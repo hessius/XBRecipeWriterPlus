@@ -2,7 +2,6 @@ import ValidatedInput from "@/components/ValidatedInput";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
-import {Icon, IconElement} from "@ui-kitten/components";
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {ActivityIndicator, Alert, Platform, Pressable, useColorScheme, useWindowDimensions} from "react-native";
@@ -145,7 +144,7 @@ export default function editRecipe() {
     type IconProps = {
         title: string;
         onPress: () => void;
-        icon: IconElement;
+        icon: React.ReactElement;
     }
 
     function writeCardIcon() {
@@ -237,14 +236,6 @@ export default function editRecipe() {
             Alert.alert('Write Error', 'There was an error writing the recipe to the card');
         }
     }
-
-    const writeNFC = (props: any): IconElement => (
-        <Icon
-            {...props}
-            name="upload-outline"
-        />
-    );
-
 
     function addPour(pourNumber: number) {
         if (recipe) {
@@ -748,11 +739,11 @@ export default function editRecipe() {
                                                     <XStack paddingRight="$2">
                                                         <XStack paddingRight="$2">
                                                             <IconButton onPress={() => deletePour(index)} title=""
-                                                                        icon={<AntDesign name="closesquareo" size={24}
+                                                                        icon={<AntDesign name="close-square" size={24}
                                                                                          color="red"/>}></IconButton>
                                                         </XStack>
                                                         <IconButton onPress={() => addPour(index)} title=""
-                                                                    icon={<AntDesign name="plussquareo" size={24}
+                                                                    icon={<AntDesign name="plus-square" size={24}
                                                                                      color="green"/>}></IconButton>
                                                     </XStack>
                                                 </XStack>

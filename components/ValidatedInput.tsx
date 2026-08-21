@@ -213,7 +213,7 @@ export default function ValidatedInput(props: Props) {
                 <XStack padding="$2" alignItems="center" alignSelf="flex-start" flex={1} gap={"$4"}>
                     <XStack gap="$3">
                         <Pressable onPress={onMinusPress} onLongPress={onMinusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
-                            <AntDesign padding={0} name="minuscircle" size={30} color="red"/>
+                            <AntDesign padding={0} name="minus-circle" size={30} color="red"/>
                         </Pressable>
                     </XStack>
 
@@ -269,7 +269,7 @@ export default function ValidatedInput(props: Props) {
                         </Input>
                         <XStack paddingLeft="$3">
                             <Pressable onPress={onPlusPress} onLongPress={onPlusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
-                                <AntDesign padding={0} name="pluscircle" size={30} color="#ff5c00"/>
+                                <AntDesign padding={0} name="plus-circle" size={30} color="#ff5c00"/>
                             </Pressable>
                         </XStack>
                     </XStack>

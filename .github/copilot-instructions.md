@@ -1,21 +1,22 @@
 # XBRecipeWriter+ — Copilot instructions
 
-Expo (SDK 53) / React Native app that reads and writes xBloom coffee recipe NFC cards (ISO 15693 / NfcV), stores recipes locally in SQLite, and imports recipes from xBloom share links.
+Expo (SDK 57) / React Native app that reads and writes xBloom coffee recipe NFC cards (ISO 15693 / NfcV), stores recipes locally in SQLite, and imports recipes from xBloom share links.
 
 ## Commands
 
 ```bash
-npm install            # runs patch-package via postinstall (patches/xcode+3.0.1.patch)
+npm install
 npx expo start         # dev server (needs a dev client, not Expo Go — NFC is a native module)
-npm run ios            # expo run:ios
+npm run ios            # expo run:ios   (add --device for real NFC)
 npm run android        # expo run:android
 npm run lint           # expo lint
-npm test               # jest --watchAll (jest-expo preset)
+npm test               # jest (jest-expo preset); npm run test:watch to watch
 npx jest path/to/file  # single file; add -t "name" for a single test
-npx tsc --noEmit       # type check
+npm run typecheck      # tsc --noEmit
+npx expo-doctor        # dependency/config health
 ```
 
-There are currently **no test files in the repo** — the jest config exists but nothing is covered. Anything touching card byte layout, checksum, or volume math is worth a test if you add one.
+`library/__tests__/` holds characterisation tests for the card byte format, volume math, and legacy JSON migrations. `cardFixtures.ts` is a deliberately **independent** reimplementation of the byte layout, so a round-trip test is not tautological — if you change the format, change both sides consciously. A changed expectation is a regression until proven otherwise: a malformed write to a genuine card is not trivially recoverable.
 
 NFC cannot be exercised in a simulator/emulator. Card read/write changes must be verified on a physical device with a real card.
 
@@ -56,7 +57,7 @@ Other domain invariants:
 
 ## UI conventions
 
-- **Tamagui** is the component/styling system (`tamagui.config.ts`, providers in `app/_layout.tsx`). Use `XStack`/`YStack`/`Button`/`Dialog` and `$`-prefixed tokens rather than raw RN `StyleSheet`. `@ui-kitten` and `@expo/vector-icons` are used for icons only.
+- **Tamagui** is the component/styling system (`tamagui.config.ts`, providers in `app/_layout.tsx`). Use `XStack`/`YStack`/`Button`/`Dialog` and `$`-prefixed tokens rather than raw RN `StyleSheet`. `@expo/vector-icons` is used for icons (v15 uses kebab-case AntDesign names, e.g. `plus-circle`, not `pluscircle`).
 - Dialogs follow the `Dialog` + `Adapt platform="touch"` + `Sheet` pattern (see `ImportRecipeComponent.tsx`).
 - **Mutate the `Recipe` object in place and bump a `key` counter** (`setKey(prev => prev + 1)`) to re-render, instead of cloning into state. This was a deliberate performance change — don't "fix" it by making `Recipe` immutable or re-serializing on every keystroke. Hot spots use refs + `useImperativeHandle` (`TotalVolumeComponent.forceUpdate`) to repaint a single value.
 - `ValidatedInput` owns numeric entry: min/max/step, slider, long-press repeat, and it reports validity upward via `setErrorFunction` — the save button is gated on that.
@@ -67,3 +68,13 @@ Other domain invariants:
 
 - Android needs an explicit NFC dialog (`AndroidNFCDialog`) because it has no system NFC sheet; iOS shows its own. NFC code paths check `nfc.getIsClosed()` before surfacing errors, since a user-cancelled Android scan throws.
 - Version lives in `app.json` (`expo.version`); `runtimeVersion.policy` is `appVersion`, so a native-affecting change needs a version bump. EAS build profiles: `development`, `preview`, `production`.
+
+## SDK 57 notes
+
+- Babel uses `react-native-worklets/plugin` (Reanimated 4 moved it out of `react-native-reanimated/plugin`); it must stay last in the plugin list.
+- There is no `metro.config.js` and no `patches/` directory — both were workarounds that SDK 57 made unnecessary. Don't reintroduce them without a reason.
+- Never import from `@react-navigation/*`; SDK 56 forked those into `expo-router`. `ThemeProvider`, `DarkTheme`, `DefaultTheme`, and `useFocusEffect` all come from `expo-router` directly.
+- `ios/` and `android/` are generated (CNG) and gitignored. Change `app.json`, then `npx expo prebuild --clean`.
+- `app.json` `runtimeVersion.policy` is `appVersion`, so a native-affecting change needs an `expo.version` bump.
+- Install with `npx expo install <pkg>` so versions stay pinned to the SDK. If npm 12 rejects it with `EALLOWSCRIPTS`, run `npx expo-doctor` to read off the expected versions and write them into `package.json` by hand.
+- Do not change the Hermes version from the SDK default, and do not enable Worklets Bundle Mode.

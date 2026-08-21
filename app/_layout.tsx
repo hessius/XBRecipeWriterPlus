@@ -1,6 +1,5 @@
-import {DarkTheme, DefaultTheme, ThemeProvider} from '@react-navigation/native';
 import {useFonts} from 'expo-font';
-import {SplashScreen, Stack} from 'expo-router';
+import {DarkTheme, DefaultTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
 import React, {useEffect} from 'react';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
@@ -48,7 +47,7 @@ export default function RootLayout() {
             }}>
             <GestureHandlerRootView style={{flex: 1}}>
                 <TamaguiProvider config={config}>
-                    <Theme name={colorScheme}>
+                    <Theme name={colorScheme === "dark" ? "dark" : "light"}>
                         <PortalProvider shouldAddRootHost>
                             <SafeAreaProvider>
                                 <ThemeProvider value={colorScheme === "light" ? LightTheme : DarkTheme}>
@@ -67,7 +66,7 @@ export default function RootLayout() {
                                             <Stack.Screen name="editRecipe" options={{title: "Edit Recipe"}}/>
                                         </Stack>
                                         <Toasts/>
-                                        <StatusBar hidden={false} translucent={true}/>
+                                        <StatusBar hidden={false}/>
                                     </SafeAreaView>
                                 </ThemeProvider>
                             </SafeAreaProvider>

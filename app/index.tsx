@@ -1,14 +1,13 @@
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 
-import {IconElement} from "@ui-kitten/components";
 import {useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Alert, Platform, Pressable, useColorScheme} from "react-native";
 
 import {Button, View, XStack, YStack} from "tamagui";
 import RecipeItem from "@/components/RecipeItem";
-import {useFocusEffect} from "@react-navigation/native";
+import {useFocusEffect} from "expo-router";
 
 import {toast, ToastPosition} from "@backpackapp-io/react-native-toast";
 import ImportRecipeComponent from "@/components/ImportRecipeComponent";
@@ -63,7 +62,7 @@ export default function HomeScreen() {
     type IconProps = {
         title: string;
         onPress: () => void;
-        icon: IconElement;
+        icon: React.ReactElement;
     }
 
     useFocusEffect(

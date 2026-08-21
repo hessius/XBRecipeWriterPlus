@@ -3,7 +3,7 @@
     "name": "XBRecipeWriter+",
     "slug": "XBRecipeWriterPlus",
     "owner": "hessius",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "xbrecipewriter",
@@ -34,8 +34,7 @@
           "android": {
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "useLegacyPackaging": true,
-            "kotlinVersion": "2.0.21"
+            "useLegacyPackaging": true
           }
         }
       ],
@@ -43,7 +42,8 @@
       [
         "react-native-nfc-manager",
         {
-          "includeNdefEntitlement": false
+          "includeNdefEntitlement": false,
+          "nfcPermission": "This app uses NFC to read and write xBloom coffee recipe cards held near your iPhone."
         }
       ],
       [
