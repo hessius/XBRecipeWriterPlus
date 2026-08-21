@@ -29,3 +29,7 @@ expo-env.d.ts
 .env.local
 credentials.json
 /.idea/
+
+# Agent skills (installed locally, not part of the app)
+.agents/
+skills-lock.json

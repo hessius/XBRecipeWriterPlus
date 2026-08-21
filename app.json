@@ -2,14 +2,15 @@
   "expo": {
     "name": "XBRecipeWriter+",
     "slug": "XBRecipeWriterPlus",
+    "owner": "hessius",
     "version": "2.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "xbrecipewriter",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "net.tools-for.XBRecipeWriterPlus"
+      "bundleIdentifier": "com.hessius.xbrecipewriterplus"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +20,7 @@
       "permissions": [
         "android.permission.NFC"
       ],
-      "package": "net.tools_for.XBRecipeWriterPlus"
+      "package": "com.hessius.xbrecipewriterplus"
     },
     "web": {
       "bundler": "metro",
@@ -66,8 +67,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "06ce7f2c-1928-4750-b8de-788849a53ad3"
-      }
+        "projectId": "575e9fca-63b7-4375-a01f-f81318c887eb"
+      },
+      "router": {}
     },
     "runtimeVersion": {
       "policy": "appVersion"

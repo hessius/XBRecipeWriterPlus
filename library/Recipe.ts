@@ -384,7 +384,7 @@ class Recipe {
             //set the bloom to double dosage, and disribute rest evenly
             this.pours[0].volume = this.dosage * 2;
             for (let i = 1; i < this.pours.length; i++) {
-                this.pours[i].volume = (Math.round(this.getTotalVolume() - this.pours[0].volume) / (this.pours.length - 1));
+                this.pours[i].volume = Math.round((this.getTotalVolume() - this.pours[0].volume) / (this.pours.length - 1));
             }
             //tack on/remove any extra thst occurs because of rounding to last pour
             if (this.getTotalVolume() - this.getPourTotalVolume() != 0) {
