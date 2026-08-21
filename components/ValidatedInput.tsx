@@ -21,13 +21,14 @@ type Props = InputProps & {
 
 type ValidEditCallbackFunction = (inputLabel: string, value: string, pourNumber?: number) => Promise<void>;
 
+/** Delay before a held +/- button starts repeating, and the fastest it repeats. */
+const LONG_PRESS_REPEAT_START = 200;
+const LONG_PRESS_REPEAT_MIN = 30;
+
 export default function ValidatedInput(props: Props) {
     const [validated, setValidated] = useState(true);
     const [value, setValue] = useState(props.initialValue);
     const isLongPressing = useRef(false);
-
-    const LONG_PRESS_REPEAT_START = 200;
-    const LONG_PRESS_REPEAT_MIN = 30;
 
     const oneStep = props.step ? props.step : 1;
 
@@ -165,7 +166,7 @@ export default function ValidatedInput(props: Props) {
             longPressInterval.current = undefined;
         }
         currentInterval.current = LONG_PRESS_REPEAT_START; // Reset interval
-    }, [value]);
+    }, []);
 
     const onMinusLongPress = useCallback(() => {
         startLongPress(onMinusPress);
