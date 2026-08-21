@@ -26,11 +26,26 @@ const LONG_PRESS_REPEAT_START = 200;
 const LONG_PRESS_REPEAT_MIN = 30;
 
 export default function ValidatedInput(props: Props) {
+    // Destructured so the memoised callbacks below depend on individual props
+    // rather than the whole `props` object, which changes on every render and
+    // makes the React Compiler bail out of optimising this component.
+    const {
+        onValidEditFunction,
+        setErrorFunction,
+        onIsSlidingChange: onIsSlidingChangeProp,
+        pourNumber,
+        label,
+        minimumValue,
+        maximumValue,
+        step,
+        floatingPoint
+    } = props;
+
     const [validated, setValidated] = useState(true);
     const [value, setValue] = useState(props.initialValue);
     const isLongPressing = useRef(false);
 
-    const oneStep = props.step ? props.step : 1;
+    const oneStep = step ? step : 1;
 
     // Long press timer refs
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -38,20 +53,20 @@ export default function ValidatedInput(props: Props) {
     const currentInterval = useRef<number>(LONG_PRESS_REPEAT_START); // Initial interval in ms
 
     const onIsSlidingChange = useCallback((isSliding: boolean) => {
-        props.onIsSlidingChange?.(isSliding);
-    }, [props.onIsSlidingChange]);
+        onIsSlidingChangeProp?.(isSliding);
+    }, [onIsSlidingChangeProp]);
 
     // Memoize validation logic to avoid recalculation
     const isValidValue = useCallback((numValue: number): boolean => {
-        return numValue >= props.minimumValue && numValue <= props.maximumValue;
-    }, [props.minimumValue, props.maximumValue]);
+        return numValue >= minimumValue && numValue <= maximumValue;
+    }, [minimumValue, maximumValue]);
 
     const validateValue = useCallback((inputValue: string): boolean => {
         if (!inputValue || inputValue === "") {
             if (value !== undefined) {
                 setValue(undefined);
                 setValidated(false);
-                props.setErrorFunction(true);
+                setErrorFunction(true);
             }
             return false;
         }
@@ -62,7 +77,7 @@ export default function ValidatedInput(props: Props) {
         if (isNaN(numValue)) {
             if (validated) {
                 setValidated(false);
-                props.setErrorFunction(true);
+                setErrorFunction(true);
             }
             return false;
         }
@@ -76,21 +91,24 @@ export default function ValidatedInput(props: Props) {
 
         if (validated !== isValid) {
             setValidated(isValid);
-            props.setErrorFunction(!isValid);
+            setErrorFunction(!isValid);
         }
 
         return isValid;
-    }, [value, validated, isValidValue, props.setErrorFunction]);
+    }, [value, validated, isValidValue, setErrorFunction]);
 
     const updateRecipe = useCallback((inputValue: string): boolean => {
         const isValid = validateValue(inputValue);
         if (isValid) {
+            // Computed outside the try: the React Compiler cannot lower optional
+            // chaining inside one, and bails out of the whole component if it sees it.
+            const labelText = String(label ?? "");
             try {
-                if (props.onValidEditFunction) {
-                    if (props.pourNumber !== undefined) {
-                        void props.onValidEditFunction(props.label?.toString()!, inputValue, props.pourNumber);
+                if (onValidEditFunction) {
+                    if (pourNumber !== undefined) {
+                        void onValidEditFunction(labelText, inputValue, pourNumber);
                     } else {
-                        void props.onValidEditFunction(props.label?.toString()!, inputValue);
+                        void onValidEditFunction(labelText, inputValue);
                     }
                 }
             } catch (error) {
@@ -98,15 +116,15 @@ export default function ValidatedInput(props: Props) {
             }
         }
         return isValid;
-    }, [validateValue, props.onValidEditFunction, props.label, props.pourNumber]);
+    }, [validateValue, onValidEditFunction, label, pourNumber]);
 
     // Memoize processed value calculation
     const processedValue = useMemo((): string => {
-        if (props.floatingPoint && value !== undefined) {
+        if (floatingPoint && value !== undefined) {
             return (value / 10).toFixed(1);
         }
         return value !== undefined ? value.toString() : "";
-    }, [value, props.floatingPoint]);
+    }, [value, floatingPoint]);
 
     const onValueChange = useCallback((sliderValue: number[]) => {
         const newValue = sliderValue[0];
@@ -118,7 +136,9 @@ export default function ValidatedInput(props: Props) {
 
     const onPlusPress = useCallback(() => {
         setValue(prevValue => {
-            if (prevValue && prevValue + oneStep <= props.maximumValue) {
+            // `prevValue !== undefined` rather than a truthiness check, so a field
+            // whose minimum is 0 can still be stepped up from 0.
+            if (prevValue !== undefined && prevValue + oneStep <= maximumValue) {
                 const newValue = prevValue + oneStep;
                 // Trigger validation after state update
                 updateRecipe(newValue.toString());
@@ -126,18 +146,18 @@ export default function ValidatedInput(props: Props) {
             }
             return prevValue;
         });
-    }, [props.maximumValue, oneStep, updateRecipe]);
+    }, [maximumValue, oneStep, updateRecipe]);
 
     const onMinusPress = useCallback(() => {
         setValue(prevValue => {
-            if (prevValue && prevValue - oneStep >= props.minimumValue) {
+            if (prevValue !== undefined && prevValue - oneStep >= minimumValue) {
                 const newValue = prevValue - oneStep;
                 updateRecipe(newValue.toString());
                 return newValue;
             }
             return prevValue;
         });
-    }, [props.minimumValue, oneStep, updateRecipe]);
+    }, [minimumValue, oneStep, updateRecipe]);
 
     const startLongPress = useCallback((pressFunction: () => void) => {
         isLongPressing.current = true;
@@ -178,15 +198,15 @@ export default function ValidatedInput(props: Props) {
 
     // Memoize error message to avoid recalculation
     const errorMessage = useMemo((): string => {
-        if (props.label && props.minimumValue && props.maximumValue) {
-            let msg = props.label + " must be between " + props.minimumValue + " and " + props.maximumValue;
-            if (props.step && props.step !== 1) {
-                msg += " in increments of " + props.step;
+        if (label && minimumValue !== undefined && maximumValue !== undefined) {
+            let msg = label + " must be between " + minimumValue + " and " + maximumValue;
+            if (step && step !== 1) {
+                msg += " in increments of " + step;
             }
             return msg;
         }
         return 'Error: Invalid Input';
-    }, [props.label, props.minimumValue, props.maximumValue, props.step]);
+    }, [label, minimumValue, maximumValue, step]);
 
     const pressedButtonStyle = useCallback(({pressed}: { pressed: boolean }) => [
         {
@@ -214,7 +234,8 @@ export default function ValidatedInput(props: Props) {
             <YStack>
                 <XStack padding="$2" alignItems="center" alignSelf="flex-start" flex={1} gap={"$4"}>
                     <XStack gap="$3">
-                        <Pressable onPress={onMinusPress} onLongPress={onMinusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Decrease ${label}`}
+                                   onPress={onMinusPress} onLongPress={onMinusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
                             <AntDesign padding={0} name="minus-circle" size={30} color={palette.danger}/>
                         </Pressable>
                     </XStack>
@@ -238,13 +259,13 @@ export default function ValidatedInput(props: Props) {
                                     <Label style={{
                                         textAlign: 'left'
                                     }}>
-                                        {props.label}
+                                        {label}
                                     </Label>
                                 </View>
                                 <Slider containerStyle={{flex: 1}}
-                                        value={value !== undefined && (value >= props.minimumValue && value <= props.maximumValue) ? [value] : [props.minimumValue]}
-                                        minimumValue={props.minimumValue ? props.minimumValue : 0}
-                                        maximumValue={props.maximumValue ? props.maximumValue : 100}
+                                        value={value !== undefined && (value >= minimumValue && value <= maximumValue) ? [value] : [minimumValue]}
+                                        minimumValue={minimumValue ? minimumValue : 0}
+                                        maximumValue={maximumValue ? maximumValue : 100}
                                         step={oneStep}
                                         minimumTrackTintColor={palette.dangerTrack}
                                         maximumTrackTintColor="$color0"
@@ -270,7 +291,8 @@ export default function ValidatedInput(props: Props) {
                                borderColor={validated ? palette.muted : palette.danger} {...props} minWidth={"$4"}>
                         </Input>
                         <XStack paddingLeft="$3">
-                            <Pressable onPress={onPlusPress} onLongPress={onPlusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={`Increase ${label}`}
+                                       onPress={onPlusPress} onLongPress={onPlusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
                                 <AntDesign padding={0} name="plus-circle" size={30} color={palette.brandIncrement}/>
                             </Pressable>
                         </XStack>

@@ -41,13 +41,11 @@ export default function LabeledInput(props: Props) {
     }
 
     async function doneEditing(value: string) {
-        if (validated) {
-            if (props.onValidEditFunction) {
-                if (props.pourNumber !== undefined) {
-                    await props.onValidEditFunction(props.label?.toString()!, value, props.pourNumber);
-                } else {
-                    await props.onValidEditFunction(props.label?.toString()!, value);
-                }
+        if (props.onValidEditFunction) {
+            if (props.pourNumber !== undefined) {
+                await props.onValidEditFunction(props.label?.toString()!, value, props.pourNumber);
+            } else {
+                await props.onValidEditFunction(props.label?.toString()!, value);
             }
         }
     }

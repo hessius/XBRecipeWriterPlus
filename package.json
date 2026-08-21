@@ -13,16 +13,6 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
-  "jest": {
-    "preset": "jest-expo",
-    "testMatch": [
-      "**/*.test.ts",
-      "**/*.test.tsx"
-    ],
-    "setupFiles": [
-      "<rootDir>/jest.setup.js"
-    ]
-  },
   "dependencies": {
     "@backpackapp-io/react-native-toast": "^0.15.1",
     "@expo/vector-icons": "^15.0.2",
@@ -65,6 +55,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@testing-library/react-native": "^14.0.1",
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.4",
     "@types/react-test-renderer": "^19.0.0",
