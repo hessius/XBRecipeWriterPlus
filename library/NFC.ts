@@ -1,9 +1,20 @@
-import {toast} from '@backpackapp-io/react-native-toast';
 import {Platform} from 'react-native';
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import Recipe from "@/library/Recipe";
 
 global.Buffer = require('buffer').Buffer;
+
+/**
+ * iOS presents its own modal NFC sheet on top of the app, so anything rendered
+ * by the app during a session (toasts, progress bars) is hidden behind it. The
+ * only way to show progress is to write into Apple's sheet itself. No-op on
+ * Android, which uses AndroidNFCDialog instead.
+ */
+export function setNfcAlertIOS(message: string) {
+    if (Platform.OS === 'ios') {
+        NfcManager.setAlertMessageIOS(message);
+    }
+}
 
 type NfcSystemInfo = {
     afi: number;
@@ -188,31 +199,26 @@ class NFC {
             let blockNum = startBlock;
 
             const id = await progressCallBack((i / data.length) * 100);
-            if (id || Platform.OS !== "ios") {
 
-                while (i < data.length) {
+            while (i < data.length) {
 
-                    let fourByteData = data.slice(i, i + 4);
-                    console.log(JSON.stringify(fourByteData));
-                    console.log("Blocknum:" + blockNum);
+                let fourByteData = data.slice(i, i + 4);
+                console.log(JSON.stringify(fourByteData));
+                console.log("Blocknum:" + blockNum);
 
-                    await this.writeSingleBlock(34, blockNum, fourByteData)
+                await this.writeSingleBlock(34, blockNum, fourByteData)
 
-                    await progressCallBack(Math.round((i / data.length) * 100), id);
+                await progressCallBack(Math.round((i / data.length) * 100), id);
 
-                    i += 4;
-                    blockNum++;
+                i += 4;
+                blockNum++;
 
-                }
-                await progressCallBack(100, id);
             }
+            await progressCallBack(100, id);
 
         } catch (e) {
             console.log(e);
-            if (Platform.OS === "ios") {
-                toast.dismiss();
-                toast("Error writing to card", {styles: {view: {backgroundColor: 'red'}}});
-            }
+            setNfcAlertIOS("Error writing to card");
             throw e;
         }
 

@@ -15,7 +15,7 @@ import TotalVolumeComponent from "@/components/TotalVolumeComponent";
 import TooltipComponent from "@/components/TooltipComponent";
 import {toast} from "@backpackapp-io/react-native-toast";
 import AndroidNFCDialog from "@/components/AndroidNFCDialog";
-import NFC from "@/library/NFC";
+import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
@@ -184,20 +184,9 @@ export default function editRecipe() {
         console.log("Progress:" + progress);
 
         if (Platform.OS === "ios") {
-            if (id && progress === 100) {
-                toast("Writing Recipe to Card: 100%", {
-                    id: id, styles: {
-                        view: {backgroundColor: 'green'}
-                    }
-                });
-            } else {
-                if (id) {
-                    toast("Writing Recipe to Card: " + Math.round(progress) + "%", {id: id});
-                    return id;
-                } else {
-                    return toast("Writing Recipe to Card: " + Math.round(progress) + "%");
-                }
-            }
+            setNfcAlertIOS(progress >= 100
+                ? "Recipe written to card"
+                : "Writing recipe to card: " + Math.round(progress) + "%");
         } else {
             setWriteProgress(progress);
         }

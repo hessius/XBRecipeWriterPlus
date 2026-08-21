@@ -13,7 +13,7 @@ import {toast, ToastPosition} from "@backpackapp-io/react-native-toast";
 import ImportRecipeComponent from "@/components/ImportRecipeComponent";
 import {useShareIntentContext} from "expo-share-intent";
 import AndroidNFCDialog from "@/components/AndroidNFCDialog";
-import NFC from "@/library/NFC";
+import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
@@ -161,7 +161,13 @@ export default function HomeScreen() {
     }
 
     async function progressCallback(progress: number): Promise<string | undefined> {
-        setReadProgress(progress);
+        if (Platform.OS === "ios") {
+            setNfcAlertIOS(progress >= 100
+                ? "Recipe read from card"
+                : "Reading recipe from card: " + Math.round(progress) + "%");
+        } else {
+            setReadProgress(progress);
+        }
         return undefined;
     }
 
