@@ -1,14 +1,16 @@
 import React from 'react';
 import {useColorScheme} from 'react-native';
-import {H6, styled, ToggleGroup} from 'tamagui';
+import {H6, type SizeTokens, styled, ToggleGroup} from 'tamagui';
 
 interface MyButtonProps {
     id: number;
     label: string;
     value: string;
+    // v2 dropped `size` from ToggleGroup itself; each item is sized instead.
+    size?: SizeTokens;
 }
 
-export function MyButton({id, label, value}: MyButtonProps) {
+export function MyButton({id, label, value, size}: MyButtonProps) {
     const colorScheme = useColorScheme();
 
     const MyToggleGroupItem = styled(ToggleGroup.Item, {
@@ -27,6 +29,7 @@ export function MyButton({id, label, value}: MyButtonProps) {
     return (
         <MyToggleGroupItem
             value={"" + id}
+            size={size}
             active={value === "" + id}
             aria-label={label}
         >

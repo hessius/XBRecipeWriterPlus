@@ -30,9 +30,13 @@ const bodyFont = createInterFont();
 
 const config = createTamagui({
   animations,
-  defaultTheme: "light",
-  shouldAddPrefersColorThemes: false,
-  themeClassNameOnRoot: false,
+  // v2 moved every root-level createTamagui option into `settings`.
+  // `themeClassNameOnRoot` was removed outright; it was web-only and this app
+  // does not target web.
+  settings: {
+    defaultTheme: "light",
+    shouldAddPrefersColorThemes: false
+  },
   shorthands,
   fonts: {
     heading: headingFont,
@@ -63,10 +67,6 @@ export type AppConfig = typeof config;
 declare module "tamagui" {
   // overrides TamaguiCustomConfig so your custom types
   // work everywhere you import `tamagui`
-  interface TamaguiCustomConfig extends AppConfig {}
-}
-
-declare module "@tamagui/core" {
   interface TamaguiCustomConfig extends AppConfig {}
 }
 

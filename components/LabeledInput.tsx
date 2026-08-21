@@ -1,8 +1,7 @@
 import React, {useState} from 'react';
-import {TextInputProps} from 'react-native';
-import {H6, Input, Label, XStack, YStack} from 'tamagui';
+import {H6, Input, type InputProps, Label, XStack, YStack} from 'tamagui';
 
-type Props = TextInputProps & {
+type Props = InputProps & {
     validateInput?: ValidateCallbackFunction
     onValidEditFunction?: ValidEditCallbackFunction
     setErrorFunction?: (error: boolean) => void

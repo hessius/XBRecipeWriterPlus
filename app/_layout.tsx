@@ -46,7 +46,7 @@ export default function RootLayout() {
                 resetOnBackground: true
             }}>
             <GestureHandlerRootView style={{flex: 1}}>
-                <TamaguiProvider config={config}>
+                <TamaguiProvider config={config} defaultTheme={colorScheme === "dark" ? "dark" : "light"}>
                     <Theme name={colorScheme === "dark" ? "dark" : "light"}>
                         <PortalProvider shouldAddRootHost>
                             <SafeAreaProvider>

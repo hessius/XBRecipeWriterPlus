@@ -44,7 +44,6 @@ export function MyButtonGroup(props: {
                 value={value}
                 orientation={props.orientation}
                 type="single"
-                size={props.size}
                 disableDeactivation={true}
                 onValueChange={handleValueChange}
             >
@@ -54,6 +53,7 @@ export function MyButtonGroup(props: {
                         id={btn}
                         label={props.getLabelText(btn)}
                         value={value}
+                        size={props.size}
                     />
                 ))}
             </ToggleGroup>

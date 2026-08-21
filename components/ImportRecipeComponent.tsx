@@ -61,7 +61,7 @@ export default function ImportRecipeComponent(props: {
                         <Adapt.Contents/>
                     </Sheet.Frame>
                     <Sheet.Overlay
-                        animation="quick"
+                        transition="quick"
                         enterStyle={{opacity: 0}}
                         exitStyle={{opacity: 0}}
                     />

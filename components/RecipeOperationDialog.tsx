@@ -1,7 +1,7 @@
 import RecipeDatabase from '@/library/RecipeDatabase';
 import React, {useEffect, useState} from 'react';
 import type {PopoverProps} from 'tamagui'
-import {Adapt, Button, Popover, YStack} from 'tamagui'
+import {Adapt, Button, Popover, Sheet, YStack} from 'tamagui'
 
 
 export function RecipeOperationDialog({
@@ -31,17 +31,17 @@ export function RecipeOperationDialog({
 
             {shouldAdapt && (
                 <Adapt platform="touch">
-                    <Popover.Sheet modal dismissOnSnapToBottom>
-                        <Popover.Sheet.Frame backgroundColor="$colorTransparent"
-                                             padding="$4">
+                    <Sheet modal dismissOnSnapToBottom>
+                        <Sheet.Frame backgroundColor="$colorTransparent"
+                                     padding="$4">
                             <Adapt.Contents/>
-                        </Popover.Sheet.Frame>
-                        <Popover.Sheet.Overlay
-                            animation="lazy"
+                        </Sheet.Frame>
+                        <Sheet.Overlay
+                            transition="lazy"
                             enterStyle={{opacity: 0}}
                             exitStyle={{opacity: 0}}
                         />
-                    </Popover.Sheet>
+                    </Sheet>
                 </Adapt>
             )}
 
@@ -51,7 +51,7 @@ export function RecipeOperationDialog({
                 enterStyle={{y: -10, opacity: 0}}
                 exitStyle={{y: -10, opacity: 0}}
                 elevate
-                animation={[
+                transition={[
                     'quick',
                     {
                         opacity: {

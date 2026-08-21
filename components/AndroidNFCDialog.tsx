@@ -37,7 +37,7 @@ export default function AndroidNFCDialog(props: {
             snapPoints={[70]}
         >
             <Sheet.Overlay
-                animation="quick"
+                transition="quick"
                 enterStyle={{opacity: 0}}
                 exitStyle={{opacity: 0}}
             />
@@ -57,7 +57,7 @@ export default function AndroidNFCDialog(props: {
                         <XStack key={props.progress} paddingHorizontal="$5" alignItems="center">
                             <Progress flex={1} value={props.progress} max={100} backgroundColor="$gray5"
                                       height={8}>
-                                <Progress.Indicator animation="quick" backgroundColor="blue"/>
+                                <Progress.Indicator transition="quick" backgroundColor="blue"/>
                             </Progress>
                             <Text paddingLeft="$2" color="black">{props.progress + "%"}</Text>
                         </XStack> : ""}

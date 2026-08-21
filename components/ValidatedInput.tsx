@@ -1,10 +1,10 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {Pressable, TextInputProps, View} from 'react-native';
-import {H6, Input, Label, XStack, YStack} from 'tamagui';
+import {Pressable, View} from 'react-native';
+import {H6, Input, type InputProps, Label, XStack, YStack} from 'tamagui';
 import {Slider} from '@miblanchard/react-native-slider';
 import {AntDesign} from '@expo/vector-icons';
 
-type Props = TextInputProps & {
+type Props = InputProps & {
     onValidEditFunction?: ValidEditCallbackFunction
     setErrorFunction: (error: boolean) => void
     onIsSlidingChange?: (isSliding: boolean) => void
