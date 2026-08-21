@@ -28,7 +28,7 @@ const TotalVolumeComponent = forwardRef<TotalVolumeComponentRef, TotalVolumeComp
             flexWrap="nowrap"
             flexShrink={0}>
             <Label fontWeight="700" fontSize="$7">Volume:</Label>
-            <Label fontWeight="700" color={props.recipe.isPourVolumeValid() ? "$text" : palette.danger}
+            <Label fontWeight="700" color={props.recipe.isPourVolumeValid() ? "$color" : palette.danger}
                    fontSize="$8" width={64} style={{fontVariant: ['tabular-nums']}}
                    minWidth="$5" textAlign="center"
                    key={"pv_" + localKey}

@@ -66,7 +66,7 @@ export default function LabeledInput(props: Props) {
                            focusStyle={{borderColor: validated ? palette.muted : palette.danger}}
                            borderColor={validated ? palette.muted : palette.danger} {...props}
                            backgroundColor={props.disabled ? palette.surfaceDisabled : "$background"}
-                           color={props.disabled ? palette.onLight : "$text"}>
+                           color={props.disabled ? palette.onLight : "$color"}>
                     </Input>
                 </XStack>
                 {!validated ?
