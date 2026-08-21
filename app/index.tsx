@@ -5,8 +5,11 @@ import {useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Alert, Platform, Pressable, useColorScheme} from "react-native";
 
-import {Button, View, XStack, YStack} from "tamagui";
-import RecipeItem from "@/components/RecipeItem";
+import {YStack} from "tamagui";
+import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+// gesture-handler's FlatList, not React Native's: it keeps the list scroll
+// gesture and each row's swipe gesture from fighting each other on Android.
+import {FlatList} from "react-native-gesture-handler";
 import {useFocusEffect} from "expo-router";
 
 import {toast, ToastPosition} from "@backpackapp-io/react-native-toast";
@@ -15,12 +18,9 @@ import {useShareIntentContext} from "expo-share-intent";
 import AndroidNFCDialog from "@/components/AndroidNFCDialog";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
-import AntDesign from '@expo/vector-icons/AntDesign';
-import Feather from '@expo/vector-icons/Feather';
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 
 // @ts-ignore-next-line
-import SwipeableFlatList from 'react-native-swipeable-list';
 
 export default function HomeScreen() {
     const [recipesJSON, setRecipesJSON] = useState<string>("");
@@ -243,46 +243,20 @@ export default function HomeScreen() {
                     backgroundColor={colorScheme === "light" ? "#dddddd" : "black"} maxWidth="100%" paddingTop="$2"
                     flexDirection="column">
                 {recipesJSON ?
-                    (<SwipeableFlatList showsVerticalScrollIndicator={false} keyExtractor={extractItemKey}
-                                        data={getRecipes()} renderItem={({item}: { item: Recipe }) => (
-                            <View style={{maxWidth: 600}}>
-                                <RecipeItem recipe={item} onPress={() => {
+                    (<FlatList showsVerticalScrollIndicator={false} keyExtractor={extractItemKey}
+                               data={getRecipes()} renderItem={({item, index}: { item: Recipe; index: number }) => (
+                            <SwipeableRecipeRow
+                                recipe={item}
+                                bounceOnMount={index === 0 && bounceFirstRowOnMount}
+                                onPress={() => {
                                     router.push({
                                         pathname: '/editRecipe',
                                         params:   {recipeJSON: JSON.stringify(item)}
                                     });
-                                }}>
-                                </RecipeItem>
-                            </View>
-                        )} renderQuickActions={({index, item}: { index: number; item: Recipe }) => (
-                            <View style={{
-                                maxWidth:       600,
-                                justifyContent: "flex-end",
-                                flex:           1,
-                                flexDirection:  "row",
-                                alignItems:     "center"
-                            }}>
-                                <XStack paddingRight="$2" height="60%" paddingVertical="$3">
-                                    <Button onPress={() => deleteRecipe(item)} width={80} height="100%"
-                                            marginRight="$1"
-                                            alignItems="center" justifyContent="center" backgroundColor="red"
-                                            borderColor="#ffa592" borderWidth={2} borderRadius={10}><AntDesign
-                                        name="delete" size={25} color="white"/></Button>
-                                    <Button onPress={() => duplicateRecipe(item)} width={80} height="100%"
-                                            alignItems="center" justifyContent="center" backgroundColor="#dddddd"
-                                            borderColor="#ffa592" borderWidth={2} borderRadius={10}>
-                                        <Feather name="copy"
-                                                 size={25}
-                                                 color="black"/>
-                                    </Button>
-                                </XStack>
-                            </View>
-                        )}
-                                        maxSwipeDistance={168}
-                                        bounceFirstRowOnMount={bounceFirstRowOnMount}
-                        >
-                        </SwipeableFlatList>
-
+                                }}
+                                onDelete={() => deleteRecipe(item)}
+                                onDuplicate={() => duplicateRecipe(item)}/>
+                        )}/>
                     ) : ""}
             </YStack>
 

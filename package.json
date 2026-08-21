@@ -27,7 +27,6 @@
     "@backpackapp-io/react-native-toast": "^0.15.1",
     "@expo/vector-icons": "^15.0.2",
     "@miblanchard/react-native-slider": "^2.6.0",
-    "@react-native-community/progress-bar-android": "^1.0.5",
     "@tamagui/config": "1.144.4",
     "@tamagui/portal": "1.144.4",
     "buffer": "^6.0.3",
@@ -53,7 +52,6 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
-    "react-native-swipeable-list": "~0.1.2",
     "react-native-uuid": "~2.0.4",
     "react-native-worklets": "0.10.1",
     "tamagui": "1.144.4"
@@ -76,8 +74,7 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "react-native-nfc-manager",
-          "@react-native-community/progress-bar-android"
+          "react-native-nfc-manager"
         ],
         "listUnknownPackages": false
       }

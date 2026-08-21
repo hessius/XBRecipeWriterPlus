@@ -1,9 +1,8 @@
 import React, {useState} from 'react';
 import {ViewStyle} from 'react-native';
 
-import {Button, Sheet, Spinner, Text, XStack, YStack} from 'tamagui';
+import {Button, Progress, Sheet, Spinner, Text, XStack, YStack} from 'tamagui';
 import Svg, {Path} from 'react-native-svg';
-import {ProgressBar} from '@react-native-community/progress-bar-android';
 
 function NfcIcon(): React.JSX.Element {
     return (
@@ -56,8 +55,10 @@ export default function AndroidNFCDialog(props: {
                     </Spinner>
                     {props.progress !== undefined ?
                         <XStack key={props.progress} paddingHorizontal="$5" alignItems="center">
-                            <ProgressBar styleAttr="Horizontal" color="blue" indeterminate={false}
-                                         progress={props.progress / 100} style={{width: '100%'}}/>
+                            <Progress flex={1} value={props.progress} max={100} backgroundColor="$gray5"
+                                      height={8}>
+                                <Progress.Indicator animation="quick" backgroundColor="blue"/>
+                            </Progress>
                             <Text paddingLeft="$2" color="black">{props.progress + "%"}</Text>
                         </XStack> : ""}
                     <Text style={{fontSize: 18, fontWeight: 'bold', color: '#333'}}>
