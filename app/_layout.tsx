@@ -3,7 +3,6 @@ import {DarkTheme, DefaultTheme, SplashScreen, Stack, ThemeProvider} from 'expo-
 import React, {useEffect} from 'react';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
-import {PortalProvider} from '@tamagui/portal'
 import config from '../tamagui.config' // your configuration
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Toasts} from '@backpackapp-io/react-native-toast';
@@ -49,7 +48,6 @@ export default function RootLayout() {
             <GestureHandlerRootView style={{flex: 1}}>
                 <TamaguiProvider config={config} defaultTheme={colorScheme === "dark" ? "dark" : "light"}>
                     <Theme name={colorScheme === "dark" ? "dark" : "light"}>
-                        <PortalProvider shouldAddRootHost>
                             <SafeAreaProvider>
                                 <ThemeProvider value={colorScheme === "light" ? LightTheme : DarkTheme}>
                                     <SafeAreaView style={{flex: 1, backgroundColor: palette.brand}}>
@@ -71,7 +69,6 @@ export default function RootLayout() {
                                     </SafeAreaView>
                                 </ThemeProvider>
                             </SafeAreaProvider>
-                        </PortalProvider>
                     </Theme>
                 </TamaguiProvider>
             </GestureHandlerRootView>
