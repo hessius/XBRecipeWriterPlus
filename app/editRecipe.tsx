@@ -3,40 +3,25 @@ import ValidatedInput from "@/components/ValidatedInput";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {ActivityIndicator, Alert, Platform, Pressable, useColorScheme, useWindowDimensions} from "react-native";
-
-
+import React, {useCallback, useEffect, useRef} from "react";
+import {ActivityIndicator, Platform, Pressable, useColorScheme, useWindowDimensions} from "react-native";
 import {Button, getTokens, H6, ScrollView, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
 import LabeledInput from "@/components/LabeledInput";
-import RecipeDatabase from "@/library/RecipeDatabase";
 import TotalVolumeComponent from "@/components/TotalVolumeComponent";
 import TooltipComponent from "@/components/TooltipComponent";
-import {toast} from "@backpackapp-io/react-native-toast";
 import AndroidNFCDialog from "@/components/AndroidNFCDialog";
-import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
-import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
-import RestoreDialog, {type RestoreOption} from "@/components/RestoreDialog";
+import RestoreDialog from "@/components/RestoreDialog";
+import useCardWriter from "@/hooks/useCardWriter";
+import useRecipeEditor, {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
 
 
 export default function editRecipe() {
     const {recipeJSON, saveEnabled} = useLocalSearchParams();
-    const [recipe, setRecipe] = useState<Recipe | null>(null);
-    const [inputError, setInputError] = useState(false);
-    const [titleChanged, setTitleChanged] = useState(false);
-    const [enableSave, setEnableSave] = useState(saveEnabled && saveEnabled === "true");
-    const [writeProgress, setWriteProgress] = useState(0);
-    const [showAndroidNFCDialog, setShowAndroidNFCDialog] = useState(false);
-    const [key, setKey] = useState(0);
-    const [isLoadingTitle, setIsLoadingTitle] = useState(false);
-    const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-    const [restoreOptions, setRestoreOptions] = useState<RestoreOption[]>([]);
-
     // disable scrolling when using sliders
     const scrollViewRefs = useRef<Map<string, ScrollView>>(new Map());
     const handleSlidingChange = useCallback((sliding: boolean) => {
@@ -52,93 +37,36 @@ export default function editRecipe() {
         }
     }, []);
 
-    const totalVolumeRef = useRef<{ forceUpdate: () => void } | null>(null);
-    const autoButtonRef = useRef<any>(null);
-
     const ON_OFF_BUTTON_CONFIG = {
         buttons:      [1, 0],
         getLabelText: (id: number) => id === 1 ? "On" : "Off"
     };
 
-    const RECIPE_LABELS = useMemo(() => ({
-        TITLE:            "Title",
-        XID:              "XID",
-        DOSE:             "Dose (g)",
-        RATIO:            "Ratio",
-        GRIND_SIZE:       "Grind size",
-        GRIND_RPM:        "Grind RPM",
-        GRINDER:          "Grinder",
-        CUP:              "Cup",
-        VOLUME:           "Volume",
-        TEMPERATURE:      "Temperature (°C)",
-        FLOW_RATE:        "Flow rate (ml/s)",
-        PAUSING:          "Pausing (s)",
-        PATTERN:          "Pattern",
-        AGITATION_BEFORE: "Agitation before",
-        AGITATION_AFTER:  "Agitation after"
-    } as const), []);
-
-    const nfc = new NFC();
+    const {writeCard, onNFCDialogClose, showAndroidNFCDialog, writeProgress} = useCardWriter();
 
     const navigation = useNavigation();
     const {height, width} = useWindowDimensions();
     const colorScheme = useColorScheme();
+
+    const {
+        recipe, getRecipe, key, enableSave, inputError, setInputError, isLoadingTitle,
+        showRestoreDialog, setShowRestoreDialog, restoreOptions, totalVolumeRef, autoButtonRef,
+        bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
+        restoreRecipe, saveRecipe, editInputComplete
+    } = useRecipeEditor({
+        recipeJSON:           recipeJSON as string | undefined,
+        initiallySaveEnabled: saveEnabled === "true",
+        onSaved:              () => navigation.goBack()
+    });
 
 
     useEffect(() => {
         navigation.setOptions({
             title:       'Edit Recipe',
             headerShown: true,
-            headerRight: () => <IconButton onPress={() => writeCard()} title="" icon={writeCardIcon()}/>
+            headerRight: () => <IconButton onPress={() => writeCard(recipe)} title="" icon={writeCardIcon()}/>
         })
     }, [navigation, recipe]);
-
-    const fetchRecipeTitle = async (r: Recipe) => {
-        setIsLoadingTitle(true);
-
-        try {
-            const xbRecipe = new XBloomRecipe(r.xid);
-            await xbRecipe.fetchRecipeDetail();
-
-            let recipeTitle = xbRecipe.getRecipeTitle();
-            if (recipeTitle.length > 0) {
-                // Update the current recipe with the fetched title
-                r.title = recipeTitle;
-                // Also get shareID for restore feature if not already present
-                let xbr = xbRecipe.getRecipe();
-                if (xbr && xbr.shareId.length > 0 && r.shareId.length == 0) {
-                    r.shareId = xbr.shareId;
-                }
-                if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length == 0) {
-                    r.offline_backup = xbr.offline_backup;
-                }
-                setRecipe(r);
-                setTitleChanged(true);
-                setEnableSave(true);
-            }
-        } catch (error) {
-            console.log("Failed to fetch recipe title:", error);
-        } finally {
-            setIsLoadingTitle(false);
-        }
-    };
-
-    useEffect(() => {
-        // Only fetch if we have a recipe with valid XID but no meaningful title
-        if (recipe &&
-            recipe.xid &&
-            recipe.xid.trim().length > 0 &&
-            (!recipe.title || recipe.title.trim().length === 0)) {
-            void fetchRecipeTitle(recipe);
-        }
-    }, [recipe]);
-
-    const handleReloadTitlePress = async () => {
-        const r = getRecipe();
-        if (r && r.xid) {
-            await fetchRecipeTitle(r);
-        }
-    };
 
     function writeCardIcon() {
         return (
@@ -150,354 +78,6 @@ export default function editRecipe() {
         )
     }
 
-
-    function getRecipe(): Recipe | null {
-        return recipe;
-    }
-
-    useEffect(() => {
-        if (recipeJSON && recipeJSON !== "") {
-            const newRecipe = new Recipe(undefined, recipeJSON as string);
-            setRecipe(newRecipe);
-        }
-    }, []);
-
-    async function onNFCDialogClose() {
-        await nfc.close();
-        setShowAndroidNFCDialog(false);
-    }
-
-    async function progressCallback(progress: number, id?: string): Promise<string | undefined> {
-        console.log("Progress:" + progress);
-
-        if (Platform.OS === "ios") {
-            setNfcAlertIOS(progress >= 100
-                ? "Recipe written to card"
-                : "Writing recipe to card: " + Math.round(progress) + "%");
-        } else {
-            setWriteProgress(progress);
-        }
-        return undefined;
-    }
-
-
-    async function writeCard() {
-        console.log('Write Card')
-        try {
-            let r = getRecipe();
-            if (r !== null) {
-                console.log(r);
-                if (r.isPourVolumeValid()) {
-                    //const id = toast("Writing Recipe to Card: 0");
-                    if (Platform.OS !== "ios") {
-                        setWriteProgress(0);
-                        setShowAndroidNFCDialog(true);
-                    }
-                    await r.writeCard(nfc, progressCallback);
-                    if (Platform.OS !== "ios") {
-                        setShowAndroidNFCDialog(false);
-                    }
-                } else {
-                    Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
-                }
-            }
-        } catch (e) {
-            console.log("Write error!:" + e);
-            setShowAndroidNFCDialog(false);
-            Alert.alert('Write Error', 'There was an error writing the recipe to the card');
-        }
-    }
-
-    function addPour(pourNumber: number) {
-        if (recipe) {
-            // Limit tea recipes to maximum 3 pours
-            if (recipe.isTea() && recipe.pours.length >= 3) {
-                Alert.alert('Pour Limit', 'Tea recipes are limited to a maximum of 3 pours', [
-                    {
-                        text:    'Ok',
-                        onPress: () => console.log('Pour limit reached')
-                    }
-                ]);
-                return;
-            }
-            recipe.addPour(pourNumber);
-            setKey((prev) => prev + 1);
-            setEnableSave(true);
-        }
-    }
-
-    function deletePour(pourNumber: number) {
-        if (recipe && recipe.pours.length > 1) {
-            recipe.deletePour(pourNumber);
-            setKey((prev) => prev + 1);
-            setEnableSave(true);
-        }
-    }
-
-    function autoAdjustPourVolumes() {
-        if (recipe) {
-            recipe.autoFixPourVolumes();
-            setKey((prev) => prev + 1);
-            setEnableSave(true);
-        }
-    }
-
-    function restoreRecipe() {
-        const alwaysKeepFields = ['uuid', 'backup', 'title'];
-
-        if (!recipe) return;
-
-        const options: RestoreOption[] = [];
-
-        function keepSettingsAndSave(
-            restoredRecipe: Recipe,
-            fieldsToKeep: Array<keyof Recipe> = []
-        ) {
-            if (!recipe) return;
-            let keepFields = [...alwaysKeepFields, ...fieldsToKeep];
-
-            for (const field of keepFields) {
-                const value = (recipe as any)[field];
-
-                if (
-                    value !== undefined &&
-                    ((((typeof value === 'string') || (typeof value === 'object'))
-                            && value.length > 0) ||
-                        typeof value === 'boolean' ||
-                        typeof value === 'number')
-                ) {
-                    (restoredRecipe as any)[field] = value;
-                }
-            }
-            setRecipe(restoredRecipe);
-            setEnableSave(true);
-        }
-
-        // Check for NFC backup data
-        if (recipe.backup && recipe.backup.length > 0) {
-            options.push({
-                id:     'nfc',
-                label:  'Restore from NFC card backup',
-                action: async () => {
-                    const restoredRecipe = new Recipe(recipe.backup);
-                    // keep shareId
-                    keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    toast("Recipe restored from NFC backup");
-                }
-            });
-        }
-
-        // Check for offline backup from the online database
-        if (recipe.offline_backup && recipe.offline_backup.length > 0) {
-            options.push({
-                id:     'offline',
-                label:  'Restore from offline backup',
-                action: async () => {
-                    const restoredRecipe = new Recipe(recipe.offline_backup, undefined, false);
-                    // keep shareId
-                    keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    toast("Recipe restored from offline backup");
-                }
-            });
-        }
-
-        // Check for XID
-        if (recipe.xid && recipe.xid.trim().length > 0) {
-            options.push({
-                id:     'xid',
-                label:  'Restore by XID (online)',
-                action: async () => {
-                    const xbRecipe = new XBloomRecipe(recipe.xid);
-                    await xbRecipe.fetchRecipeDetail();
-                    const restoredRecipe = xbRecipe.getRecipe();
-                    if (restoredRecipe) {
-                        // keep shareId and cup type in case user has customized it
-                        // (default recipeVo for the same XID may have a different cup type)
-                        keepSettingsAndSave(restoredRecipe, ['shareId', 'cupType']);
-                        toast("Recipe restored by XID");
-                    } else {
-                        throw new Error('Could not fetch recipe data using XID');
-                    }
-                }
-            });
-        }
-
-        // Check for shareId
-        if (recipe.shareId && recipe.shareId.trim().length > 0) {
-            options.push({
-                id:     'shareId',
-                label:  'Restore by Share Link (online)',
-                action: async () => {
-                    const xbRecipe = new XBloomRecipe(recipe.shareId);
-                    await xbRecipe.fetchRecipeDetail();
-                    const restoredRecipe = xbRecipe.getRecipe();
-                    if (restoredRecipe) {
-                        // keep original XID
-                        keepSettingsAndSave(restoredRecipe, ['xid']);
-                        toast("Recipe restored by Share Link");
-                    } else {
-                        throw new Error('Could not fetch recipe data using Share Link');
-                    }
-                }
-            });
-        }
-
-        if (options.length === 0) {
-            Alert.alert('No Restore Options', 'This recipe has no available restore options (no NFC backup, XID, or Share ID found)');
-            return;
-        }
-
-        setRestoreOptions(options);
-        setShowRestoreDialog(true);
-    }
-
-    function saveRecipe() {
-        console.log("Save Recipe");
-        if (!recipe) return;
-        let db = new RecipeDatabase();
-        if (recipe.isPourVolumeValid()) {
-            if (titleChanged && db.doesTitleExist(recipe.title)) {
-                let r = db.getRecipe(recipe.uuid);
-                //if the changed title matches the title of a duplicate recipe that has the same uuid. Then we hit an edge case where the user modified the title, but then changed back to what it was originally.
-                if (r?.title === recipe.title) {
-                    db.updateRecipe(recipe.uuid, recipe);
-                    navigation.goBack();
-                } else {
-                    Alert.alert('Save Error', 'The title of \"' + recipe.title + "\" already exists. Please choose a different name", [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
-                }
-            } else {
-                db.updateRecipe(recipe.uuid, recipe);
-                navigation.goBack();
-            }
-        } else {
-            Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
-                {
-                    text:    'Ok',
-                    onPress: () => console.log('Cancel Pressed')
-                }
-            ]);
-        }
-    }
-
-    const editInputComplete = useCallback(async (label: string, value: string, pourNumber?: number) => {
-        if (!recipe) return;
-        // Recipe settings
-        const fieldConfigs: Record<string, {
-            requiresNumber: boolean;
-            update: (r: Recipe, val: string) => void;
-        }> = {
-            [RECIPE_LABELS.GRINDER]:    {
-                requiresNumber: true,
-                update:         (r: Recipe, val: string) => {
-                    r.grinder = val === "1";
-                    setKey((prev) => prev + 1);
-                }
-            },
-            [RECIPE_LABELS.GRIND_SIZE]: {
-                requiresNumber: true,
-                update:         (r: Recipe, val: string) => r.grindSize = Number(val)
-            },
-            [RECIPE_LABELS.GRIND_RPM]:  {
-                requiresNumber: true,
-                update:         (r: Recipe, val: string) => r.grindRPM = Number(val)
-            },
-            [RECIPE_LABELS.RATIO]:      {
-                requiresNumber: true,
-                update:         (r: Recipe, val: string) => {
-                    r.ratio = Number(val)
-                }
-            },
-            [RECIPE_LABELS.DOSE]:       {
-                requiresNumber: true,
-                update:         (r: Recipe, val: string) => {
-                    r.dosage = Number(val)
-                }
-            },
-            [RECIPE_LABELS.XID]:        {
-                requiresNumber: false,
-                update:         (r: Recipe, val: string) => r.xid = val
-            },
-            [RECIPE_LABELS.TITLE]:      {
-                requiresNumber: false,
-                update:         (r: Recipe, val: string) => {
-                    r.title = val;
-                    setTitleChanged(true);
-                }
-            },
-            [RECIPE_LABELS.CUP]:        {
-                requiresNumber: false,
-                update:         (r: Recipe, val: string) => {
-                    r.cupType = Number(val);
-                }
-            }
-        };
-
-        // Handle pour-specific settings
-        const pourFields: Record<string, (r: Recipe, val: string, pourNum: number) => void> = {
-            [RECIPE_LABELS.VOLUME]:           (r: Recipe, val: string, pourNum: number) =>
-                                              {
-                                                  r.pours[pourNum].volume = Number(val)
-                                              },
-            [RECIPE_LABELS.TEMPERATURE]:      (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].temperature = Number(val),
-            [RECIPE_LABELS.FLOW_RATE]:        (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].flowRate = Number(val),
-            [RECIPE_LABELS.PAUSING]:          (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].pauseTime = Number(val),
-            [RECIPE_LABELS.PATTERN]:          (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].pourPattern = Number(val),
-            [RECIPE_LABELS.AGITATION_BEFORE]: (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].setAgitationBefore(val === "1"),
-            [RECIPE_LABELS.AGITATION_AFTER]:  (r: Recipe, val: string, pourNum: number) =>
-                                                  r.pours[pourNum].setAgitationAfter(val === "1")
-        };
-
-        // Handle regular fields
-        const fieldConfig = fieldConfigs[label];
-        if (fieldConfig) {
-            // Skip validation for non-numeric fields or validate numeric ones
-            if (!fieldConfig.requiresNumber || !isNaN(Number(value))) {
-                fieldConfig.update(recipe, value);
-                setEnableSave(true);
-            }
-        } else {
-            // Handle pour-specific fields
-            const pourField = pourFields[label];
-            if (pourField) {
-                if (pourNumber !== undefined && !isNaN(Number(value))) {
-                    pourField(recipe, value, pourNumber);
-                    setEnableSave(true);
-                }
-            } else {
-                throw new Error("Unknown Edit Recipe Input field");
-            }
-        }
-        // Check if the field affects volume calculations and force update
-        if (label === RECIPE_LABELS.RATIO ||
-            label === RECIPE_LABELS.DOSE ||
-            label === RECIPE_LABELS.VOLUME) {
-            totalVolumeRef.current?.forceUpdate();
-
-            // Update Auto button disabled state without re-rendering the whole component
-            if (autoButtonRef.current) {
-                const isDisabled = recipe.isPourVolumeValid();
-                autoButtonRef.current.setNativeProps({
-                    disabled: isDisabled,
-                    style: { opacity: isDisabled ? 0.5 : 1 }
-                });
-            }
-        }
-    }, [recipe, setKey, setEnableSave, setTitleChanged, totalVolumeRef, autoButtonRef, RECIPE_LABELS]);
 
     return (
         <>
@@ -732,7 +312,7 @@ export default function editRecipe() {
                         open={showRestoreDialog}
                         onOpenChange={setShowRestoreDialog}
                         options={restoreOptions}
-                        onRestored={() => setKey((prev) => prev + 1)}
+                        onRestored={bumpKey}
                     />
                 </YStack>
                 : ""}
