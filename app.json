@@ -64,7 +64,8 @@
       "expo-share-intent",
       "expo-font",
       "expo-sqlite",
-      "./plugins/withInhibitPodWarnings"
+      "./plugins/withInhibitPodWarnings",
+      "./plugins/withShareExtensionCcache"
     ],
     "experiments": {
       "typedRoutes": true

@@ -15,6 +15,7 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
+AgentResources/
 
 # macOS
 .DS_Store
