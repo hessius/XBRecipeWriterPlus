@@ -3,7 +3,7 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 
 import {useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Alert, Platform, Pressable, useColorScheme} from "react-native";
+import {Alert, Platform, useColorScheme} from "react-native";
 
 import {YStack} from "tamagui";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
@@ -20,6 +20,7 @@ import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {palette, screenBackground} from '@/constants/colors';
+import IconButton from "@/components/IconButton";
 
 // @ts-ignore-next-line
 
@@ -59,12 +60,6 @@ export default function HomeScreen() {
             headerRight: () => <IconButton onPress={() => readCard()} title="" icon={readCardIcon()}/>
         })
     }, [navigation]);
-
-    type IconProps = {
-        title: string;
-        onPress: () => void;
-        icon: React.ReactElement;
-    }
 
     useFocusEffect(
         React.useCallback(() => {
@@ -147,13 +142,6 @@ export default function HomeScreen() {
         }
         return recipes.sort((a: Recipe, b: Recipe) => a.title.localeCompare(b.title));
     }
-
-
-    const IconButton = (props: IconProps) => (
-        <Pressable onPress={props.onPress}>
-            {props.icon}
-        </Pressable>
-    );
 
 
     async function onNFCDialogClose() {

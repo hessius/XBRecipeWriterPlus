@@ -7,7 +7,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {ActivityIndicator, Alert, Platform, Pressable, useColorScheme, useWindowDimensions} from "react-native";
 
 
-import {Adapt, Button, Dialog, Fieldset, getTokens, H6, ScrollView, Sheet, XStack, YStack} from "tamagui";
+import {Button, getTokens, H6, ScrollView, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
 import LabeledInput from "@/components/LabeledInput";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -20,6 +20,8 @@ import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {palette} from '@/constants/colors';
+import IconButton from "@/components/IconButton";
+import RestoreDialog, {type RestoreOption} from "@/components/RestoreDialog";
 
 
 export default function editRecipe() {
@@ -33,11 +35,7 @@ export default function editRecipe() {
     const [key, setKey] = useState(0);
     const [isLoadingTitle, setIsLoadingTitle] = useState(false);
     const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-    const [restoreOptions, setRestoreOptions] = useState<Array<{
-        id: string;
-        label: string;
-        action: () => Promise<void>;
-    }>>([]);
+    const [restoreOptions, setRestoreOptions] = useState<RestoreOption[]>([]);
 
     // disable scrolling when using sliders
     const scrollViewRefs = useRef<Map<string, ScrollView>>(new Map());
@@ -142,12 +140,6 @@ export default function editRecipe() {
         }
     };
 
-    type IconProps = {
-        title: string;
-        onPress: () => void;
-        icon: React.ReactElement;
-    }
-
     function writeCardIcon() {
         return (
             <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
@@ -158,12 +150,6 @@ export default function editRecipe() {
         )
     }
 
-
-    const IconButton = (props: IconProps) => (
-        <Pressable onPress={props.onPress}>
-            {props.icon}
-        </Pressable>
-    );
 
     function getRecipe(): Recipe | null {
         return recipe;
@@ -261,95 +247,12 @@ export default function editRecipe() {
         }
     }
 
-    const RestoreDialog = () => {
-        const [isRestoring, setIsRestoring] = useState(false);
-
-        const handleRestoreAction = async (action: () => Promise<void>) => {
-            setIsRestoring(true);
-            try {
-                await action();
-            } catch (error) {
-                console.error("Failed to restore recipe:", error);
-                toast(`${error}`, {
-                    styles: {
-                        view: {backgroundColor: 'rose'}
-                    }
-                });
-            } finally {
-                setIsRestoring(false);
-                setShowRestoreDialog(false);
-                setKey((prev) => prev + 1);
-            }
-        };
-
-        return (
-            <Dialog modal open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
-                <Adapt platform="touch">
-                    <Sheet
-                        snapPoints={[Math.min(40 + restoreOptions.length * 15, 80)]}
-                        zIndex={200000} modal dismissOnSnapToBottom>
-                        <Sheet.Frame padding="$4">
-                            <Adapt.Contents/>
-                        </Sheet.Frame>
-                        <Sheet.Overlay
-                            transition="quick"
-                            enterStyle={{opacity: 0}}
-                            exitStyle={{opacity: 0}}
-                        />
-                    </Sheet>
-                </Adapt>
-
-                <Dialog.Portal>
-                    <Dialog.Overlay key="overlay" opacity={0.5}/>
-                    <Dialog.Content bordered elevate gap="$4" maxWidth={400}>
-                        <Dialog.Title alignSelf="center" fontWeight={600}>
-                            Restore Recipe
-                        </Dialog.Title>
-                        <Dialog.Description textAlign="center">
-                            Choose how you would like to restore this recipe:
-                        </Dialog.Description>
-
-                        <Fieldset gap="$3" marginTop={"$3"}>
-                            {restoreOptions.map((option) => (
-                                <YStack key={option.id} gap="$2">
-                                    <Button marginTop={"$2"}
-                                            theme="red"
-                                            onPress={() => handleRestoreAction(option.action)}
-                                            size="$4"
-                                            disabled={isRestoring}
-                                            opacity={isRestoring ? 0.5 : 1}>
-                                        {option.label}
-                                    </Button>
-                                </YStack>
-                            ))}
-                            <XStack alignItems="center" gap="$2" justifyContent="center">
-                                <ActivityIndicator size="large" color={palette.muted} animating={isRestoring}/>
-                            </XStack>
-                        </Fieldset>
-
-                        <XStack justifyContent="center" paddingTop="$4">
-                            <Button
-                                theme="active"
-                                onPress={() => setShowRestoreDialog(false)}>
-                                Cancel
-                            </Button>
-                        </XStack>
-                    </Dialog.Content>
-                </Dialog.Portal>
-            </Dialog>
-        );
-    };
-
     function restoreRecipe() {
         const alwaysKeepFields = ['uuid', 'backup', 'title'];
 
         if (!recipe) return;
 
-        const options: Array<{
-            id: string;
-            label: string;
-            action: () => Promise<void>;
-        }> = [];
+        const options: RestoreOption[] = [];
 
         function keepSettingsAndSave(
             restoredRecipe: Recipe,
@@ -825,7 +728,12 @@ export default function editRecipe() {
                     {Platform.OS !== "ios" && showAndroidNFCDialog ?
                         <AndroidNFCDialog onClose={() => onNFCDialogClose()}
                                           progress={writeProgress}></AndroidNFCDialog> : ""}
-                    <RestoreDialog/>
+                    <RestoreDialog
+                        open={showRestoreDialog}
+                        onOpenChange={setShowRestoreDialog}
+                        options={restoreOptions}
+                        onRestored={() => setKey((prev) => prev + 1)}
+                    />
                 </YStack>
                 : ""}
         </>
