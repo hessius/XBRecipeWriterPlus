@@ -9,14 +9,24 @@ npm install
 npx expo start         # dev server (needs a dev client, not Expo Go — NFC is a native module)
 npm run ios            # expo run:ios   (add --device for real NFC)
 npm run android        # expo run:android
-npm run lint           # expo lint
-npm test               # jest (jest-expo preset); npm run test:watch to watch
+npm run lint           # eslint . (whole repo, not just app/ and components/)
+npm test               # jest; npm run test:watch to watch
 npx jest path/to/file  # single file; add -t "name" for a single test
 npm run typecheck      # tsc --noEmit
 npx expo-doctor        # dependency/config health
 ```
 
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests and expo-doctor on every push to
+main and every pull request. All four must be green; expo-doctor is a hard failure.
+
 `library/__tests__/` holds characterisation tests for the card byte format, volume math, and legacy JSON migrations. `cardFixtures.ts` is a deliberately **independent** reimplementation of the byte layout, so a round-trip test is not tautological — if you change the format, change both sides consciously. A changed expectation is a regression until proven otherwise: a malformed write to a genuine card is not trivially recoverable.
+
+`components/__tests__/` holds component tests using `@testing-library/react-native`. Note that
+its `render` and `fireEvent` are **asynchronous** as of v14 — forget the `await` and `screen`
+stays empty and the test silently passes for the wrong reason. Always render via
+`renderWithProviders` from `test-utils/render.tsx`, which supplies the Tamagui provider.
+`jest.config.js` extends jest-expo's preset rather than replacing it; new deps that ship
+untranspiled ESM need adding to `extraEsmPackages` there.
 
 NFC cannot be exercised in a simulator/emulator. Card read/write changes must be verified on a physical device with a real card.
 
@@ -30,8 +40,11 @@ Three layers, strictly separated:
   - `NFC.ts` — transport only. Branches on `Platform.OS`: iOS uses `NfcManager.iso15693HandlerIOS`, Android uses raw `nfcVHandler.transceive` commands (`0x23` read-multiple with a `0x20` single-block fallback, `0x21` write-single). Writes 4-byte blocks.
   - `RecipeDatabase.ts` — expo-sqlite (`xbrecipewriter.db`, sync API). Recipes are stored as a whole JSON blob in `recipes(uuid, recipeJSON)`, not normalized columns.
   - `XBloomRecipe.ts` — fetches from the undocumented `client-api.xbloom.com` endpoints and maps xBloom's `recipeVo` JSON onto a `Recipe`. Two endpoints: by share id, or by XID (`id.length <= 7`).
-- **`app/`** — expo-router file routes (`index` = recipe list, `editRecipe` = editor). Typed routes are enabled.
-- **`components/`** — Tamagui presentational/dialog components.
+- **`app/`** — expo-router file routes (`index` = recipe list, `editRecipe` = editor). Typed routes are enabled. Screens should stay close to layout only.
+- **`hooks/`** — the stateful logic the screens used to inline. `useRecipeEditor` owns the recipe and every mutation on it; `useCardWriter` owns the NFC write path. Put new screen logic here rather than growing a route file back to 800 lines.
+- **`components/`** — Tamagui presentational/dialog components. Declare them at module scope: a component defined inside another component's body is a new type on every render, so React remounts it and throws away its state. That bug has already been fixed twice here.
+- **`constants/colors.ts`** — every colour in the app. See below.
+- **`test-utils/`** — the Tamagui-aware `render` wrapper for component tests.
 
 Import with the `@/` alias (maps to repo root), e.g. `@/library/Recipe`.
 
@@ -57,11 +70,24 @@ Other domain invariants:
 
 ## UI conventions
 
+- **All colour comes from `constants/colors.ts`.** No hex literals and no named CSS colours in
+  `app/` or `components/`. Tamagui's `$`-prefixed theme tokens are fine for spacing, size and
+  radius, but colour is centralised in the palette module because roughly half the colour call
+  sites are plain React Native, react-navigation or SVG props that cannot take a `$token` at all.
+  Note that Tamagui's theme proxy has no parent-theme fallback, so a custom key added to `light`
+  would not resolve inside a sub-theme such as `light_Button` — hence the plain module.
+  Add a semantically named entry (`danger`, `surface`, `muted`) rather than a literal one (`red`).
 - **Tamagui** is the component/styling system (`tamagui.config.ts`, providers in `app/_layout.tsx`). Use `XStack`/`YStack`/`Button`/`Dialog` and `$`-prefixed tokens rather than raw RN `StyleSheet`. `@expo/vector-icons` is used for icons (v15 uses kebab-case AntDesign names, e.g. `plus-circle`, not `pluscircle`).
 - Dialogs follow the `Dialog` + `Adapt platform="touch"` + `Sheet` pattern (see `ImportRecipeComponent.tsx`).
 - **Mutate the `Recipe` object in place and bump a `key` counter** (`setKey(prev => prev + 1)`) to re-render, instead of cloning into state. This was a deliberate performance change — don't "fix" it by making `Recipe` immutable or re-serializing on every keystroke. Hot spots use refs + `useImperativeHandle` (`TotalVolumeComponent.forceUpdate`) to repaint a single value.
 - `ValidatedInput` owns numeric entry: min/max/step, slider, long-press repeat, and it reports validity upward via `setErrorFunction` — the save button is gated on that.
 - Screen headers are configured with `navigation.setOptions` inside `useEffect`, not via static route options.
+- The **React Compiler is enabled**, so do not hand-write `useMemo`/`useCallback` for new code and
+  do not read whole `props` inside a hook — destructure first, or the compiler bails out of
+  optimising the entire component. `try`/`finally` also causes a bailout; that one is a compiler
+  limitation and is accepted in `useRecipeEditor` and `RestoreDialog`.
+- `react-hooks/exhaustive-deps` is set to **warn**, not error, because the compiler owns
+  memoisation. The remaining warnings are deliberate. The other hook rules are errors.
 - Import happens through `expo-share-intent`: a shared xBloom URL's `id` query param is pulled out in `app/index.tsx` and handed to `ImportRecipeComponent`.
 
 ## Platform notes
