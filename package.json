@@ -71,5 +71,16 @@
   "private": true,
   "allowScripts": {
     "fsevents@2.3.3": true
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-nfc-manager",
+          "@react-native-community/progress-bar-android"
+        ],
+        "listUnknownPackages": false
+      }
+    }
   }
 }
