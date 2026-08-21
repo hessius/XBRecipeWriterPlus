@@ -35,6 +35,9 @@
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "useLegacyPackaging": true
+          },
+          "ios": {
+            "ccacheEnabled": true
           }
         }
       ],
@@ -60,7 +63,8 @@
       ],
       "expo-share-intent",
       "expo-font",
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/withInhibitPodWarnings"
     ],
     "experiments": {
       "typedRoutes": true

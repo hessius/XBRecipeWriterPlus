@@ -11,9 +11,14 @@ global.Buffer = require('buffer').Buffer;
  * Android, which uses AndroidNFCDialog instead.
  */
 export function setNfcAlertIOS(message: string) {
-    if (Platform.OS === 'ios') {
-        NfcManager.setAlertMessageIOS(message);
+    if (Platform.OS !== 'ios') {
+        return;
     }
+    // Rejects with "Not even registered" if the session has already ended, and
+    // there is no way to interrogate session state up front. It is cosmetic, so
+    // swallow it rather than surface an unhandled rejection.
+    Promise.resolve(NfcManager.setAlertMessageIOS(message)).catch(() => {
+    });
 }
 
 type NfcSystemInfo = {
@@ -47,8 +52,17 @@ class NFC {
 
 
     async close() {
-        await NfcManager.cancelTechnologyRequest();
+        // Callers close explicitly and again from a `finally`; cancelling a
+        // session that has already ended rejects with "Not even registered".
+        if (this.isClosed) {
+            return;
+        }
         this.isClosed = true;
+        try {
+            await NfcManager.cancelTechnologyRequest();
+        } catch (e) {
+            console.log("Error closing NFC session: " + e);
+        }
     }
 
     async open() {

@@ -258,8 +258,10 @@ class Recipe {
             let uid = await nfc.getUID();
             let data = await nfc.readCard(progressCallBack);
             await progressCallBack(90)
-            await nfc.close();
+            // Report completion before closing: on iOS the progress text is
+            // written into the system NFC sheet, which is gone once we close.
             await progressCallBack(100)
+            await nfc.close();
             if (data) {
                 console.log(Recipe.convertNumberArrayToHex(data));
                 this.uid = uid ?? [];
