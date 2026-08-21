@@ -115,7 +115,7 @@ class RecipeDatabase {
         let recipes = this.retrieveAllRecipes();
         if (recipes) {
             for (let i = 0; i < recipes.length; i++) {
-                if (recipes[i].title.toLowerCase() == title.toLowerCase()) {
+                if (recipes[i].title.toLowerCase() === title.toLowerCase()) {
                     return true;
                 }
             }

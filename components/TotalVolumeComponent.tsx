@@ -47,4 +47,6 @@ const TotalVolumeComponent = forwardRef<TotalVolumeComponentRef, TotalVolumeComp
     )
 });
 
+TotalVolumeComponent.displayName = "TotalVolumeComponent";
+
 export default TotalVolumeComponent;

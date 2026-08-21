@@ -9,7 +9,6 @@ export default function RecipeItem(props: {
     onPress: () => void
 }) {
     const [pressed, setPressed] = useState(false)
-    const [showDialog, setShowDialog] = useState(false)
     const colorScheme = useColorScheme();
 
     async function onPress() {
@@ -50,7 +49,7 @@ export default function RecipeItem(props: {
 
     return (
         <YStack padding="$2">
-            <Pressable style={getStyle(props.recipe.cupType)} onLongPress={() => setShowDialog(true)}
+            <Pressable style={getStyle(props.recipe.cupType)}
                        onPressIn={() => setPressed(true)}
                        onPress={() => onPress()} onPressOut={() => setPressed(false)}>
                 <YStack paddingHorizontal="$2" paddingVertical="$1" alignItems='center'>

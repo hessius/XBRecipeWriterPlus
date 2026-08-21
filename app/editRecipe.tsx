@@ -4,7 +4,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useCallback, useEffect, useRef} from "react";
-import {ActivityIndicator, Platform, Pressable, useColorScheme, useWindowDimensions} from "react-native";
+import {ActivityIndicator, Platform, Pressable, useWindowDimensions} from "react-native";
 import {Button, getTokens, H6, ScrollView, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
 import LabeledInput from "@/components/LabeledInput";
@@ -16,11 +16,11 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
 import RestoreDialog from "@/components/RestoreDialog";
-import useCardWriter from "@/hooks/useCardWriter";
-import useRecipeEditor, {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
+import {useCardWriter} from "@/hooks/useCardWriter";
+import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 
 
-export default function editRecipe() {
+export default function EditRecipe() {
     const {recipeJSON, saveEnabled} = useLocalSearchParams();
     // disable scrolling when using sliders
     const scrollViewRefs = useRef<Map<string, ScrollView>>(new Map());
@@ -45,11 +45,10 @@ export default function editRecipe() {
     const {writeCard, onNFCDialogClose, showAndroidNFCDialog, writeProgress} = useCardWriter();
 
     const navigation = useNavigation();
-    const {height, width} = useWindowDimensions();
-    const colorScheme = useColorScheme();
+    const {width} = useWindowDimensions();
 
     const {
-        recipe, getRecipe, key, enableSave, inputError, setInputError, isLoadingTitle,
+        recipe, getRecipe, enableSave, inputError, setInputError, isLoadingTitle,
         showRestoreDialog, setShowRestoreDialog, restoreOptions, totalVolumeRef, autoButtonRef,
         bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
         restoreRecipe, saveRecipe, editInputComplete
@@ -60,14 +59,6 @@ export default function editRecipe() {
     });
 
 
-    useEffect(() => {
-        navigation.setOptions({
-            title:       'Edit Recipe',
-            headerShown: true,
-            headerRight: () => <IconButton onPress={() => writeCard(recipe)} title="" icon={writeCardIcon()}/>
-        })
-    }, [navigation, recipe]);
-
     function writeCardIcon() {
         return (
             <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
@@ -77,6 +68,14 @@ export default function editRecipe() {
             </Svg>
         )
     }
+
+    useEffect(() => {
+        navigation.setOptions({
+            title:       'Edit Recipe',
+            headerShown: true,
+            headerRight: () => <IconButton onPress={() => writeCard(recipe)} title="" icon={writeCardIcon()}/>
+        })
+    }, [navigation, recipe]);
 
 
     return (

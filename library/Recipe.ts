@@ -92,10 +92,10 @@ class Recipe {
             if (this.cupType === 0x23 || this.cupType === 0x13) {
                 this.defaultCups = ((this.cupType & 0xF0) >> 4) + 1;
                 this.cupType = 0x03; // 0x03 is for Tea
-            } else if (this.cupType == 0x04) {
+            } else if (this.cupType === 0x04) {
                 this.cupType = 0x01; // 0x01 is for Other
             }
-            if (this.cupType != CUP_TYPE.TEA) {
+            if (this.cupType !== CUP_TYPE.TEA) {
                 this.defaultCups = 0; // only used for Tea
             }
             this.grinder = jsonRecipe.grinder ?? true;
@@ -192,7 +192,7 @@ class Recipe {
     }
 
     public isTea(): boolean {
-        return this.cupType == CUP_TYPE.TEA;
+        return this.cupType === CUP_TYPE.TEA;
     }
 
     public getCupTypeName(): string {
@@ -379,9 +379,9 @@ class Recipe {
             this.fixRatio();
             return;
         }
-        if (this.pours.length == 1) { //if just 1 pour set to total volume
+        if (this.pours.length === 1) { //if just 1 pour set to total volume
             this.pours[0].volume = this.getTotalVolume();
-        } else if (this.pours.length > 1 && this.getPourTotalVolume() == 0) {
+        } else if (this.pours.length > 1 && this.getPourTotalVolume() === 0) {
             //this is where pours have been added, but not volume has been set
             //set the bloom to double dosage, and disribute rest evenly
             this.pours[0].volume = this.dosage * 2;
@@ -389,7 +389,7 @@ class Recipe {
                 this.pours[i].volume = Math.round((this.getTotalVolume() - this.pours[0].volume) / (this.pours.length - 1));
             }
             //tack on/remove any extra thst occurs because of rounding to last pour
-            if (this.getTotalVolume() - this.getPourTotalVolume() != 0) {
+            if (this.getTotalVolume() - this.getPourTotalVolume() !== 0) {
                 let diff = this.getTotalVolume() - this.getPourTotalVolume();
                 this.pours[this.pours.length - 1].volume += diff;
             }
@@ -444,7 +444,7 @@ class Recipe {
         let hexOutput = ''
         for (let i = 0; i < array.length; i++) {
             let hex = array[i].toString(16);
-            if (hex.length == 1) {
+            if (hex.length === 1) {
                 hex = '0' + hex;
             }
             hexOutput += "" + hex;
@@ -500,7 +500,7 @@ class Recipe {
 
         this.grindSize = data[41 + poursDataLength] + GRIND_SIZE_OFFSET
 
-        if (this.grindSize == GRIND_SIZE_OFFSET + GRINDER_OFF) {
+        if (this.grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
             this.grinder = false;
         }
 
@@ -510,7 +510,6 @@ class Recipe {
 
         let index = 41;
         let pourNum = 1;
-        let poursVolume = 0;
 
         while (index < 41 + poursDataLength) {
             let volume = data[index]
@@ -534,7 +533,7 @@ class Recipe {
             if (pause > 360) pause = 360;
 
             // first pour contains dose and RPM data
-            if (pourNum == 1) {
+            if (pourNum === 1) {
                 // Extract the 5-bit dose value (bits 0-4)
                 const dose = dose_and_wait_minutes & 0x1F; // 0x1F = 0b00011111
                 const rpm = data[index + 6];
@@ -547,7 +546,6 @@ class Recipe {
             let pour = new Pour(pourNum, volume, temp, flow, agitation, pattern, pause);
             this.pours.push(pour);
 
-            poursVolume += volume;
             index += 8
             pourNum++;
         }

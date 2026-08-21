@@ -1,7 +1,7 @@
 
 import type {SizeTokens} from 'tamagui'
 import {Label, ToggleGroup, XStack} from 'tamagui'
-import React, {useEffect, useState} from 'react';
+import React, {useState} from 'react';
 import {MyButton} from "@/components/MyButton";
 import {palette} from '@/constants/colors';
 
@@ -16,12 +16,13 @@ export function MyButtonGroup(props: {
     getLabelText: (id: number) => string
 }) {
     const [value, setValue] = useState<string>(props.initialValue ?? "")
-
-    useEffect(() => {
-        if (props.initialValue !== undefined) {
-            setValue(props.initialValue)
-        }
-    }, [props.initialValue])
+    // Re-sync when the parent supplies a different initial value. Done during
+    // render rather than in an effect so there is no extra render pass.
+    const [lastInitialValue, setLastInitialValue] = useState(props.initialValue)
+    if (props.initialValue !== undefined && props.initialValue !== lastInitialValue) {
+        setLastInitialValue(props.initialValue)
+        setValue(props.initialValue)
+    }
 
     const handleValueChange = (newValue: string) => {
         setValue(newValue)

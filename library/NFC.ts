@@ -1,8 +1,9 @@
 import {Platform} from 'react-native';
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import Recipe from "@/library/Recipe";
+import {Buffer} from 'buffer';
 
-global.Buffer = require('buffer').Buffer;
+global.Buffer = Buffer;
 
 /**
  * iOS presents its own modal NFC sheet on top of the app, so anything rendered
@@ -30,9 +31,6 @@ type NfcSystemInfo = {
 
 class NFC {
     private isClosed = true;
-
-    constructor() {
-    }
 
     async init() {
         try {
@@ -140,9 +138,9 @@ class NFC {
                 console.log("BlockNumber:" + blockNumber);
                 console.log("BlockCount:" + blockCount);
 
-                let resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
+                const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
 
-                if (resp && resp.length && resp.length > 0 && resp[0] == 0) {
+                if (resp && resp.length && resp.length > 0 && resp[0] === 0) {
                     resp.splice(0, 1);
                     console.log(Recipe.convertNumberArrayToHex(resp));
                     return resp;
@@ -153,7 +151,7 @@ class NFC {
                     for (let i = 0; i < blockCount; i++) {
                         const bn = blockNumber + i;
                         const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
-                        let resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
+                        const resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
 
                         if (!resp?.length || resp[0] !== 0x00) {
                             throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
@@ -202,7 +200,7 @@ class NFC {
         } else {
             let uid = await this.getUID();
             if (uid && uid.length > 0) {
-                let resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x21, ...uid, blockNumber, ...dataBlock]);
+                await NfcManager.nfcVHandler.transceive([flags, 0x21, ...uid, blockNumber, ...dataBlock]);
             }
         }
     }

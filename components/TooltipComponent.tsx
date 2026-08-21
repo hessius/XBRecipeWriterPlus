@@ -1,6 +1,6 @@
 import {YStack} from 'tamagui'
 import {AntDesign} from "@expo/vector-icons";
-import {Alert, useColorScheme} from 'react-native';
+import {Alert} from 'react-native';
 import React from 'react';
 import {palette} from '@/constants/colors';
 
@@ -8,8 +8,6 @@ export default function TooltipComponent(props: {
     content: string
     paddingLeft?: string
 }) {
-
-    const colorScheme = useColorScheme();
 
     async function handlePress() {
         Alert.alert('What is this?', props.content, [

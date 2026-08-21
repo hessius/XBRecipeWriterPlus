@@ -37,7 +37,7 @@ export class XBloomRecipe {
             let isSetGrinderSize: number = this.xbRecipeJSON.recipeVo.isSetGrinderSize ?? 2;
 
             // 2 means grinder is disabled
-            if (isSetGrinderSize == 2 || grindSize == GRIND_SIZE_OFFSET + GRINDER_OFF) {
+            if (isSetGrinderSize === 2 || grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
                 recipe.grinder = false;
             }
 
@@ -98,8 +98,8 @@ export class XBloomRecipe {
             for (let i = 0; i < pourCount; i++) {
                 let pourData = this.xbRecipeJSON.recipeVo.pourList[i];
                 let flowRate = pourData.flowRate * 10;
-                let isEnableVibrationAfter = pourData.isEnableVibrationAfter == 1;
-                let isEnableVibrationBefore = pourData.isEnableVibrationBefore == 1;
+                let isEnableVibrationAfter = pourData.isEnableVibrationAfter === 1;
+                let isEnableVibrationBefore = pourData.isEnableVibrationBefore === 1;
                 let pattern: number;
                 switch (pourData.pattern) {
                     case 1:
@@ -118,7 +118,7 @@ export class XBloomRecipe {
                 let pause = pourData.pausing;
                 let volume = pourData.volume;
                 let temperature = pourData.temperature;
-                if (recipe.cupType == CUP_TYPE.TEA && volume > 90) {
+                if (recipe.cupType === CUP_TYPE.TEA && volume > 90) {
                     console.log("Fixing tea pour volume to 90ml, was: " + volume + "ml")
                     volume = 90;
                 }

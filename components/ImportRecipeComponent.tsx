@@ -2,7 +2,7 @@ import {XBloomRecipe} from '@/library/XBloomRecipe';
 import {useRouter} from 'expo-router';
 import React, {useEffect, useState} from 'react';
 import {Image} from 'react-native';
-import {Adapt, Button, Dialog, Fieldset, ScrollView, Sheet, Text, XStack, YStack} from 'tamagui'
+import {Adapt, Button, Dialog, Fieldset, Sheet, Text, XStack, YStack} from 'tamagui'
 
 
 export default function ImportRecipeComponent(props: {

@@ -11,18 +11,18 @@ interface MyButtonProps {
     size?: SizeTokens;
 }
 
-export function MyButton({id, label, value, size}: MyButtonProps) {
-    const colorScheme = useColorScheme();
-
-    const MyToggleGroupItem = styled(ToggleGroup.Item, {
-        variants: {
-            active: {
-                true: {
-                    backgroundColor: palette.danger,
-                },
+const MyToggleGroupItem = styled(ToggleGroup.Item, {
+    variants: {
+        active: {
+            true: {
+                backgroundColor: palette.danger,
             },
         },
-    });
+    },
+});
+
+export function MyButton({id, label, value, size}: MyButtonProps) {
+    const colorScheme = useColorScheme();
 
     const scheme = colorScheme === 'light' ? textColors.light : textColors.dark;
 
@@ -33,7 +33,7 @@ export function MyButton({id, label, value, size}: MyButtonProps) {
             active={value === "" + id}
             aria-label={label}
         >
-            <H6 color={value == "" + id ? scheme.inverse : scheme.primary}>
+            <H6 color={value === "" + id ? scheme.inverse : scheme.primary}>
                 {label}
             </H6>
         </MyToggleGroupItem>

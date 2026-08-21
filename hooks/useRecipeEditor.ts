@@ -43,7 +43,11 @@ type Params = {
  * operations call `setKey` instead of `setRecipe`.
  */
 export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Params) {
-    const [recipe, setRecipe] = useState<Recipe | null>(null);
+    // Derived from the route param, so it is an initial value rather than an
+    // effect: parsing it in an effect would render once with a null recipe.
+    const [recipe, setRecipe] = useState<Recipe | null>(
+        () => (recipeJSON && recipeJSON !== "") ? new Recipe(undefined, recipeJSON as string) : null
+    );
     const [inputError, setInputError] = useState(false);
     const [titleChanged, setTitleChanged] = useState(false);
     const [enableSave, setEnableSave] = useState(initiallySaveEnabled);
@@ -59,13 +63,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         return recipe;
     }
 
-    useEffect(() => {
-        if (recipeJSON && recipeJSON !== "") {
-            const newRecipe = new Recipe(undefined, recipeJSON as string);
-            setRecipe(newRecipe);
-        }
-    }, []);
-
     const fetchRecipeTitle = async (r: Recipe) => {
         setIsLoadingTitle(true);
 
@@ -79,10 +76,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 r.title = recipeTitle;
                 // Also get shareID for restore feature if not already present
                 let xbr = xbRecipe.getRecipe();
-                if (xbr && xbr.shareId.length > 0 && r.shareId.length == 0) {
+                if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
                     r.shareId = xbr.shareId;
                 }
-                if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length == 0) {
+                if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
                     r.offline_backup = xbr.offline_backup;
                 }
                 setRecipe(r);
@@ -102,6 +99,9 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             recipe.xid &&
             recipe.xid.trim().length > 0 &&
             (!recipe.title || recipe.title.trim().length === 0)) {
+            // Syncing with an external system (the xBloom API); the setState calls
+            // happen around an await, not synchronously during the effect.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             void fetchRecipeTitle(recipe);
         }
     }, [recipe]);
@@ -156,7 +156,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
 
         function keepSettingsAndSave(
             restoredRecipe: Recipe,
-            fieldsToKeep: Array<keyof Recipe> = []
+            fieldsToKeep: (keyof Recipe)[] = []
         ) {
             if (!recipe) return;
             let keepFields = [...alwaysKeepFields, ...fieldsToKeep];
@@ -397,7 +397,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 });
             }
         }
-    }, [recipe, setKey, setEnableSave, setTitleChanged, totalVolumeRef, autoButtonRef, RECIPE_LABELS]);
+    }, [recipe, setKey, setEnableSave, setTitleChanged, totalVolumeRef, autoButtonRef]);
 
     return {
         recipe,

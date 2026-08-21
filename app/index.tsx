@@ -1,7 +1,7 @@
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 
-import {useNavigation, useRouter} from "expo-router";
+import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Alert, Platform, useColorScheme} from "react-native";
 
@@ -10,7 +10,6 @@ import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
-import {useFocusEffect} from "expo-router";
 
 import {toast, ToastPosition} from "@backpackapp-io/react-native-toast";
 import ImportRecipeComponent from "@/components/ImportRecipeComponent";
@@ -38,7 +37,7 @@ export default function HomeScreen() {
 
     const nfc = new NFC();
 
-    const {hasShareIntent, shareIntent, error, resetShareIntent} = useShareIntentContext();
+    const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
 
     const colorScheme = useColorScheme();
 
@@ -125,11 +124,6 @@ export default function HomeScreen() {
         forceRefresh();
     }
 
-    interface RenderItemProps {
-        item: { recipe: Recipe };
-        recipe: Recipe;
-    }
-
     function extractItemKey(item: Recipe) {
         return item.key;
     }
@@ -168,12 +162,15 @@ export default function HomeScreen() {
         if (hasShareIntent) {
             console.log("Share intent received:" + JSON.stringify(shareIntent));
 
-            if (shareIntent.type == "weburl" && shareIntent.webUrl) {
+            if (shareIntent.type === "weburl" && shareIntent.webUrl) {
                 let url = new URL(shareIntent.webUrl);
                 if (url) {
                     let id = url.searchParams.get("id");
                     if (id) {
                         console.log("Showing import dialog for recipe id:" + id);
+                        // Reacting to an inbound share intent — an external system
+                        // pushing into React, which is what effects are for.
+                        // eslint-disable-next-line react-hooks/set-state-in-effect
                         setShowImportRecipeDialog(() => true);
                         setXBloomRecipeID(() => id);
                         forceRefresh();
@@ -208,11 +205,10 @@ export default function HomeScreen() {
             recipes = db.retrieveAllRecipes();
         }
 
-        if (recipes && recipes.length > 0) {
-            setRecipesJSON(JSON.stringify(recipes));
-        } else {
-            setRecipesJSON("");
-        }
+        // Loading from SQLite, an external system, rather than deriving state
+        // that could have been computed during render.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setRecipesJSON(recipes && recipes.length > 0 ? JSON.stringify(recipes) : "");
     }, [key]);
 
     // loads the first recipe automatically for debugging / testing

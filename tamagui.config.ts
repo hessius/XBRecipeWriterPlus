@@ -67,6 +67,7 @@ export type AppConfig = typeof config;
 declare module "tamagui" {
   // overrides TamaguiCustomConfig so your custom types
   // work everywhere you import `tamagui`
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- required by Tamagui's type-augmentation contract
   interface TamaguiCustomConfig extends AppConfig {}
 }
 
