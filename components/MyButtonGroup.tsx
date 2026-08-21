@@ -3,6 +3,7 @@ import type {SizeTokens} from 'tamagui'
 import {Label, ToggleGroup, XStack} from 'tamagui'
 import React, {useEffect, useState} from 'react';
 import {MyButton} from "@/components/MyButton";
+import {palette} from '@/constants/colors';
 
 export function MyButtonGroup(props: {
     size: SizeTokens
@@ -40,7 +41,7 @@ export function MyButtonGroup(props: {
                 {props.label}
             </Label>
 
-            <ToggleGroup style={{borderColor: "gray", borderWidth: 1, padding: 1}}
+            <ToggleGroup style={{borderColor: palette.muted, borderWidth: 1, padding: 1}}
                 value={value}
                 orientation={props.orientation}
                 type="single"

@@ -2,6 +2,7 @@ import {YStack} from 'tamagui'
 import {AntDesign} from "@expo/vector-icons";
 import {Alert, useColorScheme} from 'react-native';
 import React from 'react';
+import {palette} from '@/constants/colors';
 
 export default function TooltipComponent(props: {
     content: string
@@ -21,7 +22,7 @@ export default function TooltipComponent(props: {
 
     return (
         <YStack paddingLeft={props.paddingLeft}>
-            <AntDesign onPress={() => handlePress()} name="question-circle" size={20} color="#ff783e"/>
+            <AntDesign onPress={() => handlePress()} name="question-circle" size={20} color={palette.brandHelp}/>
         </YStack>
     )
 }

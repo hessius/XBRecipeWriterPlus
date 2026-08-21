@@ -1,6 +1,7 @@
 import React from 'react';
 import {useColorScheme} from 'react-native';
 import {H6, type SizeTokens, styled, ToggleGroup} from 'tamagui';
+import {palette, textColors} from '@/constants/colors';
 
 interface MyButtonProps {
     id: number;
@@ -17,14 +18,13 @@ export function MyButton({id, label, value, size}: MyButtonProps) {
         variants: {
             active: {
                 true: {
-                    backgroundColor: 'red',
+                    backgroundColor: palette.danger,
                 },
             },
         },
     });
 
-    let main_text_color = colorScheme === 'light' ? "black" : "white";
-    let inverse_text_color = colorScheme === 'light' ? "white" : "black";
+    const scheme = colorScheme === 'light' ? textColors.light : textColors.dark;
 
     return (
         <MyToggleGroupItem
@@ -33,7 +33,7 @@ export function MyButton({id, label, value, size}: MyButtonProps) {
             active={value === "" + id}
             aria-label={label}
         >
-            <H6 color={value == "" + id ? inverse_text_color : main_text_color}>
+            <H6 color={value == "" + id ? scheme.inverse : scheme.primary}>
                 {label}
             </H6>
         </MyToggleGroupItem>

@@ -7,6 +7,7 @@ import {Button, XStack} from "tamagui";
 
 import Recipe from "@/library/Recipe";
 import RecipeItem from "@/components/RecipeItem";
+import {palette} from '@/constants/colors';
 
 type Props = {
     recipe: Recipe;
@@ -49,18 +50,18 @@ export default function SwipeableRecipeRow({
                     onDelete();
                 }}
                         width={80} height="100%" marginRight="$1" alignItems="center" justifyContent="center"
-                        backgroundColor="red" borderColor="#ffa592" borderWidth={2} borderRadius={10}
+                        backgroundColor={palette.danger} borderColor={palette.outline} borderWidth={2} borderRadius={10}
                         aria-label={`Delete ${recipe.title}`}>
-                    <AntDesign name="delete" size={25} color="white"/>
+                    <AntDesign name="delete" size={25} color={palette.onBrand}/>
                 </Button>
                 <Button onPress={() => {
                     swipeableRef.current?.close();
                     onDuplicate();
                 }}
                         width={80} height="100%" alignItems="center" justifyContent="center"
-                        backgroundColor="#dddddd" borderColor="#ffa592" borderWidth={2} borderRadius={10}
+                        backgroundColor={palette.surface} borderColor={palette.outline} borderWidth={2} borderRadius={10}
                         aria-label={`Duplicate ${recipe.title}`}>
-                    <Feather name="copy" size={25} color="black"/>
+                    <Feather name="copy" size={25} color={palette.onLight}/>
                 </Button>
             </XStack>
         );

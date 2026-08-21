@@ -19,6 +19,7 @@ import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
+import {palette} from '@/constants/colors';
 
 
 export default function editRecipe() {
@@ -152,7 +153,7 @@ export default function editRecipe() {
             <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
                 <Path
                     d="M2,8.5h12.5M6,16.5h2M10.5,16.5h4M22,14.03v2.08c0,3.51-.89,4.39-4.44,4.39H6.44c-3.55,0-4.44-.88-4.44-4.39V7.89c0-3.51.89-4.39,4.44-4.39h8.06M20,9.5V3.5M20,3.5l-2,2M20,3.5l2,2"
-                    stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+                    stroke={palette.onBrand} stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
             </Svg>
         )
     }
@@ -322,7 +323,7 @@ export default function editRecipe() {
                                 </YStack>
                             ))}
                             <XStack alignItems="center" gap="$2" justifyContent="center">
-                                <ActivityIndicator size="large" color="gray" animating={isRestoring}/>
+                                <ActivityIndicator size="large" color={palette.muted} animating={isRestoring}/>
                             </XStack>
                         </Fieldset>
 
@@ -618,9 +619,9 @@ export default function editRecipe() {
                                     <XStack paddingLeft={"$4"} paddingRight={"$3"}>
                                         <Pressable onPress={handleReloadTitlePress} disabled={isLoadingTitle}>
                                             {isLoadingTitle ? (
-                                                <ActivityIndicator size={30} color="gray"/>
+                                                <ActivityIndicator size={30} color={palette.muted}/>
                                             ) : (
-                                                <AntDesign name="sync" size={30} color="gray"/>
+                                                <AntDesign name="sync" size={30} color={palette.muted}/>
                                             )}
                                         </Pressable>
                                     </XStack>
@@ -701,11 +702,11 @@ export default function editRecipe() {
                                             content={"This field shows the total volume of all pours versus the total volume based on your dosage and ratio (sum of all pour volumes / dose × ratio). The numbers need to match for a valid recipe that the machine will accept. Adjust pour volumes, ratio, and dose as needed.\n\nTea recipes show 90ml per pour, but the actual volume in the cup will be 120ml per pour since the machine automatically adds ~30ml to trigger the siphon. If the siphon triggers prematurely due to wet leaf expansion, reduce the volume of the latter steeps."}/>
                                     </XStack>
                                     <Button borderWidth={2} flex={1}
-                                            pressStyle={{backgroundColor: "#de4f00", borderColor: "gray"}}
-                                            borderColor="gray" paddingHorizontal="$3" paddingVertical="$2"
-                                            marginHorizontal="$2" marginVertical="$2" backgroundColor="#f4511e"
+                                            pressStyle={{backgroundColor: palette.brandPressed, borderColor: palette.muted}}
+                                            borderColor={palette.muted} paddingHorizontal="$3" paddingVertical="$2"
+                                            marginHorizontal="$2" marginVertical="$2" backgroundColor={palette.brand}
                                             disabledStyle={{opacity: 0.5}}
-                                            fontWeight={700} fontSize="$5" color="white" minWidth="100"
+                                            fontWeight={700} fontSize="$5" color={palette.onBrand} minWidth="100"
                                             onPress={() => autoAdjustPourVolumes()}
                                             disabled={getRecipe()!.isPourVolumeValid()}
                                             ref={autoButtonRef}
@@ -720,7 +721,7 @@ export default function editRecipe() {
                                 >
                                     {getRecipe() ? getRecipe()!.pours.map((pour, index) => (
                                         <YStack width={width - getTokens().size["$2"].val} key={index} borderWidth={2}
-                                                borderColor="gray" marginInline="$2" borderRadius={10}>
+                                                borderColor={palette.muted} marginInline="$2" borderRadius={10}>
                                             <YStack padding="$2">
                                                 <XStack justifyContent="space-between">
                                                     <H6 fontSize={20}
@@ -729,11 +730,11 @@ export default function editRecipe() {
                                                         <XStack paddingRight="$2">
                                                             <IconButton onPress={() => deletePour(index)} title=""
                                                                         icon={<AntDesign name="close-square" size={24}
-                                                                                         color="red"/>}></IconButton>
+                                                                                         color={palette.danger}/>}></IconButton>
                                                         </XStack>
                                                         <IconButton onPress={() => addPour(index)} title=""
                                                                     icon={<AntDesign name="plus-square" size={24}
-                                                                                     color="green"/>}></IconButton>
+                                                                                     color={palette.success}/>}></IconButton>
                                                     </XStack>
                                                 </XStack>
                                                 <ValidatedInput setErrorFunction={setInputError}
@@ -815,11 +816,11 @@ export default function editRecipe() {
                             backgroundColor="$backgroundFocus">
                         <Button marginHorizontal={"$2"} onPress={() => restoreRecipe()} width={150} fontSize={16}
                                 fontWeight={700}
-                                color="white" backgroundColor="#f4511e">Restore</Button>
+                                color={palette.onBrand} backgroundColor={palette.brand}>Restore</Button>
                         <Button marginHorizontal={"$4"} onPress={() => saveRecipe()} width={150} fontSize={16}
                                 fontWeight={700}
-                                disabled={inputError || !enableSave} color="white"
-                                backgroundColor={inputError || !enableSave ? "#f59d7d" : "#f4511e"}>Save</Button>
+                                disabled={inputError || !enableSave} color={palette.onBrand}
+                                backgroundColor={inputError || !enableSave ? palette.brandDisabled : palette.brand}>Save</Button>
                     </XStack>
                     {Platform.OS !== "ios" && showAndroidNFCDialog ?
                         <AndroidNFCDialog onClose={() => onNFCDialogClose()}

@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {H6, Input, type InputProps, Label, XStack, YStack} from 'tamagui';
+import {palette} from '@/constants/colors';
 
 type Props = InputProps & {
     validateInput?: ValidateCallbackFunction
@@ -62,13 +63,14 @@ export default function LabeledInput(props: Props) {
                            marginLeft="$1"
                            value={value ? "" + value : ""}
                            onChangeText={(val) => validate(val)}
-                           focusStyle={{borderColor: validated ? "gray" : "red"}}
-                           borderColor={validated ? "gray" : "red"} {...props}
-                           backgroundColor={props.disabled ? "#D3D3D3" : "$background"}
-                           color={props.disabled ? "black" : "$text"}>
+                           focusStyle={{borderColor: validated ? palette.muted : palette.danger}}
+                           borderColor={validated ? palette.muted : palette.danger} {...props}
+                           backgroundColor={props.disabled ? palette.surfaceDisabled : "$background"}
+                           color={props.disabled ? palette.onLight : "$text"}>
                     </Input>
                 </XStack>
-                {!validated ? <H6 fontWeight="600" color="red" padding="$2">{"Error: " + props.errorMessage}</H6> : ""}
+                {!validated ?
+                    <H6 fontWeight="600" color={palette.danger} padding="$2">{"Error: " + props.errorMessage}</H6> : ""}
             </YStack>
         </>
     );

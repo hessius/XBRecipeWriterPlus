@@ -10,6 +10,7 @@ import {Toasts} from '@backpackapp-io/react-native-toast';
 import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
 import {useColorScheme} from "react-native";
+import {palette} from '@/constants/colors';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -25,7 +26,7 @@ export default function RootLayout() {
         ...DefaultTheme,
         colors: {
             ...DefaultTheme.colors,
-            background: 'rgb(221,221,221)'
+            background: palette.navigationBackground
         }
     };
 
@@ -51,13 +52,13 @@ export default function RootLayout() {
                         <PortalProvider shouldAddRootHost>
                             <SafeAreaProvider>
                                 <ThemeProvider value={colorScheme === "light" ? LightTheme : DarkTheme}>
-                                    <SafeAreaView style={{flex: 1, backgroundColor: '#f4511e'}}>
+                                    <SafeAreaView style={{flex: 1, backgroundColor: palette.brand}}>
                                         <Stack
                                             screenOptions={{
                                                 headerStyle:      {
-                                                    backgroundColor: '#f4511e'
+                                                    backgroundColor: palette.brand
                                                 },
-                                                headerTintColor:  '#fff',
+                                                headerTintColor:  palette.onBrand,
                                                 headerTitleStyle: {
                                                     fontWeight: 'bold'
                                                 }

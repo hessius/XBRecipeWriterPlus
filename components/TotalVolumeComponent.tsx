@@ -1,6 +1,7 @@
 import Recipe from '@/library/Recipe'
 import {Label, XStack} from 'tamagui'
 import React, {useState, forwardRef, useImperativeHandle} from 'react';
+import {palette} from '@/constants/colors';
 
 interface TotalVolumeComponentProps {
     recipe: Recipe
@@ -27,7 +28,7 @@ const TotalVolumeComponent = forwardRef<TotalVolumeComponentRef, TotalVolumeComp
             flexWrap="nowrap"
             flexShrink={0}>
             <Label fontWeight="700" fontSize="$7">Volume:</Label>
-            <Label fontWeight="700" color={props.recipe.isPourVolumeValid() ? "$text" : "red"}
+            <Label fontWeight="700" color={props.recipe.isPourVolumeValid() ? "$text" : palette.danger}
                    fontSize="$8" width={64} style={{fontVariant: ['tabular-nums']}}
                    minWidth="$5" textAlign="center"
                    key={"pv_" + localKey}

@@ -2,6 +2,7 @@ import RecipeDatabase from '@/library/RecipeDatabase';
 import React, {useEffect, useState} from 'react';
 import type {PopoverProps} from 'tamagui'
 import {Adapt, Button, Popover, Sheet, YStack} from 'tamagui'
+import {palette} from '@/constants/colors';
 
 
 export function RecipeOperationDialog({
@@ -62,7 +63,7 @@ export function RecipeOperationDialog({
             >
                 <Popover.Arrow borderWidth={1} borderColor="$colorTransparent"/>
 
-                <YStack backgroundColor="white" borderRadius={20}>
+                <YStack backgroundColor={palette.onBrand} borderRadius={20}>
                     <Button
                         size="$3"
                         onPress={() => {

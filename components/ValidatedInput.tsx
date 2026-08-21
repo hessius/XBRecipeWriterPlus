@@ -3,6 +3,7 @@ import {Pressable, View} from 'react-native';
 import {H6, Input, type InputProps, Label, XStack, YStack} from 'tamagui';
 import {Slider} from '@miblanchard/react-native-slider';
 import {AntDesign} from '@expo/vector-icons';
+import {palette} from '@/constants/colors';
 
 type Props = InputProps & {
     onValidEditFunction?: ValidEditCallbackFunction
@@ -213,7 +214,7 @@ export default function ValidatedInput(props: Props) {
                 <XStack padding="$2" alignItems="center" alignSelf="flex-start" flex={1} gap={"$4"}>
                     <XStack gap="$3">
                         <Pressable onPress={onMinusPress} onLongPress={onMinusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
-                            <AntDesign padding={0} name="minus-circle" size={30} color="red"/>
+                            <AntDesign padding={0} name="minus-circle" size={30} color={palette.danger}/>
                         </Pressable>
                     </XStack>
 
@@ -221,7 +222,7 @@ export default function ValidatedInput(props: Props) {
                         {/* Slider container */}
                         <View style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0}}>
                             <View onResponderGrant={() => true} style={{
-                                flex: 1, borderWidth: 1, borderRadius: 10, borderColor: "gray", paddingHorizontal: 1
+                                flex: 1, borderWidth: 1, borderRadius: 10, borderColor: palette.muted, paddingHorizontal: 1
                             }}>
                                 <View style={{
                                     zIndex:         1,
@@ -244,7 +245,7 @@ export default function ValidatedInput(props: Props) {
                                         minimumValue={props.minimumValue ? props.minimumValue : 0}
                                         maximumValue={props.maximumValue ? props.maximumValue : 100}
                                         step={oneStep}
-                                        minimumTrackTintColor="rgba(255, 0, 0, 0.9)"
+                                        minimumTrackTintColor={palette.dangerTrack}
                                         maximumTrackTintColor="$color0"
                                         trackStyle={{height: 40, borderRadius: 8}}
                                         renderThumbComponent={() => (
@@ -264,17 +265,17 @@ export default function ValidatedInput(props: Props) {
 
                     <XStack alignItems="center" alignContent="center">
                         <Input padding="$2" value={processedValue} onChangeText={updateRecipe}
-                               focusStyle={{borderColor: validated ? "gray" : "red"}}
-                               borderColor={validated ? "gray" : "red"} {...props} minWidth={"$4"}>
+                               focusStyle={{borderColor: validated ? palette.muted : palette.danger}}
+                               borderColor={validated ? palette.muted : palette.danger} {...props} minWidth={"$4"}>
                         </Input>
                         <XStack paddingLeft="$3">
                             <Pressable onPress={onPlusPress} onLongPress={onPlusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
-                                <AntDesign padding={0} name="plus-circle" size={30} color="#ff5c00"/>
+                                <AntDesign padding={0} name="plus-circle" size={30} color={palette.brandIncrement}/>
                             </Pressable>
                         </XStack>
                     </XStack>
                 </XStack>
-                {!validated ? <H6 fontWeight="600" color="red" padding="$2">{"Error: " + errorMessage}</H6> : ""}
+                {!validated ? <H6 fontWeight="600" color={palette.danger} padding="$2">{"Error: " + errorMessage}</H6> : ""}
             </YStack>
         </>
     );
