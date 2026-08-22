@@ -225,10 +225,13 @@ export const onAccent = {
  * of specific hex strings, which no consumer wants and which breaks
  * lookup-by-value: on a union of two disjoint literal tuples, the parameter of
  * `indexOf` and `includes` collapses to `never`. Sub-project 2 needs exactly
- * that lookup to map a persisted colour back to an index. `readonly string[]`
- * keeps the immutability and drops the narrowing.
+ * that lookup to map a persisted colour back to an index.
+ *
+ * `Readonly<Record<...>>` rather than a bare `Record<...>`: the inner
+ * `readonly string[]` only freezes the elements, and without the outer
+ * `Readonly` the group properties themselves stay writable.
  */
-export const accents: Record<AccentGroup, readonly string[]> = {
+export const accents: Readonly<Record<AccentGroup, readonly string[]>> = {
     coffee: [
         "#9FC3F0", // Sky
         "#F0B98E", // Peach
