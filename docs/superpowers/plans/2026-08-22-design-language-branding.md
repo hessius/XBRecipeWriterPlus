@@ -2215,16 +2215,64 @@ The write ceremony. Blocks light up as they are committed. Writing to a card is
 the one irreversible thing the app does — a malformed write to a genuine card is
 not trivially recoverable — so this animation must never run ahead of reality.
 
+The tests read `backgroundColor` off each block, because that is the only thing
+that says *this block is on the card*; a block count cannot see it. An earlier
+draft asserted a child count, an accessibility value and a null render, and **15
+of 19** mutations survived it — including three separate ways to paint the strip
+fully green while nothing had been written.
+
+`clampBlocks` and `blockState` both defend their own input and both round down.
+A fraction is a block still in flight, and `Infinity` clamping to `totalBlocks`
+is the one lie this component must not tell.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `components/__tests__/WriteSweep.test.tsx`:
 
 ```tsx
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {AccessibilityInfo} from "react-native";
+import {act, screen} from "@testing-library/react-native";
 
 import WriteSweep, {blockState} from "@/components/WriteSweep";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/**
+ * The colour of every block, in strip order. `backgroundColor` is the only
+ * thing that says "this block is on the card"; a block count cannot see it.
+ */
+function colours(): string[] {
+    return screen.getAllByTestId("write-sweep-block")
+        .map((node) => (node.props.style as never as {backgroundColor: string}[])[0].backgroundColor);
+}
+
+/** The gap either side of a block. */
+function marginOf(index: number): number {
+    const style = screen.getAllByTestId("write-sweep-block")[index].props.style as never as
+        {marginHorizontal: number}[];
+    return style[0].marginHorizontal;
+}
+
+/**
+ * A block's *live* opacity. `props.style` is frozen at the last React render
+ * and cannot see an animated value; only the animated style is live, and it
+ * commits one frame after a rerender.
+ */
+function opacityOf(index: number): number {
+    const block = screen.getAllByTestId("write-sweep-block")[index] as never as
+        {props: {jestAnimatedStyle: {value: {opacity: number}}}};
+    return block.props.jestAnimatedStyle.value.opacity;
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
 
 describe("blockState", () => {
     it("marks earlier blocks as written", () => {
@@ -2242,12 +2290,127 @@ describe("blockState", () => {
     it("marks everything written once the count passes the last block", () => {
         expect(blockState(9, 10)).toBe("written");
     });
+
+    // The component passes a clamped count; the export is reachable with a raw
+    // one. A block half-way through a write is not on the card.
+    it("does not call a partially written block written", () => {
+        expect(blockState(0, 0.5)).toBe("active");
+        expect(blockState(0, 0.999)).toBe("active");
+        expect(blockState(1, 1.5)).toBe("active");
+    });
+
+    it("treats a negative count as nothing written", () => {
+        expect(blockState(0, -3)).toBe("active");
+        expect(blockState(1, -3)).toBe("pending");
+    });
+
+    it("treats a non-finite count as nothing written", () => {
+        expect(blockState(0, Number.NaN)).toBe("active");
+        expect(blockState(1, Number.NaN)).toBe("pending");
+        expect(blockState(0, Number.POSITIVE_INFINITY)).toBe("active");
+        expect(blockState(5, Number.POSITIVE_INFINITY)).toBe("pending");
+    });
 });
 
 describe("WriteSweep", () => {
     it("renders one cell per block", async () => {
-        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={12}/>);
-        expect(screen.getAllByTestId("write-sweep-block")).toHaveLength(12);
+        // Deliberately not 12: a hard-coded strip length passes a 12-block test.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={7}/>);
+        expect(screen.getAllByTestId("write-sweep-block")).toHaveLength(7);
+    });
+
+    it("colours exactly the blocks that are on the card, and no others", async () => {
+        // The whole contract. A strip that paints everything green claims a
+        // written card; nothing in a block count or an accessibility value sees it.
+        await renderWithProviders(<WriteSweep blocksWritten={3} totalBlocks={8}/>);
+        expect(colours()).toEqual([
+            palette.success, palette.success, palette.success,
+            palette.text,
+            palette.line, palette.line, palette.line, palette.line
+        ]);
+    });
+
+    it("shows nothing as written before the write begins", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={6}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+    });
+
+    it("shows the whole strip written, with nothing still active, once done", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={6} totalBlocks={6}/>);
+        expect(colours()).toEqual(new Array(6).fill(palette.success));
+    });
+
+    it("keeps the active block visually distinct from a written one", async () => {
+        // Both animate to opacity 1, so colour is the only distinction there is.
+        await renderWithProviders(<WriteSweep blocksWritten={2} totalBlocks={4}/>);
+        expect(colours()[2]).not.toBe(colours()[1]);
+        expect(colours()[2]).not.toBe(colours()[3]);
+    });
+
+    it("fills left to right", async () => {
+        // Same children in the same order either way: only the container's
+        // direction says which end the strip starts from.
+        await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.style)
+            .toMatchObject({flexDirection: "row"});
+    });
+
+    it("announces itself as a progress indicator", async () => {
+        // Without the role the value below is announced as nothing at all.
+        await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityRole).toBe("progressbar");
+    });
+
+    it("never announces or paints more than was written, for any input", async () => {
+        // `written / total` from a writer that lost its total yields NaN or
+        // Infinity. Announcing a complete write of a card that was never touched
+        // is the one lie this component must not tell.
+        const {rerender} = await renderWithProviders(
+            <WriteSweep blocksWritten={Number.POSITIVE_INFINITY} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue)
+            .toEqual({min: 0, max: 4, now: 0});
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={Number.NaN} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue)
+            .toEqual({min: 0, max: 4, now: 0});
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={-2} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(0);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={99} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(4);
+
+        // A block part-way through a write is not on the card: round down.
+        await rerender(<WriteSweep blocksWritten={2.9} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(2);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(2);
+    });
+
+    it("holds a pending block back from a written one by opacity, not colour alone", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={2} totalBlocks={4}/>);
+        expect(opacityOf(0)).toBe(1);
+        expect(opacityOf(2)).toBe(1);
+        expect(opacityOf(3)).toBeLessThan(1);
+    });
+
+    it("fades a block up only when the block is actually committed", async () => {
+        const {rerender} = await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(opacityOf(2)).toBeLessThan(1);
+
+        // Time alone must move nothing: this is write-driven, not a timer.
+        await advance(DURATION.fast * 8);
+        expect(opacityOf(2)).toBeLessThan(1);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(1);
+
+        await rerender(<WriteSweep blocksWritten={3} totalBlocks={4}/>);
+        await advance(16);
+        expect(opacityOf(2)).toBeGreaterThan(0.4);   // mid-fade, not yet arrived
+        expect(opacityOf(2)).toBeLessThan(1);
+        await advance(DURATION.fast);
+        expect(opacityOf(2)).toBe(1);
     });
 
     it("reports progress as blocks, not a percentage of time", async () => {
@@ -2259,6 +2422,42 @@ describe("WriteSweep", () => {
     it("renders nothing when there are no blocks to write", async () => {
         await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={0}/>);
         expect(screen.queryByTestId("write-sweep")).toBeNull();
+    });
+
+    it("renders nothing when the total is lost rather than zero", async () => {
+        // `NaN <= 0` is false, so a lost total slips past a bare guard and
+        // announces `max: NaN` over an empty strip.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={Number.NaN}/>);
+        expect(screen.queryByTestId("write-sweep")).toBeNull();
+    });
+
+    it("spaces a short strip generously", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={8}/>);
+        expect(marginOf(0)).toBe(1);
+    });
+
+    it("tightens the gaps as the strip gets denser", async () => {
+        // The blocks share whatever width the gaps do not take, so a fixed
+        // margin eats a quarter of the pitch on a 40-block write.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={40}/>);
+        expect(marginOf(0)).toBe(0.5);
+    });
+
+    // Last in the file on purpose: `useReducedMotion` seeds from a module-level
+    // cache, so flipping the setting on leaks into every later test in the file.
+    it("commits a block instantly under Reduce Motion, without hiding progress", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        const {rerender} = await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        await advance(DURATION.fast * 2);
+
+        await rerender(<WriteSweep blocksWritten={3} totalBlocks={4}/>);
+        await advance(16);
+        // A cross-fade, not an animation: arrived within a frame, not over 120ms.
+        expect(opacityOf(2)).toBe(1);
+
+        // Still legible as progress.
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(3);
     });
 });
 ```
@@ -2286,12 +2485,33 @@ import {palette} from "@/constants/colors";
 
 export type BlockState = "written" | "active" | "pending";
 
+/**
+ * How many blocks are honestly on the card, defended.
+ *
+ * A block count arrives from the write loop and can be lost: a reader that
+ * reports no total yields `NaN`, and a division yields `Infinity`. Neither may
+ * become "the card is written" — that is the one lie this component must not
+ * tell. A fraction is a block still in flight, so it rounds *down*: a block is
+ * written or it is not.
+ */
+export function clampBlocks(blocksWritten: number, totalBlocks: number): number {
+    if (!Number.isFinite(blocksWritten)) {
+        return 0;
+    }
+    return Math.min(Math.max(Math.floor(blocksWritten), 0), Math.max(totalBlocks, 0));
+}
+
 /** What a given block index is doing, given how many blocks are committed. */
 export function blockState(index: number, blocksWritten: number): BlockState {
-    if (index < blocksWritten) {
+    // Defended here too: the export is reachable with a raw count, and a helper
+    // that disagrees with the component it backs is worse than no helper.
+    const written = Number.isFinite(blocksWritten)
+        ? Math.max(Math.floor(blocksWritten), 0)
+        : 0;
+    if (index < written) {
         return "written";
     }
-    return index === blocksWritten ? "active" : "pending";
+    return index === written ? "active" : "pending";
 }
 
 const COLOURS: Record<BlockState, string> = {
@@ -2300,12 +2520,24 @@ const COLOURS: Record<BlockState, string> = {
     pending: palette.line
 };
 
+/**
+ * The gap either side of a block.
+ *
+ * A recipe write covers 20–40 four-byte blocks, and the blocks share the width
+ * that the gaps do not take: a fixed 1 pt margin is 20% of the pitch at 32
+ * blocks and 25% at 40, so the strip gets gappier exactly as it gets denser.
+ */
+function blockMargin(totalBlocks: number): number {
+    return totalBlocks > 24 ? 0.5 : 1;
+}
+
 type CellProps = {
     state: BlockState;
+    margin: number;
     reduced: boolean;
 };
 
-function SweepBlock({state, reduced}: CellProps) {
+function SweepBlock({state, margin, reduced}: CellProps) {
     const fade = useSharedValue(state === "pending" ? 0.4 : 1);
 
     useEffect(() => {
@@ -2325,7 +2557,7 @@ function SweepBlock({state, reduced}: CellProps) {
                     flex:            1,
                     height:          10,
                     borderRadius:    2,
-                    marginHorizontal: 1,
+                    marginHorizontal: margin,
                     backgroundColor: COLOURS[state]
                 },
                 animatedStyle
@@ -2348,11 +2580,14 @@ type Props = {
  */
 export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
     const reduced = useReducedMotion();
-    if (totalBlocks <= 0) {
+
+    // `NaN <= 0` is false, so a lost total would otherwise slip past this and
+    // render an empty progressbar announcing `max: NaN`.
+    if (!Number.isFinite(totalBlocks) || totalBlocks <= 0) {
         return null;
     }
 
-    const written = Math.min(Math.max(blocksWritten, 0), totalBlocks);
+    const written = clampBlocks(blocksWritten, totalBlocks);
 
     return (
         <View
@@ -2360,9 +2595,9 @@ export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
             accessibilityRole="progressbar"
             accessibilityValue={{min: 0, max: totalBlocks, now: written}}
             style={{flexDirection: "row", alignItems: "center"}}>
-            {Array.from({length: totalBlocks}, (_, index) => (
+            {Array.from({length: Math.floor(totalBlocks)}, (_, index) => (
                 <SweepBlock key={index} state={blockState(index, written)}
-                            reduced={reduced}/>
+                            margin={blockMargin(totalBlocks)} reduced={reduced}/>
             ))}
         </View>
     );
@@ -2372,7 +2607,7 @@ export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/WriteSweep.test.tsx`
-Expected: PASS, 7 tests.
+Expected: PASS, 23 tests.
 
 - [ ] **Step 5: Commit**
 

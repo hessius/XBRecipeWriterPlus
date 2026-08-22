@@ -11,12 +11,33 @@ import {palette} from "@/constants/colors";
 
 export type BlockState = "written" | "active" | "pending";
 
+/**
+ * How many blocks are honestly on the card, defended.
+ *
+ * A block count arrives from the write loop and can be lost: a reader that
+ * reports no total yields `NaN`, and a division yields `Infinity`. Neither may
+ * become "the card is written" — that is the one lie this component must not
+ * tell. A fraction is a block still in flight, so it rounds *down*: a block is
+ * written or it is not.
+ */
+export function clampBlocks(blocksWritten: number, totalBlocks: number): number {
+    if (!Number.isFinite(blocksWritten)) {
+        return 0;
+    }
+    return Math.min(Math.max(Math.floor(blocksWritten), 0), Math.max(totalBlocks, 0));
+}
+
 /** What a given block index is doing, given how many blocks are committed. */
 export function blockState(index: number, blocksWritten: number): BlockState {
-    if (index < blocksWritten) {
+    // Defended here too: the export is reachable with a raw count, and a helper
+    // that disagrees with the component it backs is worse than no helper.
+    const written = Number.isFinite(blocksWritten)
+        ? Math.max(Math.floor(blocksWritten), 0)
+        : 0;
+    if (index < written) {
         return "written";
     }
-    return index === blocksWritten ? "active" : "pending";
+    return index === written ? "active" : "pending";
 }
 
 const COLOURS: Record<BlockState, string> = {
@@ -25,12 +46,24 @@ const COLOURS: Record<BlockState, string> = {
     pending: palette.line
 };
 
+/**
+ * The gap either side of a block.
+ *
+ * A recipe write covers 20–40 four-byte blocks, and the blocks share the width
+ * that the gaps do not take: a fixed 1 pt margin is 20% of the pitch at 32
+ * blocks and 25% at 40, so the strip gets gappier exactly as it gets denser.
+ */
+function blockMargin(totalBlocks: number): number {
+    return totalBlocks > 24 ? 0.5 : 1;
+}
+
 type CellProps = {
     state: BlockState;
+    margin: number;
     reduced: boolean;
 };
 
-function SweepBlock({state, reduced}: CellProps) {
+function SweepBlock({state, margin, reduced}: CellProps) {
     const fade = useSharedValue(state === "pending" ? 0.4 : 1);
 
     useEffect(() => {
@@ -50,7 +83,7 @@ function SweepBlock({state, reduced}: CellProps) {
                     flex:            1,
                     height:          10,
                     borderRadius:    2,
-                    marginHorizontal: 1,
+                    marginHorizontal: margin,
                     backgroundColor: COLOURS[state]
                 },
                 animatedStyle
@@ -73,11 +106,14 @@ type Props = {
  */
 export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
     const reduced = useReducedMotion();
-    if (totalBlocks <= 0) {
+
+    // `NaN <= 0` is false, so a lost total would otherwise slip past this and
+    // render an empty progressbar announcing `max: NaN`.
+    if (!Number.isFinite(totalBlocks) || totalBlocks <= 0) {
         return null;
     }
 
-    const written = Math.min(Math.max(blocksWritten, 0), totalBlocks);
+    const written = clampBlocks(blocksWritten, totalBlocks);
 
     return (
         <View
@@ -85,9 +121,9 @@ export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
             accessibilityRole="progressbar"
             accessibilityValue={{min: 0, max: totalBlocks, now: written}}
             style={{flexDirection: "row", alignItems: "center"}}>
-            {Array.from({length: totalBlocks}, (_, index) => (
+            {Array.from({length: Math.floor(totalBlocks)}, (_, index) => (
                 <SweepBlock key={index} state={blockState(index, written)}
-                            reduced={reduced}/>
+                            margin={blockMargin(totalBlocks)} reduced={reduced}/>
             ))}
         </View>
     );
