@@ -71,7 +71,6 @@ export type RecipeSource = "read" | "import" | "duplicate" | "manual";
 
 class Recipe {
     public uuid: string = "";
-    public title: string = "";
     public xid: string = "";
     public shareId: string = "";
     public key: string = ""
@@ -160,7 +159,6 @@ class Recipe {
                 this.pours.push(p);
             }
             this.ratio = jsonRecipe.ratio;
-            this.title = jsonRecipe.title;
             // Lazy migration, beside the cup-type fixes above. A record written
             // before these fields existed takes its old `title` as the local
             // name: it was editable, so it is the user's, and there is no way to
@@ -694,7 +692,7 @@ class Recipe {
     }
 
     public toString(): string {
-        return `Recipe: ${this.title}
+        return `Recipe: ${this.displayName()}
     UID:    ${Recipe.convertNumberArrayToHex(this.uid ?? "")}
     Backup: ${Recipe.convertNumberArrayToHex(this.backup ?? "")}
     XID: ${this.xid}

@@ -72,8 +72,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
 
             let recipeTitle = xbRecipe.getRecipeTitle();
             if (recipeTitle.length > 0) {
-                // Update the current recipe with the fetched title
-                r.title = recipeTitle;
+                // Update the current recipe with the fetched xBloom name. The
+                // user's own `name` is left untouched, so a sync can no longer
+                // silently overwrite a name they typed.
+                r.xbloomName = recipeTitle;
                 // Also get shareID for restore feature if not already present
                 let xbr = xbRecipe.getRecipe();
                 if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
@@ -94,11 +96,11 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     };
 
     useEffect(() => {
-        // Only fetch if we have a recipe with valid XID but no meaningful title
+        // Only fetch if we have a recipe with valid XID but no cached xBloom name
         if (recipe &&
             recipe.xid &&
             recipe.xid.trim().length > 0 &&
-            (!recipe.title || recipe.title.trim().length === 0)) {
+            (!recipe.xbloomName || recipe.xbloomName.trim().length === 0)) {
             // Syncing with an external system (the xBloom API); the setState calls
             // happen around an await, not synchronously during the effect.
             // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -148,7 +150,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     function restoreRecipe() {
-        const alwaysKeepFields = ['uuid', 'backup', 'title'];
+        const alwaysKeepFields = ['uuid', 'backup', 'name'];
 
         if (!recipe) return;
 
@@ -261,14 +263,14 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         if (!recipe) return;
         let db = new RecipeDatabase();
         if (recipe.isPourVolumeValid()) {
-            if (titleChanged && db.doesTitleExist(recipe.title)) {
+            if (titleChanged && db.doesTitleExist(recipe.name)) {
                 let r = db.getRecipe(recipe.uuid);
                 //if the changed title matches the title of a duplicate recipe that has the same uuid. Then we hit an edge case where the user modified the title, but then changed back to what it was originally.
-                if (r?.title === recipe.title) {
+                if (r?.name === recipe.name) {
                     db.updateRecipe(recipe.uuid, recipe);
                     onSaved();
                 } else {
-                    Alert.alert('Save Error', 'The title of \"' + recipe.title + "\" already exists. Please choose a different name", [
+                    Alert.alert('Save Error', 'The title of \"' + recipe.name + "\" already exists. Please choose a different name", [
                         {
                             text:    'Ok',
                             onPress: () => console.log('Cancel Pressed')
@@ -330,7 +332,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             [RECIPE_LABELS.TITLE]:      {
                 requiresNumber: false,
                 update:         (r: Recipe, val: string) => {
-                    r.title = val;
+                    r.name = val;
                     setTitleChanged(true);
                 }
             },

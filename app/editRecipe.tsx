@@ -88,7 +88,7 @@ export default function EditRecipe() {
                             <YStack maxWidth="100%">
                                 <XStack alignItems="center">
                                     <LabeledInput setErrorFunction={setInputError} maxLength={100}
-                                                  initialValue={getRecipe()!.title}
+                                                  initialValue={getRecipe()!.name}
                                                   label={RECIPE_LABELS.TITLE}
                                                   onValidEditFunction={editInputComplete}
                                                   validateInput={(data) => {

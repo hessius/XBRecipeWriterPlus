@@ -154,11 +154,11 @@ describe('pour deserialisation', () => {
 describe('JSON round-trip', () => {
     it('survives serialise -> deserialise unchanged', () => {
         const original = new Recipe(buildCard(XPOD_CARD));
-        original.title = 'Round Trip';
+        original.name = 'Round Trip';
 
         const restored = new Recipe(undefined, JSON.stringify(original));
 
-        expect(restored.title).toBe(original.title);
+        expect(restored.name).toBe(original.name);
         expect(restored.xid).toBe(original.xid);
         expect(restored.ratio).toBe(original.ratio);
         expect(restored.dosage).toBe(original.dosage);

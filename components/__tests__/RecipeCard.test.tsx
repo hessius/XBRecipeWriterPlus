@@ -19,6 +19,14 @@ function fontFamilyOf(text: string): string {
     ));
 }
 
+/** The last value set for a style property, which is the one that wins. */
+function styleValueOf(node: ReturnType<typeof screen.getByText>, key: string): unknown {
+    const style = node.props.style;
+    const list = (Array.isArray(style) ? style : [style]) as
+        Record<string, unknown>[];
+    return list.reduce<unknown>((found, s) => s?.[key] ?? found, undefined);
+}
+
 /** The outline path of the pour profile, which react-native-svg renders deep. */
 function profilePath(): string {
     const svg = screen.getByTestId("recipe-card-profile");
@@ -65,7 +73,7 @@ async function press(element: Parameters<typeof fireEvent>[0]) {
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     const recipe = new Recipe();
-    recipe.title = "Ethiopia Guji";
+    recipe.name = "Ethiopia Guji";
     recipe.dosage = 18;
     recipe.ratio = 16;
     recipe.grindSize = 25;
@@ -319,7 +327,7 @@ describe("RecipeCard", () => {
 
     it("caps a long name at two lines instead of shoving the marker aside", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe({title: "A ".repeat(40) + "Name"})}
+            <RecipeCard recipe={makeRecipe({name: "A ".repeat(40) + "Name"})}
                         onPress={jest.fn()}/>
         );
         const title = screen.getByText(/Name$/);
@@ -367,10 +375,34 @@ describe("RecipeCard", () => {
 
     it("gives an untitled recipe a name to be announced by", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe({title: ""})} onPress={jest.fn()}/>
+            <RecipeCard recipe={makeRecipe({name: ""})} onPress={jest.fn()}/>
         );
         expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
             .toContain("Untitled");
+    });
+
+    it("shows the placeholder for a recipe with no name from any source", async () => {
+        const recipe = makeRecipe();
+        recipe.name = "";
+        recipe.xbloomName = "";
+        recipe.xid = "";
+        recipe.source = "read";
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
+
+        expect(screen.getByText(recipe.displayName())).toBeTruthy();
+    });
+
+    it("mutes a placeholder so it does not read as a chosen name", async () => {
+        const recipe = makeRecipe();
+        recipe.name = "";
+        recipe.xbloomName = "";
+        recipe.xid = "";
+        recipe.source = "read";
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
+
+        const placeholder = screen.getByText(recipe.displayName());
+        const named = onAccent.text;
+        expect(styleValueOf(placeholder, "color")).not.toBe(named);
     });
 
     it("is a single accessibility element, and says what it is", async () => {

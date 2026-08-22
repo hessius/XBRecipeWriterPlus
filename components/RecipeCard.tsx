@@ -122,7 +122,7 @@ export default function RecipeCard({
     // this label or it is, to a screen reader, conveyed by the accent colour
     // alone -- which is the state the TEA/COFFEE marker exists to prevent.
     const summary = [
-        recipe.title === "" ? "Untitled recipe" : recipe.title,
+        recipe.displayName(),
         marker.toLowerCase(),
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
@@ -180,8 +180,8 @@ export default function RecipeCard({
                     card grow together rather than the prose swamping the data. */}
                 <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
                       maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                      color={onAccent.text}>
-                    {recipe.title}
+                      color={recipe.hasName() ? onAccent.text : onAccent.label}>
+                    {recipe.displayName()}
                 </Text>
                 <XStack alignItems="center" gap="$1.5">
                     {showMarker && (

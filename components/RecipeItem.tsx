@@ -37,7 +37,7 @@ export default function RecipeItem(props: {
                         fontSize="$4"
                         textAlign="center"
                     >
-                        {props.recipe.title}
+                        {props.recipe.displayName()}
                     </Text>
                     <XStack flex={1} justifyContent='space-evenly' width="100%" flexDirection='row'>
                         <YStack>

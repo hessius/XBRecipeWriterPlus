@@ -58,7 +58,7 @@ export default function HomeScreen() {
                 recipes.push(new Recipe(undefined, JSON.stringify(recipeData[i])));
             }
         }
-        return recipes.sort((a: Recipe, b: Recipe) => a.title.localeCompare(b.title));
+        return recipes.sort((a: Recipe, b: Recipe) => a.displayName().localeCompare(b.displayName()));
     }
 
 
@@ -133,7 +133,7 @@ export default function HomeScreen() {
     }
 
     function duplicateRecipe(recipe: Recipe) {
-        console.log("Duplicating recipe:" + recipe.title);
+        console.log("Duplicating recipe:" + recipe.displayName());
         let db = new RecipeDatabase();
         db.cloneRecipe(recipe.uuid);
         forceRefresh();
@@ -192,7 +192,7 @@ export default function HomeScreen() {
                 xbloom.fetchRecipeDetail().then(() => {
                     if (xbloom) {
                         let rec = xbloom?.getRecipe();
-                        if (rec && !db.doesTitleExist(rec.title)) {
+                        if (rec && !db.doesTitleExist(rec.name)) {
                             db.insertRecipe(rec);
                         }
                     }

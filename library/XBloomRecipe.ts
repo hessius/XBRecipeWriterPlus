@@ -49,7 +49,8 @@ export class XBloomRecipe {
 
             recipe.ratio = ratio;
             recipe.dosage = dosage;
-            recipe.title = title;
+            recipe.xbloomName = title;
+            recipe.source = "import";
             recipe.grindSize = grindSize;
             recipe.xid = xid;
 

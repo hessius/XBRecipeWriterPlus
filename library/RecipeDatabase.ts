@@ -90,7 +90,7 @@ class RecipeDatabase {
         let recipe = this.getRecipe(uuid);
         if (recipe) {
             recipe.generateNewUUID();
-            recipe.title = this.createTitle(recipe.title);
+            recipe.name = this.createTitle(recipe.name);
             this.insertRecipe(recipe);
         }
     }
@@ -119,7 +119,7 @@ class RecipeDatabase {
         let recipes = this.retrieveAllRecipes();
         if (recipes) {
             for (let i = 0; i < recipes.length; i++) {
-                if (recipes[i].title.toLowerCase() === title.toLowerCase()) {
+                if (recipes[i].name.toLowerCase() === title.toLowerCase()) {
                     return true;
                 }
             }
