@@ -1,6 +1,11 @@
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {accents} from "@/constants/colors";
-import {accentGroupFor, assignAccentIndex, resolveAccent} from "@/library/accent";
+import {
+    accentGroupFor,
+    nextAccentIndex,
+    resolveAccent,
+    type RecipeWithAccent
+} from "@/library/accent";
 
 function recipeWithCup(cup: number): Recipe {
     const r = new Recipe();
@@ -18,63 +23,101 @@ describe("accentGroupFor", () => {
             expect(accentGroupFor(recipeWithCup(cup))).toBe("coffee");
         }
     });
+
+    it("follows the legacy tea cup types that Recipe migrates", () => {
+        // 0x23 and 0x13 are tea cards written by the first app version with tea
+        // support; the Recipe JSON constructor rewrites them to CUP_TYPE.TEA.
+        // accentGroupFor must agree with that, which it gets for free by asking
+        // Recipe rather than comparing cupType itself.
+        const migrated = new Recipe(undefined, JSON.stringify({...new Recipe(), cupType: 0x23}));
+        expect(accentGroupFor(migrated)).toBe("tea");
+    });
 });
 
 describe("resolveAccent", () => {
-    it("is stable for the same recipe across calls", () => {
-        const r = recipeWithCup(CUP_TYPE.XPOD);
-        expect(resolveAccent(r)).toBe(resolveAccent(r));
+    it("gives two instances of the same recipe the same colour", () => {
+        // The property that matters: across a launch the recipe is a different
+        // object rebuilt from JSON, and the card must not change colour. Calling
+        // twice on one object would only prove the function is pure.
+        const original = recipeWithCup(CUP_TYPE.XPOD);
+        const reloaded = new Recipe(undefined, JSON.stringify(original));
+
+        expect(reloaded.uuid).toBe(original.uuid);
+        expect(resolveAccent(reloaded)).toBe(resolveAccent(original));
     });
 
-    it("only ever draws a tea recipe from the tea half", () => {
+    it("reaches every coffee accent across many recipes", () => {
+        // This is what kills a hash that collapsed to a constant. With 8 buckets
+        // and 200 draws, missing any bucket has probability ~2e-11.
+        const seen = new Set<string>();
         for (let i = 0; i < 200; i++) {
-            expect(accents.tea).toContain(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.XPOD)));
         }
+        expect(seen.size).toBe(accents.coffee.length);
     });
 
-    it("only ever draws a coffee recipe from the coffee half", () => {
+    it("reaches every tea accent across many recipes", () => {
+        const seen = new Set<string>();
         for (let i = 0; i < 200; i++) {
-            expect(accents.coffee).toContain(resolveAccent(recipeWithCup(CUP_TYPE.XPOD)));
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+        }
+        expect(seen.size).toBe(accents.tea.length);
+    });
+
+    it("never draws a tea recipe from the coffee half", () => {
+        for (let i = 0; i < 50; i++) {
+            expect(accents.tea).toContain(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
         }
     });
 
     it("prefers a persisted index over the uuid fallback", () => {
         const r = recipeWithCup(CUP_TYPE.XPOD);
-        (r as unknown as {accentIndex: number}).accentIndex = 3;
+        (r as RecipeWithAccent).accentIndex = 3;
         expect(resolveAccent(r)).toBe(accents.coffee[3]);
     });
 
-    it("ignores a persisted index that is out of range", () => {
-        const r = recipeWithCup(CUP_TYPE.XPOD);
-        (r as unknown as {accentIndex: number}).accentIndex = 99;
-        expect(accents.coffee).toContain(resolveAccent(r));
-    });
+    it.each([99, -1, 2.5, Number.NaN, "3", null, undefined])(
+        "falls back to the uuid hash for the invalid persisted index %p",
+        (bad) => {
+            const r = recipeWithCup(CUP_TYPE.XPOD);
+            (r as RecipeWithAccent).accentIndex = bad as number;
+            // Not merely "does not throw": accents.coffee[2.5] is undefined, and
+            // an undefined colour reaches a style prop and paints nothing.
+            expect(accents.coffee).toContain(resolveAccent(r));
+        }
+    );
 });
 
-describe("assignAccentIndex", () => {
+describe("nextAccentIndex", () => {
     it("returns zero when nothing is in use", () => {
-        expect(assignAccentIndex("coffee", [])).toBe(0);
+        expect(nextAccentIndex("coffee", [])).toBe(0);
     });
 
     it("returns the first unused index while the palette has room", () => {
-        expect(assignAccentIndex("coffee", [0, 1, 2])).toBe(3);
+        expect(nextAccentIndex("coffee", [0, 1, 2])).toBe(3);
     });
 
     it("fills the lowest free index rather than appending", () => {
-        expect(assignAccentIndex("coffee", [0, 2, 3])).toBe(1);
+        expect(nextAccentIndex("coffee", [0, 2, 3])).toBe(1);
     });
 
     it("picks the least-used index once the palette is full", () => {
         // All eight used once, plus a second use of index 5. Index 5 is now the
         // most used, so it must not win; the lowest of the tied indices does.
-        expect(assignAccentIndex("coffee", [0, 1, 2, 3, 4, 5, 6, 7, 5])).toBe(0);
+        expect(nextAccentIndex("coffee", [0, 1, 2, 3, 4, 5, 6, 7, 5])).toBe(0);
     });
 
     it("breaks ties by lowest index", () => {
-        expect(assignAccentIndex("coffee", [0, 0, 1, 2, 3, 4, 5, 6, 7])).toBe(1);
+        expect(nextAccentIndex("coffee", [0, 0, 1, 2, 3, 4, 5, 6, 7])).toBe(1);
+    });
+
+    it("ignores indices outside the group", () => {
+        // A caller holding indices from the larger coffee half must not be able
+        // to skew the tea counts.
+        expect(nextAccentIndex("tea", [0, 1, 2, 7, 99, -1])).toBe(3);
     });
 
     it("stays within the tea half", () => {
-        expect(assignAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
+        expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
     });
 });

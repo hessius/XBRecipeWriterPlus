@@ -1,9 +1,21 @@
-import Recipe, {CUP_TYPE} from "./Recipe";
+import Recipe from "./Recipe";
 import {accents, type AccentGroup} from "@/constants/colors";
+
+/**
+ * A recipe carrying its persisted accent.
+ *
+ * Sub-project 2 moves `accentIndex` onto `Recipe` proper and deletes this type —
+ * grep for `RecipeWithAccent` to find everything that needs updating then.
+ */
+export type RecipeWithAccent = Recipe & {accentIndex?: number};
 
 /** Which half of the palette a recipe draws from. */
 export function accentGroupFor(recipe: Recipe): AccentGroup {
-    return recipe.cupType === CUP_TYPE.TEA ? "tea" : "coffee";
+    // Ask Recipe rather than comparing `cupType` here. The tea byte can carry
+    // the default cup count in its high nibble, and legacy cards arrive as 0x13
+    // or 0x23; every one of those normalisations lives behind `isTea()`. A
+    // second copy of the predicate would silently miss the next such fix.
+    return recipe.isTea() ? "tea" : "coffee";
 }
 
 /**
@@ -16,6 +28,8 @@ function hashToIndex(key: string, modulo: number): number {
     let hash = 0x811c9dc5;
     for (let i = 0; i < key.length; i++) {
         hash ^= key.charCodeAt(i);
+        // Math.imul returns a signed 32-bit result; >>> 0 makes it unsigned
+        // before the modulo, so the index can never come out negative.
         hash = Math.imul(hash, 0x01000193) >>> 0;
     }
     return hash % modulo;
@@ -26,7 +40,7 @@ export function resolveAccent(recipe: Recipe): string {
     const group = accentGroupFor(recipe);
     const groupAccents = accents[group];
 
-    const persisted = (recipe as unknown as {accentIndex?: number}).accentIndex;
+    const persisted = (recipe as RecipeWithAccent).accentIndex;
     if (
         typeof persisted === "number" &&
         Number.isInteger(persisted) &&
@@ -40,16 +54,21 @@ export function resolveAccent(recipe: Recipe): string {
 }
 
 /**
- * The index to give a newly saved recipe: the least-used accent in its half of
- * the palette, ties broken by lowest index. While the library is smaller than
+ * The index a newly saved recipe should take: the least-used accent in its half
+ * of the palette, ties broken by lowest index. While the library is smaller than
  * the half-palette this is simply the first unused colour; past that, colours
  * repeat as evenly as possible rather than clustering.
  *
+ * Returns the index; persisting it is the caller's job.
+ *
  * @param group Which half to assign from.
  * @param inUse Accent indices already taken by recipes in the same half.
- *              Repeats are meaningful — they are what makes an index "more used".
+ *              Repeats are meaningful — they are what makes an index "more
+ *              used". Entries outside the group are silently ignored, so a
+ *              caller holding indices from the larger coffee half cannot skew
+ *              the tea counts.
  */
-export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
+export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
     const counts: number[] = new Array(accents[group].length).fill(0);
     for (const index of inUse) {
         if (Number.isInteger(index) && index >= 0 && index < counts.length) {
@@ -57,6 +76,8 @@ export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
         }
     }
 
+    // Strict `<` is what breaks ties by lowest index; `<=` would return the
+    // highest of the tied indices instead.
     let best = 0;
     for (let i = 1; i < counts.length; i++) {
         if (counts[i] < counts[best]) {
