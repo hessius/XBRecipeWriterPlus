@@ -241,11 +241,36 @@ describe('XID encoding', () => {
         expect(recipe.getData(original.slice(0, HASH_LENGTH), true)).toEqual(original);
     });
 
-    it('rejects XIDs longer than 8 characters', () => {
+    it('rejects XIDs longer than the 7-byte field', () => {
         const original = buildCard(XPOD_CARD);
         const recipe = new Recipe(original);
         recipe.xid = 'TOOLONGXID';
 
-        expect(() => recipe.getData(original.slice(0, HASH_LENGTH), true)).toThrow(/XID must be less than 8/);
+        expect(() => recipe.getData(original.slice(0, HASH_LENGTH), true)).toThrow(/XID must be at most 7/);
+    });
+
+    it('rejects an 8-character XID rather than overflowing the field', () => {
+        // The XID occupies bytes 32-38 inclusive. An 8-character XID used to be
+        // accepted and written as 8 bytes, shifting cup type, pour count and every
+        // pour record one byte along and corrupting the whole recipe.
+        const original = buildCard(XPOD_CARD);
+        const recipe = new Recipe(original);
+        recipe.xid = 'EIGHTCHR';
+
+        expect(() => recipe.getData(original.slice(0, HASH_LENGTH), true)).toThrow(/XID must be at most 7/);
+    });
+
+    it('keeps every later field in place for a maximum-length XID', () => {
+        const original = buildCard(XPOD_CARD);
+        const recipe = new Recipe(original);
+        recipe.xid = 'SEVENCH';
+
+        const encoded = recipe.getData(original.slice(0, HASH_LENGTH), true);
+
+        expect(encoded.length).toBe(original.length);
+        expect(encoded.slice(32, 39)).toEqual([...'SEVENCH'].map((c) => c.charCodeAt(0)));
+        // Byte 39 up to the trailing CRC must still line up with the untouched
+        // original; only the checksum legitimately changes with the XID.
+        expect(encoded.slice(39, -1)).toEqual(original.slice(39, -1));
     });
 });

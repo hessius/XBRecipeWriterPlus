@@ -13,6 +13,21 @@ export const CUP_TYPE = {
 export const GRINDER_OFF: number = 41;
 // Grind size is stored on the NFC card with offset (grind_size_value - 40)
 export const GRIND_SIZE_OFFSET = 40;
+/** The XID occupies card bytes 32-38 inclusive. */
+export const XID_LENGTH = 7;
+
+/**
+ * xBloom XIDs look like `<VENDOR>[T]<NUM>`: a three-letter vendor code, an optional
+ * `T` for tea, then two or three digits. An empty XID is allowed — the machine
+ * brews fine without one, it just means the app cannot look the recipe up online.
+ */
+export function isValidXID(xid: string): boolean {
+    const trimmed = xid.trim();
+    if (trimmed.length === 0) {
+        return true;
+    }
+    return trimmed.length <= XID_LENGTH && /^[A-Za-z]{3}T?[0-9]{2,3}$/.test(trimmed);
+}
 export const DEFAULT_GRIND_SIZE = 50;
 
 const POLY_TABLE = [
@@ -465,14 +480,17 @@ class Recipe {
 
     private convertXIDToData(xid: string): number[] {
         let result: number[] = [];
-        if (xid.length > 8) {
-            throw new Error("XID must be less than 8 characters")
-        } else if (xid.length <= 8) {
+        // The XID occupies bytes 32-38 inclusive, so seven characters is the hard
+        // limit. Eight used to be accepted and emitted as eight bytes, which shifted
+        // the cup type, pour count and every pour record one byte along.
+        if (xid.length > XID_LENGTH) {
+            throw new Error(`XID must be at most ${XID_LENGTH} characters`)
+        } else {
             for (let i = 0; i < xid.length; i++) {
                 result.push(xid.charCodeAt(i));
             }
             //add padding
-            for (let i = xid.length; i < 7; i++) {
+            for (let i = xid.length; i < XID_LENGTH; i++) {
                 result.push(0);
             }
         }

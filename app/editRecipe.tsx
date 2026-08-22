@@ -1,6 +1,6 @@
 import ValidatedInput from "@/components/ValidatedInput";
 
-import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Recipe, {CUP_TYPE, isValidXID, XID_LENGTH} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useCallback, useEffect, useRef} from "react";
@@ -109,12 +109,14 @@ export default function EditRecipe() {
                                     </XStack>
                                 </XStack>
                                 <XStack>
-                                    <LabeledInput setErrorFunction={setInputError} maxLength={7}
+                                    <LabeledInput setErrorFunction={setInputError} maxLength={XID_LENGTH}
                                                   initialValue={getRecipe()!.xid} label={RECIPE_LABELS.XID}
-                                                  onValidEditFunction={editInputComplete}/>
+                                                  onValidEditFunction={editInputComplete}
+                                                  validateInput={isValidXID}
+                                                  errorMessage="Use a 3-letter vendor code, an optional T for tea, then 2-3 digits (e.g. CGL12, CGLT123). Leave empty for no online lookup."/>
                                     <XStack flex={1} paddingLeft={"$2"}>
                                         <TooltipComponent
-                                            content="6-character recipe ID used by the app to find recipes online. Format: <VENDOR>[T]<NUM> (3-char vendor code, optional T for tea, 2-3 digit number). Remove or change to prevent wrong recipe display in app (machine will still work)."/>
+                                            content="Recipe ID used by the app to find recipes online. Format: <VENDOR>[T]<NUM> (3-char vendor code, optional T for tea, 2-3 digit number). The card does not store the recipe name, only this ID, so a card written without an XID will read back with an empty name. Remove or change to prevent wrong recipe display in app (machine will still work)."/>
                                     </XStack>
                                 </XStack>
                                 <ValidatedInput setErrorFunction={setInputError} initialValue={getRecipe()!.dosage}
