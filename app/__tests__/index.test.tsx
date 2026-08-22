@@ -1,5 +1,5 @@
 import React from "react";
-import {screen, fireEvent} from "@testing-library/react-native";
+import {screen, fireEvent, waitFor} from "@testing-library/react-native";
 
 import HomeScreen from "@/app/index";
 import Recipe from "@/library/Recipe";
@@ -24,10 +24,22 @@ jest.mock("expo-share-intent", () => ({
 
 jest.mock("@/library/RecipeDatabase");
 
+const mockNotify = jest.fn();
+
+// The reference is deliberately inside a function rather than returned
+// directly: `jest.mock` is hoisted above the `const`, so a factory that reads
+// `mockNotify` while building the module object reads it in the temporal dead
+// zone. The resulting ReferenceError is swallowed by the read path's own catch
+// and simply looks like the button doing nothing.
+jest.mock("@/components/XbrwToast", () => ({
+    notify: (notice: unknown) => mockNotify(notice)
+}));
+
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
 // (which still evaluates the real module to learn its shape) is not enough.
-// None of these tests exercise the read path, so a plain stub suffices.
+// The read-path tests below drive `Recipe.readCard` directly rather than this
+// stub, so it only has to exist and report a closed session.
 jest.mock("@/library/NFC", () => ({
     __esModule:    true,
     default:       jest.fn().mockImplementation(() => ({
@@ -133,6 +145,53 @@ describe("HomeScreen", () => {
         await fireEvent.press(screen.getByLabelText("Edit recipes"));
 
         expect(deleteGlyph()).toBeTruthy();
+    });
+
+    describe("after a card is read", () => {
+        // The recipe's own uuid is deliberately kept: a card read builds a new
+        // recipe and fills it from the bytes, so it arrives with an identity of
+        // its own. Copying the source uuid across would make `findDuplicate`
+        // skip the stored copy as the candidate itself.
+        function readAs(recipe: Recipe) {
+            jest.spyOn(Recipe.prototype, "readCard").mockImplementation(
+                async function (this: Recipe) {
+                    const {uuid} = this;
+                    Object.assign(this, recipe, {uuid});
+                    return true;
+                }
+            );
+        }
+
+        it("says nothing and opens the recipe", async () => {
+            readAs(named("Ethiopia"));
+            await renderWithProviders(
+                <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+            );
+
+            await fireEvent.press(screen.getByLabelText("Read a card"));
+
+            // The editor opens on top of the list, which is the confirmation.
+            // A toast saying the same thing is a second notification of an
+            // event the user is already looking at.
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+            expect(mockNotify).not.toHaveBeenCalled();
+        });
+
+        it("still explains itself when the recipe is already saved", async () => {
+            const saved = named("Ethiopia");
+            readAs(saved);
+            await renderWithProviders(
+                <HomeScreen db={store([saved])} settings={new Settings(memoryStorage())}/>
+            );
+
+            await fireEvent.press(screen.getByLabelText("Read a card"));
+
+            // This one is not redundant: it is the only account of why the
+            // editor has arrived with its save button disabled.
+            await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(
+                expect.objectContaining({tone: "info"})
+            ));
+        });
     });
 
     it("offers no edit toggle with an empty library", async () => {

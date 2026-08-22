@@ -116,9 +116,13 @@ export default function HomeScreen({db, settings}: Props) {
             recipe.source = "read";
             const {recipe: toOpen, isExisting} = resolveOnOpen(library.recipes, recipe);
 
-            notify(isExisting
-                ? {tone: "info", message: "Already in your library"}
-                : {tone: "success", message: "Recipe read from card"});
+            // A successful read needs no announcement: the editor opens on top
+            // of this screen with the recipe in it, which says it better than a
+            // toast could. The one thing the editor cannot say for itself is
+            // why Save arrives disabled, so that message stays.
+            if (isExisting) {
+                notify({tone: "info", message: "Already in your library"});
+            }
 
             router.push({
                 pathname: "/editRecipe",
