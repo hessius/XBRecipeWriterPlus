@@ -6,7 +6,7 @@ import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/Rea
 import {Button, XStack} from "tamagui";
 
 import Recipe from "@/library/Recipe";
-import RecipeItem from "@/components/RecipeItem";
+import RecipeCard from "@/components/RecipeCard";
 import {palette} from '@/constants/colors';
 
 type Props = {
@@ -16,6 +16,10 @@ type Props = {
     onDuplicate: () => void;
     /** Nudges the row open briefly on mount so the swipe actions are discoverable. */
     bounceOnMount?: boolean;
+    /** When true, the card shows its destructive actions instead of hiding them behind a swipe. */
+    editing?: boolean;
+    /** Forwarded to the card. Owned by the settings screen. */
+    showCoffeeMarker?: boolean;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -26,7 +30,9 @@ export default function SwipeableRecipeRow({
                                                onPress,
                                                onDelete,
                                                onDuplicate,
-                                               bounceOnMount = false
+                                               bounceOnMount = false,
+                                               editing = false,
+                                               showCoffeeMarker = true
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -68,14 +74,16 @@ export default function SwipeableRecipeRow({
     }
 
     return (
-        <View style={{maxWidth: 600}}>
+        <View style={{maxWidth: 600, paddingHorizontal: 12, paddingVertical: 6}}>
             <Swipeable
                 ref={swipeableRef}
                 friction={2}
                 rightThreshold={40}
                 overshootRight={false}
                 renderRightActions={renderRightActions}>
-                <RecipeItem recipe={recipe} onPress={onPress}/>
+                <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
+                            showCoffeeMarker={showCoffeeMarker}
+                            onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>
     );

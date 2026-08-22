@@ -10,6 +10,25 @@ function makeRecipe(title = "Ethiopia Guji") {
     return recipe;
 }
 
+function recipe(): Recipe {
+    const r = new Recipe();
+    r.name = "Ethiopia Guji";
+    r.dosage = 18;
+    r.ratio = 16;
+    r.grindSize = 62;
+    return r;
+}
+
+function props(overrides = {}) {
+    return {
+        recipe: recipe(),
+        onPress: jest.fn(),
+        onDelete: jest.fn(),
+        onDuplicate: jest.fn(),
+        ...overrides
+    };
+}
+
 describe("SwipeableRecipeRow", () => {
     it("renders the recipe", async () => {
         await renderWithProviders(
@@ -55,5 +74,38 @@ describe("SwipeableRecipeRow", () => {
 
         expect(screen.getByLabelText("Delete Kenya AA")).toBeTruthy();
         expect(screen.getByLabelText("Duplicate Kenya AA")).toBeTruthy();
+    });
+
+    it("renders the recipe as a card", async () => {
+        await renderWithProviders(<SwipeableRecipeRow {...props()}/>);
+        expect(screen.getByTestId("recipe-card")).toBeTruthy();
+        expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("keeps the destructive actions hidden until asked", async () => {
+        await renderWithProviders(<SwipeableRecipeRow {...props({editing: false})}/>);
+        expect(screen.queryByTestId("recipe-card-delete")).toBeNull();
+    });
+
+    it("reveals them inline while editing", async () => {
+        // The swipe gesture is a shortcut. It may not be the only route to a
+        // destructive action, and it is not available to a screen reader at all.
+        await renderWithProviders(<SwipeableRecipeRow {...props({editing: true})}/>);
+        expect(screen.getByTestId("recipe-card-delete")).toBeTruthy();
+        expect(screen.getByTestId("recipe-card-duplicate")).toBeTruthy();
+    });
+
+    it("deletes from the inline action", async () => {
+        const handlers = props({editing: true});
+        await renderWithProviders(<SwipeableRecipeRow {...handlers}/>);
+        await fireEvent.press(screen.getByTestId("recipe-card-delete"));
+        expect(handlers.onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes the coffee marker setting through to the card", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow {...props({showCoffeeMarker: false})}/>
+        );
+        expect(screen.queryByText("COFFEE")).toBeNull();
     });
 });
