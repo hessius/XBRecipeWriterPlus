@@ -1,94 +1,82 @@
 /**
  * Single source of truth for every colour in the app.
  *
- * These values are a faithful capture of the colours that were previously
- * hardcoded across `app/` and `components/`. Nothing has been re-picked,
- * lightened or consolidated — the intent is that this file can be swapped
- * wholesale during the design overhaul without hunting call sites.
+ * The app is dark-only, so there are no light/dark variants here. Colour lives
+ * in a plain module rather than in Tamagui theme tokens because roughly half the
+ * call sites are plain React Native, expo-router or SVG props that cannot accept
+ * a `$token`, and Tamagui's theme proxy has no parent-theme fallback — a custom
+ * key added to a theme would not resolve inside a sub-theme such as `dark_Button`.
  *
- * Several oranges are near-duplicates of `brand` (`brandPressed`,
- * `brandIncrement`, `brandHelp`, `pressedBorder`). They are almost certainly
- * unintentional drift rather than deliberate design, but they are kept
- * distinct here so the overhaul can merge them on purpose.
+ * Add semantically named entries (`danger`, `surface`, `muted`), never literal
+ * ones (`red`).
  */
+
+/** Surfaces, text and semantics. */
 export const palette = {
-    /** Primary orange: navigation header, primary buttons. */
-    brand:          "#f4511e",
-    /** Brand orange while pressed. */
-    brandPressed:   "#de4f00",
-    /** Brand orange for a disabled primary button. */
-    brandDisabled:  "#f59d7d",
-    /** Increment ("+") control. Near-duplicate of `brand`. */
-    brandIncrement: "#ff5c00",
-    /** Help / tooltip affordance. Near-duplicate of `brand`. */
-    brandHelp:      "#ff783e",
+    /** Screen background. */
+    void:    "#000000",
+    /** Sheets and elevated panels. */
+    surface: "#101010",
+    /** CTA tiles, inputs, and cards that are not accent-filled. */
+    raised:  "#161616",
+    /** Hairlines and borders. */
+    line:    "#262626",
+    /** Tertiary text and superscript counts. */
+    muted:   "#6E6E6E",
+    /** Secondary text. */
+    dim:     "#A3A3A3",
+    /** Primary text. */
+    text:    "#FFFFFF",
 
-    /** Hairline outline on recipe cards, circles and swipe actions. */
-    outline: "#ffa592",
-
+    /** Confirmation, and the "reader ready" state. */
+    success: "#5DDC8A",
     /** Destructive actions and validation errors. */
-    danger:      "red",
-    /** Filled portion of the value slider. */
-    dangerTrack: "rgba(255, 0, 0, 0.9)",
-    /** Confirmation toasts and the "add pour" control. */
-    success:     "green",
-    /** Informational accent used by the Android NFC sheet. */
-    info:        "blue",
-    /** De-emphasised borders, icons and spinners. */
-    muted:       "gray",
-
-    /** Neutral raised surface (light screen background, secondary action). */
-    surface:         "#dddddd",
-    /** Background of a disabled text input. */
-    surfaceDisabled: "#D3D3D3",
-
-    /** Foreground on brand-coloured or otherwise dark surfaces. */
-    onBrand: "#ffffff",
-    /** Foreground on light surfaces. */
-    onLight: "#000000",
-
-    /** Heading text inside the Android NFC sheet. */
-    dialogHeading: "#333333",
-    /** Body text inside the Android NFC sheet. */
-    dialogBody:    "#666666",
-
-    /** React Navigation's own light background (kept in `rgb()` form). */
-    navigationBackground: "rgb(221,221,221)"
-} as const;
-
-/** Screen background, one of the few genuinely theme-varying colours. */
-export const screenBackground = {
-    light: palette.surface,
-    dark:  "black"
-} as const;
-
-/** Body text, which flips with the colour scheme. */
-export const textColors = {
-    light: {primary: palette.onLight, inverse: palette.onBrand},
-    dark:  {primary: palette.onBrand, inverse: palette.onLight}
+    danger:  "#FF6B5E",
+    /** Recoverable problems and cautions. */
+    warn:    "#F0C24A",
+    /** Informational accents. */
+    info:    "#7FB4FF"
 } as const;
 
 /**
- * Recipe card fills and borders. Coffee and tea recipes are deliberately
- * distinct so a card's type is readable at a glance.
+ * Foregrounds drawn on top of an accent fill. Fixed rather than per-accent:
+ * every accent is light enough to take the same dark ink.
  */
-export const cardColors = {
-    light: {
-        background:    "#d1d1d1",
-        coffeeFill:    "#ffcfc5",
-        coffeeBorder:  palette.outline,
-        teaFill:       "#f0e7d2",
-        teaBorder:     "#c7b995",
-        pressedFill:   "#ffbaac",
-        pressedBorder: "#ff6302"
-    },
-    dark:  {
-        background:    "#d1d1d1",
-        coffeeFill:    "#898989",
-        coffeeBorder:  palette.brand,
-        teaFill:       "#392F24",
-        teaBorder:     "#7C5D40",
-        pressedFill:   "#d44519",
-        pressedBorder: "#ff6302"
-    }
+export const onAccent = {
+    /** Recipe names and Doto values. */
+    text:          "#0C0C0C",
+    /** Micro-labels above values. */
+    label:         "rgba(0,0,0,0.45)",
+    /** Pour profile stroke. */
+    profileStroke: "rgba(0,0,0,0.85)",
+    /** Pour profile fill. */
+    profileFill:   "rgba(0,0,0,0.30)",
+    /** Beverage marker and contactless mark. */
+    marker:        "rgba(0,0,0,0.70)"
 } as const;
+
+/**
+ * Recipe accents, split by beverage. Colour is a redundant signal — a Doto
+ * `TEA` / `COFFEE` marker carries the same information — because colour alone is
+ * not an accessible signal.
+ */
+export const accents = {
+    coffee: [
+        "#9FC3F0", // Sky
+        "#F0B98E", // Peach
+        "#F0A0AB", // Blossom
+        "#B4D6A8", // Sage
+        "#97D8C4", // Mint
+        "#BDB2E8", // Lilac
+        "#A6D6E8", // Ice
+        "#E7A9C9"  // Rose
+    ],
+    tea:    [
+        "#CFD6A3", // Sencha
+        "#DCC194", // Oolong
+        "#D9CF9A", // Jasmine
+        "#E0AEA6"  // Hibiscus
+    ]
+} as const;
+
+export type AccentGroup = keyof typeof accents;
