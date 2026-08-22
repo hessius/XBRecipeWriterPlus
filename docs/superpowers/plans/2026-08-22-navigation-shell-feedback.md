@@ -1424,7 +1424,8 @@ function ToggleRow({label, description, value, onChange}: RowProps) {
                 <Text fontSize={16} color={palette.text}>{label}</Text>
                 <Text fontSize={13} color={palette.dim}>{description}</Text>
             </YStack>
-            <Switch accessibilityLabel={label} checked={value}
+            <Switch accessibilityLabel={label} accessibilityRole="switch"
+                    accessibilityState={{checked: value}} checked={value}
                     onCheckedChange={onChange} size="$3"
                     backgroundColor={value ? palette.success : palette.line}>
                 <Switch.Thumb backgroundColor={palette.text}/>
