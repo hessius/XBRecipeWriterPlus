@@ -54,7 +54,7 @@ Two habits this repository has learned the hard way, both of which apply here:
 - Modify: `library/Recipe.ts:69-86` (field declarations), `library/Recipe.ts:87-149` (constructor)
 - Test: `library/__tests__/Recipe.persistence.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `library/__tests__/Recipe.persistence.test.ts`:
 
@@ -138,13 +138,13 @@ describe("the new persistence fields", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts -t "the new persistence fields"`
 
 Expected: FAIL. The first failures read `Property 'name' does not exist on type 'Recipe'`.
 
-- [ ] **Step 3: Add the field declarations**
+- [x] **Step 3: Add the field declarations**
 
 In `library/Recipe.ts`, above `class Recipe`:
 
@@ -176,7 +176,7 @@ Inside the class, replace `public title: string = "";` with:
     public accentIndex?: number;
 ```
 
-- [ ] **Step 4: Stamp fresh recipes and migrate stored ones**
+- [x] **Step 4: Stamp fresh recipes and migrate stored ones**
 
 In the constructor, immediately after `this.key = this.uuid;` (the first one, before the `if (data)` branch):
 
@@ -201,19 +201,19 @@ In the `if (json)` branch, replace `this.title = jsonRecipe.title;` with:
             this.accentIndex = jsonRecipe.accentIndex;
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts`
 
 Expected: PASS, including the pre-existing tests in the file.
 
-- [ ] **Step 6: Confirm the card format is untouched**
+- [x] **Step 6: Confirm the card format is untouched**
 
 Run: `npx jest library/__tests__/Recipe.card.test.ts`
 
 Expected: PASS, with no edits to that file.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add library/Recipe.ts library/__tests__/Recipe.persistence.test.ts
@@ -228,7 +228,7 @@ git commit -m "Add the local name, xBloom name, provenance and accent fields"
 - Modify: `library/Recipe.ts`
 - Test: `library/__tests__/Recipe.persistence.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 describe("displayName", () => {
@@ -289,13 +289,13 @@ describe("hasName", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts -t "displayName"`
 
 Expected: FAIL with `recipe.displayName is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `library/Recipe.ts`, near `generateNewUUID`:
 
@@ -360,13 +360,13 @@ Add to `library/Recipe.ts`, near `generateNewUUID`:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/Recipe.ts library/__tests__/Recipe.persistence.test.ts
@@ -381,7 +381,7 @@ git commit -m "Resolve a recipe's display name through a fallback chain"
 - Modify: `library/Recipe.ts` (add `fingerprint`, remove a debug log from `getData`)
 - Test: `library/__tests__/Recipe.persistence.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 describe("fingerprint", () => {
@@ -483,13 +483,13 @@ file's imports.
 Add `import Pour from "../Pour";` and `CUP_TYPE` to the file's imports if they
 are not already there.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts -t "fingerprint"`
 
 Expected: FAIL with `recipe.fingerprint is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `library/Recipe.ts`:
 
@@ -532,7 +532,7 @@ The sample values in the tests below were also corrected: `grindSize` is stored
 with `GRIND_SIZE_OFFSET` of 40, so a value of 25 encodes as −15, and a pour
 volume must fit one byte, so 288 overflows. Valid values are used instead.
 
-- [ ] **Step 4: Remove the debug logs that this makes hot**
+- [x] **Step 4: Remove the debug logs that this makes hot**
 
 In `getData`, delete all three of these lines:
 
@@ -546,13 +546,13 @@ They were harmless when `getData` ran once per card write. De-duplication calls
 it once per stored recipe per import, which would flood the log on every save —
 and two of the three hex-encode the whole payload to do it.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest library/__tests__/Recipe.persistence.test.ts library/__tests__/Recipe.card.test.ts`
 
 Expected: PASS, with no edits to `Recipe.card.test.ts`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add library/Recipe.ts library/__tests__/Recipe.persistence.test.ts
@@ -571,7 +571,7 @@ git commit -m "Identify a recipe by the card it would write"
 one, the decision this feature actually needs is extracted as a pure function
 over a list, and the database method becomes a thin wrapper.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `library/__tests__/duplicates.test.ts`:
 
@@ -642,13 +642,13 @@ describe("findDuplicate", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/duplicates.test.ts`
 
 Expected: FAIL with `Cannot find module '../duplicates'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `library/duplicates.ts`:
 
@@ -695,13 +695,13 @@ export function findDuplicate(stored: Recipe[], candidate: Recipe): Recipe | nul
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/duplicates.test.ts`
 
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/duplicates.ts library/__tests__/duplicates.test.ts
@@ -716,7 +716,7 @@ git commit -m "Detect a duplicate recipe by the card it would write"
 - Create: `library/Settings.ts`
 - Test: `library/__tests__/Settings.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `library/__tests__/Settings.test.ts`:
 
@@ -782,13 +782,13 @@ describe("Settings", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/Settings.test.ts`
 
 Expected: FAIL with `Cannot find module '../Settings'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `library/Settings.ts`:
 
@@ -886,13 +886,13 @@ export class Settings {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/Settings.test.ts`
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/Settings.ts library/__tests__/Settings.test.ts
@@ -907,7 +907,7 @@ git commit -m "Add a typed settings store"
 - Modify: `library/RecipeDatabase.ts`, `library/accent.ts`
 - Test: `library/__tests__/accent.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `library/__tests__/accent.test.ts`:
 
@@ -950,13 +950,13 @@ describe("assigning an accent when the beverage changes", () => {
 Add `reassignIfCrossed` to the file's import from `../accent`, and `accents`
 from `@/constants/colors` if not already imported.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/accent.test.ts`
 
 Expected: FAIL with `reassignIfCrossed is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `library/accent.ts`:
 
@@ -993,13 +993,13 @@ Delete the `RecipeWithAccent` type and its doc comment, and change
     const persisted = recipe.accentIndex;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/accent.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Remove the last references to the deleted type**
+- [x] **Step 5: Remove the last references to the deleted type**
 
 Run: `grep -rn "RecipeWithAccent" --include=*.ts --include=*.tsx . | grep -v node_modules`
 
@@ -1007,7 +1007,7 @@ Delete the import and the casts it is used in — in
 `components/__tests__/RecipeCard.test.tsx`, a recipe can now take
 `recipe.accentIndex = n` directly.
 
-- [ ] **Step 6: Wire assignment into the database**
+- [x] **Step 6: Wire assignment into the database**
 
 In `library/RecipeDatabase.ts`, add the import:
 
@@ -1048,13 +1048,13 @@ At the top of `updateRecipe`, in the `else` branch before the `JSON.stringify`:
                 reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
 ```
 
-- [ ] **Step 7: Run the full suite**
+- [x] **Step 7: Run the full suite**
 
 Run: `npm test`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add library/accent.ts library/RecipeDatabase.ts library/__tests__/accent.test.ts components/__tests__/RecipeCard.test.tsx
@@ -1072,7 +1072,7 @@ git commit -m "Persist a recipe's accent, and reassign it across the tea boundar
 This is the breaking task. It is one commit rather than several so the
 repository is never left half-renamed.
 
-- [ ] **Step 1: Update the RecipeCard test to the new contract**
+- [x] **Step 1: Update the RecipeCard test to the new contract**
 
 In `components/__tests__/RecipeCard.test.tsx`, the `makeRecipe` helper takes
 `{title: ...}`. Change it to set `name`, and add:
@@ -1106,18 +1106,18 @@ In `components/__tests__/RecipeCard.test.tsx`, the `makeRecipe` helper takes
 Add a `styleValueOf` helper mirroring the one in `ScreenTitle.test.tsx` if the
 file does not already have one.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
 
 Expected: FAIL — the card renders `recipe.title`, which is now `undefined`.
 
-- [ ] **Step 3: Delete the field**
+- [x] **Step 3: Delete the field**
 
 In `library/Recipe.ts`, delete `public title: string = "";` if it is still
 present after Task 1, and delete any remaining assignment to `this.title`.
 
-- [ ] **Step 4: Repoint every call site**
+- [x] **Step 4: Repoint every call site**
 
 `library/XBloomRecipe.ts:52` — the fetched name is xBloom's, not the user's:
 
@@ -1152,21 +1152,21 @@ opening a recipe and saving it would silently adopt that name as the user's.
 
 `hooks/useRecipeEditor.ts:333` — `r.name = val;`.
 
-- [ ] **Step 5: Run the full suite and typecheck**
+- [x] **Step 5: Run the full suite and typecheck**
 
 Run: `npm run typecheck && npm test`
 
 Expected: PASS. Any remaining `title` reference is a type error, which is the
 point of deleting the field rather than aliasing it.
 
-- [ ] **Step 6: Confirm nothing was missed**
+- [x] **Step 6: Confirm nothing was missed**
 
 Run: `grep -rn "\.title" app/ components/ hooks/ library/ --include=*.ts --include=*.tsx | grep -v __tests__`
 
 Expected: no matches other than `IconButton`'s own unrelated `title` prop in
 `app/editRecipe.tsx`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -1181,7 +1181,7 @@ git commit -m "Split the recipe title into a local name and a cached xBloom name
 - Modify: `library/RecipeDatabase.ts` (delete `doesTitleExist`, rework `createTitle`), `hooks/useRecipeEditor.ts:262-278`, `app/index.tsx:195`
 - Test: `library/__tests__/duplicates.test.ts`
 
-- [ ] **Step 1: Write the failing test for the copy-naming rule**
+- [x] **Step 1: Write the failing test for the copy-naming rule**
 
 Append to `library/__tests__/duplicates.test.ts`:
 
@@ -1226,13 +1226,13 @@ describe("copyName", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest library/__tests__/duplicates.test.ts -t copyName`
 
 Expected: FAIL with `copyName is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `library/duplicates.ts`:
 
@@ -1263,13 +1263,13 @@ export function copyName(name: string, existing: string[]): string {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx jest library/__tests__/duplicates.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Delete the constraint from the database**
+- [x] **Step 5: Delete the constraint from the database**
 
 In `library/RecipeDatabase.ts`, delete `doesTitleExist` and the old
 `createTitle` entirely, and rewrite `cloneRecipe`:
@@ -1293,7 +1293,7 @@ In `library/RecipeDatabase.ts`, delete `doesTitleExist` and the old
 
 Add `import {copyName} from './duplicates';`.
 
-- [ ] **Step 6: Delete the save-time alert**
+- [x] **Step 6: Delete the save-time alert**
 
 In `hooks/useRecipeEditor.ts:259`, `saveRecipe` currently nests a
 title-collision branch inside the volume check. Replace the whole function body
@@ -1326,7 +1326,7 @@ there is anything to save. Confirm with:
 
 `grep -n "titleChanged" hooks/useRecipeEditor.ts` — expect no matches when done.
 
-- [ ] **Step 7: Remove the dev-seed guard**
+- [x] **Step 7: Remove the dev-seed guard**
 
 In `app/index.tsx:195`, `db.doesTitleExist` no longer exists:
 
@@ -1336,13 +1336,13 @@ In `app/index.tsx:195`, `db.doesTitleExist` no longer exists:
                         }
 ```
 
-- [ ] **Step 8: Run typecheck and the full suite**
+- [x] **Step 8: Run typecheck and the full suite**
 
 Run: `npm run typecheck && npm test`
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
@@ -1372,7 +1372,7 @@ than declining to insert and then having to explain itself, the app opens the
 recipe the user already has. Nothing is created, and the reveal is the
 navigation.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `library/__tests__/duplicates.test.ts`:
 
@@ -1414,13 +1414,13 @@ describe("resolveOnOpen", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest library/__tests__/duplicates.test.ts -t resolveOnOpen`
 
 Expected: FAIL with `resolveOnOpen is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `library/duplicates.ts`:
 
@@ -1446,13 +1446,13 @@ export function resolveOnOpen(
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx jest library/__tests__/duplicates.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Use it on the card-read path**
+- [x] **Step 5: Use it on the card-read path**
 
 In `app/index.tsx`, replace line 103 with:
 
@@ -1481,7 +1481,7 @@ it to `"true"` for a new read is the correct behaviour and matches the comment
 on `initiallySaveEnabled` in `hooks/useRecipeEditor.ts` ("e.g. when arriving
 from a card read"); confirm on device that Save is enabled after a read.
 
-- [ ] **Step 6: Use it on the import path**
+- [x] **Step 6: Use it on the import path**
 
 In `components/ImportRecipeComponent.tsx`, replace the push at line 42 with:
 
@@ -1504,13 +1504,13 @@ Add `import {resolveOnOpen} from '@/library/duplicates';` and
 `setTimeout(..., 0)` wrapper and the comment explaining it — the deferral is
 about iOS modal teardown and is unrelated to this change.
 
-- [ ] **Step 7: Run typecheck and the full suite**
+- [x] **Step 7: Run typecheck and the full suite**
 
 Run: `npm run typecheck && npm test`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A
@@ -1567,13 +1567,13 @@ step exists to fix. The implemented condition is
 `Recipe.title` forced `fetchRecipeTitle` and the auto-fetch guard onto
 `xbloomName`. Only Step 3 remained.
 
-- [ ] **Step 4: Run typecheck and the full suite**
+- [x] **Step 4: Run typecheck and the full suite**
 
 Run: `npm run typecheck && npm test`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1586,7 +1586,7 @@ git commit -m "Stop the sync button overwriting a name the user chose"
 
 **Files:** none — verification only.
 
-- [ ] **Step 1: Confirm the card format is untouched**
+- [x] **Step 1: Confirm the card format is untouched**
 
 Run: `git diff main --stat -- library/Recipe.ts library/Pour.ts library/NFC.ts`
 
@@ -1596,7 +1596,7 @@ Expected: the card test and fixtures have an **empty diff**. `Recipe.ts` has
 changed, but only by addition — confirm `parseData` and `getData` differ by
 nothing beyond the deleted `console.log`.
 
-- [ ] **Step 2: Run every check**
+- [x] **Step 2: Run every check**
 
 ```bash
 npm run typecheck && npm run lint && npm test && npx expo-doctor
@@ -1605,13 +1605,13 @@ npm run typecheck && npm run lint && npm test && npx expo-doctor
 Expected: 0 type errors; 0 lint errors (the 6 known `exhaustive-deps` warnings
 remain); all suites pass; 21/21 checks.
 
-- [ ] **Step 3: Confirm the removed API is really gone**
+- [x] **Step 3: Confirm the removed API is really gone**
 
 Run: `grep -rn "doesTitleExist\|RecipeWithAccent\|\.title" library/ hooks/ app/ components/ --include=*.ts --include=*.tsx | grep -v __tests__`
 
 Expected: no matches except `IconButton`'s unrelated `title` prop.
 
-- [ ] **Step 4: Commit any remainder and open the pull request**
+- [x] **Step 4: Commit any remainder and open the pull request**
 
 ```bash
 git status
