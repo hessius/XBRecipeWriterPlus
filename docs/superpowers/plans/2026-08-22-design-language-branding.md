@@ -3199,13 +3199,43 @@ Create `components/__tests__/RecipeCard.test.tsx`:
 
 ```tsx
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
-import {accents} from "@/constants/colors";
+import {accents, onAccent} from "@/constants/colors";
+import type {RecipeWithAccent} from "@/library/accent";
+import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
+
+/** The face a node is set in. Tamagui flattens its style; RN keeps the array. */
+function fontFamilyOf(text: string): string {
+    const style = screen.getByText(text).props.style;
+    const list = (Array.isArray(style) ? style : [style]) as
+        {fontFamily?: string}[];
+    return String(list.reduce<string | undefined>(
+        (found, s) => s?.fontFamily ?? found, undefined
+    ));
+}
+
+/** The outline path of the pour profile, which react-native-svg renders deep. */
+function profilePath(): string {
+    const svg = screen.getByTestId("recipe-card-profile");
+    const paths: string[] = [];
+    const walk = (node: {type?: unknown; props?: {d?: string}; children?: unknown[]}) => {
+        if (typeof node.props?.d === "string") {
+            paths.push(node.props.d);
+        }
+        for (const child of node.children ?? []) {
+            if (typeof child !== "string") {
+                walk(child as Parameters<typeof walk>[0]);
+            }
+        }
+    };
+    walk(svg as unknown as Parameters<typeof walk>[0]);
+    return paths.join("|");
+}
 
 const TOUCH = {
     nativeEvent: {
@@ -3293,6 +3323,24 @@ describe("RecipeCard", () => {
         expect(screen.getByText("TEA")).toBeTruthy();
     });
 
+    it("draws a coffee recipe from the coffee half of the palette", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(accents.coffee).toContain(card.props.style.backgroundColor);
+    });
+
+    it("honours a saved accent rather than picking its own", async () => {
+        // The accent is assigned once, on save, and persisted. A card that
+        // recomputed it would repaint the library whenever anything changed.
+        const recipe = makeRecipe();
+        (recipe as RecipeWithAccent).accentIndex = 5;
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
+        expect(screen.getByTestId("recipe-card").props.style.backgroundColor)
+            .toBe(accents.coffee[5]);
+    });
+
     it("draws a tea recipe from the tea half of the palette", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
@@ -3300,6 +3348,236 @@ describe("RecipeCard", () => {
         );
         const card = screen.getByTestId("recipe-card");
         expect(accents.tea).toContain(card.props.style.backgroundColor);
+    });
+
+    it("keeps its text dark enough to read on a pastel", async () => {
+        // Every accent is a light pastel, so the one thing that must never
+        // happen is white text.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("Ethiopia Guji").props.style)
+            .toEqual(expect.objectContaining({color: onAccent.text}));
+        // The dose is a DigitRoll, so its colour lives on the digit glyphs —
+        // which are hidden from accessibility, and so from the default queries.
+        const digit = within(screen.getByLabelText("18g"))
+            .getAllByText("8", {includeHiddenElements: true})[0];
+        expect((digit.props.style as {color?: string}[])
+            .some((s) => s?.color === onAccent.text)).toBe(true);
+    });
+
+    it("draws the pour profile from this recipe's pours", async () => {
+        // The silhouette is how a recipe is recognised before it is read, so a
+        // profile that ignores the pours is worse than none.
+        const one = makeRecipe();
+        const many = makeRecipe();
+        many.pours = [new Pour(0, 60), new Pour(1, 120), new Pour(2, 108)];
+
+        const {rerender} = await renderWithProviders(
+            <RecipeCard recipe={one} onPress={jest.fn()}/>
+        );
+        const single = profilePath();
+        expect(single).toBeTruthy();
+
+        await rerender(<RecipeCard recipe={many} onPress={jest.fn()}/>);
+        expect(profilePath()).not.toBe(single);
+    });
+
+    it("keeps the profile behind the content, out of the way of touches", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Absolutely positioned and transparent to touch, or it would swallow
+        // presses meant for the card and the row actions.
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        expect(layer.props.pointerEvents).toBe("none");
+        expect(layer.props.style).toEqual(
+            expect.objectContaining({position: "absolute"})
+        );
+    });
+
+    it("shows the grind for coffee and hides it for tea", async () => {
+        // A tea card always writes the default grind, so showing a grind number
+        // beside it would be a number the machine ignores.
+        const {rerender} = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByLabelText("25")).toBeTruthy();
+
+        await rerender(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.queryByText("GRIND")).toBeNull();
+    });
+
+    it("is a card of at least a card's height, clipped to its corners", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const style = screen.getByTestId("recipe-card").props.style as
+            Record<string, number | string>;
+        // The profile is drawn oversized and flush to the corner; without the
+        // clip it spills out of the card.
+        expect(style.overflow).toBe("hidden");
+        expect(style.borderTopLeftRadius).toBeGreaterThan(0);
+        expect(style.paddingTop).toBeGreaterThan(0);
+        expect(style.justifyContent).toBe("space-between");
+
+        // A minimum, not a fixed height. Combined with the clip above, a fixed
+        // height crops the stats away as soon as the OS text size grows.
+        expect(style.minHeight).toBeGreaterThan(0);
+        expect(style.height).toBeUndefined();
+    });
+
+    it("bounds the name's growth the way the dot matrix is bounded", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Unbounded, the prose outgrows the data it sits above.
+        expect(screen.getByText("Ethiopia Guji").props.maxFontSizeMultiplier)
+            .toBe(DOTO_MAX_FONT_SCALE);
+    });
+
+    it("labels each number with the stat it belongs to", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Swapping two labels leaves every value still present and correct, so
+        // the pairing has to be asserted, not just the numbers.
+        for (const [label, value] of [["DOSE", "18g"], ["RATIO", "16"],
+                                      ["GRIND", "25"]] as const) {
+            const stat = screen.getByText(label).parent!;
+            expect(within(stat).getByLabelText(value)).toBeTruthy();
+        }
+    });
+
+    it("sets the stat labels and the marker in dot matrix", async () => {
+        // Prose is Inter, machine values are Doto. Labels on a machine's
+        // readout are Doto too; the recipe name is the only prose here.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        for (const text of ["DOSE", "RATIO", "GRIND", "COFFEE"]) {
+            expect(fontFamilyOf(text)).toMatch(/^Doto-/);
+        }
+        expect(fontFamilyOf("Ethiopia Guji")).not.toMatch(/^Doto-/);
+        // ...and set as a name, not as body copy: it is the first thing read.
+        expect(screen.getByText("Ethiopia Guji").props.style)
+            .toEqual(expect.objectContaining({fontSize: 17, fontWeight: "700"}));
+    });
+
+    it("keeps the profile a faint watermark, behind and out of the way", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        const style = layer.props.style as Record<string, number>;
+        // Drawn at full strength, or over the title, it stops being a
+        // background and starts competing with the text.
+        expect(style.opacity).toBeLessThan(1);
+        expect(style.right).toBe(0);
+        expect(style.bottom).toBe(0);
+
+        const svg = screen.getByTestId("recipe-card-profile");
+        expect(svg.props.width).toBeGreaterThan(100);
+        expect(svg.props.height).toBeGreaterThan(24);
+    });
+
+    it("caps a long name at two lines instead of shoving the marker aside", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({title: "A ".repeat(40) + "Name"})}
+                        onPress={jest.fn()}/>
+        );
+        const title = screen.getByText(/Name$/);
+        expect(title.props.numberOfLines).toBe(2);
+        // Without flex the name takes its full measured width and pushes the
+        // marker off the card.
+        expect(title.props.style).toEqual(expect.objectContaining({flex: 1}));
+        expect(screen.getByText("COFFEE")).toBeTruthy();
+    });
+
+    it("shows an unset ratio and grind as unset, not as zero", async () => {
+        // Recipe seeds both to -1, and DigitRoll clamps at zero -- so passing a
+        // sentinel through would claim a ratio of 1:0.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({ratio: -1, grindSize: -1})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.queryByLabelText("0")).toBeNull();
+        expect(screen.getAllByText("—")).toHaveLength(2);
+    });
+
+    it("announces everything the grouping hides", async () => {
+        // `accessible` collapses the subtree into one element on iOS, so the
+        // marker and the stats are only ever heard if they are in this label.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const label = screen.getByTestId("recipe-card").props
+            .accessibilityLabel as string;
+        expect(label).toContain("Ethiopia Guji");
+        expect(label).toContain("coffee");
+        expect(label).toContain("18");
+        expect(label).toContain("16");
+        expect(label).toContain("25");
+    });
+
+    it("says tea out loud rather than leaving it to the colour", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .toContain("tea");
+    });
+
+    it("gives an untitled recipe a name to be announced by", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({title: ""})} onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .toContain("Untitled");
+    });
+
+    it("is a single accessibility element, and says what it is", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessible).toBe(true);
+        expect(card.props.accessibilityRole).toBe("button");
+    });
+
+    it("offers the row actions to a screen reader, which cannot swipe", async () => {
+        // The buttons are nested inside the accessible group, so VoiceOver
+        // cannot reach them; and the swipe gesture they mirror is not available
+        // either. Without these, deleting is a sighted-only feature.
+        const onDelete = jest.fn();
+        const onDuplicate = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={onDuplicate} onDelete={onDelete}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual([
+            {name: "duplicate", label: "Duplicate recipe"},
+            {name: "delete", label: "Delete recipe"}
+        ]);
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "delete"}});
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDuplicate).not.toHaveBeenCalled();
+    });
+
+    it("offers no action it cannot perform", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions)
+            .toEqual([]);
     });
 
     it("calls onPress when tapped", async () => {
@@ -3322,15 +3600,45 @@ describe("RecipeCard", () => {
     });
 
     it("reveals the row actions in edit mode", async () => {
+        const onPress = jest.fn();
         const onDelete = jest.fn();
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+            <RecipeCard recipe={makeRecipe()} onPress={onPress}
                         onDuplicate={jest.fn()} onDelete={onDelete} editing/>
         );
 
         await press(screen.getByRole("button", {name: "Delete recipe"}));
 
         expect(onDelete).toHaveBeenCalledTimes(1);
+        // A delete that also opens the recipe it just deleted is a bug.
+        expect(onPress).not.toHaveBeenCalled();
+    });
+
+    it("gives the row actions targets big enough to hit, and apart", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+        const duplicate = screen.getByRole("button", {name: "Duplicate recipe"});
+        const style = duplicate.props.style as Record<string, number>;
+        // Padded rather than hit-slopped: slop on adjacent icons overlaps into
+        // the gap, and the later sibling wins -- so a tap at the edge of
+        // duplicate would delete the recipe.
+        expect(duplicate.props.hitSlop).toBeUndefined();
+        expect(style.paddingTop * 2 + 18).toBeGreaterThanOrEqual(44);
+        expect(style.paddingLeft * 2 + 18).toBeGreaterThanOrEqual(44);
+    });
+
+    it("duplicates from the row actions too", async () => {
+        const onDuplicate = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={onDuplicate} onDelete={jest.fn()} editing/>
+        );
+
+        await press(screen.getByRole("button", {name: "Duplicate recipe"}));
+
+        expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
 });
 ```
@@ -3351,14 +3659,34 @@ import {AntDesign} from "@expo/vector-icons";
 import {XStack, YStack, Text} from "tamagui";
 
 import DigitRoll from "@/components/DigitRoll";
-import DotMatrixText from "@/components/DotMatrixText";
+import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile from "@/components/PourProfile";
-import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {onAccent} from "@/constants/colors";
 
 const CARD_HEIGHT = 116;
 const PROFILE_HEIGHT = 56;
+
+/**
+ * The smallest comfortable touch target, per the HIG. The action icons are 18px
+ * and are padded out to this rather than given `hitSlop`, because hit slop on
+ * adjacent icons overlaps into the gap between them and the later sibling wins —
+ * which would make a tap at the edge of "duplicate" delete the recipe instead.
+ */
+const TOUCH_TARGET = 44;
+const ACTION_ICON_SIZE = 18;
+const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
+
+/**
+ * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
+ * `DigitRoll` clamps at zero, so passing a sentinel straight through would tell
+ * the user the ratio is 0 — not a possible value, and indistinguishable from a
+ * real reading.
+ */
+function isSet(value: number): boolean {
+    return Number.isFinite(value) && value > 0;
+}
 
 type StatProps = {
     label: string;
@@ -3373,8 +3701,33 @@ function Stat({label, value, suffix}: StatProps) {
                            color={onAccent.label}>
                 {label}
             </DotMatrixText>
-            <DigitRoll value={value} suffix={suffix} fontSize={18} weight="extrabold"
-                       color={onAccent.text}/>
+            {isSet(value) ? (
+                <DigitRoll value={value} suffix={suffix} fontSize={18}
+                           weight="extrabold" color={onAccent.text}/>
+            ) : (
+                <DotMatrixText fontSize={18} weight="extrabold"
+                               color={onAccent.text}>
+                    —
+                </DotMatrixText>
+            )}
+        </YStack>
+    );
+}
+
+type ActionProps = {
+    label: string;
+    icon: React.ComponentProps<typeof AntDesign>["name"];
+    testID: string;
+    onPress: () => void;
+};
+
+function Action({label, icon, testID, onPress}: ActionProps) {
+    return (
+        <YStack accessible accessibilityRole="button" accessibilityLabel={label}
+                alignItems="center" justifyContent="center"
+                padding={ACTION_PADDING} onPress={onPress}>
+            <AntDesign testID={testID} name={icon} size={ACTION_ICON_SIZE}
+                       color={onAccent.marker}/>
         </YStack>
     );
 }
@@ -3396,9 +3749,9 @@ type Props = {
 /**
  * A recipe as a card.
  *
- * The name is prose and stays in Inter. Dose and ratio are machine-derived and
- * are Doto. The pour profile is drawn behind the content at low contrast, so a
- * recipe is recognisable by its silhouette before it is read.
+ * The name is prose and stays in Inter. Dose, ratio and grind are
+ * machine-derived and are Doto. The pour profile is drawn behind the content at
+ * low contrast, so a recipe is recognisable by its silhouette before it is read.
  */
 export default function RecipeCard({
     recipe,
@@ -3413,6 +3766,28 @@ export default function RecipeCard({
     const marker = isTea ? "TEA" : "COFFEE";
     const showMarker = isTea || showCoffeeMarker;
 
+    // `accessible` groups the whole subtree into one element on iOS, so nothing
+    // inside is announced on its own. Everything the card shows has to be in
+    // this label or it is, to a screen reader, conveyed by the accent colour
+    // alone -- which is the state the TEA/COFFEE marker exists to prevent.
+    const summary = [
+        recipe.title === "" ? "Untitled recipe" : recipe.title,
+        marker.toLowerCase(),
+        isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
+        isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
+        !isTea && isSet(recipe.grindSize) ? `grind ${recipe.grindSize}` : undefined
+    ].filter((part) => part !== undefined).join(", ");
+
+    // The row actions are nested inside that same group, so VoiceOver cannot
+    // reach the buttons. These are the only non-visual path to them -- and the
+    // swipe gesture they mirror is not available to a screen reader either.
+    const actions = [
+        ...(onDuplicate !== undefined
+            ? [{name: "duplicate", label: "Duplicate recipe"}]
+            : []),
+        ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : [])
+    ];
+
     return (
         <YStack
             testID="recipe-card"
@@ -3421,13 +3796,25 @@ export default function RecipeCard({
             // card is announced as a loose pile of numbers.
             accessible
             accessibilityRole="button"
-            accessibilityLabel={recipe.title}
+            accessibilityLabel={summary}
+            accessibilityActions={actions}
+            onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === "duplicate") {
+                    onDuplicate?.();
+                } else if (event.nativeEvent.actionName === "delete") {
+                    onDelete?.();
+                }
+            }}
             onPress={onPress}
             pressStyle={{opacity: 0.85, scale: 0.99}}
-            height={CARD_HEIGHT}
+            // A minimum rather than a fixed height: the title and the Doto stats
+            // both grow with the OS text size, and a fixed height plus the clip
+            // below would crop the stats away for exactly those users.
+            minHeight={CARD_HEIGHT}
             borderRadius="$8"
             overflow="hidden"
             justifyContent="space-between"
+            gap="$2"
             padding="$3.5"
             style={{backgroundColor: accent}}>
 
@@ -3438,7 +3825,10 @@ export default function RecipeCard({
             </View>
 
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
+                {/* Bounded to the same scale Doto is, so the two halves of the
+                    card grow together rather than the prose swamping the data. */}
                 <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
+                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
                       color={onAccent.text}>
                     {recipe.title}
                 </Text>
@@ -3454,30 +3844,19 @@ export default function RecipeCard({
                 <XStack gap="$5">
                     <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
                     <Stat label="RATIO" value={recipe.ratio}/>
-                    {recipe.cupType !== CUP_TYPE.TEA && (
-                        <Stat label="GRIND" value={recipe.grindSize}/>
-                    )}
+                    {!isTea && <Stat label="GRIND" value={recipe.grindSize}/>}
                 </XStack>
 
                 {editing && (
-                    <XStack gap="$3">
+                    <XStack gap="$1">
                         {onDuplicate !== undefined && (
-                            <YStack accessible accessibilityRole="button"
-                                    accessibilityLabel="Duplicate recipe"
-                                    hitSlop={8} onPress={onDuplicate}>
-                                <AntDesign testID="recipe-card-duplicate"
-                                           name="copy" size={18}
-                                           color={onAccent.marker}/>
-                            </YStack>
+                            <Action label="Duplicate recipe" icon="copy"
+                                    testID="recipe-card-duplicate"
+                                    onPress={onDuplicate}/>
                         )}
                         {onDelete !== undefined && (
-                            <YStack accessible accessibilityRole="button"
-                                    accessibilityLabel="Delete recipe"
-                                    hitSlop={8} onPress={onDelete}>
-                                <AntDesign testID="recipe-card-delete"
-                                           name="delete" size={18}
-                                           color={onAccent.marker}/>
-                            </YStack>
+                            <Action label="Delete recipe" icon="delete"
+                                    testID="recipe-card-delete" onPress={onDelete}/>
                         )}
                     </XStack>
                 )}
@@ -3490,7 +3869,7 @@ export default function RecipeCard({
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
-Expected: PASS, 10 tests.
+Expected: PASS, 31 tests.
 
 The action buttons sit inside a card that is itself pressable. If a tap on one
 of them also fires the card's `onPress`, give the inner stacks
