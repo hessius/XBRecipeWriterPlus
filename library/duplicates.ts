@@ -63,3 +63,23 @@ export function copyName(name: string, existing: string[]): string {
     }
     return `${base} (Copy)(${count})`;
 }
+
+/**
+ * Which recipe to open after a card read or an import.
+ *
+ * When the library already holds one that would write the same card, that one
+ * is opened instead of the new one. This is the de-duplication: no second copy
+ * is ever created, and opening the existing recipe *is* the reveal.
+ *
+ * Only for the automatic paths. Duplicating a recipe is an explicit request and
+ * must always produce a copy.
+ */
+export function resolveOnOpen(
+    stored: Recipe[],
+    candidate: Recipe
+): {recipe: Recipe; isExisting: boolean} {
+    const existing = findDuplicate(stored, candidate);
+    return existing
+        ? {recipe: existing, isExisting: true}
+        : {recipe: candidate, isExisting: false};
+}

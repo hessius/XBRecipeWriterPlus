@@ -20,6 +20,7 @@ import Svg, {Path} from "react-native-svg";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
+import {resolveOnOpen} from '@/library/duplicates';
 
 // @ts-ignore-next-line
 
@@ -100,7 +101,21 @@ export default function HomeScreen() {
                 setShowAndroidNFCDialog(false);
 
                 //reenable
-                router.push({pathname: '/editRecipe', params: {recipeJSON: JSON.stringify(recipe)}});
+                // Stamped before serialising: the editor rebuilds the recipe
+                // from this JSON, so anything set afterwards would be lost.
+                recipe.source = "read";
+                const {recipe: toOpen, isExisting} =
+                    resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
+                router.push({
+                    pathname: '/editRecipe',
+                    params:   {
+                        recipeJSON: JSON.stringify(toOpen),
+                        // An already-saved recipe opens with Save disabled, as
+                        // it would from the list; only a genuinely new read
+                        // arrives needing to be saved.
+                        saveEnabled: isExisting ? "false" : "true"
+                    }
+                });
             }
         } catch (e) {
             console.log(e);

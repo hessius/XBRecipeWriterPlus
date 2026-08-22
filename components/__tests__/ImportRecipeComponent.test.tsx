@@ -17,6 +17,10 @@ jest.mock("@/library/XBloomRecipe", () => ({
     }
 }));
 
+jest.mock("@/library/RecipeDatabase", () => jest.fn().mockImplementation(() => ({
+    retrieveAllRecipes: () => []
+})));
+
 beforeEach(() => mockPush.mockClear());
 
 describe("ImportRecipeComponent", () => {

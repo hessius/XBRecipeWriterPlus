@@ -1,6 +1,6 @@
 import Recipe from "../Recipe";
 import Pour from "../Pour";
-import {findDuplicate, copyName} from "../duplicates";
+import {findDuplicate, copyName, resolveOnOpen} from "../duplicates";
 
 function sample(): Recipe {
     const recipe = new Recipe();
@@ -93,5 +93,38 @@ describe("copyName", () => {
         // A nameless recipe's copy should keep falling through to the
         // provenance placeholder rather than becoming literally " (Copy)".
         expect(copyName("", [])).toBe("");
+    });
+});
+
+describe("resolveOnOpen", () => {
+    it("opens the new recipe when the library has nothing like it", () => {
+        const candidate = sample();
+        expect(resolveOnOpen([], candidate)).toEqual({recipe: candidate, isExisting: false});
+    });
+
+    it("opens the stored recipe when it would write the same card", () => {
+        const stored = sample();
+        stored.name = "Already Saved";
+        const result = resolveOnOpen([stored], sample());
+        expect(result.recipe).toBe(stored);
+        expect(result.isExisting).toBe(true);
+    });
+
+    it("does not modify the stored recipe", () => {
+        // The reveal is read-only. Re-reading a card must not quietly restamp
+        // the recipe the user already has.
+        const stored = sample();
+        stored.name = "Already Saved";
+        stored.source = "import";
+        resolveOnOpen([stored], sample());
+        expect(stored.name).toBe("Already Saved");
+        expect(stored.source).toBe("import");
+    });
+
+    it("opens the new recipe when the library holds a different one", () => {
+        const other = sample();
+        other.ratio = 18;
+        const candidate = sample();
+        expect(resolveOnOpen([other], candidate).recipe).toBe(candidate);
     });
 });
