@@ -30,20 +30,17 @@ export default function CtaTile({
     accessibilityLabel,
     disabled = false
 }: Props) {
-    const handlePress = () => {
-        if (!disabled) {
-            onPress();
-        }
-    };
-
     return (
         <YStack
             flex={1}
-            accessible={true}
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the icon and label are announced as two separate items.
+            accessible
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel ?? label}
             accessibilityState={{disabled}}
-            onPress={handlePress}
+            onPress={disabled ? undefined : onPress}
             alignItems="center"
             justifyContent="center"
             gap="$2"
@@ -54,7 +51,7 @@ export default function CtaTile({
             borderColor={palette.line}
             opacity={disabled ? 0.4 : 1}
             pressStyle={disabled ? undefined : {opacity: 0.7, scale: 0.98}}>
-            <AntDesign name={icon} size={22}
+            <AntDesign testID="cta-tile-icon" name={icon} size={22}
                        color={disabled ? palette.muted : palette.text}/>
             <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
                            color={disabled ? palette.muted : palette.text}>

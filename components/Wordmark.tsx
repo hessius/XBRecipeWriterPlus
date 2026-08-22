@@ -24,8 +24,13 @@ export default function Wordmark({
     plusColor
 }: Props) {
     return (
-        <XStack accessibilityRole="header" accessibilityLabel="XBRW++"
-                alignItems="center">
+        <XStack
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the two halves are announced as "XBRW" and "++" separately.
+            accessible
+            accessibilityRole="header" accessibilityLabel="XBRW++"
+            alignItems="center">
             <DotMatrixText fontSize={fontSize} weight="extrabold" letterSpacing={1}
                            color={color}>
                 XBRW

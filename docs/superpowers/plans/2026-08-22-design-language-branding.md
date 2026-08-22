@@ -2636,23 +2636,85 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import CtaTile from "@/components/CtaTile";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+const TOUCH = {
+    nativeEvent: {
+        touches:        [],
+        changedTouches: [],
+        locationX:      1,
+        locationY:      1,
+        pageX:          1,
+        pageY:          1,
+        timestamp:      0
+    }
+};
+
+/**
+ * A real touch on the tile.
+ *
+ * Deliberately not `fireEvent.press`: Tamagui drives presses through the
+ * responder system rather than an `onPress` prop on the host view, so
+ * `fireEvent.press` finds no handler there and walks up the tree until it
+ * reaches `CtaTile`'s *own* `onPress` prop — the mock the test just passed in.
+ * That happens whether or not the tile wires anything up, and a tile rendering
+ * nothing interactive at all passed the original version of this test.
+ */
+async function press(element: Parameters<typeof fireEvent>[0]) {
+    await fireEvent(element, "responderGrant", TOUCH);
+    await fireEvent(element, "responderRelease", TOUCH);
+}
+
+function tile(name = "SCAN") {
+    return screen.getByRole("button", {name});
+}
 
 describe("CtaTile", () => {
     it("renders its label", async () => {
         await renderWithProviders(
-            <CtaTile icon="scan1" label="SCAN" onPress={jest.fn()}/>
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
         );
         expect(screen.getByText("SCAN")).toBeTruthy();
+        // The label doubles as the accessible name when none is spelled out,
+        // or every tile on the home screen announces as an unnamed button.
+        expect(tile()).toBeTruthy();
+    });
+
+    it("renders the icon it was given, above the label", async () => {
+        // Vector icons render as a glyph character in the `anticon` font, so
+        // the only evidence that `icon` was honoured is that two names draw
+        // two different characters.
+        const {rerender} = await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const scan = screen.getByTestId("cta-tile-icon").props.children;
+        expect(scan).toBeTruthy();
+
+        // Icon first: the tile reads top-down, and swapping the two is a
+        // different component.
+        const children = tile().children as {props?: {testID?: string}}[];
+        expect(children[0].props?.testID).toBe("cta-tile-icon");
+
+        await rerender(<CtaTile icon="qrcode" label="SCAN" onPress={jest.fn()}/>);
+        expect(screen.getByTestId("cta-tile-icon").props.children).not.toBe(scan);
+    });
+
+    it("renders the label in dot matrix, not prose", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const style = screen.getByText("SCAN").props.style as {fontFamily?: string}[];
+        expect(style.some((s) => s?.fontFamily?.startsWith("Doto-"))).toBe(true);
     });
 
     it("calls onPress when tapped", async () => {
         const onPress = jest.fn();
         await renderWithProviders(
-            <CtaTile icon="scan1" label="SCAN" onPress={onPress}/>
+            <CtaTile icon="scan" label="SCAN" onPress={onPress}/>
         );
 
-        await fireEvent.press(screen.getByRole("button", {name: "SCAN"}));
+        await press(tile());
 
         expect(onPress).toHaveBeenCalledTimes(1);
     });
@@ -2660,20 +2722,81 @@ describe("CtaTile", () => {
     it("does not call onPress when disabled", async () => {
         const onPress = jest.fn();
         await renderWithProviders(
-            <CtaTile icon="scan1" label="SCAN" onPress={onPress} disabled/>
+            <CtaTile icon="scan" label="SCAN" onPress={onPress} disabled/>
         );
 
-        await fireEvent.press(screen.getByRole("button", {name: "SCAN"}));
+        await press(tile());
 
         expect(onPress).not.toHaveBeenCalled();
     });
 
+    it("accepts no touch at all when disabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()} disabled/>
+        );
+
+        // Not merely ignored on the way out: the tile never claims the touch, so
+        // it cannot swallow a press meant for something behind it either.
+        expect(tile().props.onStartShouldSetResponder).toBeUndefined();
+        expect(tile().props.accessibilityState).toEqual({disabled: true});
+    });
+
+    it("claims touches when it is enabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        expect(tile().props.onStartShouldSetResponder).toBeDefined();
+        expect(tile().props.accessibilityState).toEqual({disabled: false});
+    });
+
+    it("is a single accessibility element, not an icon and a label", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        // A label on a View is inert unless the View is an element in its own
+        // right, and the icon would otherwise be announced separately.
+        expect(tile().props.accessible).toBe(true);
+    });
+
+    it("looks like a tile, and shares the row with its twin", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const style = tile().props.style as Record<string, number | string>;
+        // Two tiles sit side by side at equal weight; without flex each shrinks
+        // to its own content and the row stops being a pair.
+        expect(style.flex).toBe(1);
+        expect(style.backgroundColor).toBe(palette.raised);
+        expect(style.borderTopColor).toBe(palette.line);
+        expect(style.borderTopWidth).toBe(1);
+        expect(style.borderTopLeftRadius).toBeGreaterThan(0);
+        expect(style.paddingTop).toBeGreaterThan(0);
+    });
+
     it("uses the accessibility label when the Doto label is an abbreviation", async () => {
         await renderWithProviders(
-            <CtaTile icon="scan1" label="SCAN" accessibilityLabel="Scan a card"
+            <CtaTile icon="scan" label="SCAN" accessibilityLabel="Scan a card"
                      onPress={jest.fn()}/>
         );
-        expect(screen.getByRole("button", {name: "Scan a card"})).toBeTruthy();
+        expect(tile("Scan a card")).toBeTruthy();
+        // ...and the abbreviation is still what is drawn.
+        expect(screen.getByText("SCAN")).toBeTruthy();
+    });
+
+    it("dims itself when disabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()} disabled/>
+        );
+        const style = tile().props.style as {opacity: number};
+        expect(style.opacity).toBeLessThan(1);
+
+        // The label and icon go with it, or a disabled tile still reads as
+        // available.
+        const label = screen.getByText("SCAN").props.style as {color?: string}[];
+        expect(label.some((s) => s?.color === palette.muted)).toBe(true);
+        const iconStyle = screen.getByTestId("cta-tile-icon").props.style as
+            {color?: string}[];
+        expect(iconStyle.some((s) => s?.color === palette.muted)).toBe(true);
     });
 });
 ```
@@ -2685,7 +2808,32 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 
 import ScreenTitle from "@/components/ScreenTitle";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+/** Whatever the queries hand back; RNTL does not export the type by name. */
+type Node = ReturnType<typeof screen.getByText>;
+
+type Style = Record<string, unknown> | undefined;
+
+/**
+ * A node's style, always as a list. Tamagui's `Text` flattens its style into a
+ * single object while a plain React Native `Text` keeps the array, and this
+ * component renders one of each.
+ */
+function stylesOf(node: Node): Style[] {
+    return Array.isArray(node.props.style) ? node.props.style as Style[] : [node.props.style as Style];
+}
+
+/** Whether a node is set in the dot-matrix face. */
+function isDoto(node: Node): boolean {
+    return String(styleValue(node, "fontFamily")).startsWith("Doto-");
+}
+
+/** The last value set for a style property, which is the one that wins. */
+function styleValue(node: Node, key: string): unknown {
+    return stylesOf(node).reduce<unknown>((found, s) => s?.[key] ?? found, undefined);
+}
 
 describe("ScreenTitle", () => {
     it("renders the title", async () => {
@@ -2696,6 +2844,61 @@ describe("ScreenTitle", () => {
     it("renders the count as a superscript", async () => {
         await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
         expect(screen.getByText("12")).toBeTruthy();
+
+        // Smaller than the title and lifted off the baseline, or it reads as a
+        // second word rather than an annotation on the first.
+        const count = screen.getByTestId("screen-title-count");
+        const title = screen.getByText("Recipes");
+        expect(styleValue(count, "fontSize") as number)
+            .toBeLessThan((styleValue(title, "fontSize") as number) / 2);
+        expect(styleValue(count, "marginTop")).toBeGreaterThan(0);
+        expect(styleValue(count, "color")).toBe(palette.muted);
+    });
+
+    it("keeps prose in Inter and the number in dot matrix", async () => {
+        // The typography rule in miniature: the word is prose, the number is a
+        // machine-derived value. A title in Doto is the failure mode here.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        // The title's family comes from the Tamagui font config rather than an
+        // inline style, so it reads as undefined here; what matters is that it
+        // is not Doto, which is the failure this rule exists to prevent.
+        expect(isDoto(screen.getByText("Recipes"))).toBe(false);
+        expect(isDoto(screen.getByText("12"))).toBe(true);
+    });
+
+    it("sets the title in prose, at prose weight", async () => {
+        // Absolute, not relative to the count: a title that shrinks to muted
+        // light grey is indistinguishable from its own superscript.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        const title = screen.getByText("Recipes");
+        expect(styleValue(title, "fontSize")).toBe(28);
+        expect(styleValue(title, "fontWeight")).toBe("700");
+        expect(styleValue(title, "color")).toBe(palette.text);
+    });
+
+    it("keeps a long title from pushing the count off the screen", async () => {
+        await renderWithProviders(
+            <ScreenTitle title={"Very ".repeat(20) + "Long Title"} count={12}/>
+        );
+        const title = screen.getByText(/Long Title$/);
+        // Flex defaults to no shrinking, so without these the title takes its
+        // full measured width and the count is drawn past the container edge.
+        expect(styleValue(title, "flexShrink")).toBe(1);
+        expect(title.props.numberOfLines).toBe(1);
+        expect(screen.getByTestId("screen-title-count")).toBeTruthy();
+    });
+
+    it("hangs the count from the top of the line, not the bottom", async () => {
+        // A bottom-aligned row would turn the same positive marginTop into a
+        // subscript.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        const row = screen.getByText("Recipes").parent!;
+        expect(styleValue(row, "alignItems")).toBe("flex-start");
+    });
+
+    it("shows the count it was given", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={7}/>);
+        expect(screen.getByTestId("screen-title-count").props.children).toBe(7);
     });
 
     it("omits the count when there is none", async () => {
@@ -2717,7 +2920,17 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 
 import Wordmark from "@/components/Wordmark";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+function styleOf(text: string): {fontFamily?: string; fontSize?: number; color?: string}[] {
+    return screen.getByText(text).props.style as
+        {fontFamily?: string; fontSize?: number; color?: string}[];
+}
+
+function valueOf(text: string, key: "fontFamily" | "fontSize" | "color") {
+    return styleOf(text).reduce<unknown>((found, s) => s?.[key] ?? found, undefined);
+}
 
 describe("Wordmark", () => {
     it("renders the product name", async () => {
@@ -2729,6 +2942,50 @@ describe("Wordmark", () => {
         await renderWithProviders(<Wordmark/>);
         expect(screen.getByText("XBRW")).toBeTruthy();
         expect(screen.getByText("++")).toBeTruthy();
+    });
+
+    it("tints the plus signs without touching the letters", async () => {
+        // The `++` carries the fork's identity, so it is the part that may be
+        // tinted. Colouring the whole lockup would be a different mark.
+        await renderWithProviders(<Wordmark plusColor={palette.success}/>);
+        expect(valueOf("++", "color")).toBe(palette.success);
+        expect(valueOf("XBRW", "color")).toBe(palette.text);
+    });
+
+    it("is one accessibility element, announced as the whole name", async () => {
+        // A label on a View is inert unless the View is an element in its own
+        // right; without that the lockup reads as "XBRW" then "++".
+        await renderWithProviders(<Wordmark/>);
+        expect(screen.getByRole("header", {name: "XBRW++"})).toBeTruthy();
+    });
+
+    it("recolours the letters as well as the plus signs", async () => {
+        await renderWithProviders(<Wordmark color={palette.success}/>);
+        expect(valueOf("XBRW", "color")).toBe(palette.success);
+        // Unset plusColor follows the letters rather than falling back to white.
+        expect(valueOf("++", "color")).toBe(palette.success);
+    });
+
+    it("defaults to a size that fits in a header", async () => {
+        // The default is what every header call site gets, and it is the one
+        // size no explicit-prop test covers.
+        await renderWithProviders(<Wordmark/>);
+        expect(valueOf("XBRW", "fontSize")).toBe(15);
+    });
+
+    it("keeps the two halves the same size and weight", async () => {
+        // They are one word set in two Text nodes; any drift shows as a seam.
+        await renderWithProviders(<Wordmark fontSize={22}/>);
+        expect(valueOf("XBRW", "fontSize")).toBe(valueOf("++", "fontSize"));
+        expect(valueOf("XBRW", "fontFamily")).toBe(valueOf("++", "fontFamily"));
+        expect(valueOf("XBRW", "fontSize")).toBe(22);
+    });
+
+    it("is set in dot matrix", async () => {
+        // Allowed in Doto because it is an abbreviation and a version marker —
+        // a label on a machine — rather than prose.
+        await renderWithProviders(<Wordmark/>);
+        expect(valueOf("XBRW", "fontFamily")).toBe("Doto-ExtraBold");
     });
 });
 ```
@@ -2778,6 +3035,10 @@ export default function CtaTile({
     return (
         <YStack
             flex={1}
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the icon and label are announced as two separate items.
+            accessible
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel ?? label}
             accessibilityState={{disabled}}
@@ -2792,7 +3053,7 @@ export default function CtaTile({
             borderColor={palette.line}
             opacity={disabled ? 0.4 : 1}
             pressStyle={disabled ? undefined : {opacity: 0.7, scale: 0.98}}>
-            <AntDesign name={icon} size={22}
+            <AntDesign testID="cta-tile-icon" name={icon} size={22}
                        color={disabled ? palette.muted : palette.text}/>
             <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
                            color={disabled ? palette.muted : palette.text}>
@@ -2812,6 +3073,14 @@ import {XStack, Text} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 
+const TITLE_FONT_SIZE = 28;
+
+/**
+ * How far the superscript sits below the top of the title's line. Derived from
+ * the title size rather than written as a literal so the two cannot drift apart.
+ */
+const COUNT_LIFT = Math.round(TITLE_FONT_SIZE * 0.14);
+
 type Props = {
     /** Prose, so this is Inter — never rendered in Doto. */
     title: string;
@@ -2830,13 +3099,16 @@ export default function ScreenTitle({title, count}: Props) {
 
     return (
         <XStack alignItems="flex-start" gap="$1">
-            <Text fontSize={28} fontWeight="700" color={palette.text}>
+            {/* Without flexShrink a long title keeps its full measured width
+                and pushes the count off the edge of the screen. */}
+            <Text fontSize={TITLE_FONT_SIZE} fontWeight="700" color={palette.text}
+                  flexShrink={1} numberOfLines={1}>
                 {title}
             </Text>
             {showCount && (
                 <DotMatrixText testID="screen-title-count" fontSize={11}
                                weight="bold" color={palette.muted}
-                               style={{marginTop: 4}}>
+                               style={{marginTop: COUNT_LIFT}}>
                     {count}
                 </DotMatrixText>
             )}
@@ -2874,8 +3146,13 @@ export default function Wordmark({
     plusColor
 }: Props) {
     return (
-        <XStack accessibilityRole="header" accessibilityLabel="XBRW++"
-                alignItems="center">
+        <XStack
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the two halves are announced as "XBRW" and "++" separately.
+            accessible
+            accessibilityRole="header" accessibilityLabel="XBRW++"
+            alignItems="center">
             <DotMatrixText fontSize={fontSize} weight="extrabold" letterSpacing={1}
                            color={color}>
                 XBRW
@@ -2892,7 +3169,7 @@ export default function Wordmark({
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest components/__tests__/CtaTile.test.tsx components/__tests__/ScreenTitle.test.tsx components/__tests__/Wordmark.test.tsx`
-Expected: PASS, 10 tests across 3 suites.
+Expected: PASS, 28 tests across 3 suites.
 
 - [ ] **Step 5: Commit**
 
