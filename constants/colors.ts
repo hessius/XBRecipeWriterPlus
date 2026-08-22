@@ -49,8 +49,15 @@ export const palette = {
 export const onAccent = {
     /** Recipe names and Doto values. */
     text:          "#0C0C0C",
-    /** Micro-labels above values. */
-    label:         "rgba(0,0,0,0.45)",
+    /**
+     * Micro-labels above values.
+     *
+     * 0.65 rather than something lighter because these are 11 px: below that
+     * alpha the label falls under 4.5:1 against the lighter accents, and it is
+     * the only cue to what the number beneath it means. At 0.65 the darkest
+     * pairing is 5.1:1.
+     */
+    label:         "rgba(0,0,0,0.65)",
     /** Pour profile stroke. */
     profileStroke: "rgba(0,0,0,0.85)",
     /** Pour profile fill. */
