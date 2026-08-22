@@ -33,6 +33,10 @@ export default function ImportRecipeComponent(props: {
         const recipe = xBloomRecipe?.getRecipe();
         // Close the dialog first to avoid iOS modal sticking around
         setDisplayDialog(false);
+        // The parent must clear the pending share too. Without this it keeps the
+        // dialog "armed" with a stale recipe id, and the next refresh of the recipe
+        // list re-mounts this component and pops the sheet again unprompted.
+        props.onClose();
         // Defer navigation until after the dialog state has propagated
         setTimeout(() => {
             router.push({pathname: '/editRecipe', params: {recipeJSON: JSON.stringify(recipe), saveEnabled: "true"}});

@@ -173,7 +173,6 @@ export default function HomeScreen() {
                         // eslint-disable-next-line react-hooks/set-state-in-effect
                         setShowImportRecipeDialog(() => true);
                         setXBloomRecipeID(() => id);
-                        forceRefresh();
                         resetShareIntent();
                     }
                 }
@@ -246,7 +245,7 @@ export default function HomeScreen() {
             </YStack>
 
             {showImportRecipeDialog && xbloomRecipeID ?
-                <ImportRecipeComponent key={"import" + key} recipeId={xbloomRecipeID}
+                <ImportRecipeComponent key={"import" + xbloomRecipeID} recipeId={xbloomRecipeID}
                                        onClose={() => onCloseImportCallback()}/> : ""}
 
             {Platform.OS !== "ios" && showAndroidNFCDialog ?
