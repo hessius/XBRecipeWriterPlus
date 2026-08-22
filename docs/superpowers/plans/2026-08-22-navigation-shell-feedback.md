@@ -2722,7 +2722,23 @@ leave this task's tests failing only on that missing import.
 If you prefer not to leave a red test, do Task 16 before this step and then run
 them in order — the plan's order is by dependency, not by obligation.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Delete the old dialog**
+
+`app/index.tsx` was the last thing importing `AndroidNFCDialog`, and this
+rewrite drops that import. Task 16 had to leave the file in place for exactly
+that reason.
+
+Run: `grep -rn "AndroidNFCDialog" app components hooks`
+Expected: the only hit is `components/AndroidNFCDialog.tsx` itself.
+
+```bash
+git rm components/AndroidNFCDialog.tsx
+```
+
+Run: `npm run typecheck`
+Expected: 0 errors — this is what catches a missed reference.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add app/index.tsx app/__tests__/index.test.tsx
@@ -2981,14 +2997,13 @@ In `app/editRecipe.tsx`, change the destructure on line ~45 to
 
 Change nothing else in that screen — it is sub-project 4's work.
 
-- [ ] **Step 7: Delete the old dialog**
+- [ ] **Step 7: Leave the old dialog in place for now**
 
 Run: `grep -rn "AndroidNFCDialog" app components hooks`
-Expected: the only hit is `components/AndroidNFCDialog.tsx` itself.
-
-```bash
-git rm components/AndroidNFCDialog.tsx
-```
+Expected: `components/AndroidNFCDialog.tsx` itself **and `app/index.tsx`**, which
+still renders it on the read path. That screen is Task 15's, not this task's, so
+the file cannot be deleted yet — Task 15 does it once the rewrite drops the last
+import.
 
 Run: `npm run typecheck`
 Expected: 0 errors — this is what catches a missed rename.
