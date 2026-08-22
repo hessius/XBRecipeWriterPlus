@@ -31,9 +31,28 @@ module.exports = function withShareExtensionCcache(config) {
     return withFinalizedMod(config, [
         'ios',
         async (cfg) => {
+            // The .xcodeproj is named after the sanitised `expo.name`, so it
+            // must not be hardcoded: renaming the app renames the directory
+            // and would otherwise fail prebuild here. Expo supplies the name
+            // on the mod request; the disk scan is a fallback so this cannot
+            // silently break again.
+            const platformRoot = cfg.modRequest.platformProjectRoot;
+            const projectName =
+                cfg.modRequest.projectName ??
+                fs
+                    .readdirSync(platformRoot)
+                    .find((entry) => entry.endsWith('.xcodeproj'))
+                    ?.replace(/\.xcodeproj$/, '');
+
+            if (!projectName) {
+                throw new Error(
+                    `[withShareExtensionCcache] No .xcodeproj found in ${platformRoot}.`
+                );
+            }
+
             const projectPath = path.join(
-                cfg.modRequest.platformProjectRoot,
-                'XBRecipeWriter.xcodeproj',
+                platformRoot,
+                `${projectName}.xcodeproj`,
                 'project.pbxproj'
             );
 

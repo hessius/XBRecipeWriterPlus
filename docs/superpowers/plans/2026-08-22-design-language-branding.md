@@ -4037,7 +4037,11 @@ Expected: an `<svg` element with a `1024` viewBox or width.
 
 - [ ] **Step 2: Write the generator script**
 
-Create `scripts/generate-icons.sh`:
+Create `scripts/generate-icons.sh`. Note the adaptive-icon branch: Android
+masks an adaptive foreground and only guarantees the middle ~66%, while this
+mark fills ~93% of the canvas, so rendering the same file for both crops the
+outer ring of dots off on Android. The foreground is inset into the safe zone
+by wrapping the source in a scaled `<g>` before rendering.
 
 ```bash
 #!/usr/bin/env bash
@@ -4058,14 +4062,48 @@ if ! command -v rsvg-convert >/dev/null 2>&1; then
 fi
 
 render() {
-    local size="$1" dest="$2"
-    rsvg-convert -w "$size" -h "$size" -b "#000000" "$SRC" -o "$OUT/$dest"
+    local size="$1" dest="$2" src="${3:-$SRC}"
+    rsvg-convert -w "$size" -h "$size" -b "#000000" "$src" -o "$OUT/$dest"
     echo "  $dest (${size}x${size})"
 }
 
+# Android masks an adaptive icon's foreground: only the middle ~66% is
+# guaranteed to survive, and the mark fills almost the whole canvas. Rendering
+# the same file for both would crop the outer ring of dots off on Android, so
+# the foreground is inset into that safe zone first.
+SAFE_ZONE=0.66
+ADAPTIVE_SVG="$(mktemp -t xbrw-adaptive).svg"
+trap 'rm -f "$ADAPTIVE_SVG"' EXIT
+
+python3 - "$SRC" "$ADAPTIVE_SVG" "$SAFE_ZONE" <<'PYTHON'
+import re, sys
+
+source, destination, scale = sys.argv[1], sys.argv[2], float(sys.argv[3])
+svg = open(source).read()
+
+opening = re.match(r"<svg[^>]*>", svg)
+if opening is None:
+    raise SystemExit("no <svg> element in " + source)
+
+box = re.search(r'viewBox="([\d.\-\s]+)"', opening.group(0))
+if box is None:
+    raise SystemExit("no viewBox in " + source)
+_, _, width, height = (float(n) for n in box.group(1).split())
+
+body = svg[opening.end():svg.rindex("</svg>")]
+offset_x = width * (1 - scale) / 2
+offset_y = height * (1 - scale) / 2
+
+open(destination, "w").write(
+    f"{opening.group(0)}"
+    f'<g transform="translate({offset_x:g} {offset_y:g}) scale({scale:g})">'
+    f"{body}</g></svg>"
+)
+PYTHON
+
 echo "Rendering from $SRC:"
 render 1024 icon.png
-render 1024 adaptive-icon.png
+render 1024 adaptive-icon.png "$ADAPTIVE_SVG"
 render  512 splash-icon.png
 render   48 favicon.png
 echo "Done."
@@ -4093,11 +4131,6 @@ Change these keys. Everything else stays as it is.
     "version": "2.4.0",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "userInterfaceStyle": "dark"
     },
@@ -4111,6 +4144,14 @@ Change these keys. Everything else stays as it is.
   }
 }
 ```
+
+Do **not** add a top-level `splash` key. This project configures the splash
+through the `expo-splash-screen` plugin, and the legacy key is ignored when
+that plugin is present. Point the plugin's `image` at `splash-icon.png`
+instead, and **delete its `dark` block**: with `ios.userInterfaceStyle` set,
+prebuild warns that "the existing `userInterfaceStyle` property is preventing
+splash screen from working properly". A dark-variant splash is meaningless in
+a dark-only app anyway.
 
 The version bump from `2.3.0` to `2.4.0` is not optional:
 `runtimeVersion.policy` is `appVersion`, and changing the icon, splash and
@@ -4133,7 +4174,8 @@ is a hard failure in CI, so it must be green here.
 ```bash
 git add assets/branding/xbrw-icon.svg scripts/generate-icons.sh \
         assets/images/icon.png assets/images/adaptive-icon.png \
-        assets/images/splash-icon.png assets/images/favicon.png app.json
+        assets/images/splash-icon.png assets/images/favicon.png \
+        app.json plugins/withShareExtensionCcache.js
 git commit -m "Rebrand to XBRW++ with generated dark app assets"
 ```
 
@@ -4146,7 +4188,21 @@ diff — but the change will not appear on a device until it is run.
 npx expo prebuild --clean
 ```
 
-Expected: completes without error. Nothing to commit.
+Expected: completes without error, ending in `Finished prebuild` and
+`Installed CocoaPods`. Nothing to commit.
+
+**This step is load-bearing, not a formality.** The `.xcodeproj` is named after
+the sanitised `expo.name`, so renaming the app to `XBRW++` renames it from
+`XBRecipeWriter.xcodeproj` to `XBRW.xcodeproj` — and
+`plugins/withShareExtensionCcache.js` hardcoded the old path, so prebuild
+failed with `ENOENT ... project.pbxproj`. That breaks every EAS build while
+leaving `expo config` and `expo-doctor` perfectly green, so nothing but a real
+prebuild catches it. The plugin now takes the name from
+`cfg.modRequest.projectName`, falling back to scanning `ios/` for the
+`.xcodeproj`. Add `plugins/withShareExtensionCcache.js` to the Step 6 commit.
+
+One warning is pre-existing and unrelated: `android: withBuildScriptExtVersion:
+Cannot set minimum buildscript.ext.compileSdkVersion`.
 
 ---
 
