@@ -39,6 +39,29 @@ export type DotoWeight = keyof typeof FAMILIES;
  */
 type DotMatrixStyle = Omit<TextStyle, "fontSize" | "fontFamily" | "fontWeight">;
 
+/**
+ * The size handed to React Native, before the OS applies its own font scale.
+ *
+ * RN multiplies by the scale after this, so clamping to the floor alone does not
+ * defend it: a user on Android's "Small" (0.85) or iOS xSmall would render 11 px
+ * as about 9. Only downward scaling needs compensating — scaling up never
+ * crosses the floor.
+ */
+function requestedSize(fontSize: number): number {
+    return Math.max(fontSize, DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1));
+}
+
+/**
+ * The size Doto is actually drawn at, after the bounded OS scale.
+ *
+ * Exported because a caller that clips dot-matrix text to a fixed box —
+ * `DigitRoll`'s digit columns — must size that box from the drawn height, not
+ * from the height it asked for, or accessibility text sizing crops the glyphs.
+ */
+export function drawnFontSize(fontSize: number): number {
+    return requestedSize(fontSize) * Math.min(PixelRatio.getFontScale(), DOTO_MAX_FONT_SCALE);
+}
+
 type Props = {
     /**
      * Machine-derived values only. Deliberately not `ReactNode`: nesting an
@@ -75,13 +98,6 @@ export default function DotMatrixText({
     style,
     testID
 }: Props) {
-    // React Native multiplies fontSize by the OS font scale after this clamp, so
-    // clamping to the floor alone does not defend it: a user on Android's
-    // "Small" (0.85) or iOS xSmall would render 11 px as about 9. Only downward
-    // scaling needs compensating — scaling up never crosses the floor.
-    const shrink = Math.min(PixelRatio.getFontScale(), 1);
-    const minSize = DOTO_MIN_FONT_SIZE / shrink;
-
     return (
         <Text
             testID={testID}
@@ -95,7 +111,7 @@ export default function DotMatrixText({
                 // that make this component the single enforcement point.
                 {
                     fontFamily: FAMILIES[weight],
-                    fontSize:   Math.max(fontSize, minSize)
+                    fontSize:   requestedSize(fontSize)
                 }
             ]}>
             {children}

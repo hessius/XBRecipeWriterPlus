@@ -6,7 +6,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 
-import DotMatrixText, {type DotoWeight} from "@/components/DotMatrixText";
+import DotMatrixText, {drawnFontSize, type DotoWeight} from "@/components/DotMatrixText";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import {palette} from "@/constants/colors";
 
@@ -26,8 +26,11 @@ type ColumnProps = {
  */
 function DigitColumn({digit, fontSize, weight, color, reduced}: ColumnProps) {
     // Doto's line box is close to 1.35em at these sizes; hard-coding the ratio
-    // keeps the strip aligned without measuring on every render.
-    const rowHeight = Math.round(fontSize * 1.35);
+    // keeps the strip aligned without measuring on every render. It is applied
+    // to the size the glyphs are actually *drawn* at rather than the size asked
+    // for, because a user with accessibility text sizing turned up would
+    // otherwise get 28 px digits clipped into a 27 px box.
+    const rowHeight = Math.round(drawnFontSize(fontSize) * 1.35);
     const offset = useSharedValue(-digit * rowHeight);
 
     useEffect(() => {
@@ -44,7 +47,14 @@ function DigitColumn({digit, fontSize, weight, color, reduced}: ColumnProps) {
     return (
         <View testID="digit-roll-column"
               style={{height: rowHeight, overflow: "hidden"}}>
-            <Animated.View style={animatedStyle}>
+            <Animated.View
+                // The nine glyphs that are not currently showing are decoration.
+                // Without this each column offers a screen reader all ten, and a
+                // three-digit readout is announced as "0 1 2 3 4 5 6 7 8 9"
+                // three times over. The real value is on the container's label.
+                importantForAccessibility="no-hide-descendants"
+                accessibilityElementsHidden
+                style={animatedStyle}>
                 {DIGITS.map((d) => (
                     <DotMatrixText key={d} fontSize={fontSize} weight={weight}
                                    color={color}
@@ -87,12 +97,21 @@ export default function DigitRoll({
     const digits = text.split("").map((d) => Number(d));
 
     return (
-        <View accessibilityLabel={text}
+        // `accessibilityLabel` on a bare View is inert — React Native does not
+        // make the node an accessibility element implicitly, so the label is
+        // never reached and the descendants are announced instead. The label
+        // carries the suffix because a volume readout announced as "255" rather
+        // than "255ml" drops the one thing a sighted user gets for free.
+        <View accessible
+              accessibilityLabel={suffix === undefined ? text : `${text}${suffix}`}
               style={{flexDirection: "row", alignItems: "flex-end"}}>
             {digits.map((digit, index) => (
                 <DigitColumn
                     // Position-keyed on purpose: index 0 is the same column
                     // whether it holds a 2 or a 3, which is what should roll.
+                    // Keying by digit would remount on every change — the column
+                    // would cut to the new glyph instead of travelling to it —
+                    // and a value like 255 would produce duplicate sibling keys.
                     key={index}
                     digit={digit}
                     fontSize={fontSize}
