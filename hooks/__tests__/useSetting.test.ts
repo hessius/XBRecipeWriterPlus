@@ -47,4 +47,30 @@ describe("useSetting", () => {
         // sees, and it is the half that a state-only implementation loses.
         expect(new Settings(storage).get("showCoffeeMarker")).toBe(false);
     });
+
+    it("repaints every reader of the key, not only the one that changed it", async () => {
+        // The settings screen and each RecipeCard are separate call sites over
+        // one store. Per-instance state leaves the cards showing the old value
+        // until they happen to remount, which on the home screen means "until
+        // the app is reloaded".
+        const settings = new Settings(memoryStorage());
+        const toggler = await renderHook(() => useSetting("showCoffeeMarker", settings));
+        const reader = await renderHook(() => useSetting("showCoffeeMarker", settings));
+
+        await act(async () => toggler.result.current[1](false));
+
+        expect(reader.result.current[0]).toBe(false);
+    });
+
+    it("stops listening once unmounted", async () => {
+        const settings = new Settings(memoryStorage());
+        const {result, unmount} = await renderHook(() => useSetting("showCoffeeMarker", settings));
+
+        unmount();
+
+        // Not an assertion about the value — it is that notifying a store with
+        // no live readers must not try to update an unmounted one.
+        expect(() => settings.set("showCoffeeMarker", false)).not.toThrow();
+        expect(result.current[0]).toBe(true);
+    });
 });
