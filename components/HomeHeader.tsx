@@ -29,6 +29,7 @@ type ActionProps = {
 function Action({icon, label, onPress, active = false}: ActionProps) {
     return (
         <XStack
+            testID="home-header-action"
             accessible
             accessibilityRole="button"
             accessibilityLabel={label}
@@ -93,11 +94,11 @@ export default function HomeHeader({
                          fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 
             <XStack alignItems="center">
-                {showEdit && (
-                    <Action icon="edit" active={editing}
-                            label={editing ? "Done editing" : "Edit recipes"}
-                            onPress={onToggleEdit}/>
-                )}
+                {/* The arriving glyphs go at the left edge of the group. The
+                    group is right-aligned, so it grows leftwards and edit and
+                    settings stay exactly where the user last saw them —
+                    inserting in the middle would slide them sideways every
+                    time the list crossed the threshold. */}
                 {collapsed && (
                     <Animated.View entering={entering} exiting={exiting}>
                         <XStack alignItems="center">
@@ -105,6 +106,11 @@ export default function HomeHeader({
                             <Action icon="import" label="Import a recipe" onPress={onImport}/>
                         </XStack>
                     </Animated.View>
+                )}
+                {showEdit && (
+                    <Action icon="edit" active={editing}
+                            label={editing ? "Done editing" : "Edit recipes"}
+                            onPress={onToggleEdit}/>
                 )}
                 <Action icon="settings" label="Settings" onPress={onSettings}/>
             </XStack>

@@ -53,12 +53,34 @@ describe("HomeHeader", () => {
         // rendered tree, so re-querying it after a second render finds one tree,
         // not two.
         const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
-        const big = expanded.getByText("Recipes").props.style.fontSize;
+        const big = expanded.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
 
         const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
-        const small = collapsed.getByText("Recipes").props.style.fontSize;
+        const small = collapsed.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
 
         expect(small).toBeLessThan(big);
+    });
+
+    it("puts the arriving glyphs left of the ones already there", async () => {
+        // Edit and settings are present in both states. The action group is
+        // right-aligned, so inserting the new glyphs at its left edge grows it
+        // leftwards and leaves those two exactly where they were; inserting in
+        // the middle would slide them sideways on every collapse.
+        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        const order = screen.getAllByTestId("home-header-action")
+            .map((node) => node.props.accessibilityLabel);
+
+        expect(order).toEqual([
+            "Read a card", "Import a recipe", "Edit recipes", "Settings"
+        ]);
+    });
+
+    it("leaves the settled glyphs in the same order when expanded", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        const order = screen.getAllByTestId("home-header-action")
+            .map((node) => node.props.accessibilityLabel);
+
+        expect(order).toEqual(["Edit recipes", "Settings"]);
     });
 
     it("hides the edit toggle when there is nothing to edit", async () => {

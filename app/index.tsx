@@ -3,6 +3,7 @@ import {Platform} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
+import Animated, {FadeInDown, FadeOutUp} from "react-native-reanimated";
 import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
 import {XStack, YStack} from "tamagui";
@@ -15,6 +16,7 @@ import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
+import {DURATION} from "@/constants/motion";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
@@ -161,13 +163,20 @@ export default function HomeScreen({db, settings}: Props) {
                     onSettings={() => router.push("/settings")}/>
 
                 {!collapsed && (
-                    <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
-                        <CtaTile icon="scan" label="READ CARD"
-                                 accessibilityLabel="Read a card" onPress={readCard}/>
-                        <CtaTile icon="import" label="IMPORT"
-                                 accessibilityLabel="Import a recipe"
-                                 onPress={() => setImportId("")}/>
-                    </XStack>
+                    // The tiles leave upwards, towards the glyphs they become
+                    // in the header, rather than blinking out. Under Reduce
+                    // Motion Reanimated drops the travel and keeps the fade.
+                    <Animated.View
+                        entering={FadeInDown.duration(DURATION.base)}
+                        exiting={FadeOutUp.duration(DURATION.fast)}>
+                        <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
+                            <CtaTile icon="scan" label="READ CARD"
+                                     accessibilityLabel="Read a card" onPress={readCard}/>
+                            <CtaTile icon="import" label="IMPORT"
+                                     accessibilityLabel="Import a recipe"
+                                     onPress={() => setImportId("")}/>
+                        </XStack>
+                    </Animated.View>
                 )}
 
                 {isEmpty ? (

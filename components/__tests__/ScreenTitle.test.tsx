@@ -15,9 +15,19 @@ type Style = Record<string, unknown> | undefined;
  * A node's style, always as a list. Tamagui's `Text` flattens its style into a
  * single object while a plain React Native `Text` keeps the array, and this
  * component renders one of each.
+ *
+ * Reanimated components keep their animated style off `props.style` entirely,
+ * under `jestAnimatedStyle`, so it is appended last — it is the one that wins
+ * on screen, and the title's size and the count's lift are both animated.
  */
 function stylesOf(node: Node): Style[] {
-    return Array.isArray(node.props.style) ? node.props.style as Style[] : [node.props.style as Style];
+    const declared = Array.isArray(node.props.style)
+        ? node.props.style as Style[]
+        : [node.props.style as Style];
+    const animated = (node.props as {
+        jestAnimatedStyle?: {value?: Record<string, unknown>};
+    }).jestAnimatedStyle?.value;
+    return animated ? [...declared, animated] : declared;
 }
 
 /** Whether a node is set in the dot-matrix face. */
@@ -46,7 +56,8 @@ describe("ScreenTitle", () => {
         const title = screen.getByText("Recipes");
         expect(styleValue(count, "fontSize") as number)
             .toBeLessThan((styleValue(title, "fontSize") as number) / 2);
-        expect(styleValue(count, "marginTop")).toBeGreaterThan(0);
+        expect(styleValue(screen.getByTestId("screen-title-count-lift"), "marginTop"))
+            .toBeGreaterThan(0);
         expect(styleValue(count, "color")).toBe(palette.dim);
     });
 
@@ -120,7 +131,7 @@ describe("ScreenTitle", () => {
 
     it("renders at the size it is given", async () => {
         await renderWithProviders(<ScreenTitle title="Recipes" count={7} fontSize={18}/>);
-        expect(screen.getByText("Recipes").props.style.fontSize).toBe(18);
+        expect(styleValue(screen.getByText("Recipes"), "fontSize")).toBe(18);
     });
 
     it("keeps the superscript tied to the title size", async () => {
@@ -129,16 +140,21 @@ describe("ScreenTitle", () => {
         // Each render's own utilities: `screen` tracks only the most recent tree.
         const smallRender = await renderWithProviders(
             <ScreenTitle title="Recipes" count={7} fontSize={18}/>);
-        const small = smallRender.getByTestId("screen-title-count").props.style;
+        const small = styleValue(
+            smallRender.getByTestId("screen-title-count-lift"), "marginTop") as number;
 
         const largeRender = await renderWithProviders(
             <ScreenTitle title="Recipes" count={7} fontSize={36}/>);
-        const large = largeRender.getByTestId("screen-title-count").props.style;
+        const large = styleValue(
+            largeRender.getByTestId("screen-title-count-lift"), "marginTop") as number;
 
-        const lift = (style: Record<string, unknown> | Record<string, unknown>[]) =>
-            [style].flat().reduce<number>((found, part) =>
-                typeof part?.marginTop === "number" ? part.marginTop : found, 0);
+        expect(large).toBeGreaterThan(small);
+    });
 
-        expect(lift(large)).toBeGreaterThan(lift(small));
+    it("eases between sizes rather than snapping", async () => {
+        // The header collapses under a finger that is still moving, so the
+        // title has to travel with it. A plain prop swap is a jump cut.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={7}/>);
+        expect(screen.getByText("Recipes").props.jestAnimatedStyle).toBeDefined();
     });
 });
