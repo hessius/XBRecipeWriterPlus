@@ -1579,11 +1579,14 @@ it("renders at the size it is given", async () => {
 it("keeps the superscript tied to the title size", async () => {
     // The lift is derived, not a literal, so the count cannot drift away from
     // the word it belongs to when the header collapses.
-    await renderWithProviders(<ScreenTitle title="Recipes" count={7} fontSize={18}/>);
-    const small = screen.getByTestId("screen-title-count").props.style;
+    // Each render's own utilities: `screen` tracks only the most recent tree.
+    const smallRender = await renderWithProviders(
+        <ScreenTitle title="Recipes" count={7} fontSize={18}/>);
+    const small = smallRender.getByTestId("screen-title-count").props.style;
 
-    await renderWithProviders(<ScreenTitle title="Recipes" count={7} fontSize={36}/>);
-    const large = screen.getAllByTestId("screen-title-count")[1].props.style;
+    const largeRender = await renderWithProviders(
+        <ScreenTitle title="Recipes" count={7} fontSize={36}/>);
+    const large = largeRender.getByTestId("screen-title-count").props.style;
 
     const lift = (style: Record<string, unknown> | Record<string, unknown>[]) =>
         [style].flat().reduce<number>((found, part) =>
