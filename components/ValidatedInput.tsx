@@ -267,7 +267,7 @@ export default function ValidatedInput(props: Props) {
                                         minimumValue={minimumValue ? minimumValue : 0}
                                         maximumValue={maximumValue ? maximumValue : 100}
                                         step={oneStep}
-                                        minimumTrackTintColor={palette.dangerTrack}
+                                        minimumTrackTintColor={palette.danger}
                                         maximumTrackTintColor="$color0"
                                         trackStyle={{height: 40, borderRadius: 8}}
                                         renderThumbComponent={() => (
@@ -293,7 +293,7 @@ export default function ValidatedInput(props: Props) {
                         <XStack paddingLeft="$3">
                             <Pressable accessibilityRole="button" accessibilityLabel={`Increase ${label}`}
                                        onPress={onPlusPress} onLongPress={onPlusLongPress} onPressOut={stopLongPress} style={pressedButtonStyle}>
-                                <AntDesign padding={0} name="plus-circle" size={30} color={palette.brandIncrement}/>
+                                <AntDesign padding={0} name="plus-circle" size={30} color={palette.text}/>
                             </Pressable>
                         </XStack>
                     </XStack>

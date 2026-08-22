@@ -34,7 +34,7 @@ const config = createTamagui({
   // `themeClassNameOnRoot` was removed outright; it was web-only and this app
   // does not target web.
   settings: {
-    defaultTheme: "light",
+    defaultTheme: "dark",
     shouldAddPrefersColorThemes: false
   },
   shorthands,

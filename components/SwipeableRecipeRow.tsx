@@ -50,18 +50,18 @@ export default function SwipeableRecipeRow({
                     onDelete();
                 }}
                         width={80} height="100%" marginRight="$1" alignItems="center" justifyContent="center"
-                        backgroundColor={palette.danger} borderColor={palette.outline} borderWidth={2} borderRadius={10}
+                        backgroundColor={palette.danger} borderColor={palette.line} borderWidth={2} borderRadius={10}
                         aria-label={`Delete ${recipe.title}`}>
-                    <AntDesign name="delete" size={25} color={palette.onBrand}/>
+                    <AntDesign name="delete" size={25} color={palette.base}/>
                 </Button>
                 <Button onPress={() => {
                     swipeableRef.current?.close();
                     onDuplicate();
                 }}
                         width={80} height="100%" alignItems="center" justifyContent="center"
-                        backgroundColor={palette.surface} borderColor={palette.outline} borderWidth={2} borderRadius={10}
+                        backgroundColor={palette.surface} borderColor={palette.line} borderWidth={2} borderRadius={10}
                         aria-label={`Duplicate ${recipe.title}`}>
-                    <Feather name="copy" size={25} color={palette.onLight}/>
+                    <Feather name="copy" size={25} color={palette.text}/>
                 </Button>
             </XStack>
         );

@@ -1,94 +1,116 @@
 /**
  * Single source of truth for every colour in the app.
  *
- * These values are a faithful capture of the colours that were previously
- * hardcoded across `app/` and `components/`. Nothing has been re-picked,
- * lightened or consolidated — the intent is that this file can be swapped
- * wholesale during the design overhaul without hunting call sites.
+ * The app is dark-only, so there are no light/dark variants here. Colour lives
+ * in a plain module rather than in Tamagui theme tokens because roughly half the
+ * call sites are plain React Native, expo-router or SVG props that cannot accept
+ * a `$token`, and Tamagui's theme proxy has no parent-theme fallback — a custom
+ * key added to a theme would not resolve inside a sub-theme such as `dark_Button`.
  *
- * Several oranges are near-duplicates of `brand` (`brandPressed`,
- * `brandIncrement`, `brandHelp`, `pressedBorder`). They are almost certainly
- * unintentional drift rather than deliberate design, but they are kept
- * distinct here so the overhaul can merge them on purpose.
+ * Add semantically named entries (`danger`, `surface`, `muted`), never literal
+ * ones (`red`).
  */
+
+/** The two halves of the accent palette. */
+export type AccentGroup = "coffee" | "tea";
+
+/** Surfaces, text and semantics. */
 export const palette = {
-    /** Primary orange: navigation header, primary buttons. */
-    brand:          "#f4511e",
-    /** Brand orange while pressed. */
-    brandPressed:   "#de4f00",
-    /** Brand orange for a disabled primary button. */
-    brandDisabled:  "#f59d7d",
-    /** Increment ("+") control. Near-duplicate of `brand`. */
-    brandIncrement: "#ff5c00",
-    /** Help / tooltip affordance. Near-duplicate of `brand`. */
-    brandHelp:      "#ff783e",
+    /** Screen background. `base` rather than `void`: `void` is a reserved word
+     *  and cannot be shorthand-destructured. */
+    base:    "#000000",
+    /** Sheets and elevated panels. */
+    surface: "#101010",
+    /** CTA tiles, inputs, and cards that are not accent-filled. */
+    raised:  "#161616",
+    /** Hairlines and borders. */
+    line:    "#262626",
+    /**
+     * Disabled controls and decorative marks.
+     *
+     * 4.12:1 on `base` — under AA, so this is not a text colour. It reads as the
+     * obvious choice for a tertiary annotation and was used for the superscript
+     * count until the measurement said otherwise; use `dim` for small text.
+     */
+    muted:   "#6E6E6E",
+    /** Secondary text, including the superscript count. */
+    dim:     "#A3A3A3",
+    /** Primary text. */
+    text:    "#FFFFFF",
 
-    /** Hairline outline on recipe cards, circles and swipe actions. */
-    outline: "#ffa592",
-
+    /** Confirmation, and the "reader ready" state. */
+    success: "#5DDC8A",
     /** Destructive actions and validation errors. */
-    danger:      "red",
-    /** Filled portion of the value slider. */
-    dangerTrack: "rgba(255, 0, 0, 0.9)",
-    /** Confirmation toasts and the "add pour" control. */
-    success:     "green",
-    /** Informational accent used by the Android NFC sheet. */
-    info:        "blue",
-    /** De-emphasised borders, icons and spinners. */
-    muted:       "gray",
-
-    /** Neutral raised surface (light screen background, secondary action). */
-    surface:         "#dddddd",
-    /** Background of a disabled text input. */
-    surfaceDisabled: "#D3D3D3",
-
-    /** Foreground on brand-coloured or otherwise dark surfaces. */
-    onBrand: "#ffffff",
-    /** Foreground on light surfaces. */
-    onLight: "#000000",
-
-    /** Heading text inside the Android NFC sheet. */
-    dialogHeading: "#333333",
-    /** Body text inside the Android NFC sheet. */
-    dialogBody:    "#666666",
-
-    /** React Navigation's own light background (kept in `rgb()` form). */
-    navigationBackground: "rgb(221,221,221)"
-} as const;
-
-/** Screen background, one of the few genuinely theme-varying colours. */
-export const screenBackground = {
-    light: palette.surface,
-    dark:  "black"
-} as const;
-
-/** Body text, which flips with the colour scheme. */
-export const textColors = {
-    light: {primary: palette.onLight, inverse: palette.onBrand},
-    dark:  {primary: palette.onBrand, inverse: palette.onLight}
+    danger:  "#FF6B5E",
+    /** Recoverable problems and cautions. */
+    warn:    "#F0C24A",
+    /** Informational accents. */
+    info:    "#7FB4FF"
 } as const;
 
 /**
- * Recipe card fills and borders. Coffee and tea recipes are deliberately
- * distinct so a card's type is readable at a glance.
+ * Foregrounds drawn on top of an accent fill. Fixed rather than per-accent:
+ * every accent is light enough to take the same dark ink.
  */
-export const cardColors = {
-    light: {
-        background:    "#d1d1d1",
-        coffeeFill:    "#ffcfc5",
-        coffeeBorder:  palette.outline,
-        teaFill:       "#f0e7d2",
-        teaBorder:     "#c7b995",
-        pressedFill:   "#ffbaac",
-        pressedBorder: "#ff6302"
-    },
-    dark:  {
-        background:    "#d1d1d1",
-        coffeeFill:    "#898989",
-        coffeeBorder:  palette.brand,
-        teaFill:       "#392F24",
-        teaBorder:     "#7C5D40",
-        pressedFill:   "#d44519",
-        pressedBorder: "#ff6302"
-    }
+export const onAccent = {
+    /** Recipe names and Doto values. */
+    text:          "#0C0C0C",
+    /**
+     * Micro-labels above values.
+     *
+     * 0.65 rather than something lighter because these are 11 px: below that
+     * alpha the label falls under 4.5:1 against the lighter accents, and it is
+     * the only cue to what the number beneath it means. At 0.65 the darkest
+     * pairing is 5.1:1.
+     */
+    label:         "rgba(0,0,0,0.65)",
+    /**
+     * Pour profile stroke.
+     *
+     * The profile is a watermark, so this alpha is doing the dimming that used
+     * to be a group opacity on the wrapping view. A wrapper multiplied this
+     * already-composited value, which put the rendered stroke at 2.72:1 on
+     * Blossom while the colour suite measured the token at 8.46:1 and passed.
+     * The floor for a non-text graphic is 3:1; 0.50 is the faintest value that
+     * clears it on every accent, worst case 3.24:1 on Blossom.
+     */
+    profileStroke: "rgba(0,0,0,0.50)",
+    /** Pour profile fill. Scaled with the stroke to keep the watermark's shape. */
+    profileFill:   "rgba(0,0,0,0.15)",
+    /** Beverage marker and contactless mark. */
+    marker:        "rgba(0,0,0,0.70)"
 } as const;
+
+/**
+ * Recipe accents, split by beverage. Colour is a redundant signal — a Doto
+ * `TEA` / `COFFEE` marker carries the same information — because colour alone is
+ * not an accessible signal.
+ *
+ * Deliberately NOT `as const`. Literal narrowing would type a group as a tuple
+ * of specific hex strings, which no consumer wants and which breaks
+ * lookup-by-value: on a union of two disjoint literal tuples, the parameter of
+ * `indexOf` and `includes` collapses to `never`. Sub-project 2 needs exactly
+ * that lookup to map a persisted colour back to an index.
+ *
+ * `Readonly<Record<...>>` rather than a bare `Record<...>`: the inner
+ * `readonly string[]` only freezes the elements, and without the outer
+ * `Readonly` the group properties themselves stay writable.
+ */
+export const accents: Readonly<Record<AccentGroup, readonly string[]>> = {
+    coffee: [
+        "#9FC3F0", // Sky
+        "#F0B98E", // Peach
+        "#F0A0AB", // Blossom
+        "#B4D6A8", // Sage
+        "#97D8C4", // Mint
+        "#BDB2E8", // Lilac
+        "#A6D6E8", // Ice
+        "#E7A9C9"  // Rose
+    ],
+    tea:    [
+        "#CFD6A3", // Sencha
+        "#DCC194", // Oolong
+        "#D9CF9A", // Jasmine
+        "#E0AEA6"  // Hibiscus
+    ]
+};

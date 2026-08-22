@@ -13,7 +13,7 @@ import config from "@/tamagui.config";
  */
 function Providers({children}: { children: React.ReactNode }) {
     return (
-        <TamaguiProvider config={config} defaultTheme="light">
+        <TamaguiProvider config={config} defaultTheme="dark">
             {children}
         </TamaguiProvider>
     );

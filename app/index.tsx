@@ -3,7 +3,7 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 
 import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Alert, Platform, useColorScheme} from "react-native";
+import {Alert, Platform} from "react-native";
 
 import {YStack} from "tamagui";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
@@ -18,7 +18,7 @@ import AndroidNFCDialog from "@/components/AndroidNFCDialog";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Svg, {Path} from "react-native-svg";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
-import {palette, screenBackground} from '@/constants/colors';
+import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
 
 // @ts-ignore-next-line
@@ -39,15 +39,13 @@ export default function HomeScreen() {
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
 
-    const colorScheme = useColorScheme();
-
 
     function readCardIcon() {
         return (
             <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
                 <Path
                     d="M2 8.5H14.5M6 16.5H8M10.5 16.5H14.5M22 14.03V16.11C22 19.62 21.11 20.5 17.56 20.5H6.44C2.89 20.5 2 19.62 2 16.11V7.89C2 4.38 2.89 3.5 6.44 3.5H14.5M20 3.5V9.5M20 9.5L22 7.5M20 9.5L18 7.5"
-                    stroke={palette.onBrand} stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+                    stroke={palette.text} stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
             </Svg>
         )
     }
@@ -224,7 +222,7 @@ export default function HomeScreen() {
     return (
         <>
             <YStack alignItems="center" key={"recipekey" + key}
-                    backgroundColor={colorScheme === "light" ? screenBackground.light : screenBackground.dark} maxWidth="100%" paddingTop="$2"
+                    backgroundColor={palette.base} maxWidth="100%" paddingTop="$2"
                     flexDirection="column">
                 {recipesJSON ?
                     (<FlatList showsVerticalScrollIndicator={false} keyExtractor={extractItemKey}

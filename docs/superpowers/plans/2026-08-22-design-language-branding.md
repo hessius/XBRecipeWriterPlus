@@ -1,0 +1,4906 @@
+# Design Language and Branding Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace the app's visual language and branding — palette, typography, motion primitives, icon, splash and name — without changing any behaviour.
+
+**Architecture:** Colour and motion tokens live in plain modules under `constants/`, because roughly half the call sites are React Native, expo-router or SVG props that cannot accept a Tamagui `$token`. Presentational primitives are added to `components/` at module scope and are individually unit-tested. The accent resolver is pure domain logic and goes in `library/` as a new file; no existing `library/` file is touched, so the card byte format and its characterisation tests are untouched.
+
+**Tech Stack:** Expo SDK 57, React Native 0.86, Tamagui v2, Reanimated 4, react-native-svg, expo-font, Jest + @testing-library/react-native 14.
+
+**Spec:** [`docs/superpowers/specs/2026-08-22-design-language-branding-design.md`](../specs/2026-08-22-design-language-branding-design.md)
+
+---
+
+## Scope note
+
+This sub-project is behaviour-neutral. It ships two things:
+
+1. **Primitives** — `DotMatrixText`, `PourProfile`, `DigitRoll`, `DotBloom`,
+   `WriteSweep`, `CtaTile`, `ScreenTitle`, `Wordmark`, `RecipeCard` — which are
+   built and tested here but **not wired into any screen**. Sub-project 4 wires
+   them.
+2. **A re-skin** of what already exists — palette swap, dark-only switch and
+   branding — so the app stays coherent while the new primitives wait.
+
+If a task makes an existing screen behave differently, that is a bug in this
+sub-project, not a feature.
+
+## Known red baseline
+
+Task 2 replaces `constants/colors.ts` wholesale, which deliberately breaks every
+existing call site. From Task 2 until Task 12 clears them, the repository is
+**expected to be red** in two specific ways:
+
+| Check | Expected state between Tasks 2 and 12 |
+|---|---|
+| `npm run typecheck` | ~35 `error TS` across the 14 files importing the old palette |
+| `npm test` | `components/__tests__/MyButtonGroup.test.tsx` and `components/__tests__/SwipeableRecipeRow.test.tsx` fail, 9 tests total |
+
+Both were green at Task 1 and are green again after Task 12. **Do not fix them
+inside Tasks 3–11.** Task 12 migrates every call site in one pass with a
+documented mapping; patching them piecemeal beforehand does the same work worse
+and without that mapping.
+
+For Tasks 3–11, this means:
+
+- Verify your own work with a scoped run — `npx jest <your test file>` — not the
+  full suite.
+- Then run `npm test` once and confirm the failure set is still exactly those two
+  suites and nine tests. A third failing suite, or a tenth failing test, is
+  **yours** and must be fixed before you report DONE.
+
+## Conventions this plan assumes
+
+- Import through the `@/` alias, which maps to the repository root.
+- Components are declared **at module scope**. A component defined inside another
+  component's body is a new type on every render, so React remounts it and
+  discards its state. That bug has already been fixed twice in this repository.
+- The **React Compiler is enabled**. Do not hand-write `useMemo` or `useCallback`,
+  and do not read a whole `props` object inside a hook — destructure first, or the
+  compiler bails out of optimising the entire component.
+- `@testing-library/react-native` v14's `render` and `fireEvent` are
+  **asynchronous**. Forget the `await` and `screen` stays empty and the test
+  passes for the wrong reason. Always render via `renderWithProviders` from
+  `test-utils/render.tsx`.
+- Never import from `@react-navigation/*`; SDK 56 forked those into `expo-router`.
+
+## File structure
+
+**Created**
+
+| File | Responsibility |
+|---|---|
+| `assets/fonts/Doto-SemiBold.ttf`, `Doto-Bold.ttf`, `Doto-ExtraBold.ttf` | Static Doto instances. Variable fonts are unreliable in RN. |
+| `assets/fonts/Doto-OFL.txt` | Doto's licence, required by OFL. |
+| `assets/branding/xbrw-icon.svg` | Committed copy of the logo. `AgentResources/` is gitignored. |
+| `assets/images/icon.png`, `adaptive-icon.png`, `favicon.png`, `splash-icon.png` | Generated raster assets. |
+| `scripts/generate-icons.sh` | Regenerates the rasters from the SVG. |
+| `constants/motion.ts` | Durations, easings, springs and the Reduce Motion hook. |
+| `library/accent.ts` | Accent assignment and resolution. Pure, no React. |
+| `library/__tests__/accent.test.ts` | Accent resolver tests. |
+| `components/DotMatrixText.tsx` | Doto text. The only place the font family is named. Enforces the size floor. |
+| `components/PourProfile.tsx` | Stepped cumulative-water SVG path from a `Pour[]`. |
+| `components/DigitRoll.tsx` | Rolling Doto numerals. |
+| `components/DotBloom.tsx` | Scanning animation, driven by progress. |
+| `components/WriteSweep.tsx` | Write animation, driven by block progress. |
+| `components/CtaTile.tsx` | Icon over Doto label. |
+| `components/ScreenTitle.tsx` | Inter title with superscript Doto count. |
+| `components/Wordmark.tsx` | `XBRW++` lockup for the header. |
+| `components/RecipeCard.tsx` | Accent fill, name, Doto stats, marker, profile behind. |
+| `components/SplashOverlay.tsx` | Animated dot-matrix splash handoff. |
+
+**Modified**
+
+| File | Change |
+|---|---|
+| `constants/colors.ts` | Replaced wholesale. Light/dark splits collapsed. |
+| `tamagui.config.ts` | `defaultTheme` becomes `dark`. |
+| `app/_layout.tsx` | Load Doto, drop colour-scheme branching, black chrome, mount `SplashOverlay`. |
+| `test-utils/render.tsx` | Provider renders the dark theme. |
+| `app.json` | Name, `userInterfaceStyle`, splash config, version bump. |
+| `eslint.config.js` | Forbid raw colour literals in `app/` and `components/`. |
+| All files under `components/` and `app/` that read the old palette | Consume the new tokens; remove `useColorScheme` branching. |
+
+---
+
+### Task 1: Bundle the Doto font
+
+**Files:**
+- Create: `assets/fonts/Doto-SemiBold.ttf`, `assets/fonts/Doto-Bold.ttf`, `assets/fonts/Doto-ExtraBold.ttf`, `assets/fonts/Doto-OFL.txt`
+
+- [ ] **Step 1: Download the three static weights**
+
+Google Fonts serves a separate static TTF per weight from the `css2` endpoint. A
+browser User-Agent is required, or the endpoint returns woff2, which React Native
+cannot load.
+
+```bash
+cd /Users/jesperhessius/Dev/XBRecipeWriterPlus
+UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+CSS=$(curl -s -A "$UA" "https://fonts.googleapis.com/css2?family=Doto:wght@600;700;800&display=swap")
+
+for pair in "600:SemiBold" "700:Bold" "800:ExtraBold"; do
+  W="${pair%%:*}"; NAME="${pair##*:}"
+  URL=$(echo "$CSS" | awk -v w="  font-weight: $W;" '$0==w{f=1} f&&/src: url\(/{print; exit}' \
+        | sed -E 's/.*url\(([^)]+)\).*/\1/')
+  echo "weight $W -> $URL"
+  curl -sSL -o "assets/fonts/Doto-$NAME.ttf" "$URL"
+done
+
+ls -l assets/fonts/Doto-*.ttf
+```
+
+Expected: three non-empty files, roughly 20–40 KB each.
+
+- [ ] **Step 2: Verify they are real TrueType files, not an error page**
+
+```bash
+file assets/fonts/Doto-*.ttf
+```
+
+Expected: every line reports `TrueType Font data` or `TrueType font data`. If any
+line says `HTML document` or `ASCII text`, the download failed — re-run Step 1.
+
+- [ ] **Step 3: Fetch the licence**
+
+OFL requires the licence to ship alongside the font.
+
+```bash
+curl -sSL -o assets/fonts/Doto-OFL.txt \
+  "https://raw.githubusercontent.com/google/fonts/main/ofl/doto/OFL.txt"
+head -3 assets/fonts/Doto-OFL.txt
+```
+
+Expected: the word `Copyright` on the first line and `SIL Open Font License`
+within the first few lines.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add assets/fonts/Doto-SemiBold.ttf assets/fonts/Doto-Bold.ttf \
+        assets/fonts/Doto-ExtraBold.ttf assets/fonts/Doto-OFL.txt
+git commit -m "Bundle the Doto dot-matrix font"
+```
+
+---
+
+### Task 2: Replace the palette
+
+**Files:**
+- Modify: `constants/colors.ts` (replaced wholesale)
+
+This task deliberately leaves the rest of the app broken at the type level. Task
+12 fixes every call site. Do not expect `npm run typecheck` to be green until
+then.
+
+- [ ] **Step 1: Write the new palette**
+
+Replace the entire contents of `constants/colors.ts`:
+
+```ts
+/**
+ * Single source of truth for every colour in the app.
+ *
+ * The app is dark-only, so there are no light/dark variants here. Colour lives
+ * in a plain module rather than in Tamagui theme tokens because roughly half the
+ * call sites are plain React Native, expo-router or SVG props that cannot accept
+ * a `$token`, and Tamagui's theme proxy has no parent-theme fallback — a custom
+ * key added to a theme would not resolve inside a sub-theme such as `dark_Button`.
+ *
+ * Add semantically named entries (`danger`, `surface`, `muted`), never literal
+ * ones (`red`).
+ */
+
+/** The two halves of the accent palette. */
+export type AccentGroup = "coffee" | "tea";
+
+/** Surfaces, text and semantics. */
+export const palette = {
+    /** Screen background. `base` rather than `void`: `void` is a reserved word
+     *  and cannot be shorthand-destructured. */
+    base:    "#000000",
+    /** Sheets and elevated panels. */
+    surface: "#101010",
+    /** CTA tiles, inputs, and cards that are not accent-filled. */
+    raised:  "#161616",
+    /** Hairlines and borders. */
+    line:    "#262626",
+    /** Tertiary text and superscript counts. */
+    muted:   "#6E6E6E",
+    /** Secondary text. */
+    dim:     "#A3A3A3",
+    /** Primary text. */
+    text:    "#FFFFFF",
+
+    /** Confirmation, and the "reader ready" state. */
+    success: "#5DDC8A",
+    /** Destructive actions and validation errors. */
+    danger:  "#FF6B5E",
+    /** Recoverable problems and cautions. */
+    warn:    "#F0C24A",
+    /** Informational accents. */
+    info:    "#7FB4FF"
+} as const;
+
+/**
+ * Foregrounds drawn on top of an accent fill. Fixed rather than per-accent:
+ * every accent is light enough to take the same dark ink.
+ */
+export const onAccent = {
+    /** Recipe names and Doto values. */
+    text:          "#0C0C0C",
+    /** Micro-labels above values. */
+    label:         "rgba(0,0,0,0.45)",
+    /** Pour profile stroke. */
+    profileStroke: "rgba(0,0,0,0.85)",
+    /** Pour profile fill. */
+    profileFill:   "rgba(0,0,0,0.30)",
+    /** Beverage marker and contactless mark. */
+    marker:        "rgba(0,0,0,0.70)"
+} as const;
+
+/**
+ * Recipe accents, split by beverage. Colour is a redundant signal — a Doto
+ * `TEA` / `COFFEE` marker carries the same information — because colour alone is
+ * not an accessible signal.
+ *
+ * Deliberately NOT `as const`. Literal narrowing would type a group as a tuple
+ * of specific hex strings, which no consumer wants and which breaks
+ * lookup-by-value: on a union of two disjoint literal tuples, the parameter of
+ * `indexOf` and `includes` collapses to `never`. Sub-project 2 needs exactly
+ * that lookup to map a persisted colour back to an index.
+ *
+ * `Readonly<Record<...>>` rather than a bare `Record<...>`: the inner
+ * `readonly string[]` only freezes the elements, and without the outer
+ * `Readonly` the group properties themselves stay writable.
+ */
+export const accents: Readonly<Record<AccentGroup, readonly string[]>> = {
+    coffee: [
+        "#9FC3F0", // Sky
+        "#F0B98E", // Peach
+        "#F0A0AB", // Blossom
+        "#B4D6A8", // Sage
+        "#97D8C4", // Mint
+        "#BDB2E8", // Lilac
+        "#A6D6E8", // Ice
+        "#E7A9C9"  // Rose
+    ],
+    tea:    [
+        "#CFD6A3", // Sencha
+        "#DCC194", // Oolong
+        "#D9CF9A", // Jasmine
+        "#E0AEA6"  // Hibiscus
+    ]
+};
+```
+
+- [ ] **Step 2: Confirm the module itself compiles**
+
+```bash
+npx tsc --noEmit --skipLibCheck --ignoreConfig --target es2020 --module esnext \
+  --moduleResolution bundler constants/colors.ts
+```
+
+`--ignoreConfig` is required: `tsconfig.json` is present, and this version of
+`tsc` refuses to compile named files while a config exists without it.
+
+Expected: no output, exit code 0. The whole-project `npm run typecheck` will
+report roughly 35 errors across the 14 files that import the old palette. That is
+this task's intended outcome, not a defect — Task 12 clears them.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add constants/colors.ts
+git commit -m "Replace the palette with the dark-only design tokens"
+```
+
+---
+
+### Task 3: Accent resolver
+
+**Files:**
+- Create: `library/accent.ts`
+- Test: `library/__tests__/accent.test.ts`
+
+The resolver takes a persisted accent index when one exists and otherwise derives
+a stable index from the recipe's uuid. Sub-project 2 adds the persisted field;
+until then every recipe takes the fallback path, and cards must not change colour
+between launches.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `library/__tests__/accent.test.ts`:
+
+```ts
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {accents} from "@/constants/colors";
+import {
+    accentGroupFor,
+    nextAccentIndex,
+    resolveAccent,
+    type RecipeWithAccent
+} from "@/library/accent";
+
+function recipeWithCup(cup: number): Recipe {
+    const r = new Recipe();
+    r.cupType = cup;
+    return r;
+}
+
+describe("accentGroupFor", () => {
+    it("puts tea recipes in the tea group", () => {
+        expect(accentGroupFor(recipeWithCup(CUP_TYPE.TEA))).toBe("tea");
+    });
+
+    it("puts every other cup type in the coffee group", () => {
+        for (const cup of [CUP_TYPE.XPOD, CUP_TYPE.OMNI, CUP_TYPE.OTHER]) {
+            expect(accentGroupFor(recipeWithCup(cup))).toBe("coffee");
+        }
+    });
+
+    it("follows the legacy tea cup types that Recipe migrates", () => {
+        // 0x23 and 0x13 are tea cards written by the first app version with tea
+        // support; the Recipe JSON constructor rewrites them to CUP_TYPE.TEA.
+        // This pins that a migrated card lands in the tea half. It cannot fail
+        // against a cupType comparison today, because isTea() is currently that
+        // same comparison — the reason to call isTea() is that cupType has
+        // needed normalising twice already, and the next such fix should reach
+        // the palette without anyone remembering this file exists.
+        const migrated = new Recipe(undefined, JSON.stringify({...new Recipe(), cupType: 0x23}));
+        expect(accentGroupFor(migrated)).toBe("tea");
+    });
+});
+
+describe("resolveAccent", () => {
+    it("gives two instances of the same recipe the same colour", () => {
+        // The property that matters: across a launch the recipe is a different
+        // object rebuilt from JSON, and the card must not change colour. Calling
+        // twice on one object would only prove the function is pure.
+        const original = recipeWithCup(CUP_TYPE.XPOD);
+        const reloaded = new Recipe(undefined, JSON.stringify(original));
+
+        expect(reloaded.uuid).toBe(original.uuid);
+        expect(resolveAccent(reloaded)).toBe(resolveAccent(original));
+    });
+
+    it("reaches every coffee accent across many recipes", () => {
+        // This is what kills a hash that collapsed to a constant. With 8 buckets
+        // and 200 draws, missing any bucket has probability ~2e-11.
+        const seen = new Set<string>();
+        for (let i = 0; i < 200; i++) {
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.XPOD)));
+        }
+        expect(seen.size).toBe(accents.coffee.length);
+    });
+
+    it("reaches every tea accent across many recipes", () => {
+        const seen = new Set<string>();
+        for (let i = 0; i < 200; i++) {
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+        }
+        expect(seen.size).toBe(accents.tea.length);
+    });
+
+    it("never draws a tea recipe from the coffee half", () => {
+        for (let i = 0; i < 50; i++) {
+            expect(accents.tea).toContain(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+        }
+    });
+
+    it("prefers a persisted index over the uuid fallback", () => {
+        const r = recipeWithCup(CUP_TYPE.XPOD);
+        (r as RecipeWithAccent).accentIndex = 3;
+        expect(resolveAccent(r)).toBe(accents.coffee[3]);
+    });
+
+    it.each([99, -1, 2.5, Number.NaN, "3", null, undefined])(
+        "falls back to the uuid hash for the invalid persisted index %p",
+        (bad) => {
+            const r = recipeWithCup(CUP_TYPE.XPOD);
+            (r as RecipeWithAccent).accentIndex = bad as number;
+            // Not merely "does not throw": accents.coffee[2.5] is undefined, and
+            // an undefined colour reaches a style prop and paints nothing.
+            expect(accents.coffee).toContain(resolveAccent(r));
+        }
+    );
+});
+
+describe("nextAccentIndex", () => {
+    it("returns zero when nothing is in use", () => {
+        expect(nextAccentIndex("coffee", [])).toBe(0);
+    });
+
+    it("returns the first unused index while the palette has room", () => {
+        expect(nextAccentIndex("coffee", [0, 1, 2])).toBe(3);
+    });
+
+    it("fills the lowest free index rather than appending", () => {
+        expect(nextAccentIndex("coffee", [0, 2, 3])).toBe(1);
+    });
+
+    it("picks the least-used index once the palette is full", () => {
+        // All eight used once, plus a second use of index 5. Index 5 is now the
+        // most used, so it must not win; the lowest of the tied indices does.
+        expect(nextAccentIndex("coffee", [0, 1, 2, 3, 4, 5, 6, 7, 5])).toBe(0);
+    });
+
+    it("breaks ties by lowest index", () => {
+        expect(nextAccentIndex("coffee", [0, 0, 1, 2, 3, 4, 5, 6, 7])).toBe(1);
+    });
+
+    it("ignores indices outside the group", () => {
+        // A caller holding indices from the larger coffee half must not be able
+        // to skew the tea counts. Note this cannot fail if the guard in
+        // nextAccentIndex is deleted: counts[7]++ on a length-4 array yields
+        // NaN, and NaN < counts[best] is false, so a stray index can never win
+        // anyway. The guard earns its place by keeping a hostile index from
+        // allocating counts[1_000_000], which is not observable from here.
+        expect(nextAccentIndex("tea", [0, 1, 2, 7, 99, -1])).toBe(3);
+        expect(nextAccentIndex("tea", [1_000_000, -1, 2.5, Number.NaN])).toBe(
+            nextAccentIndex("tea", [])
+        );
+    });
+
+    it("only ever returns an index into its own group", () => {
+        // Guards the return contract itself: tea has four accents, so anything
+        // sized against the coffee half would be out of bounds at the call site.
+        expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest library/__tests__/accent.test.ts`
+Expected: FAIL — `Cannot find module '@/library/accent'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `library/accent.ts`:
+
+```ts
+import Recipe from "./Recipe";
+import {accents, type AccentGroup} from "@/constants/colors";
+
+/**
+ * A recipe carrying its persisted accent.
+ *
+ * Sub-project 2 moves `accentIndex` onto `Recipe` proper and deletes this type —
+ * grep for `RecipeWithAccent` to find everything that needs updating then.
+ */
+export type RecipeWithAccent = Recipe & {accentIndex?: number};
+
+/** Which half of the palette a recipe draws from. */
+export function accentGroupFor(recipe: Recipe): AccentGroup {
+    // Ask Recipe rather than comparing `cupType` here. The tea byte can carry
+    // the default cup count in its high nibble, and legacy cards arrive as 0x13
+    // or 0x23; every one of those normalisations lives behind `isTea()`. A
+    // second copy of the predicate would silently miss the next such fix.
+    return recipe.isTea() ? "tea" : "coffee";
+}
+
+/**
+ * FNV-1a over the uuid. Any stable hash would do; the only requirement is that a
+ * given recipe keeps its colour across launches, since the accent is not yet
+ * persisted. Sub-project 2 adds the persisted field and this becomes the
+ * fallback for recipes saved before it existed.
+ */
+function hashToIndex(key: string, modulo: number): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+        hash ^= key.charCodeAt(i);
+        // Math.imul returns a signed 32-bit result; >>> 0 makes it unsigned
+        // before the modulo, so the index can never come out negative.
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash % modulo;
+}
+
+/** The accent colour to paint a recipe's card with. */
+export function resolveAccent(recipe: Recipe): string {
+    const group = accentGroupFor(recipe);
+    const groupAccents = accents[group];
+
+    const persisted = (recipe as RecipeWithAccent).accentIndex;
+    if (
+        typeof persisted === "number" &&
+        Number.isInteger(persisted) &&
+        persisted >= 0 &&
+        persisted < groupAccents.length
+    ) {
+        return groupAccents[persisted];
+    }
+
+    return groupAccents[hashToIndex(recipe.uuid, groupAccents.length)];
+}
+
+/**
+ * The index a newly saved recipe should take: the least-used accent in its half
+ * of the palette, ties broken by lowest index. While the library is smaller than
+ * the half-palette this is simply the first unused colour; past that, colours
+ * repeat as evenly as possible rather than clustering.
+ *
+ * Returns the index; persisting it is the caller's job.
+ *
+ * @param group Which half to assign from.
+ * @param inUse Accent indices already taken by recipes in the same half.
+ *              Repeats are meaningful — they are what makes an index "more
+ *              used". Entries outside the group are silently ignored, so a
+ *              caller holding indices from the larger coffee half cannot skew
+ *              the tea counts.
+ */
+export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
+    const counts: number[] = new Array(accents[group].length).fill(0);
+    for (const index of inUse) {
+        if (Number.isInteger(index) && index >= 0 && index < counts.length) {
+            counts[index]++;
+        }
+    }
+
+    // Strict `<` is what breaks ties by lowest index; `<=` would return the
+    // highest of the tied indices instead.
+    let best = 0;
+    for (let i = 1; i < counts.length; i++) {
+        if (counts[i] < counts[best]) {
+            best = i;
+        }
+    }
+    return best;
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest library/__tests__/accent.test.ts`
+Expected: PASS, 22 tests (the `it.each` contributes seven).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add library/accent.ts library/__tests__/accent.test.ts
+git commit -m "Add the recipe accent resolver"
+```
+
+---
+
+### Task 4: Motion tokens
+
+**Files:**
+- Create: `constants/motion.ts`
+- Test: `components/__tests__/motion.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/motion.test.ts`:
+
+```ts
+import {AccessibilityInfo} from "react-native";
+import {act, renderHook, waitFor} from "@testing-library/react-native";
+
+import {DURATION, useReducedMotion} from "@/constants/motion";
+
+describe("DURATION", () => {
+    it("keeps every duration inside the band a user reads as movement", () => {
+        // Below about 80ms a transition reads as a jump rather than a movement,
+        // and above about 500ms it reads as lag. This is the assertion that
+        // bites: an ordering check alone still passes if `fast` is retuned to
+        // 1ms, which would silently disable every feedback animation in the app.
+        for (const ms of Object.values(DURATION)) {
+            expect(ms).toBeGreaterThanOrEqual(80);
+            expect(ms).toBeLessThanOrEqual(500);
+        }
+
+        expect(DURATION.fast).toBeLessThan(DURATION.base);
+        expect(DURATION.base).toBeLessThan(DURATION.deliberate);
+    });
+});
+
+describe("useReducedMotion", () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    // These two leave AccessibilityInfo.addEventListener alone, so the real
+    // subscription is created and the effect's cleanup runs for real at unmount.
+    // Breaking `subscription.remove()` fails them both; a stubbed subscription
+    // would throw that coverage away.
+    it("reads the OS setting on mount", async () => {
+        const read = jest
+            .spyOn(AccessibilityInfo, "isReduceMotionEnabled")
+            .mockResolvedValue(false);
+
+        // renderHook is async in Testing Library v14, like render and fireEvent.
+        // Without the await, destructuring yields undefined rather than failing
+        // loudly.
+        const {result} = await renderHook(() => useReducedMotion());
+
+        await waitFor(() => expect(read).toHaveBeenCalled());
+        // Asserting the call matters: false is also the initial state, so
+        // checking the value alone would pass against a hook that read nothing.
+        expect(result.current).toBe(false);
+    });
+
+    it("reports true when the OS has motion reduced", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        const {result} = await renderHook(() => useReducedMotion());
+
+        await waitFor(() => expect(result.current).toBe(true));
+    });
+
+    // The rest capture the change handler, which does require stubbing
+    // addEventListener.
+    function captureHandler() {
+        let handler: ((enabled: boolean) => void) | undefined;
+        jest.spyOn(AccessibilityInfo, "addEventListener").mockImplementation(
+            (_event, listener) => {
+                // addEventListener is overloaded across every accessibility
+                // event, so `listener` arrives as the union of all their handler
+                // types and does not narrow on the event name. The hook only
+                // ever registers for reduceMotionChanged, whose handler takes a
+                // boolean.
+                handler = listener as unknown as (enabled: boolean) => void;
+                return {remove: jest.fn()} as never;
+            }
+        );
+        return () => handler;
+    }
+
+    it("follows the setting being toggled while the app is open", async () => {
+        const handlerOf = captureHandler();
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(false);
+
+        const {result} = await renderHook(() => useReducedMotion());
+        await waitFor(() => expect(result.current).toBe(false));
+
+        await act(async () => handlerOf()?.(true));
+
+        expect(result.current).toBe(true);
+    });
+
+    it("does not let the initial read overwrite a newer change event", async () => {
+        // The read crosses to native, so a user can flip the switch while it is
+        // in flight. If the stale promise wins, the hook reports the value the
+        // setting had before the user changed it, and keeps reporting it until
+        // the next toggle.
+        const handlerOf = captureHandler();
+        let settle: (enabled: boolean) => void = () => {};
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockReturnValue(
+            new Promise((resolve) => {
+                settle = resolve;
+            })
+        );
+
+        const {result} = await renderHook(() => useReducedMotion());
+
+        await act(async () => handlerOf()?.(true));
+        await act(async () => {
+            settle(false);
+        });
+
+        expect(result.current).toBe(true);
+    });
+
+    it("starts a later mount from the last known value", async () => {
+        // The whole point of the module-level cache. A component that animates
+        // on mount must not start its full animation and then snap into the
+        // cross-fade once the async read lands; only the very first hook in the
+        // app's lifetime is allowed to be wrong.
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+        const first = await renderHook(() => useReducedMotion());
+        await waitFor(() => expect(first.result.current).toBe(true));
+        first.unmount();
+
+        // Never resolves, so the cache is the only thing that can supply a value.
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockReturnValue(
+            new Promise(() => {})
+        );
+        const second = await renderHook(() => useReducedMotion());
+
+        expect(second.result.current).toBe(true);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/motion.test.ts`
+Expected: FAIL — `Cannot find module '@/constants/motion'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `constants/motion.ts`:
+
+```ts
+import {useEffect, useState} from "react";
+import {AccessibilityInfo} from "react-native";
+import {Easing} from "react-native-reanimated";
+
+/**
+ * Single source of truth for motion timing.
+ *
+ * `fast` is feedback, not decoration. `deliberate` is reserved for the two
+ * ceremonies — scanning a card and writing one — which are the only moments
+ * where the app should feel like it is taking its time.
+ */
+export const DURATION = {
+    fast:       120,
+    base:       240,
+    deliberate: 400
+} as const;
+
+/** Timing curves, for anything the system drives. */
+export const EASING = {
+    /** Entering. */
+    out:   Easing.bezier(0.2, 0.85, 0.3, 1),
+    /** Leaving. */
+    in:    Easing.bezier(0.7, 0, 0.85, 0.15),
+    /** Continuous or looping motion. */
+    inOut: Easing.bezier(0.45, 0, 0.25, 1)
+} as const;
+
+/** Spring configs, for anything a finger drives. */
+export const SPRING = {
+    /** Cards, sheets, anything with weight. */
+    gentle: {damping: 20, stiffness: 160, mass: 1},
+    /** Toggles and small controls. */
+    snappy: {damping: 22, stiffness: 300, mass: 0.8}
+} as const;
+
+/**
+ * Whether the OS has Reduce Motion enabled.
+ *
+ * Every animation in the app honours this by degrading to a cross-fade — never
+ * to nothing. A user who has disabled motion must still see that something
+ * changed.
+ */
+
+/**
+ * Last known value, shared by every hook instance.
+ *
+ * There is no synchronous accessor for this setting, so the first read is always
+ * asynchronous and a hook necessarily starts at some assumed value. Seeding from
+ * a cache means only the very first instance in the app's lifetime can be wrong,
+ * rather than every mount: without it, a component that animates on mount would
+ * start its full animation and then snap into the cross-fade a frame later,
+ * which is worse for a Reduce Motion user than either path alone.
+ */
+let cachedReducedMotion = false;
+
+export function useReducedMotion(): boolean {
+    const [reduced, setReduced] = useState(cachedReducedMotion);
+
+    useEffect(() => {
+        let cancelled = false;
+        let superseded = false;
+
+        const apply = (enabled: boolean) => {
+            cachedReducedMotion = enabled;
+            if (!cancelled) {
+                setReduced(enabled);
+            }
+        };
+
+        // Subscribe before the initial read, not after. The read crosses to
+        // native, so the user can flip the switch while it is in flight; if that
+        // happens the event carries the newer value and the resolving promise
+        // must not overwrite it. Last writer would otherwise win over last value.
+        const subscription = AccessibilityInfo.addEventListener(
+            "reduceMotionChanged",
+            (enabled) => {
+                superseded = true;
+                apply(enabled);
+            }
+        );
+
+        // Reading an OS accessibility setting: an external system, which is what
+        // effects are for.
+        AccessibilityInfo.isReduceMotionEnabled()
+            .then((enabled) => {
+                if (!superseded) {
+                    apply(enabled);
+                }
+            })
+            .catch(() => {
+                // An unavailable setting is not a reason to fail. Assume motion is
+                // fine. No state is written here, so `cancelled` has nothing to
+                // guard.
+            });
+
+        return () => {
+            cancelled = true;
+            subscription.remove();
+        };
+    }, []);
+
+    return reduced;
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/motion.test.ts`
+Expected: PASS, 6 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add constants/motion.ts components/__tests__/motion.test.ts
+git commit -m "Add motion tokens and the reduce-motion hook"
+```
+
+---
+
+### Task 5: DotMatrixText
+
+**Files:**
+- Create: `components/DotMatrixText.tsx`
+- Test: `components/__tests__/DotMatrixText.test.tsx`
+
+The 11 px floor is enforced here rather than left to call sites, because it was
+established empirically — below it Doto stops reading as characters.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/DotMatrixText.test.tsx`:
+
+```tsx
+import React from "react";
+import {screen} from "@testing-library/react-native";
+import {PixelRatio, StyleSheet} from "react-native";
+
+import DotMatrixText, {
+    DOTO_MAX_FONT_SCALE,
+    DOTO_MIN_FONT_SIZE
+} from "@/components/DotMatrixText";
+import {renderWithProviders} from "@/test-utils/render";
+
+function styleOf(testID: string): Record<string, unknown> {
+    return StyleSheet.flatten(screen.getByTestId(testID).props.style) ?? {};
+}
+
+describe("DotMatrixText", () => {
+    it("renders its content", async () => {
+        await renderWithProviders(<DotMatrixText>255</DotMatrixText>);
+        expect(screen.getByText("255")).toBeTruthy();
+    });
+
+    it("defaults to the bold Doto instance", async () => {
+        await renderWithProviders(<DotMatrixText testID="dm">255</DotMatrixText>);
+        // Exact, not /^Doto-/. A prefix match passes for all three families, so
+        // it would leave the default — the weight nearly every call site gets —
+        // unpinned.
+        expect(styleOf("dm").fontFamily).toBe("Doto-Bold");
+    });
+
+    it("raises a font size below the floor", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" fontSize={6}>255</DotMatrixText>
+        );
+        expect(styleOf("dm").fontSize).toBe(DOTO_MIN_FONT_SIZE);
+    });
+
+    it("leaves a font size at or above the floor alone", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" fontSize={18}>255</DotMatrixText>
+        );
+        expect(styleOf("dm").fontSize).toBe(18);
+    });
+
+    it("maps the weight onto the matching static instance", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" weight="extrabold">255</DotMatrixText>
+        );
+        expect(styleOf("dm").fontFamily).toBe("Doto-ExtraBold");
+    });
+
+    it("lets style carry layout", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" style={{marginTop: 4}}>255</DotMatrixText>
+        );
+        expect(styleOf("dm").marginTop).toBe(4);
+    });
+
+    it("does not let style defeat the floor or the family", async () => {
+        // The executable form of this component's mandate. `style` is applied
+        // after the caller's other props, so without deliberate ordering it wins
+        // the flatten and a call site can render Inter at 4px through the
+        // dot-matrix component. TypeScript rejects these keys, hence the cast —
+        // this pins the runtime behaviour for JavaScript callers and for anyone
+        // who reaches for `as any` to make a label fit.
+        await renderWithProviders(
+            <DotMatrixText
+                testID="dm"
+                fontSize={20}
+                style={{fontSize: 4, fontFamily: "Inter-Regular"} as never}>
+                255
+            </DotMatrixText>
+        );
+        expect(styleOf("dm").fontSize).toBe(20);
+        expect(styleOf("dm").fontFamily).toBe("Doto-Bold");
+    });
+
+    it("passes numberOfLines through", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" numberOfLines={1}>255</DotMatrixText>
+        );
+        // A dropped passthrough would silently reflow a dense layout rather than
+        // truncating, which is the kind of regression nothing else notices.
+        expect(screen.getByTestId("dm").props.numberOfLines).toBe(1);
+    });
+
+    it("compensates when the OS is scaling text down", async () => {
+        // React Native multiplies fontSize by the font scale after the clamp, so
+        // a user on Android "Small" or iOS xSmall would see the 11px floor
+        // render at about 9px — below the size at which Doto stops reading as
+        // characters, which is the entire reason the floor exists.
+        jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(0.85);
+
+        await renderWithProviders(
+            <DotMatrixText testID="dm" fontSize={6}>255</DotMatrixText>
+        );
+
+        const size = styleOf("dm").fontSize as number;
+        expect(size * 0.85).toBeGreaterThanOrEqual(DOTO_MIN_FONT_SIZE);
+        jest.restoreAllMocks();
+    });
+
+    it("bounds how far the OS may scale text up", async () => {
+        // Fixed-width readouts in dense layouts. Scaling is honoured, not
+        // refused — a user who needs larger text needs it here too — but
+        // unbounded growth truncates the pour profile and the digit column.
+        await renderWithProviders(<DotMatrixText testID="dm">255</DotMatrixText>);
+        expect(screen.getByTestId("dm").props.maxFontSizeMultiplier).toBe(
+            DOTO_MAX_FONT_SCALE
+        );
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/DotMatrixText.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/DotMatrixText'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/DotMatrixText.tsx`:
+
+```tsx
+import React from "react";
+import {PixelRatio, Text, type StyleProp, type TextStyle} from "react-native";
+
+import {palette} from "@/constants/colors";
+
+/**
+ * Doto below this size stops reading as characters and starts reading as noise.
+ * Established by rendering a legibility ladder at true device scale during
+ * design. The component clamps rather than trusting call sites.
+ */
+export const DOTO_MIN_FONT_SIZE = 11;
+
+/**
+ * How far OS font scaling may enlarge dot-matrix text.
+ *
+ * These are fixed-width machine readouts inside dense layouts — a pour profile,
+ * a rolling digit column, a recipe card — so unbounded growth overflows or
+ * truncates them. Scaling is still honoured, because a user who needs larger
+ * text needs it here too; it is bounded rather than refused.
+ */
+export const DOTO_MAX_FONT_SCALE = 1.4;
+
+const FAMILIES = {
+    semibold:  "Doto-SemiBold",
+    bold:      "Doto-Bold",
+    extrabold: "Doto-ExtraBold"
+} as const;
+
+export type DotoWeight = keyof typeof FAMILIES;
+
+/**
+ * Everything a call site may style except the two properties this component
+ * exists to control. Excluding them at the type level turns "please do not
+ * override the floor" from a comment into a compile error.
+ *
+ * `fontWeight` is excluded too: these are static font instances, so setting a
+ * weight on top of one asks the platform for synthetic bolding rather than the
+ * matching family, which on Android smears the dot grid.
+ */
+type DotMatrixStyle = Omit<TextStyle, "fontSize" | "fontFamily" | "fontWeight">;
+
+/**
+ * The size handed to React Native, before the OS applies its own font scale.
+ *
+ * RN multiplies by the scale after this, so clamping to the floor alone does not
+ * defend it: a user on Android's "Small" (0.85) or iOS xSmall would render 11 px
+ * as about 9. Only downward scaling needs compensating — scaling up never
+ * crosses the floor.
+ */
+function requestedSize(fontSize: number): number {
+    return Math.max(fontSize, DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1));
+}
+
+/**
+ * The size Doto is actually drawn at, after the bounded OS scale.
+ *
+ * Exported because a caller that clips dot-matrix text to a fixed box —
+ * `DigitRoll`'s digit columns — must size that box from the drawn height, not
+ * from the height it asked for, or accessibility text sizing crops the glyphs.
+ */
+export function drawnFontSize(fontSize: number): number {
+    return requestedSize(fontSize) * Math.min(PixelRatio.getFontScale(), DOTO_MAX_FONT_SCALE);
+}
+
+type Props = {
+    /**
+     * Machine-derived values only. Deliberately not `ReactNode`: nesting an
+     * element here is how Inter would get back inside a dot-matrix block.
+     */
+    children: string | number;
+    /** Clamped up to `DOTO_MIN_FONT_SIZE`. */
+    fontSize?: number;
+    weight?: DotoWeight;
+    color?: string;
+    /** Doto is dense, so most call sites want a little extra tracking. */
+    letterSpacing?: number;
+    numberOfLines?: number;
+    style?: StyleProp<DotMatrixStyle>;
+    testID?: string;
+};
+
+/**
+ * Dot-matrix text.
+ *
+ * The rule this component exists to enforce: Doto is for machine-derived values
+ * and system status. Anything a human typed — a recipe name, an error message —
+ * stays in Inter and must not be rendered through here.
+ *
+ * This is the only place in the app that names the Doto font family.
+ */
+export default function DotMatrixText({
+    children,
+    fontSize = 14,
+    weight = "bold",
+    color = palette.text,
+    letterSpacing = 0.5,
+    numberOfLines,
+    style,
+    testID
+}: Props) {
+    return (
+        <Text
+            testID={testID}
+            numberOfLines={numberOfLines}
+            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+            style={[
+                {color, letterSpacing},
+                style,
+                // After the caller's style, not before. `style` carries layout —
+                // margins, line height — but must not reach the two properties
+                // that make this component the single enforcement point.
+                {
+                    fontFamily: FAMILIES[weight],
+                    fontSize:   requestedSize(fontSize)
+                }
+            ]}>
+            {children}
+        </Text>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/DotMatrixText.test.tsx`
+Expected: PASS, 10 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/DotMatrixText.tsx components/__tests__/DotMatrixText.test.tsx
+git commit -m "Add the DotMatrixText primitive"
+```
+
+---
+
+### Task 6: PourProfile
+
+**Files:**
+- Create: `components/PourProfile.tsx`
+- Test: `components/__tests__/PourProfile.test.tsx`
+
+The path builder is exported separately from the component so it can be tested
+without rendering, including the degenerate cases that would otherwise divide by
+zero.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/PourProfile.test.tsx`:
+
+```tsx
+import React from "react";
+import {screen} from "@testing-library/react-native";
+
+import PourProfile, {buildProfilePath} from "@/components/PourProfile";
+import Pour from "@/library/Pour";
+import {renderWithProviders} from "@/test-utils/render";
+
+function pours(volumes: number[]): Pour[] {
+    // Pour requires its number; volume is the second positional argument.
+    return volumes.map((v, i) => new Pour(i, v));
+}
+
+describe("buildProfilePath", () => {
+    it("draws an even recipe as an even staircase", () => {
+        // Rise to the halfway point, plateau, rise to the top, plateau. Compare
+        // the interior of this with the bloom-first case below: the endpoints of
+        // the two are identical, so only the middle carries any information.
+        expect(buildProfilePath(pours([50, 50]), 100, 40)).toBe(
+            "M0 40 L31 20 L50 20 L81 0 L100 0"
+        );
+    });
+
+    it("draws a bloom as a low first step", () => {
+        // The 38 is the assertion that earns its keep. It pins the first pour to
+        // 5% of the height, which requires per-pour volumes to drive the shape,
+        // the plateau point to exist, and the pours to be walked in order — an
+        // even staircase, a missing plateau or a reversed schedule all move it.
+        expect(buildProfilePath(pours([5, 95]), 100, 40)).toBe(
+            "M0 40 L31 38 L50 38 L81 0 L100 0"
+        );
+    });
+
+    it("starts at the bottom left", () => {
+        expect(buildProfilePath(pours([50, 50]), 100, 40)).toMatch(/^M0 40/);
+    });
+
+    it("reaches the top by the last pour", () => {
+        // endsWith, not toContain: "100 0" is a substring of "L100 0.5", so a
+        // shape stopping a hair short of the top would satisfy a containment
+        // check, as would a stray (100, 0) anywhere in the middle.
+        expect(buildProfilePath(pours([50, 50]), 100, 40).endsWith("L100 0")).toBe(true);
+    });
+
+    it("handles a single pour", () => {
+        expect(buildProfilePath(pours([100]), 100, 40)).toBe("M0 40 L62 0 L100 0");
+    });
+
+    it("treats an unset volume as zero", () => {
+        // Pour defaults volume to -1. Unclamped, a negative contribution drags
+        // the curve below its own baseline and outside the viewBox.
+        expect(buildProfilePath(pours([-1, 100]), 100, 40)).toBe(
+            buildProfilePath(pours([0, 100]), 100, 40)
+        );
+    });
+
+    it("does not produce NaN for a zero-volume bloom", () => {
+        expect(buildProfilePath(pours([0, 100]), 100, 40)).not.toContain("NaN");
+    });
+
+    it("does not produce NaN when every pour is zero", () => {
+        expect(buildProfilePath(pours([0, 0]), 100, 40)).not.toContain("NaN");
+    });
+
+    it("draws an all-zero recipe flat along the baseline", () => {
+        expect(buildProfilePath(pours([0, 0]), 100, 40)).toBe(
+            "M0 40 L31 40 L50 40 L81 40 L100 40"
+        );
+    });
+
+    it("returns an empty path for no pours", () => {
+        expect(buildProfilePath([], 100, 40)).toBe("");
+    });
+});
+
+describe("PourProfile", () => {
+    it("renders nothing when there are no pours", async () => {
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={[]} width={100} height={40}/>
+        );
+        expect(screen.queryByTestId("pp")).toBeNull();
+    });
+
+    it("renders when there are pours", async () => {
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+        );
+        expect(screen.getByTestId("pp")).toBeTruthy();
+    });
+
+    it("pads the viewBox so the stroke is not clipped at the edges", async () => {
+        // The path touches y = 0 and y = height exactly, so a viewBox flush to
+        // the geometry renders the opening baseline and closing plateau at half
+        // the weight of the diagonals.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}
+                         strokeWidth={2}/>
+        );
+        // react-native-svg parses viewBox into these four host props rather
+        // than passing the string through.
+        const {minX, minY, vbWidth, vbHeight} = screen.getByTestId("pp").props;
+        expect([minX, minY, vbWidth, vbHeight]).toEqual([-1, -1, 102, 42]);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/PourProfile.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/PourProfile'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/PourProfile.tsx`:
+
+```tsx
+import React from "react";
+import Svg, {Path} from "react-native-svg";
+
+import type Pour from "@/library/Pour";
+import {onAccent} from "@/constants/colors";
+
+function round(value: number): number {
+    return Math.round(value * 10) / 10;
+}
+
+/**
+ * The silhouette of a brew: cumulative water over time, stepped.
+ *
+ * Each pour contributes a rise followed by a flat, so pauses read as plateaus.
+ * Time is divided evenly between pours rather than scaled by pause duration —
+ * the shape is an identifying mark, not a chart, and even division keeps short
+ * pours visible.
+ */
+export function buildProfilePath(pours: Pour[], width: number, height: number): string {
+    if (pours.length === 0) {
+        return "";
+    }
+
+    // Volume defaults to -1 on Pour, meaning unset, and a negative contribution
+    // would push the curve below its own baseline and outside the viewBox.
+    const volumeOf = (pour: Pour) => Math.max(pour.volume, 0);
+
+    const total = pours.reduce((sum, pour) => sum + volumeOf(pour), 0);
+    const points: [number, number][] = [[0, height]];
+    let poured = 0;
+
+    for (let i = 0; i < pours.length; i++) {
+        poured += volumeOf(pours[i]);
+        // A recipe whose pours are all zero has no shape. Drawing it flat along
+        // the bottom is honest, and more importantly it is not NaN.
+        const after = total > 0 ? poured / total : 0;
+
+        const riseEnd = ((i + 0.62) / pours.length) * width;
+        const flatEnd = ((i + 1) / pours.length) * width;
+
+        // The rise starts where the previous pour's plateau ended, which is
+        // already the last point — at i = 0 that is the seed. Emitting it again
+        // would add a zero-length segment per pour and about a third more path
+        // data for identical geometry.
+        points.push([riseEnd, height - after * height]);
+        points.push([flatEnd, height - after * height]);
+    }
+
+    return "M" + points.map(([x, y]) => `${round(x)} ${round(y)}`).join(" L");
+}
+
+type Props = {
+    pours: Pour[];
+    width: number;
+    height: number;
+    stroke?: string;
+    fill?: string;
+    strokeWidth?: number;
+    testID?: string;
+};
+
+/**
+ * Draws a pour schedule. Knows nothing about cards — the caller supplies the
+ * colours, so the same component serves an accent-filled card and a dark row.
+ */
+export default function PourProfile({
+    pours,
+    width,
+    height,
+    stroke = onAccent.profileStroke,
+    fill = onAccent.profileFill,
+    strokeWidth = 1.6,
+    testID
+}: Props) {
+    const path = buildProfilePath(pours, width, height);
+    if (path === "") {
+        return null;
+    }
+
+    // The path touches y = 0 and y = height exactly, so a viewBox flush to the
+    // geometry clips half the stroke off the opening baseline and the closing
+    // plateau — the two most prominent runs of the mark, which would then render
+    // at half the weight of the diagonals. Padding the viewBox by half a stroke
+    // fixes that while keeping buildProfilePath and its tests in geometry units.
+    const bleed = strokeWidth / 2;
+    const viewBox = [-bleed, -bleed, width + strokeWidth, height + strokeWidth].join(" ");
+
+    return (
+        <Svg testID={testID} width={width} height={height} viewBox={viewBox}>
+            <Path d={`${path} L${round(width)} ${round(height)} Z`} fill={fill}/>
+            <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
+                  strokeLinejoin="round"/>
+        </Svg>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/PourProfile.test.tsx`
+Expected: PASS, 13 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/PourProfile.tsx components/__tests__/PourProfile.test.tsx
+git commit -m "Add the PourProfile primitive"
+```
+
+---
+### Task 7: DigitRoll
+
+**Files:**
+- Create: `components/DigitRoll.tsx`
+- Test: `components/__tests__/DigitRoll.test.tsx`
+
+A value that changes should be seen to change. Each digit column slides to its
+new glyph; digits that did not change do not move.
+
+The tests read the live `translateY` off the animated style rather than trusting
+that an animation was configured. That is the only thing separating this from
+static text: an early draft of this suite asserted column counts and labels, and
+twelve of fifteen shape-destroying mutations survived it — including reducing the
+whole component to `<Text>{value}</Text>`.
+
+Note `Task 5`'s `drawnFontSize` helper. The clip box must be sized from the height
+the glyphs are *drawn* at, not the size requested, or accessibility text sizing
+crops the digits inside a box that never grew.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/DigitRoll.test.tsx`:
+
+```tsx
+import React from "react";
+import {AccessibilityInfo, PixelRatio} from "react-native";
+import {act, screen} from "@testing-library/react-native";
+
+import DigitRoll from "@/components/DigitRoll";
+import {DURATION} from "@/constants/motion";
+import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/** The clip box for a digit position. */
+function column(index: number) {
+    return screen.getAllByTestId("digit-roll-column")[index];
+}
+
+/** The height of the clip box — one row of the strip. */
+function rowHeight(index: number): number {
+    return (column(index).props.style as {height: number}).height;
+}
+
+/**
+ * How far the strip inside a column is currently translated. This is the only
+ * thing that distinguishes a roll from static text, so the tests read it
+ * directly rather than trusting that an animation was configured.
+ */
+function offsetOf(index: number): number {
+    const strip = column(index).children[0] as never as {
+        props: {jestAnimatedStyle: {value: {transform: {translateY: number}[]}}};
+    };
+    return strip.props.jestAnimatedStyle.value.transform[0].translateY;
+}
+
+/** The laid-out height of each glyph on the strip. */
+function rowPitchOf(index: number): number[] {
+    const strip = column(index).children[0] as never as {
+        children: {props: {style: {height: number; lineHeight: number}[]}}[];
+    };
+    return strip.children.flatMap((text) =>
+        text.props.style.filter((s) => s?.height !== undefined).map((s) => s.height));
+}
+
+/** The glyphs on the strip in the order they are stacked. */
+function stripOf(index: number): string[] {
+    const strip = column(index).children[0] as never as {children: {children: string[]}[]};
+    return strip.children.map((text) => text.children[0]);
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+describe("DigitRoll", () => {
+    it("renders one column per digit", async () => {
+        await renderWithProviders(<DigitRoll value={255}/>);
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(3);
+    });
+
+    it("renders the current value as text", async () => {
+        await renderWithProviders(<DigitRoll value={255}/>);
+        expect(screen.getByLabelText("255")).toBeTruthy();
+    });
+
+    it("pads to the requested minimum width", async () => {
+        await renderWithProviders(<DigitRoll value={7} minDigits={3}/>);
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(3);
+        expect(screen.getByLabelText("007")).toBeTruthy();
+    });
+
+    it("appends a suffix outside the rolling columns", async () => {
+        await renderWithProviders(<DigitRoll value={255} suffix="ml"/>);
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(3);
+        expect(screen.getByText("ml")).toBeTruthy();
+    });
+
+    it("announces the readout once, with its unit, and hides the strip", async () => {
+        await renderWithProviders(<DigitRoll value={255} suffix="ml"/>);
+
+        // The unit is part of the value being announced, not decoration: "255"
+        // alone loses the one thing a sighted user reads for free.
+        expect(screen.getByLabelText("255ml")).toBeTruthy();
+
+        // A label on a bare View is inert without this — React Native does not
+        // promote the node to an accessibility element implicitly.
+        expect(screen.getByLabelText("255ml").props.accessible).toBe(true);
+
+        // Otherwise all thirty off-screen glyphs are individually focusable and
+        // a three-digit readout is announced as "0 1 2 ... 9", three times.
+        for (const col of screen.getAllByTestId("digit-roll-column")) {
+            const strip = col.children[0] as never as {props: Record<string, unknown>};
+            expect(strip.props.accessibilityElementsHidden).toBe(true);
+            expect(strip.props.importantForAccessibility).toBe("no-hide-descendants");
+        }
+    });
+
+    it("sizes the clip box from the height the glyphs are actually drawn at", async () => {
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1);
+        await renderWithProviders(<DigitRoll value={5} fontSize={20}/>);
+        expect(rowHeight(0)).toBe(Math.round(20 * 1.35));
+        scaleSpy.mockRestore();
+    });
+
+    it("grows the clip box with the OS font scale, up to the cap", async () => {
+        // The glyphs are drawn at fontSize x the OS scale, so a box sized from
+        // the *requested* size crops them for exactly the user who turned
+        // accessibility text sizing on because they could not read it.
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
+        await renderWithProviders(<DigitRoll value={5} fontSize={20}/>);
+        expect(rowHeight(0)).toBe(Math.round(20 * 1.4 * 1.35));
+        scaleSpy.mockRestore();
+    });
+
+    it("stops growing the clip box where DotMatrixText stops scaling", async () => {
+        // Scaling is bounded at DOTO_MAX_FONT_SCALE, so past it the box must
+        // stop too rather than opening a gap under the glyphs.
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(3);
+        await renderWithProviders(<DigitRoll value={5} fontSize={20}/>);
+        expect(rowHeight(0)).toBe(Math.round(20 * 1.4 * 1.35));
+        scaleSpy.mockRestore();
+    });
+
+    it("grows the column count when the value gains a digit", async () => {
+        const {rerender} = await renderWithProviders(<DigitRoll value={9}/>);
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(1);
+
+        await rerender(<DigitRoll value={10}/>);
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(2);
+    });
+
+    it("stacks the whole 0-9 strip in each column, in order", async () => {
+        await renderWithProviders(<DigitRoll value={40}/>);
+
+        // Not just the current glyph: the neighbours are what is visible mid-roll.
+        expect(stripOf(0)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+        expect(stripOf(1)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    });
+
+    it("clips each column to a single row", async () => {
+        await renderWithProviders(<DigitRoll value={5}/>);
+
+        // Without this the other nine glyphs are on screen at once.
+        expect(column(0).props.style).toMatchObject({overflow: "hidden"});
+        expect(rowHeight(0)).toBeGreaterThan(0);
+
+        // Every glyph occupies exactly one clip box, or the offsets — which are
+        // multiples of the clip box height — land between digits.
+        expect(rowPitchOf(0)).toEqual(new Array(10).fill(rowHeight(0)));
+    });
+
+    it("offsets each column to its own digit", async () => {
+        await renderWithProviders(<DigitRoll value={123}/>);
+
+        expect(offsetOf(0)).toBe(-1 * rowHeight(0));
+        expect(offsetOf(1)).toBe(-2 * rowHeight(1));
+        expect(offsetOf(2)).toBe(-3 * rowHeight(2));
+    });
+
+    it("rolls through the intermediate glyphs instead of cutting to the new digit", async () => {
+        const {rerender} = await renderWithProviders(<DigitRoll value={1}/>);
+        expect(offsetOf(0)).toBe(-1 * rowHeight(0));
+
+        await rerender(<DigitRoll value={8}/>);
+        await advance(16);
+
+        // One frame in: moving, but nowhere near arrived. A column that remounts
+        // (a value-derived key) or never animates lands on its target instantly.
+        const midRoll = offsetOf(0);
+        expect(midRoll).toBeLessThan(-1 * rowHeight(0));
+        expect(midRoll).toBeGreaterThan(-8 * rowHeight(0));
+
+        await advance(DURATION.base);
+        expect(offsetOf(0)).toBe(-8 * rowHeight(0));
+    });
+
+    it("leaves a digit that did not change where it is", async () => {
+        const {rerender} = await renderWithProviders(<DigitRoll value={255}/>);
+
+        await rerender(<DigitRoll value={265}/>);
+        await advance(16);
+
+        // The hundreds column holds a 2 before and after, so it must not move.
+        expect(offsetOf(0)).toBe(-2 * rowHeight(0));
+        expect(offsetOf(1)).not.toBe(-6 * rowHeight(1));
+
+        await advance(DURATION.base);
+        expect(offsetOf(0)).toBe(-2 * rowHeight(0));
+        expect(offsetOf(1)).toBe(-6 * rowHeight(1));
+    });
+
+    it("rounds and clamps out-of-contract values", async () => {
+        const {rerender} = await renderWithProviders(<DigitRoll value={254.6}/>);
+        expect(screen.getByLabelText("255")).toBeTruthy();
+        expect(offsetOf(2)).toBe(-5 * rowHeight(2));
+
+        await rerender(<DigitRoll value={-5}/>);
+        await advance(DURATION.base);
+        expect(screen.getByLabelText("0")).toBeTruthy();
+        expect(screen.getAllByTestId("digit-roll-column")).toHaveLength(1);
+        expect(offsetOf(0)).toBeCloseTo(0);
+    });
+
+    // Last in the file on purpose: `useReducedMotion` seeds from a module-level
+    // cache, so flipping the setting on leaks into every later test in the file.
+    it("snaps rather than rolls under Reduce Motion", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        const {rerender} = await renderWithProviders(<DigitRoll value={1}/>);
+        await rerender(<DigitRoll value={8}/>);
+        await advance(16);
+
+        // Arrived on the first frame, and still shows the new value.
+        expect(offsetOf(0)).toBe(-8 * rowHeight(0));
+        expect(screen.getByLabelText("8")).toBeTruthy();
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/DigitRoll.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/DigitRoll'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/DigitRoll.tsx`:
+
+```tsx
+import React, {useEffect} from "react";
+import {View} from "react-native";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming
+} from "react-native-reanimated";
+
+import DotMatrixText, {drawnFontSize, type DotoWeight} from "@/components/DotMatrixText";
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+
+const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+type ColumnProps = {
+    digit: number;
+    fontSize: number;
+    weight: DotoWeight;
+    color: string;
+    reduced: boolean;
+};
+
+/**
+ * One digit position. The full 0–9 strip is rendered and translated, so the
+ * intermediate glyphs are genuinely visible as it moves.
+ */
+function DigitColumn({digit, fontSize, weight, color, reduced}: ColumnProps) {
+    // Doto's line box is close to 1.35em at these sizes; hard-coding the ratio
+    // keeps the strip aligned without measuring on every render. It is applied
+    // to the size the glyphs are actually *drawn* at rather than the size asked
+    // for, because a user with accessibility text sizing turned up would
+    // otherwise get 28 px digits clipped into a 27 px box.
+    const rowHeight = Math.round(drawnFontSize(fontSize) * 1.35);
+    const offset = useSharedValue(-digit * rowHeight);
+
+    useEffect(() => {
+        const target = -digit * rowHeight;
+        offset.value = reduced
+            ? target
+            : withTiming(target, {duration: DURATION.base, easing: EASING.out});
+    }, [digit, rowHeight, reduced, offset]);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{translateY: offset.value}]
+    }));
+
+    return (
+        <View testID="digit-roll-column"
+              style={{height: rowHeight, overflow: "hidden"}}>
+            <Animated.View
+                // The nine glyphs that are not currently showing are decoration.
+                // Without this each column offers a screen reader all ten, and a
+                // three-digit readout is announced as "0 1 2 3 4 5 6 7 8 9"
+                // three times over. The real value is on the container's label.
+                importantForAccessibility="no-hide-descendants"
+                accessibilityElementsHidden
+                style={animatedStyle}>
+                {DIGITS.map((d) => (
+                    <DotMatrixText key={d} fontSize={fontSize} weight={weight}
+                                   color={color}
+                                   style={{height: rowHeight, lineHeight: rowHeight}}>
+                        {d}
+                    </DotMatrixText>
+                ))}
+            </Animated.View>
+        </View>
+    );
+}
+
+type Props = {
+    value: number;
+    /** Zero-pads up to this many digits. */
+    minDigits?: number;
+    /** Static text after the digits — a unit, not part of the roll. */
+    suffix?: string;
+    fontSize?: number;
+    weight?: DotoWeight;
+    color?: string;
+};
+
+/**
+ * A number whose digits roll when it changes.
+ *
+ * Reduce Motion snaps each column to its target rather than removing the
+ * component, so the value is still correct and still visibly updates.
+ */
+export default function DigitRoll({
+    value,
+    minDigits = 1,
+    suffix,
+    fontSize = 20,
+    weight = "bold",
+    color = palette.text
+}: Props) {
+    const reduced = useReducedMotion();
+    const text = Math.max(0, Math.round(value)).toString().padStart(minDigits, "0");
+    const digits = text.split("").map((d) => Number(d));
+
+    return (
+        // `accessibilityLabel` on a bare View is inert — React Native does not
+        // make the node an accessibility element implicitly, so the label is
+        // never reached and the descendants are announced instead. The label
+        // carries the suffix because a volume readout announced as "255" rather
+        // than "255ml" drops the one thing a sighted user gets for free.
+        <View accessible
+              accessibilityLabel={suffix === undefined ? text : `${text}${suffix}`}
+              style={{flexDirection: "row", alignItems: "flex-end"}}>
+            {digits.map((digit, index) => (
+                <DigitColumn
+                    // Position-keyed on purpose: index 0 is the same column
+                    // whether it holds a 2 or a 3, which is what should roll.
+                    // Keying by digit would remount on every change — the column
+                    // would cut to the new glyph instead of travelling to it —
+                    // and a value like 255 would produce duplicate sibling keys.
+                    key={index}
+                    digit={digit}
+                    fontSize={fontSize}
+                    weight={weight}
+                    color={color}
+                    reduced={reduced}
+                />
+            ))}
+            {suffix !== undefined && (
+                <DotMatrixText fontSize={Math.round(fontSize * 0.6)} weight="semibold"
+                               color={color} style={{marginLeft: 2}}>
+                    {suffix}
+                </DotMatrixText>
+            )}
+        </View>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/DigitRoll.test.tsx`
+Expected: PASS, 16 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/DigitRoll.tsx components/__tests__/DigitRoll.test.tsx
+git commit -m "Add the DigitRoll primitive"
+```
+
+---
+
+### Task 8: DotBloom
+
+**Files:**
+- Create: `components/DotBloom.tsx`
+- Test: `components/__tests__/DotBloom.test.tsx`
+
+The scanning animation. It is driven by real read progress, never by a timer —
+a progress indicator that lies is worse than none.
+
+The tests read live opacities off `jestAnimatedStyle` and compute the dot
+geometry, because neither a dot count nor an accessibility value can tell a ring
+that fills from an empty one. An earlier draft of this suite asserted only those
+two things, and **17 of 18** shape-destroying mutations survived it — including
+lighting every dot permanently and swapping the lit and unlit colours.
+
+Three things settled during review:
+
+- One `clampProgress`, used by both `litCount` and the announced value. The two
+  open-coded clamps disagreed: `Infinity` announced 100% over an empty ring.
+- Only the dot at the fill boundary breathes. Every unlit dot pulsing in unison
+  is a global flicker that reads as a warning, and it costs 24 infinite
+  animations during an NFC read.
+- The ring radius is inset by half a dot, so the drawn extent matches the
+  declared `size` instead of overhanging it and being clipped by the dialog.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/DotBloom.test.tsx`:
+
+```tsx
+import React from "react";
+import {AccessibilityInfo} from "react-native";
+import {act, screen} from "@testing-library/react-native";
+
+import DotBloom, {clampProgress, litCount} from "@/components/DotBloom";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/** The static (non-animated) half of a dot's style: colour and position. */
+function boxOf(index: number): {left: number; top: number; width: number; backgroundColor: string} {
+    const style = screen.getAllByTestId("dot-bloom-dot")[index].props.style as never as
+        {left: number; top: number; width: number; backgroundColor: string}[];
+    return style[0];
+}
+
+/**
+ * The dot's *live* opacity. `props.style` holds only the value from the last
+ * React render, so it cannot see the pulse or a lit/unlit flip; the animated
+ * style is the only thing that distinguishes a breathing ring from a still one.
+ */
+function opacityOf(index: number): number {
+    const dot = screen.getAllByTestId("dot-bloom-dot")[index] as never as
+        {props: {jestAnimatedStyle: {value: {opacity: number}}}};
+    return dot.props.jestAnimatedStyle.value.opacity;
+}
+
+function colours(): string[] {
+    return screen.getAllByTestId("dot-bloom-dot")
+        .map((_, index) => boxOf(index).backgroundColor);
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+describe("clampProgress", () => {
+    it.each([
+        [0, 0], [1, 1], [0.5, 0.5], [4, 1], [-1, 0],
+        [Number.NaN, 0], [Number.POSITIVE_INFINITY, 0], [Number.NEGATIVE_INFINITY, 0]
+    ])("clamps %p to %p", (input, expected) => {
+        expect(clampProgress(input)).toBe(expected);
+    });
+});
+
+describe("litCount", () => {
+    it("lights nothing at zero", () => {
+        expect(litCount(0, 24)).toBe(0);
+    });
+
+    it("lights everything at one", () => {
+        expect(litCount(1, 24)).toBe(24);
+    });
+
+    it("lights half at one half", () => {
+        expect(litCount(0.5, 24)).toBe(12);
+    });
+
+    it("clamps progress above one", () => {
+        expect(litCount(4, 24)).toBe(24);
+    });
+
+    it("clamps progress below zero", () => {
+        expect(litCount(-1, 24)).toBe(0);
+    });
+
+    it("treats a non-finite progress as zero", () => {
+        expect(litCount(Number.NaN, 24)).toBe(0);
+    });
+});
+
+describe("DotBloom", () => {
+    it("renders the full ring of dots regardless of progress", async () => {
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={24}/>);
+        expect(screen.getAllByTestId("dot-bloom-dot")).toHaveLength(24);
+    });
+
+    it("renders as many dots as asked for", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={12}/>);
+        expect(screen.getAllByTestId("dot-bloom-dot")).toHaveLength(12);
+    });
+
+    it("exposes progress as an accessibility value", async () => {
+        await renderWithProviders(<DotBloom progress={0.5}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityValue)
+            .toEqual({min: 0, max: 100, now: 50});
+    });
+
+    it("announces nothing read for a non-finite progress", async () => {
+        // `read / total` with a total of zero. The ring lights nothing, so the
+        // announcement must not say otherwise.
+        await renderWithProviders(<DotBloom progress={Number.NaN} dotCount={8}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityValue)
+            .toEqual({min: 0, max: 100, now: 0});
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("does not announce a complete read for an infinite progress", async () => {
+        await renderWithProviders(<DotBloom progress={Number.POSITIVE_INFINITY} dotCount={8}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityValue.now).toBe(0);
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("announces itself as a progress indicator", async () => {
+        // Without the role the value above is announced as nothing at all.
+        await renderWithProviders(<DotBloom progress={0.5}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityRole).toBe("progressbar");
+    });
+
+    it("lays the dots out on a ring, clockwise from twelve o'clock", async () => {
+        // A ring that fills from 3 o'clock, or anticlockwise, or collapses to a
+        // point, is a different animation; none of that is visible in a dot count.
+        await renderWithProviders(<DotBloom progress={0} dotCount={4} size={100} dotSize={10}/>);
+        const centre = 100 / 2 - 10 / 2;
+        const radius = (100 - 10) / 2;
+
+        // The ring occupies the box it says it does, or the layout around it is
+        // sized for something other than what is drawn.
+        expect(screen.getByTestId("dot-bloom").props.style)
+            .toMatchObject({width: 100, height: 100});
+
+        expect(boxOf(0).left).toBeCloseTo(centre);          // 12 o'clock
+        expect(boxOf(0).top).toBeCloseTo(centre - radius);
+        expect(boxOf(1).left).toBeCloseTo(centre + radius); // 3 o'clock
+        expect(boxOf(1).top).toBeCloseTo(centre);
+        expect(boxOf(2).left).toBeCloseTo(centre);          // 6 o'clock
+        expect(boxOf(2).top).toBeCloseTo(centre + radius);
+        expect(boxOf(3).left).toBeCloseTo(centre - radius); // 9 o'clock
+        expect(boxOf(3).top).toBeCloseTo(centre);
+    });
+
+    it("keeps the whole ring inside the box it declares", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8} size={200} dotSize={16}/>);
+        for (let index = 0; index < 8; index++) {
+            expect(boxOf(index).width).toBe(16);
+
+            // Sized from the dot centres, the ring overhangs by half a dot and a
+            // clipping ancestor flattens its outer edge all the way round.
+            expect(boxOf(index).left).toBeGreaterThanOrEqual(0);
+            expect(boxOf(index).top).toBeGreaterThanOrEqual(0);
+            expect(boxOf(index).left + 16).toBeLessThanOrEqual(200);
+            expect(boxOf(index).top + 16).toBeLessThanOrEqual(200);
+        }
+
+        // ...and it still fills the box rather than shrinking away from it.
+        expect(Math.min(...Array.from({length: 8}, (_, i) => boxOf(i).top))).toBeCloseTo(0);
+        expect(Math.max(...Array.from({length: 8}, (_, i) => boxOf(i).top + 16))).toBeCloseTo(200);
+    });
+
+    it("lights the first N dots and no others", async () => {
+        // The whole contract of the component: N is real read progress.
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+        expect(colours()).toEqual([
+            palette.success, palette.success,
+            palette.dim, palette.dim, palette.dim, palette.dim, palette.dim, palette.dim
+        ]);
+        expect(opacityOf(0)).toBe(1);
+        expect(opacityOf(2)).toBeLessThan(1);
+    });
+
+    it("lights nothing before the read starts", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("lights everything when the read completes", async () => {
+        await renderWithProviders(<DotBloom progress={1} dotCount={8}/>);
+        expect(colours()).toEqual(new Array(8).fill(palette.success));
+        expect(opacityOf(7)).toBe(1);
+    });
+
+    it("lights dots as real progress arrives, and never runs ahead of it", async () => {
+        const {rerender} = await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        // Time alone must move nothing: this is progress-driven, not a timer.
+        await advance(DURATION.deliberate * 4);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<DotBloom progress={0.5} dotCount={8}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(4);
+    });
+
+    it("breathes the leading dot instead of leaving the ring frozen", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        const start = opacityOf(0);
+
+        await advance(DURATION.deliberate / 2);
+        const mid = opacityOf(0);
+        expect(mid).toBeLessThan(start);
+
+        // Reverses rather than restarting: a repeat that snaps back to full
+        // brightness every cycle strobes instead of breathing.
+        await advance(DURATION.deliberate);
+        expect(opacityOf(0)).toBeGreaterThan(mid);
+    });
+
+    it("breathes only the dot at the fill boundary", async () => {
+        // Every unlit dot pulsing in unison is a global flicker — a warning,
+        // not a machine waiting. The motion marks where the ring has got to.
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+        const still = opacityOf(4);
+
+        await advance(DURATION.deliberate / 2);
+        expect(opacityOf(2)).toBeLessThan(still);  // the next dot to light
+        expect(opacityOf(4)).toBe(still);
+        expect(opacityOf(7)).toBe(still);
+    });
+
+    it("stops breathing once the read is complete", async () => {
+        await renderWithProviders(<DotBloom progress={1} dotCount={8}/>);
+        await advance(DURATION.deliberate / 2);
+
+        // There is no boundary left, so nothing should still be waiting.
+        for (let index = 0; index < 8; index++) {
+            expect(opacityOf(index)).toBe(1);
+        }
+    });
+
+    it("stops breathing a dot once it is lit", async () => {
+        const {rerender} = await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        await advance(DURATION.deliberate / 2);
+        expect(opacityOf(0)).toBeLessThan(1);
+
+        await rerender(<DotBloom progress={0.2} dotCount={8}/>);
+        await advance(16);
+        expect(opacityOf(0)).toBe(1);
+
+        // The pulse was cancelled, not merely overwritten for one frame.
+        await advance(DURATION.deliberate * 2);
+        expect(opacityOf(0)).toBe(1);
+    });
+
+    // Last in the file on purpose: `useReducedMotion` seeds from a module-level
+    // cache, so flipping the setting on leaks into every later test in the file.
+    it("holds the ring still under Reduce Motion, without hiding progress", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+
+        // Let the asynchronous Reduce Motion read land before sampling.
+        await advance(DURATION.deliberate);
+        const before = opacityOf(4);
+
+        // Deliberately not a whole number of pulse cycles: a still ring and a
+        // ring sampled one full breath later look identical.
+        await advance(DURATION.deliberate * 0.75);
+        expect(opacityOf(4)).toBe(before);
+        await advance(DURATION.deliberate * 0.4);
+        expect(opacityOf(4)).toBe(before);
+
+        // Still legible as progress: two lit, six not.
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(2);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/DotBloom.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/DotBloom'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/DotBloom.tsx`:
+
+```tsx
+import React from "react";
+import {View} from "react-native";
+import Animated, {
+    type SharedValue,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming
+} from "react-native-reanimated";
+
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+
+/** How dim an unlit dot sits against the background. */
+const UNLIT_OPACITY = 0.18;
+
+/** How far the leading dot fades at the bottom of its breath. */
+const PULSE_FLOOR = 0.35;
+
+/**
+ * Progress as a fraction, defended.
+ *
+ * Read progress arrives as `read / total`, and a reader that reports `total = 0`
+ * yields `NaN`. The single source of truth for both the ring and the announced
+ * value: two open-coded clamps disagreed here once already, and the screen
+ * reader announced 100% for a scan that had not started.
+ */
+export function clampProgress(progress: number): number {
+    return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 1) : 0;
+}
+
+/** How many dots of `total` are lit at a given progress. */
+export function litCount(progress: number, total: number): number {
+    return Math.round(clampProgress(progress) * total);
+}
+
+type DotProps = {
+    lit: boolean;
+    /** The one dot at the fill boundary — the next to light. */
+    leading: boolean;
+    index: number;
+    total: number;
+    centre: number;
+    radius: number;
+    size: number;
+    pulse: SharedValue<number>;
+};
+
+function BloomDot({lit, leading, index, total, centre, radius, size, pulse}: DotProps) {
+    const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: lit ? 1 : UNLIT_OPACITY * (leading ? pulse.value : 1)
+    }));
+
+    return (
+        <Animated.View
+            testID="dot-bloom-dot"
+            style={[
+                {
+                    position:        "absolute",
+                    width:           size,
+                    height:          size,
+                    borderRadius:    size / 2,
+                    backgroundColor: lit ? palette.success : palette.dim,
+                    left:            centre + Math.cos(angle) * radius - size / 2,
+                    top:             centre + Math.sin(angle) * radius - size / 2
+                },
+                animatedStyle
+            ]}
+        />
+    );
+}
+
+type Props = {
+    /** Real read progress, 0–1. Never a timer. */
+    progress: number;
+    dotCount?: number;
+    /** Diameter of the ring, including the dots. */
+    size?: number;
+    dotSize?: number;
+};
+
+/**
+ * The scanning ceremony: a ring of dots that fills as the card is read.
+ *
+ * On iOS this is composed into the top half of the screen, because CoreNFC
+ * presents a system sheet over the lower half that the app cannot draw on. On
+ * Android there is no system sheet and it sits inside the app's own dialog.
+ * Those compositions belong to sub-project 3; this component only draws the ring.
+ */
+export default function DotBloom({
+    progress,
+    dotCount = 24,
+    size = 160,
+    dotSize = 8
+}: Props) {
+    const reduced = useReducedMotion();
+    const lit = litCount(progress, dotCount);
+    const scanning = lit < dotCount;
+
+    // One animation for the whole ring rather than one per dot. Only the dot at
+    // the fill boundary reads it, so the motion is localised where the user
+    // should be looking; every unlit dot breathing in unison reads as a global
+    // flicker, which is a warning, not a machine waiting.
+    const pulse = useSharedValue(1);
+
+    React.useEffect(() => {
+        if (reduced || !scanning) {
+            pulse.value = 1;
+            return;
+        }
+        pulse.value = withRepeat(
+            withTiming(PULSE_FLOOR, {duration: DURATION.deliberate, easing: EASING.inOut}),
+            -1,
+            true
+        );
+    }, [reduced, scanning, pulse]);
+
+    // The dots are centred on this circle and extend half their own width beyond
+    // it, so the ring radius is inset by half a dot: otherwise the component
+    // draws `size + dotSize` while declaring `size`, and any clipping ancestor
+    // shaves the outer edge off every dot.
+    const centre = size / 2;
+    const radius = (size - dotSize) / 2;
+
+    return (
+        <View
+            testID="dot-bloom"
+            accessibilityRole="progressbar"
+            accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: Math.round(clampProgress(progress) * 100)
+            }}
+            style={{width: size, height: size}}>
+            {Array.from({length: dotCount}, (_, index) => (
+                <BloomDot key={index} index={index} total={dotCount} lit={index < lit}
+                          leading={index === lit} centre={centre} radius={radius}
+                          size={dotSize} pulse={pulse}/>
+            ))}
+        </View>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/DotBloom.test.tsx`
+Expected: PASS, 31 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/DotBloom.tsx components/__tests__/DotBloom.test.tsx
+git commit -m "Add the DotBloom scanning animation"
+```
+
+---
+
+### Task 9: WriteSweep
+
+**Files:**
+- Create: `components/WriteSweep.tsx`
+- Test: `components/__tests__/WriteSweep.test.tsx`
+
+The write ceremony. Blocks light up as they are committed. Writing to a card is
+the one irreversible thing the app does — a malformed write to a genuine card is
+not trivially recoverable — so this animation must never run ahead of reality.
+
+The tests read `backgroundColor` off each block, because that is the only thing
+that says *this block is on the card*; a block count cannot see it. An earlier
+draft asserted a child count, an accessibility value and a null render, and **15
+of 19** mutations survived it — including three separate ways to paint the strip
+fully green while nothing had been written.
+
+`clampBlocks` and `blockState` both defend their own input and both round down.
+A fraction is a block still in flight, and `Infinity` clamping to `totalBlocks`
+is the one lie this component must not tell.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/WriteSweep.test.tsx`:
+
+```tsx
+import React from "react";
+import {AccessibilityInfo} from "react-native";
+import {act, screen} from "@testing-library/react-native";
+
+import WriteSweep, {blockState} from "@/components/WriteSweep";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/**
+ * The colour of every block, in strip order. `backgroundColor` is the only
+ * thing that says "this block is on the card"; a block count cannot see it.
+ */
+function colours(): string[] {
+    return screen.getAllByTestId("write-sweep-block")
+        .map((node) => (node.props.style as never as {backgroundColor: string}[])[0].backgroundColor);
+}
+
+/** The gap either side of a block. */
+function marginOf(index: number): number {
+    const style = screen.getAllByTestId("write-sweep-block")[index].props.style as never as
+        {marginHorizontal: number}[];
+    return style[0].marginHorizontal;
+}
+
+/**
+ * A block's *live* opacity. `props.style` is frozen at the last React render
+ * and cannot see an animated value; only the animated style is live, and it
+ * commits one frame after a rerender.
+ */
+function opacityOf(index: number): number {
+    const block = screen.getAllByTestId("write-sweep-block")[index] as never as
+        {props: {jestAnimatedStyle: {value: {opacity: number}}}};
+    return block.props.jestAnimatedStyle.value.opacity;
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+describe("blockState", () => {
+    it("marks earlier blocks as written", () => {
+        expect(blockState(0, 3)).toBe("written");
+    });
+
+    it("marks the current block as active", () => {
+        expect(blockState(3, 3)).toBe("active");
+    });
+
+    it("marks later blocks as pending", () => {
+        expect(blockState(4, 3)).toBe("pending");
+    });
+
+    it("marks everything written once the count passes the last block", () => {
+        expect(blockState(9, 10)).toBe("written");
+    });
+
+    // The component passes a clamped count; the export is reachable with a raw
+    // one. A block half-way through a write is not on the card.
+    it("does not call a partially written block written", () => {
+        expect(blockState(0, 0.5)).toBe("active");
+        expect(blockState(0, 0.999)).toBe("active");
+        expect(blockState(1, 1.5)).toBe("active");
+    });
+
+    it("treats a negative count as nothing written", () => {
+        expect(blockState(0, -3)).toBe("active");
+        expect(blockState(1, -3)).toBe("pending");
+    });
+
+    it("treats a non-finite count as nothing written", () => {
+        expect(blockState(0, Number.NaN)).toBe("active");
+        expect(blockState(1, Number.NaN)).toBe("pending");
+        expect(blockState(0, Number.POSITIVE_INFINITY)).toBe("active");
+        expect(blockState(5, Number.POSITIVE_INFINITY)).toBe("pending");
+    });
+});
+
+describe("WriteSweep", () => {
+    it("renders one cell per block", async () => {
+        // Deliberately not 12: a hard-coded strip length passes a 12-block test.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={7}/>);
+        expect(screen.getAllByTestId("write-sweep-block")).toHaveLength(7);
+    });
+
+    it("colours exactly the blocks that are on the card, and no others", async () => {
+        // The whole contract. A strip that paints everything green claims a
+        // written card; nothing in a block count or an accessibility value sees it.
+        await renderWithProviders(<WriteSweep blocksWritten={3} totalBlocks={8}/>);
+        expect(colours()).toEqual([
+            palette.success, palette.success, palette.success,
+            palette.text,
+            palette.line, palette.line, palette.line, palette.line
+        ]);
+    });
+
+    it("shows nothing as written before the write begins", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={6}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+    });
+
+    it("shows the whole strip written, with nothing still active, once done", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={6} totalBlocks={6}/>);
+        expect(colours()).toEqual(new Array(6).fill(palette.success));
+    });
+
+    it("keeps the active block visually distinct from a written one", async () => {
+        // Both animate to opacity 1, so colour is the only distinction there is.
+        await renderWithProviders(<WriteSweep blocksWritten={2} totalBlocks={4}/>);
+        expect(colours()[2]).not.toBe(colours()[1]);
+        expect(colours()[2]).not.toBe(colours()[3]);
+    });
+
+    it("fills left to right", async () => {
+        // Same children in the same order either way: only the container's
+        // direction says which end the strip starts from.
+        await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.style)
+            .toMatchObject({flexDirection: "row"});
+    });
+
+    it("announces itself as a progress indicator", async () => {
+        // Without the role the value below is announced as nothing at all.
+        await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityRole).toBe("progressbar");
+    });
+
+    it("never announces or paints more than was written, for any input", async () => {
+        // `written / total` from a writer that lost its total yields NaN or
+        // Infinity. Announcing a complete write of a card that was never touched
+        // is the one lie this component must not tell.
+        const {rerender} = await renderWithProviders(
+            <WriteSweep blocksWritten={Number.POSITIVE_INFINITY} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue)
+            .toEqual({min: 0, max: 4, now: 0});
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={Number.NaN} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue)
+            .toEqual({min: 0, max: 4, now: 0});
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={-2} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(0);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<WriteSweep blocksWritten={99} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(4);
+
+        // A block part-way through a write is not on the card: round down.
+        await rerender(<WriteSweep blocksWritten={2.9} totalBlocks={4}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue.now).toBe(2);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(2);
+    });
+
+    it("holds a pending block back from a written one by opacity, not colour alone", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={2} totalBlocks={4}/>);
+        expect(opacityOf(0)).toBe(1);
+        expect(opacityOf(2)).toBe(1);
+        expect(opacityOf(3)).toBeLessThan(1);
+    });
+
+    it("fades a block up only when the block is actually committed", async () => {
+        const {rerender} = await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        expect(opacityOf(2)).toBeLessThan(1);
+
+        // Time alone must move nothing: this is write-driven, not a timer.
+        await advance(DURATION.fast * 8);
+        expect(opacityOf(2)).toBeLessThan(1);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(1);
+
+        await rerender(<WriteSweep blocksWritten={3} totalBlocks={4}/>);
+        await advance(16);
+        expect(opacityOf(2)).toBeGreaterThan(0.4);   // mid-fade, not yet arrived
+        expect(opacityOf(2)).toBeLessThan(1);
+        await advance(DURATION.fast);
+        expect(opacityOf(2)).toBe(1);
+    });
+
+    it("reports progress as blocks, not a percentage of time", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={6} totalBlocks={12}/>);
+        expect(screen.getByTestId("write-sweep").props.accessibilityValue)
+            .toEqual({min: 0, max: 12, now: 6});
+    });
+
+    it("renders nothing when there are no blocks to write", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={0}/>);
+        expect(screen.queryByTestId("write-sweep")).toBeNull();
+    });
+
+    it("renders nothing when the total is lost rather than zero", async () => {
+        // `NaN <= 0` is false, so a lost total slips past a bare guard and
+        // announces `max: NaN` over an empty strip.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={Number.NaN}/>);
+        expect(screen.queryByTestId("write-sweep")).toBeNull();
+    });
+
+    it("spaces a short strip generously", async () => {
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={8}/>);
+        expect(marginOf(0)).toBe(1);
+    });
+
+    it("tightens the gaps as the strip gets denser", async () => {
+        // The blocks share whatever width the gaps do not take, so a fixed
+        // margin eats a quarter of the pitch on a 40-block write.
+        await renderWithProviders(<WriteSweep blocksWritten={0} totalBlocks={40}/>);
+        expect(marginOf(0)).toBe(0.5);
+    });
+
+    // Last in the file on purpose: `useReducedMotion` seeds from a module-level
+    // cache, so flipping the setting on leaks into every later test in the file.
+    it("commits a block instantly under Reduce Motion, without hiding progress", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        const {rerender} = await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
+        await advance(DURATION.fast * 2);
+
+        await rerender(<WriteSweep blocksWritten={3} totalBlocks={4}/>);
+        await advance(16);
+        // A cross-fade, not an animation: arrived within a frame, not over 120ms.
+        expect(opacityOf(2)).toBe(1);
+
+        // Still legible as progress.
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(3);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/WriteSweep.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/WriteSweep'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/WriteSweep.tsx`:
+
+```tsx
+import React, {useEffect} from "react";
+import {View} from "react-native";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming
+} from "react-native-reanimated";
+
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+
+export type BlockState = "written" | "active" | "pending";
+
+/**
+ * How many blocks are honestly on the card, defended.
+ *
+ * A block count arrives from the write loop and can be lost: a reader that
+ * reports no total yields `NaN`, and a division yields `Infinity`. Neither may
+ * become "the card is written" — that is the one lie this component must not
+ * tell. A fraction is a block still in flight, so it rounds *down*: a block is
+ * written or it is not.
+ */
+export function clampBlocks(blocksWritten: number, totalBlocks: number): number {
+    if (!Number.isFinite(blocksWritten)) {
+        return 0;
+    }
+    return Math.min(Math.max(Math.floor(blocksWritten), 0), Math.max(totalBlocks, 0));
+}
+
+/** What a given block index is doing, given how many blocks are committed. */
+export function blockState(index: number, blocksWritten: number): BlockState {
+    // Defended here too: the export is reachable with a raw count, and a helper
+    // that disagrees with the component it backs is worse than no helper.
+    const written = Number.isFinite(blocksWritten)
+        ? Math.max(Math.floor(blocksWritten), 0)
+        : 0;
+    if (index < written) {
+        return "written";
+    }
+    return index === written ? "active" : "pending";
+}
+
+const COLOURS: Record<BlockState, string> = {
+    written: palette.success,
+    active:  palette.text,
+    pending: palette.line
+};
+
+/**
+ * The gap either side of a block.
+ *
+ * A recipe write covers 20–40 four-byte blocks, and the blocks share the width
+ * that the gaps do not take: a fixed 1 pt margin is 20% of the pitch at 32
+ * blocks and 25% at 40, so the strip gets gappier exactly as it gets denser.
+ */
+function blockMargin(totalBlocks: number): number {
+    return totalBlocks > 24 ? 0.5 : 1;
+}
+
+type CellProps = {
+    state: BlockState;
+    margin: number;
+    reduced: boolean;
+};
+
+function SweepBlock({state, margin, reduced}: CellProps) {
+    const fade = useSharedValue(state === "pending" ? 0.4 : 1);
+
+    useEffect(() => {
+        const target = state === "pending" ? 0.4 : 1;
+        fade.value = reduced
+            ? target
+            : withTiming(target, {duration: DURATION.fast, easing: EASING.out});
+    }, [state, reduced, fade]);
+
+    const animatedStyle = useAnimatedStyle(() => ({opacity: fade.value}));
+
+    return (
+        <Animated.View
+            testID="write-sweep-block"
+            style={[
+                {
+                    flex:            1,
+                    height:          10,
+                    borderRadius:    2,
+                    marginHorizontal: margin,
+                    backgroundColor: COLOURS[state]
+                },
+                animatedStyle
+            ]}
+        />
+    );
+}
+
+type Props = {
+    /** Blocks actually committed to the card. Never a timer. */
+    blocksWritten: number;
+    totalBlocks: number;
+};
+
+/**
+ * The write ceremony: a strip of blocks that light up as they are committed.
+ *
+ * Deliberately literal. The card is written block by block, so the progress
+ * shown is the progress that happened.
+ */
+export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
+    const reduced = useReducedMotion();
+
+    // `NaN <= 0` is false, so a lost total would otherwise slip past this and
+    // render an empty progressbar announcing `max: NaN`.
+    if (!Number.isFinite(totalBlocks) || totalBlocks <= 0) {
+        return null;
+    }
+
+    const written = clampBlocks(blocksWritten, totalBlocks);
+
+    return (
+        <View
+            testID="write-sweep"
+            accessibilityRole="progressbar"
+            accessibilityValue={{min: 0, max: totalBlocks, now: written}}
+            style={{flexDirection: "row", alignItems: "center"}}>
+            {Array.from({length: Math.floor(totalBlocks)}, (_, index) => (
+                <SweepBlock key={index} state={blockState(index, written)}
+                            margin={blockMargin(totalBlocks)} reduced={reduced}/>
+            ))}
+        </View>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/WriteSweep.test.tsx`
+Expected: PASS, 23 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/WriteSweep.tsx components/__tests__/WriteSweep.test.tsx
+git commit -m "Add the WriteSweep write animation"
+```
+
+---
+
+### Task 10: Home chrome primitives
+
+**Files:**
+- Create: `components/CtaTile.tsx`, `components/ScreenTitle.tsx`, `components/Wordmark.tsx`
+- Test: `components/__tests__/CtaTile.test.tsx`, `components/__tests__/ScreenTitle.test.tsx`, `components/__tests__/Wordmark.test.tsx`
+
+Three small, related pieces of the home header, built together because each is
+too small to be its own task.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `components/__tests__/CtaTile.test.tsx`:
+
+```tsx
+import React from "react";
+import {fireEvent, screen} from "@testing-library/react-native";
+
+import CtaTile from "@/components/CtaTile";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+const TOUCH = {
+    nativeEvent: {
+        touches:        [],
+        changedTouches: [],
+        locationX:      1,
+        locationY:      1,
+        pageX:          1,
+        pageY:          1,
+        timestamp:      0
+    }
+};
+
+/**
+ * A real touch on the tile.
+ *
+ * Deliberately not `fireEvent.press`: Tamagui drives presses through the
+ * responder system rather than an `onPress` prop on the host view, so
+ * `fireEvent.press` finds no handler there and walks up the tree until it
+ * reaches `CtaTile`'s *own* `onPress` prop — the mock the test just passed in.
+ * That happens whether or not the tile wires anything up, and a tile rendering
+ * nothing interactive at all passed the original version of this test.
+ */
+async function press(element: Parameters<typeof fireEvent>[0]) {
+    await fireEvent(element, "responderGrant", TOUCH);
+    await fireEvent(element, "responderRelease", TOUCH);
+}
+
+function tile(name = "SCAN") {
+    return screen.getByRole("button", {name});
+}
+
+describe("CtaTile", () => {
+    it("renders its label", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("SCAN")).toBeTruthy();
+        // The label doubles as the accessible name when none is spelled out,
+        // or every tile on the home screen announces as an unnamed button.
+        expect(tile()).toBeTruthy();
+    });
+
+    it("renders the icon it was given, above the label", async () => {
+        // Vector icons render as a glyph character in the `anticon` font, so
+        // the only evidence that `icon` was honoured is that two names draw
+        // two different characters.
+        const {rerender} = await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const scan = screen.getByTestId("cta-tile-icon").props.children;
+        expect(scan).toBeTruthy();
+
+        // Icon first: the tile reads top-down, and swapping the two is a
+        // different component.
+        const children = tile().children as {props?: {testID?: string}}[];
+        expect(children[0].props?.testID).toBe("cta-tile-icon");
+
+        await rerender(<CtaTile icon="qrcode" label="SCAN" onPress={jest.fn()}/>);
+        expect(screen.getByTestId("cta-tile-icon").props.children).not.toBe(scan);
+    });
+
+    it("renders the label in dot matrix, not prose", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const style = screen.getByText("SCAN").props.style as {fontFamily?: string}[];
+        expect(style.some((s) => s?.fontFamily?.startsWith("Doto-"))).toBe(true);
+    });
+
+    it("calls onPress when tapped", async () => {
+        const onPress = jest.fn();
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={onPress}/>
+        );
+
+        await press(tile());
+
+        expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not call onPress when disabled", async () => {
+        const onPress = jest.fn();
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={onPress} disabled/>
+        );
+
+        await press(tile());
+
+        expect(onPress).not.toHaveBeenCalled();
+    });
+
+    it("accepts no touch at all when disabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()} disabled/>
+        );
+
+        // Not merely ignored on the way out: the tile never claims the touch, so
+        // it cannot swallow a press meant for something behind it either.
+        expect(tile().props.onStartShouldSetResponder).toBeUndefined();
+        expect(tile().props.accessibilityState).toEqual({disabled: true});
+    });
+
+    it("claims touches when it is enabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        expect(tile().props.onStartShouldSetResponder).toBeDefined();
+        expect(tile().props.accessibilityState).toEqual({disabled: false});
+    });
+
+    it("is a single accessibility element, not an icon and a label", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        // A label on a View is inert unless the View is an element in its own
+        // right, and the icon would otherwise be announced separately.
+        expect(tile().props.accessible).toBe(true);
+    });
+
+    it("looks like a tile, and shares the row with its twin", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+        const style = tile().props.style as Record<string, number | string>;
+        // Two tiles sit side by side at equal weight; without flex each shrinks
+        // to its own content and the row stops being a pair.
+        expect(style.flex).toBe(1);
+        expect(style.backgroundColor).toBe(palette.raised);
+        expect(style.borderTopColor).toBe(palette.line);
+        expect(style.borderTopWidth).toBe(1);
+        expect(style.borderTopLeftRadius).toBeGreaterThan(0);
+        expect(style.paddingTop).toBeGreaterThan(0);
+    });
+
+    it("uses the accessibility label when the Doto label is an abbreviation", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" accessibilityLabel="Scan a card"
+                     onPress={jest.fn()}/>
+        );
+        expect(tile("Scan a card")).toBeTruthy();
+        // ...and the abbreviation is still what is drawn.
+        expect(screen.getByText("SCAN")).toBeTruthy();
+    });
+
+    it("dims itself when disabled", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()} disabled/>
+        );
+        const style = tile().props.style as {opacity: number};
+        expect(style.opacity).toBeLessThan(1);
+
+        // The label and icon go with it, or a disabled tile still reads as
+        // available.
+        const label = screen.getByText("SCAN").props.style as {color?: string}[];
+        expect(label.some((s) => s?.color === palette.muted)).toBe(true);
+        const iconStyle = screen.getByTestId("cta-tile-icon").props.style as
+            {color?: string}[];
+        expect(iconStyle.some((s) => s?.color === palette.muted)).toBe(true);
+    });
+});
+```
+
+Create `components/__tests__/ScreenTitle.test.tsx`:
+
+```tsx
+import React from "react";
+import {screen} from "@testing-library/react-native";
+
+import ScreenTitle from "@/components/ScreenTitle";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+/** Whatever the queries hand back; RNTL does not export the type by name. */
+type Node = ReturnType<typeof screen.getByText>;
+
+type Style = Record<string, unknown> | undefined;
+
+/**
+ * A node's style, always as a list. Tamagui's `Text` flattens its style into a
+ * single object while a plain React Native `Text` keeps the array, and this
+ * component renders one of each.
+ */
+function stylesOf(node: Node): Style[] {
+    return Array.isArray(node.props.style) ? node.props.style as Style[] : [node.props.style as Style];
+}
+
+/** Whether a node is set in the dot-matrix face. */
+function isDoto(node: Node): boolean {
+    return String(styleValue(node, "fontFamily")).startsWith("Doto-");
+}
+
+/** The last value set for a style property, which is the one that wins. */
+function styleValue(node: Node, key: string): unknown {
+    return stylesOf(node).reduce<unknown>((found, s) => s?.[key] ?? found, undefined);
+}
+
+describe("ScreenTitle", () => {
+    it("renders the title", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        expect(screen.getByText("Recipes")).toBeTruthy();
+    });
+
+    it("renders the count as a superscript", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        expect(screen.getByText("12")).toBeTruthy();
+
+        // Smaller than the title and lifted off the baseline, or it reads as a
+        // second word rather than an annotation on the first.
+        const count = screen.getByTestId("screen-title-count");
+        const title = screen.getByText("Recipes");
+        expect(styleValue(count, "fontSize") as number)
+            .toBeLessThan((styleValue(title, "fontSize") as number) / 2);
+        expect(styleValue(count, "marginTop")).toBeGreaterThan(0);
+        expect(styleValue(count, "color")).toBe(palette.muted);
+    });
+
+    it("keeps prose in Inter and the number in dot matrix", async () => {
+        // The typography rule in miniature: the word is prose, the number is a
+        // machine-derived value. A title in Doto is the failure mode here.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        // The title's family comes from the Tamagui font config rather than an
+        // inline style, so it reads as undefined here; what matters is that it
+        // is not Doto, which is the failure this rule exists to prevent.
+        expect(isDoto(screen.getByText("Recipes"))).toBe(false);
+        expect(isDoto(screen.getByText("12"))).toBe(true);
+    });
+
+    it("sets the title in prose, at prose weight", async () => {
+        // Absolute, not relative to the count: a title that shrinks to muted
+        // light grey is indistinguishable from its own superscript.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        const title = screen.getByText("Recipes");
+        expect(styleValue(title, "fontSize")).toBe(28);
+        expect(styleValue(title, "fontWeight")).toBe("700");
+        expect(styleValue(title, "color")).toBe(palette.text);
+    });
+
+    it("keeps a long title from pushing the count off the screen", async () => {
+        await renderWithProviders(
+            <ScreenTitle title={"Very ".repeat(20) + "Long Title"} count={12}/>
+        );
+        const title = screen.getByText(/Long Title$/);
+        // Flex defaults to no shrinking, so without these the title takes its
+        // full measured width and the count is drawn past the container edge.
+        expect(styleValue(title, "flexShrink")).toBe(1);
+        expect(title.props.numberOfLines).toBe(1);
+        expect(screen.getByTestId("screen-title-count")).toBeTruthy();
+    });
+
+    it("hangs the count from the top of the line, not the bottom", async () => {
+        // A bottom-aligned row would turn the same positive marginTop into a
+        // subscript.
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        const row = screen.getByText("Recipes").parent!;
+        expect(styleValue(row, "alignItems")).toBe("flex-start");
+    });
+
+    it("shows the count it was given", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={7}/>);
+        expect(screen.getByTestId("screen-title-count").props.children).toBe(7);
+    });
+
+    it("omits the count when there is none", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes"/>);
+        expect(screen.queryByTestId("screen-title-count")).toBeNull();
+    });
+
+    it("omits the count when it is zero, because the empty state says it better", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={0}/>);
+        expect(screen.queryByTestId("screen-title-count")).toBeNull();
+    });
+});
+```
+
+Create `components/__tests__/Wordmark.test.tsx`:
+
+```tsx
+import React from "react";
+import {screen} from "@testing-library/react-native";
+
+import Wordmark from "@/components/Wordmark";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+function styleOf(text: string): {fontFamily?: string; fontSize?: number; color?: string}[] {
+    return screen.getByText(text).props.style as
+        {fontFamily?: string; fontSize?: number; color?: string}[];
+}
+
+function valueOf(text: string, key: "fontFamily" | "fontSize" | "color") {
+    return styleOf(text).reduce<unknown>((found, s) => s?.[key] ?? found, undefined);
+}
+
+describe("Wordmark", () => {
+    it("renders the product name", async () => {
+        await renderWithProviders(<Wordmark/>);
+        expect(screen.getByLabelText("XBRW++")).toBeTruthy();
+    });
+
+    it("sets the plus signs apart from the letters", async () => {
+        await renderWithProviders(<Wordmark/>);
+        expect(screen.getByText("XBRW")).toBeTruthy();
+        expect(screen.getByText("++")).toBeTruthy();
+    });
+
+    it("tints the plus signs without touching the letters", async () => {
+        // The `++` carries the fork's identity, so it is the part that may be
+        // tinted. Colouring the whole lockup would be a different mark.
+        await renderWithProviders(<Wordmark plusColor={palette.success}/>);
+        expect(valueOf("++", "color")).toBe(palette.success);
+        expect(valueOf("XBRW", "color")).toBe(palette.text);
+    });
+
+    it("is one accessibility element, announced as the whole name", async () => {
+        // A label on a View is inert unless the View is an element in its own
+        // right; without that the lockup reads as "XBRW" then "++".
+        await renderWithProviders(<Wordmark/>);
+        expect(screen.getByRole("header", {name: "XBRW++"})).toBeTruthy();
+    });
+
+    it("recolours the letters as well as the plus signs", async () => {
+        await renderWithProviders(<Wordmark color={palette.success}/>);
+        expect(valueOf("XBRW", "color")).toBe(palette.success);
+        // Unset plusColor follows the letters rather than falling back to white.
+        expect(valueOf("++", "color")).toBe(palette.success);
+    });
+
+    it("defaults to a size that fits in a header", async () => {
+        // The default is what every header call site gets, and it is the one
+        // size no explicit-prop test covers.
+        await renderWithProviders(<Wordmark/>);
+        expect(valueOf("XBRW", "fontSize")).toBe(15);
+    });
+
+    it("keeps the two halves the same size and weight", async () => {
+        // They are one word set in two Text nodes; any drift shows as a seam.
+        await renderWithProviders(<Wordmark fontSize={22}/>);
+        expect(valueOf("XBRW", "fontSize")).toBe(valueOf("++", "fontSize"));
+        expect(valueOf("XBRW", "fontFamily")).toBe(valueOf("++", "fontFamily"));
+        expect(valueOf("XBRW", "fontSize")).toBe(22);
+    });
+
+    it("is set in dot matrix", async () => {
+        // Allowed in Doto because it is an abbreviation and a version marker —
+        // a label on a machine — rather than prose.
+        await renderWithProviders(<Wordmark/>);
+        expect(valueOf("XBRW", "fontFamily")).toBe("Doto-ExtraBold");
+    });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `npx jest components/__tests__/CtaTile.test.tsx components/__tests__/ScreenTitle.test.tsx components/__tests__/Wordmark.test.tsx`
+Expected: FAIL — three `Cannot find module` errors.
+
+- [ ] **Step 3: Write the implementations**
+
+Create `components/CtaTile.tsx`:
+
+```tsx
+import React from "react";
+import {AntDesign} from "@expo/vector-icons";
+import {YStack} from "tamagui";
+
+import DotMatrixText from "@/components/DotMatrixText";
+import {palette} from "@/constants/colors";
+
+type Props = {
+    /** An AntDesign glyph name. v15 uses kebab-case, e.g. `plus-circle`. */
+    icon: React.ComponentProps<typeof AntDesign>["name"];
+    /** Shown in Doto, so keep it short and upper-case. */
+    label: string;
+    onPress: () => void;
+    /** Spell the action out here when the label is an abbreviation. */
+    accessibilityLabel?: string;
+    disabled?: boolean;
+};
+
+/**
+ * A primary action: icon above a dot-matrix label.
+ *
+ * The home screen shows two of these at equal weight. There is deliberately no
+ * primary/secondary variant — if a third action ever earns equal weight it joins
+ * the row; if it does not, it does not belong here.
+ */
+export default function CtaTile({
+    icon,
+    label,
+    onPress,
+    accessibilityLabel,
+    disabled = false
+}: Props) {
+    return (
+        <YStack
+            flex={1}
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the icon and label are announced as two separate items.
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel ?? label}
+            accessibilityState={{disabled}}
+            onPress={disabled ? undefined : onPress}
+            alignItems="center"
+            justifyContent="center"
+            gap="$2"
+            paddingVertical="$4"
+            borderRadius="$6"
+            backgroundColor={palette.raised}
+            borderWidth={1}
+            borderColor={palette.line}
+            opacity={disabled ? 0.4 : 1}
+            pressStyle={disabled ? undefined : {opacity: 0.7, scale: 0.98}}>
+            <AntDesign testID="cta-tile-icon" name={icon} size={22}
+                       color={disabled ? palette.muted : palette.text}/>
+            <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
+                           color={disabled ? palette.muted : palette.text}>
+                {label}
+            </DotMatrixText>
+        </YStack>
+    );
+}
+```
+
+Create `components/ScreenTitle.tsx`:
+
+```tsx
+import React from "react";
+import {XStack, Text} from "tamagui";
+
+import DotMatrixText from "@/components/DotMatrixText";
+import {palette} from "@/constants/colors";
+
+const TITLE_FONT_SIZE = 28;
+
+/**
+ * How far the superscript sits below the top of the title's line. Derived from
+ * the title size rather than written as a literal so the two cannot drift apart.
+ */
+const COUNT_LIFT = Math.round(TITLE_FONT_SIZE * 0.14);
+
+type Props = {
+    /** Prose, so this is Inter — never rendered in Doto. */
+    title: string;
+    /** Rendered as a small superscript. Hidden when absent or zero. */
+    count?: number;
+};
+
+/**
+ * A screen title with a machine-counted superscript beside it.
+ *
+ * The split is the typography rule in miniature: the word is prose, the number
+ * is a machine-derived value.
+ */
+export default function ScreenTitle({title, count}: Props) {
+    const showCount = typeof count === "number" && count > 0;
+
+    return (
+        <XStack alignItems="flex-start" gap="$1">
+            {/* Without flexShrink a long title keeps its full measured width
+                and pushes the count off the edge of the screen. */}
+            <Text fontSize={TITLE_FONT_SIZE} fontWeight="700" color={palette.text}
+                  flexShrink={1} numberOfLines={1}>
+                {title}
+            </Text>
+            {showCount && (
+                <DotMatrixText testID="screen-title-count" fontSize={11}
+                               weight="bold" color={palette.muted}
+                               style={{marginTop: COUNT_LIFT}}>
+                    {count}
+                </DotMatrixText>
+            )}
+        </XStack>
+    );
+}
+```
+
+Create `components/Wordmark.tsx`:
+
+```tsx
+import React from "react";
+import {XStack} from "tamagui";
+
+import DotMatrixText from "@/components/DotMatrixText";
+import {palette} from "@/constants/colors";
+
+type Props = {
+    fontSize?: number;
+    color?: string;
+    /** Colour of the `++`. Defaults to the same as the letters. */
+    plusColor?: string;
+};
+
+/**
+ * The `XBRW++` lockup.
+ *
+ * The name is an abbreviation and a version marker rather than a word, which is
+ * why it is allowed in Doto — it is a label on a machine, not prose. The `++`
+ * carries the fork's identity, so it is the part that may be tinted.
+ */
+export default function Wordmark({
+    fontSize = 15,
+    color = palette.text,
+    plusColor
+}: Props) {
+    return (
+        <XStack
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label below are inert and
+            // the two halves are announced as "XBRW" and "++" separately.
+            accessible
+            accessibilityRole="header" accessibilityLabel="XBRW++"
+            alignItems="center">
+            <DotMatrixText fontSize={fontSize} weight="extrabold" letterSpacing={1}
+                           color={color}>
+                XBRW
+            </DotMatrixText>
+            <DotMatrixText fontSize={fontSize} weight="extrabold" letterSpacing={1}
+                           color={plusColor ?? color}>
+                ++
+            </DotMatrixText>
+        </XStack>
+    );
+}
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx jest components/__tests__/CtaTile.test.tsx components/__tests__/ScreenTitle.test.tsx components/__tests__/Wordmark.test.tsx`
+Expected: PASS, 28 tests across 3 suites.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/CtaTile.tsx components/ScreenTitle.tsx components/Wordmark.tsx \
+        components/__tests__/CtaTile.test.tsx \
+        components/__tests__/ScreenTitle.test.tsx \
+        components/__tests__/Wordmark.test.tsx
+git commit -m "Add the home chrome primitives"
+```
+
+---
+
+### Task 11: RecipeCard
+
+**Files:**
+- Create: `components/RecipeCard.tsx`
+- Test: `components/__tests__/RecipeCard.test.tsx`
+
+The centrepiece. Compact card shape, accent fill, the pour profile drawn behind
+at low opacity, Doto stats, and a beverage marker. It replaces nothing yet —
+`components/RecipeItem.tsx` stays in place until sub-project 4 swaps it.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `components/__tests__/RecipeCard.test.tsx`:
+
+```tsx
+import React from "react";
+import {fireEvent, screen, within} from "@testing-library/react-native";
+
+import RecipeCard from "@/components/RecipeCard";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Pour from "@/library/Pour";
+import {accents, onAccent} from "@/constants/colors";
+import type {RecipeWithAccent} from "@/library/accent";
+import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
+import {renderWithProviders} from "@/test-utils/render";
+
+/** The face a node is set in. Tamagui flattens its style; RN keeps the array. */
+function fontFamilyOf(text: string): string {
+    const style = screen.getByText(text).props.style;
+    const list = (Array.isArray(style) ? style : [style]) as
+        {fontFamily?: string}[];
+    return String(list.reduce<string | undefined>(
+        (found, s) => s?.fontFamily ?? found, undefined
+    ));
+}
+
+/** The outline path of the pour profile, which react-native-svg renders deep. */
+function profilePath(): string {
+    const svg = screen.getByTestId("recipe-card-profile");
+    const paths: string[] = [];
+    const walk = (node: {type?: unknown; props?: {d?: string}; children?: unknown[]}) => {
+        if (typeof node.props?.d === "string") {
+            paths.push(node.props.d);
+        }
+        for (const child of node.children ?? []) {
+            if (typeof child !== "string") {
+                walk(child as Parameters<typeof walk>[0]);
+            }
+        }
+    };
+    walk(svg as unknown as Parameters<typeof walk>[0]);
+    return paths.join("|");
+}
+
+const TOUCH = {
+    nativeEvent: {
+        touches:        [],
+        changedTouches: [],
+        locationX:      1,
+        locationY:      1,
+        pageX:          1,
+        pageY:          1,
+        timestamp:      0
+    }
+};
+
+/**
+ * A real touch.
+ *
+ * Deliberately not `fireEvent.press`: Tamagui drives presses through the
+ * responder system rather than an `onPress` prop on the host view, so
+ * `fireEvent.press` finds no handler there and walks up the React tree until it
+ * reaches a component's own `onPress` prop — the mock the test just passed in.
+ * That passes whether or not anything is wired up.
+ */
+async function press(element: Parameters<typeof fireEvent>[0]) {
+    await fireEvent(element, "responderGrant", TOUCH);
+    await fireEvent(element, "responderRelease", TOUCH);
+}
+
+function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
+    const recipe = new Recipe();
+    recipe.title = "Ethiopia Guji";
+    recipe.dosage = 18;
+    recipe.ratio = 16;
+    recipe.grindSize = 25;
+    recipe.cupType = CUP_TYPE.XPOD;
+    recipe.pours = [new Pour(0, 288)];
+
+    return Object.assign(recipe, overrides);
+}
+
+describe("RecipeCard", () => {
+    it("renders the recipe name", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("shows the dose and ratio", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // `DigitRoll` folds its suffix into the accessible label, so the dose
+        // announces as "18g" rather than a bare number.
+        expect(screen.getByLabelText("18g")).toBeTruthy();
+        expect(screen.getByLabelText("16")).toBeTruthy();
+    });
+
+    it("marks a coffee recipe as COFFEE", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("COFFEE")).toBeTruthy();
+    });
+
+    it("marks a tea recipe as TEA", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("TEA")).toBeTruthy();
+    });
+
+    it("hides the coffee marker when asked", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} showCoffeeMarker={false}/>
+        );
+        expect(screen.queryByText("COFFEE")).toBeNull();
+    });
+
+    it("still shows the tea marker when the coffee marker is hidden", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()} showCoffeeMarker={false}/>
+        );
+        expect(screen.getByText("TEA")).toBeTruthy();
+    });
+
+    it("draws a coffee recipe from the coffee half of the palette", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(accents.coffee).toContain(card.props.style.backgroundColor);
+    });
+
+    it("honours a saved accent rather than picking its own", async () => {
+        // The accent is assigned once, on save, and persisted. A card that
+        // recomputed it would repaint the library whenever anything changed.
+        const recipe = makeRecipe();
+        (recipe as RecipeWithAccent).accentIndex = 5;
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
+        expect(screen.getByTestId("recipe-card").props.style.backgroundColor)
+            .toBe(accents.coffee[5]);
+    });
+
+    it("draws a tea recipe from the tea half of the palette", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(accents.tea).toContain(card.props.style.backgroundColor);
+    });
+
+    it("keeps its text dark enough to read on a pastel", async () => {
+        // Every accent is a light pastel, so the one thing that must never
+        // happen is white text.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("Ethiopia Guji").props.style)
+            .toEqual(expect.objectContaining({color: onAccent.text}));
+        // The dose is a DigitRoll, so its colour lives on the digit glyphs —
+        // which are hidden from accessibility, and so from the default queries.
+        const digit = within(screen.getByLabelText("18g"))
+            .getAllByText("8", {includeHiddenElements: true})[0];
+        expect((digit.props.style as {color?: string}[])
+            .some((s) => s?.color === onAccent.text)).toBe(true);
+    });
+
+    it("draws the pour profile from this recipe's pours", async () => {
+        // The silhouette is how a recipe is recognised before it is read, so a
+        // profile that ignores the pours is worse than none.
+        const one = makeRecipe();
+        const many = makeRecipe();
+        many.pours = [new Pour(0, 60), new Pour(1, 120), new Pour(2, 108)];
+
+        const {rerender} = await renderWithProviders(
+            <RecipeCard recipe={one} onPress={jest.fn()}/>
+        );
+        const single = profilePath();
+        expect(single).toBeTruthy();
+
+        await rerender(<RecipeCard recipe={many} onPress={jest.fn()}/>);
+        expect(profilePath()).not.toBe(single);
+    });
+
+    it("keeps the profile behind the content, out of the way of touches", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Absolutely positioned and transparent to touch, or it would swallow
+        // presses meant for the card and the row actions.
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        expect(layer.props.pointerEvents).toBe("none");
+        expect(layer.props.style).toEqual(
+            expect.objectContaining({position: "absolute"})
+        );
+    });
+
+    it("shows the grind for coffee and hides it for tea", async () => {
+        // A tea card always writes the default grind, so showing a grind number
+        // beside it would be a number the machine ignores.
+        const {rerender} = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByLabelText("25")).toBeTruthy();
+
+        await rerender(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.queryByText("GRIND")).toBeNull();
+    });
+
+    it("is a card of at least a card's height, clipped to its corners", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const style = screen.getByTestId("recipe-card").props.style as
+            Record<string, number | string>;
+        // The profile is drawn oversized and flush to the corner; without the
+        // clip it spills out of the card.
+        expect(style.overflow).toBe("hidden");
+        expect(style.borderTopLeftRadius).toBeGreaterThan(0);
+        expect(style.paddingTop).toBeGreaterThan(0);
+        expect(style.justifyContent).toBe("space-between");
+
+        // A minimum, not a fixed height. Combined with the clip above, a fixed
+        // height crops the stats away as soon as the OS text size grows.
+        expect(style.minHeight).toBeGreaterThan(0);
+        expect(style.height).toBeUndefined();
+    });
+
+    it("bounds the name's growth the way the dot matrix is bounded", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Unbounded, the prose outgrows the data it sits above.
+        expect(screen.getByText("Ethiopia Guji").props.maxFontSizeMultiplier)
+            .toBe(DOTO_MAX_FONT_SCALE);
+    });
+
+    it("labels each number with the stat it belongs to", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // Swapping two labels leaves every value still present and correct, so
+        // the pairing has to be asserted, not just the numbers.
+        for (const [label, value] of [["DOSE", "18g"], ["RATIO", "16"],
+                                      ["GRIND", "25"]] as const) {
+            const stat = screen.getByText(label).parent!;
+            expect(within(stat).getByLabelText(value)).toBeTruthy();
+        }
+    });
+
+    it("sets the stat labels and the marker in dot matrix", async () => {
+        // Prose is Inter, machine values are Doto. Labels on a machine's
+        // readout are Doto too; the recipe name is the only prose here.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        for (const text of ["DOSE", "RATIO", "GRIND", "COFFEE"]) {
+            expect(fontFamilyOf(text)).toMatch(/^Doto-/);
+        }
+        expect(fontFamilyOf("Ethiopia Guji")).not.toMatch(/^Doto-/);
+        // ...and set as a name, not as body copy: it is the first thing read.
+        expect(screen.getByText("Ethiopia Guji").props.style)
+            .toEqual(expect.objectContaining({fontSize: 17, fontWeight: "700"}));
+    });
+
+    it("keeps the profile a faint watermark, behind and out of the way", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        const style = layer.props.style as Record<string, number>;
+        // Drawn at full strength, or over the title, it stops being a
+        // background and starts competing with the text.
+        expect(style.opacity).toBeLessThan(1);
+        expect(style.right).toBe(0);
+        expect(style.bottom).toBe(0);
+
+        const svg = screen.getByTestId("recipe-card-profile");
+        expect(svg.props.width).toBeGreaterThan(100);
+        expect(svg.props.height).toBeGreaterThan(24);
+    });
+
+    it("caps a long name at two lines instead of shoving the marker aside", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({title: "A ".repeat(40) + "Name"})}
+                        onPress={jest.fn()}/>
+        );
+        const title = screen.getByText(/Name$/);
+        expect(title.props.numberOfLines).toBe(2);
+        // Without flex the name takes its full measured width and pushes the
+        // marker off the card.
+        expect(title.props.style).toEqual(expect.objectContaining({flex: 1}));
+        expect(screen.getByText("COFFEE")).toBeTruthy();
+    });
+
+    it("shows an unset ratio and grind as unset, not as zero", async () => {
+        // Recipe seeds both to -1, and DigitRoll clamps at zero -- so passing a
+        // sentinel through would claim a ratio of 1:0.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({ratio: -1, grindSize: -1})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.queryByLabelText("0")).toBeNull();
+        expect(screen.getAllByText("—")).toHaveLength(2);
+    });
+
+    it("announces everything the grouping hides", async () => {
+        // `accessible` collapses the subtree into one element on iOS, so the
+        // marker and the stats are only ever heard if they are in this label.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const label = screen.getByTestId("recipe-card").props
+            .accessibilityLabel as string;
+        expect(label).toContain("Ethiopia Guji");
+        expect(label).toContain("coffee");
+        expect(label).toContain("18");
+        expect(label).toContain("16");
+        expect(label).toContain("25");
+    });
+
+    it("says tea out loud rather than leaving it to the colour", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .toContain("tea");
+    });
+
+    it("gives an untitled recipe a name to be announced by", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({title: ""})} onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .toContain("Untitled");
+    });
+
+    it("is a single accessibility element, and says what it is", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessible).toBe(true);
+        expect(card.props.accessibilityRole).toBe("button");
+    });
+
+    it("offers the row actions to a screen reader, which cannot swipe", async () => {
+        // The buttons are nested inside the accessible group, so VoiceOver
+        // cannot reach them; and the swipe gesture they mirror is not available
+        // either. Without these, deleting is a sighted-only feature.
+        const onDelete = jest.fn();
+        const onDuplicate = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={onDuplicate} onDelete={onDelete}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual([
+            {name: "duplicate", label: "Duplicate recipe"},
+            {name: "delete", label: "Delete recipe"}
+        ]);
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "delete"}});
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDuplicate).not.toHaveBeenCalled();
+    });
+
+    it("offers no action it cannot perform", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions)
+            .toEqual([]);
+    });
+
+    it("calls onPress when tapped", async () => {
+        const onPress = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
+        );
+
+        await press(screen.getByTestId("recipe-card"));
+
+        expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides the row actions by default", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()}/>
+        );
+        expect(screen.queryByRole("button", {name: "Delete recipe"})).toBeNull();
+    });
+
+    it("reveals the row actions in edit mode", async () => {
+        const onPress = jest.fn();
+        const onDelete = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={onPress}
+                        onDuplicate={jest.fn()} onDelete={onDelete} editing/>
+        );
+
+        await press(screen.getByRole("button", {name: "Delete recipe"}));
+
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        // A delete that also opens the recipe it just deleted is a bug.
+        expect(onPress).not.toHaveBeenCalled();
+    });
+
+    it("gives the row actions targets big enough to hit, and apart", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+        const duplicate = screen.getByRole("button", {name: "Duplicate recipe"});
+        const style = duplicate.props.style as Record<string, number>;
+        // Padded rather than hit-slopped: slop on adjacent icons overlaps into
+        // the gap, and the later sibling wins -- so a tap at the edge of
+        // duplicate would delete the recipe.
+        expect(duplicate.props.hitSlop).toBeUndefined();
+        expect(style.paddingTop * 2 + 18).toBeGreaterThanOrEqual(44);
+        expect(style.paddingLeft * 2 + 18).toBeGreaterThanOrEqual(44);
+    });
+
+    it("duplicates from the row actions too", async () => {
+        const onDuplicate = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={onDuplicate} onDelete={jest.fn()} editing/>
+        );
+
+        await press(screen.getByRole("button", {name: "Duplicate recipe"}));
+
+        expect(onDuplicate).toHaveBeenCalledTimes(1);
+    });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/RecipeCard.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/RecipeCard'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `components/RecipeCard.tsx`:
+
+```tsx
+import React from "react";
+import {View} from "react-native";
+import {AntDesign} from "@expo/vector-icons";
+import {XStack, YStack, Text} from "tamagui";
+
+import DigitRoll from "@/components/DigitRoll";
+import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
+import PourProfile from "@/components/PourProfile";
+import Recipe from "@/library/Recipe";
+import {accentGroupFor, resolveAccent} from "@/library/accent";
+import {onAccent} from "@/constants/colors";
+
+const CARD_HEIGHT = 116;
+const PROFILE_HEIGHT = 56;
+
+/**
+ * The smallest comfortable touch target, per the HIG. The action icons are 18px
+ * and are padded out to this rather than given `hitSlop`, because hit slop on
+ * adjacent icons overlaps into the gap between them and the later sibling wins —
+ * which would make a tap at the edge of "duplicate" delete the recipe instead.
+ */
+const TOUCH_TARGET = 44;
+const ACTION_ICON_SIZE = 18;
+const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
+
+/**
+ * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
+ * `DigitRoll` clamps at zero, so passing a sentinel straight through would tell
+ * the user the ratio is 0 — not a possible value, and indistinguishable from a
+ * real reading.
+ */
+function isSet(value: number): boolean {
+    return Number.isFinite(value) && value > 0;
+}
+
+type StatProps = {
+    label: string;
+    value: number;
+    suffix?: string;
+};
+
+function Stat({label, value, suffix}: StatProps) {
+    return (
+        <YStack gap="$0.5">
+            <DotMatrixText fontSize={11} weight="semibold" letterSpacing={1.2}
+                           color={onAccent.label}>
+                {label}
+            </DotMatrixText>
+            {isSet(value) ? (
+                <DigitRoll value={value} suffix={suffix} fontSize={18}
+                           weight="extrabold" color={onAccent.text}/>
+            ) : (
+                <DotMatrixText fontSize={18} weight="extrabold"
+                               color={onAccent.text}>
+                    —
+                </DotMatrixText>
+            )}
+        </YStack>
+    );
+}
+
+type ActionProps = {
+    label: string;
+    icon: React.ComponentProps<typeof AntDesign>["name"];
+    testID: string;
+    onPress: () => void;
+};
+
+function Action({label, icon, testID, onPress}: ActionProps) {
+    return (
+        <YStack accessible accessibilityRole="button" accessibilityLabel={label}
+                alignItems="center" justifyContent="center"
+                padding={ACTION_PADDING} onPress={onPress}>
+            <AntDesign testID={testID} name={icon} size={ACTION_ICON_SIZE}
+                       color={onAccent.marker}/>
+        </YStack>
+    );
+}
+
+type Props = {
+    recipe: Recipe;
+    onPress: () => void;
+    /** When true, the destructive actions are visible rather than swipe-only. */
+    editing?: boolean;
+    onDuplicate?: () => void;
+    onDelete?: () => void;
+    /**
+     * The `TEA` marker is always shown; the `COFFEE` marker is redundant for a
+     * mostly-coffee library and sub-project 6 adds a setting to hide it.
+     */
+    showCoffeeMarker?: boolean;
+};
+
+/**
+ * A recipe as a card.
+ *
+ * The name is prose and stays in Inter. Dose, ratio and grind are
+ * machine-derived and are Doto. The pour profile is drawn behind the content at
+ * low contrast, so a recipe is recognisable by its silhouette before it is read.
+ */
+export default function RecipeCard({
+    recipe,
+    onPress,
+    editing = false,
+    onDuplicate,
+    onDelete,
+    showCoffeeMarker = true
+}: Props) {
+    const accent = resolveAccent(recipe);
+    const isTea = accentGroupFor(recipe) === "tea";
+    const marker = isTea ? "TEA" : "COFFEE";
+    const showMarker = isTea || showCoffeeMarker;
+
+    // `accessible` groups the whole subtree into one element on iOS, so nothing
+    // inside is announced on its own. Everything the card shows has to be in
+    // this label or it is, to a screen reader, conveyed by the accent colour
+    // alone -- which is the state the TEA/COFFEE marker exists to prevent.
+    const summary = [
+        recipe.title === "" ? "Untitled recipe" : recipe.title,
+        marker.toLowerCase(),
+        isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
+        isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
+        !isTea && isSet(recipe.grindSize) ? `grind ${recipe.grindSize}` : undefined
+    ].filter((part) => part !== undefined).join(", ");
+
+    // The row actions are nested inside that same group, so VoiceOver cannot
+    // reach the buttons. These are the only non-visual path to them -- and the
+    // swipe gesture they mirror is not available to a screen reader either.
+    const actions = [
+        ...(onDuplicate !== undefined
+            ? [{name: "duplicate", label: "Duplicate recipe"}]
+            : []),
+        ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : [])
+    ];
+
+    return (
+        <YStack
+            testID="recipe-card"
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label are inert and the
+            // card is announced as a loose pile of numbers.
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={summary}
+            accessibilityActions={actions}
+            onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === "duplicate") {
+                    onDuplicate?.();
+                } else if (event.nativeEvent.actionName === "delete") {
+                    onDelete?.();
+                }
+            }}
+            onPress={onPress}
+            pressStyle={{opacity: 0.85, scale: 0.99}}
+            // A minimum rather than a fixed height: the title and the Doto stats
+            // both grow with the OS text size, and a fixed height plus the clip
+            // below would crop the stats away for exactly those users.
+            minHeight={CARD_HEIGHT}
+            borderRadius="$8"
+            overflow="hidden"
+            justifyContent="space-between"
+            gap="$2"
+            padding="$3.5"
+            style={{backgroundColor: accent}}>
+
+            <View pointerEvents="none"
+                  style={{position: "absolute", right: 0, bottom: 0, opacity: 0.5}}>
+                <PourProfile testID="recipe-card-profile" pours={recipe.pours}
+                             width={200} height={PROFILE_HEIGHT}/>
+            </View>
+
+            <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
+                {/* Bounded to the same scale Doto is, so the two halves of the
+                    card grow together rather than the prose swamping the data. */}
+                <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
+                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                      color={onAccent.text}>
+                    {recipe.title}
+                </Text>
+                {showMarker && (
+                    <DotMatrixText fontSize={11} weight="semibold" letterSpacing={1.4}
+                                   color={onAccent.marker}>
+                        {marker}
+                    </DotMatrixText>
+                )}
+            </XStack>
+
+            <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
+                <XStack gap="$5">
+                    <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
+                    <Stat label="RATIO" value={recipe.ratio}/>
+                    {!isTea && <Stat label="GRIND" value={recipe.grindSize}/>}
+                </XStack>
+
+                {editing && (
+                    <XStack gap="$1">
+                        {onDuplicate !== undefined && (
+                            <Action label="Duplicate recipe" icon="copy"
+                                    testID="recipe-card-duplicate"
+                                    onPress={onDuplicate}/>
+                        )}
+                        {onDelete !== undefined && (
+                            <Action label="Delete recipe" icon="delete"
+                                    testID="recipe-card-delete" onPress={onDelete}/>
+                        )}
+                    </XStack>
+                )}
+            </XStack>
+        </YStack>
+    );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/RecipeCard.test.tsx`
+Expected: PASS, 31 tests.
+
+The action buttons sit inside a card that is itself pressable. If a tap on one
+of them also fires the card's `onPress`, give the inner stacks
+`onStartShouldSetResponderCapture` or stop propagation — a delete that also
+opens the recipe is a bug, not a test artefact.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/RecipeCard.tsx components/__tests__/RecipeCard.test.tsx
+git commit -m "Add the RecipeCard component"
+```
+
+---
+
+### Task 12: Switch the app to dark-only
+
+**Files:**
+- Modify: `tamagui.config.ts`, `app/_layout.tsx`, `test-utils/render.tsx`
+- Modify: every file under `app/` and `components/` that reads the old palette or `useColorScheme`
+
+This is the task that makes `npm run typecheck` green again after Task 2.
+
+- [ ] **Step 1: Find every call site that still needs migrating**
+
+```bash
+cd /Users/jesperhessius/Dev/XBRecipeWriterPlus
+npm run typecheck 2>&1 | grep -E "^(app|components|hooks)/" | sort -u
+grep -rn "useColorScheme" app components hooks
+```
+
+Expected: a list of files. Every one of them is in scope for this task.
+
+- [ ] **Step 2: Default the Tamagui config to dark**
+
+In `tamagui.config.ts`, change the settings block:
+
+```ts
+    settings: {
+        defaultTheme: "dark",
+        shouldAddPrefersColorThemes: false
+    }
+```
+
+Keep `shouldAddPrefersColorThemes` — dropping it collapses Tamagui's config type
+inference and produces around forty cascading typecheck errors across every
+Tamagui component in the app.
+
+- [ ] **Step 3: Make the test provider dark**
+
+In `test-utils/render.tsx`, change `defaultTheme="light"` to `defaultTheme="dark"`
+and change the `<Theme name="light">` wrapper, if present, to `<Theme name="dark">`.
+
+- [ ] **Step 4: Remove colour-scheme branching from the root layout**
+
+In `app/_layout.tsx`:
+
+- Delete the `useColorScheme` import and every use of it.
+- Delete the locally built `LightTheme` object.
+- Load the Doto weights alongside the existing font load:
+
+```tsx
+    const [loaded] = useFonts({
+        SpaceMono:         require("../assets/fonts/SpaceMono-Regular.ttf"),
+        "Doto-SemiBold":   require("../assets/fonts/Doto-SemiBold.ttf"),
+        "Doto-Bold":       require("../assets/fonts/Doto-Bold.ttf"),
+        "Doto-ExtraBold":  require("../assets/fonts/Doto-ExtraBold.ttf")
+    });
+```
+
+- Build a single navigation theme from the palette:
+
+```tsx
+const AppTheme = {
+    ...DarkTheme,
+    colors: {
+        ...DarkTheme.colors,
+        background: palette.base,
+        card:       palette.base,
+        text:       palette.text,
+        border:     palette.line,
+        primary:    palette.text,
+        notification: palette.danger
+    }
+};
+```
+
+- Pass `AppTheme` unconditionally to `ThemeProvider`, use `<Theme name="dark">`
+  for the Tamagui `Theme`, and set the `Stack` chrome to `palette.base`
+  background with `palette.text` tint. `DarkTheme` is imported from
+  `expo-router`, never from `@react-navigation/*`.
+
+- [ ] **Step 5: Migrate every remaining call site**
+
+Work through the list from Step 1. The mapping from the old palette to the new:
+
+| Old key / intent | New token |
+|---|---|
+| screen background, `navigationBackground`, `screenBackground` | `palette.base` |
+| card / sheet background | `palette.surface` |
+| input or tile background, `surfaceDisabled` | `palette.raised` |
+| `outline`, border, divider | `palette.line` |
+| primary text, `dialogHeading` | `palette.text` |
+| secondary text, `dialogBody`, `brandHelp` | `palette.dim` |
+| tertiary / placeholder text, disabled text | `palette.muted` |
+| `brand`, `brandIncrement`, brand / accent chrome | `palette.text` |
+| `onBrand`, `onLight` — content sitting **on** a brand fill | `palette.base` |
+| `brandPressed` | `palette.dim` |
+| `brandDisabled` — a disabled *fill* | `palette.muted` |
+| destructive, `dangerTrack` | `palette.danger` |
+| confirmation | `palette.success` |
+
+Read each call site and work out what the colour is *for* rather than
+substituting mechanically. Two traps, both of which caught the first pass:
+
+- A disabled **fill** and a disabled **surface** are not the same. A disabled
+  button is a grey fill with dark ink, because the enabled one is a white fill;
+  a disabled input is *recessed* to `palette.raised`, because the enabled one is
+  already dark. Painting an input `palette.muted` makes a disabled field the
+  brightest thing on the screen.
+- `onLight` means "on a light fill". Where the fill it sat on is now dark — the
+  Android NFC sheet, the duplicate swipe action — the content must go to
+  `palette.text`, not `palette.base`, or it is black on black.
+
+Where a component picked a colour from `useColorScheme()`, delete the branch and
+keep the dark value.
+
+- [ ] **Step 6: Verify**
+
+```bash
+npm run typecheck && npm run lint && npm test
+```
+
+Expected: typecheck silent, lint clean, all tests pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "Switch the app to dark-only and migrate every colour call site"
+```
+
+---
+
+### Task 13: Branding assets and app metadata
+
+**Files:**
+- Create: `assets/branding/xbrw-icon.svg`, `scripts/generate-icons.sh`
+- Modify: `assets/images/icon.png`, `assets/images/adaptive-icon.png`, `assets/images/favicon.png`
+- Create: `assets/images/splash-icon.png`
+- Modify: `app.json`
+
+- [ ] **Step 1: Copy the logo into the repository**
+
+`AgentResources/` is gitignored, so the source SVG must live in the repo.
+
+```bash
+cd /Users/jesperhessius/Dev/XBRecipeWriterPlus
+mkdir -p assets/branding
+cp "AgentResources/Branding/xbrw-icon-new.svg" assets/branding/xbrw-icon.svg
+head -2 assets/branding/xbrw-icon.svg
+```
+
+Expected: an `<svg` element with a `1024` viewBox or width.
+
+- [ ] **Step 2: Write the generator script**
+
+Create `scripts/generate-icons.sh`. Note the adaptive-icon branch: Android
+masks an adaptive foreground and only guarantees the middle ~66%, while this
+mark fills ~93% of the canvas, so rendering the same file for both crops the
+outer ring of dots off on Android. The foreground is inset into the safe zone
+by wrapping the source in a scaled `<g>` before rendering.
+
+```bash
+#!/usr/bin/env bash
+# Regenerates the raster app assets from assets/branding/xbrw-icon.svg.
+#
+# Requires rsvg-convert (brew install librsvg). The outputs are committed, so
+# this only needs running when the SVG changes.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+SRC="assets/branding/xbrw-icon.svg"
+OUT="assets/images"
+
+if ! command -v rsvg-convert >/dev/null 2>&1; then
+    echo "rsvg-convert not found. Install it with: brew install librsvg" >&2
+    exit 1
+fi
+
+render() {
+    local size="$1" dest="$2" src="${3:-$SRC}"
+    rsvg-convert -w "$size" -h "$size" -b "#000000" "$src" -o "$OUT/$dest"
+    echo "  $dest (${size}x${size})"
+}
+
+# Android masks an adaptive icon's foreground: only the middle ~66% is
+# guaranteed to survive, and the mark fills almost the whole canvas. Rendering
+# the same file for both would crop the outer ring of dots off on Android, so
+# the foreground is inset into that safe zone first.
+SAFE_ZONE=0.66
+ADAPTIVE_SVG="$(mktemp -t xbrw-adaptive).svg"
+trap 'rm -f "$ADAPTIVE_SVG"' EXIT
+
+python3 - "$SRC" "$ADAPTIVE_SVG" "$SAFE_ZONE" <<'PYTHON'
+import re, sys
+
+source, destination, scale = sys.argv[1], sys.argv[2], float(sys.argv[3])
+svg = open(source).read()
+
+opening = re.match(r"<svg[^>]*>", svg)
+if opening is None:
+    raise SystemExit("no <svg> element in " + source)
+
+box = re.search(r'viewBox="([\d.\-\s]+)"', opening.group(0))
+if box is None:
+    raise SystemExit("no viewBox in " + source)
+_, _, width, height = (float(n) for n in box.group(1).split())
+
+body = svg[opening.end():svg.rindex("</svg>")]
+offset_x = width * (1 - scale) / 2
+offset_y = height * (1 - scale) / 2
+
+open(destination, "w").write(
+    f"{opening.group(0)}"
+    f'<g transform="translate({offset_x:g} {offset_y:g}) scale({scale:g})">'
+    f"{body}</g></svg>"
+)
+PYTHON
+
+echo "Rendering from $SRC:"
+render 1024 icon.png
+render 1024 adaptive-icon.png "$ADAPTIVE_SVG"
+render  512 splash-icon.png
+render   48 favicon.png
+echo "Done."
+```
+
+- [ ] **Step 3: Run it**
+
+```bash
+chmod +x scripts/generate-icons.sh
+./scripts/generate-icons.sh
+file assets/images/*.png
+```
+
+Expected: four `PNG image data` lines with the sizes `1024 x 1024`,
+`1024 x 1024`, `512 x 512` and `48 x 48`.
+
+- [ ] **Step 4: Update `app.json`**
+
+Change these keys. Everything else stays as it is.
+
+```json
+{
+  "expo": {
+    "name": "XBRW++",
+    "version": "2.4.0",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "ios": {
+      "userInterfaceStyle": "dark"
+    },
+    "android": {
+      "userInterfaceStyle": "dark",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
+    }
+  }
+}
+```
+
+Do **not** add a top-level `splash` key. This project configures the splash
+through the `expo-splash-screen` plugin, and the legacy key is ignored when
+that plugin is present. Point the plugin's `image` at `splash-icon.png`
+instead, and **delete its `dark` block**: with `ios.userInterfaceStyle` set,
+prebuild warns that "the existing `userInterfaceStyle` property is preventing
+splash screen from working properly". A dark-variant splash is meaningless in
+a dark-only app anyway.
+
+The version bump from `2.3.0` to `2.4.0` is not optional:
+`runtimeVersion.policy` is `appVersion`, and changing the icon, splash and
+interface style is native-affecting. Do not change `slug`, `scheme` or the
+bundle identifiers — that would orphan installed builds and break the share
+intent.
+
+- [ ] **Step 5: Verify the config still parses and is healthy**
+
+```bash
+npx expo config --type public > /dev/null && echo "config ok"
+npx expo-doctor
+```
+
+Expected: `config ok`, then expo-doctor reporting all checks passed. expo-doctor
+is a hard failure in CI, so it must be green here.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add assets/branding/xbrw-icon.svg scripts/generate-icons.sh \
+        assets/images/icon.png assets/images/adaptive-icon.png \
+        assets/images/splash-icon.png assets/images/favicon.png \
+        app.json plugins/withShareExtensionCcache.js
+git commit -m "Rebrand to XBRW++ with generated dark app assets"
+```
+
+- [ ] **Step 7: Regenerate the native projects**
+
+`ios/` and `android/` are generated by CNG and gitignored, so this produces no
+diff — but the change will not appear on a device until it is run.
+
+```bash
+npx expo prebuild --clean
+```
+
+Expected: completes without error, ending in `Finished prebuild` and
+`Installed CocoaPods`. Nothing to commit.
+
+**This step is load-bearing, not a formality.** The `.xcodeproj` is named after
+the sanitised `expo.name`, so renaming the app to `XBRW++` renames it from
+`XBRecipeWriter.xcodeproj` to `XBRW.xcodeproj` — and
+`plugins/withShareExtensionCcache.js` hardcoded the old path, so prebuild
+failed with `ENOENT ... project.pbxproj`. That breaks every EAS build while
+leaving `expo config` and `expo-doctor` perfectly green, so nothing but a real
+prebuild catches it. The plugin now takes the name from
+`cfg.modRequest.projectName`, falling back to scanning `ios/` for the
+`.xcodeproj`. Add `plugins/withShareExtensionCcache.js` to the Step 6 commit.
+
+One warning is pre-existing and unrelated: `android: withBuildScriptExtVersion:
+Cannot set minimum buildscript.ext.compileSdkVersion`.
+
+---
+
+### Task 14: Animated splash
+
+**Files:**
+- Create: `components/SplashOverlay.tsx`, `components/__tests__/SplashOverlay.test.tsx`
+- Modify: `app/_layout.tsx`, `constants/motion.ts`
+
+`expo-splash-screen` shows the static PNG until the JS bundle has hydrated. This
+overlay covers the seam between that and the app's first paint.
+
+**Design corrections made during review — read these before implementing.**
+
+1. **The overlay must draw the same asset the native splash drew.** An earlier
+   draft rendered the `Wordmark` while the native splash shows
+   `splash-icon.png`, which is the bloom mark — two different images. The
+   "invisible handoff" the component exists for was therefore false: the mark
+   was replaced by text in a single frame. The overlay now renders that same
+   PNG at `MARK_SIZE = 200`, which must stay equal to the `imageWidth` given to
+   the `expo-splash-screen` plugin in `app.json`. A test asserts that equality
+   by reading `app.json`, because nothing else would catch the drift.
+2. **There is no scale entrance.** A draft grew the lockup from `0.92`, but the
+   static splash is at rest, so the first overlay frame was smaller than the
+   frame it replaced and visibly popped. Worse, `SplashOverlay` is the *first*
+   `useReducedMotion` instance in the app's lifetime, so it is the one mount
+   where that hook's cache is guaranteed cold — a Reduce Motion user would have
+   seen the grow start and then snap. Removing the scale removes both.
+3. **The whole overlay fades, not just its contents.** Animating only the inner
+   lockup leaves the opaque black backdrop up until the parent unmounts it,
+   which makes the reveal a hard cut rather than a cross-fade. The animated
+   style belongs on the full-bleed view.
+4. **The overlay is hidden from screen readers.** `pointerEvents="none"` does
+   not remove a view from the accessibility tree, so without
+   `accessibilityElementsHidden` and `importantForAccessibility` VoiceOver could
+   land on a decorative splash that is about to vanish. Note the consequence for
+   tests: RNTL's default queries skip elements hidden from accessibility, so
+   every query in the suite needs `{includeHiddenElements: true}`.
+5. **`DURATION.hold` was added to `constants/motion.ts`.** The hold before the
+   fade is a motion timing, and all motion timing lives in that module.
+
+Because every animation here is already a cross-fade — the form the spec
+requires motion to degrade *to* — the component deliberately has no
+`useReducedMotion` branch. There is no motion to reduce.
+
+- [ ] **Step 1: Add the hold timing**
+
+In `constants/motion.ts`, add `hold: 320` to `DURATION`, between `base` and
+`deliberate`, and extend the doc comment to say what it is for.
+
+- [ ] **Step 2: Write the failing test**
+
+Create `components/__tests__/SplashOverlay.test.tsx`:
+
+```tsx
+import React from "react";
+import {act, screen} from "@testing-library/react-native";
+
+import SplashOverlay, {MARK_SIZE} from "@/components/SplashOverlay";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/**
+ * The overlay is deliberately hidden from the accessibility tree, and RNTL's
+ * default queries skip anything hidden from it — so every lookup here has to opt
+ * back in. That the plain queries cannot see it is itself the proof that the
+ * hiding works.
+ */
+const HIDDEN = {includeHiddenElements: true} as const;
+
+function get(testID: string) {
+    return screen.getByTestId(testID, HIDDEN);
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+/**
+ * A node's *live* opacity. `props.style` is frozen at the last React render and
+ * cannot see an animated value; only `jestAnimatedStyle` is live, and it commits
+ * one frame after a rerender.
+ */
+function opacityOf(testID: string): number {
+    const node = get(testID) as never as {
+        props: {jestAnimatedStyle: {value: {opacity: number}}};
+    };
+    return node.props.jestAnimatedStyle.value.opacity;
+}
+
+function flatStyle(testID: string): Record<string, unknown> {
+    const style = get(testID).props.style as never as
+        Record<string, unknown>[];
+    return Object.assign({}, ...[style].flat(2)) as Record<string, unknown>;
+}
+
+describe("SplashOverlay", () => {
+    it("renders nothing when not visible", async () => {
+        await renderWithProviders(
+            <SplashOverlay visible={false} onFinished={jest.fn()}/>
+        );
+
+        expect(screen.queryByTestId("splash-overlay", HIDDEN)).toBeNull();
+    });
+
+    it("covers the screen in the base colour", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // A splash that is not opaque, or not full-bleed, shows the seam it
+        // exists to hide.
+        const style = flatStyle("splash-overlay");
+
+        expect(style.backgroundColor).toBe(palette.base);
+        expect(style.position).toBe("absolute");
+        expect([style.top, style.left, style.right, style.bottom]).toEqual([0, 0, 0, 0]);
+    });
+
+    it("draws the same mark as the static splash, at the same size", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // The whole premise of the component is that its first frame is a pixel
+        // match for the launch image it takes over from. A different asset or a
+        // different size makes the handoff jump.
+        const mark = get("splash-mark");
+        const style = flatStyle("splash-mark");
+
+        expect(mark.props.source).toBe(require("../../assets/images/splash-icon.png"));
+        expect(style.width).toBe(MARK_SIZE);
+        expect(style.height).toBe(MARK_SIZE);
+        expect(MARK_SIZE).toBe(
+            require("../../app.json").expo.plugins
+                .find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen")[1]
+                .imageWidth
+        );
+    });
+
+    it("keeps the mark centred by positioning the wordmark absolutely", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // In a column the wordmark would push the mark off centre, and the mark
+        // would no longer line up with the static splash behind it.
+        const style = flatStyle("splash-wordmark");
+
+        expect(style.position).toBe("absolute");
+        expect(screen.getByLabelText("XBRW++", HIDDEN)).toBeTruthy();
+    });
+
+    it("hides itself from screen readers", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // It duplicates the launch image and the real app is already mounted
+        // behind it, so it is decorative. `pointerEvents` alone does not remove
+        // a view from the accessibility tree.
+        const overlay = get("splash-overlay");
+
+        // The default queries cannot see it at all, which is the behaviour a
+        // screen reader gets.
+        expect(screen.queryByTestId("splash-overlay")).toBeNull();
+        expect(overlay.props.pointerEvents).toBe("none");
+        expect(overlay.props.accessibilityElementsHidden).toBe(true);
+        expect(overlay.props.importantForAccessibility).toBe("no-hide-descendants");
+    });
+
+    it("fades the wordmark in from nothing", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        const start = opacityOf("splash-wordmark");
+        await advance(DURATION.base / 2);
+        const middle = opacityOf("splash-wordmark");
+        await advance(DURATION.base);
+
+        expect(start).toBe(0);
+        expect(middle).toBeGreaterThan(0);
+        expect(middle).toBeLessThan(1);
+        expect(opacityOf("splash-wordmark")).toBe(1);
+    });
+
+    it("holds at full opacity before it begins to fade", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        await advance(DURATION.hold - 40);
+
+        expect(opacityOf("splash-overlay")).toBe(1);
+    });
+
+    it("fades the whole overlay, not just its contents", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // Fading only the lockup would leave the opaque black backdrop up until
+        // the parent unmounts it, turning the reveal into a hard cut.
+        await advance(DURATION.hold + DURATION.base / 2);
+        const middle = opacityOf("splash-overlay");
+
+        expect(middle).toBeGreaterThan(0);
+        expect(middle).toBeLessThan(1);
+    });
+
+    it("uses the leaving curve to go, and the entering curve to arrive", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // A quarter of the way in, the two curves are far apart: EASING.out has
+        // already covered most of its distance, EASING.in has barely started.
+        // Sampling there is what distinguishes them — endpoints never can.
+        await advance(DURATION.base / 4);
+        const arriving = opacityOf("splash-wordmark");
+
+        await advance(DURATION.hold);
+        await advance(DURATION.base / 4);
+        const leaving = opacityOf("splash-overlay");
+
+        expect(arriving).toBeGreaterThan(0.5);
+        expect(leaving).toBeGreaterThan(0.7);
+    });
+
+    it("does not report finished while it is still on screen", async () => {
+        const onFinished = jest.fn();
+        await renderWithProviders(<SplashOverlay visible onFinished={onFinished}/>);
+
+        await advance(DURATION.hold + DURATION.base - 40);
+
+        expect(onFinished).not.toHaveBeenCalled();
+    });
+
+    it("reports finished once it has faded out", async () => {
+        const onFinished = jest.fn();
+        await renderWithProviders(<SplashOverlay visible onFinished={onFinished}/>);
+
+        await advance(DURATION.hold + DURATION.base + 32);
+
+        expect(onFinished).toHaveBeenCalledTimes(1);
+        expect(opacityOf("splash-overlay")).toBe(0);
+    });
+
+    it("survives its callback changing identity every render", async () => {
+        const onFinished = jest.fn();
+        const {rerender} = await renderWithProviders(
+            <SplashOverlay visible onFinished={() => onFinished()}/>
+        );
+
+        // A parent that passes an inline arrow re-renders with a new function
+        // each time. These deliberately continue past the fade: if the effect
+        // depended on that identity it would restart the delay on every render
+        // and the splash would cover the app forever.
+        const step = 60;
+        const window = DURATION.hold + DURATION.base + 32;
+        for (let elapsed = 0; elapsed < window * 2; elapsed += step) {
+            await advance(step);
+            await rerender(<SplashOverlay visible onFinished={() => onFinished()}/>);
+        }
+
+        expect(onFinished).toHaveBeenCalledTimes(1);
+    });
+});
+```
+
+- [ ] **Step 3: Run the test to verify it fails**
+
+Run: `npx jest components/__tests__/SplashOverlay.test.tsx`
+Expected: FAIL — `Cannot find module '@/components/SplashOverlay'`.
+
+- [ ] **Step 4: Write the implementation**
+
+Create `components/SplashOverlay.tsx`:
+
+```tsx
+import React, {useEffect, useEffectEvent} from "react";
+import {Image, StyleSheet} from "react-native";
+import Animated, {
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withTiming
+} from "react-native-reanimated";
+
+import Wordmark from "@/components/Wordmark";
+import {DURATION, EASING} from "@/constants/motion";
+import {palette} from "@/constants/colors";
+
+/**
+ * Width of the mark, in points.
+ *
+ * This must equal `expo-splash-screen`'s `imageWidth` in `app.json`. The overlay
+ * exists to be indistinguishable from the static splash at the moment it takes
+ * over, and it draws the same file; if the two sizes drift, the handoff visibly
+ * jumps.
+ */
+export const MARK_SIZE = 200;
+
+/** How far below the mark the wordmark sits. */
+const WORDMARK_OFFSET = 28;
+
+type Props = {
+    visible: boolean;
+    /** Called once the overlay has played and faded. */
+    onFinished: () => void;
+};
+
+/**
+ * Covers the seam between the static splash and the app's first paint.
+ *
+ * `expo-splash-screen` shows `splash-icon.png` centred on black until the bundle
+ * has hydrated. This draws that same file, at that same size, on that same
+ * black, so the takeover is invisible: the first frame is a pixel match for the
+ * frame it replaces. The wordmark then fades in beneath the mark, and the whole
+ * overlay cross-fades away to reveal the app.
+ *
+ * Every animation here is already a cross-fade, which is the form the spec
+ * requires motion to degrade to under Reduce Motion, so there is deliberately no
+ * `useReducedMotion` branch: there is no motion to reduce. That also avoids a
+ * race this component alone would lose — it is the first hook instance in the
+ * app's lifetime, so it is the one mount where `useReducedMotion`'s cache is
+ * guaranteed to be cold and its first render guaranteed to assume wrongly.
+ */
+export default function SplashOverlay({visible, onFinished}: Props) {
+    const overlayOpacity = useSharedValue(1);
+    const wordmarkOpacity = useSharedValue(0);
+
+    // The effect below must run once per appearance, not once per render. A
+    // parent passing an inline arrow gives `onFinished` a new identity every
+    // time, and depending on that directly would restart the fade on each render
+    // and leave the splash covering the app forever.
+    const finish = useEffectEvent(() => {
+        onFinished();
+    });
+
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+
+        wordmarkOpacity.value = withTiming(1, {
+            duration: DURATION.base,
+            easing:   EASING.out
+        });
+
+        overlayOpacity.value = withDelay(
+            DURATION.hold,
+            withTiming(0, {duration: DURATION.base, easing: EASING.in}, (done) => {
+                // This callback is a worklet on the UI thread, so `finish` must
+                // be marshalled back with `runOnJS`. Dropping it passes every
+                // test — jest has no thread boundary — and throws on device.
+                //
+                // An interrupted animation reports `false`. No current path
+                // interrupts this one, so the guard is defence against a future
+                // dependency being added to the effect above rather than
+                // something the suite can exercise.
+                if (done) {
+                    runOnJS(finish)();
+                }
+            })
+        );
+    }, [visible, overlayOpacity, wordmarkOpacity]);
+
+    const overlayStyle = useAnimatedStyle(() => ({opacity: overlayOpacity.value}));
+    const wordmarkStyle = useAnimatedStyle(() => ({opacity: wordmarkOpacity.value}));
+
+    if (!visible) {
+        return null;
+    }
+
+    return (
+        <Animated.View
+            testID="splash-overlay"
+            // Decorative: it duplicates the launch image, and the real app is
+            // already mounted behind it. `pointerEvents` does not remove a view
+            // from the accessibility tree, so both of these are needed to stop a
+            // screen reader landing on a splash that is about to disappear.
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[StyleSheet.absoluteFill, styles.backdrop, overlayStyle]}>
+            <Image testID="splash-mark"
+                   source={require("../assets/images/splash-icon.png")}
+                   style={styles.mark} resizeMode="contain"/>
+            <Animated.View testID="splash-wordmark" style={[styles.wordmark, wordmarkStyle]}>
+                <Wordmark fontSize={24}/>
+            </Animated.View>
+        </Animated.View>
+    );
+}
+
+const styles = StyleSheet.create({
+    backdrop: {
+        alignItems:      "center",
+        justifyContent:  "center",
+        backgroundColor: palette.base
+    },
+    mark:      {
+        width:  MARK_SIZE,
+        height: MARK_SIZE
+    },
+    // Absolute so the mark stays exactly centred, matching the static splash.
+    wordmark:  {
+        position:  "absolute",
+        top:       "50%",
+        marginTop: MARK_SIZE / 2 + WORDMARK_OFFSET
+    }
+});
+```
+
+- [ ] **Step 5: Run the test to verify it passes**
+
+Run: `npx jest components/__tests__/SplashOverlay.test.tsx`
+Expected: PASS, 12 tests.
+
+- [ ] **Step 6: Mount it in the root layout**
+
+In `app/_layout.tsx`, add the state:
+
+```tsx
+    const [splashDone, setSplashDone] = useState(false);
+```
+
+and render the overlay as a sibling *after* `SafeAreaView`, still inside
+`ThemeProvider`:
+
+```tsx
+                                    <SplashOverlay visible={!splashDone}
+                                                   onFinished={() => setSplashDone(true)}/>
+```
+
+`ThemeProvider` is context-only, so `StyleSheet.absoluteFill` resolves against
+`SafeAreaProvider`'s flex:1 view and the overlay covers the insets and the
+notch, not just the safe area. Placing it *inside* `SafeAreaView` would leave
+the status-bar region uncovered.
+
+The existing `SplashScreen.hideAsync()` call stays exactly where it is. The
+component returns `null` until the fonts load, so the tree containing the
+overlay is committed before the effect hides the native splash — there is no
+frame where neither is on screen.
+
+- [ ] **Step 7: Verify**
+
+```bash
+npm run typecheck && npm run lint && npm test
+```
+
+Expected: typecheck silent, lint 0 errors, all tests pass.
+
+**Two invariants this suite cannot protect, verified by mutation:**
+
+- Removing `runOnJS` around `finish` passes every test and crashes on device.
+  Jest has no worklet/thread boundary, so nothing in the suite can see it.
+- The `if (done)` guard is currently unreachable: no path interrupts the fade.
+  It is defence against a future dependency being added to the effect.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add components/SplashOverlay.tsx components/__tests__/SplashOverlay.test.tsx \
+        app/_layout.tsx constants/motion.ts
+git commit -m "Add the animated splash overlay"
+```
+
+---
+
+### Task 15: Enforce the palette with a lint rule
+
+**Files:**
+- Modify: `eslint.config.js`
+
+The spec's rule — all colour comes from `constants/colors.ts` — has been a
+convention enforced by review. Now that the palette is being replaced wholesale,
+make it mechanical.
+
+- [ ] **Step 1: Add the rule**
+
+The convention bans hex literals, functional colours *and* named CSS colours.
+The first two can be matched anywhere, but a bare named colour cannot: Tamagui
+theme names are not colours, and `<Button theme="red">` in
+`components/RestoreDialog.tsx` is legitimate. Named colours are therefore only
+flagged as the value of a colour-valued prop or property — anything matching
+`*Color`, `fill`, `stroke` or `tint`. That also leaves prose
+(`accessibilityLabel="a red button"`) and incidental strings (`testID="tan"`)
+alone; both were checked against a throwaway fixture.
+
+`eslint.config.js` in full:
+
+```js
+const {defineConfig} = require("eslint/config");
+const expoConfig = require("eslint-config-expo/flat");
+
+const COLOUR_MESSAGE =
+    "Colour literals are not allowed here. Add a semantically named token to " +
+    "constants/colors.ts (danger, surface, muted — never red) and import it.";
+
+/** The CSS named colours, for the "colour-valued property" selectors below. */
+const NAMED_COLOURS = [
+    "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque",
+    "black", "blanchedalmond", "blue", "blueviolet", "brown", "burlywood",
+    "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue", "cornsilk",
+    "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray",
+    "darkgreen", "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen",
+    "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen",
+    "darkslateblue", "darkslategray", "darkslategrey", "darkturquoise",
+    "darkviolet", "deeppink", "deepskyblue", "dimgray", "dimgrey", "dodgerblue",
+    "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro",
+    "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "grey",
+    "honeydew", "hotpink", "indianred", "indigo", "ivory", "khaki", "lavender",
+    "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral",
+    "lightcyan", "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey",
+    "lightpink", "lightsalmon", "lightseagreen", "lightskyblue", "lightslategray",
+    "lightslategrey", "lightsteelblue", "lightyellow", "lime", "limegreen",
+    "linen", "magenta", "maroon", "mediumaquamarine", "mediumblue",
+    "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue",
+    "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue",
+    "mintcream", "mistyrose", "moccasin", "navajowhite", "navy", "oldlace",
+    "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod",
+    "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff",
+    "peru", "pink", "plum", "powderblue", "purple", "rebeccapurple", "red",
+    "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen",
+    "seashell", "sienna", "silver", "skyblue", "slateblue", "slategray",
+    "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle",
+    "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow",
+    "yellowgreen"
+].join("|");
+
+module.exports = defineConfig([
+    expoConfig,
+    {
+        ignores: [
+            "dist/*",
+            "ios/*",
+            "android/*",
+            ".expo/*",
+            ".agents/*",
+            "expo-env.d.ts"
+        ]
+    },
+    {
+        // Node-run files: config, jest setup and scripts.
+        files: ["*.js", "*.cjs", "jest.setup.js", "scripts/**"],
+        languageOptions: {
+            globals: {
+                __dirname: "readonly",
+                __filename: "readonly",
+                Buffer: "readonly",
+                module: "writable",
+                require: "readonly",
+                process: "readonly",
+                jest: "readonly"
+            }
+        }
+    },
+    {
+        rules: {
+            // The React Compiler is enabled, so it — not ESLint — decides what to
+            // memoise. We still want the hook rules themselves, which is what
+            // caught the conditional useEffect in app/index.tsx.
+            "react-hooks/exhaustive-deps": "warn"
+        }
+    },
+    {
+        // All colour comes from constants/colors.ts. Roughly half the colour call
+        // sites are plain React Native, expo-router or SVG props that cannot take
+        // a Tamagui "$token" at all, so the palette module is the only thing that
+        // can be the single source — and only a lint rule keeps it that way.
+        //
+        // Tests are exempt: asserting on a concrete colour value is the point of
+        // them.
+        files:   ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+        ignores: ["**/__tests__/**"],
+        rules:   {
+            "no-restricted-syntax": [
+                "error",
+                {
+                    selector: "Literal[value=/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
+                    message:  COLOUR_MESSAGE
+                },
+                {
+                    selector: "Literal[value=/^(?:rgba?|hsla?)\\(/]",
+                    message:  COLOUR_MESSAGE
+                },
+                // Named colours are only flagged where they are unambiguously a
+                // colour. Matching the bare word everywhere would fail on
+                // Tamagui's theme names, which are not colours at all:
+                // <Button theme="red"> selects a theme, and is legitimate.
+                {
+                    selector: `JSXAttribute[name.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] > Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
+                    message:  COLOUR_MESSAGE
+                },
+                {
+                    selector: `Property[key.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] > Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
+                    message:  COLOUR_MESSAGE
+                }
+            ]
+        }
+    }
+]);
+```
+
+Tests are exempt because they assert on concrete colour values, which is the
+point of them.
+
+- [ ] **Step 2: Run lint**
+
+```bash
+npm run lint
+```
+
+Expected: **0 errors.** Task 12 already migrated every call site, so this rule
+locks in a clean state rather than finding fallout. If it does report anything,
+each hit is a real violation: add a semantically named entry to
+`constants/colors.ts` — `danger`, `surface`, `muted`, never `red` — and import
+it. `constants/colors.ts` itself is not covered; the rule only reaches `app/`
+and `components/`.
+
+Confirm the rule actually fires before trusting a clean run — a selector typo
+silently passes everything. Drop a throwaway component containing
+`backgroundColor: "#FF0000"`, `borderColor: "red"`,
+`shadowColor: "rgba(0,0,0,0.5)"` and `theme="red"`, lint it, and check you get
+exactly three errors and no complaint about the theme. Then delete it.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add eslint.config.js
+git commit -m "Forbid raw colour literals in app and components"
+```
+
+---
+
+### Task 16: Full verification
+
+**Files:** none
+
+- [ ] **Step 1: Run everything CI runs**
+
+`.github/workflows/ci.yml` runs these four on every push to `main` and every pull
+request. All four must be green, and expo-doctor is a hard failure.
+
+```bash
+cd /Users/jesperhessius/Dev/XBRecipeWriterPlus
+npm run typecheck && npm run lint && npm test && npx expo-doctor
+```
+
+Expected: typecheck silent; lint clean; the full Jest suite passing, including
+the untouched `library/__tests__/` characterisation tests for the card byte
+format; expo-doctor reporting all checks passed.
+
+- [ ] **Step 2: Confirm the card format was not touched**
+
+A changed expectation in these tests is a regression until proven otherwise — a
+malformed write to a genuine card is not trivially recoverable, and this
+sub-project has no business near the byte layout.
+
+```bash
+git diff --stat main -- library/Recipe.ts library/Pour.ts library/NFC.ts \
+                        library/RecipeDatabase.ts library/XBloomRecipe.ts
+```
+
+Expected: no output. The only change under `library/` should be the new
+`accent.ts` and its test.
+
+- [ ] **Step 3: Verify on a device**
+
+The simulator cannot exercise NFC, and Doto's legibility was established on a
+desktop display rather than in a hand.
+
+```bash
+npm run ios -- --device
+```
+
+Then check, by eye:
+- the splash animates and hands off to the app without a flash of a different colour
+- the app is black in both OS appearance settings
+- Doto at 11 px is readable at arm's length, and still readable in daylight
+- dark text on the lightest tea accents (`#DCC194` Oolong, `#D9CF9A` Jasmine) is
+  comfortable, not marginal
+
+Record anything marginal against the follow-on contrast-audit issue rather than
+adjusting the palette ad hoc.
+
+- [ ] **Step 4: Commit anything outstanding**
+
+```bash
+git status --short
+```
+
+Expected: a clean tree. If not, commit the remainder.
+
+---
+
+## Done
+
+Sub-project 1 is complete when:
+
+- The app is black, named `XBRW++`, and carries the new icon and animated splash.
+- `constants/colors.ts` is the only source of colour, enforced by lint.
+- The nine primitives exist, are tested, and are not yet wired into a screen.
+- `library/` is unchanged apart from the new `accent.ts`.
+- Typecheck, lint, tests and expo-doctor are all green.
+
+Sub-project 4 wires the primitives into the home screen. Sub-project 3 composes
+the bloom and sweep against the iOS system sheet and the Android dialog.
