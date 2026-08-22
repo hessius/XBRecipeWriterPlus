@@ -9,7 +9,7 @@ global.Buffer = Buffer;
  * iOS presents its own modal NFC sheet on top of the app, so anything rendered
  * by the app during a session (toasts, progress bars) is hidden behind it. The
  * only way to show progress is to write into Apple's sheet itself. No-op on
- * Android, which uses AndroidNFCDialog instead.
+ * Android, where NfcOverlay is unobstructed and reports progress itself.
  */
 export function setNfcAlertIOS(message: string) {
     if (Platform.OS !== 'ios') {
