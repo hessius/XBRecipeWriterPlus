@@ -1,4 +1,8 @@
-node_modules/
+# No trailing slash: a git worktree commonly symlinks node_modules back to the
+# main checkout, and "node_modules/" matches directories only -- so the symlink
+# was not ignored and `git add -A` committed it. Checking such a commit out into
+# a normal clone then fails with "cannot rmdir 'node_modules'".
+node_modules
 android/
 .expo/
 ios/
