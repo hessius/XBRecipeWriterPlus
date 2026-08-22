@@ -72,6 +72,41 @@ export const DOT_ICONS = {
         ".........",
         "#########"
     ],
+    /**
+     * A lidded bin with three ribs.
+     *
+     * Not an X, which was the first instinct and the wrong one: `error` is
+     * already an X, and the two would have appeared within a second of each
+     * other — an X to delete, then an X if the delete failed.
+     */
+    delete: [
+        "...###...",
+        ".#######.",
+        ".#.....#.",
+        ".#.#.#.#.",
+        ".#.#.#.#.",
+        ".#.#.#.#.",
+        ".#.....#.",
+        "..#####..",
+        "........."
+    ],
+    /**
+     * Two offset squares, the back one occluded by the front.
+     *
+     * A plus was considered and rejected: on its own a plus reads as "new", and
+     * duplicating a recipe is not the same offer as writing one from scratch.
+     */
+    duplicate: [
+        "...######",
+        "...#....#",
+        "...#....#",
+        "######..#",
+        "#....#..#",
+        "#....####",
+        "#....#...",
+        "#....#...",
+        "######..."
+    ],
     success: [
         ".........",
         ".........",
