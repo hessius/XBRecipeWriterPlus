@@ -192,7 +192,7 @@ export default function HomeScreen() {
                 xbloom.fetchRecipeDetail().then(() => {
                     if (xbloom) {
                         let rec = xbloom?.getRecipe();
-                        if (rec && !db.doesTitleExist(rec.name)) {
+                        if (rec) {
                             db.insertRecipe(rec);
                         }
                     }

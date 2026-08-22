@@ -38,3 +38,28 @@ export function findDuplicate(stored: Recipe[], candidate: Recipe): Recipe | nul
     }
     return null;
 }
+
+/**
+ * The name for a copy of `name`, given the names already in the library.
+ *
+ * Scoped to copies of this one name rather than the whole library: recipe names
+ * are no longer unique, so this is a nicety that keeps two copies of the same
+ * recipe apart, not a constraint.
+ */
+export function copyName(name: string, existing: string[]): string {
+    if (name.trim().length === 0) {
+        return name;
+    }
+
+    const base = name.replace(/ \(Copy\)(?:\(\d+\))?$/, "");
+    const first = `${base} (Copy)`;
+    if (!existing.includes(first)) {
+        return first;
+    }
+
+    let count = 2;
+    while (existing.includes(`${base} (Copy)(${count})`)) {
+        count++;
+    }
+    return `${base} (Copy)(${count})`;
+}

@@ -1,6 +1,6 @@
 import Recipe from "../Recipe";
 import Pour from "../Pour";
-import {findDuplicate} from "../duplicates";
+import {findDuplicate, copyName} from "../duplicates";
 
 function sample(): Recipe {
     const recipe = new Recipe();
@@ -60,5 +60,38 @@ describe("findDuplicate", () => {
             throw new Error("malformed");
         };
         expect(findDuplicate([broken], sample())).toBeNull();
+    });
+});
+
+describe("copyName", () => {
+    it("marks the first copy", () => {
+        expect(copyName("Ethiopia", [])).toBe("Ethiopia (Copy)");
+    });
+
+    it("numbers a second copy of the same name", () => {
+        expect(copyName("Ethiopia", ["Ethiopia (Copy)"])).toBe("Ethiopia (Copy)(2)");
+    });
+
+    it("keeps counting past the second", () => {
+        expect(copyName("Ethiopia", ["Ethiopia (Copy)", "Ethiopia (Copy)(2)"]))
+            .toBe("Ethiopia (Copy)(3)");
+    });
+
+    it("ignores unrelated names, since titles are no longer unique", () => {
+        // The old implementation scanned the entire library and refused any
+        // colliding title. This one only looks at copies of the name being
+        // copied, so two different recipes may still share a name.
+        expect(copyName("Ethiopia", ["Kenya", "Kenya (Copy)"])).toBe("Ethiopia (Copy)");
+    });
+
+    it("copies an already-copied name without nesting the suffix", () => {
+        expect(copyName("Ethiopia (Copy)", ["Ethiopia (Copy)"]))
+            .toBe("Ethiopia (Copy)(2)");
+    });
+
+    it("leaves an empty name empty, so the placeholder still applies", () => {
+        // A nameless recipe's copy should keep falling through to the
+        // provenance placeholder rather than becoming literally " (Copy)".
+        expect(copyName("", [])).toBe("");
     });
 });

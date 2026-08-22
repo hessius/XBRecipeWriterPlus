@@ -49,7 +49,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         () => (recipeJSON && recipeJSON !== "") ? new Recipe(undefined, recipeJSON as string) : null
     );
     const [inputError, setInputError] = useState(false);
-    const [titleChanged, setTitleChanged] = useState(false);
     const [enableSave, setEnableSave] = useState(initiallySaveEnabled);
     const [key, setKey] = useState(0);
     const [isLoadingTitle, setIsLoadingTitle] = useState(false);
@@ -85,7 +84,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     r.offline_backup = xbr.offline_backup;
                 }
                 setRecipe(r);
-                setTitleChanged(true);
                 setEnableSave(true);
             }
         } catch (error) {
@@ -259,28 +257,11 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     function saveRecipe() {
-        console.log("Save Recipe");
         if (!recipe) return;
         let db = new RecipeDatabase();
         if (recipe.isPourVolumeValid()) {
-            if (titleChanged && db.doesTitleExist(recipe.name)) {
-                let r = db.getRecipe(recipe.uuid);
-                //if the changed title matches the title of a duplicate recipe that has the same uuid. Then we hit an edge case where the user modified the title, but then changed back to what it was originally.
-                if (r?.name === recipe.name) {
-                    db.updateRecipe(recipe.uuid, recipe);
-                    onSaved();
-                } else {
-                    Alert.alert('Save Error', 'The title of \"' + recipe.name + "\" already exists. Please choose a different name", [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
-                }
-            } else {
-                db.updateRecipe(recipe.uuid, recipe);
-                onSaved();
-            }
+            db.updateRecipe(recipe.uuid, recipe);
+            onSaved();
         } else {
             Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
                 {
@@ -333,7 +314,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 requiresNumber: false,
                 update:         (r: Recipe, val: string) => {
                     r.name = val;
-                    setTitleChanged(true);
                 }
             },
             [RECIPE_LABELS.CUP]:        {
@@ -399,7 +379,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 });
             }
         }
-    }, [recipe, setKey, setEnableSave, setTitleChanged, totalVolumeRef, autoButtonRef]);
+    }, [recipe, setKey, setEnableSave, totalVolumeRef, autoButtonRef]);
 
     return {
         recipe,
