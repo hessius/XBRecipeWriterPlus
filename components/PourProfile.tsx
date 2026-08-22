@@ -21,22 +21,27 @@ export function buildProfilePath(pours: Pour[], width: number, height: number): 
         return "";
     }
 
-    const total = pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
+    // Volume defaults to -1 on Pour, meaning unset, and a negative contribution
+    // would push the curve below its own baseline and outside the viewBox.
+    const volumeOf = (pour: Pour) => Math.max(pour.volume, 0);
+
+    const total = pours.reduce((sum, pour) => sum + volumeOf(pour), 0);
     const points: [number, number][] = [[0, height]];
     let poured = 0;
 
     for (let i = 0; i < pours.length; i++) {
+        poured += volumeOf(pours[i]);
         // A recipe whose pours are all zero has no shape. Drawing it flat along
         // the bottom is honest, and more importantly it is not NaN.
-        const before = total > 0 ? poured / total : 0;
-        poured += Math.max(pours[i].volume, 0);
         const after = total > 0 ? poured / total : 0;
 
-        const riseStart = (i / pours.length) * width;
         const riseEnd = ((i + 0.62) / pours.length) * width;
         const flatEnd = ((i + 1) / pours.length) * width;
 
-        points.push([riseStart, height - before * height]);
+        // The rise starts where the previous pour's plateau ended, which is
+        // already the last point — at i = 0 that is the seed. Emitting it again
+        // would add a zero-length segment per pour and about a third more path
+        // data for identical geometry.
         points.push([riseEnd, height - after * height]);
         points.push([flatEnd, height - after * height]);
     }
@@ -72,9 +77,16 @@ export default function PourProfile({
         return null;
     }
 
+    // The path touches y = 0 and y = height exactly, so a viewBox flush to the
+    // geometry clips half the stroke off the opening baseline and the closing
+    // plateau — the two most prominent runs of the mark, which would then render
+    // at half the weight of the diagonals. Padding the viewBox by half a stroke
+    // fixes that while keeping buildProfilePath and its tests in geometry units.
+    const bleed = strokeWidth / 2;
+    const viewBox = [-bleed, -bleed, width + strokeWidth, height + strokeWidth].join(" ");
+
     return (
-        <Svg testID={testID} width={width} height={height}
-             viewBox={`0 0 ${width} ${height}`}>
+        <Svg testID={testID} width={width} height={height} viewBox={viewBox}>
             <Path d={`${path} L${round(width)} ${round(height)} Z`} fill={fill}/>
             <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
                   strokeLinejoin="round"/>
