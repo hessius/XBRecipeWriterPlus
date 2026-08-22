@@ -849,9 +849,12 @@ Create `components/__tests__/DotMatrixText.test.tsx`:
 ```tsx
 import React from "react";
 import {screen} from "@testing-library/react-native";
-import {StyleSheet} from "react-native";
+import {PixelRatio, StyleSheet} from "react-native";
 
-import DotMatrixText, {DOTO_MIN_FONT_SIZE} from "@/components/DotMatrixText";
+import DotMatrixText, {
+    DOTO_MAX_FONT_SCALE,
+    DOTO_MIN_FONT_SIZE
+} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
 
 function styleOf(testID: string): Record<string, unknown> {
@@ -864,9 +867,12 @@ describe("DotMatrixText", () => {
         expect(screen.getByText("255")).toBeTruthy();
     });
 
-    it("uses the Doto family", async () => {
+    it("defaults to the bold Doto instance", async () => {
         await renderWithProviders(<DotMatrixText testID="dm">255</DotMatrixText>);
-        expect(styleOf("dm").fontFamily).toMatch(/^Doto-/);
+        // Exact, not /^Doto-/. A prefix match passes for all three families, so
+        // it would leave the default — the weight nearly every call site gets —
+        // unpinned.
+        expect(styleOf("dm").fontFamily).toBe("Doto-Bold");
     });
 
     it("raises a font size below the floor", async () => {
@@ -889,6 +895,67 @@ describe("DotMatrixText", () => {
         );
         expect(styleOf("dm").fontFamily).toBe("Doto-ExtraBold");
     });
+
+    it("lets style carry layout", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" style={{marginTop: 4}}>255</DotMatrixText>
+        );
+        expect(styleOf("dm").marginTop).toBe(4);
+    });
+
+    it("does not let style defeat the floor or the family", async () => {
+        // The executable form of this component's mandate. `style` is applied
+        // after the caller's other props, so without deliberate ordering it wins
+        // the flatten and a call site can render Inter at 4px through the
+        // dot-matrix component. TypeScript rejects these keys, hence the cast —
+        // this pins the runtime behaviour for JavaScript callers and for anyone
+        // who reaches for `as any` to make a label fit.
+        await renderWithProviders(
+            <DotMatrixText
+                testID="dm"
+                fontSize={20}
+                style={{fontSize: 4, fontFamily: "Inter-Regular"} as never}>
+                255
+            </DotMatrixText>
+        );
+        expect(styleOf("dm").fontSize).toBe(20);
+        expect(styleOf("dm").fontFamily).toBe("Doto-Bold");
+    });
+
+    it("passes numberOfLines through", async () => {
+        await renderWithProviders(
+            <DotMatrixText testID="dm" numberOfLines={1}>255</DotMatrixText>
+        );
+        // A dropped passthrough would silently reflow a dense layout rather than
+        // truncating, which is the kind of regression nothing else notices.
+        expect(screen.getByTestId("dm").props.numberOfLines).toBe(1);
+    });
+
+    it("compensates when the OS is scaling text down", async () => {
+        // React Native multiplies fontSize by the font scale after the clamp, so
+        // a user on Android "Small" or iOS xSmall would see the 11px floor
+        // render at about 9px — below the size at which Doto stops reading as
+        // characters, which is the entire reason the floor exists.
+        jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(0.85);
+
+        await renderWithProviders(
+            <DotMatrixText testID="dm" fontSize={6}>255</DotMatrixText>
+        );
+
+        const size = styleOf("dm").fontSize as number;
+        expect(size * 0.85).toBeGreaterThanOrEqual(DOTO_MIN_FONT_SIZE);
+        jest.restoreAllMocks();
+    });
+
+    it("bounds how far the OS may scale text up", async () => {
+        // Fixed-width readouts in dense layouts. Scaling is honoured, not
+        // refused — a user who needs larger text needs it here too — but
+        // unbounded growth truncates the pour profile and the digit column.
+        await renderWithProviders(<DotMatrixText testID="dm">255</DotMatrixText>);
+        expect(screen.getByTestId("dm").props.maxFontSizeMultiplier).toBe(
+            DOTO_MAX_FONT_SCALE
+        );
+    });
 });
 ```
 
@@ -903,7 +970,7 @@ Create `components/DotMatrixText.tsx`:
 
 ```tsx
 import React from "react";
-import {Text, type StyleProp, type TextStyle} from "react-native";
+import {PixelRatio, Text, type StyleProp, type TextStyle} from "react-native";
 
 import {palette} from "@/constants/colors";
 
@@ -914,6 +981,16 @@ import {palette} from "@/constants/colors";
  */
 export const DOTO_MIN_FONT_SIZE = 11;
 
+/**
+ * How far OS font scaling may enlarge dot-matrix text.
+ *
+ * These are fixed-width machine readouts inside dense layouts — a pour profile,
+ * a rolling digit column, a recipe card — so unbounded growth overflows or
+ * truncates them. Scaling is still honoured, because a user who needs larger
+ * text needs it here too; it is bounded rather than refused.
+ */
+export const DOTO_MAX_FONT_SCALE = 1.4;
+
 const FAMILIES = {
     semibold:  "Doto-SemiBold",
     bold:      "Doto-Bold",
@@ -922,8 +999,23 @@ const FAMILIES = {
 
 export type DotoWeight = keyof typeof FAMILIES;
 
+/**
+ * Everything a call site may style except the two properties this component
+ * exists to control. Excluding them at the type level turns "please do not
+ * override the floor" from a comment into a compile error.
+ *
+ * `fontWeight` is excluded too: these are static font instances, so setting a
+ * weight on top of one asks the platform for synthetic bolding rather than the
+ * matching family, which on Android smears the dot grid.
+ */
+type DotMatrixStyle = Omit<TextStyle, "fontSize" | "fontFamily" | "fontWeight">;
+
 type Props = {
-    children: React.ReactNode;
+    /**
+     * Machine-derived values only. Deliberately not `ReactNode`: nesting an
+     * element here is how Inter would get back inside a dot-matrix block.
+     */
+    children: string | number;
     /** Clamped up to `DOTO_MIN_FONT_SIZE`. */
     fontSize?: number;
     weight?: DotoWeight;
@@ -931,7 +1023,7 @@ type Props = {
     /** Doto is dense, so most call sites want a little extra tracking. */
     letterSpacing?: number;
     numberOfLines?: number;
-    style?: StyleProp<TextStyle>;
+    style?: StyleProp<DotMatrixStyle>;
     testID?: string;
 };
 
@@ -954,18 +1046,28 @@ export default function DotMatrixText({
     style,
     testID
 }: Props) {
+    // React Native multiplies fontSize by the OS font scale after this clamp, so
+    // clamping to the floor alone does not defend it: a user on Android's
+    // "Small" (0.85) or iOS xSmall would render 11 px as about 9. Only downward
+    // scaling needs compensating — scaling up never crosses the floor.
+    const shrink = Math.min(PixelRatio.getFontScale(), 1);
+    const minSize = DOTO_MIN_FONT_SIZE / shrink;
+
     return (
         <Text
             testID={testID}
             numberOfLines={numberOfLines}
+            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
             style={[
+                {color, letterSpacing},
+                style,
+                // After the caller's style, not before. `style` carries layout —
+                // margins, line height — but must not reach the two properties
+                // that make this component the single enforcement point.
                 {
                     fontFamily: FAMILIES[weight],
-                    fontSize:   Math.max(fontSize, DOTO_MIN_FONT_SIZE),
-                    color,
-                    letterSpacing
-                },
-                style
+                    fontSize:   Math.max(fontSize, minSize)
+                }
             ]}>
             {children}
         </Text>
@@ -976,7 +1078,7 @@ export default function DotMatrixText({
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/DotMatrixText.test.tsx`
-Expected: PASS, 5 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1349,7 +1451,7 @@ export default function DigitRoll({
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/DigitRoll.test.tsx`
-Expected: PASS, 5 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
