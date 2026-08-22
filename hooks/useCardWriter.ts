@@ -14,15 +14,6 @@ type CardWriter = {
     showNfcOverlay: boolean;
     /** Write progress 0-100. */
     writeProgress: number;
-    /**
-     * The pour-volume mismatch, or null.
-     *
-     * A state rather than an event: the machine rejects a recipe whose pour
-     * volumes do not sum to dosage x ratio, so this is a property of the recipe
-     * that persists until it is fixed. Delivered as a modal you dismiss, it was
-     * something the user then had to remember.
-     */
-    volumeError: string | null;
 };
 
 /**
@@ -36,10 +27,16 @@ type CardWriter = {
  * behaviour in editRecipe.tsx — `NFC` tracks whether its session is closed,
  * and holding one across renders would change when that flag is reset.
  */
-export function useCardWriter(): CardWriter {
+export function useCardWriter(
+    // The pour-volume mismatch is one state of one recipe, not an event, and
+    // `useRecipeEditor` owns the recipe. Reporting into its setter rather than
+    // keeping a local copy means there is a single atom for the message,
+    // which both the write path and the save path can clear — two copies
+    // of the same state can never reliably clear each other.
+    onVolumeError: (message: string | null) => void
+): CardWriter {
     const [writeProgress, setWriteProgress] = useState(0);
     const [showNfcOverlay, setShowNfcOverlay] = useState(false);
-    const [volumeError, setVolumeError] = useState<string | null>(null);
 
     const nfc = new NFC();
 
@@ -67,13 +64,13 @@ export function useCardWriter(): CardWriter {
             if (recipe !== null) {
                 console.log(recipe);
                 if (recipe.isPourVolumeValid()) {
-                    setVolumeError(null);
+                    onVolumeError(null);
                     setWriteProgress(0);
                     setShowNfcOverlay(true);
                     await recipe.writeCard(nfc, progressCallback);
                     setShowNfcOverlay(false);
                 } else {
-                    setVolumeError(
+                    onVolumeError(
                         "Your individual pour volumes must add up to the total volume."
                     );
                 }
@@ -88,7 +85,7 @@ export function useCardWriter(): CardWriter {
         }
     }
 
-    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, volumeError};
+    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress};
 }
 
 export default useCardWriter;

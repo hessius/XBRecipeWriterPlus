@@ -2,9 +2,12 @@ import {act, renderHook} from "@testing-library/react-native";
 import {Alert} from "react-native";
 
 import {useCardWriter} from "@/hooks/useCardWriter";
+import {useRecipeEditor} from "@/hooks/useRecipeEditor";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+
+jest.mock("@/library/RecipeDatabase");
 
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
@@ -37,7 +40,8 @@ describe("useCardWriter", () => {
 
     it("does not use a native Alert for the volume mismatch", async () => {
         const alert = jest.spyOn(Alert, "alert");
-        const {result} = await renderHook(() => useCardWriter());
+        const onVolumeError = jest.fn();
+        const {result} = await renderHook(() => useCardWriter(onVolumeError));
 
         await act(async () => result.current.writeCard(invalidRecipe()));
 
@@ -45,19 +49,25 @@ describe("useCardWriter", () => {
         alert.mockRestore();
     });
 
-    it("reports the volume mismatch as a persistent state, not a toast", async () => {
+    it("reports the volume mismatch through the callback, not a toast", async () => {
         // A validation error you dismiss and then have to remember is the bug
-        // this replaces. It belongs beside the save button until it is fixed.
-        const {result} = await renderHook(() => useCardWriter());
+        // this replaces. It belongs beside the save button until it is fixed,
+        // which is why the hook reports into a caller-owned setter rather
+        // than a toast or a local state atom of its own.
+        const onVolumeError = jest.fn();
+        const {result} = await renderHook(() => useCardWriter(onVolumeError));
 
         await act(async () => result.current.writeCard(invalidRecipe()));
 
-        expect(result.current.volumeError).toBeTruthy();
+        expect(onVolumeError).toHaveBeenCalledWith(
+            "Your individual pour volumes must add up to the total volume."
+        );
         expect(notify).not.toHaveBeenCalled();
     });
 
-    it("clears the mismatch once a valid recipe is written", async () => {
-        const {result} = await renderHook(() => useCardWriter());
+    it("clears the mismatch via the callback once a valid recipe is written", async () => {
+        const onVolumeError = jest.fn();
+        const {result} = await renderHook(() => useCardWriter(onVolumeError));
         await act(async () => result.current.writeCard(invalidRecipe()));
 
         const valid = invalidRecipe();
@@ -66,6 +76,41 @@ describe("useCardWriter", () => {
 
         await act(async () => result.current.writeCard(valid));
 
-        expect(result.current.volumeError).toBeNull();
+        expect(onVolumeError).toHaveBeenLastCalledWith(null);
+    });
+
+    // Regression test: the pour-volume mismatch used to live in two separate
+    // state atoms — one in useCardWriter, one in useRecipeEditor — and
+    // neither hook could clear the other's copy. A user could tap "write
+    // card" on an invalid recipe (setting the writer's copy), then tap AUTO
+    // to fix the pours (clearing only the editor's copy), and the message
+    // would stay on screen claiming the volumes did not add up, though they
+    // now did. Wiring useCardWriter to report into useRecipeEditor's own
+    // setter means there is exactly one atom, so the editor's own clear path
+    // reliably empties the same value the write path set.
+    it("lets the editor's AUTO fix clear an error set by a failed write", async () => {
+        const invalidJSON = JSON.stringify(invalidRecipe());
+
+        const {result} = await renderHook(() => {
+            const editor = useRecipeEditor({
+                recipeJSON:           invalidJSON,
+                initiallySaveEnabled: true,
+                onSaved:              jest.fn()
+            });
+            const writer = useCardWriter(editor.setVolumeError);
+            return {editor, writer};
+        });
+
+        // Simulate the user tapping "write card" on the invalid recipe.
+        await act(async () => result.current.writer.writeCard(result.current.editor.getRecipe()));
+        expect(result.current.editor.volumeError).toBeTruthy();
+
+        // Simulate the user then tapping AUTO, which genuinely fixes the
+        // recipe's pour volumes.
+        await act(async () => result.current.editor.autoAdjustPourVolumes());
+
+        // The very same atom the screen renders must now be empty — not
+        // still holding the writer's stale message.
+        expect(result.current.editor.volumeError).toBeNull();
     });
 });

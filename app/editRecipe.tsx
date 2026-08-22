@@ -42,8 +42,6 @@ export default function EditRecipe() {
         getLabelText: (id: number) => id === 1 ? "On" : "Off"
     };
 
-    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, volumeError} = useCardWriter();
-
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
@@ -51,13 +49,14 @@ export default function EditRecipe() {
         recipe, getRecipe, enableSave, inputError, setInputError, isLoadingTitle,
         showRestoreDialog, setShowRestoreDialog, restoreOptions, totalVolumeRef, autoButtonRef,
         bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
-        restoreRecipe, saveRecipe, editInputComplete, volumeError: editorVolumeError
+        restoreRecipe, saveRecipe, editInputComplete, volumeError, setVolumeError
     } = useRecipeEditor({
         recipeJSON:           recipeJSON as string | undefined,
         initiallySaveEnabled: saveEnabled === "true",
         onSaved:              () => navigation.goBack()
     });
-    const inlineError = volumeError ?? editorVolumeError;
+
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
 
 
     function writeCardIcon() {
@@ -302,10 +301,10 @@ export default function EditRecipe() {
                             </YStack>
                         </ScrollView>
                     </XStack>
-                    {inlineError !== null && (
+                    {volumeError !== null && (
                         <Text accessibilityRole="alert" fontSize={13} color={palette.danger}
                               paddingHorizontal="$3" paddingBottom="$2">
-                            {inlineError}
+                            {volumeError}
                         </Text>
                     )}
                     <XStack paddingVertical="$2" justifyContent="center" alignContent="center" alignItems="center"

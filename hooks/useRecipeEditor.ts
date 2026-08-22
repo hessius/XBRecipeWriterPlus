@@ -403,7 +403,8 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         restoreRecipe,
         saveRecipe,
         editInputComplete,
-        volumeError
+        volumeError,
+        setVolumeError
     };
 }
 
