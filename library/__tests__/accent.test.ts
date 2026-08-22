@@ -116,11 +116,20 @@ describe("nextAccentIndex", () => {
 
     it("ignores indices outside the group", () => {
         // A caller holding indices from the larger coffee half must not be able
-        // to skew the tea counts.
+        // to skew the tea counts. Note this cannot fail if the guard in
+        // nextAccentIndex is deleted: counts[7]++ on a length-4 array yields
+        // NaN, and NaN < counts[best] is false, so a stray index can never win
+        // anyway. The guard earns its place by keeping a hostile index from
+        // allocating counts[1_000_000], which is not observable from here.
         expect(nextAccentIndex("tea", [0, 1, 2, 7, 99, -1])).toBe(3);
+        expect(nextAccentIndex("tea", [1_000_000, -1, 2.5, Number.NaN])).toBe(
+            nextAccentIndex("tea", [])
+        );
     });
 
-    it("stays within the tea half", () => {
+    it("only ever returns an index into its own group", () => {
+        // Guards the return contract itself: tea has four accents, so anything
+        // sized against the coffee half would be out of bounds at the call site.
         expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
     });
 });
