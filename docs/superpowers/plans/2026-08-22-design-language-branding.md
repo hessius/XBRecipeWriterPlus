@@ -3207,17 +3207,40 @@ import Pour from "@/library/Pour";
 import {accents} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
+const TOUCH = {
+    nativeEvent: {
+        touches:        [],
+        changedTouches: [],
+        locationX:      1,
+        locationY:      1,
+        pageX:          1,
+        pageY:          1,
+        timestamp:      0
+    }
+};
+
+/**
+ * A real touch.
+ *
+ * Deliberately not `fireEvent.press`: Tamagui drives presses through the
+ * responder system rather than an `onPress` prop on the host view, so
+ * `fireEvent.press` finds no handler there and walks up the React tree until it
+ * reaches a component's own `onPress` prop — the mock the test just passed in.
+ * That passes whether or not anything is wired up.
+ */
+async function press(element: Parameters<typeof fireEvent>[0]) {
+    await fireEvent(element, "responderGrant", TOUCH);
+    await fireEvent(element, "responderRelease", TOUCH);
+}
+
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     const recipe = new Recipe();
     recipe.title = "Ethiopia Guji";
     recipe.dosage = 18;
     recipe.ratio = 16;
+    recipe.grindSize = 25;
     recipe.cupType = CUP_TYPE.XPOD;
-
-    const pour = new Pour();
-    pour.pourNumber = 0;
-    pour.volume = 288;
-    recipe.pours = [pour];
+    recipe.pours = [new Pour(0, 288)];
 
     return Object.assign(recipe, overrides);
 }
@@ -3234,7 +3257,9 @@ describe("RecipeCard", () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        expect(screen.getByLabelText("18")).toBeTruthy();
+        // `DigitRoll` folds its suffix into the accessible label, so the dose
+        // announces as "18g" rather than a bare number.
+        expect(screen.getByLabelText("18g")).toBeTruthy();
         expect(screen.getByLabelText("16")).toBeTruthy();
     });
 
@@ -3283,7 +3308,7 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
         );
 
-        await fireEvent.press(screen.getByTestId("recipe-card"));
+        await press(screen.getByTestId("recipe-card"));
 
         expect(onPress).toHaveBeenCalledTimes(1);
     });
@@ -3303,7 +3328,7 @@ describe("RecipeCard", () => {
                         onDuplicate={jest.fn()} onDelete={onDelete} editing/>
         );
 
-        await fireEvent.press(screen.getByRole("button", {name: "Delete recipe"}));
+        await press(screen.getByRole("button", {name: "Delete recipe"}));
 
         expect(onDelete).toHaveBeenCalledTimes(1);
     });
@@ -3391,6 +3416,10 @@ export default function RecipeCard({
     return (
         <YStack
             testID="recipe-card"
+            // React Native does not promote a View to an accessibility element
+            // implicitly, so without this the role and label are inert and the
+            // card is announced as a loose pile of numbers.
+            accessible
             accessibilityRole="button"
             accessibilityLabel={recipe.title}
             onPress={onPress}
@@ -3404,7 +3433,8 @@ export default function RecipeCard({
 
             <View pointerEvents="none"
                   style={{position: "absolute", right: 0, bottom: 0, opacity: 0.5}}>
-                <PourProfile pours={recipe.pours} width={200} height={PROFILE_HEIGHT}/>
+                <PourProfile testID="recipe-card-profile" pours={recipe.pours}
+                             width={200} height={PROFILE_HEIGHT}/>
             </View>
 
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
@@ -3432,20 +3462,22 @@ export default function RecipeCard({
                 {editing && (
                     <XStack gap="$3">
                         {onDuplicate !== undefined && (
-                            <View accessibilityRole="button"
-                                  accessibilityLabel="Duplicate recipe"
-                                  onTouchEnd={onDuplicate}>
-                                <AntDesign name="copy1" size={18}
+                            <YStack accessible accessibilityRole="button"
+                                    accessibilityLabel="Duplicate recipe"
+                                    hitSlop={8} onPress={onDuplicate}>
+                                <AntDesign testID="recipe-card-duplicate"
+                                           name="copy" size={18}
                                            color={onAccent.marker}/>
-                            </View>
+                            </YStack>
                         )}
                         {onDelete !== undefined && (
-                            <View accessibilityRole="button"
-                                  accessibilityLabel="Delete recipe"
-                                  onTouchEnd={onDelete}>
-                                <AntDesign name="delete" size={18}
+                            <YStack accessible accessibilityRole="button"
+                                    accessibilityLabel="Delete recipe"
+                                    hitSlop={8} onPress={onDelete}>
+                                <AntDesign testID="recipe-card-delete"
+                                           name="delete" size={18}
                                            color={onAccent.marker}/>
-                            </View>
+                            </YStack>
                         )}
                     </XStack>
                 )}
@@ -3460,9 +3492,10 @@ export default function RecipeCard({
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
 Expected: PASS, 10 tests.
 
-If the two action buttons do not respond to `fireEvent.press`, replace the
-`View` + `onTouchEnd` pairs with Tamagui `YStack` and `onPress`, which is what
-`CtaTile` uses and is known to work with the testing library.
+The action buttons sit inside a card that is itself pressable. If a tap on one
+of them also fires the card's `onPress`, give the inner stacks
+`onStartShouldSetResponderCapture` or stop propagation — a delete that also
+opens the recipe is a bug, not a test artefact.
 
 - [ ] **Step 5: Commit**
 
