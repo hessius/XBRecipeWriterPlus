@@ -3,6 +3,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import CtaTile from "@/components/CtaTile";
 import {palette} from "@/constants/colors";
+import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {renderWithProviders} from "@/test-utils/render";
 
 const TOUCH = {
@@ -48,22 +49,38 @@ describe("CtaTile", () => {
     });
 
     it("renders the icon it was given, above the label", async () => {
-        // Vector icons render as a glyph character in the `anticon` font, so
-        // the only evidence that `icon` was honoured is that two names draw
-        // two different characters.
+        // Each icon is a bitmap drawn as dots, so the only evidence that
+        // `icon` was honoured is that two names draw a different number of
+        // dots (scan and import light up different counts of cells).
         const {rerender} = await renderWithProviders(
             <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
         );
-        const scan = screen.getByTestId("cta-tile-icon").props.children;
-        expect(scan).toBeTruthy();
+        expect(
+            screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true}).length
+        ).toBe(litCells(DOT_ICONS.scan).length);
 
         // Icon first: the tile reads top-down, and swapping the two is a
         // different component.
         const children = tile().children as {props?: {testID?: string}}[];
         expect(children[0].props?.testID).toBe("cta-tile-icon");
 
-        await rerender(<CtaTile icon="qrcode" label="SCAN" onPress={jest.fn()}/>);
-        expect(screen.getByTestId("cta-tile-icon").props.children).not.toBe(scan);
+        await rerender(<CtaTile icon="import" label="SCAN" onPress={jest.fn()}/>);
+        expect(
+            screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true}).length
+        ).toBe(litCells(DOT_ICONS.import).length);
+    });
+
+    it("renders its glyph as dots, not as a vector icon", async () => {
+        await renderWithProviders(
+            <CtaTile icon="scan" label="READ CARD" onPress={() => {}}/>
+        );
+        expect(screen.getByTestId("cta-tile-icon", {includeHiddenElements: true})).toBeTruthy();
+        expect(
+            screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true}).length
+        ).toBeGreaterThan(0);
+        expect(
+            screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true}).length
+        ).toBe(litCells(DOT_ICONS.scan).length);
     });
 
     it("renders the label in dot matrix, not prose", async () => {
@@ -160,8 +177,8 @@ describe("CtaTile", () => {
         // available.
         const label = screen.getByText("SCAN").props.style as {color?: string}[];
         expect(label.some((s) => s?.color === palette.muted)).toBe(true);
-        const iconStyle = screen.getByTestId("cta-tile-icon").props.style as
-            {color?: string}[];
-        expect(iconStyle.some((s) => s?.color === palette.muted)).toBe(true);
+        const dots = screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true});
+        const dotStyle = dots[0].props.style as ({backgroundColor?: string} | undefined)[];
+        expect(dotStyle.some((s) => s?.backgroundColor === palette.muted)).toBe(true);
     });
 });

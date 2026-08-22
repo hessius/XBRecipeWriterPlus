@@ -1,13 +1,16 @@
 import React from "react";
-import {AntDesign} from "@expo/vector-icons";
 import {YStack} from "tamagui";
 
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 
+/** The icon size inside a tile: large enough that the dot grid still reads. */
+const TILE_ICON_SIZE = 26;
+
 type Props = {
-    /** An AntDesign glyph name. v15 uses kebab-case, e.g. `plus-circle`. */
-    icon: React.ComponentProps<typeof AntDesign>["name"];
+    icon: DotIconName;
     /** Shown in Doto, so keep it short and upper-case. */
     label: string;
     onPress: () => void;
@@ -51,8 +54,8 @@ export default function CtaTile({
             borderColor={palette.line}
             opacity={disabled ? 0.4 : 1}
             pressStyle={disabled ? undefined : {opacity: 0.7, scale: 0.98}}>
-            <AntDesign testID="cta-tile-icon" name={icon} size={22}
-                       color={disabled ? palette.muted : palette.text}/>
+            <DotIcon testID="cta-tile-icon" name={icon} size={TILE_ICON_SIZE}
+                     color={disabled ? palette.muted : palette.text}/>
             <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
                            color={disabled ? palette.muted : palette.text}>
                 {label}
