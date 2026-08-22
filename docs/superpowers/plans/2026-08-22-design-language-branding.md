@@ -636,7 +636,12 @@ describe("useReducedMotion", () => {
         let handler: ((enabled: boolean) => void) | undefined;
         jest.spyOn(AccessibilityInfo, "addEventListener").mockImplementation(
             (_event, listener) => {
-                handler = listener as (enabled: boolean) => void;
+                // addEventListener is overloaded across every accessibility
+                // event, so `listener` arrives as the union of all their handler
+                // types and does not narrow on the event name. The hook only
+                // ever registers for reduceMotionChanged, whose handler takes a
+                // boolean.
+                handler = listener as unknown as (enabled: boolean) => void;
                 return {remove: jest.fn()} as never;
             }
         );
