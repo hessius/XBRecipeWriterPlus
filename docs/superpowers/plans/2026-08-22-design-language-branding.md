@@ -26,6 +26,30 @@ This sub-project is behaviour-neutral. It ships two things:
 If a task makes an existing screen behave differently, that is a bug in this
 sub-project, not a feature.
 
+## Known red baseline
+
+Task 2 replaces `constants/colors.ts` wholesale, which deliberately breaks every
+existing call site. From Task 2 until Task 12 clears them, the repository is
+**expected to be red** in two specific ways:
+
+| Check | Expected state between Tasks 2 and 12 |
+|---|---|
+| `npm run typecheck` | ~35 `error TS` across the 14 files importing the old palette |
+| `npm test` | `components/__tests__/MyButtonGroup.test.tsx` and `components/__tests__/SwipeableRecipeRow.test.tsx` fail, 9 tests total |
+
+Both were green at Task 1 and are green again after Task 12. **Do not fix them
+inside Tasks 3–11.** Task 12 migrates every call site in one pass with a
+documented mapping; patching them piecemeal beforehand does the same work worse
+and without that mapping.
+
+For Tasks 3–11, this means:
+
+- Verify your own work with a scoped run — `npx jest <your test file>` — not the
+  full suite.
+- Then run `npm test` once and confirm the failure set is still exactly those two
+  suites and nine tests. A third failing suite, or a tenth failing test, is
+  **yours** and must be fixed before you report DONE.
+
 ## Conventions this plan assumes
 
 - Import through the `@/` alias, which maps to the repository root.
@@ -454,7 +478,7 @@ export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/accent.test.ts`
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
