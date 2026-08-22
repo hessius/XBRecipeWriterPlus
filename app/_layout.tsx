@@ -1,5 +1,5 @@
 import {useFonts} from 'expo-font';
-import {DarkTheme, DefaultTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
+import {DarkTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
 import React, {useEffect} from 'react';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
@@ -8,26 +8,32 @@ import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Toasts} from '@backpackapp-io/react-native-toast';
 import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
-import {useColorScheme} from "react-native";
 import {palette} from '@/constants/colors';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-    const colorScheme = useColorScheme();
-    const [loaded] = useFonts({
-        SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf')
-    });
+const AppTheme = {
+    ...DarkTheme,
+    colors: {
+        ...DarkTheme.colors,
+        background:   palette.base,
+        card:         palette.base,
+        text:         palette.text,
+        border:       palette.line,
+        primary:      palette.text,
+        notification: palette.danger
+    }
+};
 
-    const LightTheme = {
-        ...DefaultTheme,
-        colors: {
-            ...DefaultTheme.colors,
-            background: palette.navigationBackground
-        }
-    };
+export default function RootLayout() {
+    const [loaded] = useFonts({
+        SpaceMono:        require('../assets/fonts/SpaceMono-Regular.ttf'),
+        "Doto-SemiBold":  require('../assets/fonts/Doto-SemiBold.ttf'),
+        "Doto-Bold":      require('../assets/fonts/Doto-Bold.ttf'),
+        "Doto-ExtraBold": require('../assets/fonts/Doto-ExtraBold.ttf')
+    });
 
     useEffect(() => {
         if (loaded) {
@@ -46,17 +52,17 @@ export default function RootLayout() {
                 resetOnBackground: true
             }}>
             <GestureHandlerRootView style={{flex: 1}}>
-                <TamaguiProvider config={config} defaultTheme={colorScheme === "dark" ? "dark" : "light"}>
-                    <Theme name={colorScheme === "dark" ? "dark" : "light"}>
+                <TamaguiProvider config={config} defaultTheme="dark">
+                    <Theme name="dark">
                             <SafeAreaProvider>
-                                <ThemeProvider value={colorScheme === "light" ? LightTheme : DarkTheme}>
-                                    <SafeAreaView style={{flex: 1, backgroundColor: palette.brand}}>
+                                <ThemeProvider value={AppTheme}>
+                                    <SafeAreaView style={{flex: 1, backgroundColor: palette.base}}>
                                         <Stack
                                             screenOptions={{
                                                 headerStyle:      {
-                                                    backgroundColor: palette.brand
+                                                    backgroundColor: palette.base
                                                 },
-                                                headerTintColor:  palette.onBrand,
+                                                headerTintColor:  palette.text,
                                                 headerTitleStyle: {
                                                     fontWeight: 'bold'
                                                 }

@@ -45,7 +45,7 @@ export default function AndroidNFCDialog(props: {
             <Sheet.Handle/>
             <Sheet.Frame
                 style={{
-                    backgroundColor:     palette.onBrand,
+                    backgroundColor:     palette.surface,
                     borderTopLeftRadius: 16,
                     borderTopRightRadius: 16,
                     padding:             16
@@ -60,16 +60,16 @@ export default function AndroidNFCDialog(props: {
                                       height={8}>
                                 <Progress.Indicator transition="quick" backgroundColor={palette.info}/>
                             </Progress>
-                            <Text paddingLeft="$2" color={palette.onLight}>{props.progress + "%"}</Text>
+                            <Text paddingLeft="$2" color={palette.text}>{props.progress + "%"}</Text>
                         </XStack> : ""}
-                    <Text style={{fontSize: 18, fontWeight: 'bold', color: palette.dialogHeading}}>
+                    <Text style={{fontSize: 18, fontWeight: 'bold', color: palette.text}}>
                         Hold Near the NFC Reader
                     </Text>
-                    <Text style={{fontSize: 14, textAlign: 'center', color: palette.dialogBody}}>
+                    <Text style={{fontSize: 14, textAlign: 'center', color: palette.dim}}>
                         Place your card close to the NFC reader to continue.
                     </Text>
                     <NfcIcon/>
-                    <Button backgroundColor={palette.info} size="$6" color={palette.onBrand} theme="active"
+                    <Button backgroundColor={palette.info} size="$6" color={palette.base} theme="active"
                             onPress={() => onCancel()}>
                         Cancel
                     </Button>

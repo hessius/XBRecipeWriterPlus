@@ -3909,9 +3909,14 @@ In `tamagui.config.ts`, change the settings block:
 
 ```ts
     settings: {
-        defaultTheme: "dark"
+        defaultTheme: "dark",
+        shouldAddPrefersColorThemes: false
     }
 ```
+
+Keep `shouldAddPrefersColorThemes` — dropping it collapses Tamagui's config type
+inference and produces around forty cascading typecheck errors across every
+Tamagui component in the app.
 
 - [ ] **Step 3: Make the test provider dark**
 
@@ -3961,18 +3966,33 @@ const AppTheme = {
 
 Work through the list from Step 1. The mapping from the old palette to the new:
 
-| Old intent | New token |
+| Old key / intent | New token |
 |---|---|
-| screen background | `palette.base` |
+| screen background, `navigationBackground`, `screenBackground` | `palette.base` |
 | card / sheet background | `palette.surface` |
-| input or tile background | `palette.raised` |
-| border, divider | `palette.line` |
-| primary text | `palette.text` |
-| secondary text | `palette.dim` |
-| tertiary / placeholder text | `palette.muted` |
-| brand / accent chrome | `palette.text` on `palette.base` |
-| destructive | `palette.danger` |
+| input or tile background, `surfaceDisabled` | `palette.raised` |
+| `outline`, border, divider | `palette.line` |
+| primary text, `dialogHeading` | `palette.text` |
+| secondary text, `dialogBody`, `brandHelp` | `palette.dim` |
+| tertiary / placeholder text, disabled text | `palette.muted` |
+| `brand`, `brandIncrement`, brand / accent chrome | `palette.text` |
+| `onBrand`, `onLight` — content sitting **on** a brand fill | `palette.base` |
+| `brandPressed` | `palette.dim` |
+| `brandDisabled` — a disabled *fill* | `palette.muted` |
+| destructive, `dangerTrack` | `palette.danger` |
 | confirmation | `palette.success` |
+
+Read each call site and work out what the colour is *for* rather than
+substituting mechanically. Two traps, both of which caught the first pass:
+
+- A disabled **fill** and a disabled **surface** are not the same. A disabled
+  button is a grey fill with dark ink, because the enabled one is a white fill;
+  a disabled input is *recessed* to `palette.raised`, because the enabled one is
+  already dark. Painting an input `palette.muted` makes a disabled field the
+  brightest thing on the screen.
+- `onLight` means "on a light fill". Where the fill it sat on is now dark — the
+  Android NFC sheet, the duplicate swipe action — the content must go to
+  `palette.text`, not `palette.base`, or it is black on black.
 
 Where a component picked a colour from `useColorScheme()`, delete the branch and
 keep the dark value.
