@@ -3307,9 +3307,13 @@ Expected: PASS.
 
 - [ ] **Step 9: Prove no Alert survives**
 
-Run: `grep -rn "Alert" app components hooks library --include=*.ts --include=*.tsx | grep -v __tests__`
-Expected: **no output**. A hit in a test file is fine — the tests assert that
-`Alert.alert` is never called, which requires naming it.
+Run: `grep -rnE "\bAlert\.alert\b|\bAlert\b *[,}].*react-native" app components hooks library --include=*.ts --include=*.tsx | grep -v __tests__`
+Expected: **no output**.
+
+Grep for `Alert` alone and you will match `setNfcAlertIOS`, which is the iOS
+system sheet's one line of text and has nothing to do with `Alert.alert`. A hit
+in a test file is also fine — the tests assert that `Alert.alert` is never
+called, which requires naming it.
 
 - [ ] **Step 10: Commit**
 
