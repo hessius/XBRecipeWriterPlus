@@ -259,3 +259,68 @@ describe("the new persistence fields", () => {
         expect(reloaded.source).toBe("manual");
     });
 });
+
+describe("displayName", () => {
+    function named(fields: Partial<Recipe>): Recipe {
+        const recipe = new Recipe();
+        Object.assign(recipe, fields);
+        return recipe;
+    }
+
+    it("prefers the local name", () => {
+        expect(named({name: "My Blend", xbloomName: "Guji", xid: "ABC"}).displayName())
+            .toBe("My Blend");
+    });
+
+    it("falls back to the xBloom name", () => {
+        expect(named({xbloomName: "Guji", xid: "ABC"}).displayName()).toBe("Guji");
+    });
+
+    it("falls back to the XID", () => {
+        expect(named({xid: "ABC123"}).displayName()).toBe("ABC123");
+    });
+
+    it("treats whitespace as absent, so a space does not become a name", () => {
+        expect(named({name: "   ", xbloomName: "Guji"}).displayName()).toBe("Guji");
+    });
+
+    it("names a card read with no XID by how it arrived, and dates it", () => {
+        // The date is asserted by shape, not by literal text: the formatter
+        // follows the machine's locale and timezone, so "4 Mar" on a laptop can
+        // be "Mar 4" on CI. Requiring a digit still catches the failures that
+        // matter — "Read undefined", "Read NaN", "Read Invalid Date".
+        const name = named({source: "read", createdAt: Date.UTC(2026, 2, 4)}).displayName();
+
+        expect(name).toMatch(/^Read .*\d/);
+        expect(name).not.toMatch(/undefined|NaN|Invalid/);
+    });
+
+    it("names an import by how it arrived, and dates it", () => {
+        const name = named({source: "import", createdAt: Date.UTC(2026, 2, 4)}).displayName();
+
+        expect(name).toMatch(/^Imported .*\d/);
+        expect(name).not.toMatch(/undefined|NaN|Invalid/);
+    });
+
+    it("omits the date when the creation time is unknown", () => {
+        expect(named({source: "read", createdAt: 0}).displayName()).toBe("Read");
+    });
+
+    it("falls back to Untitled for a recipe with no provenance at all", () => {
+        expect(named({source: "manual", createdAt: 0}).displayName()).toBe("Untitled");
+    });
+});
+
+describe("hasName", () => {
+    it("is true when any real name is available", () => {
+        const recipe = new Recipe();
+        recipe.xid = "ABC";
+        expect(recipe.hasName()).toBe(true);
+    });
+
+    it("is false when the placeholder is in use, so the UI can mute it", () => {
+        const recipe = new Recipe();
+        recipe.source = "read";
+        expect(recipe.hasName()).toBe(false);
+    });
+});

@@ -216,6 +216,65 @@ class Recipe {
         this.key = this.uuid;
     }
 
+    /**
+     * The name to show for this recipe.
+     *
+     * A chain rather than a single field, because both names and the XID are
+     * optional: a card carries no name at all, only the XID, and a card with no
+     * XID carries nothing. This lives here so no screen reimplements it.
+     */
+    public displayName(): string {
+        if (this.name.trim().length > 0) {
+            return this.name;
+        }
+        if (this.xbloomName.trim().length > 0) {
+            return this.xbloomName;
+        }
+        if (this.xid.trim().length > 0) {
+            return this.xid;
+        }
+        return this.placeholderName();
+    }
+
+    /**
+     * Whether any real name was found, as opposed to the placeholder.
+     *
+     * The UI renders the placeholder muted, so that a generated label is never
+     * mistaken for a name the user chose.
+     */
+    public hasName(): boolean {
+        return this.name.trim().length > 0 ||
+               this.xbloomName.trim().length > 0 ||
+               this.xid.trim().length > 0;
+    }
+
+    /**
+     * Provenance and date, for a recipe with no name from any source.
+     *
+     * Not derived from the brew parameters: the recipe card already shows dose,
+     * ratio and grind beside the name, so "18 g · 1:16" would only repeat
+     * itself. Provenance and date are the one thing that distinguishes four
+     * nameless cards read in a row.
+     */
+    private placeholderName(): string {
+        const verb: Record<RecipeSource, string> = {
+            read:      "Read",
+            import:    "Imported",
+            duplicate: "Copy",
+            manual:    "Untitled"
+        };
+
+        if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {
+            return verb[this.source];
+        }
+
+        const date = new Date(this.createdAt).toLocaleDateString(undefined, {
+            day:   "numeric",
+            month: "short"
+        });
+        return `${verb[this.source]} ${date}`;
+    }
+
     public deletePour(pourNumber: number) {
         this.pours.splice(pourNumber, 1);
         for (let i = 0; i < this.pours.length; i++) {
