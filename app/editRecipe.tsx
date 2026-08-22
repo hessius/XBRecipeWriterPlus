@@ -4,13 +4,13 @@ import Recipe, {CUP_TYPE, isValidXID, XID_LENGTH} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useCallback, useEffect, useRef} from "react";
-import {ActivityIndicator, Platform, Pressable, useWindowDimensions} from "react-native";
+import {ActivityIndicator, Pressable, useWindowDimensions} from "react-native";
 import {Button, getTokens, H6, ScrollView, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
 import LabeledInput from "@/components/LabeledInput";
 import TotalVolumeComponent from "@/components/TotalVolumeComponent";
 import TooltipComponent from "@/components/TooltipComponent";
-import AndroidNFCDialog from "@/components/AndroidNFCDialog";
+import NfcOverlay from "@/components/NfcOverlay";
 import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from '@/constants/colors';
@@ -42,7 +42,7 @@ export default function EditRecipe() {
         getLabelText: (id: number) => id === 1 ? "On" : "Off"
     };
 
-    const {writeCard, onNFCDialogClose, showAndroidNFCDialog, writeProgress} = useCardWriter();
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter();
 
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
@@ -311,9 +311,9 @@ export default function EditRecipe() {
                                 disabled={inputError || !enableSave} color={palette.base}
                                 backgroundColor={inputError || !enableSave ? palette.muted : palette.text}>Save</Button>
                     </XStack>
-                    {Platform.OS !== "ios" && showAndroidNFCDialog ?
-                        <AndroidNFCDialog onClose={() => onNFCDialogClose()}
-                                          progress={writeProgress}></AndroidNFCDialog> : ""}
+                    <NfcOverlay visible={showNfcOverlay} mode="write"
+                                progress={writeProgress}
+                                onCancel={onNFCDialogClose}/>
                     <RestoreDialog
                         open={showRestoreDialog}
                         onOpenChange={setShowRestoreDialog}
