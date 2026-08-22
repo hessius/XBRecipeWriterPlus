@@ -214,10 +214,32 @@ the one that moves down into the list, not one of the three navigation actions.
 ### The problem being fixed
 
 Feedback today is split by outcome, not by meaning: successes go to a toast,
-failures go to a native `Alert`. Thirteen `Alert` call sites. The app speaks in
-its own voice when things go well and in the system's voice when they go badly —
-switching exactly when the user is most frustrated — and `Alert` is the one
-surface the design language cannot touch.
+failures go to a native `Alert`. The app speaks in its own voice when things go
+well and in the system's voice when they go badly — switching exactly when the
+user is most frustrated — and `Alert` is the one surface the design language
+cannot touch.
+
+Thirteen feedback call sites, of which seven are `Alert`:
+
+| Site | Today | Becomes |
+|---|---|---|
+| `app/index.tsx:123` | `Alert` "Could not read card" | Toast, error |
+| `components/TooltipComponent.tsx:13` | `Alert` "What is this?" | Sheet |
+| `hooks/useRecipeEditor.ts:120` | `Alert` "Pour Limit" | Toast, info |
+| `hooks/useRecipeEditor.ts:257` | `Alert` "No Restore Options" | Toast, info |
+| `hooks/useRecipeEditor.ts:272` | `Alert` "Pour Volume Error" | Inline |
+| `hooks/useCardWriter.ts:67` | `Alert` "Pour Volume Error" | Inline |
+| `hooks/useCardWriter.ts:78` | `Alert` "Write Error" | Toast, error |
+| `app/index.tsx:93` | bare `toast()` | `notify` success |
+| `components/RestoreDialog.tsx:31` | bare `toast()` | `notify` error |
+| `hooks/useRecipeEditor.ts:196` | bare `toast()` | `notify` success |
+| `hooks/useRecipeEditor.ts:210` | bare `toast()` | `notify` success |
+| `hooks/useRecipeEditor.ts:228` | bare `toast()` | `notify` success |
+| `hooks/useRecipeEditor.ts:248` | bare `toast()` | `notify` success |
+
+The two "Pour Volume Error" sites are the same message raised from two places,
+which is itself the argument for the inline treatment: it is one state of one
+recipe, not two events.
 
 Some of them are not messages at all. "Your individual pour volumes must add up
 to the total volume" is a *validation state* belonging to the save button,
@@ -243,7 +265,7 @@ The pour-volume mismatch becomes a message beside the save button.
 The restore options list. `TooltipComponent`'s help text, currently an `Alert`,
 which is a strange way to present a paragraph of explanation.
 
-**No native `Alert` remains.** One of the thirteen reaches into the editor, which
+**No native `Alert` remains.** One of the seven reaches into the editor, which
 is otherwise sub-project 4's territory. That is accepted: shipping this
 sub-project claiming "one voice" while a system modal still fires would make the
 claim false.
