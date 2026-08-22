@@ -209,8 +209,9 @@ helper, mirroring how `constants/colors.ts` centralises colour.
 
 The existing three-layer separation is preserved. This sub-project touches only
 `components/`, `constants/`, `app/_layout.tsx`, `tamagui.config.ts`, `app.json`
-and `assets/`. Nothing in `library/` changes, so the card format and its
-characterisation tests are untouched.
+and `assets/`, and adds one new file to `library/` for the accent resolver, which
+is domain logic and not React. **No existing file in `library/` is modified**, so
+the card format and its characterisation tests are untouched.
 
 Colour stays in the plain `constants/colors.ts` module rather than moving into
 Tamagui theme tokens, for the reason already recorded in the repository: roughly
