@@ -157,6 +157,7 @@ export default function HomeScreen({db, settings}: Props) {
                     collapsed={collapsed}
                     editing={editing}
                     showEdit={!isEmpty}
+                    canImport={false}
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportId("")}
@@ -172,7 +173,12 @@ export default function HomeScreen({db, settings}: Props) {
                         <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
                             <CtaTile icon="scan" label="READ CARD"
                                      accessibilityLabel="Read a card" onPress={readCard}/>
-                            <CtaTile icon="import" label="IMPORT"
+                            {/* Shown but inert until sub-project 5. The sheet
+                                behind it previews a recipe it is handed by a
+                                share intent and has no way to be given one
+                                here, so the tile holds its place in the layout
+                                rather than claiming an action it cannot do. */}
+                            <CtaTile icon="import" label="IMPORT" disabled
                                      accessibilityLabel="Import a recipe"
                                      onPress={() => setImportId("")}/>
                         </XStack>

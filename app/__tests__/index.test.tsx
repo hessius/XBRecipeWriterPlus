@@ -81,12 +81,28 @@ describe("HomeScreen", () => {
         expect(screen.queryByTestId("recipe-card")).toBeNull();
     });
 
-    it("keeps both actions available when the library is empty", async () => {
+    it("keeps both actions visible when the library is empty", async () => {
         // The empty state replaces the list only. If the tiles vanished with it,
         // a new user would see an app with nothing to do.
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
         expect(screen.getByLabelText("Read a card")).toBeTruthy();
         expect(screen.getByLabelText("Import a recipe")).toBeTruthy();
+    });
+
+    it("shows import as unavailable rather than pretending it works", async () => {
+        // ImportRecipeComponent is a preview-and-confirm sheet for an id it is
+        // handed; it has no field to type one into, and only ever opened from a
+        // share intent. Until sub-project 5 gives it a way in, a tile that
+        // silently does nothing when pressed is worse than one that says so.
+        await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
+        const tile = screen.getByLabelText("Import a recipe");
+
+        expect(tile.props.accessibilityState.disabled).toBe(true);
+
+        // Still there, still saying IMPORT, and pressing it goes nowhere.
+        await fireEvent.press(tile);
+        expect(screen.getByText("IMPORT")).toBeTruthy();
+        expect(mockPush).not.toHaveBeenCalled();
     });
 
     it("opens a recipe when its card is pressed", async () => {

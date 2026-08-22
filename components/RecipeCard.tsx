@@ -24,12 +24,6 @@ const ACTION_ICON_SIZE = 18;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
 
 /**
- * The contactless glyph, sized to sit level with the 11 px beverage marker
- * rather than to be read on its own.
- */
-const CONTACTLESS_SIZE = 13;
-
-/**
  * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
  * `DigitRoll` clamps at zero, so passing a sentinel straight through would tell
  * the user the ratio is 0 — not a possible value, and indistinguishable from a
@@ -190,18 +184,6 @@ export default function RecipeCard({
                             {marker}
                         </DotMatrixText>
                     )}
-                    {/* The contactless glyph is `wifi` turned a quarter turn —
-                        the same construction the contactless payment symbol
-                        uses. It is decorative: the card's accessibility label
-                        already says this is a recipe, and every recipe here
-                        writes to a card, so announcing it on each row would be
-                        noise. */}
-                    <View accessibilityElementsHidden
-                          importantForAccessibility="no-hide-descendants"
-                          style={{transform: [{rotate: "90deg"}]}}>
-                        <AntDesign testID="recipe-card-contactless" name="wifi"
-                                   size={CONTACTLESS_SIZE} color={onAccent.marker}/>
-                    </View>
                 </XStack>
             </XStack>
 

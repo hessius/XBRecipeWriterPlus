@@ -276,28 +276,20 @@ describe("RecipeCard", () => {
             .toEqual(expect.objectContaining({fontSize: 17, fontWeight: "700"}));
     });
 
-    it("shows a contactless mark, since every card here writes to one", async () => {
+    it("carries no contactless mark", async () => {
+        // It used to sit beside the beverage marker, unconditionally, on every
+        // card. Every recipe in this app writes to a card, so a mark that says
+        // so on all of them distinguishes nothing -- it is a decoration in the
+        // one corner a real per-recipe indicator would want.
+        //
+        // Queried with hidden elements included: the mark was hidden from the
+        // accessibility tree, so a default query would report it absent while
+        // it was still on screen.
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        // RNTL's default queries skip elements hidden from accessibility, and
-        // this mark deliberately is. Without the flag the failure reads as "not
-        // rendered", which sends you looking in the wrong place.
-        expect(screen.getByTestId("recipe-card-contactless",
-                                  {includeHiddenElements: true})).toBeTruthy();
-    });
-
-    it("keeps the contactless mark when the coffee marker is hidden", async () => {
-        // The two live in the same top-right cluster, and the setting in
-        // sub-project 6 is about the beverage word only. Hiding one must not
-        // take the other with it.
-        await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        showCoffeeMarker={false}/>
-        );
-        expect(screen.queryByText("COFFEE")).toBeNull();
-        expect(screen.getByTestId("recipe-card-contactless",
-                                  {includeHiddenElements: true})).toBeTruthy();
+        expect(screen.queryByTestId("recipe-card-contactless",
+                                    {includeHiddenElements: true})).toBeNull();
     });
 
     it("keeps the profile a faint watermark without dimming it below AA", async () => {

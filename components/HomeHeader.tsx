@@ -24,18 +24,21 @@ type ActionProps = {
     label: string;
     onPress: () => void;
     active?: boolean;
+    disabled?: boolean;
 };
 
-function Action({icon, label, onPress, active = false}: ActionProps) {
+function Action({icon, label, onPress, active = false, disabled = false}: ActionProps) {
     return (
         <XStack
             testID="home-header-action"
             accessible
             accessibilityRole="button"
             accessibilityLabel={label}
-            onPress={onPress}
+            accessibilityState={{disabled}}
+            onPress={disabled ? undefined : onPress}
             padding={ACTION_PADDING}
-            pressStyle={{opacity: 0.6}}>
+            opacity={disabled ? 0.4 : 1}
+            pressStyle={disabled ? undefined : {opacity: 0.6}}>
             <DotIcon name={icon} size={ACTION_ICON_SIZE}
                      color={active ? palette.success : palette.dim}/>
         </XStack>
@@ -50,6 +53,8 @@ type Props = {
     editing: boolean;
     /** False when the library is empty: there is nothing to edit. */
     showEdit: boolean;
+    /** False until sub-project 5 gives import a way to be handed a recipe. */
+    canImport?: boolean;
     onToggleEdit: () => void;
     onScan: () => void;
     onImport: () => void;
@@ -73,6 +78,7 @@ export default function HomeHeader({
     collapsed,
     editing,
     showEdit,
+    canImport = true,
     onToggleEdit,
     onScan,
     onImport,
@@ -103,7 +109,8 @@ export default function HomeHeader({
                     <Animated.View entering={entering} exiting={exiting}>
                         <XStack alignItems="center">
                             <Action icon="scan" label="Read a card" onPress={onScan}/>
-                            <Action icon="import" label="Import a recipe" onPress={onImport}/>
+                            <Action icon="import" label="Import a recipe"
+                                    disabled={!canImport} onPress={onImport}/>
                         </XStack>
                     </Animated.View>
                 )}
