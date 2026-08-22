@@ -11,12 +11,10 @@ describe("DURATION", () => {
 });
 
 describe("useReducedMotion", () => {
-    beforeEach(() => {
-        jest.spyOn(AccessibilityInfo, "addEventListener").mockReturnValue({
-            remove: jest.fn()
-        } as any);
-    });
-
+    // AccessibilityInfo.addEventListener is deliberately NOT mocked. The real one
+    // returns a real subscription, so the effect's cleanup runs for real at
+    // unmount — breaking `subscription.remove()` fails both tests below. A stub
+    // subscription would throw that coverage away.
     afterEach(() => {
         jest.restoreAllMocks();
     });
@@ -24,6 +22,9 @@ describe("useReducedMotion", () => {
     it("reports false when the OS has motion enabled", async () => {
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(false);
 
+        // renderHook is async in Testing Library v14, like render and fireEvent.
+        // Without the await, destructuring yields undefined rather than failing
+        // loudly.
         const {result} = await renderHook(() => useReducedMotion());
 
         await waitFor(() => expect(result.current).toBe(false));
