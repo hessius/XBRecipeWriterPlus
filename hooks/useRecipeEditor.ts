@@ -371,6 +371,14 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             label === RECIPE_LABELS.VOLUME) {
             totalVolumeRef.current?.forceUpdate();
 
+            // An edit that makes the pours add up retires the message, without
+            // waiting for another save. It is never raised here, only cleared:
+            // the mismatch is reported when the user asks for something to
+            // happen — Save, or a write — not while they are still typing.
+            if (recipe.isPourVolumeValid()) {
+                setVolumeError(null);
+            }
+
             // Update Auto button disabled state without re-rendering the whole component
             if (autoButtonRef.current) {
                 const isDisabled = recipe.isPourVolumeValid();
@@ -380,7 +388,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 });
             }
         }
-    }, [recipe, setKey, setEnableSave, totalVolumeRef, autoButtonRef]);
+    }, [recipe, setKey, setEnableSave, setVolumeError, totalVolumeRef, autoButtonRef]);
 
     return {
         recipe,
