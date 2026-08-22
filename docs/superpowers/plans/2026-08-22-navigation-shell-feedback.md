@@ -38,6 +38,9 @@ Two RNTL behaviours cost time in this plan's first tasks; both are load-bearing:
   twice to compare two states must keep each render's own returned query
   utilities (`const a = await renderWithProviders(...); a.getByText(...)`) rather
   than indexing into `screen.getAllBy*`.
+- **`renderHook` returns a Promise too**, not only `render`. Its declaration is
+  `renderHook(...): Promise<RenderHookResult<...>>`. Destructuring `{result}`
+  without awaiting silently gives `undefined`.
 
 **The React Compiler is enabled.** Do not hand-write `useMemo` or `useCallback`
 in new code, and do not read a whole `props` object inside a hook — destructure
@@ -1204,34 +1207,34 @@ function memoryStorage(): SettingsStorage {
 }
 
 describe("useSetting", () => {
-    it("starts at the stored default", () => {
+    it("starts at the stored default", async () => {
         const settings = new Settings(memoryStorage());
-        const {result} = renderHook(() => useSetting("showCoffeeMarker", settings));
+        const {result} = await renderHook(() => useSetting("showCoffeeMarker", settings));
         expect(result.current[0]).toBe(true);
     });
 
-    it("reports a value written before the hook mounted", () => {
+    it("reports a value written before the hook mounted", async () => {
         const settings = new Settings(memoryStorage());
         settings.set("showCoffeeMarker", false);
-        const {result} = renderHook(() => useSetting("showCoffeeMarker", settings));
+        const {result} = await renderHook(() => useSetting("showCoffeeMarker", settings));
         expect(result.current[0]).toBe(false);
     });
 
-    it("re-renders with the new value when set", () => {
+    it("re-renders with the new value when set", async () => {
         const settings = new Settings(memoryStorage());
-        const {result} = renderHook(() => useSetting("showCoffeeMarker", settings));
+        const {result} = await renderHook(() => useSetting("showCoffeeMarker", settings));
 
-        act(() => result.current[1](false));
+        await act(async () => result.current[1](false));
 
         expect(result.current[0]).toBe(false);
     });
 
-    it("persists the new value, not just the React state", () => {
+    it("persists the new value, not just the React state", async () => {
         const storage = memoryStorage();
         const settings = new Settings(storage);
-        const {result} = renderHook(() => useSetting("showCoffeeMarker", settings));
+        const {result} = await renderHook(() => useSetting("showCoffeeMarker", settings));
 
-        act(() => result.current[1](false));
+        await act(async () => result.current[1](false));
 
         // A fresh Settings over the same storage: this is what the next launch
         // sees, and it is the half that a state-only implementation loses.
@@ -2211,46 +2214,46 @@ function named(name: string): Recipe {
 }
 
 describe("useRecipeLibrary", () => {
-    it("sorts by display name so the list order does not depend on insertion order", () => {
+    it("sorts by display name so the list order does not depend on insertion order", async () => {
         const db = stubDb([named("Zambia"), named("Ethiopia"), named("Kenya")]);
-        const {result} = renderHook(() => useRecipeLibrary(db));
+        const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes.map((r) => r.displayName()))
             .toEqual(["Ethiopia", "Kenya", "Zambia"]);
     });
 
-    it("reports an empty library as an empty list, not as null", () => {
+    it("reports an empty library as an empty list, not as null", async () => {
         // retrieveAllRecipes returns null when the table is empty. Every caller
         // leaking that null is how the old screen ended up with `recipesJSON ? ... : ""`.
         const db = {...stubDb([]), retrieveAllRecipes: jest.fn(() => null)};
-        const {result} = renderHook(() => useRecipeLibrary(db));
+        const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes).toEqual([]);
     });
 
-    it("deletes through the database and re-reads", () => {
+    it("deletes through the database and re-reads", async () => {
         const db = stubDb([named("Ethiopia")]);
-        const {result} = renderHook(() => useRecipeLibrary(db));
+        const {result} = await renderHook(() => useRecipeLibrary(db));
 
-        act(() => result.current.deleteRecipe(result.current.recipes[0]));
+        await act(async () => result.current.deleteRecipe(result.current.recipes[0]));
 
         expect(db.deleteRecipe).toHaveBeenCalledTimes(1);
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
     });
 
-    it("duplicates through the database and re-reads", () => {
+    it("duplicates through the database and re-reads", async () => {
         const db = stubDb([named("Ethiopia")]);
-        const {result} = renderHook(() => useRecipeLibrary(db));
+        const {result} = await renderHook(() => useRecipeLibrary(db));
 
-        act(() => result.current.duplicateRecipe(result.current.recipes[0]));
+        await act(async () => result.current.duplicateRecipe(result.current.recipes[0]));
 
         expect(db.cloneRecipe).toHaveBeenCalledTimes(1);
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
     });
 
-    it("re-reads on refresh", () => {
+    it("re-reads on refresh", async () => {
         const db = stubDb([named("Ethiopia")]);
-        const {result} = renderHook(() => useRecipeLibrary(db));
+        const {result} = await renderHook(() => useRecipeLibrary(db));
 
-        act(() => result.current.refresh());
+        await act(async () => result.current.refresh());
 
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
     });
@@ -3082,7 +3085,7 @@ describe("useCardWriter", () => {
 
     it("does not use a native Alert for the volume mismatch", async () => {
         const alert = jest.spyOn(Alert, "alert");
-        const {result} = renderHook(() => useCardWriter());
+        const {result} = await renderHook(() => useCardWriter());
 
         await act(async () => result.current.writeCard(invalidRecipe()));
 
@@ -3093,7 +3096,7 @@ describe("useCardWriter", () => {
     it("reports the volume mismatch as a persistent state, not a toast", async () => {
         // A validation error you dismiss and then have to remember is the bug
         // this replaces. It belongs beside the save button until it is fixed.
-        const {result} = renderHook(() => useCardWriter());
+        const {result} = await renderHook(() => useCardWriter());
 
         await act(async () => result.current.writeCard(invalidRecipe()));
 
@@ -3102,7 +3105,7 @@ describe("useCardWriter", () => {
     });
 
     it("clears the mismatch once a valid recipe is written", async () => {
-        const {result} = renderHook(() => useCardWriter());
+        const {result} = await renderHook(() => useCardWriter());
         await act(async () => result.current.writeCard(invalidRecipe()));
 
         const valid = invalidRecipe();
