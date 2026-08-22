@@ -51,7 +51,7 @@ export default function SwipeableRecipeRow({
                 }}
                         width={80} height="100%" marginRight="$1" alignItems="center" justifyContent="center"
                         backgroundColor={palette.danger} borderColor={palette.line} borderWidth={2} borderRadius={10}
-                        aria-label={`Delete ${recipe.title}`}>
+                        aria-label={`Delete ${recipe.displayName()}`}>
                     <AntDesign name="delete" size={25} color={palette.base}/>
                 </Button>
                 <Button onPress={() => {
@@ -60,7 +60,7 @@ export default function SwipeableRecipeRow({
                 }}
                         width={80} height="100%" alignItems="center" justifyContent="center"
                         backgroundColor={palette.surface} borderColor={palette.line} borderWidth={2} borderRadius={10}
-                        aria-label={`Duplicate ${recipe.title}`}>
+                        aria-label={`Duplicate ${recipe.displayName()}`}>
                     <Feather name="copy" size={25} color={palette.text}/>
                 </Button>
             </XStack>

@@ -49,7 +49,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         () => (recipeJSON && recipeJSON !== "") ? new Recipe(undefined, recipeJSON as string) : null
     );
     const [inputError, setInputError] = useState(false);
-    const [titleChanged, setTitleChanged] = useState(false);
     const [enableSave, setEnableSave] = useState(initiallySaveEnabled);
     const [key, setKey] = useState(0);
     const [isLoadingTitle, setIsLoadingTitle] = useState(false);
@@ -72,8 +71,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
 
             let recipeTitle = xbRecipe.getRecipeTitle();
             if (recipeTitle.length > 0) {
-                // Update the current recipe with the fetched title
-                r.title = recipeTitle;
+                // Update the current recipe with the fetched xBloom name. The
+                // user's own `name` is left untouched, so a sync can no longer
+                // silently overwrite a name they typed.
+                r.xbloomName = recipeTitle;
                 // Also get shareID for restore feature if not already present
                 let xbr = xbRecipe.getRecipe();
                 if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
@@ -83,7 +84,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     r.offline_backup = xbr.offline_backup;
                 }
                 setRecipe(r);
-                setTitleChanged(true);
                 setEnableSave(true);
             }
         } catch (error) {
@@ -94,11 +94,11 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     };
 
     useEffect(() => {
-        // Only fetch if we have a recipe with valid XID but no meaningful title
+        // Only fetch if we have a recipe with valid XID but no cached xBloom name
         if (recipe &&
             recipe.xid &&
             recipe.xid.trim().length > 0 &&
-            (!recipe.title || recipe.title.trim().length === 0)) {
+            (!recipe.xbloomName || recipe.xbloomName.trim().length === 0)) {
             // Syncing with an external system (the xBloom API); the setState calls
             // happen around an await, not synchronously during the effect.
             // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -148,7 +148,13 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     function restoreRecipe() {
-        const alwaysKeepFields = ['uuid', 'backup', 'title'];
+        // Restoring replaces the brew parameters, not the recipe's identity:
+        // its uuid, the name the user chose, and the metadata the library sorts
+        // and colours by all survive a restore. Without `accentIndex` the card
+        // would silently change colour, and without `createdAt`/`source` a
+        // restored recipe would lose its provenance and placeholder name.
+        const alwaysKeepFields = ['uuid', 'backup', 'name', 'xbloomName',
+                                  'accentIndex', 'createdAt', 'source'];
 
         if (!recipe) return;
 
@@ -257,28 +263,11 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     function saveRecipe() {
-        console.log("Save Recipe");
         if (!recipe) return;
         let db = new RecipeDatabase();
         if (recipe.isPourVolumeValid()) {
-            if (titleChanged && db.doesTitleExist(recipe.title)) {
-                let r = db.getRecipe(recipe.uuid);
-                //if the changed title matches the title of a duplicate recipe that has the same uuid. Then we hit an edge case where the user modified the title, but then changed back to what it was originally.
-                if (r?.title === recipe.title) {
-                    db.updateRecipe(recipe.uuid, recipe);
-                    onSaved();
-                } else {
-                    Alert.alert('Save Error', 'The title of \"' + recipe.title + "\" already exists. Please choose a different name", [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
-                }
-            } else {
-                db.updateRecipe(recipe.uuid, recipe);
-                onSaved();
-            }
+            db.updateRecipe(recipe.uuid, recipe);
+            onSaved();
         } else {
             Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
                 {
@@ -330,8 +319,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             [RECIPE_LABELS.TITLE]:      {
                 requiresNumber: false,
                 update:         (r: Recipe, val: string) => {
-                    r.title = val;
-                    setTitleChanged(true);
+                    r.name = val;
                 }
             },
             [RECIPE_LABELS.CUP]:        {
@@ -397,7 +385,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 });
             }
         }
-    }, [recipe, setKey, setEnableSave, setTitleChanged, totalVolumeRef, autoButtonRef]);
+    }, [recipe, setKey, setEnableSave, totalVolumeRef, autoButtonRef]);
 
     return {
         recipe,

@@ -6,7 +6,7 @@ import Recipe from "@/library/Recipe";
 
 function makeRecipe(title = "Ethiopia Guji") {
     const recipe = new Recipe();
-    recipe.title = title;
+    recipe.name = title;
     return recipe;
 }
 

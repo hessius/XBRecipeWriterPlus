@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 
 import Recipe from './Recipe';
+import {accentGroupFor, reassignIfCrossed} from './accent';
+import {copyName} from './duplicates';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
@@ -20,8 +22,8 @@ class RecipeDatabase {
 
     public insertRecipe(recipe: Recipe): void {
         if (recipe && !this.getRecipe(recipe.uuid)) {
+            recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
             let recipeJson = JSON.stringify(recipe);
-            console.log(recipeJson);
             this.db.runSync(`
                         INSERT INTO recipes (uuid, recipeJSON)
                         VALUES (?, ?);`,
@@ -41,8 +43,9 @@ class RecipeDatabase {
             this.insertRecipe(updatedRecipe);
             return;
         } else {
+            updatedRecipe.accentIndex =
+                reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
             let updatedRecipeJson = JSON.stringify(updatedRecipe);
-            console.log(updatedRecipeJson);
             this.db.runSync(`
                         UPDATE recipes
                         SET recipeJSON = ?
@@ -85,42 +88,16 @@ class RecipeDatabase {
     public cloneRecipe(uuid: string): void {
         let recipe = this.getRecipe(uuid);
         if (recipe) {
+            const names = (this.retrieveAllRecipes() ?? []).map((r) => r.name);
             recipe.generateNewUUID();
-            recipe.title = this.createTitle(recipe.title);
+            recipe.name = copyName(recipe.name, names);
+            recipe.source = "duplicate";
+            recipe.createdAt = Date.now();
+            // Cleared so the copy is assigned its own colour on insert rather
+            // than sitting on the original's.
+            recipe.accentIndex = undefined;
             this.insertRecipe(recipe);
         }
-    }
-
-    private createTitle(title: string): string {
-
-        let newTitle = title;
-        if (!newTitle.includes("(Copy)")) {
-            newTitle = `${newTitle} (Copy)(1)`;
-        }
-
-        let count = 1;
-        while (this.doesTitleExist(newTitle)) {
-            count++;
-            if (newTitle.includes("(Copy)")) {
-                newTitle = newTitle.replace(/\(Copy\)\(\d+\)$/, `(Copy)(${count})`);
-            } else {
-                newTitle = `${title} (Copy)(${count})`;
-            }
-        }
-
-        return newTitle;
-    }
-
-    public doesTitleExist(title: string): boolean {
-        let recipes = this.retrieveAllRecipes();
-        if (recipes) {
-            for (let i = 0; i < recipes.length; i++) {
-                if (recipes[i].title.toLowerCase() === title.toLowerCase()) {
-                    return true;
-                }
-            }
-        }
-        return false
     }
 
 
@@ -140,6 +117,20 @@ class RecipeDatabase {
         return null;
     }
 
+    /**
+     * The accent indices already taken in a recipe's half of the palette.
+     *
+     * Only the same half counts: the coffee library is larger, and letting its
+     * indices into the tea tally would skew tea towards colours nothing uses.
+     */
+    private accentsInUse(recipe: Recipe): number[] {
+        const group = accentGroupFor(recipe);
+        return (this.retrieveAllRecipes() ?? [])
+            .filter((other) => other.uuid !== recipe.uuid &&
+                               accentGroupFor(other) === group)
+            .map((other) => other.accentIndex)
+            .filter((index): index is number => typeof index === "number");
+    }
 
 }
 

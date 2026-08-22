@@ -20,6 +20,7 @@ import Svg, {Path} from "react-native-svg";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
+import {resolveOnOpen} from '@/library/duplicates';
 
 // @ts-ignore-next-line
 
@@ -58,7 +59,7 @@ export default function HomeScreen() {
                 recipes.push(new Recipe(undefined, JSON.stringify(recipeData[i])));
             }
         }
-        return recipes.sort((a: Recipe, b: Recipe) => a.title.localeCompare(b.title));
+        return recipes.sort((a: Recipe, b: Recipe) => a.displayName().localeCompare(b.displayName()));
     }
 
 
@@ -100,7 +101,21 @@ export default function HomeScreen() {
                 setShowAndroidNFCDialog(false);
 
                 //reenable
-                router.push({pathname: '/editRecipe', params: {recipeJSON: JSON.stringify(recipe)}});
+                // Stamped before serialising: the editor rebuilds the recipe
+                // from this JSON, so anything set afterwards would be lost.
+                recipe.source = "read";
+                const {recipe: toOpen, isExisting} =
+                    resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
+                router.push({
+                    pathname: '/editRecipe',
+                    params:   {
+                        recipeJSON: JSON.stringify(toOpen),
+                        // An already-saved recipe opens with Save disabled, as
+                        // it would from the list; only a genuinely new read
+                        // arrives needing to be saved.
+                        saveEnabled: isExisting ? "false" : "true"
+                    }
+                });
             }
         } catch (e) {
             console.log(e);
@@ -133,7 +148,7 @@ export default function HomeScreen() {
     }
 
     function duplicateRecipe(recipe: Recipe) {
-        console.log("Duplicating recipe:" + recipe.title);
+        console.log("Duplicating recipe:" + recipe.displayName());
         let db = new RecipeDatabase();
         db.cloneRecipe(recipe.uuid);
         forceRefresh();
@@ -192,7 +207,7 @@ export default function HomeScreen() {
                 xbloom.fetchRecipeDetail().then(() => {
                     if (xbloom) {
                         let rec = xbloom?.getRecipe();
-                        if (rec && !db.doesTitleExist(rec.title)) {
+                        if (rec) {
                             db.insertRecipe(rec);
                         }
                     }

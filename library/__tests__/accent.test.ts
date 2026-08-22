@@ -3,8 +3,8 @@ import {accents} from "@/constants/colors";
 import {
     accentGroupFor,
     nextAccentIndex,
-    resolveAccent,
-    type RecipeWithAccent
+    reassignIfCrossed,
+    resolveAccent
 } from "@/library/accent";
 
 function recipeWithCup(cup: number): Recipe {
@@ -75,7 +75,7 @@ describe("resolveAccent", () => {
 
     it("prefers a persisted index over the uuid fallback", () => {
         const r = recipeWithCup(CUP_TYPE.XPOD);
-        (r as RecipeWithAccent).accentIndex = 3;
+        r.accentIndex = 3;
         expect(resolveAccent(r)).toBe(accents.coffee[3]);
     });
 
@@ -83,7 +83,7 @@ describe("resolveAccent", () => {
         "falls back to the uuid hash for the invalid persisted index %p",
         (bad) => {
             const r = recipeWithCup(CUP_TYPE.XPOD);
-            (r as RecipeWithAccent).accentIndex = bad as number;
+            r.accentIndex = bad as number;
             // Not merely "does not throw": accents.coffee[2.5] is undefined, and
             // an undefined colour reaches a style prop and paints nothing.
             expect(accents.coffee).toContain(resolveAccent(r));
@@ -131,5 +131,39 @@ describe("nextAccentIndex", () => {
         // Guards the return contract itself: tea has four accents, so anything
         // sized against the coffee half would be out of bounds at the call site.
         expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
+    });
+});
+
+describe("assigning an accent when the beverage changes", () => {
+    it("keeps an index that is valid for the recipe's half", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.accentIndex = 6;
+        expect(reassignIfCrossed(recipe, [])).toBe(6);
+    });
+
+    it("reassigns when a coffee index is out of range for tea", () => {
+        // The tea half is shorter than the coffee half, so an index valid for
+        // coffee can point past the end of tea. The halves do not overlap, so
+        // clamping would land on an arbitrary colour rather than the least-used
+        // one.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.accentIndex = 6;
+        const reassigned = reassignIfCrossed(recipe, []);
+        expect(reassigned).toBeLessThan(accents.tea.length);
+    });
+
+    it("assigns the least-used colour in the new half", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.accentIndex = 9;
+        expect(reassignIfCrossed(recipe, [0, 0, 1, 2])).toBe(3);
+    });
+
+    it("assigns an index to a recipe that has never had one", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        expect(reassignIfCrossed(recipe, [0, 1])).toBe(2);
     });
 });

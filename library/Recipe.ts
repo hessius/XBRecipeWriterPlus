@@ -66,9 +66,11 @@ const POLY_TABLE = [
 ];
 
 
+/** Where a recipe came from. Drives the placeholder name. */
+export type RecipeSource = "read" | "import" | "duplicate" | "manual";
+
 class Recipe {
     public uuid: string = "";
-    public title: string = "";
     public xid: string = "";
     public shareId: string = "";
     public key: string = ""
@@ -84,10 +86,30 @@ class Recipe {
     public backup: number[] = [];
     public offline_backup: number[] = [];
     public uid: number[] = [];
+    /** The name the user chose. Empty until they rename something. */
+    public name: string = "";
+    /**
+     * The name xBloom publishes for this recipe's XID, cached.
+     *
+     * Not hand-edited. Once the sync and display work lands, a sync will
+     * refresh this while the local `name` wins the display, so refreshing can
+     * no longer discard what the user typed.
+     */
+    public xbloomName: string = "";
+    /** Epoch ms. `0` means unknown — a record saved before the field existed. */
+    public createdAt: number = 0;
+    public source: RecipeSource = "manual";
+    /**
+     * Index into the accent half for this recipe's beverage. Absent on records
+     * saved before the field existed, which fall back to the uuid hash in
+     * `library/accent.ts`.
+     */
+    public accentIndex?: number;
 
     constructor(data?: number[], json?: string, hasSignature: boolean = true) {
         this.uuid = (uuid.v4() as string);
         this.key = this.uuid;
+        this.createdAt = Date.now();
 
         if (data) {
             if (hasSignature) {
@@ -137,7 +159,18 @@ class Recipe {
                 this.pours.push(p);
             }
             this.ratio = jsonRecipe.ratio;
-            this.title = jsonRecipe.title;
+            // Lazy migration, beside the cup-type fixes above. A record written
+            // before these fields existed takes its old `title` as the local
+            // name: it was editable, so it is the user's, and there is no way to
+            // tell a synced title from a typed one after the fact.
+            this.name = jsonRecipe.name ?? jsonRecipe.title ?? "";
+            this.xbloomName = jsonRecipe.xbloomName ?? "";
+            // Not `?? Date.now()`. Backfilling with the read time would give
+            // every legacy record a date that changes on every launch until it
+            // is next saved.
+            this.createdAt = jsonRecipe.createdAt ?? 0;
+            this.source = jsonRecipe.source ?? "manual";
+            this.accentIndex = jsonRecipe.accentIndex;
             this.xid = jsonRecipe.xid;
             if (jsonRecipe.dosage) {
                 this.dosage = jsonRecipe.dosage;
@@ -179,6 +212,85 @@ class Recipe {
     public generateNewUUID() {
         this.uuid = (uuid.v4() as string);
         this.key = this.uuid;
+    }
+
+    /**
+     * A stable identity for this recipe, as the bytes it would write.
+     *
+     * Two recipes are the same when writing either produces the same card. The
+     * first 32 bytes are the card's own signature, which differs between a
+     * recipe read from a card and the same recipe imported from a share link,
+     * so an explicit zero prefix is passed: `getData(null)` would otherwise
+     * fall back to this recipe's own `backup`, reintroducing exactly the
+     * dependency being removed. `getData` strips that prefix back off before
+     * returning, leaving only the payload.
+     *
+     * Computed on demand and never persisted: a stored fingerprint would be
+     * silently invalidated by any future change to the byte format, whereas a
+     * computed one simply re-derives. Libraries here are tens of recipes, so
+     * scanning them all costs nothing.
+     */
+    public fingerprint(): string {
+        return Recipe.convertNumberArrayToHex(this.getData(new Array(32).fill(0)));
+    }
+
+    /**
+     * The name to show for this recipe.
+     *
+     * A chain rather than a single field, because both names and the XID are
+     * optional: a card carries no name at all, only the XID, and a card with no
+     * XID carries nothing. This lives here so no screen reimplements it.
+     */
+    public displayName(): string {
+        if (this.name.trim().length > 0) {
+            return this.name;
+        }
+        if (this.xbloomName.trim().length > 0) {
+            return this.xbloomName;
+        }
+        if (this.xid.trim().length > 0) {
+            return this.xid;
+        }
+        return this.placeholderName();
+    }
+
+    /**
+     * Whether any real name was found, as opposed to the placeholder.
+     *
+     * The UI renders the placeholder muted, so that a generated label is never
+     * mistaken for a name the user chose.
+     */
+    public hasName(): boolean {
+        return this.name.trim().length > 0 ||
+               this.xbloomName.trim().length > 0 ||
+               this.xid.trim().length > 0;
+    }
+
+    /**
+     * Provenance and date, for a recipe with no name from any source.
+     *
+     * Not derived from the brew parameters: the recipe card already shows dose,
+     * ratio and grind beside the name, so "18 g · 1:16" would only repeat
+     * itself. Provenance and date are the one thing that distinguishes four
+     * nameless cards read in a row.
+     */
+    private placeholderName(): string {
+        const verb: Record<RecipeSource, string> = {
+            read:      "Read",
+            import:    "Imported",
+            duplicate: "Copy",
+            manual:    "Untitled"
+        };
+
+        if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {
+            return verb[this.source];
+        }
+
+        const date = new Date(this.createdAt).toLocaleDateString(undefined, {
+            day:   "numeric",
+            month: "short"
+        });
+        return `${verb[this.source]} ${date}`;
     }
 
     public deletePour(pourNumber: number) {
@@ -305,7 +417,6 @@ class Recipe {
         } else {
             data = data.concat(this.backup.length >= 32 ? this.backup.slice(0, 32) : new Array(32).fill(0));
         }
-        console.log("Prefix:" + Recipe.convertNumberArrayToHex(data));
 
         data = data.concat(this.convertXIDToData(this.xid));
 
@@ -374,8 +485,6 @@ class Recipe {
 
         data.push(this.ratio);
         let checkSum = this.calculateCRC(data);
-        console.log("CheckSum:" + Recipe.convertNumberArrayToHex(data));
-        console.log("CheckSum:" + checkSum + ":" + this.checksum);
         data.push(checkSum);
 
         if (withSignature) {
@@ -583,7 +692,7 @@ class Recipe {
     }
 
     public toString(): string {
-        return `Recipe: ${this.title}
+        return `Recipe: ${this.displayName()}
     UID:    ${Recipe.convertNumberArrayToHex(this.uid ?? "")}
     Backup: ${Recipe.convertNumberArrayToHex(this.backup ?? "")}
     XID: ${this.xid}

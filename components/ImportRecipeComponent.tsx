@@ -1,4 +1,6 @@
 import {XBloomRecipe} from '@/library/XBloomRecipe';
+import RecipeDatabase from '@/library/RecipeDatabase';
+import {resolveOnOpen} from '@/library/duplicates';
 import {useRouter} from 'expo-router';
 import React, {useEffect, useState} from 'react';
 import {Image} from 'react-native';
@@ -37,9 +39,22 @@ export default function ImportRecipeComponent(props: {
         // dialog "armed" with a stale recipe id, and the next refresh of the recipe
         // list re-mounts this component and pops the sheet again unprompted.
         props.onClose();
+        if (!recipe) {
+            return;
+        }
+        recipe.source = "import";
+        const db = new RecipeDatabase();
+        const {recipe: toOpen, isExisting} =
+            resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
         // Defer navigation until after the dialog state has propagated
         setTimeout(() => {
-            router.push({pathname: '/editRecipe', params: {recipeJSON: JSON.stringify(recipe), saveEnabled: "true"}});
+            router.push({
+                pathname: '/editRecipe',
+                params:   {
+                    recipeJSON:  JSON.stringify(toOpen),
+                    saveEnabled: isExisting ? "false" : "true"
+                }
+            });
         }, 0);
     }
 

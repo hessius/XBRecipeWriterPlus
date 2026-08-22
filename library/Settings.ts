@@ -1,0 +1,107 @@
+import * as SQLite from 'expo-sqlite';
+
+/**
+ * Every setting, with its default.
+ *
+ * This map is the single source of both the key list and the value types — a
+ * key that is not here is a compile error at the call site, so there is no
+ * stringly-typed lookup to typo.
+ */
+export const DEFAULTS = {
+    /**
+     * The `TEA` marker is always shown; `COFFEE` is redundant in a mostly-coffee
+     * library, so it can be turned off.
+     */
+    showCoffeeMarker: true
+} as const;
+
+export type SettingKey = keyof typeof DEFAULTS;
+
+/**
+ * Widen a literal type (as produced by `DEFAULTS`'s `as const`) back to its
+ * base primitive type, so `set()` accepts any `boolean`/`number`/`string`
+ * rather than only the exact literal default value.
+ */
+type Widen<T> = T extends boolean ? boolean
+    : T extends number ? number
+    : T extends string ? string
+    : T;
+
+export type SettingValue<K extends SettingKey> = Widen<(typeof DEFAULTS)[K]>;
+
+/**
+ * Where settings are kept.
+ *
+ * An interface rather than a hard dependency on SQLite so the store can be
+ * tested without a database: `RecipeDatabase` has no tests and no mock, and
+ * introducing one to check a defaults map would be a poor trade.
+ */
+export interface SettingsStorage {
+    read(key: string): string | null;
+    write(key: string, value: string): void;
+}
+
+/** The real backend: a table alongside `recipes` in the app's database. */
+export class SqliteSettingsStorage implements SettingsStorage {
+    private db: SQLite.SQLiteDatabase;
+
+    constructor() {
+        this.db = SQLite.openDatabaseSync('xbrecipewriter.db');
+        this.db.execSync(`
+            CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY NOT NULL, value TEXT);`
+        );
+    }
+
+    public read(key: string): string | null {
+        const row = this.db.getFirstSync<{value: string | null}>(
+            `SELECT value FROM settings WHERE key = ?;`, [key]
+        );
+        return row?.value ?? null;
+    }
+
+    public write(key: string, value: string): void {
+        this.db.runSync(
+            `INSERT INTO settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+            [key, value]
+        );
+    }
+}
+
+export class Settings {
+    private storage: SettingsStorage;
+
+    constructor(storage: SettingsStorage = new SqliteSettingsStorage()) {
+        this.storage = storage;
+    }
+
+    public get<K extends SettingKey>(key: K): SettingValue<K> {
+        const raw = this.storage.read(key);
+        if (raw === null) {
+            return DEFAULTS[key] as SettingValue<K>;
+        }
+
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            // Type-check against the default rather than trusting what is
+            // stored. A row edited by hand, or written by a version that
+            // changed this setting's type, must not propagate as the wrong
+            // type into the rest of the app.
+            //
+            // Sound only for primitive defaults. `typeof` collapses arrays,
+            // plain objects and null to "object", so a setting whose default
+            // is an object or array needs a real shape check here rather than
+            // this one.
+            if (typeof parsed !== typeof DEFAULTS[key]) {
+                return DEFAULTS[key] as SettingValue<K>;
+            }
+            return parsed as SettingValue<K>;
+        } catch {
+            return DEFAULTS[key] as SettingValue<K>;
+        }
+    }
+
+    public set<K extends SettingKey>(key: K, value: SettingValue<K>): void {
+        this.storage.write(key, JSON.stringify(value));
+    }
+}
