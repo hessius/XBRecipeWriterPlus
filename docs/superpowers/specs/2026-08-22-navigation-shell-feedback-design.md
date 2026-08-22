@@ -272,16 +272,26 @@ claim false.
 
 ### Toast implementation
 
-`@backpackapp-io/react-native-toast` is **kept and skinned**. It exposes a
-`customToast` option per call and a `children` render prop on `<Toasts>` that
-takes arbitrary JSX, so the styling constraint that would have justified writing
-our own does not exist.
+`@backpackapp-io/react-native-toast` is **kept and skinned**. It accepts a
+`customToast?: (toast: Toast) => JSX.Element` option on every call, which takes
+arbitrary JSX, so the styling constraint that would have justified writing our
+own does not exist.
 
 Rebuilding would re-implement queueing, swipe-to-dismiss, timing, safe-area
 insets, reanimated enter and exit transitions, and the promise API — for no gain.
 
-Every toast is skinned in **one place**, via the render prop on `<Toasts>`, not
-per call site. A `notify()` caller passes meaning, never styling.
+**Correction, found during implementation.** An earlier draft of this section
+claimed `<Toasts>` also takes a `children` render prop. It does not — not in the
+installed 0.15.1, whose `Toasts` props are configuration only. `customToast` per
+call is the whole mechanism.
+
+That makes the "one place" guarantee structural rather than architectural:
+`notify()` is the only dispatcher in the app, and it is what supplies
+`customToast`. Any bare `toast()` call that bypasses it would render the
+library's default body and break the app's voice — so **no bare `toast()` may
+survive outside `components/XbrwToast.tsx`**, and that is checked by grep in the
+verification task rather than left to discipline. A `notify()` caller passes
+meaning, never styling.
 
 ### Layering
 
@@ -384,7 +394,7 @@ forward from sub-project 6 because the toggle cannot be wired without it.
 | `components/TooltipComponent.tsx` | modified | `Alert` → sheet |
 | `hooks/useRecipeEditor.ts` | modified | `Alert` → `notify` |
 | `hooks/useCardWriter.ts` | modified | `Alert` → `notify`; uses `NfcOverlay` |
-| `app/_layout.tsx` | modified | `<Toasts>` render prop |
+| `app/_layout.tsx` | unchanged | `<Toasts>` needs no render prop; see the correction above |
 
 `app/index.tsx` is currently doing far too much — data loading, share-intent
 handling, NFC reading, dialog state and layout. The list and the read path move

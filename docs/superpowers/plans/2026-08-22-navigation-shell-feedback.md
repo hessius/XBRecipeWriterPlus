@@ -1047,9 +1047,8 @@ type Props = {
 /**
  * The body of every toast in the app.
  *
- * Rendered from the single `children` render prop on `<Toasts>` rather than
- * per call site, so there is exactly one place where a toast is styled and a
- * caller cannot invent a variant.
+ * Supplied by `notify()` as the library's `customToast`, so there is exactly
+ * one place where a toast is styled and a caller cannot invent a variant.
  *
  * The message is prose and stays in Inter — the typography rule is that Doto is
  * for machine-derived values, and an error sentence is not one.
@@ -1117,29 +1116,46 @@ export default XbrwToast;
 Run: `npx jest components/__tests__/XbrwToast.test.tsx`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Wire the render prop**
+- [ ] **Step 5: Supply the body on every dispatch**
 
-In `app/_layout.tsx`, add the import:
+**Corrected during implementation.** This step originally wired a `children`
+render prop on `<Toasts>` in `app/_layout.tsx`. **That prop does not exist** —
+`Toasts` in the installed 0.15.1 takes configuration only. The real mechanism is
+`customToast?: (toast: Toast) => JSX.Element` in `ToastOptions`, supplied per
+call. `app/_layout.tsx` therefore needs **no change at all**.
+
+`notify()` above becomes:
 
 ```tsx
-import {XbrwToast} from '@/components/XbrwToast';
+export function notify(notice: Notice): void {
+    const {duration} = resolveNotice(notice);
+    const type = toneToLibType(notice.tone);
+    const options = {
+        duration,
+        customToast: () => <XbrwToast type={type} message={notice.message}/>
+    };
+
+    if (notice.tone === "success") {
+        libToast.success(notice.message, options);
+    } else if (notice.tone === "error") {
+        libToast.error(notice.message, options);
+    } else {
+        libToast(notice.message, options);
+    }
+}
 ```
 
-and replace `<Toasts/>` with:
+with `toneToLibType` added to the `@/library/notify` import.
 
-```tsx
-                                        <Toasts>
-                                            {(t) => <XbrwToast type={t.type} message={String(t.message)}/>}
-                                        </Toasts>
-```
+The "skinned in one place" guarantee is now structural: `notify()` is the only
+dispatcher, and it is what supplies `customToast`. **A bare `toast()` call
+anywhere else renders the library's default body and breaks the app's voice** —
+Task 17 removes the six that exist today, and Task 18 greps to prove it.
 
 - [ ] **Step 6: Verify the app still typechecks**
 
 Run: `npm run typecheck`
-Expected: 0 errors. If the render prop's parameter is implicitly `any`, give it
-the library's `Toast` type:
-`import type {Toast} from '@backpackapp-io/react-native-toast';` and annotate
-`(t: Toast) => ...`.
+Expected: 0 errors.
 
 - [ ] **Step 7: Commit**
 
@@ -1150,8 +1166,8 @@ git add components/XbrwToast.tsx components/__tests__/XbrwToast.test.tsx app/_la
 Subject: `feat: skin every toast in one place`
 Body:
 ```
-The toast library exposes a children render prop on <Toasts> that
-takes arbitrary JSX, so the app's toasts can carry Doto, dot-matrix
+The toast library takes a customToast option on every call that
+accepts arbitrary JSX, so the app's toasts can carry dot-matrix
 glyphs and the palette without replacing the library and losing its
 queueing, swipe-to-dismiss, safe-area handling and promise API.
 
@@ -3329,6 +3345,15 @@ Expected: no output.
 grep -rnE "duration: *[0-9]" app components --include=*.tsx | grep -v __tests__
 ```
 Expected: no output — every duration comes from `constants/motion.ts`.
+
+- [ ] **Step 2b: Confirm the app has exactly one toast dispatcher**
+
+```bash
+grep -rnE "\btoast[.(]" app components hooks --include=*.ts --include=*.tsx | grep -v __tests__ | grep -v "^components/XbrwToast.tsx"
+```
+Expected: **no output**. `notify()` is what supplies the `customToast` body, so a
+bare `toast()` call anywhere else renders the toast library's own default and the
+app changes voice mid-sentence.
 
 - [ ] **Step 3: Confirm the sub-project 1 components are actually mounted**
 
