@@ -21,12 +21,30 @@ export type ResolvedNotice = Notice & {
     glyph: DotIconName;
     /** Milliseconds on screen. */
     duration: number;
+    /** The tone named in the machine's own voice, set in Doto above the prose. */
+    label: string;
 };
 
 const GLYPHS: Record<NoticeTone, DotIconName> = {
     success: "success",
     error:   "error",
     info:    "info"
+};
+
+/**
+ * What the machine calls each tone.
+ *
+ * Short and upper case because these are rendered in Doto at 11px, the face's
+ * legibility floor -- a long or mixed-case word becomes texture at that size.
+ * "DONE" rather than "SUCCESS" for exactly that reason.
+ *
+ * This is meaning rather than styling, so it is resolved here with the glyph
+ * and the duration instead of being written into the component.
+ */
+const LABELS: Record<NoticeTone, string> = {
+    success: "DONE",
+    error:   "ERROR",
+    info:    "NOTE"
 };
 
 /**
@@ -50,7 +68,8 @@ export function resolveNotice(notice: Notice): ResolvedNotice {
     return {
         ...notice,
         glyph:    GLYPHS[notice.tone],
-        duration: DURATIONS[notice.tone]
+        duration: DURATIONS[notice.tone],
+        label:    LABELS[notice.tone]
     };
 }
 

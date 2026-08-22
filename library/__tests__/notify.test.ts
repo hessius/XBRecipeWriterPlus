@@ -40,3 +40,20 @@ describe("the toast library's type strings", () => {
         expect(libTypeToTone("loading")).toBe("info");
     });
 });
+
+describe("tone labels", () => {
+    it("names each tone in the machine's own words", () => {
+        expect(resolveNotice({tone: "success", message: "x"}).label).toBe("DONE");
+        expect(resolveNotice({tone: "error", message: "x"}).label).toBe("ERROR");
+        expect(resolveNotice({tone: "info", message: "x"}).label).toBe("NOTE");
+    });
+
+    it.each(TONES)("gives %s a label that survives being set in Doto", (tone) => {
+        // Upper case and short: the label is rendered in Doto at 11px, which is
+        // the face's legibility floor, and a long or mixed-case word turns to
+        // texture at that size.
+        const {label} = resolveNotice({tone, message: "x"});
+        expect(label).toBe(label.toUpperCase());
+        expect(label.length).toBeLessThanOrEqual(5);
+    });
+});

@@ -1,8 +1,9 @@
 import React from "react";
 import {toast as libToast} from "@backpackapp-io/react-native-toast";
-import {Text, XStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
+import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {
     libTypeToTone,
@@ -12,9 +13,17 @@ import {
     type NoticeTone
 } from "@/library/notify";
 
-const GLYPH_SIZE = 20;
+const GLYPH_SIZE = 22;
 
-/** Per-tone accent, used for the glyph and the leading rule only. */
+/**
+ * The width to fall back to when the library has not measured one.
+ *
+ * Only reached when the component is rendered outside the toaster, which is to
+ * say in a test; the library always passes a width in the app.
+ */
+const FALLBACK_WIDTH = 360;
+
+/** Per-tone accent, used for the glyph and its label. */
 const TONE_COLOUR: Record<NoticeTone, string> = {
     success: palette.success,
     error:   palette.danger,
@@ -25,19 +34,30 @@ type Props = {
     /** The toast library's own type tag. Translated back into a tone here. */
     type: string;
     message: string;
+    /**
+     * The width the library measured, handed to every `customToast`.
+     *
+     * Applied rather than ignored because the wrapper the library renders
+     * `customToast` into has no width of its own: the toast is shrink-to-fit,
+     * and a message set to `flex: 1` has a flex basis of zero, so it adds
+     * nothing to the parent's intrinsic width and is then laid out at zero
+     * width. On device that showed as a toast with a glyph, a border, and no
+     * text between them.
+     */
+    width?: number;
 };
 
 /**
  * The body of every toast in the app.
  *
- * Rendered from the single `children` render prop on `<Toasts>` rather than
- * per call site, so there is exactly one place where a toast is styled and a
- * caller cannot invent a variant.
+ * Rendered from a single place rather than per call site, so there is exactly
+ * one place a toast is styled and a caller cannot invent a variant.
  *
- * The message is prose and stays in Inter — the typography rule is that Doto is
- * for machine-derived values, and an error sentence is not one.
+ * Two lines: the machine names the tone, then says the thing. The label is
+ * machine-derived and is Doto; the sentence is written for a person and stays
+ * in Inter.
  */
-export function XbrwToast({type, message}: Props) {
+export function XbrwToast({type, message, width = FALLBACK_WIDTH}: Props) {
     const tone = libTypeToTone(type);
     const notice = resolveNotice({tone, message});
     const colour = TONE_COLOUR[tone];
@@ -49,21 +69,28 @@ export function XbrwToast({type, message}: Props) {
             accessible
             accessibilityRole="alert"
             accessibilityLabel={message}
-            alignItems="center"
+            width={width}
+            alignItems="flex-start"
             gap="$3"
             paddingVertical="$3"
             paddingHorizontal="$3.5"
             borderRadius="$6"
             borderWidth={1}
             borderColor={palette.line}
-            borderLeftWidth={3}
-            borderLeftColor={colour}
-            backgroundColor={palette.raised}
-            maxWidth={420}>
+            backgroundColor={palette.surface}>
             <DotIcon name={notice.glyph} size={GLYPH_SIZE} color={colour} animated/>
-            <Text flex={1} fontSize={14} color={palette.text}>
-                {message}
-            </Text>
+            <YStack flexShrink={1} gap="$1">
+                {/* The machine naming what it is about to say. Doto is for
+                    machine-derived values, and a tone is one; the sentence
+                    underneath is written for a person and stays in Inter. */}
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.8}
+                               color={colour}>
+                    {notice.label}
+                </DotMatrixText>
+                <Text fontSize={14} color={palette.text}>
+                    {message}
+                </Text>
+            </YStack>
         </XStack>
     );
 }
@@ -89,7 +116,12 @@ export function notify(notice: Notice): void {
     const type = toneToLibType(notice.tone);
     const options = {
         duration,
-        customToast: () => <XbrwToast type={type} message={notice.message}/>
+        customToast: (queued: {width?: number}) => (
+            // The library hands each `customToast` the width it measured for
+            // that toast, accounting for the screen and the safe-area insets.
+            // Passing it on is what stops the body being laid out shrink-to-fit.
+            <XbrwToast type={type} message={notice.message} width={queued.width}/>
+        )
     };
 
     if (notice.tone === "success") {
