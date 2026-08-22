@@ -133,6 +133,7 @@ export default function DotBloom({
     return (
         <View
             testID="dot-bloom"
+            accessible
             accessibilityRole="progressbar"
             accessibilityValue={{
                 min: 0,
