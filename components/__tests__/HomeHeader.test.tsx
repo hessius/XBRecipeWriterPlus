@@ -1,0 +1,88 @@
+import React from "react";
+import {screen, fireEvent} from "@testing-library/react-native";
+
+import HomeHeader from "@/components/HomeHeader";
+import {renderWithProviders} from "@/test-utils/render";
+
+function props(overrides = {}) {
+    return {
+        count:        7,
+        collapsed:    false,
+        editing:      false,
+        showEdit:     true,
+        onToggleEdit: jest.fn(),
+        onScan:       jest.fn(),
+        onImport:     jest.fn(),
+        onSettings:   jest.fn(),
+        ...overrides
+    };
+}
+
+describe("HomeHeader", () => {
+    it("shows the title and the recipe count", async () => {
+        await renderWithProviders(<HomeHeader {...props()}/>);
+        expect(screen.getByText("Recipes")).toBeTruthy();
+        expect(screen.getByText("7")).toBeTruthy();
+    });
+
+    it("leaves scan and import to the tiles while expanded", async () => {
+        // Expanded, the two primary actions are the CTA tiles below. Repeating
+        // them in the header would be two affordances for one job.
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(screen.queryByLabelText("Read a card")).toBeNull();
+        expect(screen.queryByLabelText("Import a recipe")).toBeNull();
+    });
+
+    it("takes scan and import in once the tiles are gone", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        expect(screen.getByLabelText("Read a card")).toBeTruthy();
+        expect(screen.getByLabelText("Import a recipe")).toBeTruthy();
+    });
+
+    it("keeps settings reachable in both states", async () => {
+        const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(expanded.getByLabelText("Settings")).toBeTruthy();
+
+        const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        expect(collapsed.getByLabelText("Settings")).toBeTruthy();
+    });
+
+    it("shrinks the title when collapsed", async () => {
+        // Each render is queried through its own utilities rather than the
+        // shared `screen` binding. `screen` tracks only the most recently
+        // rendered tree, so re-querying it after a second render finds one tree,
+        // not two.
+        const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        const big = expanded.getByText("Recipes").props.style.fontSize;
+
+        const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        const small = collapsed.getByText("Recipes").props.style.fontSize;
+
+        expect(small).toBeLessThan(big);
+    });
+
+    it("hides the edit toggle when there is nothing to edit", async () => {
+        await renderWithProviders(<HomeHeader {...props({showEdit: false, count: 0})}/>);
+        expect(screen.queryByLabelText("Edit recipes")).toBeNull();
+    });
+
+    it("says which way the edit toggle will go", async () => {
+        await renderWithProviders(<HomeHeader {...props({editing: true})}/>);
+        expect(screen.getByLabelText("Done editing")).toBeTruthy();
+    });
+
+    it("reports each action", async () => {
+        const handlers = props({collapsed: true});
+        await renderWithProviders(<HomeHeader {...handlers}/>);
+
+        await fireEvent.press(screen.getByLabelText("Read a card"));
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await fireEvent.press(screen.getByLabelText("Settings"));
+        await fireEvent.press(screen.getByLabelText("Edit recipes"));
+
+        expect(handlers.onScan).toHaveBeenCalledTimes(1);
+        expect(handlers.onImport).toHaveBeenCalledTimes(1);
+        expect(handlers.onSettings).toHaveBeenCalledTimes(1);
+        expect(handlers.onToggleEdit).toHaveBeenCalledTimes(1);
+    });
+});
