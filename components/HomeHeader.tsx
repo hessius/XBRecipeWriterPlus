@@ -1,12 +1,12 @@
-import React from "react";
-import Animated, {FadeIn, FadeOut} from "react-native-reanimated";
+import React, {useEffect} from "react";
+import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import ScreenTitle, {TITLE_FONT_SIZE, TITLE_FONT_SIZE_COMPACT} from "@/components/ScreenTitle";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
-import {DURATION, useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 
 const ACTION_ICON_SIZE = 20;
 
@@ -18,6 +18,16 @@ const ACTION_ICON_SIZE = 20;
  */
 const TOUCH_TARGET = 44;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
+
+/**
+ * The width the two arriving glyphs occupy once they have landed.
+ *
+ * It is stated rather than measured because the animation has to know the
+ * target before the glyphs have anywhere to be measured in: they start at zero
+ * width, so an `onLayout` would report zero and the slide would never leave.
+ * Each glyph is exactly one touch target wide by construction above.
+ */
+const SLIDE_WIDTH = TOUCH_TARGET * 2;
 
 type ActionProps = {
     icon: DotIconName;
@@ -86,12 +96,28 @@ export default function HomeHeader({
 }: Props) {
     const reduced = useReducedMotion();
 
-    // Under Reduced Motion the two glyphs appear and disappear without the
-    // travel, but they still fade — a user who disabled motion must still see
-    // that the header changed rather than find two new controls with no
-    // explanation.
-    const entering = reduced ? FadeIn.duration(DURATION.fast) : FadeIn.duration(DURATION.base);
-    const exiting = reduced ? FadeOut.duration(DURATION.fast) : FadeOut.duration(DURATION.fast);
+    // Two values, not one. Under Reduced Motion the glyphs must still fade, so
+    // the user sees that the header changed — but they must not travel, so the
+    // width is set outright. Driving both from a single progress value would
+    // make one of the two behaviours impossible to express.
+    const travel = useSharedValue(collapsed ? 1 : 0);
+    const fade = useSharedValue(collapsed ? 1 : 0);
+
+    useEffect(() => {
+        const target = collapsed ? 1 : 0;
+        travel.value = reduced
+            ? target
+            : withTiming(target, {duration: DURATION.base, easing: EASING.out});
+        fade.value = withTiming(target, {
+            duration: reduced ? DURATION.fast : DURATION.base,
+            easing:   EASING.out
+        });
+    }, [collapsed, reduced, travel, fade]);
+
+    const slide = useAnimatedStyle(() => ({
+        width:   travel.value * SLIDE_WIDTH,
+        opacity: fade.value
+    }));
 
     return (
         <XStack alignItems="center" justifyContent="space-between" gap="$2"
@@ -104,16 +130,27 @@ export default function HomeHeader({
                     group is right-aligned, so it grows leftwards and edit and
                     settings stay exactly where the user last saw them —
                     inserting in the middle would slide them sideways every
-                    time the list crossed the threshold. */}
-                {collapsed && (
-                    <Animated.View entering={entering} exiting={exiting}>
-                        <XStack alignItems="center">
-                            <Action icon="scan" label="Read a card" onPress={onScan}/>
-                            <Action icon="import" label="Import a recipe"
-                                    disabled={!canImport} onPress={onImport}/>
-                        </XStack>
-                    </Animated.View>
-                )}
+                    time the list crossed the threshold.
+
+                    They stay mounted at zero width rather than being added and
+                    removed, so the width is something that can be animated;
+                    mounting them made the slot appear in one frame, and no
+                    amount of fading hid that. Zero width is only a visual
+                    absence, so they are also taken out of the accessibility
+                    tree and made untappable while parked. */}
+                <Animated.View testID="home-header-slide"
+                               style={[slide, {overflow: "hidden"}]}
+                               pointerEvents={collapsed ? "auto" : "none"}
+                               accessibilityElementsHidden={!collapsed}
+                               importantForAccessibility={
+                                   collapsed ? "auto" : "no-hide-descendants"
+                               }>
+                    <XStack alignItems="center" width={SLIDE_WIDTH}>
+                        <Action icon="scan" label="Read a card" onPress={onScan}/>
+                        <Action icon="import" label="Import a recipe"
+                                disabled={!canImport} onPress={onImport}/>
+                    </XStack>
+                </Animated.View>
                 {showEdit && (
                     <Action icon="edit" active={editing}
                             label={editing ? "Done editing" : "Edit recipes"}

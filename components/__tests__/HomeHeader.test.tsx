@@ -39,6 +39,34 @@ describe("HomeHeader", () => {
         expect(screen.getByLabelText("Import a recipe")).toBeTruthy();
     });
 
+    it("keeps the glyphs mounted while expanded so they can travel", async () => {
+        // A fade alone gave the width away instantly: the glyphs appeared in a
+        // slot that had been zero wide the frame before, so they popped while
+        // the title eased. They stay mounted and are animated to width instead.
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(screen.getByLabelText("Read a card", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("gives the parked glyphs no width and the arrived ones their full width", async () => {
+        const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        const parked = expanded.getByTestId("home-header-slide", {includeHiddenElements: true});
+        expect(parked.props.jestAnimatedStyle.value.width).toBe(0);
+
+        const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        const arrived = collapsed.getByTestId("home-header-slide");
+        expect(arrived.props.jestAnimatedStyle.value.width).toBeGreaterThan(0);
+    });
+
+    it("keeps the parked glyphs out of reach", async () => {
+        // Zero width is a visual fact. Without these they would still be
+        // focusable by a screen reader and still take a tap at the group's edge.
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        const parked = screen.getByTestId("home-header-slide", {includeHiddenElements: true});
+        expect(parked.props.accessibilityElementsHidden).toBe(true);
+        expect(parked.props.pointerEvents).toBe("none");
+    });
+
     it("keeps settings reachable in both states", async () => {
         const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
         expect(expanded.getByLabelText("Settings")).toBeTruthy();
