@@ -497,10 +497,15 @@ Add to `library/Recipe.ts`:
     /**
      * A stable identity for this recipe, as the bytes it would write.
      *
-     * Two recipes are the same when writing either produces the same card. The
-     * first 32 bytes are the card's own signature, which differs between a
-     * recipe read from a card and the same recipe imported from a share link,
-     * so they are sliced off.
+     * Two recipes are the same when writing either produces the same card.
+     *
+     * The explicit all-zero prefix is load-bearing. `getData(null)` does NOT
+     * zero-pad — it falls back to `this.backup`, which holds the signature of
+     * the card a recipe was read from. Leaving it to that default would fold
+     * the signature into the CRC and give a read and an import of the same
+     * recipe two different identities, which is exactly what this must not do.
+     * `getData` then strips the prefix itself, since `withSignature` defaults
+     * to false, so no further slicing is needed here.
      *
      * Computed on demand and never persisted: a stored fingerprint would be
      * silently invalidated by any future change to the byte format, whereas a
@@ -508,20 +513,38 @@ Add to `library/Recipe.ts`:
      * scanning them all costs nothing.
      */
     public fingerprint(): string {
-        return Recipe.convertNumberArrayToHex(this.getData(null).slice(32));
+        return Recipe.convertNumberArrayToHex(this.getData(new Array(32).fill(0)));
     }
 ```
 
-- [ ] **Step 4: Remove the debug log that this makes hot**
+**Correction, recorded after implementation.** This plan originally specified
+`getData(null).slice(32)`, on two beliefs about `getData` that turned out to be
+false, both confirmed by reading it:
 
-In `getData`, delete this line:
+- It does not zero-pad an absent prefix. `library/Recipe.ts:420` reads
+  `this.backup.length >= 32 ? this.backup.slice(0, 32) : new Array(32).fill(0)`,
+  so a recipe read from a card silently contributes that card's signature.
+- It already strips the prefix. The tail of the method does
+  `data.splice(0, 32)` whenever `withSignature` is false, which is the default.
+  An extra `.slice(32)` therefore truncated 32 bytes of real payload.
+
+The sample values in the tests below were also corrected: `grindSize` is stored
+with `GRIND_SIZE_OFFSET` of 40, so a value of 25 encodes as −15, and a pour
+volume must fit one byte, so 288 overflows. Valid values are used instead.
+
+- [ ] **Step 4: Remove the debug logs that this makes hot**
+
+In `getData`, delete all three of these lines:
 
 ```ts
         console.log("Prefix:" + Recipe.convertNumberArrayToHex(data));
+        console.log("CheckSum:" + Recipe.convertNumberArrayToHex(data));
+        console.log("CheckSum:" + checkSum + ":" + this.checksum);
 ```
 
-It was harmless when `getData` ran once per card write. De-duplication calls it
-once per stored recipe per import, which would flood the log on every save.
+They were harmless when `getData` ran once per card write. De-duplication calls
+it once per stored recipe per import, which would flood the log on every save —
+and two of the three hex-encode the whole payload to do it.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
