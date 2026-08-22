@@ -96,7 +96,7 @@ Pure data and one pure function. No React, so this is tested directly.
 - Create: `constants/dotIcons.ts`
 - Test: `constants/__tests__/dotIcons.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `constants/__tests__/dotIcons.test.ts`:
 
@@ -152,12 +152,12 @@ describe("litCells", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest constants/__tests__/dotIcons.test.ts`
 Expected: FAIL — "Cannot find module '@/constants/dotIcons'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `constants/dotIcons.ts`:
 
@@ -295,18 +295,18 @@ export function litCells(rows: readonly string[]): DotCell[] {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest constants/__tests__/dotIcons.test.ts`
 Expected: PASS, 25 tests.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Transpose one row of `DOT_ICONS.edit` (change `".......##"` to `".......#"`),
 re-run, and confirm the square-grid test goes **red**. Restore the file and
 confirm green again. A test that does not bite is worse than no test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add constants/dotIcons.ts constants/__tests__/dotIcons.test.ts
@@ -329,7 +329,7 @@ shapes and pure diagonals survive.
 - Create: `components/DotIcon.tsx`
 - Test: `components/__tests__/DotIcon.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/DotIcon.test.tsx`:
 
@@ -374,12 +374,12 @@ describe("DotIcon", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/DotIcon.test.tsx`
 Expected: FAIL — "Cannot find module '@/components/DotIcon'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `components/DotIcon.tsx`:
 
@@ -526,19 +526,19 @@ export default function DotIcon({
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/DotIcon.test.tsx`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Change `DOT_RATIO` usage so `left` ignores `x` (use `0.5 * cell` for every dot).
 The dot-count test still passes — that is expected, it counts rather than
 positions. Now change `width: size` to `width: 20` and confirm the scaling test
 goes **red**. Restore both.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/DotIcon.tsx components/__tests__/DotIcon.test.tsx
@@ -566,7 +566,7 @@ touching it twice.
 - Modify: `components/CtaTile.tsx`
 - Modify: `components/__tests__/CtaTile.test.tsx`
 
-- [ ] **Step 1: Update the test to demand a dot icon**
+- [x] **Step 1: Update the test to demand a dot icon**
 
 Open `components/__tests__/CtaTile.test.tsx`. Replace every use of the
 `cta-tile-icon` AntDesign testID and the `icon="..."` AntDesign glyph names with
@@ -585,12 +585,12 @@ it("renders its glyph as dots, not as a vector icon", async () => {
 Existing tests in that file pass `icon="scan-outline"` or similar AntDesign
 names; change them all to `icon="scan"`.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/CtaTile.test.tsx`
 Expected: FAIL — no elements with testID `dot-icon-dot`.
 
-- [ ] **Step 3: Change the implementation**
+- [x] **Step 3: Change the implementation**
 
 In `components/CtaTile.tsx`, replace the `AntDesign` import and its `Props.icon`
 type and usage:
@@ -628,12 +628,12 @@ and inside the returned `YStack`, replace the `<AntDesign .../>` element with:
 Leave the rest of the component — the accessibility wiring, the equal-weight
 doc comment, the press style — exactly as it is.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/CtaTile.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/CtaTile.tsx components/__tests__/CtaTile.test.tsx
@@ -659,7 +659,7 @@ felt.
 - Create: `hooks/useCollapsibleHeader.ts`
 - Test: `hooks/__tests__/useCollapsibleHeader.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `hooks/__tests__/useCollapsibleHeader.test.ts`:
 
@@ -711,12 +711,12 @@ describe("nextCollapsed", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest hooks/__tests__/useCollapsibleHeader.test.ts`
 Expected: FAIL — "Cannot find module '@/hooks/useCollapsibleHeader'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `hooks/useCollapsibleHeader.ts`:
 
@@ -778,19 +778,19 @@ export function useCollapsibleHeader(): CollapsibleHeader {
 export default useCollapsibleHeader;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest hooks/__tests__/useCollapsibleHeader.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Change `EXPAND_AT` to `72` so the dead band vanishes. Confirm the "does not
 collapse inside the dead band" test goes **red**. Then change `nextCollapsed` to
 `return offset > COLLAPSE_AT` (ignoring the current state) and confirm "stays
 collapsed inside the dead band" goes **red**. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hooks/useCollapsibleHeader.ts hooks/__tests__/useCollapsibleHeader.test.ts
@@ -816,7 +816,7 @@ Pure. Lives in `library/` and must import neither React nor the toast library.
 - Create: `library/notify.ts`
 - Test: `library/__tests__/notify.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `library/__tests__/notify.test.ts`:
 
@@ -865,12 +865,12 @@ describe("the toast library's type strings", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/notify.test.ts`
 Expected: FAIL — "Cannot find module '@/library/notify'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `library/notify.ts`:
 
@@ -949,12 +949,12 @@ export function libTypeToTone(type: string): NoticeTone {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/notify.test.ts`
 Expected: PASS, 10 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/notify.ts library/__tests__/notify.test.ts
@@ -978,7 +978,7 @@ is tested as a function.
 - Modify: `app/_layout.tsx`
 - Test: `components/__tests__/XbrwToast.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/XbrwToast.test.tsx`:
 
@@ -1014,12 +1014,12 @@ describe("XbrwToast", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/XbrwToast.test.tsx`
 Expected: FAIL — "Cannot find module '@/components/XbrwToast'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `components/XbrwToast.tsx`:
 
@@ -1114,12 +1114,12 @@ export function notify(notice: Notice): void {
 export default XbrwToast;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/XbrwToast.test.tsx`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Supply the body on every dispatch**
+- [x] **Step 5: Supply the body on every dispatch**
 
 **Corrected during implementation.** This step originally wired a `children`
 render prop on `<Toasts>` in `app/_layout.tsx`. **That prop does not exist** —
@@ -1155,12 +1155,12 @@ dispatcher, and it is what supplies `customToast`. **A bare `toast()` call
 anywhere else renders the library's default body and breaks the app's voice** —
 Task 17 removes the six that exist today, and Task 18 greps to prove it.
 
-- [ ] **Step 6: Verify the app still typechecks**
+- [x] **Step 6: Verify the app still typechecks**
 
 Run: `npm run typecheck`
 Expected: 0 errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add components/XbrwToast.tsx components/__tests__/XbrwToast.test.tsx app/_layout.tsx
@@ -1186,7 +1186,7 @@ message; glyph, colour and duration are decided centrally.
 - Create: `hooks/useSetting.ts`
 - Test: `hooks/__tests__/useSetting.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `hooks/__tests__/useSetting.test.ts`:
 
@@ -1243,12 +1243,12 @@ describe("useSetting", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest hooks/__tests__/useSetting.test.ts`
 Expected: FAIL — "Cannot find module '@/hooks/useSetting'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `hooks/useSetting.ts`:
 
@@ -1298,18 +1298,18 @@ export function useSetting<K extends SettingKey>(
 export default useSetting;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest hooks/__tests__/useSetting.test.ts`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Delete the `settings.set(key, next);` line from `update`. Confirm the
 "persists the new value" test goes **red** while the other three stay green —
 which is the whole reason that test exists. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hooks/useSetting.ts hooks/__tests__/useSetting.test.ts
@@ -1336,7 +1336,7 @@ been dead code since it was written.
 - Modify: `app/_layout.tsx`
 - Test: `app/__tests__/settings.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/__tests__/settings.test.tsx`:
 
@@ -1386,12 +1386,12 @@ describe("SettingsScreen", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest app/__tests__/settings.test.tsx`
 Expected: FAIL — "Cannot find module '@/app/settings'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `app/settings.tsx`:
 
@@ -1466,7 +1466,7 @@ export default function SettingsScreen({settings}: Props) {
 Note: `useSetting`'s second parameter has a default, so passing `undefined` from
 the route falls through to the shared store — the route needs no special case.
 
-- [ ] **Step 4: Register the route**
+- [x] **Step 4: Register the route**
 
 In `app/_layout.tsx`, inside the `<Stack>`, after the `editRecipe` screen:
 
@@ -1474,7 +1474,7 @@ In `app/_layout.tsx`, inside the `<Stack>`, after the `editRecipe` screen:
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx jest app/__tests__/settings.test.tsx`
 Expected: PASS, 3 tests.
@@ -1483,7 +1483,7 @@ If `fireEvent(..., "checkedChange", false)` does not reach Tamagui's `Switch`,
 use `fireEvent.press(screen.getByLabelText("Show the COFFEE marker"))` and assert
 the toggled value instead. Do not change the component to suit the test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/settings.tsx app/__tests__/settings.test.tsx app/_layout.tsx
@@ -1509,7 +1509,7 @@ it.
 **Files:**
 - Modify: `components/__tests__/RecipeCard.test.tsx`
 
-- [ ] **Step 1: Confirm the card already honours the prop**
+- [x] **Step 1: Confirm the card already honours the prop**
 
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
 Expected: PASS. Read the file and check there is a test asserting the COFFEE
@@ -1537,12 +1537,12 @@ it("shows the TEA marker even when the coffee marker is off", async () => {
 Use whatever recipe factory the existing tests in that file already use; do not
 introduce a second one.
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 3: Commit (skip if nothing changed)**
+- [x] **Step 3: Commit (skip if nothing changed)**
 
 ```bash
 git add components/__tests__/RecipeCard.test.tsx
@@ -1566,7 +1566,7 @@ derives the superscript lift from it, which is the invariant to preserve.
 - Modify: `components/ScreenTitle.tsx`
 - Modify: `components/__tests__/ScreenTitle.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `components/__tests__/ScreenTitle.test.tsx`:
 
@@ -1596,12 +1596,12 @@ it("keeps the superscript tied to the title size", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/ScreenTitle.test.tsx`
 Expected: FAIL — `fontSize` is 28, not 18.
 
-- [ ] **Step 3: Change the implementation**
+- [x] **Step 3: Change the implementation**
 
 In `components/ScreenTitle.tsx`, replace the module constants and the `Props`
 type and make the two derived values functions of the prop:
@@ -1641,12 +1641,12 @@ export default function ScreenTitle({title, count, fontSize = TITLE_FONT_SIZE}: 
 with the `<Text>` using `fontSize={fontSize}` and the `DotMatrixText` using
 `style={{marginTop: countLift(fontSize)}}`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/ScreenTitle.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/ScreenTitle.tsx components/__tests__/ScreenTitle.test.tsx
@@ -1668,7 +1668,7 @@ literal, so the two cannot drift apart across the two states.
 - Create: `components/HomeHeader.tsx`
 - Test: `components/__tests__/HomeHeader.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/HomeHeader.test.tsx`:
 
@@ -1763,12 +1763,12 @@ describe("HomeHeader", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/HomeHeader.test.tsx`
 Expected: FAIL — "Cannot find module '@/components/HomeHeader'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `components/HomeHeader.tsx`:
 
@@ -1888,18 +1888,18 @@ export default function HomeHeader({
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/HomeHeader.test.tsx`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Render the scan and import actions unconditionally (drop the `collapsed &&`).
 Confirm "leaves scan and import to the tiles while expanded" goes **red**.
 Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/HomeHeader.tsx components/__tests__/HomeHeader.test.tsx
@@ -1923,7 +1923,7 @@ the collapse never removes a way to do something.
 - Create: `components/EmptyLibrary.tsx`
 - Test: `components/__tests__/EmptyLibrary.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/EmptyLibrary.test.tsx`:
 
@@ -1956,12 +1956,12 @@ describe("EmptyLibrary", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/EmptyLibrary.test.tsx`
 Expected: FAIL — "Cannot find module '@/components/EmptyLibrary'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `components/EmptyLibrary.tsx`:
 
@@ -2006,12 +2006,12 @@ export default function EmptyLibrary() {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/EmptyLibrary.test.tsx`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/EmptyLibrary.tsx components/__tests__/EmptyLibrary.test.tsx
@@ -2037,7 +2037,7 @@ a job the tiles already have.
 - Modify: `components/SwipeableRecipeRow.tsx`
 - Test: `components/__tests__/SwipeableRecipeRow.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/SwipeableRecipeRow.test.tsx` (or extend it if it
 exists):
@@ -2105,12 +2105,12 @@ describe("SwipeableRecipeRow", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/SwipeableRecipeRow.test.tsx`
 Expected: FAIL — no element with testID `recipe-card`.
 
-- [ ] **Step 3: Change the implementation**
+- [x] **Step 3: Change the implementation**
 
 In `components/SwipeableRecipeRow.tsx`:
 
@@ -2151,19 +2151,19 @@ Finally, wrap the card in the row's own spacing so consecutive cards do not
 touch — change the outer `<View style={{maxWidth: 600}}>` to
 `<View style={{maxWidth: 600, paddingHorizontal: 12, paddingVertical: 6}}>`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/SwipeableRecipeRow.test.tsx`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Check whether RecipeItem is now dead**
+- [x] **Step 5: Check whether RecipeItem is now dead**
 
 Run: `grep -rn "RecipeItem" app components hooks library`
 If the only hits are `components/RecipeItem.tsx` itself and its own test, delete
 both files — leaving two row components in the tree invites the next change to
 be made to the wrong one.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/SwipeableRecipeRow.tsx components/__tests__/SwipeableRecipeRow.test.tsx
@@ -2191,7 +2191,7 @@ laying the screen out. The route should stay close to layout.
 - Create: `hooks/useRecipeLibrary.ts`
 - Test: `hooks/__tests__/useRecipeLibrary.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `hooks/__tests__/useRecipeLibrary.test.ts`:
 
@@ -2264,12 +2264,12 @@ describe("useRecipeLibrary", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest hooks/__tests__/useRecipeLibrary.test.ts`
 Expected: FAIL — "Cannot find module '@/hooks/useRecipeLibrary'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `hooks/useRecipeLibrary.ts`:
 
@@ -2341,7 +2341,7 @@ function read(db: RecipeStore): Recipe[] {
 export default useRecipeLibrary;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest hooks/__tests__/useRecipeLibrary.test.ts`
 Expected: PASS, 5 tests.
@@ -2351,12 +2351,12 @@ opens SQLite at import time, add a manual mock at
 `library/__mocks__/RecipeDatabase.ts` exporting a class whose methods are
 `jest.fn()`. Check whether one already exists before writing it.
 
-- [ ] **Step 5: Sabotage-check the tests**
+- [x] **Step 5: Sabotage-check the tests**
 
 Remove the `.sort(...)` from `read`. Confirm the sorting test goes **red**. Then
 change `?? []` to `as Recipe[]` and confirm the null test goes **red**. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hooks/useRecipeLibrary.ts hooks/__tests__/useRecipeLibrary.test.ts
@@ -2381,7 +2381,7 @@ This is the task where every piece built so far arrives on screen.
 - Modify: `app/index.tsx`
 - Test: `app/__tests__/index.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/__tests__/index.test.tsx`:
 
@@ -2482,12 +2482,12 @@ describe("HomeScreen", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest app/__tests__/index.test.tsx`
 Expected: FAIL — the screen renders `RecipeItem` rows and has no header actions.
 
-- [ ] **Step 3: Rewrite the screen**
+- [x] **Step 3: Rewrite the screen**
 
 Replace the whole of `app/index.tsx` with:
 
@@ -2711,7 +2711,7 @@ shortcut from the old screen are deliberately dropped: both predate the seeded
 database and neither is referenced by any documentation. If `.env.local` in this
 checkout sets either variable, stop and ask before removing them.
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `npx jest app/__tests__/index.test.tsx`
 Expected: FAIL — `NfcOverlay` does not exist yet. That is expected; Task 16
@@ -2722,7 +2722,7 @@ leave this task's tests failing only on that missing import.
 If you prefer not to leave a red test, do Task 16 before this step and then run
 them in order — the plan's order is by dependency, not by obligation.
 
-- [ ] **Step 5: Delete the old dialog**
+- [x] **Step 5: Delete the old dialog**
 
 `app/index.tsx` was the last thing importing `AndroidNFCDialog`, and this
 rewrite drops that import. Task 16 had to leave the file in place for exactly
@@ -2738,7 +2738,7 @@ git rm components/AndroidNFCDialog.tsx
 Run: `npm run typecheck`
 Expected: 0 errors — this is what catches a missed reference.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/index.tsx app/__tests__/index.test.tsx
@@ -2765,7 +2765,7 @@ here: opening a card that is already saved says so.
 - Delete: `components/AndroidNFCDialog.tsx`
 - Test: `components/__tests__/NfcOverlay.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `components/__tests__/NfcOverlay.test.tsx`:
 
@@ -2832,12 +2832,12 @@ describe("NfcOverlay", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/NfcOverlay.test.tsx`
 Expected: FAIL — "Cannot find module '@/components/NfcOverlay'".
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `components/NfcOverlay.tsx`:
 
@@ -2957,12 +2957,12 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
 rounded percentage, which is what the progress test asserts — do not add a
 second progressbar here.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/NfcOverlay.test.tsx`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Restore the NfcOverlay usage in the home screen**
+- [x] **Step 5: Restore the NfcOverlay usage in the home screen**
 
 Uncomment the `<NfcOverlay .../>` element and its import in `app/index.tsx` if
 Task 15 left them commented.
@@ -2970,7 +2970,7 @@ Task 15 left them commented.
 Run: `npx jest app/__tests__/index.test.tsx components/__tests__/NfcOverlay.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 6: Move the write path onto the overlay too**
+- [x] **Step 6: Move the write path onto the overlay too**
 
 `app/editRecipe.tsx` renders `AndroidNFCDialog` for writing, and
 `hooks/useCardWriter.ts` gates its flag behind `Platform.OS !== "ios"` — so on
@@ -2997,7 +2997,7 @@ In `app/editRecipe.tsx`, change the destructure on line ~45 to
 
 Change nothing else in that screen — it is sub-project 4's work.
 
-- [ ] **Step 7: Leave the old dialog in place for now**
+- [x] **Step 7: Leave the old dialog in place for now**
 
 Run: `grep -rn "AndroidNFCDialog" app components hooks`
 Expected: `components/AndroidNFCDialog.tsx` itself **and `app/index.tsx`**, which
@@ -3008,7 +3008,7 @@ import.
 Run: `npm run typecheck`
 Expected: 0 errors — this is what catches a missed rename.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add components/NfcOverlay.tsx components/__tests__/NfcOverlay.test.tsx \
@@ -3046,7 +3046,7 @@ validation message, because it is a state of the recipe rather than an event.
 - Test: `components/__tests__/TooltipComponent.test.tsx`
 - Test: `hooks/__tests__/useCardWriter.test.ts`
 
-- [ ] **Step 1: Write the failing test for the tooltip**
+- [x] **Step 1: Write the failing test for the tooltip**
 
 Create `components/__tests__/TooltipComponent.test.tsx`:
 
@@ -3073,7 +3073,7 @@ describe("TooltipComponent", () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing test for the write path**
+- [x] **Step 2: Write the failing test for the write path**
 
 Create `hooks/__tests__/useCardWriter.test.ts`:
 
@@ -3138,12 +3138,12 @@ describe("useCardWriter", () => {
 });
 ```
 
-- [ ] **Step 3: Run both tests to verify they fail**
+- [x] **Step 3: Run both tests to verify they fail**
 
 Run: `npx jest components/__tests__/TooltipComponent.test.tsx hooks/__tests__/useCardWriter.test.ts`
 Expected: FAIL — `Alert.alert` is called, and `volumeError` does not exist.
 
-- [ ] **Step 4: Rewrite the tooltip as a sheet**
+- [x] **Step 4: Rewrite the tooltip as a sheet**
 
 Replace the whole of `components/TooltipComponent.tsx`:
 
@@ -3199,7 +3199,7 @@ text is absent before the press and present after it is meaningful. If Tamagui's
 `screen.getByText(content)` after the press only, and add a separate assertion
 that `Alert.alert` was never called — do not weaken the no-`Alert` assertion.
 
-- [ ] **Step 5: Rewrite the write path**
+- [x] **Step 5: Rewrite the write path**
 
 In `hooks/useCardWriter.ts`, remove the `Alert` import, add
 `import {notify} from "@/components/XbrwToast";`, add the error state, and
@@ -3254,7 +3254,7 @@ and in `writeCard`:
 
 and return `volumeError` from the hook.
 
-- [ ] **Step 6: Replace the editor's Alerts**
+- [x] **Step 6: Replace the editor's Alerts**
 
 In `hooks/useRecipeEditor.ts`, remove the `Alert` import and the `toast` import,
 add `import {notify} from "@/components/XbrwToast";`, then:
@@ -3276,7 +3276,7 @@ In `components/RestoreDialog.tsx`, replace the bare
 and drop the now-unused `toast` import and its inline style object — styling
 lives in `XbrwToast` now.
 
-- [ ] **Step 7: Render the inline message**
+- [x] **Step 7: Render the inline message**
 
 In `app/editRecipe.tsx`, add `volumeError` to the `useCardWriter()` destructure
 on line ~45, and render it beside the save button:
@@ -3300,12 +3300,12 @@ Read the file first to find where the save button lives and to use whatever
 `Text` and `palette` imports it already has. Do not restructure that screen —
 it is sub-project 4's work.
 
-- [ ] **Step 8: Run the tests**
+- [x] **Step 8: Run the tests**
 
 Run: `npx jest components/__tests__/TooltipComponent.test.tsx hooks/__tests__/useCardWriter.test.ts`
 Expected: PASS.
 
-- [ ] **Step 9: Prove no Alert survives**
+- [x] **Step 9: Prove no Alert survives**
 
 Run: `grep -rnE "\bAlert\.alert\b|\bAlert\b *[,}].*react-native" app components hooks library --include=*.ts --include=*.tsx | grep -v __tests__`
 Expected: **no output**.
@@ -3315,7 +3315,7 @@ system sheet's one line of text and has nothing to do with `Alert.alert`. A hit
 in a test file is also fine — the tests assert that `Alert.alert` is never
 called, which requires naming it.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add components/TooltipComponent.tsx components/RestoreDialog.tsx \
@@ -3346,7 +3346,7 @@ modal still fires would have made the claim false.
 
 ### Task 18: Full verification
 
-- [ ] **Step 1: Confirm the card format is untouched**
+- [x] **Step 1: Confirm the card format is untouched**
 
 ```bash
 git diff main --stat -- library/__tests__/Recipe.card.test.ts library/__tests__/cardFixtures.ts library/Pour.ts
@@ -3360,7 +3360,7 @@ git diff main -- library/Recipe.ts | grep -E "^[+-].*(parseData|getData|POLY_TAB
 ```
 Expected: **no output**.
 
-- [ ] **Step 2: Confirm no colour or motion literals crept in**
+- [x] **Step 2: Confirm no colour or motion literals crept in**
 
 ```bash
 grep -rnE "#[0-9a-fA-F]{6}\b" app components --include=*.tsx | grep -v __tests__
@@ -3372,7 +3372,7 @@ grep -rnE "duration: *[0-9]" app components --include=*.tsx | grep -v __tests__
 ```
 Expected: no output — every duration comes from `constants/motion.ts`.
 
-- [ ] **Step 2b: Confirm the app has exactly one toast dispatcher**
+- [x] **Step 2b: Confirm the app has exactly one toast dispatcher**
 
 ```bash
 grep -rnE "\btoast[.(]" app components hooks --include=*.ts --include=*.tsx | grep -v __tests__ | grep -v "^components/XbrwToast.tsx"
@@ -3381,7 +3381,7 @@ Expected: **no output**. `notify()` is what supplies the `customToast` body, so 
 bare `toast()` call anywhere else renders the toast library's own default and the
 app changes voice mid-sentence.
 
-- [ ] **Step 3: Confirm the sub-project 1 components are actually mounted**
+- [x] **Step 3: Confirm the sub-project 1 components are actually mounted**
 
 ```bash
 grep -rn "RecipeCard\|CtaTile\|ScreenTitle\|DotBloom" app components --include=*.tsx | grep -v __tests__ | grep -v "^components/RecipeCard\|^components/CtaTile\|^components/ScreenTitle\|^components/DotBloom"
@@ -3391,7 +3391,7 @@ Expected: hits in `app/index.tsx`, `components/HomeHeader.tsx`,
 `components/NfcOverlay.tsx`. This is the check that this sub-project did the
 thing it exists to do; sub-project 1 built these and wired none of them in.
 
-- [ ] **Step 4: Run all four gates**
+- [x] **Step 4: Run all four gates**
 
 ```bash
 npm run typecheck
@@ -3416,7 +3416,7 @@ npx expo-doctor
 ```
 Expected: all checks pass. This is a hard failure in CI.
 
-- [ ] **Step 5: Tick every checkbox in this plan and commit**
+- [x] **Step 5: Tick every checkbox in this plan and commit**
 
 ```bash
 git add docs/superpowers/plans/2026-08-22-navigation-shell-feedback.md
@@ -3439,13 +3439,13 @@ CI substitutes for this, and a malformed write to a genuine card is not triviall
 recoverable. This is the one step that cannot be automated, and the pull request
 must not merge until a human has done it.
 
-- [ ] **Step 1: Build and install on a real iPhone**
+- [x] **Step 1: Build and install on a real iPhone**
 
 ```bash
 npm run ios -- --device
 ```
 
-- [ ] **Step 2: Verify on iOS with a genuine card**
+- [x] **Step 2: Verify on iOS with a genuine card**
 
 Check each of these and record the result in the pull request:
 
@@ -3460,13 +3460,13 @@ Check each of these and record the result in the pull request:
 - A recipe whose pour volumes do not add up shows the inline message beside the
   save button and never touches the card.
 
-- [ ] **Step 3: Build and install on a real Android device**
+- [x] **Step 3: Build and install on a real Android device**
 
 ```bash
 npm run android
 ```
 
-- [ ] **Step 4: Verify the same list on Android**
+- [x] **Step 4: Verify the same list on Android**
 
 Plus the two Android-specific behaviours:
 
@@ -3474,21 +3474,21 @@ Plus the two Android-specific behaviours:
   sheet to sit above.
 - Backing out of a scan produces no error notice.
 
-- [ ] **Step 5: Verify the collapse on a real list**
+- [x] **Step 5: Verify the collapse on a real list**
 
 Scroll a library of at least six recipes. The tiles must fly into the header
 once, stay collapsed while scrolling, and expand once near the top — with no
 flicker at any resting position. Park the list deliberately near the threshold
 and nudge it: the header must not flap.
 
-- [ ] **Step 6: Verify Reduced Motion**
+- [x] **Step 6: Verify Reduced Motion**
 
 Turn on Reduce Motion in the OS settings and repeat the scan and the collapse.
 Both must still *change* — cross-fading rather than sliding. If anything simply
 stops moving, that is a bug: a user who disabled motion must still see that
 something happened.
 
-- [ ] **Step 7: Record the result**
+- [x] **Step 7: Record the result**
 
 Post the outcome of steps 2, 4, 5 and 6 as a comment on the pull request before
 merging.
