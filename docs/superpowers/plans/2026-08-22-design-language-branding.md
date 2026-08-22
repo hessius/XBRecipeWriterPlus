@@ -1753,16 +1753,75 @@ git commit -m "Add the DigitRoll primitive"
 The scanning animation. It is driven by real read progress, never by a timer —
 a progress indicator that lies is worse than none.
 
+The tests read live opacities off `jestAnimatedStyle` and compute the dot
+geometry, because neither a dot count nor an accessibility value can tell a ring
+that fills from an empty one. An earlier draft of this suite asserted only those
+two things, and **17 of 18** shape-destroying mutations survived it — including
+lighting every dot permanently and swapping the lit and unlit colours.
+
+Three things settled during review:
+
+- One `clampProgress`, used by both `litCount` and the announced value. The two
+  open-coded clamps disagreed: `Infinity` announced 100% over an empty ring.
+- Only the dot at the fill boundary breathes. Every unlit dot pulsing in unison
+  is a global flicker that reads as a warning, and it costs 24 infinite
+  animations during an NFC read.
+- The ring radius is inset by half a dot, so the drawn extent matches the
+  declared `size` instead of overhanging it and being clipped by the dialog.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `components/__tests__/DotBloom.test.tsx`:
 
 ```tsx
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {AccessibilityInfo} from "react-native";
+import {act, screen} from "@testing-library/react-native";
 
-import DotBloom, {litCount} from "@/components/DotBloom";
+import DotBloom, {clampProgress, litCount} from "@/components/DotBloom";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+jest.useFakeTimers();
+
+/** The static (non-animated) half of a dot's style: colour and position. */
+function boxOf(index: number): {left: number; top: number; width: number; backgroundColor: string} {
+    const style = screen.getAllByTestId("dot-bloom-dot")[index].props.style as never as
+        {left: number; top: number; width: number; backgroundColor: string}[];
+    return style[0];
+}
+
+/**
+ * The dot's *live* opacity. `props.style` holds only the value from the last
+ * React render, so it cannot see the pulse or a lit/unlit flip; the animated
+ * style is the only thing that distinguishes a breathing ring from a still one.
+ */
+function opacityOf(index: number): number {
+    const dot = screen.getAllByTestId("dot-bloom-dot")[index] as never as
+        {props: {jestAnimatedStyle: {value: {opacity: number}}}};
+    return dot.props.jestAnimatedStyle.value.opacity;
+}
+
+function colours(): string[] {
+    return screen.getAllByTestId("dot-bloom-dot")
+        .map((_, index) => boxOf(index).backgroundColor);
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+describe("clampProgress", () => {
+    it.each([
+        [0, 0], [1, 1], [0.5, 0.5], [4, 1], [-1, 0],
+        [Number.NaN, 0], [Number.POSITIVE_INFINITY, 0], [Number.NEGATIVE_INFINITY, 0]
+    ])("clamps %p to %p", (input, expected) => {
+        expect(clampProgress(input)).toBe(expected);
+    });
+});
 
 describe("litCount", () => {
     it("lights nothing at zero", () => {
@@ -1796,10 +1855,182 @@ describe("DotBloom", () => {
         expect(screen.getAllByTestId("dot-bloom-dot")).toHaveLength(24);
     });
 
+    it("renders as many dots as asked for", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={12}/>);
+        expect(screen.getAllByTestId("dot-bloom-dot")).toHaveLength(12);
+    });
+
     it("exposes progress as an accessibility value", async () => {
         await renderWithProviders(<DotBloom progress={0.5}/>);
         expect(screen.getByTestId("dot-bloom").props.accessibilityValue)
             .toEqual({min: 0, max: 100, now: 50});
+    });
+
+    it("announces nothing read for a non-finite progress", async () => {
+        // `read / total` with a total of zero. The ring lights nothing, so the
+        // announcement must not say otherwise.
+        await renderWithProviders(<DotBloom progress={Number.NaN} dotCount={8}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityValue)
+            .toEqual({min: 0, max: 100, now: 0});
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("does not announce a complete read for an infinite progress", async () => {
+        await renderWithProviders(<DotBloom progress={Number.POSITIVE_INFINITY} dotCount={8}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityValue.now).toBe(0);
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("announces itself as a progress indicator", async () => {
+        // Without the role the value above is announced as nothing at all.
+        await renderWithProviders(<DotBloom progress={0.5}/>);
+        expect(screen.getByTestId("dot-bloom").props.accessibilityRole).toBe("progressbar");
+    });
+
+    it("lays the dots out on a ring, clockwise from twelve o'clock", async () => {
+        // A ring that fills from 3 o'clock, or anticlockwise, or collapses to a
+        // point, is a different animation; none of that is visible in a dot count.
+        await renderWithProviders(<DotBloom progress={0} dotCount={4} size={100} dotSize={10}/>);
+        const centre = 100 / 2 - 10 / 2;
+        const radius = (100 - 10) / 2;
+
+        // The ring occupies the box it says it does, or the layout around it is
+        // sized for something other than what is drawn.
+        expect(screen.getByTestId("dot-bloom").props.style)
+            .toMatchObject({width: 100, height: 100});
+
+        expect(boxOf(0).left).toBeCloseTo(centre);          // 12 o'clock
+        expect(boxOf(0).top).toBeCloseTo(centre - radius);
+        expect(boxOf(1).left).toBeCloseTo(centre + radius); // 3 o'clock
+        expect(boxOf(1).top).toBeCloseTo(centre);
+        expect(boxOf(2).left).toBeCloseTo(centre);          // 6 o'clock
+        expect(boxOf(2).top).toBeCloseTo(centre + radius);
+        expect(boxOf(3).left).toBeCloseTo(centre - radius); // 9 o'clock
+        expect(boxOf(3).top).toBeCloseTo(centre);
+    });
+
+    it("keeps the whole ring inside the box it declares", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8} size={200} dotSize={16}/>);
+        for (let index = 0; index < 8; index++) {
+            expect(boxOf(index).width).toBe(16);
+
+            // Sized from the dot centres, the ring overhangs by half a dot and a
+            // clipping ancestor flattens its outer edge all the way round.
+            expect(boxOf(index).left).toBeGreaterThanOrEqual(0);
+            expect(boxOf(index).top).toBeGreaterThanOrEqual(0);
+            expect(boxOf(index).left + 16).toBeLessThanOrEqual(200);
+            expect(boxOf(index).top + 16).toBeLessThanOrEqual(200);
+        }
+
+        // ...and it still fills the box rather than shrinking away from it.
+        expect(Math.min(...Array.from({length: 8}, (_, i) => boxOf(i).top))).toBeCloseTo(0);
+        expect(Math.max(...Array.from({length: 8}, (_, i) => boxOf(i).top + 16))).toBeCloseTo(200);
+    });
+
+    it("lights the first N dots and no others", async () => {
+        // The whole contract of the component: N is real read progress.
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+        expect(colours()).toEqual([
+            palette.success, palette.success,
+            palette.dim, palette.dim, palette.dim, palette.dim, palette.dim, palette.dim
+        ]);
+        expect(opacityOf(0)).toBe(1);
+        expect(opacityOf(2)).toBeLessThan(1);
+    });
+
+    it("lights nothing before the read starts", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        expect(colours()).toEqual(new Array(8).fill(palette.dim));
+    });
+
+    it("lights everything when the read completes", async () => {
+        await renderWithProviders(<DotBloom progress={1} dotCount={8}/>);
+        expect(colours()).toEqual(new Array(8).fill(palette.success));
+        expect(opacityOf(7)).toBe(1);
+    });
+
+    it("lights dots as real progress arrives, and never runs ahead of it", async () => {
+        const {rerender} = await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        // Time alone must move nothing: this is progress-driven, not a timer.
+        await advance(DURATION.deliberate * 4);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(0);
+
+        await rerender(<DotBloom progress={0.5} dotCount={8}/>);
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(4);
+    });
+
+    it("breathes the leading dot instead of leaving the ring frozen", async () => {
+        await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        const start = opacityOf(0);
+
+        await advance(DURATION.deliberate / 2);
+        const mid = opacityOf(0);
+        expect(mid).toBeLessThan(start);
+
+        // Reverses rather than restarting: a repeat that snaps back to full
+        // brightness every cycle strobes instead of breathing.
+        await advance(DURATION.deliberate);
+        expect(opacityOf(0)).toBeGreaterThan(mid);
+    });
+
+    it("breathes only the dot at the fill boundary", async () => {
+        // Every unlit dot pulsing in unison is a global flicker — a warning,
+        // not a machine waiting. The motion marks where the ring has got to.
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+        const still = opacityOf(4);
+
+        await advance(DURATION.deliberate / 2);
+        expect(opacityOf(2)).toBeLessThan(still);  // the next dot to light
+        expect(opacityOf(4)).toBe(still);
+        expect(opacityOf(7)).toBe(still);
+    });
+
+    it("stops breathing once the read is complete", async () => {
+        await renderWithProviders(<DotBloom progress={1} dotCount={8}/>);
+        await advance(DURATION.deliberate / 2);
+
+        // There is no boundary left, so nothing should still be waiting.
+        for (let index = 0; index < 8; index++) {
+            expect(opacityOf(index)).toBe(1);
+        }
+    });
+
+    it("stops breathing a dot once it is lit", async () => {
+        const {rerender} = await renderWithProviders(<DotBloom progress={0} dotCount={8}/>);
+        await advance(DURATION.deliberate / 2);
+        expect(opacityOf(0)).toBeLessThan(1);
+
+        await rerender(<DotBloom progress={0.2} dotCount={8}/>);
+        await advance(16);
+        expect(opacityOf(0)).toBe(1);
+
+        // The pulse was cancelled, not merely overwritten for one frame.
+        await advance(DURATION.deliberate * 2);
+        expect(opacityOf(0)).toBe(1);
+    });
+
+    // Last in the file on purpose: `useReducedMotion` seeds from a module-level
+    // cache, so flipping the setting on leaks into every later test in the file.
+    it("holds the ring still under Reduce Motion, without hiding progress", async () => {
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+
+        await renderWithProviders(<DotBloom progress={0.25} dotCount={8}/>);
+
+        // Let the asynchronous Reduce Motion read land before sampling.
+        await advance(DURATION.deliberate);
+        const before = opacityOf(4);
+
+        // Deliberately not a whole number of pulse cycles: a still ring and a
+        // ring sampled one full breath later look identical.
+        await advance(DURATION.deliberate * 0.75);
+        expect(opacityOf(4)).toBe(before);
+        await advance(DURATION.deliberate * 0.4);
+        expect(opacityOf(4)).toBe(before);
+
+        // Still legible as progress: two lit, six not.
+        expect(colours().filter((c) => c === palette.success)).toHaveLength(2);
     });
 });
 ```
@@ -1817,6 +2048,7 @@ Create `components/DotBloom.tsx`:
 import React from "react";
 import {View} from "react-native";
 import Animated, {
+    type SharedValue,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -1826,43 +2058,46 @@ import Animated, {
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import {palette} from "@/constants/colors";
 
+/** How dim an unlit dot sits against the background. */
+const UNLIT_OPACITY = 0.18;
+
+/** How far the leading dot fades at the bottom of its breath. */
+const PULSE_FLOOR = 0.35;
+
+/**
+ * Progress as a fraction, defended.
+ *
+ * Read progress arrives as `read / total`, and a reader that reports `total = 0`
+ * yields `NaN`. The single source of truth for both the ring and the announced
+ * value: two open-coded clamps disagreed here once already, and the screen
+ * reader announced 100% for a scan that had not started.
+ */
+export function clampProgress(progress: number): number {
+    return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 1) : 0;
+}
+
 /** How many dots of `total` are lit at a given progress. */
 export function litCount(progress: number, total: number): number {
-    if (!Number.isFinite(progress)) {
-        return 0;
-    }
-    return Math.round(Math.min(Math.max(progress, 0), 1) * total);
+    return Math.round(clampProgress(progress) * total);
 }
 
 type DotProps = {
     lit: boolean;
+    /** The one dot at the fill boundary — the next to light. */
+    leading: boolean;
     index: number;
     total: number;
+    centre: number;
     radius: number;
     size: number;
-    reduced: boolean;
+    pulse: SharedValue<number>;
 };
 
-function BloomDot({lit, index, total, radius, size, reduced}: DotProps) {
+function BloomDot({lit, leading, index, total, centre, radius, size, pulse}: DotProps) {
     const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
-    const pulse = useSharedValue(1);
-
-    React.useEffect(() => {
-        // The leading unlit dot breathes so the ring does not look frozen while
-        // the reader is waiting for a card. Everything else is static.
-        if (reduced || lit) {
-            pulse.value = 1;
-            return;
-        }
-        pulse.value = withRepeat(
-            withTiming(0.35, {duration: DURATION.deliberate, easing: EASING.inOut}),
-            -1,
-            true
-        );
-    }, [lit, reduced, pulse]);
 
     const animatedStyle = useAnimatedStyle(() => ({
-        opacity: lit ? 1 : 0.18 * pulse.value
+        opacity: lit ? 1 : UNLIT_OPACITY * (leading ? pulse.value : 1)
     }));
 
     return (
@@ -1875,8 +2110,8 @@ function BloomDot({lit, index, total, radius, size, reduced}: DotProps) {
                     height:          size,
                     borderRadius:    size / 2,
                     backgroundColor: lit ? palette.success : palette.dim,
-                    left:            radius + Math.cos(angle) * radius - size / 2,
-                    top:             radius + Math.sin(angle) * radius - size / 2
+                    left:            centre + Math.cos(angle) * radius - size / 2,
+                    top:             centre + Math.sin(angle) * radius - size / 2
                 },
                 animatedStyle
             ]}
@@ -1888,7 +2123,7 @@ type Props = {
     /** Real read progress, 0–1. Never a timer. */
     progress: number;
     dotCount?: number;
-    /** Diameter of the ring. */
+    /** Diameter of the ring, including the dots. */
     size?: number;
     dotSize?: number;
 };
@@ -1909,7 +2144,32 @@ export default function DotBloom({
 }: Props) {
     const reduced = useReducedMotion();
     const lit = litCount(progress, dotCount);
-    const radius = size / 2;
+    const scanning = lit < dotCount;
+
+    // One animation for the whole ring rather than one per dot. Only the dot at
+    // the fill boundary reads it, so the motion is localised where the user
+    // should be looking; every unlit dot breathing in unison reads as a global
+    // flicker, which is a warning, not a machine waiting.
+    const pulse = useSharedValue(1);
+
+    React.useEffect(() => {
+        if (reduced || !scanning) {
+            pulse.value = 1;
+            return;
+        }
+        pulse.value = withRepeat(
+            withTiming(PULSE_FLOOR, {duration: DURATION.deliberate, easing: EASING.inOut}),
+            -1,
+            true
+        );
+    }, [reduced, scanning, pulse]);
+
+    // The dots are centred on this circle and extend half their own width beyond
+    // it, so the ring radius is inset by half a dot: otherwise the component
+    // draws `size + dotSize` while declaring `size`, and any clipping ancestor
+    // shaves the outer edge off every dot.
+    const centre = size / 2;
+    const radius = (size - dotSize) / 2;
 
     return (
         <View
@@ -1918,12 +2178,13 @@ export default function DotBloom({
             accessibilityValue={{
                 min: 0,
                 max: 100,
-                now: Math.round(Math.min(Math.max(progress, 0), 1) * 100)
+                now: Math.round(clampProgress(progress) * 100)
             }}
             style={{width: size, height: size}}>
             {Array.from({length: dotCount}, (_, index) => (
                 <BloomDot key={index} index={index} total={dotCount} lit={index < lit}
-                          radius={radius} size={dotSize} reduced={reduced}/>
+                          leading={index === lit} centre={centre} radius={radius}
+                          size={dotSize} pulse={pulse}/>
             ))}
         </View>
     );
@@ -1933,7 +2194,7 @@ export default function DotBloom({
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/DotBloom.test.tsx`
-Expected: PASS, 13 tests.
+Expected: PASS, 31 tests.
 
 - [ ] **Step 5: Commit**
 
