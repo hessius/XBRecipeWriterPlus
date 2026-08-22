@@ -1,6 +1,7 @@
 import {useState} from "react";
-import {Alert, Platform} from "react-native";
+import {Platform} from "react-native";
 
+import {notify} from "@/components/XbrwToast";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import type Recipe from "@/library/Recipe";
 
@@ -13,6 +14,15 @@ type CardWriter = {
     showNfcOverlay: boolean;
     /** Write progress 0-100. */
     writeProgress: number;
+    /**
+     * The pour-volume mismatch, or null.
+     *
+     * A state rather than an event: the machine rejects a recipe whose pour
+     * volumes do not sum to dosage x ratio, so this is a property of the recipe
+     * that persists until it is fixed. Delivered as a modal you dismiss, it was
+     * something the user then had to remember.
+     */
+    volumeError: string | null;
 };
 
 /**
@@ -29,6 +39,7 @@ type CardWriter = {
 export function useCardWriter(): CardWriter {
     const [writeProgress, setWriteProgress] = useState(0);
     const [showNfcOverlay, setShowNfcOverlay] = useState(false);
+    const [volumeError, setVolumeError] = useState<string | null>(null);
 
     const nfc = new NFC();
 
@@ -56,27 +67,28 @@ export function useCardWriter(): CardWriter {
             if (recipe !== null) {
                 console.log(recipe);
                 if (recipe.isPourVolumeValid()) {
+                    setVolumeError(null);
                     setWriteProgress(0);
                     setShowNfcOverlay(true);
                     await recipe.writeCard(nfc, progressCallback);
                     setShowNfcOverlay(false);
                 } else {
-                    Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
+                    setVolumeError(
+                        "Your individual pour volumes must add up to the total volume."
+                    );
                 }
             }
         } catch (e) {
             console.log("Write error!:" + e);
             setShowNfcOverlay(false);
-            Alert.alert('Write Error', 'There was an error writing the recipe to the card');
+            // A cancelled scan throws, and the user cancelling is not a failure.
+            if (!nfc.getIsClosed()) {
+                notify({tone: "error", message: "Could not write the recipe to the card."});
+            }
         }
     }
 
-    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress};
+    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, volumeError};
 }
 
 export default useCardWriter;

@@ -5,7 +5,7 @@ import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useCallback, useEffect, useRef} from "react";
 import {ActivityIndicator, Pressable, useWindowDimensions} from "react-native";
-import {Button, getTokens, H6, ScrollView, XStack, YStack} from "tamagui";
+import {Button, getTokens, H6, ScrollView, Text, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
 import LabeledInput from "@/components/LabeledInput";
 import TotalVolumeComponent from "@/components/TotalVolumeComponent";
@@ -42,7 +42,7 @@ export default function EditRecipe() {
         getLabelText: (id: number) => id === 1 ? "On" : "Off"
     };
 
-    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter();
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, volumeError} = useCardWriter();
 
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
@@ -51,12 +51,13 @@ export default function EditRecipe() {
         recipe, getRecipe, enableSave, inputError, setInputError, isLoadingTitle,
         showRestoreDialog, setShowRestoreDialog, restoreOptions, totalVolumeRef, autoButtonRef,
         bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
-        restoreRecipe, saveRecipe, editInputComplete
+        restoreRecipe, saveRecipe, editInputComplete, volumeError: editorVolumeError
     } = useRecipeEditor({
         recipeJSON:           recipeJSON as string | undefined,
         initiallySaveEnabled: saveEnabled === "true",
         onSaved:              () => navigation.goBack()
     });
+    const inlineError = volumeError ?? editorVolumeError;
 
 
     function writeCardIcon() {
@@ -301,6 +302,12 @@ export default function EditRecipe() {
                             </YStack>
                         </ScrollView>
                     </XStack>
+                    {inlineError !== null && (
+                        <Text accessibilityRole="alert" fontSize={13} color={palette.danger}
+                              paddingHorizontal="$3" paddingBottom="$2">
+                            {inlineError}
+                        </Text>
+                    )}
                     <XStack paddingVertical="$2" justifyContent="center" alignContent="center" alignItems="center"
                             backgroundColor="$backgroundFocus">
                         <Button marginHorizontal={"$2"} onPress={() => restoreRecipe()} width={150} fontSize={16}
