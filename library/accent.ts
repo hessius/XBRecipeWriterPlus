@@ -1,14 +1,6 @@
 import Recipe from "./Recipe";
 import {accents, type AccentGroup} from "@/constants/colors";
 
-/**
- * A recipe carrying its persisted accent.
- *
- * Sub-project 2 moves `accentIndex` onto `Recipe` proper and deletes this type —
- * grep for `RecipeWithAccent` to find everything that needs updating then.
- */
-export type RecipeWithAccent = Recipe & {accentIndex?: number};
-
 /** Which half of the palette a recipe draws from. */
 export function accentGroupFor(recipe: Recipe): AccentGroup {
     // Ask Recipe rather than comparing `cupType` here. The tea byte can carry
@@ -40,7 +32,7 @@ export function resolveAccent(recipe: Recipe): string {
     const group = accentGroupFor(recipe);
     const groupAccents = accents[group];
 
-    const persisted = (recipe as RecipeWithAccent).accentIndex;
+    const persisted = recipe.accentIndex;
     if (
         typeof persisted === "number" &&
         Number.isInteger(persisted) &&
@@ -85,4 +77,28 @@ export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
         }
     }
     return best;
+}
+
+/**
+ * The accent index a recipe should hold, given the accents already in use in
+ * its half of the palette.
+ *
+ * Returns the existing index unchanged when it is still valid. A recipe whose
+ * cup type has crossed between coffee and tea gets a fresh one, because the two
+ * halves are disjoint: a coffee index can point past the end of the shorter tea
+ * half, and even when it does not it names a colour from the wrong group.
+ *
+ * @param inUse Accent indices held by other recipes in the same half.
+ */
+export function reassignIfCrossed(recipe: Recipe, inUse: number[]): number {
+    const group = accentGroupFor(recipe);
+    const size = accents[group].length;
+    const current = recipe.accentIndex;
+
+    if (typeof current === "number" && Number.isInteger(current) &&
+        current >= 0 && current < size) {
+        return current;
+    }
+
+    return nextAccentIndex(group, inUse);
 }

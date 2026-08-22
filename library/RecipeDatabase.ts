@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import Recipe from './Recipe';
+import {accentGroupFor, reassignIfCrossed} from './accent';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
@@ -20,6 +21,7 @@ class RecipeDatabase {
 
     public insertRecipe(recipe: Recipe): void {
         if (recipe && !this.getRecipe(recipe.uuid)) {
+            recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
             let recipeJson = JSON.stringify(recipe);
             console.log(recipeJson);
             this.db.runSync(`
@@ -41,6 +43,8 @@ class RecipeDatabase {
             this.insertRecipe(updatedRecipe);
             return;
         } else {
+            updatedRecipe.accentIndex =
+                reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
             let updatedRecipeJson = JSON.stringify(updatedRecipe);
             console.log(updatedRecipeJson);
             this.db.runSync(`
@@ -140,6 +144,20 @@ class RecipeDatabase {
         return null;
     }
 
+    /**
+     * The accent indices already taken in a recipe's half of the palette.
+     *
+     * Only the same half counts: the coffee library is larger, and letting its
+     * indices into the tea tally would skew tea towards colours nothing uses.
+     */
+    private accentsInUse(recipe: Recipe): number[] {
+        const group = accentGroupFor(recipe);
+        return (this.retrieveAllRecipes() ?? [])
+            .filter((other) => other.uuid !== recipe.uuid &&
+                               accentGroupFor(other) === group)
+            .map((other) => other.accentIndex)
+            .filter((index): index is number => typeof index === "number");
+    }
 
 }
 

@@ -6,7 +6,6 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import {accents, onAccent} from "@/constants/colors";
 import {AA_LARGE, contrast} from "@/test-utils/contrast";
-import type {RecipeWithAccent} from "@/library/accent";
 import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -136,7 +135,7 @@ describe("RecipeCard", () => {
         // The accent is assigned once, on save, and persisted. A card that
         // recomputed it would repaint the library whenever anything changed.
         const recipe = makeRecipe();
-        (recipe as RecipeWithAccent).accentIndex = 5;
+        recipe.accentIndex = 5;
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
         expect(screen.getByTestId("recipe-card").props.style.backgroundColor)
             .toBe(accents.coffee[5]);
