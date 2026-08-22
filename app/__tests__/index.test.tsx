@@ -121,11 +121,18 @@ describe("HomeScreen", () => {
 
     it("reveals the row actions when editing is turned on", async () => {
         await renderWithProviders(<HomeScreen db={store([named("Ethiopia")])} settings={new Settings(memoryStorage())}/>);
-        expect(screen.queryByTestId("recipe-card-delete")).toBeNull();
+        // Hidden elements are included on purpose: the glyph is hidden from the
+        // accessibility tree, so a bare query would report it absent whether it
+        // had been rendered or not -- and the first assertion would then pass
+        // for the wrong reason.
+        const deleteGlyph = () =>
+            screen.queryByTestId("recipe-card-delete", {includeHiddenElements: true});
+
+        expect(deleteGlyph()).toBeNull();
 
         await fireEvent.press(screen.getByLabelText("Edit recipes"));
 
-        expect(screen.getByTestId("recipe-card-delete")).toBeTruthy();
+        expect(deleteGlyph()).toBeTruthy();
     });
 
     it("offers no edit toggle with an empty library", async () => {
