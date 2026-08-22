@@ -316,7 +316,7 @@ Create `library/__tests__/accent.test.ts`:
 ```ts
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {accents} from "@/constants/colors";
-import {accentGroupFor, assignAccentIndex, resolveAccent} from "@/library/accent";
+import {accentGroupFor, nextAccentIndex, resolveAccent} from "@/library/accent";
 
 function recipeWithCup(cup: number): Recipe {
     const r = new Recipe();
@@ -334,66 +334,115 @@ describe("accentGroupFor", () => {
             expect(accentGroupFor(recipeWithCup(cup))).toBe("coffee");
         }
     });
+
+    it("follows the legacy tea cup types that Recipe migrates", () => {
+        // 0x23 and 0x13 are tea cards written by the first app version with tea
+        // support; the Recipe JSON constructor rewrites them to CUP_TYPE.TEA.
+        // accentGroupFor must agree with that, which it gets for free by asking
+        // Recipe rather than comparing cupType itself.
+        const migrated = new Recipe(JSON.stringify({...new Recipe(), cupType: 0x23}));
+        expect(accentGroupFor(migrated)).toBe("tea");
+    });
 });
 
 describe("resolveAccent", () => {
-    it("is stable for the same recipe across calls", () => {
-        const r = recipeWithCup(CUP_TYPE.XPOD);
-        expect(resolveAccent(r)).toBe(resolveAccent(r));
+    it("gives two instances of the same recipe the same colour", () => {
+        // The property that matters: across a launch the recipe is a different
+        // object rebuilt from JSON, and the card must not change colour. Calling
+        // twice on one object would only prove the function is pure.
+        const original = recipeWithCup(CUP_TYPE.XPOD);
+        const reloaded = new Recipe(JSON.stringify(original));
+
+        expect(reloaded.uuid).toBe(original.uuid);
+        expect(resolveAccent(reloaded)).toBe(resolveAccent(original));
     });
 
-    it("only ever draws a tea recipe from the tea half", () => {
+    it("reaches every coffee accent across many recipes", () => {
+        // This is what kills a hash that collapsed to a constant. With 8 buckets
+        // and 200 draws, missing any bucket has probability ~2e-11.
+        const seen = new Set<string>();
         for (let i = 0; i < 200; i++) {
-            expect(accents.tea).toContain(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.XPOD)));
         }
+        expect(seen.size).toBe(accents.coffee.length);
     });
 
-    it("only ever draws a coffee recipe from the coffee half", () => {
+    it("reaches every tea accent across many recipes", () => {
+        const seen = new Set<string>();
         for (let i = 0; i < 200; i++) {
-            expect(accents.coffee).toContain(resolveAccent(recipeWithCup(CUP_TYPE.XPOD)));
+            seen.add(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
+        }
+        expect(seen.size).toBe(accents.tea.length);
+    });
+
+    it("never draws a tea recipe from the coffee half", () => {
+        for (let i = 0; i < 50; i++) {
+            expect(accents.tea).toContain(resolveAccent(recipeWithCup(CUP_TYPE.TEA)));
         }
     });
 
     it("prefers a persisted index over the uuid fallback", () => {
         const r = recipeWithCup(CUP_TYPE.XPOD);
-        (r as unknown as {accentIndex: number}).accentIndex = 3;
+        (r as RecipeWithAccent).accentIndex = 3;
         expect(resolveAccent(r)).toBe(accents.coffee[3]);
     });
 
-    it("ignores a persisted index that is out of range", () => {
-        const r = recipeWithCup(CUP_TYPE.XPOD);
-        (r as unknown as {accentIndex: number}).accentIndex = 99;
-        expect(accents.coffee).toContain(resolveAccent(r));
-    });
+    it.each([99, -1, 2.5, Number.NaN, "3", null, undefined])(
+        "falls back to the uuid hash for the invalid persisted index %p",
+        (bad) => {
+            const r = recipeWithCup(CUP_TYPE.XPOD);
+            (r as RecipeWithAccent).accentIndex = bad as number;
+            // Not merely "does not throw": accents.coffee[2.5] is undefined, and
+            // an undefined colour reaches a style prop and paints nothing.
+            expect(accents.coffee).toContain(resolveAccent(r));
+        }
+    );
 });
 
-describe("assignAccentIndex", () => {
+describe("nextAccentIndex", () => {
     it("returns zero when nothing is in use", () => {
-        expect(assignAccentIndex("coffee", [])).toBe(0);
+        expect(nextAccentIndex("coffee", [])).toBe(0);
     });
 
     it("returns the first unused index while the palette has room", () => {
-        expect(assignAccentIndex("coffee", [0, 1, 2])).toBe(3);
+        expect(nextAccentIndex("coffee", [0, 1, 2])).toBe(3);
     });
 
     it("fills the lowest free index rather than appending", () => {
-        expect(assignAccentIndex("coffee", [0, 2, 3])).toBe(1);
+        expect(nextAccentIndex("coffee", [0, 2, 3])).toBe(1);
     });
 
     it("picks the least-used index once the palette is full", () => {
         // All eight used once, plus a second use of index 5. Index 5 is now the
         // most used, so it must not win; the lowest of the tied indices does.
-        expect(assignAccentIndex("coffee", [0, 1, 2, 3, 4, 5, 6, 7, 5])).toBe(0);
+        expect(nextAccentIndex("coffee", [0, 1, 2, 3, 4, 5, 6, 7, 5])).toBe(0);
     });
 
     it("breaks ties by lowest index", () => {
-        expect(assignAccentIndex("coffee", [0, 0, 1, 2, 3, 4, 5, 6, 7])).toBe(1);
+        expect(nextAccentIndex("coffee", [0, 0, 1, 2, 3, 4, 5, 6, 7])).toBe(1);
+    });
+
+    it("ignores indices outside the group", () => {
+        // A caller holding indices from the larger coffee half must not be able
+        // to skew the tea counts.
+        expect(nextAccentIndex("tea", [0, 1, 2, 7, 99, -1])).toBe(3);
     });
 
     it("stays within the tea half", () => {
-        expect(assignAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
+        expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
     });
 });
+```
+
+Note the test file imports `RecipeWithAccent` alongside the functions:
+
+```ts
+import {
+    accentGroupFor,
+    nextAccentIndex,
+    resolveAccent,
+    type RecipeWithAccent
+} from "@/library/accent";
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -406,12 +455,24 @@ Expected: FAIL — `Cannot find module '@/library/accent'`.
 Create `library/accent.ts`:
 
 ```ts
-import Recipe, {CUP_TYPE} from "./Recipe";
+import Recipe from "./Recipe";
 import {accents, type AccentGroup} from "@/constants/colors";
+
+/**
+ * A recipe carrying its persisted accent.
+ *
+ * Sub-project 2 moves `accentIndex` onto `Recipe` proper and deletes this type —
+ * grep for `RecipeWithAccent` to find everything that needs updating then.
+ */
+export type RecipeWithAccent = Recipe & {accentIndex?: number};
 
 /** Which half of the palette a recipe draws from. */
 export function accentGroupFor(recipe: Recipe): AccentGroup {
-    return recipe.cupType === CUP_TYPE.TEA ? "tea" : "coffee";
+    // Ask Recipe rather than comparing `cupType` here. The tea byte can carry
+    // the default cup count in its high nibble, and legacy cards arrive as 0x13
+    // or 0x23; every one of those normalisations lives behind `isTea()`. A
+    // second copy of the predicate would silently miss the next such fix.
+    return recipe.isTea() ? "tea" : "coffee";
 }
 
 /**
@@ -424,6 +485,8 @@ function hashToIndex(key: string, modulo: number): number {
     let hash = 0x811c9dc5;
     for (let i = 0; i < key.length; i++) {
         hash ^= key.charCodeAt(i);
+        // Math.imul returns a signed 32-bit result; >>> 0 makes it unsigned
+        // before the modulo, so the index can never come out negative.
         hash = Math.imul(hash, 0x01000193) >>> 0;
     }
     return hash % modulo;
@@ -434,7 +497,7 @@ export function resolveAccent(recipe: Recipe): string {
     const group = accentGroupFor(recipe);
     const groupAccents = accents[group];
 
-    const persisted = (recipe as unknown as {accentIndex?: number}).accentIndex;
+    const persisted = (recipe as RecipeWithAccent).accentIndex;
     if (
         typeof persisted === "number" &&
         Number.isInteger(persisted) &&
@@ -448,16 +511,21 @@ export function resolveAccent(recipe: Recipe): string {
 }
 
 /**
- * The index to give a newly saved recipe: the least-used accent in its half of
- * the palette, ties broken by lowest index. While the library is smaller than
+ * The index a newly saved recipe should take: the least-used accent in its half
+ * of the palette, ties broken by lowest index. While the library is smaller than
  * the half-palette this is simply the first unused colour; past that, colours
  * repeat as evenly as possible rather than clustering.
  *
+ * Returns the index; persisting it is the caller's job.
+ *
  * @param group Which half to assign from.
  * @param inUse Accent indices already taken by recipes in the same half.
- *              Repeats are meaningful — they are what makes an index "more used".
+ *              Repeats are meaningful — they are what makes an index "more
+ *              used". Entries outside the group are silently ignored, so a
+ *              caller holding indices from the larger coffee half cannot skew
+ *              the tea counts.
  */
-export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
+export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
     const counts: number[] = new Array(accents[group].length).fill(0);
     for (const index of inUse) {
         if (Number.isInteger(index) && index >= 0 && index < counts.length) {
@@ -465,6 +533,8 @@ export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
         }
     }
 
+    // Strict `<` is what breaks ties by lowest index; `<=` would return the
+    // highest of the tied indices instead.
     let best = 0;
     for (let i = 1; i < counts.length; i++) {
         if (counts[i] < counts[best]) {
@@ -478,7 +548,7 @@ export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/accent.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 20 tests (the `it.each` contributes seven).
 
 - [ ] **Step 5: Commit**
 
