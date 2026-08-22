@@ -27,8 +27,11 @@ describe("accentGroupFor", () => {
     it("follows the legacy tea cup types that Recipe migrates", () => {
         // 0x23 and 0x13 are tea cards written by the first app version with tea
         // support; the Recipe JSON constructor rewrites them to CUP_TYPE.TEA.
-        // accentGroupFor must agree with that, which it gets for free by asking
-        // Recipe rather than comparing cupType itself.
+        // This pins that a migrated card lands in the tea half. It cannot fail
+        // against a cupType comparison today, because isTea() is currently that
+        // same comparison — the reason to call isTea() is that cupType has
+        // needed normalising twice already, and the next such fix should reach
+        // the palette without anyone remembering this file exists.
         const migrated = new Recipe(undefined, JSON.stringify({...new Recipe(), cupType: 0x23}));
         expect(accentGroupFor(migrated)).toBe("tea");
     });

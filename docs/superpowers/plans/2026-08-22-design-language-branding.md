@@ -338,9 +338,12 @@ describe("accentGroupFor", () => {
     it("follows the legacy tea cup types that Recipe migrates", () => {
         // 0x23 and 0x13 are tea cards written by the first app version with tea
         // support; the Recipe JSON constructor rewrites them to CUP_TYPE.TEA.
-        // accentGroupFor must agree with that, which it gets for free by asking
-        // Recipe rather than comparing cupType itself.
-        const migrated = new Recipe(JSON.stringify({...new Recipe(), cupType: 0x23}));
+        // This pins that a migrated card lands in the tea half. It cannot fail
+        // against a cupType comparison today, because isTea() is currently that
+        // same comparison — the reason to call isTea() is that cupType has
+        // needed normalising twice already, and the next such fix should reach
+        // the palette without anyone remembering this file exists.
+        const migrated = new Recipe(undefined, JSON.stringify({...new Recipe(), cupType: 0x23}));
         expect(accentGroupFor(migrated)).toBe("tea");
     });
 });
@@ -351,7 +354,7 @@ describe("resolveAccent", () => {
         // object rebuilt from JSON, and the card must not change colour. Calling
         // twice on one object would only prove the function is pure.
         const original = recipeWithCup(CUP_TYPE.XPOD);
-        const reloaded = new Recipe(JSON.stringify(original));
+        const reloaded = new Recipe(undefined, JSON.stringify(original));
 
         expect(reloaded.uuid).toBe(original.uuid);
         expect(resolveAccent(reloaded)).toBe(resolveAccent(original));
@@ -548,7 +551,7 @@ export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/__tests__/accent.test.ts`
-Expected: PASS, 20 tests (the `it.each` contributes seven).
+Expected: PASS, 22 tests (the `it.each` contributes seven).
 
 - [ ] **Step 5: Commit**
 
