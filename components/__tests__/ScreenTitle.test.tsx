@@ -117,4 +117,28 @@ describe("ScreenTitle", () => {
         await renderWithProviders(<ScreenTitle title="Recipes" count={0}/>);
         expect(screen.queryByTestId("screen-title-count")).toBeNull();
     });
+
+    it("renders at the size it is given", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={7} fontSize={18}/>);
+        expect(screen.getByText("Recipes").props.style.fontSize).toBe(18);
+    });
+
+    it("keeps the superscript tied to the title size", async () => {
+        // The lift is derived, not a literal, so the count cannot drift away from
+        // the word it belongs to when the header collapses.
+        // Each render's own utilities: `screen` tracks only the most recent tree.
+        const smallRender = await renderWithProviders(
+            <ScreenTitle title="Recipes" count={7} fontSize={18}/>);
+        const small = smallRender.getByTestId("screen-title-count").props.style;
+
+        const largeRender = await renderWithProviders(
+            <ScreenTitle title="Recipes" count={7} fontSize={36}/>);
+        const large = largeRender.getByTestId("screen-title-count").props.style;
+
+        const lift = (style: Record<string, unknown> | Record<string, unknown>[]) =>
+            [style].flat().reduce<number>((found, part) =>
+                typeof part?.marginTop === "number" ? part.marginTop : found, 0);
+
+        expect(lift(large)).toBeGreaterThan(lift(small));
+    });
 });
