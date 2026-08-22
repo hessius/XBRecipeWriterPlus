@@ -3439,13 +3439,13 @@ CI substitutes for this, and a malformed write to a genuine card is not triviall
 recoverable. This is the one step that cannot be automated, and the pull request
 must not merge until a human has done it.
 
-- [x] **Step 1: Build and install on a real iPhone**
+- [ ] **Step 1: Build and install on a real iPhone**
 
 ```bash
 npm run ios -- --device
 ```
 
-- [x] **Step 2: Verify on iOS with a genuine card**
+- [ ] **Step 2: Verify on iOS with a genuine card**
 
 Check each of these and record the result in the pull request:
 
@@ -3460,13 +3460,13 @@ Check each of these and record the result in the pull request:
 - A recipe whose pour volumes do not add up shows the inline message beside the
   save button and never touches the card.
 
-- [x] **Step 3: Build and install on a real Android device**
+- [ ] **Step 3: Build and install on a real Android device**
 
 ```bash
 npm run android
 ```
 
-- [x] **Step 4: Verify the same list on Android**
+- [ ] **Step 4: Verify the same list on Android**
 
 Plus the two Android-specific behaviours:
 
@@ -3474,21 +3474,21 @@ Plus the two Android-specific behaviours:
   sheet to sit above.
 - Backing out of a scan produces no error notice.
 
-- [x] **Step 5: Verify the collapse on a real list**
+- [ ] **Step 5: Verify the collapse on a real list**
 
 Scroll a library of at least six recipes. The tiles must fly into the header
 once, stay collapsed while scrolling, and expand once near the top — with no
 flicker at any resting position. Park the list deliberately near the threshold
 and nudge it: the header must not flap.
 
-- [x] **Step 6: Verify Reduced Motion**
+- [ ] **Step 6: Verify Reduced Motion**
 
 Turn on Reduce Motion in the OS settings and repeat the scan and the collapse.
 Both must still *change* — cross-fading rather than sliding. If anything simply
 stops moving, that is a bug: a user who disabled motion must still see that
 something happened.
 
-- [x] **Step 7: Record the result**
+- [ ] **Step 7: Record the result**
 
 Post the outcome of steps 2, 4, 5 and 6 as a comment on the pull request before
 merging.
