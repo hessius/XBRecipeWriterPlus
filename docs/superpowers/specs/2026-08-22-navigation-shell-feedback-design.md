@@ -37,12 +37,13 @@ bump.
 | Where the CTA tiles sit | Under the header, above the list |
 | What happens on scroll | Tiles fly into the header; the title shrinks |
 | Collapse mechanism | Two discrete states with hysteresis, not interpolation |
-| Icon rendering | Dot matrix, all of them, including the settings gear |
+| Icon rendering | Dot matrix, all of them, including settings |
 | The scan glyph | Three concentric squares on a 9×9 grid |
+| The settings glyph | Two faders — the gear metaphor was dropped, not drawn |
 | Feedback surfaces | Toast, inline, sheet — no native `Alert` anywhere |
 | Toast implementation | Keep `@backpackapp-io/react-native-toast`, skin it |
 | iOS NFC composition | Dim the app, stage the bloom above the system sheet |
-| Settings | A minimal real screen now, not a gear that goes nowhere |
+| Settings | A minimal real screen now, not an affordance that goes nowhere |
 
 ## 1. The dot icon set
 
@@ -74,16 +75,16 @@ Authored, not generated. Signed-distance rasterisation was tried first and
 produced blobs at these sizes.
 
 ```
-scan (three rings)   import (download)    settings (gear)
-#########            ·········            ···#·#···
-#·······#            ····#····            ·#··#··#·
-#·#####·#            ····#····            ··#####··
-#·#···#·#            ····#····            ·###·###·
-#·#·#·#·#            ··#·#·#··            ###···###
-#·#···#·#            ···###···            ·###·###·
-#·#####·#            ····#····            ··#####··
-#·······#            ·#######·            ·#··#··#·
-#########            ·········            ···#·#···
+scan (three rings)   import (download)    settings (faders)
+#########            ·········            ·········
+#·······#            ····#····            ···#·····
+#·#####·#            ····#····            #########
+#·#···#·#            ····#····            ···#·····
+#·#·#·#·#            ··#·#·#··            ·········
+#·#···#·#            ···###···            ······#··
+#·#####·#            ····#····            #########
+#·······#            ·#######·            ······#··
+#########            ·········            ·········
 
 success (check)      error (cross)        info
 ·········            ·········            ·········
@@ -97,8 +98,7 @@ success (check)      error (cross)        info
 ·········            ·········            ·········
 
 edit (pencil)
-·········
-·······#·
+·······##
 ······##·
 ·····##··
 ····##···
@@ -106,14 +106,24 @@ edit (pencil)
 ··##·····
 ·##······
 ·········
+#########
 ```
 
-The pencil is a pure diagonal, one dot per row, which is the other shape class
-that survives a coarse grid intact.
+Two shape classes survive a coarse grid: **axis-aligned** runs and **pure
+diagonals** of one dot per row. Everything here is one or the other.
 
 The scan glyph is three concentric rings rather than two because it reads as
 signal radiating outward, which is what the action does. Two rings were the safer
 choice and were rejected deliberately.
+
+Settings is **two faders, not a gear**. A gear is radially symmetric with fine
+teeth — the single worst shape for a 9×9 grid — and four candidate gears were
+drawn and compared at 16, 20, 26 and 44 px before the metaphor was abandoned. The
+meaning is "settings", not "gear", and faders are axis-aligned, so the grid
+renders them exactly.
+
+The edit pencil sits on a baseline. The bare diagonal was legible but ambiguous;
+the baseline makes it a writing tool rather than a stroke.
 
 ### Component
 
@@ -133,7 +143,7 @@ choice and were rejected deliberately.
 
 ```
 ┌──────────────────────────────────┐
-│ Recipes⁰⁷            ◉  ↓  ⚙    │   header
+│ Recipes⁰⁷         ✎  ◉  ↓  ≡     │   header
 ├──────────────────────────────────┤
 │  ┌───────────┐  ┌───────────┐    │
 │  │     ◉     │  │     ↓     │    │   CTA tiles, equal weight
@@ -317,7 +327,7 @@ produce a failure toast.
 
 ## 5. Settings
 
-The gear needs somewhere to go. Sub-project 2 shipped a working settings store
+The settings glyph needs somewhere to go. Sub-project 2 shipped a working settings store
 whose one key, `showCoffeeMarker`, currently has nothing reading it, and the
 roadmap forbids affordances that do nothing.
 
@@ -399,7 +409,7 @@ is the one gate that cannot be automated.
 - No `Alert.alert` call remains in `app/`, `components/` or `hooks/`.
 - The NFC overlay is one component with two platform compositions, verified on
   real hardware with a real card.
-- The gear opens a settings screen with one working toggle, and `showCoffeeMarker`
+- The settings glyph opens a screen with one working toggle, and `showCoffeeMarker`
   is no longer dead code.
 - Typecheck, lint, tests and expo-doctor are green.
 
