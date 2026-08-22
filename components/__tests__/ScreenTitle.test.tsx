@@ -3,6 +3,7 @@ import {screen} from "@testing-library/react-native";
 
 import ScreenTitle from "@/components/ScreenTitle";
 import {palette} from "@/constants/colors";
+import {AA_TEXT, contrast} from "@/test-utils/contrast";
 import {renderWithProviders} from "@/test-utils/render";
 
 /** Whatever the queries hand back; RNTL does not export the type by name. */
@@ -46,7 +47,19 @@ describe("ScreenTitle", () => {
         expect(styleValue(count, "fontSize") as number)
             .toBeLessThan((styleValue(title, "fontSize") as number) / 2);
         expect(styleValue(count, "marginTop")).toBeGreaterThan(0);
-        expect(styleValue(count, "color")).toBe(palette.muted);
+        expect(styleValue(count, "color")).toBe(palette.dim);
+    });
+
+    // 11 px is below WCAG's "large text" threshold, so the count needs the full
+    // 4.5:1 like any other body text. `palette.muted` reads as the natural
+    // choice for a tertiary annotation and measures 4.12:1 on black — close
+    // enough to look fine on a desktop display and fail on a phone in daylight.
+    it("keeps the count above AA contrast on the screen background", async () => {
+        await renderWithProviders(<ScreenTitle title="Recipes" count={12}/>);
+        const count = screen.getByTestId("screen-title-count");
+
+        expect(contrast(styleValue(count, "color") as string, palette.base))
+            .toBeGreaterThanOrEqual(AA_TEXT);
     });
 
     it("keeps prose in Inter and the number in dot matrix", async () => {

@@ -25,9 +25,15 @@ export const palette = {
     raised:  "#161616",
     /** Hairlines and borders. */
     line:    "#262626",
-    /** Tertiary text and superscript counts. */
+    /**
+     * Disabled controls and decorative marks.
+     *
+     * 4.12:1 on `base` — under AA, so this is not a text colour. It reads as the
+     * obvious choice for a tertiary annotation and was used for the superscript
+     * count until the measurement said otherwise; use `dim` for small text.
+     */
     muted:   "#6E6E6E",
-    /** Secondary text. */
+    /** Secondary text, including the superscript count. */
     dim:     "#A3A3A3",
     /** Primary text. */
     text:    "#FFFFFF",
@@ -58,10 +64,19 @@ export const onAccent = {
      * pairing is 5.1:1.
      */
     label:         "rgba(0,0,0,0.65)",
-    /** Pour profile stroke. */
-    profileStroke: "rgba(0,0,0,0.85)",
-    /** Pour profile fill. */
-    profileFill:   "rgba(0,0,0,0.30)",
+    /**
+     * Pour profile stroke.
+     *
+     * The profile is a watermark, so this alpha is doing the dimming that used
+     * to be a group opacity on the wrapping view. A wrapper multiplied this
+     * already-composited value, which put the rendered stroke at 2.72:1 on
+     * Blossom while the colour suite measured the token at 8.46:1 and passed.
+     * The floor for a non-text graphic is 3:1; 0.50 is the faintest value that
+     * clears it on every accent, worst case 3.24:1 on Blossom.
+     */
+    profileStroke: "rgba(0,0,0,0.50)",
+    /** Pour profile fill. Scaled with the stroke to keep the watermark's shape. */
+    profileFill:   "rgba(0,0,0,0.15)",
     /** Beverage marker and contactless mark. */
     marker:        "rgba(0,0,0,0.70)"
 } as const;

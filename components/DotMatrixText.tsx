@@ -20,13 +20,21 @@ export const DOTO_MIN_FONT_SIZE = 11;
  */
 export const DOTO_MAX_FONT_SCALE = 1.4;
 
-const FAMILIES = {
-    semibold:  "Doto-SemiBold",
+/**
+ * The static Doto instances this component may request.
+ *
+ * Only weights at 700 or heavier appear here. The design spec puts Doto's floor
+ * at 11 px and weight 700, and makes this component the enforcement point, so a
+ * lighter instance is not offered at all rather than left to call-site
+ * discipline. Below 700 the dot grid thins out and the smudge the size floor
+ * exists to prevent comes back at a legal size.
+ */
+export const DOTO_FAMILIES = {
     bold:      "Doto-Bold",
     extrabold: "Doto-ExtraBold"
 } as const;
 
-export type DotoWeight = keyof typeof FAMILIES;
+export type DotoWeight = keyof typeof DOTO_FAMILIES;
 
 /**
  * Everything a call site may style except the two properties this component
@@ -110,7 +118,7 @@ export default function DotMatrixText({
                 // margins, line height — but must not reach the two properties
                 // that make this component the single enforcement point.
                 {
-                    fontFamily: FAMILIES[weight],
+                    fontFamily: DOTO_FAMILIES[weight],
                     fontSize:   requestedSize(fontSize)
                 }
             ]}>

@@ -29,9 +29,15 @@ export function clampProgress(progress: number): number {
     return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 1) : 0;
 }
 
-/** How many dots of `total` are lit at a given progress. */
+/**
+ * How many dots of `total` are lit at a given progress.
+ *
+ * Floor, not round. Rounding to nearest lights a dot at its halfway point, so a
+ * read at 23.5/24 would show a complete ring — and report itself finished —
+ * with the last block still in flight.
+ */
 export function litCount(progress: number, total: number): number {
-    return Math.round(clampProgress(progress) * total);
+    return Math.floor(clampProgress(progress) * total);
 }
 
 type DotProps = {

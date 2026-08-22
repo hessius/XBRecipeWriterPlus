@@ -213,15 +213,24 @@ describe("WriteSweep", () => {
 
     // Last in the file on purpose: `useReducedMotion` seeds from a module-level
     // cache, so flipping the setting on leaks into every later test in the file.
-    it("commits a block instantly under Reduce Motion, without hiding progress", async () => {
+    it("still cross-fades a committed block under Reduce Motion", async () => {
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
 
         const {rerender} = await renderWithProviders(<WriteSweep blocksWritten={1} totalBlocks={4}/>);
         await advance(DURATION.fast * 2);
 
         await rerender(<WriteSweep blocksWritten={3} totalBlocks={4}/>);
-        await advance(16);
-        // A cross-fade, not an animation: arrived within a frame, not over 120ms.
+
+        // Opacity is not spatial, so Reduce Motion has no quarrel with it. The
+        // spec asks animations to degrade to a cross-fade, never to nothing —
+        // and this animation already *is* a cross-fade, so snapping it removed
+        // the very thing the requirement asks to keep.
+        await advance(DURATION.fast / 2);
+        const midway = opacityOf(2);
+        expect(midway).toBeGreaterThan(0.4);
+        expect(midway).toBeLessThan(1);
+
+        await advance(DURATION.fast);
         expect(opacityOf(2)).toBe(1);
 
         // Still legible as progress.

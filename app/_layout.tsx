@@ -32,7 +32,6 @@ export default function RootLayout() {
     const [splashDone, setSplashDone] = useState(false);
     const [loaded] = useFonts({
         SpaceMono:        require('../assets/fonts/SpaceMono-Regular.ttf'),
-        "Doto-SemiBold":  require('../assets/fonts/Doto-SemiBold.ttf'),
         "Doto-Bold":      require('../assets/fonts/Doto-Bold.ttf'),
         "Doto-ExtraBold": require('../assets/fonts/Doto-ExtraBold.ttf')
     });

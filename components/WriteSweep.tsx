@@ -6,7 +6,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING} from "@/constants/motion";
 import {palette} from "@/constants/colors";
 
 export type BlockState = "written" | "active" | "pending";
@@ -60,18 +60,21 @@ function blockMargin(totalBlocks: number): number {
 type CellProps = {
     state: BlockState;
     margin: number;
-    reduced: boolean;
 };
 
-function SweepBlock({state, margin, reduced}: CellProps) {
+function SweepBlock({state, margin}: CellProps) {
     const fade = useSharedValue(state === "pending" ? 0.4 : 1);
 
     useEffect(() => {
-        const target = state === "pending" ? 0.4 : 1;
-        fade.value = reduced
-            ? target
-            : withTiming(target, {duration: DURATION.fast, easing: EASING.out});
-    }, [state, reduced, fade]);
+        // Not branched on Reduce Motion. This is an opacity change with no
+        // spatial component, which is precisely the cross-fade the setting asks
+        // animations to degrade *to* — snapping it would leave a Reduce Motion
+        // user with no indication that a block had committed at all.
+        fade.value = withTiming(state === "pending" ? 0.4 : 1, {
+            duration: DURATION.fast,
+            easing:   EASING.out
+        });
+    }, [state, fade]);
 
     const animatedStyle = useAnimatedStyle(() => ({opacity: fade.value}));
 
@@ -105,8 +108,6 @@ type Props = {
  * shown is the progress that happened.
  */
 export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
-    const reduced = useReducedMotion();
-
     // `NaN <= 0` is false, so a lost total would otherwise slip past this and
     // render an empty progressbar announcing `max: NaN`.
     if (!Number.isFinite(totalBlocks) || totalBlocks <= 0) {
@@ -123,7 +124,7 @@ export default function WriteSweep({blocksWritten, totalBlocks}: Props) {
             style={{flexDirection: "row", alignItems: "center"}}>
             {Array.from({length: Math.floor(totalBlocks)}, (_, index) => (
                 <SweepBlock key={index} state={blockState(index, written)}
-                            margin={blockMargin(totalBlocks)} reduced={reduced}/>
+                            margin={blockMargin(totalBlocks)}/>
             ))}
         </View>
     );

@@ -1,8 +1,11 @@
+import fs from "fs";
+import path from "path";
 import React from "react";
 import {screen} from "@testing-library/react-native";
 import {PixelRatio, StyleSheet} from "react-native";
 
 import DotMatrixText, {
+    DOTO_FAMILIES,
     DOTO_MAX_FONT_SCALE,
     DOTO_MIN_FONT_SIZE
 } from "@/components/DotMatrixText";
@@ -45,6 +48,31 @@ describe("DotMatrixText", () => {
             <DotMatrixText testID="dm" weight="extrabold">255</DotMatrixText>
         );
         expect(styleOf("dm").fontFamily).toBe("Doto-ExtraBold");
+    });
+
+    // The design spec puts Doto's floor at "11 px, and always at weight 700 or
+    // heavier", and names this component as the thing that enforces it. The
+    // size half of that is covered above; this is the weight half. A 600
+    // instance offered here is not a call-site mistake, it is the primitive
+    // handing out a weight the spec forbids.
+    it("offers no weight below 700", () => {
+        expect(Object.values(DOTO_FAMILIES)).toEqual(["Doto-Bold", "Doto-ExtraBold"]);
+    });
+
+    // Registration and use can drift in either direction: a family requested
+    // but never loaded falls back to the system font silently, and one loaded
+    // but never requested is dead weight in the bundle. Reading the layout is
+    // the only way to catch either from here.
+    it("requests exactly the Doto families the app registers", () => {
+        const layout = fs.readFileSync(
+            path.join(__dirname, "..", "..", "app", "_layout.tsx"),
+            "utf8"
+        );
+        const registered = [...layout.matchAll(/"(Doto-[A-Za-z]+)":/g)]
+            .map((match) => match[1])
+            .sort();
+
+        expect(registered).toEqual([...Object.values(DOTO_FAMILIES)].sort());
     });
 
     it("lets style carry layout", async () => {

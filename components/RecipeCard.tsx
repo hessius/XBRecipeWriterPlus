@@ -24,6 +24,12 @@ const ACTION_ICON_SIZE = 18;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
 
 /**
+ * The contactless glyph, sized to sit level with the 11 px beverage marker
+ * rather than to be read on its own.
+ */
+const CONTACTLESS_SIZE = 13;
+
+/**
  * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
  * `DigitRoll` clamps at zero, so passing a sentinel straight through would tell
  * the user the ratio is 0 — not a possible value, and indistinguishable from a
@@ -42,7 +48,7 @@ type StatProps = {
 function Stat({label, value, suffix}: StatProps) {
     return (
         <YStack gap="$0.5">
-            <DotMatrixText fontSize={11} weight="semibold" letterSpacing={1.2}
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
                            color={onAccent.label}>
                 {label}
             </DotMatrixText>
@@ -164,7 +170,7 @@ export default function RecipeCard({
             style={{backgroundColor: accent}}>
 
             <View pointerEvents="none"
-                  style={{position: "absolute", right: 0, bottom: 0, opacity: 0.5}}>
+                  style={{position: "absolute", right: 0, bottom: 0}}>
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
                              width={200} height={PROFILE_HEIGHT}/>
             </View>
@@ -177,12 +183,26 @@ export default function RecipeCard({
                       color={onAccent.text}>
                     {recipe.title}
                 </Text>
-                {showMarker && (
-                    <DotMatrixText fontSize={11} weight="semibold" letterSpacing={1.4}
-                                   color={onAccent.marker}>
-                        {marker}
-                    </DotMatrixText>
-                )}
+                <XStack alignItems="center" gap="$1.5">
+                    {showMarker && (
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                                       color={onAccent.marker}>
+                            {marker}
+                        </DotMatrixText>
+                    )}
+                    {/* The contactless glyph is `wifi` turned a quarter turn —
+                        the same construction the contactless payment symbol
+                        uses. It is decorative: the card's accessibility label
+                        already says this is a recipe, and every recipe here
+                        writes to a card, so announcing it on each row would be
+                        noise. */}
+                    <View accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                          style={{transform: [{rotate: "90deg"}]}}>
+                        <AntDesign testID="recipe-card-contactless" name="wifi"
+                                   size={CONTACTLESS_SIZE} color={onAccent.marker}/>
+                    </View>
+                </XStack>
             </XStack>
 
             <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">

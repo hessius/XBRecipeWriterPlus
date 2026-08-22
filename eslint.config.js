@@ -96,12 +96,16 @@ module.exports = defineConfig([
                 // colour. Matching the bare word everywhere would fail on
                 // Tamagui's theme names, which are not colours at all:
                 // <Button theme="red"> selects a theme, and is legitimate.
+                //
+                // Descendant, not direct child: a direct-child selector only
+                // sees `color="red"`, so `color={bad ? "red" : "green"}` and any
+                // other nested expression walked straight past the rule.
                 {
-                    selector: `JSXAttribute[name.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] > Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
+                    selector: `JSXAttribute[name.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
                     message:  COLOUR_MESSAGE
                 },
                 {
-                    selector: `Property[key.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] > Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
+                    selector: `Property[key.name=/^(?:.*[Cc]olor|fill|stroke|tint)$/] Literal[value=/^(?:${NAMED_COLOURS})$/i]`,
                     message:  COLOUR_MESSAGE
                 }
             ]

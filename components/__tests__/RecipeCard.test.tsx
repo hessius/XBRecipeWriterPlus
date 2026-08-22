@@ -5,6 +5,7 @@ import RecipeCard from "@/components/RecipeCard";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import {accents, onAccent} from "@/constants/colors";
+import {AA_LARGE, contrast} from "@/test-utils/contrast";
 import type {RecipeWithAccent} from "@/library/accent";
 import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
@@ -268,17 +269,49 @@ describe("RecipeCard", () => {
             .toEqual(expect.objectContaining({fontSize: 17, fontWeight: "700"}));
     });
 
-    it("keeps the profile a faint watermark, behind and out of the way", async () => {
+    it("shows a contactless mark, since every card here writes to one", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        // RNTL's default queries skip elements hidden from accessibility, and
+        // this mark deliberately is. Without the flag the failure reads as "not
+        // rendered", which sends you looking in the wrong place.
+        expect(screen.getByTestId("recipe-card-contactless",
+                                  {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("keeps the contactless mark when the coffee marker is hidden", async () => {
+        // The two live in the same top-right cluster, and the setting in
+        // sub-project 6 is about the beverage word only. Hiding one must not
+        // take the other with it.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        showCoffeeMarker={false}/>
+        );
+        expect(screen.queryByText("COFFEE")).toBeNull();
+        expect(screen.getByTestId("recipe-card-contactless",
+                                  {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("keeps the profile a faint watermark without dimming it below AA", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
         const layer = screen.getByTestId("recipe-card-profile").parent!;
         const style = layer.props.style as Record<string, number>;
-        // Drawn at full strength, or over the title, it stops being a
-        // background and starts competing with the text.
-        expect(style.opacity).toBeLessThan(1);
+
+        // The faintness belongs in the token, not in a group opacity here. A
+        // wrapper opacity multiplies an already-composited stroke, so the ratio
+        // the colour suite validates stops being the ratio that renders: at 0.5
+        // the stroke measured 2.72:1 on Blossom against a 3:1 requirement.
+        expect(style.opacity ?? 1).toBe(1);
         expect(style.right).toBe(0);
         expect(style.bottom).toBe(0);
+
+        for (const accent of [...accents.coffee, ...accents.tea]) {
+            expect(contrast(onAccent.profileStroke, accent))
+                .toBeGreaterThanOrEqual(AA_LARGE);
+        }
 
         const svg = screen.getByTestId("recipe-card-profile");
         expect(svg.props.width).toBeGreaterThan(100);

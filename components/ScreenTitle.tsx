@@ -38,7 +38,7 @@ export default function ScreenTitle({title, count}: Props) {
             </Text>
             {showCount && (
                 <DotMatrixText testID="screen-title-count" fontSize={11}
-                               weight="bold" color={palette.muted}
+                               weight="bold" color={palette.dim}
                                style={{marginTop: COUNT_LIFT}}>
                     {count}
                 </DotMatrixText>

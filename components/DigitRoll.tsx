@@ -3,6 +3,8 @@ import {View} from "react-native";
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
+    withDelay,
+    withSequence,
     withTiming
 } from "react-native-reanimated";
 
@@ -32,15 +34,34 @@ function DigitColumn({digit, fontSize, weight, color, reduced}: ColumnProps) {
     // otherwise get 28 px digits clipped into a 27 px box.
     const rowHeight = Math.round(drawnFontSize(fontSize) * 1.35);
     const offset = useSharedValue(-digit * rowHeight);
+    const fade = useSharedValue(1);
 
     useEffect(() => {
         const target = -digit * rowHeight;
-        offset.value = reduced
-            ? target
-            : withTiming(target, {duration: DURATION.base, easing: EASING.out});
-    }, [digit, rowHeight, reduced, offset]);
+
+        if (!reduced) {
+            offset.value = withTiming(target, {
+                duration: DURATION.base,
+                easing:   EASING.out
+            });
+            return;
+        }
+
+        // Reduce Motion removes the travel, not the transition. The strip fades
+        // out, repositions while it cannot be seen, and fades back carrying the
+        // new digit — so the change still registers without anything sliding
+        // across the screen. Assigning the target outright would satisfy the
+        // letter of "no motion" and leave the number rewriting itself between
+        // frames with nothing to mark that it had.
+        fade.value = withSequence(
+            withTiming(0, {duration: DURATION.fast, easing: EASING.in}),
+            withTiming(1, {duration: DURATION.fast, easing: EASING.out})
+        );
+        offset.value = withDelay(DURATION.fast, withTiming(target, {duration: 0}));
+    }, [digit, rowHeight, reduced, offset, fade]);
 
     const animatedStyle = useAnimatedStyle(() => ({
+        opacity:   fade.value,
         transform: [{translateY: offset.value}]
     }));
 
@@ -121,7 +142,7 @@ export default function DigitRoll({
                 />
             ))}
             {suffix !== undefined && (
-                <DotMatrixText fontSize={Math.round(fontSize * 0.6)} weight="semibold"
+                <DotMatrixText fontSize={Math.round(fontSize * 0.6)} weight="bold"
                                color={color} style={{marginLeft: 2}}>
                     {suffix}
                 </DotMatrixText>

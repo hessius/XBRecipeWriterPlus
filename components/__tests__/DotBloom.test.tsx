@@ -71,6 +71,21 @@ describe("litCount", () => {
     it("treats a non-finite progress as zero", () => {
         expect(litCount(Number.NaN, 24)).toBe(0);
     });
+
+    it("rounds down, so a dot lights only once its share has been read", () => {
+        // Rounding to nearest lights a dot at its halfway point, which at 24
+        // dots means 23.5/24 of a read shows a full ring — and `scanning` goes
+        // false — while the last block is still in flight. The spec's
+        // non-negotiable is that progress is always driven by real state, and a
+        // ring that completes early is the one lie this animation can tell.
+        expect(litCount(23.5 / 24, 24)).toBe(23);
+        expect(litCount(23.9 / 24, 24)).toBe(23);
+    });
+
+    it("leaves a single dot unlit until the read is complete", () => {
+        expect(litCount(0.99, 1)).toBe(0);
+        expect(litCount(1, 1)).toBe(1);
+    });
 });
 
 describe("DotBloom", () => {

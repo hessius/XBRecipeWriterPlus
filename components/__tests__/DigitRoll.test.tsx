@@ -30,8 +30,19 @@ function offsetOf(index: number): number {
     return strip.props.jestAnimatedStyle.value.transform[0].translateY;
 }
 
-/** The laid-out height of each glyph on the strip. */
-function rowPitchOf(index: number): number[] {
+/**
+ * How faded the strip inside a column currently is. Under Reduce Motion this is
+ * the only thing that carries the change, so it is read directly rather than
+ * inferred from the transform.
+ */
+function opacityOf(index: number): number {
+    const strip = column(index).children[0] as never as {
+        props: {jestAnimatedStyle: {value: {opacity?: number}}};
+    };
+    return strip.props.jestAnimatedStyle.value.opacity ?? 1;
+}
+
+/** The laid-out height of each glyph on the strip. */function rowPitchOf(index: number): number[] {
     const strip = column(index).children[0] as never as {
         children: {props: {style: {height: number; lineHeight: number}[]}}[];
     };
@@ -202,15 +213,27 @@ describe("DigitRoll", () => {
 
     // Last in the file on purpose: `useReducedMotion` seeds from a module-level
     // cache, so flipping the setting on leaks into every later test in the file.
-    it("snaps rather than rolls under Reduce Motion", async () => {
+    it("cross-fades rather than rolling under Reduce Motion", async () => {
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
 
         const {rerender} = await renderWithProviders(<DigitRoll value={1}/>);
         await rerender(<DigitRoll value={8}/>);
-        await advance(16);
 
-        // Arrived on the first frame, and still shows the new value.
+        // The spec's non-negotiable is that motion degrades to a cross-fade,
+        // never to nothing. Snapping the transform satisfies "no travel" but
+        // leaves a Reduce Motion user with a number that changes between frames
+        // with nothing to mark that it did.
+        await advance(DURATION.fast / 2);
+        expect(opacityOf(0)).toBeLessThan(1);
+        expect(offsetOf(0)).toBe(-1 * rowHeight(0));
+
+        // The strip repositions while it is invisible, so the travel is never
+        // seen — then fades back carrying the new value.
+        await advance(DURATION.fast);
         expect(offsetOf(0)).toBe(-8 * rowHeight(0));
+
+        await advance(DURATION.fast);
+        expect(opacityOf(0)).toBe(1);
         expect(screen.getByLabelText("8")).toBeTruthy();
     });
 });
