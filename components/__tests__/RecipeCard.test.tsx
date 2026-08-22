@@ -4,10 +4,22 @@ import {fireEvent, screen, within} from "@testing-library/react-native";
 import RecipeCard from "@/components/RecipeCard";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
-import {accents, onAccent} from "@/constants/colors";
+import {accents, onAccent, palette} from "@/constants/colors";
+import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {AA_LARGE, contrast} from "@/test-utils/contrast";
 import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
+
+/** The colour a dot icon's dots are drawn in. */
+function dotColourOf(testID: string): string {
+    const dot = within(screen.getByTestId(testID, {includeHiddenElements: true}))
+        .getAllByTestId("dot-icon-dot", {includeHiddenElements: true})[0];
+    const list = (Array.isArray(dot.props.style) ? dot.props.style : [dot.props.style]) as
+        {backgroundColor?: string}[];
+    return String(list.reduce<string | undefined>(
+        (found, entry) => entry?.backgroundColor ?? found, undefined
+    ));
+}
 
 /** The face a node is set in. Tamagui flattens its style; RN keeps the array. */
 function fontFamilyOf(text: string): string {
@@ -483,6 +495,51 @@ describe("RecipeCard", () => {
         expect(duplicate.props.hitSlop).toBeUndefined();
         expect(style.paddingTop * 2 + 18).toBeGreaterThanOrEqual(44);
         expect(style.paddingLeft * 2 + 18).toBeGreaterThanOrEqual(44);
+    });
+
+    it("draws the row actions as dot glyphs rather than vector icons", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        // A dot icon is exactly as many nodes as its bitmap has lit cells, so
+        // this fails both if the glyph reverts to a vector icon and if the two
+        // are wired to the wrong bitmaps.
+        // The glyphs are hidden from the accessibility tree on purpose -- the
+        // pressable around each one is the single element a screen reader sees.
+        const dots = (testID: string) =>
+            within(screen.getByTestId(testID, {includeHiddenElements: true}))
+                .getAllByTestId("dot-icon-dot", {includeHiddenElements: true});
+
+        expect(dots("recipe-card-duplicate"))
+            .toHaveLength(litCells(DOT_ICONS.duplicate).length);
+        expect(dots("recipe-card-delete"))
+            .toHaveLength(litCells(DOT_ICONS.delete).length);
+    });
+
+    it("inks duplicate and delete in their own tones", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        expect(dotColourOf("recipe-card-duplicate")).toBe(palette.success);
+        expect(dotColourOf("recipe-card-delete")).toBe(palette.danger);
+    });
+
+    it("sits each glyph in a key cut from the card", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        // Without the key the glyph is drawn straight onto the accent, which is
+        // what left it short of contrast and reading as decoration rather than
+        // as something pressable.
+        const style = screen.getByRole("button", {name: "Delete recipe"})
+            .props.style as {backgroundColor?: string};
+        expect(style.backgroundColor).toBe(onAccent.key);
     });
 
     it("duplicates from the row actions too", async () => {

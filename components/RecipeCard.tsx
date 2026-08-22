@@ -1,14 +1,15 @@
 import React from "react";
 import {View} from "react-native";
-import {AntDesign} from "@expo/vector-icons";
 import {XStack, YStack, Text} from "tamagui";
 
 import DigitRoll from "@/components/DigitRoll";
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
-import {onAccent} from "@/constants/colors";
+import {onAccent, palette} from "@/constants/colors";
+import type {DotIconName} from "@/constants/dotIcons";
 
 const CARD_HEIGHT = 116;
 const PROFILE_HEIGHT = 56;
@@ -61,18 +62,30 @@ function Stat({label, value, suffix}: StatProps) {
 
 type ActionProps = {
     label: string;
-    icon: React.ComponentProps<typeof AntDesign>["name"];
+    icon: DotIconName;
+    tone: string;
     testID: string;
     onPress: () => void;
 };
 
-function Action({label, icon, testID, onPress}: ActionProps) {
+/**
+ * One of the two actions a card offers in edit mode.
+ *
+ * The glyph sits in a dark key rather than directly on the accent. Drawn on the
+ * accent it was both short of contrast on the lighter cards and, more to the
+ * point, indistinguishable from the card's own decoration — there was nothing
+ * to suggest it could be pressed.
+ */
+function Action({label, icon, tone, testID, onPress}: ActionProps) {
     return (
         <YStack accessible accessibilityRole="button" accessibilityLabel={label}
                 alignItems="center" justifyContent="center"
-                padding={ACTION_PADDING} onPress={onPress}>
-            <AntDesign testID={testID} name={icon} size={ACTION_ICON_SIZE}
-                       color={onAccent.marker}/>
+                padding={ACTION_PADDING} borderRadius="$4"
+                backgroundColor={onAccent.key}
+                pressStyle={{opacity: 0.7}}
+                onPress={onPress}>
+            <DotIcon testID={testID} name={icon} size={ACTION_ICON_SIZE}
+                     color={tone}/>
         </YStack>
     );
 }
@@ -197,12 +210,14 @@ export default function RecipeCard({
                 {editing && (
                     <XStack gap="$1">
                         {onDuplicate !== undefined && (
-                            <Action label="Duplicate recipe" icon="copy"
+                            <Action label="Duplicate recipe" icon="duplicate"
+                                    tone={palette.success}
                                     testID="recipe-card-duplicate"
                                     onPress={onDuplicate}/>
                         )}
                         {onDelete !== undefined && (
                             <Action label="Delete recipe" icon="delete"
+                                    tone={palette.danger}
                                     testID="recipe-card-delete" onPress={onDelete}/>
                         )}
                     </XStack>

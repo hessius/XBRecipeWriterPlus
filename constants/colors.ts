@@ -78,7 +78,21 @@ export const onAccent = {
     /** Pour profile fill. Scaled with the stroke to keep the watermark's shape. */
     profileFill:   "rgba(0,0,0,0.15)",
     /** Beverage marker and contactless mark. */
-    marker:        "rgba(0,0,0,0.70)"
+    marker:        "rgba(0,0,0,0.70)",
+    /**
+     * The well behind an action glyph on a card.
+     *
+     * The glyphs used to be drawn straight onto the accent at `marker`, which
+     * left them short of contrast on the lighter accents and, worse, gave no
+     * suggestion that they were separate pressable objects rather than more
+     * card. This punches a dark key into the accent for them to sit in.
+     *
+     * 0.78 rather than solid black: the accent still shows through, so the key
+     * belongs to the card it is cut from. That is also the point at which the
+     * delete ink clears 4.5:1 on every accent — a graphic only needs 3:1, so
+     * there is real headroom here.
+     */
+    key:           "rgba(0,0,0,0.78)"
 } as const;
 
 /**
