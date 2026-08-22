@@ -1,269 +1,212 @@
-import Recipe from "@/library/Recipe";
-import RecipeDatabase from "@/library/RecipeDatabase";
-
-import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Alert, Platform} from "react-native";
-
-import {YStack} from "tamagui";
-import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import {Platform} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
-
-import {toast, ToastPosition} from "@backpackapp-io/react-native-toast";
-import ImportRecipeComponent from "@/components/ImportRecipeComponent";
+import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
-import AndroidNFCDialog from "@/components/AndroidNFCDialog";
+import {XStack, YStack} from "tamagui";
+
+import CtaTile from "@/components/CtaTile";
+import EmptyLibrary from "@/components/EmptyLibrary";
+import HomeHeader from "@/components/HomeHeader";
+import ImportRecipeComponent from "@/components/ImportRecipeComponent";
+import NfcOverlay from "@/components/NfcOverlay";
+import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import {notify} from "@/components/XbrwToast";
+import {palette} from "@/constants/colors";
+import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
+import {useSetting} from "@/hooks/useSetting";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
-import Svg, {Path} from "react-native-svg";
-import {XBloomRecipe} from "@/library/XBloomRecipe";
-import {palette} from '@/constants/colors';
-import IconButton from "@/components/IconButton";
-import {resolveOnOpen} from '@/library/duplicates';
+import Recipe from "@/library/Recipe";
+import {resolveOnOpen} from "@/library/duplicates";
+import type {Settings} from "@/library/Settings";
 
-// @ts-ignore-next-line
+type Props = {
+    /** Injected by tests. The route renders against the real database. */
+    db?: RecipeStore;
+    /** Injected by tests. */
+    settings?: Settings;
+};
 
-export default function HomeScreen() {
-    const [recipesJSON, setRecipesJSON] = useState<string>("");
-    const [showAndroidNFCDialog, setShowAndroidNFCDialog] = useState(false);
-    const [showImportRecipeDialog, setShowImportRecipeDialog] = useState(false);
-    const [readProgress, setReadProgress] = useState(0);
-    const [xbloomRecipeID, setXBloomRecipeID] = useState<string | null>("");
-    const [bounceFirstRowOnMount, setBounceFirstRowOnMount] = useState(true);
-    const [key, setKey] = useState(0);
+/**
+ * The recipe library.
+ *
+ * Layout only. Loading and mutating recipes belong to `useRecipeLibrary`, the
+ * scroll collapse to `useCollapsibleHeader`, and every message to `notify`.
+ */
+export default function HomeScreen({db, settings}: Props) {
     const router = useRouter();
-    const db = new RecipeDatabase();
     const navigation = useNavigation();
 
-    const nfc = new NFC();
+    const library = useRecipeLibrary(db);
+    const {collapsed, onScroll} = useCollapsibleHeader();
+    const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
+
+    const [editing, setEditing] = useState(false);
+    const [scanning, setScanning] = useState(false);
+    const [readProgress, setReadProgress] = useState(0);
+    const [importId, setImportId] = useState<string | null>(null);
+    const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
+    const nfc = new NFC();
 
+    const isEmpty = library.recipes.length === 0;
 
-    function readCardIcon() {
-        return (
-            <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
-                <Path
-                    d="M2 8.5H14.5M6 16.5H8M10.5 16.5H14.5M22 14.03V16.11C22 19.62 21.11 20.5 17.56 20.5H6.44C2.89 20.5 2 19.62 2 16.11V7.89C2 4.38 2.89 3.5 6.44 3.5H14.5M20 3.5V9.5M20 9.5L22 7.5M20 9.5L18 7.5"
-                    stroke={palette.text} stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-            </Svg>
-        )
-    }
+    // The header owns the whole strip, so the navigator's own bar would be a
+    // second title above ours.
+    useEffect(() => {
+        navigation.setOptions({headerShown: false});
+    }, [navigation]);
 
-    function getRecipes(): Recipe[] {
-        let recipes = [];
-        if (recipesJSON && recipesJSON.length > 0) {
-            let recipeData = JSON.parse(recipesJSON);
-            for (let i = 0; i < recipeData.length; i++) {
-                recipes.push(new Recipe(undefined, JSON.stringify(recipeData[i])));
-            }
+    useFocusEffect(
+        React.useCallback(() => {
+            library.refresh();
+            // Refreshing on focus is how a recipe saved in the editor appears
+            // here. `library` is rebuilt every render, so depending on it would
+            // re-run this on every render instead of on every focus.
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [])
+    );
+
+    useEffect(() => {
+        if (!hasShareIntent || shareIntent.type !== "weburl" || !shareIntent.webUrl) {
+            return;
         }
-        return recipes.sort((a: Recipe, b: Recipe) => a.displayName().localeCompare(b.displayName()));
-    }
-
-
-    async function onNFCDialogClose() {
-        await nfc.close();
-        setShowAndroidNFCDialog(false);
-    }
+        const id = new URL(shareIntent.webUrl).searchParams.get("id");
+        if (id) {
+            // Reacting to an inbound share intent — an external system pushing
+            // into React, which is what effects are for.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setImportId(id);
+            resetShareIntent();
+        }
+    }, [hasShareIntent, shareIntent, resetShareIntent]);
 
     async function progressCallback(progress: number): Promise<string | undefined> {
         if (Platform.OS === "ios") {
             setNfcAlertIOS(progress >= 100
                 ? "Recipe read from card"
-                : "Reading recipe from card: " + Math.round(progress) + "%");
-        } else {
-            setReadProgress(progress);
+                : `Reading recipe from card: ${Math.round(progress)}%`);
         }
+        setReadProgress(progress);
         return undefined;
     }
 
     async function readCard() {
-        setShowAndroidNFCDialog(true);
+        setScanning(true);
         setReadProgress(0);
         try {
-            console.log('Read Card')
-            let recipe = new Recipe();
+            const recipe = new Recipe();
+            const success = await recipe.readCard(nfc, progressCallback);
+            setScanning(false);
+            if (!success) {
+                return;
+            }
 
-            let success = await recipe.readCard(nfc, progressCallback);
+            // Stamped before serialising: the editor rebuilds the recipe from
+            // this JSON, so anything set afterwards would be lost.
+            recipe.source = "read";
+            const {recipe: toOpen, isExisting} = resolveOnOpen(library.recipes, recipe);
 
-            if (success) {
-                if (Platform.OS === "ios") {
-                    toast("Recipe read successfully", {
-                        duration: 4000,
-                        position: ToastPosition.TOP,
-                        styles:   {
-                            view: {backgroundColor: palette.success}
-                        }
-                    });
+            notify(isExisting
+                ? {tone: "info", message: "Already in your library"}
+                : {tone: "success", message: "Recipe read from card"});
+
+            router.push({
+                pathname: "/editRecipe",
+                params:   {
+                    recipeJSON: JSON.stringify(toOpen),
+                    // An already-saved recipe opens with Save disabled, as it
+                    // would from the list; only a genuinely new read arrives
+                    // needing to be saved.
+                    saveEnabled: isExisting ? "false" : "true"
                 }
-                setShowAndroidNFCDialog(false);
-
-                //reenable
-                // Stamped before serialising: the editor rebuilds the recipe
-                // from this JSON, so anything set afterwards would be lost.
-                recipe.source = "read";
-                const {recipe: toOpen, isExisting} =
-                    resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
-                router.push({
-                    pathname: '/editRecipe',
-                    params:   {
-                        recipeJSON: JSON.stringify(toOpen),
-                        // An already-saved recipe opens with Save disabled, as
-                        // it would from the list; only a genuinely new read
-                        // arrives needing to be saved.
-                        saveEnabled: isExisting ? "false" : "true"
-                    }
-                });
-            }
-        } catch (e) {
-            console.log(e);
-            setShowAndroidNFCDialog(false);
-            Alert.alert("Error", "Could not read card. Please try again.");
-        }
-
-    }
-
-    function forceRefresh() {
-        setBounceFirstRowOnMount(false);
-        setKey((prev) => prev + 1);
-    }
-
-    async function onCloseImportCallback() {
-        console.log("Closing import dialog");
-        setShowImportRecipeDialog(() => false);
-        setXBloomRecipeID(() => "");
-        forceRefresh();
-    }
-
-    function extractItemKey(item: Recipe) {
-        return item.key;
-    }
-
-    function deleteRecipe(recipe: Recipe) {
-        let db = new RecipeDatabase();
-        db.deleteRecipe(recipe.uuid);
-        forceRefresh();
-    }
-
-    function duplicateRecipe(recipe: Recipe) {
-        console.log("Duplicating recipe:" + recipe.displayName());
-        let db = new RecipeDatabase();
-        db.cloneRecipe(recipe.uuid);
-        forceRefresh();
-    }
-
-    useEffect(() => {
-        navigation.setOptions({
-            title:       'Recipes',
-            headerShown: true,
-            headerRight: () => <IconButton onPress={() => readCard()} title="" icon={readCardIcon()}/>
-        })
-    }, [navigation]);
-
-    useFocusEffect(
-        React.useCallback(() => {
-            let recipes = db.retrieveAllRecipes();
-            if (recipes) {
-                setRecipesJSON(JSON.stringify(recipes));
-            }
-        }, [])
-    )
-
-    useEffect(() => {
-        if (hasShareIntent) {
-            console.log("Share intent received:" + JSON.stringify(shareIntent));
-
-            if (shareIntent.type === "weburl" && shareIntent.webUrl) {
-                let url = new URL(shareIntent.webUrl);
-                if (url) {
-                    let id = url.searchParams.get("id");
-                    if (id) {
-                        console.log("Showing import dialog for recipe id:" + id);
-                        // Reacting to an inbound share intent — an external system
-                        // pushing into React, which is what effects are for.
-                        // eslint-disable-next-line react-hooks/set-state-in-effect
-                        setShowImportRecipeDialog(() => true);
-                        setXBloomRecipeID(() => id);
-                        resetShareIntent();
-                    }
-                }
+            });
+        } catch {
+            setScanning(false);
+            // A cancelled Android scan throws. That is the user getting what
+            // they asked for, not a failure to report.
+            if (!nfc.getIsClosed()) {
+                notify({tone: "error", message: "Could not read the card. Please try again."});
             }
         }
-    }, [hasShareIntent]);
+    }
 
+    async function cancelScan() {
+        await nfc.close();
+        setScanning(false);
+    }
 
-    useEffect(() => {
-        let recipes = db.retrieveAllRecipes();
-
-        // when testing with an empty database, load sample recipes by IDs
-        // (use `EXPO_PUBLIC_LOAD_RECIPE=CMcQuqFPRw9E2xDQvFAZkg==,KrTeDcmAIbv/0jrYKS4UtQ==,CpY80jg3CuKrSiO3YLruHg==` in .env.local)
-        if (__DEV__ && process.env.EXPO_PUBLIC_LOAD_RECIPE !== undefined && recipes === null) {
-            const recipeIds = process.env.EXPO_PUBLIC_LOAD_RECIPE.split(',');
-
-            for (const recipeId of recipeIds) {
-                let xbloom = new XBloomRecipe(recipeId.trim());
-                xbloom.fetchRecipeDetail().then(() => {
-                    if (xbloom) {
-                        let rec = xbloom?.getRecipe();
-                        if (rec) {
-                            db.insertRecipe(rec);
-                        }
-                    }
-                });
-            }
-
-            recipes = db.retrieveAllRecipes();
-        }
-
-        // Loading from SQLite, an external system, rather than deriving state
-        // that could have been computed during render.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRecipesJSON(recipes && recipes.length > 0 ? JSON.stringify(recipes) : "");
-    }, [key]);
-
-    // loads the first recipe automatically for debugging / testing
-    // (use `EXPO_PUBLIC_DEBUG_RECIPE_VIEW=true` in .env.local)
-    const debugOpenFirstRecipe = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_RECIPE_VIEW === "true";
-    useEffect(() => {
-        if (!debugOpenFirstRecipe) return;
-        const recipes = getRecipes();
-        if (recipes && recipes.length > 0) {
-            router.push({pathname: '/editRecipe', params: {recipeJSON: JSON.stringify(recipes[0])}});
-        }
-    }, [recipesJSON, debugOpenFirstRecipe]);
+    function openRecipe(recipe: Recipe) {
+        router.push({pathname: "/editRecipe", params: {recipeJSON: JSON.stringify(recipe)}});
+    }
 
     return (
         <>
-            <YStack alignItems="center" key={"recipekey" + key}
-                    backgroundColor={palette.base} maxWidth="100%" paddingTop="$2"
-                    flexDirection="column">
-                {recipesJSON ?
-                    (<FlatList showsVerticalScrollIndicator={false} keyExtractor={extractItemKey}
-                               data={getRecipes()} renderItem={({item, index}: { item: Recipe; index: number }) => (
+            <YStack flex={1} backgroundColor={palette.base}>
+                <HomeHeader
+                    count={library.recipes.length}
+                    collapsed={collapsed}
+                    editing={editing}
+                    showEdit={!isEmpty}
+                    onToggleEdit={() => setEditing((current) => !current)}
+                    onScan={readCard}
+                    onImport={() => setImportId("")}
+                    onSettings={() => router.push("/settings")}/>
+
+                {!collapsed && (
+                    <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
+                        <CtaTile icon="scan" label="READ CARD"
+                                 accessibilityLabel="Read a card" onPress={readCard}/>
+                        <CtaTile icon="import" label="IMPORT"
+                                 accessibilityLabel="Import a recipe"
+                                 onPress={() => setImportId("")}/>
+                    </XStack>
+                )}
+
+                {isEmpty ? (
+                    <EmptyLibrary/>
+                ) : (
+                    <FlatList
+                        data={library.recipes}
+                        keyExtractor={(item: Recipe) => item.key}
+                        onScroll={onScroll}
+                        scrollEventThrottle={16}
+                        showsVerticalScrollIndicator={false}
+                        renderItem={({item, index}: {item: Recipe; index: number}) => (
                             <SwipeableRecipeRow
                                 recipe={item}
-                                bounceOnMount={index === 0 && bounceFirstRowOnMount}
-                                onPress={() => {
-                                    router.push({
-                                        pathname: '/editRecipe',
-                                        params:   {recipeJSON: JSON.stringify(item)}
-                                    });
+                                editing={editing}
+                                showCoffeeMarker={showCoffeeMarker}
+                                bounceOnMount={index === 0 && bounceFirstRow}
+                                onPress={() => openRecipe(item)}
+                                onDelete={() => {
+                                    setBounceFirstRow(false);
+                                    library.deleteRecipe(item);
                                 }}
-                                onDelete={() => deleteRecipe(item)}
-                                onDuplicate={() => duplicateRecipe(item)}/>
+                                onDuplicate={() => {
+                                    setBounceFirstRow(false);
+                                    library.duplicateRecipe(item);
+                                }}/>
                         )}/>
-                    ) : ""}
+                )}
             </YStack>
 
-            {showImportRecipeDialog && xbloomRecipeID ?
-                <ImportRecipeComponent key={"import" + xbloomRecipeID} recipeId={xbloomRecipeID}
-                                       onClose={() => onCloseImportCallback()}/> : ""}
+            {importId !== null && (
+                <ImportRecipeComponent
+                    key={`import-${importId}`}
+                    recipeId={importId}
+                    onClose={() => {
+                        setImportId(null);
+                        library.refresh();
+                    }}/>
+            )}
 
-            {Platform.OS !== "ios" && showAndroidNFCDialog ?
-                <AndroidNFCDialog onClose={() => onNFCDialogClose()}
-                                  progress={readProgress}></AndroidNFCDialog> : ""}
+            <NfcOverlay visible={scanning} mode="read" progress={readProgress}
+                        onCancel={cancelScan}/>
         </>
-    )
+    );
 }
