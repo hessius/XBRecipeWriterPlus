@@ -1,6 +1,6 @@
 import {useFonts} from 'expo-font';
 import {DarkTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
 import config from '../tamagui.config' // your configuration
@@ -9,6 +9,7 @@ import {Toasts} from '@backpackapp-io/react-native-toast';
 import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
+import SplashOverlay from '@/components/SplashOverlay';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -28,6 +29,7 @@ const AppTheme = {
 };
 
 export default function RootLayout() {
+    const [splashDone, setSplashDone] = useState(false);
     const [loaded] = useFonts({
         SpaceMono:        require('../assets/fonts/SpaceMono-Regular.ttf'),
         "Doto-SemiBold":  require('../assets/fonts/Doto-SemiBold.ttf'),
@@ -73,6 +75,8 @@ export default function RootLayout() {
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
                                     </SafeAreaView>
+                                    <SplashOverlay visible={!splashDone}
+                                                   onFinished={() => setSplashDone(true)}/>
                                 </ThemeProvider>
                             </SafeAreaProvider>
                     </Theme>

@@ -4210,71 +4210,271 @@ Cannot set minimum buildscript.ext.compileSdkVersion`.
 
 **Files:**
 - Create: `components/SplashOverlay.tsx`, `components/__tests__/SplashOverlay.test.tsx`
-- Modify: `app/_layout.tsx`
+- Modify: `app/_layout.tsx`, `constants/motion.ts`
 
 `expo-splash-screen` shows the static PNG until the JS bundle has hydrated. This
-overlay covers the seam between that and the app's first paint, and animates the
-dots out.
+overlay covers the seam between that and the app's first paint.
 
-- [ ] **Step 1: Write the failing test**
+**Design corrections made during review — read these before implementing.**
+
+1. **The overlay must draw the same asset the native splash drew.** An earlier
+   draft rendered the `Wordmark` while the native splash shows
+   `splash-icon.png`, which is the bloom mark — two different images. The
+   "invisible handoff" the component exists for was therefore false: the mark
+   was replaced by text in a single frame. The overlay now renders that same
+   PNG at `MARK_SIZE = 200`, which must stay equal to the `imageWidth` given to
+   the `expo-splash-screen` plugin in `app.json`. A test asserts that equality
+   by reading `app.json`, because nothing else would catch the drift.
+2. **There is no scale entrance.** A draft grew the lockup from `0.92`, but the
+   static splash is at rest, so the first overlay frame was smaller than the
+   frame it replaced and visibly popped. Worse, `SplashOverlay` is the *first*
+   `useReducedMotion` instance in the app's lifetime, so it is the one mount
+   where that hook's cache is guaranteed cold — a Reduce Motion user would have
+   seen the grow start and then snap. Removing the scale removes both.
+3. **The whole overlay fades, not just its contents.** Animating only the inner
+   lockup leaves the opaque black backdrop up until the parent unmounts it,
+   which makes the reveal a hard cut rather than a cross-fade. The animated
+   style belongs on the full-bleed view.
+4. **The overlay is hidden from screen readers.** `pointerEvents="none"` does
+   not remove a view from the accessibility tree, so without
+   `accessibilityElementsHidden` and `importantForAccessibility` VoiceOver could
+   land on a decorative splash that is about to vanish. Note the consequence for
+   tests: RNTL's default queries skip elements hidden from accessibility, so
+   every query in the suite needs `{includeHiddenElements: true}`.
+5. **`DURATION.hold` was added to `constants/motion.ts`.** The hold before the
+   fade is a motion timing, and all motion timing lives in that module.
+
+Because every animation here is already a cross-fade — the form the spec
+requires motion to degrade *to* — the component deliberately has no
+`useReducedMotion` branch. There is no motion to reduce.
+
+- [ ] **Step 1: Add the hold timing**
+
+In `constants/motion.ts`, add `hold: 320` to `DURATION`, between `base` and
+`deliberate`, and extend the doc comment to say what it is for.
+
+- [ ] **Step 2: Write the failing test**
 
 Create `components/__tests__/SplashOverlay.test.tsx`:
 
 ```tsx
 import React from "react";
-import {AccessibilityInfo} from "react-native";
-import {screen, waitFor} from "@testing-library/react-native";
+import {act, screen} from "@testing-library/react-native";
 
-import SplashOverlay from "@/components/SplashOverlay";
+import SplashOverlay, {MARK_SIZE} from "@/components/SplashOverlay";
+import {DURATION} from "@/constants/motion";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
+jest.useFakeTimers();
+
+/**
+ * The overlay is deliberately hidden from the accessibility tree, and RNTL's
+ * default queries skip anything hidden from it — so every lookup here has to opt
+ * back in. That the plain queries cannot see it is itself the proof that the
+ * hiding works.
+ */
+const HIDDEN = {includeHiddenElements: true} as const;
+
+function get(testID: string) {
+    return screen.getByTestId(testID, HIDDEN);
+}
+
+async function advance(ms: number) {
+    await act(async () => {
+        jest.advanceTimersByTime(ms);
+    });
+}
+
+/**
+ * A node's *live* opacity. `props.style` is frozen at the last React render and
+ * cannot see an animated value; only `jestAnimatedStyle` is live, and it commits
+ * one frame after a rerender.
+ */
+function opacityOf(testID: string): number {
+    const node = get(testID) as never as {
+        props: {jestAnimatedStyle: {value: {opacity: number}}};
+    };
+    return node.props.jestAnimatedStyle.value.opacity;
+}
+
+function flatStyle(testID: string): Record<string, unknown> {
+    const style = get(testID).props.style as never as
+        Record<string, unknown>[];
+    return Object.assign({}, ...[style].flat(2)) as Record<string, unknown>;
+}
+
 describe("SplashOverlay", () => {
-    afterEach(() => {
-        jest.restoreAllMocks();
-    });
-
-    it("renders the wordmark while visible", async () => {
-        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
-        expect(screen.getByLabelText("XBRW++")).toBeTruthy();
-    });
-
     it("renders nothing when not visible", async () => {
         await renderWithProviders(
             <SplashOverlay visible={false} onFinished={jest.fn()}/>
         );
+
+        expect(screen.queryByTestId("splash-overlay", HIDDEN)).toBeNull();
+    });
+
+    it("covers the screen in the base colour", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // A splash that is not opaque, or not full-bleed, shows the seam it
+        // exists to hide.
+        const style = flatStyle("splash-overlay");
+
+        expect(style.backgroundColor).toBe(palette.base);
+        expect(style.position).toBe("absolute");
+        expect([style.top, style.left, style.right, style.bottom]).toEqual([0, 0, 0, 0]);
+    });
+
+    it("draws the same mark as the static splash, at the same size", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // The whole premise of the component is that its first frame is a pixel
+        // match for the launch image it takes over from. A different asset or a
+        // different size makes the handoff jump.
+        const mark = get("splash-mark");
+        const style = flatStyle("splash-mark");
+
+        expect(mark.props.source).toBe(require("../../assets/images/splash-icon.png"));
+        expect(style.width).toBe(MARK_SIZE);
+        expect(style.height).toBe(MARK_SIZE);
+        expect(MARK_SIZE).toBe(
+            require("../../app.json").expo.plugins
+                .find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen")[1]
+                .imageWidth
+        );
+    });
+
+    it("keeps the mark centred by positioning the wordmark absolutely", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // In a column the wordmark would push the mark off centre, and the mark
+        // would no longer line up with the static splash behind it.
+        const style = flatStyle("splash-wordmark");
+
+        expect(style.position).toBe("absolute");
+        expect(screen.getByLabelText("XBRW++", HIDDEN)).toBeTruthy();
+    });
+
+    it("hides itself from screen readers", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // It duplicates the launch image and the real app is already mounted
+        // behind it, so it is decorative. `pointerEvents` alone does not remove
+        // a view from the accessibility tree.
+        const overlay = get("splash-overlay");
+
+        // The default queries cannot see it at all, which is the behaviour a
+        // screen reader gets.
         expect(screen.queryByTestId("splash-overlay")).toBeNull();
+        expect(overlay.props.pointerEvents).toBe("none");
+        expect(overlay.props.accessibilityElementsHidden).toBe(true);
+        expect(overlay.props.importantForAccessibility).toBe("no-hide-descendants");
     });
 
-    it("reports finished once it has played", async () => {
+    it("fades the wordmark in from nothing", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        const start = opacityOf("splash-wordmark");
+        await advance(DURATION.base / 2);
+        const middle = opacityOf("splash-wordmark");
+        await advance(DURATION.base);
+
+        expect(start).toBe(0);
+        expect(middle).toBeGreaterThan(0);
+        expect(middle).toBeLessThan(1);
+        expect(opacityOf("splash-wordmark")).toBe(1);
+    });
+
+    it("holds at full opacity before it begins to fade", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        await advance(DURATION.hold - 40);
+
+        expect(opacityOf("splash-overlay")).toBe(1);
+    });
+
+    it("fades the whole overlay, not just its contents", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // Fading only the lockup would leave the opaque black backdrop up until
+        // the parent unmounts it, turning the reveal into a hard cut.
+        await advance(DURATION.hold + DURATION.base / 2);
+        const middle = opacityOf("splash-overlay");
+
+        expect(middle).toBeGreaterThan(0);
+        expect(middle).toBeLessThan(1);
+    });
+
+    it("uses the leaving curve to go, and the entering curve to arrive", async () => {
+        await renderWithProviders(<SplashOverlay visible onFinished={jest.fn()}/>);
+
+        // A quarter of the way in, the two curves are far apart: EASING.out has
+        // already covered most of its distance, EASING.in has barely started.
+        // Sampling there is what distinguishes them — endpoints never can.
+        await advance(DURATION.base / 4);
+        const arriving = opacityOf("splash-wordmark");
+
+        await advance(DURATION.hold);
+        await advance(DURATION.base / 4);
+        const leaving = opacityOf("splash-overlay");
+
+        expect(arriving).toBeGreaterThan(0.5);
+        expect(leaving).toBeGreaterThan(0.7);
+    });
+
+    it("does not report finished while it is still on screen", async () => {
         const onFinished = jest.fn();
         await renderWithProviders(<SplashOverlay visible onFinished={onFinished}/>);
 
-        await waitFor(() => expect(onFinished).toHaveBeenCalled(), {timeout: 4000});
+        await advance(DURATION.hold + DURATION.base - 40);
+
+        expect(onFinished).not.toHaveBeenCalled();
     });
 
-    it("still reports finished under reduce motion", async () => {
-        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+    it("reports finished once it has faded out", async () => {
         const onFinished = jest.fn();
-
         await renderWithProviders(<SplashOverlay visible onFinished={onFinished}/>);
 
-        await waitFor(() => expect(onFinished).toHaveBeenCalled(), {timeout: 4000});
+        await advance(DURATION.hold + DURATION.base + 32);
+
+        expect(onFinished).toHaveBeenCalledTimes(1);
+        expect(opacityOf("splash-overlay")).toBe(0);
+    });
+
+    it("survives its callback changing identity every render", async () => {
+        const onFinished = jest.fn();
+        const {rerender} = await renderWithProviders(
+            <SplashOverlay visible onFinished={() => onFinished()}/>
+        );
+
+        // A parent that passes an inline arrow re-renders with a new function
+        // each time. These deliberately continue past the fade: if the effect
+        // depended on that identity it would restart the delay on every render
+        // and the splash would cover the app forever.
+        const step = 60;
+        const window = DURATION.hold + DURATION.base + 32;
+        for (let elapsed = 0; elapsed < window * 2; elapsed += step) {
+            await advance(step);
+            await rerender(<SplashOverlay visible onFinished={() => onFinished()}/>);
+        }
+
+        expect(onFinished).toHaveBeenCalledTimes(1);
     });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 3: Run the test to verify it fails**
 
 Run: `npx jest components/__tests__/SplashOverlay.test.tsx`
 Expected: FAIL — `Cannot find module '@/components/SplashOverlay'`.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 4: Write the implementation**
 
 Create `components/SplashOverlay.tsx`:
 
 ```tsx
-import React, {useEffect} from "react";
-import {StyleSheet, View} from "react-native";
+import React, {useEffect, useEffectEvent} from "react";
+import {Image, StyleSheet} from "react-native";
 import Animated, {
     runOnJS,
     useAnimatedStyle,
@@ -4284,10 +4484,21 @@ import Animated, {
 } from "react-native-reanimated";
 
 import Wordmark from "@/components/Wordmark";
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING} from "@/constants/motion";
 import {palette} from "@/constants/colors";
 
-const HOLD_MS = 320;
+/**
+ * Width of the mark, in points.
+ *
+ * This must equal `expo-splash-screen`'s `imageWidth` in `app.json`. The overlay
+ * exists to be indistinguishable from the static splash at the moment it takes
+ * over, and it draws the same file; if the two sizes drift, the handoff visibly
+ * jumps.
+ */
+export const MARK_SIZE = 200;
+
+/** How far below the mark the wordmark sits. */
+const WORDMARK_OFFSET = 28;
 
 type Props = {
     visible: boolean;
@@ -4298,54 +4509,84 @@ type Props = {
 /**
  * Covers the seam between the static splash and the app's first paint.
  *
- * The static PNG that `expo-splash-screen` shows is the same lockup on the same
- * black, so the handoff is invisible: only the animation is new. Under Reduce
- * Motion it holds the static frame and cross-fades — the spec's rule is that
- * motion degrades to a cross-fade, never to nothing.
+ * `expo-splash-screen` shows `splash-icon.png` centred on black until the bundle
+ * has hydrated. This draws that same file, at that same size, on that same
+ * black, so the takeover is invisible: the first frame is a pixel match for the
+ * frame it replaces. The wordmark then fades in beneath the mark, and the whole
+ * overlay cross-fades away to reveal the app.
+ *
+ * Every animation here is already a cross-fade, which is the form the spec
+ * requires motion to degrade to under Reduce Motion, so there is deliberately no
+ * `useReducedMotion` branch: there is no motion to reduce. That also avoids a
+ * race this component alone would lose — it is the first hook instance in the
+ * app's lifetime, so it is the one mount where `useReducedMotion`'s cache is
+ * guaranteed to be cold and its first render guaranteed to assume wrongly.
  */
 export default function SplashOverlay({visible, onFinished}: Props) {
-    const reduced = useReducedMotion();
-    const opacity = useSharedValue(1);
-    const scale = useSharedValue(reduced ? 1 : 0.92);
+    const overlayOpacity = useSharedValue(1);
+    const wordmarkOpacity = useSharedValue(0);
+
+    // The effect below must run once per appearance, not once per render. A
+    // parent passing an inline arrow gives `onFinished` a new identity every
+    // time, and depending on that directly would restart the fade on each render
+    // and leave the splash covering the app forever.
+    const finish = useEffectEvent(() => {
+        onFinished();
+    });
 
     useEffect(() => {
         if (!visible) {
             return;
         }
 
-        if (!reduced) {
-            scale.value = withTiming(1, {
-                duration: DURATION.deliberate,
-                easing:   EASING.out
-            });
-        }
+        wordmarkOpacity.value = withTiming(1, {
+            duration: DURATION.base,
+            easing:   EASING.out
+        });
 
-        opacity.value = withDelay(
-            HOLD_MS,
+        overlayOpacity.value = withDelay(
+            DURATION.hold,
             withTiming(0, {duration: DURATION.base, easing: EASING.in}, (done) => {
+                // This callback is a worklet on the UI thread, so `finish` must
+                // be marshalled back with `runOnJS`. Dropping it passes every
+                // test — jest has no thread boundary — and throws on device.
+                //
+                // An interrupted animation reports `false`. No current path
+                // interrupts this one, so the guard is defence against a future
+                // dependency being added to the effect above rather than
+                // something the suite can exercise.
                 if (done) {
-                    runOnJS(onFinished)();
+                    runOnJS(finish)();
                 }
             })
         );
-    }, [visible, reduced, opacity, scale, onFinished]);
+    }, [visible, overlayOpacity, wordmarkOpacity]);
 
-    const animatedStyle = useAnimatedStyle(() => ({
-        opacity:   opacity.value,
-        transform: [{scale: scale.value}]
-    }));
+    const overlayStyle = useAnimatedStyle(() => ({opacity: overlayOpacity.value}));
+    const wordmarkStyle = useAnimatedStyle(() => ({opacity: wordmarkOpacity.value}));
 
     if (!visible) {
         return null;
     }
 
     return (
-        <View testID="splash-overlay" pointerEvents="none"
-              style={[StyleSheet.absoluteFill, styles.backdrop]}>
-            <Animated.View style={animatedStyle}>
-                <Wordmark fontSize={34}/>
+        <Animated.View
+            testID="splash-overlay"
+            // Decorative: it duplicates the launch image, and the real app is
+            // already mounted behind it. `pointerEvents` does not remove a view
+            // from the accessibility tree, so both of these are needed to stop a
+            // screen reader landing on a splash that is about to disappear.
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[StyleSheet.absoluteFill, styles.backdrop, overlayStyle]}>
+            <Image testID="splash-mark"
+                   source={require("../assets/images/splash-icon.png")}
+                   style={styles.mark} resizeMode="contain"/>
+            <Animated.View testID="splash-wordmark" style={[styles.wordmark, wordmarkStyle]}>
+                <Wordmark fontSize={24}/>
             </Animated.View>
-        </View>
+        </Animated.View>
     );
 }
 
@@ -4354,46 +4595,71 @@ const styles = StyleSheet.create({
         alignItems:      "center",
         justifyContent:  "center",
         backgroundColor: palette.base
+    },
+    mark:      {
+        width:  MARK_SIZE,
+        height: MARK_SIZE
+    },
+    // Absolute so the mark stays exactly centred, matching the static splash.
+    wordmark:  {
+        position:  "absolute",
+        top:       "50%",
+        marginTop: MARK_SIZE / 2 + WORDMARK_OFFSET
     }
 });
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npx jest components/__tests__/SplashOverlay.test.tsx`
-Expected: PASS, 4 tests.
+Expected: PASS, 12 tests.
 
-- [ ] **Step 5: Mount it in the root layout**
+- [ ] **Step 6: Mount it in the root layout**
 
-In `app/_layout.tsx`, add the state and render the overlay as the last child
-inside `SafeAreaProvider`, above the `Stack`, so it covers the whole app:
+In `app/_layout.tsx`, add the state:
 
 ```tsx
     const [splashDone, setSplashDone] = useState(false);
 ```
 
+and render the overlay as a sibling *after* `SafeAreaView`, still inside
+`ThemeProvider`:
+
 ```tsx
-            <SplashOverlay visible={!splashDone}
-                           onFinished={() => setSplashDone(true)}/>
+                                    <SplashOverlay visible={!splashDone}
+                                                   onFinished={() => setSplashDone(true)}/>
 ```
 
-The existing `SplashScreen.hideAsync()` call stays exactly where it is — the
-native splash must hide before the overlay can be seen, and the overlay is what
-covers the gap after it.
+`ThemeProvider` is context-only, so `StyleSheet.absoluteFill` resolves against
+`SafeAreaProvider`'s flex:1 view and the overlay covers the insets and the
+notch, not just the safe area. Placing it *inside* `SafeAreaView` would leave
+the status-bar region uncovered.
 
-- [ ] **Step 6: Verify the app still boots**
+The existing `SplashScreen.hideAsync()` call stays exactly where it is. The
+component returns `null` until the fonts load, so the tree containing the
+overlay is committed before the effect hides the native splash — there is no
+frame where neither is on screen.
+
+- [ ] **Step 7: Verify**
 
 ```bash
-npm run typecheck && npm test
+npm run typecheck && npm run lint && npm test
 ```
 
-Expected: typecheck silent, all tests pass.
+Expected: typecheck silent, lint 0 errors, all tests pass.
 
-- [ ] **Step 7: Commit**
+**Two invariants this suite cannot protect, verified by mutation:**
+
+- Removing `runOnJS` around `finish` passes every test and crashes on device.
+  Jest has no worklet/thread boundary, so nothing in the suite can see it.
+- The `if (done)` guard is currently unreachable: no path interrupts the fade.
+  It is defence against a future dependency being added to the effect.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add components/SplashOverlay.tsx components/__tests__/SplashOverlay.test.tsx \
-        app/_layout.tsx
+        app/_layout.tsx constants/motion.ts
 git commit -m "Add the animated splash overlay"
 ```
 

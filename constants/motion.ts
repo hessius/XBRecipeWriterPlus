@@ -7,11 +7,13 @@ import {Easing} from "react-native-reanimated";
  *
  * `fast` is feedback, not decoration. `deliberate` is reserved for the two
  * ceremonies — scanning a card and writing one — which are the only moments
- * where the app should feel like it is taking its time.
+ * where the app should feel like it is taking its time. `hold` is not a
+ * transition at all: it is how long something rests before it leaves.
  */
 export const DURATION = {
     fast:       120,
     base:       240,
+    hold:       320,
     deliberate: 400
 } as const;
 
