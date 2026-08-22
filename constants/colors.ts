@@ -11,10 +11,14 @@
  * ones (`red`).
  */
 
+/** The two halves of the accent palette. */
+export type AccentGroup = "coffee" | "tea";
+
 /** Surfaces, text and semantics. */
 export const palette = {
-    /** Screen background. */
-    void:    "#000000",
+    /** Screen background. `base` rather than `void`: `void` is a reserved word
+     *  and cannot be shorthand-destructured. */
+    base:    "#000000",
     /** Sheets and elevated panels. */
     surface: "#101010",
     /** CTA tiles, inputs, and cards that are not accent-filled. */
@@ -59,8 +63,15 @@ export const onAccent = {
  * Recipe accents, split by beverage. Colour is a redundant signal — a Doto
  * `TEA` / `COFFEE` marker carries the same information — because colour alone is
  * not an accessible signal.
+ *
+ * Deliberately NOT `as const`. Literal narrowing would type a group as a tuple
+ * of specific hex strings, which no consumer wants and which breaks
+ * lookup-by-value: on a union of two disjoint literal tuples, the parameter of
+ * `indexOf` and `includes` collapses to `never`. Sub-project 2 needs exactly
+ * that lookup to map a persisted colour back to an index. `readonly string[]`
+ * keeps the immutability and drops the narrowing.
  */
-export const accents = {
+export const accents: Record<AccentGroup, readonly string[]> = {
     coffee: [
         "#9FC3F0", // Sky
         "#F0B98E", // Peach
@@ -77,6 +88,4 @@ export const accents = {
         "#D9CF9A", // Jasmine
         "#E0AEA6"  // Hibiscus
     ]
-} as const;
-
-export type AccentGroup = keyof typeof accents;
+};
