@@ -66,6 +66,9 @@ const POLY_TABLE = [
 ];
 
 
+/** Where a recipe came from. Drives the placeholder name. */
+export type RecipeSource = "read" | "import" | "duplicate" | "manual";
+
 class Recipe {
     public uuid: string = "";
     public title: string = "";
@@ -84,10 +87,30 @@ class Recipe {
     public backup: number[] = [];
     public offline_backup: number[] = [];
     public uid: number[] = [];
+    /** The name the user chose. Empty until they rename something. */
+    public name: string = "";
+    /**
+     * The name xBloom publishes for this recipe's XID, cached.
+     *
+     * Not hand-edited. Once the sync and display work lands, a sync will
+     * refresh this while the local `name` wins the display, so refreshing can
+     * no longer discard what the user typed.
+     */
+    public xbloomName: string = "";
+    /** Epoch ms. `0` means unknown — a record saved before the field existed. */
+    public createdAt: number = 0;
+    public source: RecipeSource = "manual";
+    /**
+     * Index into the accent half for this recipe's beverage. Absent on records
+     * saved before the field existed, which fall back to the uuid hash in
+     * `library/accent.ts`.
+     */
+    public accentIndex?: number;
 
     constructor(data?: number[], json?: string, hasSignature: boolean = true) {
         this.uuid = (uuid.v4() as string);
         this.key = this.uuid;
+        this.createdAt = Date.now();
 
         if (data) {
             if (hasSignature) {
@@ -138,6 +161,18 @@ class Recipe {
             }
             this.ratio = jsonRecipe.ratio;
             this.title = jsonRecipe.title;
+            // Lazy migration, beside the cup-type fixes above. A record written
+            // before these fields existed takes its old `title` as the local
+            // name: it was editable, so it is the user's, and there is no way to
+            // tell a synced title from a typed one after the fact.
+            this.name = jsonRecipe.name ?? jsonRecipe.title ?? "";
+            this.xbloomName = jsonRecipe.xbloomName ?? "";
+            // Not `?? Date.now()`. Backfilling with the read time would give
+            // every legacy record a date that changes on every launch until it
+            // is next saved.
+            this.createdAt = jsonRecipe.createdAt ?? 0;
+            this.source = jsonRecipe.source ?? "manual";
+            this.accentIndex = jsonRecipe.accentIndex;
             this.xid = jsonRecipe.xid;
             if (jsonRecipe.dosage) {
                 this.dosage = jsonRecipe.dosage;

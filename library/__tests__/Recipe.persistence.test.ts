@@ -176,3 +176,86 @@ describe('JSON round-trip', () => {
         expect(restored.getData(card.slice(0, 32), true)).toEqual(original.getData(card.slice(0, 32), true));
     });
 });
+
+describe("the new persistence fields", () => {
+    function legacyJson(extra: Record<string, unknown> = {}): string {
+        return JSON.stringify({
+            uuid:     "legacy-uuid",
+            title:    "Ethiopia Guji",
+            xid:      "ABC123",
+            ratio:    16,
+            dosage:   18,
+            cupType:  0x00,
+            grindSize: 25,
+            checksum: 0,
+            pours:    [{pourNumber: 1, volume: 288, temperature: 92, flowRate: 3, agitation: 0, pourPattern: 0, pauseTime: 0}],
+            ...extra
+        });
+    }
+
+    it("takes a legacy title as the local name", () => {
+        const recipe = new Recipe(undefined, legacyJson());
+        expect(recipe.name).toBe("Ethiopia Guji");
+    });
+
+    it("prefers an explicit name over a legacy title", () => {
+        const recipe = new Recipe(undefined, legacyJson({name: "My Blend"}));
+        expect(recipe.name).toBe("My Blend");
+    });
+
+    it("defaults a recipe with neither to an empty name", () => {
+        const recipe = new Recipe(undefined, legacyJson({title: undefined}));
+        expect(recipe.name).toBe("");
+    });
+
+    it("leaves the xBloom name unknown on a legacy record", () => {
+        // A legacy title may have come from a sync or from the user; there is no
+        // way to tell, so it is treated as the user's and the cached xBloom name
+        // starts empty rather than guessing.
+        expect(new Recipe(undefined, legacyJson()).xbloomName).toBe("");
+    });
+
+    it("keeps a stored xBloom name", () => {
+        expect(new Recipe(undefined, legacyJson({xbloomName: "Ethiopia Guji"})).xbloomName)
+            .toBe("Ethiopia Guji");
+    });
+
+    it("marks a legacy record's creation time unknown rather than inventing one", () => {
+        expect(new Recipe(undefined, legacyJson()).createdAt).toBe(0);
+    });
+
+    it("keeps a stored creation time", () => {
+        expect(new Recipe(undefined, legacyJson({createdAt: 1700000000000})).createdAt)
+            .toBe(1700000000000);
+    });
+
+    it("defaults a legacy record's provenance to manual", () => {
+        expect(new Recipe(undefined, legacyJson()).source).toBe("manual");
+    });
+
+    it("keeps a stored provenance", () => {
+        expect(new Recipe(undefined, legacyJson({source: "import"})).source).toBe("import");
+    });
+
+    it("leaves the accent index absent on a legacy record, for the hash fallback", () => {
+        expect(new Recipe(undefined, legacyJson()).accentIndex).toBeUndefined();
+    });
+
+    it("keeps a stored accent index", () => {
+        expect(new Recipe(undefined, legacyJson({accentIndex: 3})).accentIndex).toBe(3);
+    });
+
+    it("stamps a freshly built recipe with the current time", () => {
+        const before = Date.now();
+        expect(new Recipe().createdAt).toBeGreaterThanOrEqual(before);
+    });
+
+    it("survives a save and reload without losing the migrated name", () => {
+        // The migration runs on read. If it did not also round-trip through
+        // JSON.stringify, the first save after an upgrade would drop the name.
+        const migrated = new Recipe(undefined, legacyJson());
+        const reloaded = new Recipe(undefined, JSON.stringify(migrated));
+        expect(reloaded.name).toBe("Ethiopia Guji");
+        expect(reloaded.source).toBe("manual");
+    });
+});
