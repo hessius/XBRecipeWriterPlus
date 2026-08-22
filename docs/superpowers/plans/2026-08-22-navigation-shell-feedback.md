@@ -28,6 +28,17 @@ degrade to a cross-fade under Reduced Motion — never to nothing.
 `fireEvent` are asynchronous in RNTL v14 — a missing `await` leaves the screen
 empty and the test passes for the wrong reason.** Always `await` them.
 
+Two RNTL behaviours cost time in this plan's first tasks; both are load-bearing:
+
+- **The default queries exclude anything hidden from the accessibility tree** —
+  the element itself, not only its descendants. `DotIcon` and the empty state's
+  bloom are deliberately hidden, so asserting on them needs
+  `{includeHiddenElements: true}` as the query's second argument.
+- **`screen` tracks only the most recently rendered tree.** A test that renders
+  twice to compare two states must keep each render's own returned query
+  utilities (`const a = await renderWithProviders(...); a.getByText(...)`) rather
+  than indexing into `screen.getAllBy*`.
+
 **The React Compiler is enabled.** Do not hand-write `useMemo` or `useCallback`
 in new code, and do not read a whole `props` object inside a hook — destructure
 first, or the compiler bails out of optimising the entire component.
@@ -1681,21 +1692,25 @@ describe("HomeHeader", () => {
     });
 
     it("keeps settings reachable in both states", async () => {
-        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
-        expect(screen.getByLabelText("Settings")).toBeTruthy();
+        const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(expanded.getByLabelText("Settings")).toBeTruthy();
 
-        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
-        expect(screen.getAllByLabelText("Settings")).toHaveLength(2);
+        const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        expect(collapsed.getByLabelText("Settings")).toBeTruthy();
     });
 
     it("shrinks the title when collapsed", async () => {
-        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
-        const expanded = screen.getByText("Recipes").props.style.fontSize;
+        // Each render is queried through its own utilities rather than the
+        // shared `screen` binding. `screen` tracks only the most recently
+        // rendered tree, so re-querying it after a second render finds one tree,
+        // not two.
+        const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        const big = expanded.getByText("Recipes").props.style.fontSize;
 
-        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
-        const collapsed = screen.getAllByText("Recipes")[1].props.style.fontSize;
+        const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        const small = collapsed.getByText("Recipes").props.style.fontSize;
 
-        expect(collapsed).toBeLessThan(expanded);
+        expect(small).toBeLessThan(big);
     });
 
     it("hides the edit toggle when there is nothing to edit", async () => {
