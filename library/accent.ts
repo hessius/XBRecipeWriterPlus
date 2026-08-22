@@ -1,0 +1,67 @@
+import Recipe, {CUP_TYPE} from "./Recipe";
+import {accents, type AccentGroup} from "@/constants/colors";
+
+/** Which half of the palette a recipe draws from. */
+export function accentGroupFor(recipe: Recipe): AccentGroup {
+    return recipe.cupType === CUP_TYPE.TEA ? "tea" : "coffee";
+}
+
+/**
+ * FNV-1a over the uuid. Any stable hash would do; the only requirement is that a
+ * given recipe keeps its colour across launches, since the accent is not yet
+ * persisted. Sub-project 2 adds the persisted field and this becomes the
+ * fallback for recipes saved before it existed.
+ */
+function hashToIndex(key: string, modulo: number): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+        hash ^= key.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash % modulo;
+}
+
+/** The accent colour to paint a recipe's card with. */
+export function resolveAccent(recipe: Recipe): string {
+    const group = accentGroupFor(recipe);
+    const groupAccents = accents[group];
+
+    const persisted = (recipe as unknown as {accentIndex?: number}).accentIndex;
+    if (
+        typeof persisted === "number" &&
+        Number.isInteger(persisted) &&
+        persisted >= 0 &&
+        persisted < groupAccents.length
+    ) {
+        return groupAccents[persisted];
+    }
+
+    return groupAccents[hashToIndex(recipe.uuid, groupAccents.length)];
+}
+
+/**
+ * The index to give a newly saved recipe: the least-used accent in its half of
+ * the palette, ties broken by lowest index. While the library is smaller than
+ * the half-palette this is simply the first unused colour; past that, colours
+ * repeat as evenly as possible rather than clustering.
+ *
+ * @param group Which half to assign from.
+ * @param inUse Accent indices already taken by recipes in the same half.
+ *              Repeats are meaningful — they are what makes an index "more used".
+ */
+export function assignAccentIndex(group: AccentGroup, inUse: number[]): number {
+    const counts: number[] = new Array(accents[group].length).fill(0);
+    for (const index of inUse) {
+        if (Number.isInteger(index) && index >= 0 && index < counts.length) {
+            counts[index]++;
+        }
+    }
+
+    let best = 0;
+    for (let i = 1; i < counts.length; i++) {
+        if (counts[i] < counts[best]) {
+            best = i;
+        }
+    }
+    return best;
+}
