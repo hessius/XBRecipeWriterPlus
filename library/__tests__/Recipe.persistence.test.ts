@@ -1,6 +1,6 @@
 import Recipe, {CUP_TYPE} from '../Recipe';
 import Pour from '../Pour';
-import {buildCard, XPOD_CARD} from './cardFixtures';
+import {buildCard, HASH_LENGTH, XPOD_CARD} from './cardFixtures';
 
 /**
  * Recipes are persisted to SQLite as whole JSON blobs, so every recipe ever saved by
@@ -322,5 +322,101 @@ describe("hasName", () => {
         const recipe = new Recipe();
         recipe.source = "read";
         expect(recipe.hasName()).toBe(false);
+    });
+});
+
+describe("fingerprint", () => {
+    function sample(): Recipe {
+        const recipe = new Recipe();
+        recipe.xid = "ABC123";
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.ratio = 16;
+        recipe.dosage = 18;
+        recipe.grindSize = 65;
+        recipe.grindRPM = 120;
+        recipe.pours = [new Pour(1, 240, 92, 3, 0, 0, 0)];
+        return recipe;
+    }
+
+    it("is stable across two identical recipes", () => {
+        expect(sample().fingerprint()).toBe(sample().fingerprint());
+    });
+
+    it("ignores the local name", () => {
+        const a = sample();
+        const b = sample();
+        b.name = "Something Else";
+        expect(b.fingerprint()).toBe(a.fingerprint());
+    });
+
+    it("ignores the uuid", () => {
+        const a = sample();
+        const b = sample();
+        b.generateNewUUID();
+        expect(b.fingerprint()).toBe(a.fingerprint());
+    });
+
+    it("ignores the accent index", () => {
+        const a = sample();
+        const b = sample();
+        b.accentIndex = 5;
+        expect(b.fingerprint()).toBe(a.fingerprint());
+    });
+
+    it("ignores the card signature, so a read and an import compare equal", () => {
+        // This is the whole point of slicing 32 bytes off. A recipe read from a
+        // card carries that card's signature in `backup`; the same recipe
+        // imported from a share link carries none. Without the slice they would
+        // never de-duplicate against each other.
+        const a = sample();
+        const b = sample();
+        b.backup = new Array(32).fill(0xAB);
+        expect(b.fingerprint()).toBe(a.fingerprint());
+    });
+
+    it("changes when the grind changes, because that is a different card", () => {
+        const a = sample();
+        const b = sample();
+        b.grindSize = 66;
+        expect(b.fingerprint()).not.toBe(a.fingerprint());
+    });
+
+    it("changes when a pour volume changes", () => {
+        const a = sample();
+        const b = sample();
+        b.pours[0].volume = 250;
+        expect(b.fingerprint()).not.toBe(a.fingerprint());
+    });
+
+    it("changes when the XID changes", () => {
+        const a = sample();
+        const b = sample();
+        b.xid = "ZZZ999";
+        expect(b.fingerprint()).not.toBe(a.fingerprint());
+    });
+
+    it("is exactly the payload bytes, per an independent implementation", () => {
+        // Every test above is relational: they would all still pass if
+        // `fingerprint` returned, say, the length of the payload. This one
+        // pins the actual value, and takes the expectation from
+        // `cardFixtures.buildCard` — a deliberately separate reimplementation
+        // of the byte layout — rather than from `getData`, so it is not
+        // checking the code against itself.
+        // The checksum byte is computed over the hash-plus-payload, so it is
+        // only independent of the recipe's identity when the hash is zero (the
+        // same zero prefix `fingerprint` always uses, since it ignores
+        // whatever signature the recipe itself carries).
+        const bytes = buildCard({...XPOD_CARD, hash: new Array(HASH_LENGTH).fill(0)});
+        const expected = bytes.slice(HASH_LENGTH)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+
+        expect(new Recipe(bytes).fingerprint()).toBe(expected);
+    });
+
+    it("is lower-case hex with no separators, two characters per byte", () => {
+        const printed = sample().fingerprint();
+        expect(printed).toMatch(/^[0-9a-f]+$/);
+        expect(printed.length % 2).toBe(0);
     });
 });

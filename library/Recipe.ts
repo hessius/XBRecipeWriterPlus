@@ -217,6 +217,26 @@ class Recipe {
     }
 
     /**
+     * A stable identity for this recipe, as the bytes it would write.
+     *
+     * Two recipes are the same when writing either produces the same card. The
+     * first 32 bytes are the card's own signature, which differs between a
+     * recipe read from a card and the same recipe imported from a share link,
+     * so an explicit zero prefix is passed: `getData(null)` would otherwise
+     * fall back to this recipe's own `backup`, reintroducing exactly the
+     * dependency being removed. `getData` strips that prefix back off before
+     * returning, leaving only the payload.
+     *
+     * Computed on demand and never persisted: a stored fingerprint would be
+     * silently invalidated by any future change to the byte format, whereas a
+     * computed one simply re-derives. Libraries here are tens of recipes, so
+     * scanning them all costs nothing.
+     */
+    public fingerprint(): string {
+        return Recipe.convertNumberArrayToHex(this.getData(new Array(32).fill(0)));
+    }
+
+    /**
      * The name to show for this recipe.
      *
      * A chain rather than a single field, because both names and the XID are
@@ -399,7 +419,6 @@ class Recipe {
         } else {
             data = data.concat(this.backup.length >= 32 ? this.backup.slice(0, 32) : new Array(32).fill(0));
         }
-        console.log("Prefix:" + Recipe.convertNumberArrayToHex(data));
 
         data = data.concat(this.convertXIDToData(this.xid));
 
@@ -468,8 +487,6 @@ class Recipe {
 
         data.push(this.ratio);
         let checkSum = this.calculateCRC(data);
-        console.log("CheckSum:" + Recipe.convertNumberArrayToHex(data));
-        console.log("CheckSum:" + checkSum + ":" + this.checksum);
         data.push(checkSum);
 
         if (withSignature) {
