@@ -1524,7 +1524,7 @@ git commit -m "Open the recipe already saved instead of importing it twice"
 **Files:**
 - Modify: `hooks/useRecipeEditor.ts:66-106`, `app/editRecipe.tsx` (the sync button)
 
-- [ ] **Step 1: Point the fetch at the cached field**
+- [x] **Step 1: Point the fetch at the cached field** (landed in `ca55f5f`)
 
 In `hooks/useRecipeEditor.ts`, in `fetchRecipeTitle`, replace `r.title = recipeTitle;`
 with:
@@ -1536,7 +1536,7 @@ with:
                 r.xbloomName = recipeTitle;
 ```
 
-- [ ] **Step 2: Fix the auto-fetch condition**
+- [x] **Step 2: Fix the auto-fetch condition** (landed in `ca55f5f`)
 
 The effect below it fetches only when the title is empty. It should now fetch
 when the *cached* name is empty:
@@ -1548,12 +1548,24 @@ when the *cached* name is empty:
             recipe.xbloomName.trim().length === 0) {
 ```
 
-- [ ] **Step 3: Disable the button when it cannot work, and label it**
+- [x] **Step 3: Disable the button when it cannot work, and label it**
 
 In `app/editRecipe.tsx`, the sync button next to the name field: add
-`disabled={!getRecipe()?.xid?.trim() && !getRecipe()?.shareId?.trim()}` and
-`accessibilityLabel="Refresh the name from xBloom"`. Today it silently does
-nothing when there is no XID, and has no label at all.
+`accessibilityLabel="Refresh the name from xBloom"` and extend `disabled` to
+cover the no-XID case. Today it silently does nothing when there is no XID, and
+has no label at all.
+
+**Correction:** the plan originally wrote the condition as
+`!xid?.trim() && !shareId?.trim()`, but `fetchRecipeTitle` constructs
+`new XBloomRecipe(r.xid)` and `handleReloadTitlePress` already early-returns
+without an XID — a `shareId` alone does nothing. Including `shareId` in the
+condition would have left the button enabled in exactly the inert case this
+step exists to fix. The implemented condition is
+`isLoadingTitle || !getRecipe()?.xid?.trim()`.
+
+**Note:** Steps 1 and 2 already landed in commit `ca55f5f`, where deleting
+`Recipe.title` forced `fetchRecipeTitle` and the auto-fetch guard onto
+`xbloomName`. Only Step 3 remained.
 
 - [ ] **Step 4: Run typecheck and the full suite**
 

@@ -99,7 +99,12 @@ export default function EditRecipe() {
                                                   disabled={isLoadingTitle}
                                     />
                                     <XStack paddingLeft={"$4"} paddingRight={"$3"}>
-                                        <Pressable onPress={handleReloadTitlePress} disabled={isLoadingTitle}>
+                                        {/* The refresh only ever queries by XID, so without one the
+                                            button is inert — disable it rather than let it silently
+                                            do nothing. */}
+                                        <Pressable onPress={handleReloadTitlePress}
+                                                   disabled={isLoadingTitle || !getRecipe()?.xid?.trim()}
+                                                   accessibilityLabel="Refresh the name from xBloom">
                                             {isLoadingTitle ? (
                                                 <ActivityIndicator size={30} color={palette.muted}/>
                                             ) : (
