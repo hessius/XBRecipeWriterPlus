@@ -24,7 +24,6 @@ class RecipeDatabase {
         if (recipe && !this.getRecipe(recipe.uuid)) {
             recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
             let recipeJson = JSON.stringify(recipe);
-            console.log(recipeJson);
             this.db.runSync(`
                         INSERT INTO recipes (uuid, recipeJSON)
                         VALUES (?, ?);`,
@@ -47,7 +46,6 @@ class RecipeDatabase {
             updatedRecipe.accentIndex =
                 reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
             let updatedRecipeJson = JSON.stringify(updatedRecipe);
-            console.log(updatedRecipeJson);
             this.db.runSync(`
                         UPDATE recipes
                         SET recipeJSON = ?

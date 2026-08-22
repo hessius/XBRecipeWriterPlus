@@ -148,7 +148,13 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     function restoreRecipe() {
-        const alwaysKeepFields = ['uuid', 'backup', 'name'];
+        // Restoring replaces the brew parameters, not the recipe's identity:
+        // its uuid, the name the user chose, and the metadata the library sorts
+        // and colours by all survive a restore. Without `accentIndex` the card
+        // would silently change colour, and without `createdAt`/`source` a
+        // restored recipe would lose its provenance and placeholder name.
+        const alwaysKeepFields = ['uuid', 'backup', 'name', 'xbloomName',
+                                  'accentIndex', 'createdAt', 'source'];
 
         if (!recipe) return;
 

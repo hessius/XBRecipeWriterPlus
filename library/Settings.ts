@@ -53,10 +53,10 @@ export class SqliteSettingsStorage implements SettingsStorage {
     }
 
     public read(key: string): string | null {
-        const row = this.db.getFirstSync<{value: string}>(
+        const row = this.db.getFirstSync<{value: string | null}>(
             `SELECT value FROM settings WHERE key = ?;`, [key]
         );
-        return row ? row.value : null;
+        return row?.value ?? null;
     }
 
     public write(key: string, value: string): void {
