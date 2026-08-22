@@ -87,9 +87,12 @@ export default function HomeScreen({db, settings}: Props) {
 
     async function progressCallback(progress: number): Promise<string | undefined> {
         if (Platform.OS === "ios") {
+            // The placement teaching rather than a percentage: a read reports
+            // only 30, 50 and 80, so a number here would be precise-looking
+            // and wrong, and the sheet already has its own spinner.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe read from card"
-                : `Reading recipe from card: ${Math.round(progress)}%`);
+                : "Hold the card to the top of the phone.");
         }
         setReadProgress(progress);
         return undefined;

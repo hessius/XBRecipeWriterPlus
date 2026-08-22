@@ -46,14 +46,19 @@ export function useCardWriter(
     }
 
     async function progressCallback(progress: number, id?: string): Promise<string | undefined> {
-        console.log("Progress:" + progress);
+        // Both platforms, not one. The overlay reaches iOS for the first time
+        // in this sub-project, and this used to sit in the `else` of the check
+        // below — so on iOS the bloom stayed at zero for the whole write.
+        setWriteProgress(progress);
 
         if (Platform.OS === "ios") {
+            // The one line of Apple's sheet we control. It carries the
+            // placement teaching rather than a percentage: the sheet already
+            // has a spinner, and our own half above it no longer repeats the
+            // copy, so this is the only place it appears on iOS.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe written to card"
-                : "Writing recipe to card: " + Math.round(progress) + "%");
-        } else {
-            setWriteProgress(progress);
+                : "Hold the card to the top of the phone.");
         }
         return undefined;
     }

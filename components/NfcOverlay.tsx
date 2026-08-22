@@ -34,8 +34,12 @@ type Props = {
  * On iOS the system sheet owns the lower half of the screen, so the app dims
  * itself and stages the bloom in the strip above it — the dimming is what makes
  * our half and the system's half read as one event rather than two overlapping
- * UIs. On Android there is no system sheet at all, so this is the entire
- * experience and it centres.
+ * UIs. Our half carries the bloom and one word and nothing else: the sheet
+ * already has a Cancel button and a line of text we write into, and repeating
+ * either of them directly above it is two controls for one job.
+ *
+ * On Android there is no system sheet at all, so this is the entire
+ * experience: it centres, and it owns the placement copy and the only way out.
  *
  * Replaces `AndroidNFCDialog`, which was Android-only and spoke in a different
  * visual language from everything around it.
@@ -53,6 +57,11 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
         : undefined;
 
     const verb = mode === "read" ? "Reading" : "Writing";
+
+    // Writes report block by block, so their percentage means something. Reads
+    // report 30, then 50, then 80, around blocking awaits — a number that looks
+    // precise and is not. The bloom's own pulse carries a read instead.
+    const counts = mode === "write" && !isIOS;
 
     return (
         <Animated.View
@@ -85,29 +94,35 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
                     <YStack alignItems="center" gap="$2">
                         <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
                                        color={palette.text}>
-                            {`${verb.toUpperCase()} ${Math.round(progress)}%`}
+                            {counts
+                                ? `${verb.toUpperCase()} ${Math.round(progress)}%`
+                                : verb.toUpperCase()}
                         </DotMatrixText>
-                        <Text fontSize={14} textAlign="center" color={palette.dim}>
-                            Hold the card to the top of the phone.
-                        </Text>
+                        {!isIOS && (
+                            <Text fontSize={14} textAlign="center" color={palette.dim}>
+                                Hold the card to the top of the phone.
+                            </Text>
+                        )}
                     </YStack>
 
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Cancel"
-                        onPress={onCancel}
-                        style={{
-                            minHeight:        44,
-                            minWidth:         44,
-                            justifyContent:   "center",
-                            alignItems:       "center",
-                            paddingVertical:  12,
-                            paddingHorizontal: 24
-                        }}>
-                        <Text fontSize={16} color={palette.dim}>
-                            Cancel
-                        </Text>
-                    </Pressable>
+                    {!isIOS && (
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel"
+                            onPress={onCancel}
+                            style={{
+                                minHeight:         44,
+                                minWidth:          44,
+                                justifyContent:    "center",
+                                alignItems:        "center",
+                                paddingVertical:   12,
+                                paddingHorizontal: 24
+                            }}>
+                            <Text fontSize={16} color={palette.dim}>
+                                Cancel
+                            </Text>
+                        </Pressable>
+                    )}
                 </YStack>
             </View>
         </Animated.View>

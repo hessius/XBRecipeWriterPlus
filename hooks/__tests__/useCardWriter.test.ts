@@ -1,9 +1,10 @@
 import {act, renderHook} from "@testing-library/react-native";
-import {Alert} from "react-native";
+import {Alert, Platform} from "react-native";
 
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useRecipeEditor} from "@/hooks/useRecipeEditor";
 import Recipe from "@/library/Recipe";
+import type NFC from "@/library/NFC";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
@@ -25,6 +26,8 @@ jest.mock("@/library/NFC", () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {notify} = require("@/components/XbrwToast");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {setNfcAlertIOS} = require("@/library/NFC");
 
 function invalidRecipe(): Recipe {
     const r = new Recipe();
@@ -36,7 +39,10 @@ function invalidRecipe(): Recipe {
 }
 
 describe("useCardWriter", () => {
-    beforeEach(() => (notify as jest.Mock).mockClear());
+    beforeEach(() => {
+        (notify as jest.Mock).mockClear();
+        (setNfcAlertIOS as jest.Mock).mockClear();
+    });
 
     it("does not use a native Alert for the volume mismatch", async () => {
         const alert = jest.spyOn(Alert, "alert");
@@ -112,5 +118,52 @@ describe("useCardWriter", () => {
         // The very same atom the screen renders must now be empty — not
         // still holding the writer's stale message.
         expect(result.current.editor.volumeError).toBeNull();
+    });
+
+    it("advances the bloom on iOS too, not only on Android", async () => {
+        // The overlay reaches iOS for the first time in this sub-project. Its
+        // progress used to be set in the `else` of a platform check, so on iOS
+        // the bloom sat at zero for the whole write while the only moving part
+        // was Apple's own spinner.
+        Platform.OS = "ios";
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = invalidRecipe();
+        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        jest.spyOn(valid, "writeCard").mockImplementation(
+            async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
+                await progress(60);
+            }
+        );
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(result.current.writeProgress).toBe(60);
+        Platform.OS = "android";
+    });
+
+    it("gives the iOS sheet the placement copy, not a percentage", async () => {
+        // That one line is the only part of the system sheet we control, and
+        // it sits where the user is already looking. A percentage there
+        // duplicates Apple's own spinner, while the placement teaching now
+        // exists nowhere else on iOS: our half no longer repeats it.
+        Platform.OS = "ios";
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = invalidRecipe();
+        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        jest.spyOn(valid, "writeCard").mockImplementation(
+            async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
+                await progress(60);
+            }
+        );
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(setNfcAlertIOS).toHaveBeenCalledWith(
+            expect.stringMatching(/hold the card to the top of the phone/i)
+        );
+        expect(setNfcAlertIOS).not.toHaveBeenCalledWith(expect.stringContaining("%"));
+        Platform.OS = "android";
     });
 });
