@@ -316,7 +316,12 @@ Create `library/__tests__/accent.test.ts`:
 ```ts
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {accents} from "@/constants/colors";
-import {accentGroupFor, nextAccentIndex, resolveAccent} from "@/library/accent";
+import {
+    accentGroupFor,
+    nextAccentIndex,
+    resolveAccent,
+    type RecipeWithAccent
+} from "@/library/accent";
 
 function recipeWithCup(cup: number): Recipe {
     const r = new Recipe();
@@ -435,17 +440,6 @@ describe("nextAccentIndex", () => {
         expect(nextAccentIndex("tea", [0, 1, 2, 3])).toBeLessThan(accents.tea.length);
     });
 });
-```
-
-Note the test file imports `RecipeWithAccent` alongside the functions:
-
-```ts
-import {
-    accentGroupFor,
-    nextAccentIndex,
-    resolveAccent,
-    type RecipeWithAccent
-} from "@/library/accent";
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
