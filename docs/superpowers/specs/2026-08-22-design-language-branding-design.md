@@ -83,7 +83,7 @@ replaced rather than extended, and the light/dark splits in `screenBackground`,
 
 | Token | Value | Use |
 |---|---|---|
-| `void` | `#000000` | Screen background |
+| `base` | `#000000` | Screen background |
 | `surface` | `#101010` | Sheets, elevated panels |
 | `raised` | `#161616` | CTA tiles, inputs |
 | `line` | `#262626` | Hairlines and borders |

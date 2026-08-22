@@ -168,10 +168,14 @@ Replace the entire contents of `constants/colors.ts`:
  * ones (`red`).
  */
 
+/** The two halves of the accent palette. */
+export type AccentGroup = "coffee" | "tea";
+
 /** Surfaces, text and semantics. */
 export const palette = {
-    /** Screen background. */
-    void:    "#000000",
+    /** Screen background. `base` rather than `void`: `void` is a reserved word
+     *  and cannot be shorthand-destructured. */
+    base:    "#000000",
     /** Sheets and elevated panels. */
     surface: "#101010",
     /** CTA tiles, inputs, and cards that are not accent-filled. */
@@ -216,8 +220,15 @@ export const onAccent = {
  * Recipe accents, split by beverage. Colour is a redundant signal — a Doto
  * `TEA` / `COFFEE` marker carries the same information — because colour alone is
  * not an accessible signal.
+ *
+ * Deliberately NOT `as const`. Literal narrowing would type a group as a tuple
+ * of specific hex strings, which no consumer wants and which breaks
+ * lookup-by-value: on a union of two disjoint literal tuples, the parameter of
+ * `indexOf` and `includes` collapses to `never`. Sub-project 2 needs exactly
+ * that lookup to map a persisted colour back to an index. `readonly string[]`
+ * keeps the immutability and drops the narrowing.
  */
-export const accents = {
+export const accents: Record<AccentGroup, readonly string[]> = {
     coffee: [
         "#9FC3F0", // Sky
         "#F0B98E", // Peach
@@ -234,19 +245,22 @@ export const accents = {
         "#D9CF9A", // Jasmine
         "#E0AEA6"  // Hibiscus
     ]
-} as const;
-
-export type AccentGroup = keyof typeof accents;
+};
 ```
 
 - [ ] **Step 2: Confirm the module itself compiles**
 
 ```bash
-npx tsc --noEmit --skipLibCheck --target es2020 --module esnext \
+npx tsc --noEmit --skipLibCheck --ignoreConfig --target es2020 --module esnext \
   --moduleResolution bundler constants/colors.ts
 ```
 
-Expected: no output, exit code 0.
+`--ignoreConfig` is required: `tsconfig.json` is present, and this version of
+`tsc` refuses to compile named files while a config exists without it.
+
+Expected: no output, exit code 0. The whole-project `npm run typecheck` will
+report roughly 35 errors across the 14 files that import the old palette. That is
+this task's intended outcome, not a defect — Task 12 clears them.
 
 - [ ] **Step 3: Commit**
 
@@ -2133,8 +2147,8 @@ const AppTheme = {
     ...DarkTheme,
     colors: {
         ...DarkTheme.colors,
-        background: palette.void,
-        card:       palette.void,
+        background: palette.base,
+        card:       palette.base,
         text:       palette.text,
         border:     palette.line,
         primary:    palette.text,
@@ -2144,7 +2158,7 @@ const AppTheme = {
 ```
 
 - Pass `AppTheme` unconditionally to `ThemeProvider`, use `<Theme name="dark">`
-  for the Tamagui `Theme`, and set the `Stack` chrome to `palette.void`
+  for the Tamagui `Theme`, and set the `Stack` chrome to `palette.base`
   background with `palette.text` tint. `DarkTheme` is imported from
   `expo-router`, never from `@react-navigation/*`.
 
@@ -2154,14 +2168,14 @@ Work through the list from Step 1. The mapping from the old palette to the new:
 
 | Old intent | New token |
 |---|---|
-| screen background | `palette.void` |
+| screen background | `palette.base` |
 | card / sheet background | `palette.surface` |
 | input or tile background | `palette.raised` |
 | border, divider | `palette.line` |
 | primary text | `palette.text` |
 | secondary text | `palette.dim` |
 | tertiary / placeholder text | `palette.muted` |
-| brand / accent chrome | `palette.text` on `palette.void` |
+| brand / accent chrome | `palette.text` on `palette.base` |
 | destructive | `palette.danger` |
 | confirmation | `palette.success` |
 
@@ -2468,7 +2482,7 @@ const styles = StyleSheet.create({
     backdrop: {
         alignItems:      "center",
         justifyContent:  "center",
-        backgroundColor: palette.void
+        backgroundColor: palette.base
     }
 });
 ```
