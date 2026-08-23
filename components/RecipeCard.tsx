@@ -12,6 +12,16 @@ import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 
 const CARD_HEIGHT = 116;
+
+/**
+ * How far past the card's corner the pour profile is pushed, on top of the
+ * stroke's own bleed.
+ *
+ * The mark is a background, and sitting exactly on the corner it still read as
+ * a shape that had been placed there. Running it a little off both edges is
+ * what makes it read as something the card was cut from.
+ */
+const PROFILE_OVERHANG = 2;
 const PROFILE_HEIGHT = 56;
 
 /**
@@ -177,7 +187,11 @@ export default function RecipeCard({
             style={{backgroundColor: accent}}>
 
             <View pointerEvents="none"
-                  style={{position: "absolute", right: -PROFILE_BLEED, bottom: -PROFILE_BLEED}}>
+                  style={{
+                      position: "absolute",
+                      right:    -(PROFILE_BLEED + PROFILE_OVERHANG),
+                      bottom:   -(PROFILE_BLEED + PROFILE_OVERHANG)
+                  }}>
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
                              width={200} height={PROFILE_HEIGHT}/>
             </View>

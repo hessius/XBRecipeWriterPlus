@@ -225,10 +225,13 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
         const layer = screen.getByTestId("recipe-card-profile").parent!;
-        expect(layer.props.style).toEqual(expect.objectContaining({
-            right:  -PROFILE_BLEED,
-            bottom: -PROFILE_BLEED
-        }));
+        // Past them, in fact: the stroke's own bleed plus a little overhang, so
+        // the mark reads as something the card was cut from rather than as a
+        // shape sitting on it. Both edges by the same amount -- the asymmetry
+        // was the thing that showed.
+        const style = layer.props.style as {right: number; bottom: number};
+        expect(style.right).toBeLessThan(-PROFILE_BLEED);
+        expect(style.right).toBe(style.bottom);
     });
 
     it("shows the grind for coffee and hides it for tea", async () => {
