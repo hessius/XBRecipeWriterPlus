@@ -46,8 +46,9 @@ const ENTRIES = {
         hint:   "Turning it off is experimental.",
         detail: "Turning the grinder off writes grind size 81, one past the " +
                 "maximum, and the machine will refuse a card in that state " +
-                "outright. The workaround is to load any other recipe first — " +
-                "a shortcut button, another card, or the xBloom app — after " +
+                "outright. The workaround is to load any other recipe with the " +
+                "grinder enabled first — a shortcut button, another card, or " +
+                "the xBloom app — after " +
                 "which this card will be accepted and the machine will show " +
                 "'--' for the grind size. There is no better way to disable " +
                 "the grinder from a recipe card."
@@ -74,8 +75,10 @@ const ENTRIES = {
         hint:   "All stages together must equal the target.",
         detail: "The machine checks the stage volumes against the dose times " +
                 "the ratio and refuses the card if they differ. Auto fix " +
-                "rescales every stage to close the gap and puts the rounding " +
-                "error on the last one."
+                "rescales every stage to close the gap and spreads the " +
+                "rounding error across the stages it fits worst. Changing the " +
+                "dose or the ratio moves the target instead of the stages, " +
+                "which is often the better fix."
     },
     temperature: {
         title: "Temperature",
@@ -104,7 +107,7 @@ const ENTRIES = {
                 "than that reaches the cup: the machine adds it to trigger the " +
                 "siphon, so a steep lands at about 120 ml. If the siphon " +
                 "triggers early because the leaf has swollen, take volume off " +
-                "the later steeps."
+                "the later steeps. Tea recipes are also limited to 3 steeps."
     }
 } as const satisfies Record<string, HelpEntry>;
 

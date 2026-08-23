@@ -21,6 +21,18 @@ describe("the editor's help copy", () => {
         expect(RECIPE_HELP.grinder.detail).toContain("load any other recipe");
     });
 
+    it("requires the workaround recipe to have its grinder enabled", () => {
+        expect(RECIPE_HELP.grinder.detail).toContain("with the grinder enabled");
+    });
+
+    it("offers changing the dose or ratio as an alternative to rescaling stage volumes", () => {
+        expect(RECIPE_HELP.volume.detail).toMatch(/dose or (the )?ratio/);
+    });
+
+    it("does not claim auto fix puts the rounding error on the last stage", () => {
+        expect(RECIPE_HELP.volume.detail).not.toMatch(/rounding error on the last/);
+    });
+
     it("explains that a card without a recipe ID reads back nameless", () => {
         expect(RECIPE_HELP.xid.detail).toContain("nameless");
     });
