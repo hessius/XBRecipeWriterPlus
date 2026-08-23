@@ -91,7 +91,7 @@ describe("SegmentedRow", () => {
             <SegmentedRow topic="grinder" value="1" options={OPTIONS} onChange={onChange}/>
         );
 
-        expect(screen.getByLabelText("On").props.accessibilityState.selected).toBe(true);
+        expect(screen.getByLabelText("On").props.accessibilityState.checked).toBe(true);
 
         await fireEvent.press(screen.getByLabelText("Off"));
 

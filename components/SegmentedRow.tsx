@@ -37,7 +37,7 @@ export default function SegmentedRow({
                     return (
                         <Pressable key={option.value} accessibilityRole="radio"
                                    accessibilityLabel={option.label}
-                                   accessibilityState={{selected}}
+                                   accessibilityState={{checked: selected}}
                                    onPress={() => onChange(option.value)}>
                             <Text fontSize={11} fontWeight="600"
                                   paddingHorizontal="$2.5" paddingVertical="$1.5"

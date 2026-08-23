@@ -23,6 +23,11 @@ type Props = {
  * the screen readable without any help mode at all. What the two help styles
  * change is where the long form goes: behind a marker on the label, or unfolded
  * under the row.
+ *
+ * The row has no label prop: it is identified by its help topic and takes its
+ * words from `RECIPE_HELP`. A field on this deck without an entry there cannot
+ * be drawn, which is the point — a field nobody wrote a note for is a field
+ * nobody explained.
  */
 export default function FieldRow({topic, helpStyle, explaining, onHelp, children}: Props) {
     const entry = RECIPE_HELP[topic];
@@ -59,7 +64,7 @@ export default function FieldRow({topic, helpStyle, explaining, onHelp, children
                 test pass for the wrong reason — and nothing here needs to
                 animate: the explain toggle switches a whole screenful at once,
                 which is a mode change rather than a disclosure. */}
-            {hasDetail && showDetail && (
+            {showDetail && (
                 <Text fontSize={12} lineHeight={18} color={palette.dim}
                       paddingTop="$3" paddingLeft="$3" marginTop="$2"
                       borderLeftWidth={2} borderLeftColor={palette.line}>
