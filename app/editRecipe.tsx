@@ -17,6 +17,7 @@ import SegmentedRow from "@/components/SegmentedRow";
 import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
+import TeaBanner from "@/components/TeaBanner";
 import {palette} from "@/constants/colors";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
@@ -464,7 +465,7 @@ export default function EditRecipe() {
                                 beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
                 </Collapsible>
 
-                {/* The tea banner is Task 16. */}
+                {recipe.isTea() && <TeaBanner accent={accent}/>}
 
                 <DeckSwitch deck={deck} stageCount={recipe.pours.length}
                             accent={accent} onChange={setDeck}/>

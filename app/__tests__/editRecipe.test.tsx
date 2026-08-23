@@ -5,13 +5,14 @@ import {act, fireEvent, screen} from "@testing-library/react-native";
 import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
 // shapes rather than inventing new ones. Note the comment there about reading a
-// `const` from inside a hoisted `jest.mock` factory.
+// `let` from inside a hoisted `jest.mock` factory: Babel rejects any name that
+// does not start with `mock`.
 jest.mock("expo-router", () => ({
-    useLocalSearchParams: () => ({recipeJSON: mockFixtureJSON, saveEnabled: "false"}),
+    useLocalSearchParams: () => ({recipeJSON: mockRecipeJSON, saveEnabled: "false"}),
     useNavigation:        () => ({setOptions: mockSetOptions, goBack: jest.fn()})
 }));
 
@@ -48,7 +49,11 @@ function fixture(): Recipe {
     return r;
 }
 
-const mockFixtureJSON = JSON.stringify(fixture());
+let mockRecipeJSON = JSON.stringify(fixture());
+
+beforeEach(() => {
+    mockRecipeJSON = JSON.stringify(fixture());
+});
 
 /**
  * The header's caret is set through `navigation.setOptions`, so it is not in
@@ -61,7 +66,8 @@ const mockFixtureJSON = JSON.stringify(fixture());
  * so pressing "More" would open nothing. Same shape both times keeps the
  * instance — and its overflow state — alive.
  */
-async function renderEditor() {
+async function renderEditor(overrides: Partial<Recipe> = {}) {
+    mockRecipeJSON = JSON.stringify(Object.assign(fixture(), overrides));
     const view = await renderWithProviders(<><EditRecipe key="editor"/></>);
     const options = mockSetOptions.mock.calls.at(-1)?.[0];
     if (options?.headerRight) await view.rerender(
@@ -78,6 +84,14 @@ describe("the editor", () => {
         await renderEditor();
 
         expect(screen.getByTestId("recipe-hero")).toBeTruthy();
+    });
+
+    it("shows the tea banner only for tea", async () => {
+        await renderEditor();
+        expect(screen.queryByTestId("tea-banner-body")).toBeNull();
+
+        await renderEditor({cupType: CUP_TYPE.TEA});
+        expect(screen.getByTestId("tea-banner-body")).toBeTruthy();
     });
 
     it("shows every brew field at once", async () => {
