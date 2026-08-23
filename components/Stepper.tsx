@@ -60,6 +60,8 @@ type Props = {
  * must not become "9" the moment it is entered.
  */
 export default function Stepper({label, value, min, max, step, accent, unit, onChange}: Props) {
+    // null means the Doto readout is showing; a string means the field is
+    // open and holds the in-progress text.
     const [draft, setDraft] = useState<string | null>(null);
     // Tracks the last `value` the draft was derived from, so a change coming
     // from outside — auto fix rewrites every stage volume at once — is
@@ -67,11 +69,19 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
     // would cost an extra commit for every external update.
     const [syncedValue, setSyncedValue] = useState(value);
     const repeat = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // The repeat loop's tick reads this instead of closing over `value`, so a
+    // change from outside mid-hold — an auto fix, a clamping parent — is the
+    // base the next tick steps from, rather than being overwritten by it.
+    const latestValue = useRef(value);
 
     if (value !== syncedValue) {
         setSyncedValue(value);
         setDraft(null);
     }
+
+    useEffect(() => {
+        latestValue.current = value;
+    }, [value]);
 
     useEffect(() => () => {
         if (repeat.current) clearTimeout(repeat.current);
@@ -84,11 +94,10 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
 
     function startRepeating(direction: 1 | -1) {
         let delay = REPEAT_START_MS;
-        let current = value;
         const tick = () => {
+            const current = latestValue.current;
             const next = stepped(current, step, direction, min, max);
             if (next === current) return;
-            current = next;
             onChange(next);
             delay = Math.max(REPEAT_MIN_MS, delay * 0.82);
             repeat.current = setTimeout(tick, delay);
@@ -118,10 +127,21 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
         <XStack alignItems="center" gap="$2"
                 accessibilityRole="adjustable"
                 accessibilityLabel={`${label}, ${value}${unit ? ` ${unit}` : ""}`}
-                accessibilityValue={{min, max, now: value}}>
+                accessibilityValue={{min, max, now: value}}
+                accessibilityActions={[{name: "increment"}, {name: "decrement"}]}
+                onAccessibilityAction={(event) => {
+                    if (event.nativeEvent.actionName === "increment") {
+                        nudge(1);
+                    } else if (event.nativeEvent.actionName === "decrement") {
+                        nudge(-1);
+                    }
+                }}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Decrease ${label}`}
                        onPress={() => nudge(-1)}
                        onLongPress={() => startRepeating(-1)}
+                       // Fires on every release, not only after a hold; calling
+                       // stopRepeating on a plain tap is intentional and safe —
+                       // it is a no-op when no repeat timer is pending.
                        onPressOut={stopRepeating}
                        style={stepStyle}>
                 <DotIcon name="minus" size={16} color={palette.dim}/>

@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import Stepper, {clamp, stepped} from "@/components/Stepper";
 import {renderWithProviders} from "@/test-utils/render";
@@ -100,5 +100,157 @@ describe("Stepper", () => {
         const group = screen.getByLabelText("Ratio, 16");
         expect(group.props.accessibilityRole).toBe("adjustable");
         expect(group.props.accessibilityValue).toEqual({min: 5, max: 100, now: 16});
+    });
+
+    it("answers an accessibility adjust action", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Ratio" value={16} min={5} max={100} step={1}
+                     onChange={onChange}/>
+        );
+
+        const group = screen.getByLabelText("Ratio, 16");
+        await fireEvent(group, "accessibilityAction", {nativeEvent: {actionName: "increment"}});
+        expect(onChange).toHaveBeenCalledWith(17);
+
+        await fireEvent(group, "accessibilityAction", {nativeEvent: {actionName: "decrement"}});
+        expect(onChange).toHaveBeenCalledWith(15);
+    });
+});
+
+describe("Stepper hold-to-repeat", () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it("repeats after the hold delay and again at a shortening interval", async () => {
+        jest.useFakeTimers();
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Ratio" value={16} min={5} max={100} step={1}
+                     onChange={onChange}/>
+        );
+
+        await fireEvent(screen.getByLabelText("Increase Ratio"), "longPress");
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(onChange).toHaveBeenNthCalledWith(1, 17);
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        const secondCallCount = onChange.mock.calls.length;
+        expect(secondCallCount).toBeGreaterThan(1);
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(onChange.mock.calls.length).toBeGreaterThan(secondCallCount);
+    });
+
+    it("stops repeating once the button is released", async () => {
+        jest.useFakeTimers();
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Ratio" value={16} min={5} max={100} step={1}
+                     onChange={onChange}/>
+        );
+
+        const increase = screen.getByLabelText("Increase Ratio");
+        await fireEvent(increase, "longPress");
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+
+        await fireEvent(increase, "pressOut");
+
+        await act(async () => {
+            jest.advanceTimersByTime(5000);
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops on its own at the bound", async () => {
+        jest.useFakeTimers();
+        const onChange = jest.fn();
+
+        // A real caller is controlled: onChange's value comes back in as the
+        // next `value` prop. Without that feedback loop the tick would never
+        // see it reach the bound and this test would be asserting nothing.
+        function Controlled() {
+            const [value, setValue] = React.useState(30);
+            return (
+                <Stepper label="Dose" value={value} min={1} max={31} step={1}
+                         onChange={(next) => {
+                             onChange(next);
+                             setValue(next);
+                         }}/>
+            );
+        }
+
+        await renderWithProviders(<Controlled/>);
+
+        await fireEvent(screen.getByLabelText("Increase Dose"), "longPress");
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(onChange).toHaveBeenCalledWith(31);
+        const callsAtBound = onChange.mock.calls.length;
+
+        await act(async () => {
+            jest.advanceTimersByTime(5000);
+        });
+        expect(onChange).toHaveBeenCalledTimes(callsAtBound);
+    });
+
+    it("steps from the value it is given, not a value captured at hold-start", async () => {
+        jest.useFakeTimers();
+        const onChange = jest.fn();
+        const {rerender} = await renderWithProviders(
+            <Stepper label="Ratio" value={16} min={5} max={100} step={1}
+                     onChange={onChange}/>
+        );
+
+        await fireEvent(screen.getByLabelText("Increase Ratio"), "longPress");
+
+        // An external change lands mid-hold, as an auto fix would.
+        await rerender(
+            <Stepper label="Ratio" value={50} min={5} max={100} step={1}
+                     onChange={onChange}/>
+        );
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+
+        // The tick must step from 50, the value the component now has, not
+        // from 16, the value captured when the hold began.
+        expect(onChange).toHaveBeenCalledWith(51);
+        expect(onChange).not.toHaveBeenCalledWith(17);
+    });
+
+    it("drops an in-progress draft when the value changes from outside", async () => {
+        const onChange = jest.fn();
+        const {rerender} = await renderWithProviders(
+            <Stepper label="Dose" value={18} min={1} max={31} step={1}
+                     onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Edit Dose"));
+        await fireEvent.changeText(screen.getByLabelText("Dose"), "9");
+        expect(screen.getByLabelText("Dose").props.value).toBe("9");
+
+        await rerender(
+            <Stepper label="Dose" value={22} min={1} max={31} step={1}
+                     onChange={onChange}/>
+        );
+
+        expect(screen.queryByTestId("stepper-input")).toBeNull();
+        expect(screen.getByTestId("stepper-value")).toHaveTextContent("22");
     });
 });
