@@ -25,7 +25,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
-import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {asHelpStyle, type HelpStyle} from "@/library/Settings";
 
@@ -58,6 +58,12 @@ type TextFieldRowProps = {
     explaining: boolean;
     onHelp: (topic: HelpTopic) => void;
     onCommit: (value: string) => void;
+    /** Validates on every keystroke; false marks the field and reports up. */
+    validate?: (value: string) => boolean;
+    /** The reason shown while `validate` returns false. Prose, not a caption. */
+    invalidReason?: string;
+    /** Reports the field's validity so the write and save gates can honour it. */
+    onInvalidChange?: (invalid: boolean) => void;
 };
 
 /**
@@ -68,15 +74,40 @@ type TextFieldRowProps = {
  * cursor. It commits when editing ends, which is when the value is worth writing
  * back.
  *
+ * A field may validate live: `validate` runs on every keystroke, not only on
+ * commit, so a bad value closes the write and save gates before the field
+ * blurs. Validity is reported up rather than kept here alone, because the gate
+ * it feeds lives on the screen.
+ *
  * Declared at module scope so it is not a fresh component type on every render
  * of the screen, which would remount it and drop the text mid-entry.
  */
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
-    helpStyle, explaining, onHelp, onCommit
+    helpStyle, explaining, onHelp, onCommit,
+    validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
+    const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
+
+    // Report validity on mount and on every remount — the `key` below remounts
+    // this input when the value changes underneath it, e.g. a revert to a good
+    // ID. Without this the gate could not be reopened, because the field never
+    // sees a value it did not type. All three deps are stable (a module-scope
+    // validator and a useState setter), so this runs only on a real remount.
+    useEffect(() => {
+        if (validate) onInvalidChange?.(!validate(initialValue));
+    }, [initialValue, validate, onInvalidChange]);
+
+    function onChangeText(value: string) {
+        if (!validate) return;
+        const bad = !validate(value);
+        setInvalid(bad);
+        onInvalidChange?.(bad);
+    }
+
     return (
-        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                  error={invalid ? invalidReason : undefined}>
             {/* Keyed on the value it mirrors, so an external change — a revert,
                 a refreshed xBloom name — remounts this one input and nothing
                 else. The screen used to carry the key bump on the scroll
@@ -84,10 +115,10 @@ function TextFieldRow({
                 stepper was nudged. */}
             <Input unstyled key={initialValue} accessibilityLabel={label}
                    defaultValue={initialValue} maxLength={maxLength}
-                   autoCapitalize={autoCapitalize}
+                   autoCapitalize={autoCapitalize} onChangeText={onChangeText}
                    onEndEditing={(event) => onCommit(event.nativeEvent.text)}
                    textAlign="right" minWidth={110} fontSize={16}
-                   color={palette.text}/>
+                   color={invalid ? palette.danger : palette.text}/>
         </FieldRow>
     );
 }
@@ -101,6 +132,8 @@ type BrewDeckProps = {
     explaining: boolean;
     onHelp: (topic: HelpTopic) => void;
     dispatch: Dispatch;
+    /** Reports the recipe-ID field's validity into the screen's write/save gate. */
+    onInputErrorChange: (invalid: boolean) => void;
 };
 
 /**
@@ -114,7 +147,7 @@ type BrewDeckProps = {
  * Module scope, not an inline function: a component defined inside the screen's
  * body is a new type on every render and would remount its whole subtree.
  */
-function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp, dispatch}: BrewDeckProps) {
+function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp, dispatch, onInputErrorChange}: BrewDeckProps) {
     "use no memo";
 
     // These components draw a model that is mutated in place: `pour.getVolume()`
@@ -181,6 +214,8 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
             <TextFieldRow topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                          validate={isValidXID} onInvalidChange={onInputErrorChange}
+                          invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
             <TextFieldRow topic="name" label="Name" initialValue={recipe.name}
@@ -387,7 +422,7 @@ export default function EditRecipe() {
     // reason. Note that the compiler is off under jest, so no test can catch a
     // regression here; see `babel-preset-expo` and `app.json`'s experiments.
 
-    const {recipeJSON, saveEnabled} = useLocalSearchParams();
+    const {recipeJSON} = useLocalSearchParams();
     const navigation = useNavigation();
 
     const [helpStyleRaw] = useSetting("helpStyle");
@@ -408,11 +443,10 @@ export default function EditRecipe() {
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
-        editStage, addPour, deletePour, autoAdjustPourVolumes
+        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes
     } = useRecipeEditor({
-        recipeJSON:           recipeJSON as string | undefined,
-        initiallySaveEnabled: saveEnabled === "true",
-        onSaved:              () => navigation.goBack()
+        recipeJSON: recipeJSON as string | undefined,
+        onSaved:    () => navigation.goBack()
     });
 
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
@@ -499,7 +533,8 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               helpStyle={helpStyle} explaining={explaining}
-                              onHelp={setHelpTopic} dispatch={dispatch}/>
+                              onHelp={setHelpTopic} dispatch={dispatch}
+                              onInputErrorChange={setInputError}/>
                 ) : (
                     <StagesDeck recipe={recipe} balance={balance} accent={accent}
                                 isTea={recipe.isTea()} openStage={openStage}

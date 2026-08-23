@@ -31,8 +31,6 @@ export const RECIPE_LABELS = {
 type Params = {
     /** Serialised recipe passed through the route params. */
     recipeJSON?: string;
-    /** Whether Save starts enabled, e.g. when arriving from a card read. */
-    initiallySaveEnabled: boolean;
     /** Called once the recipe has been persisted. */
     onSaved: () => void;
 };
@@ -44,16 +42,14 @@ type Params = {
  * bumping `key` rather than by replacing the object. That is why several
  * operations call `setKey` instead of `setRecipe`.
  */
-export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Params) {
+export function useRecipeEditor({recipeJSON, onSaved}: Params) {
     // Derived from the route param, so it is an initial value rather than an
     // effect: parsing it in an effect would render once with a null recipe.
     const [recipe, setRecipe] = useState<Recipe | null>(
         () => (recipeJSON && recipeJSON !== "") ? new Recipe(undefined, recipeJSON as string) : null
     );
     const [inputError, setInputError] = useState(false);
-    const [enableSave, setEnableSave] = useState(initiallySaveEnabled);
     const [key, setKey] = useState(0);
-    const [isLoadingTitle, setIsLoadingTitle] = useState(false);
     const [volumeError, setVolumeError] = useState<string | null>(null);
 
     /**
@@ -79,8 +75,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     }
 
     const fetchRecipeTitle = async (r: Recipe) => {
-        setIsLoadingTitle(true);
-
         try {
             const xbRecipe = new XBloomRecipe(r.xid);
             await xbRecipe.fetchRecipeDetail();
@@ -100,12 +94,9 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     r.offline_backup = xbr.offline_backup;
                 }
                 setRecipe(r);
-                setEnableSave(true);
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
-        } finally {
-            setIsLoadingTitle(false);
         }
     };
 
@@ -138,7 +129,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             }
             recipe.addPour(pourNumber);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
@@ -146,7 +136,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         if (recipe && recipe.pours.length > 1) {
             recipe.deletePour(pourNumber);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
@@ -155,7 +144,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             recipe.autoFixPourVolumes();
             setVolumeError(null);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
@@ -188,7 +176,6 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             }
         }
         setRecipe(restoredRecipe);
-        setEnableSave(true);
     }
 
     /** Perform the revert for one source. Each body is unchanged from the old dialog. */
@@ -336,7 +323,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             // Skip validation for non-numeric fields or validate numeric ones
             if (!fieldConfig.requiresNumber || !isNaN(Number(value))) {
                 fieldConfig.update(recipe, value);
-                setEnableSave(true);
+                // Publish the in-place edit. This used to ride on a
+                // `setEnableSave(true)` whose only surviving effect was the
+                // re-render; the save-enabled flag it set was never read.
+                setKey((prev) => prev + 1);
             }
         } else {
             // Handle pour-specific fields
@@ -344,13 +334,13 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             if (pourField) {
                 if (pourNumber !== undefined && !isNaN(Number(value))) {
                     pourField(recipe, value, pourNumber);
-                    setEnableSave(true);
+                    setKey((prev) => prev + 1);
                 }
             } else {
                 throw new Error("Unknown Edit Recipe Input field");
             }
         }
-    }, [recipe, setKey, setEnableSave]);
+    }, [recipe, setKey]);
 
     /** Edit one value of one stage. `Pour` stores agitation as flags, not numbers. */
     function editStage(index: number, field: StageField, value: number) {
@@ -359,17 +349,14 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
 
         applyStageField(pour, field, value);
         setKey((prev) => prev + 1);
-        setEnableSave(true);
     }
 
     return {
         recipe,
         getRecipe,
         key,
-        enableSave,
         inputError,
         setInputError,
-        isLoadingTitle,
         balance,
         canWrite,
         canSave,

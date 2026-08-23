@@ -21,7 +21,6 @@ async function renderEditor(overrides: {onSaved?: () => void} = {}) {
 
     return renderHook(() => useRecipeEditor({
         recipeJSON:           JSON.stringify(recipe),
-        initiallySaveEnabled: false,
         onSaved:              overrides.onSaved ?? jest.fn()
     }));
 }

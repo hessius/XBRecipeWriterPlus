@@ -12,6 +12,8 @@ type Props = {
     helpStyle?: HelpStyle;
     /** Explain mode is on. Only consulted when `helpStyle` is "explain". */
     explaining?: boolean;
+    /** A validation reason to show under the row. Prose, so it stays in Inter. */
+    error?: string;
     onHelp?: (topic: HelpTopic) => void;
     children: React.ReactNode;
 };
@@ -29,7 +31,7 @@ type Props = {
  * be drawn, which is the point — a field nobody wrote a note for is a field
  * nobody explained.
  */
-export default function FieldRow({topic, helpStyle, explaining, onHelp, children}: Props) {
+export default function FieldRow({topic, helpStyle, explaining, error, onHelp, children}: Props) {
     const entry = RECIPE_HELP[topic];
     const hasDetail = entry.detail !== undefined;
     const showMarker = hasDetail && helpStyle === "markers";
@@ -58,6 +60,16 @@ export default function FieldRow({topic, helpStyle, explaining, onHelp, children
                 </YStack>
                 {children}
             </XStack>
+
+            {/* The validation reason, when there is one. Full width under the
+                row rather than crammed beside the right-aligned input, and in
+                Inter (the default body face) because it is a sentence, not a
+                machine caption. */}
+            {error && (
+                <Text fontSize={11} lineHeight={16} color={palette.danger} marginTop="$2">
+                    {error}
+                </Text>
+            )}
 
             {/* Mounted only while explaining, never merely clipped. Collapsible
                 keeps children mounted, which would make a "the detail is hidden"

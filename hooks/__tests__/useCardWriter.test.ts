@@ -100,7 +100,6 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => {
             const editor = useRecipeEditor({
                 recipeJSON:           invalidJSON,
-                initiallySaveEnabled: true,
                 onSaved:              jest.fn()
             });
             const writer = useCardWriter(editor.setVolumeError);

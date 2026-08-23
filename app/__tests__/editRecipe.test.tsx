@@ -216,6 +216,41 @@ describe("the editor", () => {
 
         expect(screen.queryByLabelText("Explain")).toBeNull();
     });
+
+    it("blocks write and save while the recipe ID is malformed, and says why", async () => {
+        await renderEditor();
+
+        // Validated live, on change — not on blur — so the gate closes before
+        // the field commits. `!!bad` is neither empty nor the vendor-code shape.
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
+
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(true);
+        // A distinctive fragment: the `xid` help detail also names the digits,
+        // so the reason is worded to not collide with it under `getByText`.
+        expect(screen.getByText(/Not a valid ID/i)).toBeTruthy();
+    });
+
+    it("clears the block once the recipe ID is valid again", async () => {
+        await renderEditor();
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
+
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "CGL12");
+
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled).toBe(false);
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+        expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+    });
+
+    it("treats an empty recipe ID as valid", async () => {
+        await renderEditor();
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
+
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "");
+
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+        expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+    });
 });
 
 describe("the stages deck", () => {
