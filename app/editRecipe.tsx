@@ -3,7 +3,7 @@ import ValidatedInput from "@/components/ValidatedInput";
 import Recipe, {CUP_TYPE, isValidXID, XID_LENGTH} from "@/library/Recipe";
 import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useCallback, useEffect, useRef} from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
 import {ActivityIndicator, Pressable, useWindowDimensions} from "react-native";
 import {Button, getTokens, H6, ScrollView, Text, XStack, YStack} from "tamagui";
 import {MyButtonGroup} from "@/components/MyButtonGroup";
@@ -15,7 +15,7 @@ import Svg, {Path} from "react-native-svg";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from '@/constants/colors';
 import IconButton from "@/components/IconButton";
-import RestoreDialog from "@/components/RestoreDialog";
+import RestoreDialog, {RestoreOption} from "@/components/RestoreDialog";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 
@@ -47,14 +47,26 @@ export default function EditRecipe() {
 
     const {
         recipe, getRecipe, enableSave, inputError, setInputError, isLoadingTitle,
-        showRestoreDialog, setShowRestoreDialog, restoreOptions, totalVolumeRef, autoButtonRef,
+        balance, revertSources,
         bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
-        restoreRecipe, saveRecipe, editInputComplete, volumeError, setVolumeError
+        saveRecipe, editInputComplete, setVolumeError
     } = useRecipeEditor({
         recipeJSON:           recipeJSON as string | undefined,
         initiallySaveEnabled: saveEnabled === "true",
         onSaved:              () => navigation.goBack()
     });
+
+    // The revert sheet's open state now belongs to the screen, not the hook.
+    // Task 14 replaces this screen and dialog wholesale; this is the smallest
+    // bridge that keeps the old one compiling against the new hook shape.
+    const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+    const restoreOptions: RestoreOption[] = revertSources
+        .filter((s) => s.available)
+        .map((s) => ({id: s.id, label: s.label, action: s.action}));
+
+    function restoreRecipe() {
+        setShowRestoreDialog(true);
+    }
 
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
 
@@ -186,7 +198,7 @@ export default function EditRecipe() {
                                 )}
                                 <XStack alignItems="center" flexWrap="wrap">
                                     <XStack paddingRight="$4">
-                                        <TotalVolumeComponent recipe={getRecipe()!} ref={totalVolumeRef} />
+                                        <TotalVolumeComponent recipe={getRecipe()!} />
                                         <TooltipComponent
                                             content={"This field shows the total volume of all pours versus the total volume based on your dosage and ratio (sum of all pour volumes / dose × ratio). The numbers need to match for a valid recipe that the machine will accept. Adjust pour volumes, ratio, and dose as needed.\n\nTea recipes show 90ml per pour, but the actual volume in the cup will be 120ml per pour since the machine automatically adds ~30ml to trigger the siphon. If the siphon triggers prematurely due to wet leaf expansion, reduce the volume of the latter steeps."}/>
                                     </XStack>
@@ -197,8 +209,7 @@ export default function EditRecipe() {
                                             disabledStyle={{opacity: 0.5}}
                                             fontWeight={700} fontSize="$5" color={palette.base} minWidth="100"
                                             onPress={() => autoAdjustPourVolumes()}
-                                            disabled={getRecipe()!.isPourVolumeValid()}
-                                            ref={autoButtonRef}
+                                            disabled={balance.balanced}
                                     >
                                         Auto
                                     </Button>
@@ -301,10 +312,10 @@ export default function EditRecipe() {
                             </YStack>
                         </ScrollView>
                     </XStack>
-                    {volumeError !== null && (
+                    {!balance.balanced && (
                         <Text accessibilityRole="alert" fontSize={13} color={palette.danger}
                               paddingHorizontal="$3" paddingBottom="$2">
-                            {volumeError}
+                            Your individual pour volumes must add up to the total volume.
                         </Text>
                     )}
                     <XStack paddingVertical="$2" justifyContent="center" alignContent="center" alignItems="center"
