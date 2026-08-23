@@ -139,6 +139,42 @@ export const DOT_ICONS = {
         "...###...",
         ".........",
         "........."
+    ],
+    /**
+     * Two backward chevrons: the rewind mark.
+     *
+     * A curved arrow was drawn first and thrown away. It is the shape class the
+     * note at the top of this file warns about — a one-dot stroke that is
+     * neither axis-aligned nor a pure diagonal aliases into noise. Chevrons are
+     * nothing but diagonals, so every dot lands on the grid.
+     */
+    revert: [
+        ".........",
+        "....#...#",
+        "...#...#.",
+        "..#...#..",
+        ".#...#...",
+        "..#...#..",
+        "...#...#.",
+        "....#...#",
+        "........."
+    ],
+    /**
+     * A downward caret.
+     *
+     * Points at the sheet that will rise, rather than at a menu that will drop.
+     * Also used, rotated, as the disclosure mark on a stage tile.
+     */
+    more: [
+        ".........",
+        ".........",
+        "#.......#",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#....",
+        ".........",
+        "........."
     ]
 } as const satisfies Record<string, readonly string[]>;
 
