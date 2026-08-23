@@ -2,7 +2,7 @@ import React from "react";
 import {Text} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
-import Collapsible, {rowStyle} from "@/components/Collapsible";
+import Collapsible, {nextHeight, rowStyle} from "@/components/Collapsible";
 import {renderWithProviders} from "@/test-utils/render";
 
 const includeHidden = {includeHiddenElements: true};
@@ -81,5 +81,29 @@ describe("rowStyle", () => {
 
     it("leaves the height alone until the content has been measured", () => {
         expect(rowStyle(1, null)).toEqual({opacity: 1});
+    });
+});
+
+describe("nextHeight", () => {
+    it("takes the measurement when the row is open", () => {
+        expect(nextHeight(null, 80, true)).toBe(80);
+        expect(nextHeight(80, 96, true)).toBe(96);
+    });
+
+    it("ignores anything measured while the row is closed", () => {
+        // This is what kept the tiles from ever coming back. Closed, the row is
+        // clipped to nothing; a layout pass in that state reported a height of
+        // zero, the row remembered it, and reopening then animated to zero --
+        // the tiles were gone for good after the first scroll.
+        expect(nextHeight(80, 0, false)).toBe(80);
+        expect(nextHeight(80, 96, false)).toBe(80);
+    });
+
+    it("ignores a height of nothing even when open, having nothing to say", () => {
+        expect(nextHeight(80, 0, true)).toBe(80);
+    });
+
+    it("returns the height it was given back unchanged, so nothing re-renders", () => {
+        expect(nextHeight(80, 80, true)).toBe(80);
     });
 });

@@ -19,6 +19,25 @@ export function rowStyle(progress: number, contentHeight: number | null) {
     return {height: progress * contentHeight, opacity: progress};
 }
 
+/**
+ * The height to remember after a layout pass.
+ *
+ * A closed row is clipped to nothing, and a layout pass in that state reports
+ * exactly that. Believing it is how the row came to have nothing to reopen to:
+ * the content was measured at zero the moment it was hidden and stayed that way.
+ * Only a row that is actually showing its content can say how tall it is.
+ */
+export function nextHeight(
+    current: number | null,
+    measured: number,
+    open: boolean
+): number | null {
+    if (!open || measured <= 0) {
+        return current;
+    }
+    return measured;
+}
+
 type Props = {
     /** Whether the children are shown. */
     open: boolean;
@@ -44,6 +63,17 @@ export default function Collapsible({open, children}: Props) {
     const [contentHeight, setContentHeight] = useState<number | null>(null);
     const progress = useSharedValue(open ? 1 : 0);
 
+    // The measurement is mirrored onto a shared value rather than read from
+    // state inside the worklet. An animated style is re-evaluated when a shared
+    // value it reads changes; a plain number captured in its closure is not a
+    // signal the UI thread can be woken by, declared dependency or not. The
+    // effect is the one place the compiler allows a shared value to be written.
+    const height = useSharedValue<number | null>(null);
+
+    useEffect(() => {
+        height.value = contentHeight;
+    }, [contentHeight, height]);
+
     useEffect(() => {
         const target = open ? 1 : 0;
         progress.value = reduced
@@ -54,13 +84,7 @@ export default function Collapsible({open, children}: Props) {
     // Before the first layout pass there is no height to animate to, so the row
     // takes its natural one. Assuming zero would collapse it on the first frame
     // and then have it spring open.
-    // The dependency is declared rather than inferred: `contentHeight` is a
-    // plain number, not a shared value, so nothing on the UI thread would
-    // otherwise know the first measurement had arrived.
-    const style = useAnimatedStyle(
-        () => rowStyle(progress.value, contentHeight),
-        [contentHeight]
-    );
+    const style = useAnimatedStyle(() => rowStyle(progress.value, height.value));
 
     return (
         <Animated.View
@@ -73,12 +97,12 @@ export default function Collapsible({open, children}: Props) {
                 of the fixed, animating height of the clipping parent above it. */}
             <View testID="collapsible-content"
                   onLayout={(event) => {
-                      // Guarded: layout fires on every pass, and setting an
-                      // unchanged height would re-render the screen each time
-                      // the list moved under it.
+                      // `nextHeight` returns the current value unchanged when
+                      // there is nothing to learn, which is most passes: layout
+                      // fires whenever the row moves, and re-rendering the
+                      // screen to store the same number would be wasted work.
                       const measured = event.nativeEvent.layout.height;
-                      setContentHeight((current) =>
-                          current === measured ? current : measured);
+                      setContentHeight((current) => nextHeight(current, measured, open));
                   }}>
                 {children}
             </View>
