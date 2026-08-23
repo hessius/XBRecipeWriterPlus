@@ -398,6 +398,10 @@ export default function EditRecipe() {
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
+    // The setting supplies the initial value; the header toggle changes it for
+    // this visit only and never writes back, so a user can fold the notes away
+    // without changing what the next recipe opens on.
+    const [explaining, setExplaining] = useState(helpStyle === "explain");
 
     const {collapsed, onScroll} = useCollapsibleHeader();
 
@@ -413,23 +417,40 @@ export default function EditRecipe() {
 
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
 
+    // Computed before the header effect, not after the `recipe` guard below, so
+    // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
+    // neutral tint on the render where the recipe has not resolved yet.
+    const accent = recipe ? resolveAccent(recipe) : palette.dim;
+
     useEffect(() => {
         navigation.setOptions({
             title:       "Edit Recipe",
             headerShown: true,
             headerRight: () => (
-                <Pressable accessibilityRole="button" accessibilityLabel="More"
-                           onPress={() => setOverflowOpen(true)} hitSlop={12}>
-                    <DotIcon name="more" size={16} color={palette.dim}/>
-                </Pressable>
+                <XStack alignItems="center" gap="$3">
+                    {/* Only where there is a screenful of notes to fold: the
+                        `markers` style hangs its long form off each label, so a
+                        toggle there would have nothing to act on. */}
+                    {helpStyle === "explain" && (
+                        <Pressable accessibilityRole="button" accessibilityLabel="Explain"
+                                   accessibilityState={{selected: explaining}}
+                                   onPress={() => setExplaining((prev) => !prev)} hitSlop={12}>
+                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                           color={explaining ? accent : palette.dim}>
+                                EXPLAIN
+                            </DotMatrixText>
+                        </Pressable>
+                    )}
+                    <Pressable accessibilityRole="button" accessibilityLabel="More"
+                               onPress={() => setOverflowOpen(true)} hitSlop={12}>
+                        <DotIcon name="more" size={16} color={palette.dim}/>
+                    </Pressable>
+                </XStack>
             )
         });
-    }, [navigation]);
+    }, [navigation, helpStyle, explaining, accent]);
 
     if (!recipe) return null;
-
-    const accent = resolveAccent(recipe);
-    const explaining = helpStyle === "explain";
 
     // Every edit republishes the recipe: the model is mutated in place, so a key
     // bump is what repaints the steppers and the derived total. Several of the

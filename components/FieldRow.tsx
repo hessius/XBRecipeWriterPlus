@@ -62,7 +62,7 @@ export default function FieldRow({topic, helpStyle, explaining, onHelp, children
             {/* Mounted only while explaining, never merely clipped. Collapsible
                 keeps children mounted, which would make a "the detail is hidden"
                 test pass for the wrong reason — and nothing here needs to
-                animate: the explain setting switches a whole screenful at once,
+                animate: the explain toggle switches a whole screenful at once,
                 which is a mode change rather than a disclosure. */}
             {showDetail && (
                 <Text fontSize={12} lineHeight={18} color={palette.dim}

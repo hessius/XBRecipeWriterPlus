@@ -19,10 +19,13 @@ jest.mock("expo-router", () => ({
 jest.mock("@/library/RecipeDatabase");
 
 // `useSetting` reaches for the shared SQLite-backed settings store, which
-// cannot open under jest. The editor only reads `helpStyle`; pin it. (Not in
-// the plan's sketch — added here because the real hook opens a database.)
+// cannot open under jest. The editor only reads `helpStyle`; pin it. Held in a
+// `mock`-prefixed `let` — Babel rejects any other name read inside a hoisted
+// factory — so a test can pick the help style the way `mockRecipeJSON` picks
+// the recipe. (Not in the plan's sketch — added here because the real hook
+// opens a database.)
 jest.mock("@/hooks/useSetting", () => ({
-    useSetting: () => ["explain", jest.fn()]
+    useSetting: () => [mockHelpStyle, jest.fn()]
 }));
 
 jest.mock("@/library/NFC", () => ({
@@ -50,9 +53,11 @@ function fixture(): Recipe {
 }
 
 let mockRecipeJSON = JSON.stringify(fixture());
+let mockHelpStyle = "explain";
 
 beforeEach(() => {
     mockRecipeJSON = JSON.stringify(fixture());
+    mockHelpStyle = "explain";
 });
 
 /**
@@ -174,6 +179,42 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Duplicate")).toBeTruthy();
         expect(screen.getByLabelText("Revert")).toBeTruthy();
+    });
+
+    it("unfolds the notes in explain mode and folds them with the toggle", async () => {
+        // The `ratio` detail is only mounted while explaining — `FieldRow`
+        // mounts it rather than clipping it — so its presence is the queryable
+        // difference between the two states. A regex, because
+        // `getByText`/`queryByText` default to an exact whole-string match.
+        mockHelpStyle = "explain";
+        await renderEditor();
+
+        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Explain"));
+
+        expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
+    });
+
+    it("unfolds the notes again on a second press", async () => {
+        mockHelpStyle = "explain";
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("Explain"));
+        expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("Explain"));
+        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
+    });
+
+    it("offers no explain toggle when the help style has nothing to unfold", async () => {
+        // The `markers` style hangs its long form off a marker beside each
+        // label, not under the row, so there is no screenful to fold and the
+        // toggle would do nothing.
+        mockHelpStyle = "markers";
+        await renderEditor();
+
+        expect(screen.queryByLabelText("Explain")).toBeNull();
     });
 });
 
