@@ -250,8 +250,14 @@ steep to trigger the siphon, so the cup holds about 120 ml — and that a siphon
 triggering early means reducing the later steeps. That is knowledge currently
 buried in the totals tooltip.
 
-Tea-only and coffee-only fields appear and disappear as they do today. The cup
-count for tea (byte 39's high nibble) is a field on the BREW deck.
+Tea-only and coffee-only fields appear and disappear as they do today.
+
+The cup count for tea (byte 39's high nibble) was to be a field on the BREW
+deck. It is not, and deliberately: `Recipe` derives that nibble from the number
+of stages rather than storing it, so a control would either be inert or would
+have to invent a second, conflicting source for the same byte. The count is
+already editable — by adding or removing a stage — and the byte is written
+correctly either way. Recorded here rather than silently dropped.
 
 ## Colour
 

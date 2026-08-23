@@ -126,13 +126,10 @@ export default function HomeScreen({db, settings}: Props) {
 
             router.push({
                 pathname: "/editRecipe",
-                params:   {
-                    recipeJSON: JSON.stringify(toOpen),
-                    // An already-saved recipe opens with Save disabled, as it
-                    // would from the list; only a genuinely new read arrives
-                    // needing to be saved.
-                    saveEnabled: isExisting ? "false" : "true"
-                }
+                // No `saveEnabled`: the editor lets any recipe be saved now,
+                // including one that will not write, so there is nothing left
+                // for a caller to disable.
+                params:   {recipeJSON: JSON.stringify(toOpen)}
             });
         } catch {
             setScanning(false);
