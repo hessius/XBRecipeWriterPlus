@@ -56,4 +56,10 @@ describe("Settings", () => {
         new Settings(storage).set("showCoffeeMarker", false);
         expect(map.showCoffeeMarker).toBe("false");
     });
+
+    it("leaves the dot matrix pour profile off unless it is asked for", () => {
+        // A matter of taste, and the flat wash is the quieter of the two. A
+        // preference like that belongs off by default.
+        expect(new Settings(fakeStorage()).get("dotMatrixProfile")).toBe(false);
+    });
 });

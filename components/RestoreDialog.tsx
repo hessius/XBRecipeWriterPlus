@@ -1,8 +1,8 @@
 import React, {useState} from "react";
 import {ActivityIndicator} from "react-native";
-import {toast} from "@backpackapp-io/react-native-toast";
 import {Adapt, Button, Dialog, Fieldset, Sheet, XStack, YStack} from "tamagui";
 
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 
 export type RestoreOption = {
@@ -28,11 +28,7 @@ export default function RestoreDialog({open, onOpenChange, options, onRestored}:
             await action();
         } catch (error) {
             console.error("Failed to restore recipe:", error);
-            toast(`${error}`, {
-                styles: {
-                    view: {backgroundColor: palette.danger}
-                }
-            });
+            notify({tone: "error", message: String(error)});
         } finally {
             setIsRestoring(false);
             onOpenChange(false);

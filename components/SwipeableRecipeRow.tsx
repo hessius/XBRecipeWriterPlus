@@ -1,13 +1,14 @@
-import AntDesign from "@expo/vector-icons/AntDesign";
-import Feather from "@expo/vector-icons/Feather";
 import React, {useEffect, useRef} from "react";
 import {View} from "react-native";
 import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/ReanimatedSwipeable";
-import {Button, XStack} from "tamagui";
+import {XStack, YStack} from "tamagui";
 
 import Recipe from "@/library/Recipe";
-import RecipeItem from "@/components/RecipeItem";
-import {palette} from '@/constants/colors';
+import DotIcon from "@/components/DotIcon";
+import DotMatrixText from "@/components/DotMatrixText";
+import RecipeCard from "@/components/RecipeCard";
+import type {DotIconName} from "@/constants/dotIcons";
+import {palette} from "@/constants/colors";
 
 type Props = {
     recipe: Recipe;
@@ -16,17 +17,73 @@ type Props = {
     onDuplicate: () => void;
     /** Nudges the row open briefly on mount so the swipe actions are discoverable. */
     bounceOnMount?: boolean;
+    /** When true, the card shows its destructive actions instead of hiding them behind a swipe. */
+    editing?: boolean;
+    /** Forwarded to the card. Owned by the settings screen. */
+    showCoffeeMarker?: boolean;
+    /** Forwarded to the card. Owned by the settings screen. */
+    dottedProfile?: boolean;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
 const BOUNCE_CLOSE_DELAY = 1000;
+
+const TILE_WIDTH = 76;
+const TILE_GLYPH_SIZE = 24;
+
+type TileProps = {
+    icon: DotIconName;
+    caption: string;
+    tone: string;
+    label: string;
+    testID: string;
+    onPress: () => void;
+};
+
+/**
+ * One action revealed by swiping a row aside.
+ *
+ * The tile is the app's own surface colour and the tone appears only as ink.
+ * Filled tiles were tried first and put two saturated blocks next to an already
+ * saturated accent card — three loud things in a row, with the colour spent on
+ * the tile rather than on the thing being said.
+ *
+ * Captioned, because a glyph on its own asks the user to guess, and one of the
+ * two guesses here is unrecoverable.
+ */
+function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
+    return (
+        <YStack
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            onPress={onPress}
+            pressStyle={{opacity: 0.6}}
+            width={TILE_WIDTH}
+            alignItems="center"
+            justifyContent="center"
+            gap="$2"
+            // Matched to the card's radius so the revealed actions read as
+            // objects of the same kind, rather than as chrome behind it.
+            borderRadius="$8"
+            backgroundColor={palette.surface}>
+            <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2} color={tone}>
+                {caption}
+            </DotMatrixText>
+        </YStack>
+    );
+}
 
 export default function SwipeableRecipeRow({
                                                recipe,
                                                onPress,
                                                onDelete,
                                                onDuplicate,
-                                               bounceOnMount = false
+                                               bounceOnMount = false,
+                                               editing = false,
+                                               showCoffeeMarker = true,
+                                               dottedProfile = false
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -44,38 +101,41 @@ export default function SwipeableRecipeRow({
 
     function renderRightActions() {
         return (
-            <XStack paddingRight="$2" paddingVertical="$3" alignItems="center">
-                <Button onPress={() => {
-                    swipeableRef.current?.close();
-                    onDelete();
-                }}
-                        width={80} height="100%" marginRight="$1" alignItems="center" justifyContent="center"
-                        backgroundColor={palette.danger} borderColor={palette.line} borderWidth={2} borderRadius={10}
-                        aria-label={`Delete ${recipe.displayName()}`}>
-                    <AntDesign name="delete" size={25} color={palette.base}/>
-                </Button>
-                <Button onPress={() => {
-                    swipeableRef.current?.close();
-                    onDuplicate();
-                }}
-                        width={80} height="100%" alignItems="center" justifyContent="center"
-                        backgroundColor={palette.surface} borderColor={palette.line} borderWidth={2} borderRadius={10}
-                        aria-label={`Duplicate ${recipe.displayName()}`}>
-                    <Feather name="copy" size={25} color={palette.text}/>
-                </Button>
+            // The left padding is the gap between the card and the first tile.
+            // Without it the tile butts against the card's edge and reads as
+            // part of it, rather than as something the card slid off.
+            <XStack testID="row-actions" paddingLeft="$2" paddingRight="$2"
+                    paddingVertical="$3" alignItems="stretch" gap="$2">
+                <Tile icon="duplicate" caption="COPY" tone={palette.success}
+                      testID="row-action-duplicate"
+                      label={`Duplicate ${recipe.displayName()}`}
+                      onPress={() => {
+                          swipeableRef.current?.close();
+                          onDuplicate();
+                      }}/>
+                <Tile icon="delete" caption="DELETE" tone={palette.danger}
+                      testID="row-action-delete"
+                      label={`Delete ${recipe.displayName()}`}
+                      onPress={() => {
+                          swipeableRef.current?.close();
+                          onDelete();
+                      }}/>
             </XStack>
         );
     }
 
     return (
-        <View style={{maxWidth: 600}}>
+        <View style={{maxWidth: 600, paddingHorizontal: 12, paddingVertical: 6}}>
             <Swipeable
                 ref={swipeableRef}
                 friction={2}
                 rightThreshold={40}
                 overshootRight={false}
                 renderRightActions={renderRightActions}>
-                <RecipeItem recipe={recipe} onPress={onPress}/>
+                <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
+                            showCoffeeMarker={showCoffeeMarker}
+                            dottedProfile={dottedProfile}
+                            onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>
     );

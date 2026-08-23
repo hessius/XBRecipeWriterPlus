@@ -70,6 +70,7 @@ export default function RootLayout() {
                                             }}>
                                             <Stack.Screen name="index" options={{}}/>
                                             <Stack.Screen name="editRecipe" options={{title: "Edit Recipe"}}/>
+                                            <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>

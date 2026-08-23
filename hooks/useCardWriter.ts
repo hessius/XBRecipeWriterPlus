@@ -1,50 +1,64 @@
 import {useState} from "react";
-import {Alert, Platform} from "react-native";
+import {Platform} from "react-native";
 
+import {notify} from "@/components/XbrwToast";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import type Recipe from "@/library/Recipe";
 
 type CardWriter = {
     /** Write the given recipe to a card, reporting a pour-volume error first if invalid. */
     writeCard: (recipe: Recipe | null) => Promise<void>;
-    /** Dismiss the Android progress sheet and release the NFC session. */
+    /** Dismiss the NFC overlay and release the NFC session. */
     onNFCDialogClose: () => Promise<void>;
-    /** Whether the Android progress sheet should be shown. iOS uses the system sheet. */
-    showAndroidNFCDialog: boolean;
-    /** Write progress 0-100. Only meaningful on Android. */
+    /** Whether the NFC overlay should be shown, on both platforms. */
+    showNfcOverlay: boolean;
+    /** Write progress 0-100. */
     writeProgress: number;
 };
 
 /**
  * Owns writing a recipe to an NFC card.
  *
- * iOS and Android report progress differently: iOS updates the text of the
- * system NFC sheet, Android drives our own sheet via `writeProgress`.
+ * iOS and Android report progress differently: iOS also updates the text of
+ * the system NFC sheet, while `writeProgress` drives the `NfcOverlay` on
+ * both platforms.
  *
  * A fresh `NFC` instance is created per render, matching the previous
  * behaviour in editRecipe.tsx — `NFC` tracks whether its session is closed,
  * and holding one across renders would change when that flag is reset.
  */
-export function useCardWriter(): CardWriter {
+export function useCardWriter(
+    // The pour-volume mismatch is one state of one recipe, not an event, and
+    // `useRecipeEditor` owns the recipe. Reporting into its setter rather than
+    // keeping a local copy means there is a single atom for the message,
+    // which both the write path and the save path can clear — two copies
+    // of the same state can never reliably clear each other.
+    onVolumeError: (message: string | null) => void
+): CardWriter {
     const [writeProgress, setWriteProgress] = useState(0);
-    const [showAndroidNFCDialog, setShowAndroidNFCDialog] = useState(false);
+    const [showNfcOverlay, setShowNfcOverlay] = useState(false);
 
     const nfc = new NFC();
 
     async function onNFCDialogClose() {
         await nfc.close();
-        setShowAndroidNFCDialog(false);
+        setShowNfcOverlay(false);
     }
 
     async function progressCallback(progress: number, id?: string): Promise<string | undefined> {
-        console.log("Progress:" + progress);
+        // Both platforms, not one. The overlay reaches iOS for the first time
+        // in this sub-project, and this used to sit in the `else` of the check
+        // below — so on iOS the bloom stayed at zero for the whole write.
+        setWriteProgress(progress);
 
         if (Platform.OS === "ios") {
+            // The one line of Apple's sheet we control. It carries the
+            // placement teaching rather than a percentage: the sheet already
+            // has a spinner, and our own half above it no longer repeats the
+            // copy, so this is the only place it appears on iOS.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe written to card"
-                : "Writing recipe to card: " + Math.round(progress) + "%");
-        } else {
-            setWriteProgress(progress);
+                : "Hold the card to the top of the phone.");
         }
         return undefined;
     }
@@ -55,31 +69,28 @@ export function useCardWriter(): CardWriter {
             if (recipe !== null) {
                 console.log(recipe);
                 if (recipe.isPourVolumeValid()) {
-                    if (Platform.OS !== "ios") {
-                        setWriteProgress(0);
-                        setShowAndroidNFCDialog(true);
-                    }
+                    onVolumeError(null);
+                    setWriteProgress(0);
+                    setShowNfcOverlay(true);
                     await recipe.writeCard(nfc, progressCallback);
-                    if (Platform.OS !== "ios") {
-                        setShowAndroidNFCDialog(false);
-                    }
+                    setShowNfcOverlay(false);
                 } else {
-                    Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
-                        {
-                            text:    'Ok',
-                            onPress: () => console.log('Cancel Pressed')
-                        }
-                    ]);
+                    onVolumeError(
+                        "Your individual pour volumes must add up to the total volume."
+                    );
                 }
             }
         } catch (e) {
             console.log("Write error!:" + e);
-            setShowAndroidNFCDialog(false);
-            Alert.alert('Write Error', 'There was an error writing the recipe to the card');
+            setShowNfcOverlay(false);
+            // A cancelled scan throws, and the user cancelling is not a failure.
+            if (!nfc.getIsClosed()) {
+                notify({tone: "error", message: "Could not write the recipe to the card."});
+            }
         }
     }
 
-    return {writeCard, onNFCDialogClose, showAndroidNFCDialog, writeProgress};
+    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress};
 }
 
 export default useCardWriter;

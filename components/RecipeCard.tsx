@@ -1,16 +1,27 @@
 import React from "react";
 import {View} from "react-native";
-import {AntDesign} from "@expo/vector-icons";
 import {XStack, YStack, Text} from "tamagui";
 
 import DigitRoll from "@/components/DigitRoll";
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
-import PourProfile from "@/components/PourProfile";
+import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
-import {onAccent} from "@/constants/colors";
+import {onAccent, palette} from "@/constants/colors";
+import type {DotIconName} from "@/constants/dotIcons";
 
 const CARD_HEIGHT = 116;
+
+/**
+ * How far past the card's corner the pour profile is pushed, on top of the
+ * stroke's own bleed.
+ *
+ * The mark is a background, and sitting exactly on the corner it still read as
+ * a shape that had been placed there. Running it a little off both edges is
+ * what makes it read as something the card was cut from.
+ */
+const PROFILE_OVERHANG = 2;
 const PROFILE_HEIGHT = 56;
 
 /**
@@ -22,12 +33,6 @@ const PROFILE_HEIGHT = 56;
 const TOUCH_TARGET = 44;
 const ACTION_ICON_SIZE = 18;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
-
-/**
- * The contactless glyph, sized to sit level with the 11 px beverage marker
- * rather than to be read on its own.
- */
-const CONTACTLESS_SIZE = 13;
 
 /**
  * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
@@ -67,18 +72,30 @@ function Stat({label, value, suffix}: StatProps) {
 
 type ActionProps = {
     label: string;
-    icon: React.ComponentProps<typeof AntDesign>["name"];
+    icon: DotIconName;
+    tone: string;
     testID: string;
     onPress: () => void;
 };
 
-function Action({label, icon, testID, onPress}: ActionProps) {
+/**
+ * One of the two actions a card offers in edit mode.
+ *
+ * The glyph sits in a dark key rather than directly on the accent. Drawn on the
+ * accent it was both short of contrast on the lighter cards and, more to the
+ * point, indistinguishable from the card's own decoration — there was nothing
+ * to suggest it could be pressed.
+ */
+function Action({label, icon, tone, testID, onPress}: ActionProps) {
     return (
         <YStack accessible accessibilityRole="button" accessibilityLabel={label}
                 alignItems="center" justifyContent="center"
-                padding={ACTION_PADDING} onPress={onPress}>
-            <AntDesign testID={testID} name={icon} size={ACTION_ICON_SIZE}
-                       color={onAccent.marker}/>
+                padding={ACTION_PADDING} borderRadius="$4"
+                backgroundColor={onAccent.key}
+                pressStyle={{opacity: 0.7}}
+                onPress={onPress}>
+            <DotIcon testID={testID} name={icon} size={ACTION_ICON_SIZE}
+                     color={tone}/>
         </YStack>
     );
 }
@@ -95,6 +112,8 @@ type Props = {
      * mostly-coffee library and sub-project 6 adds a setting to hide it.
      */
     showCoffeeMarker?: boolean;
+    /** Fill the pour profile with a dot screen. Owned by the settings screen. */
+    dottedProfile?: boolean;
 };
 
 /**
@@ -110,7 +129,8 @@ export default function RecipeCard({
     editing = false,
     onDuplicate,
     onDelete,
-    showCoffeeMarker = true
+    showCoffeeMarker = true,
+    dottedProfile = false
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -170,9 +190,13 @@ export default function RecipeCard({
             style={{backgroundColor: accent}}>
 
             <View pointerEvents="none"
-                  style={{position: "absolute", right: 0, bottom: 0}}>
+                  style={{
+                      position: "absolute",
+                      right:    -(PROFILE_BLEED + PROFILE_OVERHANG),
+                      bottom:   -(PROFILE_BLEED + PROFILE_OVERHANG)
+                  }}>
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
-                             width={200} height={PROFILE_HEIGHT}/>
+                             width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
             </View>
 
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
@@ -190,18 +214,6 @@ export default function RecipeCard({
                             {marker}
                         </DotMatrixText>
                     )}
-                    {/* The contactless glyph is `wifi` turned a quarter turn —
-                        the same construction the contactless payment symbol
-                        uses. It is decorative: the card's accessibility label
-                        already says this is a recipe, and every recipe here
-                        writes to a card, so announcing it on each row would be
-                        noise. */}
-                    <View accessibilityElementsHidden
-                          importantForAccessibility="no-hide-descendants"
-                          style={{transform: [{rotate: "90deg"}]}}>
-                        <AntDesign testID="recipe-card-contactless" name="wifi"
-                                   size={CONTACTLESS_SIZE} color={onAccent.marker}/>
-                    </View>
                 </XStack>
             </XStack>
 
@@ -215,12 +227,14 @@ export default function RecipeCard({
                 {editing && (
                     <XStack gap="$1">
                         {onDuplicate !== undefined && (
-                            <Action label="Duplicate recipe" icon="copy"
+                            <Action label="Duplicate recipe" icon="duplicate"
+                                    tone={palette.success}
                                     testID="recipe-card-duplicate"
                                     onPress={onDuplicate}/>
                         )}
                         {onDelete !== undefined && (
                             <Action label="Delete recipe" icon="delete"
+                                    tone={palette.danger}
                                     testID="recipe-card-delete" onPress={onDelete}/>
                         )}
                     </XStack>

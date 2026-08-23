@@ -126,6 +126,15 @@ describe("DotBloom", () => {
         expect(screen.getByTestId("dot-bloom").props.accessibilityRole).toBe("progressbar");
     });
 
+    it("is an accessibility element, so the role is more than a prop", async () => {
+        // A View carrying accessibilityRole but not `accessible` is not an
+        // element at all: VoiceOver walks straight past it and the role and
+        // value above are announced to nobody. Queried by role rather than by
+        // testID precisely because that is what a screen reader would find.
+        await renderWithProviders(<DotBloom progress={0.5}/>);
+        expect(screen.getByRole("progressbar")).toBeTruthy();
+    });
+
     it("lays the dots out on a ring, clockwise from twelve o'clock", async () => {
         // A ring that fills from 3 o'clock, or anticlockwise, or collapses to a
         // point, is a different animation; none of that is visible in a dot count.

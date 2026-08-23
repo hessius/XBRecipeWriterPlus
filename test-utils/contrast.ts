@@ -58,6 +58,21 @@ export function contrast(foreground: string, background: string): number {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+/**
+ * `colour` composited over `background`, as an opaque hex.
+ *
+ * `contrast` flattens its foreground but reads the background as opaque, so a
+ * translucent ink drawn on a translucent well cannot be measured with it
+ * directly. This resolves the lower of the two composites first, so the pair
+ * can be handed to `contrast` as an ordinary foreground and background.
+ */
+export function over(colour: string, background: string): string {
+    const [r, g, b] = flatten(colour, background);
+    return "#" + [r, g, b]
+        .map((value) => Math.round(value).toString(16).padStart(2, "0"))
+        .join("");
+}
+
 /** WCAG AA for body text: 4.5:1. */
 export const AA_TEXT = 4.5;
 

@@ -1,7 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {Alert} from "react-native";
-import {toast} from "@backpackapp-io/react-native-toast";
 
+import {notify} from "@/components/XbrwToast";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
@@ -54,6 +53,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     const [isLoadingTitle, setIsLoadingTitle] = useState(false);
     const [showRestoreDialog, setShowRestoreDialog] = useState(false);
     const [restoreOptions, setRestoreOptions] = useState<RestoreOption[]>([]);
+    const [volumeError, setVolumeError] = useState<string | null>(null);
 
     const totalVolumeRef = useRef<{ forceUpdate: () => void } | null>(null);
     const autoButtonRef = useRef<any>(null);
@@ -117,12 +117,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         if (recipe) {
             // Limit tea recipes to maximum 3 pours
             if (recipe.isTea() && recipe.pours.length >= 3) {
-                Alert.alert('Pour Limit', 'Tea recipes are limited to a maximum of 3 pours', [
-                    {
-                        text:    'Ok',
-                        onPress: () => console.log('Pour limit reached')
-                    }
-                ]);
+                notify({tone: "info", message: "Tea recipes are limited to 3 pours."});
                 return;
             }
             recipe.addPour(pourNumber);
@@ -142,6 +137,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
     function autoAdjustPourVolumes() {
         if (recipe) {
             recipe.autoFixPourVolumes();
+            setVolumeError(null);
             setKey((prev) => prev + 1);
             setEnableSave(true);
         }
@@ -193,7 +189,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     const restoredRecipe = new Recipe(recipe.backup);
                     // keep shareId
                     keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    toast("Recipe restored from NFC backup");
+                    notify({tone: "success", message: "Recipe restored from the NFC backup."});
                 }
             });
         }
@@ -207,7 +203,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     const restoredRecipe = new Recipe(recipe.offline_backup, undefined, false);
                     // keep shareId
                     keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    toast("Recipe restored from offline backup");
+                    notify({tone: "success", message: "Recipe restored from the offline backup."});
                 }
             });
         }
@@ -225,7 +221,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                         // keep shareId and cup type in case user has customized it
                         // (default recipeVo for the same XID may have a different cup type)
                         keepSettingsAndSave(restoredRecipe, ['shareId', 'cupType']);
-                        toast("Recipe restored by XID");
+                        notify({tone: "success", message: "Recipe restored from the XID."});
                     } else {
                         throw new Error('Could not fetch recipe data using XID');
                     }
@@ -245,7 +241,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                     if (restoredRecipe) {
                         // keep original XID
                         keepSettingsAndSave(restoredRecipe, ['xid']);
-                        toast("Recipe restored by Share Link");
+                        notify({tone: "success", message: "Recipe restored from the share link."});
                     } else {
                         throw new Error('Could not fetch recipe data using Share Link');
                     }
@@ -254,7 +250,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         }
 
         if (options.length === 0) {
-            Alert.alert('No Restore Options', 'This recipe has no available restore options (no NFC backup, XID, or Share ID found)');
+            notify({
+                tone:    "info",
+                message: "This recipe has no backup, XID or share link to restore from."
+            });
             return;
         }
 
@@ -266,15 +265,11 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         if (!recipe) return;
         let db = new RecipeDatabase();
         if (recipe.isPourVolumeValid()) {
+            setVolumeError(null);
             db.updateRecipe(recipe.uuid, recipe);
             onSaved();
         } else {
-            Alert.alert('Pour Volume Error', 'Your individual pour volumes must add up to the total volume', [
-                {
-                    text:    'Ok',
-                    onPress: () => console.log('Cancel Pressed')
-                }
-            ]);
+            setVolumeError("Your individual pour volumes must add up to the total volume.");
         }
     }
 
@@ -376,6 +371,14 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             label === RECIPE_LABELS.VOLUME) {
             totalVolumeRef.current?.forceUpdate();
 
+            // An edit that makes the pours add up retires the message, without
+            // waiting for another save. It is never raised here, only cleared:
+            // the mismatch is reported when the user asks for something to
+            // happen — Save, or a write — not while they are still typing.
+            if (recipe.isPourVolumeValid()) {
+                setVolumeError(null);
+            }
+
             // Update Auto button disabled state without re-rendering the whole component
             if (autoButtonRef.current) {
                 const isDisabled = recipe.isPourVolumeValid();
@@ -385,7 +388,7 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 });
             }
         }
-    }, [recipe, setKey, setEnableSave, totalVolumeRef, autoButtonRef]);
+    }, [recipe, setKey, setEnableSave, setVolumeError, totalVolumeRef, autoButtonRef]);
 
     return {
         recipe,
@@ -407,7 +410,9 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
         autoAdjustPourVolumes,
         restoreRecipe,
         saveRecipe,
-        editInputComplete
+        editInputComplete,
+        volumeError,
+        setVolumeError
     };
 }
 

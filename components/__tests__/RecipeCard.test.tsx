@@ -2,12 +2,25 @@ import React from "react";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
+import {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
-import {accents, onAccent} from "@/constants/colors";
+import {accents, onAccent, palette} from "@/constants/colors";
+import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {AA_LARGE, contrast} from "@/test-utils/contrast";
 import {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
+
+/** The colour a dot icon's dots are drawn in. */
+function dotColourOf(testID: string): string {
+    const dot = within(screen.getByTestId(testID, {includeHiddenElements: true}))
+        .getAllByTestId("dot-icon-dot", {includeHiddenElements: true})[0];
+    const list = (Array.isArray(dot.props.style) ? dot.props.style : [dot.props.style]) as
+        {backgroundColor?: string}[];
+    return String(list.reduce<string | undefined>(
+        (found, entry) => entry?.backgroundColor ?? found, undefined
+    ));
+}
 
 /** The face a node is set in. Tamagui flattens its style; RN keeps the array. */
 function fontFamilyOf(text: string): string {
@@ -204,6 +217,35 @@ describe("RecipeCard", () => {
         );
     });
 
+    it("fills the profile flat by default and with dots when asked", async () => {
+        const flat = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(flat.queryByTestId("profile-dot")).toBeNull();
+
+        const dotted = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} dottedProfile/>
+        );
+        expect(dotted.getAllByTestId("profile-dot").length).toBeGreaterThan(0);
+    });
+
+    it("runs the profile out to the card's own edges", async () => {
+        // The mark is a background, so a gap along the bottom and right reads as
+        // misalignment. It is offset by the stroke's bleed and the card clips,
+        // which puts the baseline and the closing plateau on the edges exactly.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        // Past them, in fact: the stroke's own bleed plus a little overhang, so
+        // the mark reads as something the card was cut from rather than as a
+        // shape sitting on it. Both edges by the same amount -- the asymmetry
+        // was the thing that showed.
+        const style = layer.props.style as {right: number; bottom: number};
+        expect(style.right).toBeLessThan(-PROFILE_BLEED);
+        expect(style.right).toBe(style.bottom);
+    });
+
     it("shows the grind for coffee and hides it for tea", async () => {
         // A tea card always writes the default grind, so showing a grind number
         // beside it would be a number the machine ignores.
@@ -276,28 +318,20 @@ describe("RecipeCard", () => {
             .toEqual(expect.objectContaining({fontSize: 17, fontWeight: "700"}));
     });
 
-    it("shows a contactless mark, since every card here writes to one", async () => {
+    it("carries no contactless mark", async () => {
+        // It used to sit beside the beverage marker, unconditionally, on every
+        // card. Every recipe in this app writes to a card, so a mark that says
+        // so on all of them distinguishes nothing -- it is a decoration in the
+        // one corner a real per-recipe indicator would want.
+        //
+        // Queried with hidden elements included: the mark was hidden from the
+        // accessibility tree, so a default query would report it absent while
+        // it was still on screen.
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        // RNTL's default queries skip elements hidden from accessibility, and
-        // this mark deliberately is. Without the flag the failure reads as "not
-        // rendered", which sends you looking in the wrong place.
-        expect(screen.getByTestId("recipe-card-contactless",
-                                  {includeHiddenElements: true})).toBeTruthy();
-    });
-
-    it("keeps the contactless mark when the coffee marker is hidden", async () => {
-        // The two live in the same top-right cluster, and the setting in
-        // sub-project 6 is about the beverage word only. Hiding one must not
-        // take the other with it.
-        await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        showCoffeeMarker={false}/>
-        );
-        expect(screen.queryByText("COFFEE")).toBeNull();
-        expect(screen.getByTestId("recipe-card-contactless",
-                                  {includeHiddenElements: true})).toBeTruthy();
+        expect(screen.queryByTestId("recipe-card-contactless",
+                                    {includeHiddenElements: true})).toBeNull();
     });
 
     it("keeps the profile a faint watermark without dimming it below AA", async () => {
@@ -312,8 +346,6 @@ describe("RecipeCard", () => {
         // the colour suite validates stops being the ratio that renders: at 0.5
         // the stroke measured 2.72:1 on Blossom against a 3:1 requirement.
         expect(style.opacity ?? 1).toBe(1);
-        expect(style.right).toBe(0);
-        expect(style.bottom).toBe(0);
 
         for (const accent of [...accents.coffee, ...accents.tea]) {
             expect(contrast(onAccent.profileStroke, accent))
@@ -491,6 +523,51 @@ describe("RecipeCard", () => {
         expect(duplicate.props.hitSlop).toBeUndefined();
         expect(style.paddingTop * 2 + 18).toBeGreaterThanOrEqual(44);
         expect(style.paddingLeft * 2 + 18).toBeGreaterThanOrEqual(44);
+    });
+
+    it("draws the row actions as dot glyphs rather than vector icons", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        // A dot icon is exactly as many nodes as its bitmap has lit cells, so
+        // this fails both if the glyph reverts to a vector icon and if the two
+        // are wired to the wrong bitmaps.
+        // The glyphs are hidden from the accessibility tree on purpose -- the
+        // pressable around each one is the single element a screen reader sees.
+        const dots = (testID: string) =>
+            within(screen.getByTestId(testID, {includeHiddenElements: true}))
+                .getAllByTestId("dot-icon-dot", {includeHiddenElements: true});
+
+        expect(dots("recipe-card-duplicate"))
+            .toHaveLength(litCells(DOT_ICONS.duplicate).length);
+        expect(dots("recipe-card-delete"))
+            .toHaveLength(litCells(DOT_ICONS.delete).length);
+    });
+
+    it("inks duplicate and delete in their own tones", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        expect(dotColourOf("recipe-card-duplicate")).toBe(palette.success);
+        expect(dotColourOf("recipe-card-delete")).toBe(palette.danger);
+    });
+
+    it("sits each glyph in a key cut from the card", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDuplicate={jest.fn()} onDelete={jest.fn()} editing/>
+        );
+
+        // Without the key the glyph is drawn straight onto the accent, which is
+        // what left it short of contrast and reading as decoration rather than
+        // as something pressable.
+        const style = screen.getByRole("button", {name: "Delete recipe"})
+            .props.style as {backgroundColor?: string};
+        expect(style.backgroundColor).toBe(onAccent.key);
     });
 
     it("duplicates from the row actions too", async () => {

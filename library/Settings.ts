@@ -12,7 +12,14 @@ export const DEFAULTS = {
      * The `TEA` marker is always shown; `COFFEE` is redundant in a mostly-coffee
      * library, so it can be turned off.
      */
-    showCoffeeMarker: true
+    showCoffeeMarker: true,
+    /**
+     * Fill the pour profile with a screen of dots instead of a flat tint.
+     *
+     * Off by default: the two read differently at card size and which is better
+     * is a matter of taste, so the quieter one is what arrives unasked for.
+     */
+    dotMatrixProfile: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -70,10 +77,33 @@ export class SqliteSettingsStorage implements SettingsStorage {
 
 export class Settings {
     private storage: SettingsStorage;
+    private listeners = new Set<() => void>();
 
     constructor(storage: SettingsStorage = new SqliteSettingsStorage()) {
         this.storage = storage;
     }
+
+    /**
+     * Watch for changes to any setting.
+     *
+     * A bound property rather than a method so its identity is stable per
+     * store: `useSyncExternalStore` re-subscribes whenever the function it is
+     * given changes, which for a method reference recreated each render would
+     * be every render.
+     *
+     * Deliberately not per-key. There is one setting today and a handful
+     * foreseen, so every reader re-reading its own key on any change is
+     * cheaper than the bookkeeping to avoid it — `get` is a single indexed
+     * SELECT.
+     *
+     * @returns The unsubscribe function.
+     */
+    public subscribe = (listener: () => void): (() => void) => {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    };
 
     public get<K extends SettingKey>(key: K): SettingValue<K> {
         const raw = this.storage.read(key);
@@ -103,5 +133,10 @@ export class Settings {
 
     public set<K extends SettingKey>(key: K, value: SettingValue<K>): void {
         this.storage.write(key, JSON.stringify(value));
+        // After the write, never before: a listener that re-reads the store
+        // must not be able to observe the old value.
+        for (const listener of this.listeners) {
+            listener();
+        }
     }
 }

@@ -1,5 +1,5 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {screen, within} from "@testing-library/react-native";
 
 import PourProfile, {buildProfilePath} from "@/components/PourProfile";
 import Pour from "@/library/Pour";
@@ -99,5 +99,75 @@ describe("PourProfile", () => {
         // than passing the string through.
         const {minX, minY, vbWidth, vbHeight} = screen.getByTestId("pp").props;
         expect([minX, minY, vbWidth, vbHeight]).toEqual([-1, -1, 102, 42]);
+    });
+
+    it("sizes itself to that padded viewBox, so nothing is letterboxed", async () => {
+        // An SVG whose element aspect differs from its viewBox aspect is fitted
+        // inside it and centred. Padding only the viewBox made the two differ,
+        // and the drawing was inset by a couple of points on the left and right
+        // while filling the height exactly -- which read as asymmetric padding.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}
+                         strokeWidth={2}/>
+        );
+        const svg = screen.getByTestId("pp");
+        expect([svg.props.width, svg.props.height]).toEqual([102, 42]);
+    });
+
+    it("fills the area with a dot pattern rather than a flat wash", async () => {
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
+        );
+        const filled = within(screen.getByTestId("pp")).getByTestId("profile-fill");
+
+        // react-native-svg resolves a url() reference into the id it names
+        // rather than passing the string through.
+        const fill = filled.props.fill as {brushRef?: string};
+        expect(fill.brushRef).toBe(`${filled.props.clipPath}`.replace("clip", "dots"));
+    });
+
+    it("staggers every other row, so the fill reads as a screen", async () => {
+        // A square grid reads as a page of holes. Offsetting alternate rows by
+        // half a cell is what makes it a dot matrix.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
+        );
+        const dots = within(screen.getByTestId("pp")).getAllByTestId("profile-dot");
+
+        expect(dots).toHaveLength(2);
+        expect(Number(dots[1].props.cx) - Number(dots[0].props.cx))
+            .toBe(Number(dots[1].props.cy) - Number(dots[0].props.cy));
+        expect(Number(dots[1].props.cx)).toBeGreaterThan(Number(dots[0].props.cx));
+    });
+
+    it("gives each profile its own pattern, so two cards cannot share one", async () => {
+        // SVG ids are resolved document-wide. A list of cards all referring to
+        // "#profile" would leave every one of them at the mercy of whichever
+        // mounted last.
+        const first = await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
+        );
+        const second = await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
+        );
+
+        const brushOf = (utils: typeof first) =>
+            (within(utils.getByTestId("pp")).getByTestId("profile-fill")
+                .props.fill as {brushRef: string}).brushRef;
+
+        expect(brushOf(first)).not.toBe(brushOf(second));
+    });
+
+    it("fills flat unless the dot screen is asked for", async () => {
+        // The default, and the quieter of the two: the dots are a preference,
+        // and one that has to be turned on.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+        );
+        const svg = within(screen.getByTestId("pp"));
+
+        expect(svg.queryByTestId("profile-fill")).toBeNull();
+        expect(svg.queryByTestId("profile-dot")).toBeNull();
+        expect(svg.getByTestId("profile-wash")).toBeTruthy();
     });
 });

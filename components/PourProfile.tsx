@@ -1,5 +1,5 @@
-import React from "react";
-import Svg, {Path} from "react-native-svg";
+import React, {useId} from "react";
+import Svg, {Circle, ClipPath, Defs, Path, Pattern, Rect} from "react-native-svg";
 
 import type Pour from "@/library/Pour";
 import {onAccent} from "@/constants/colors";
@@ -54,10 +54,37 @@ type Props = {
     width: number;
     height: number;
     stroke?: string;
+    /** The flat fill under the curve, used when `dotted` is false. */
     fill?: string;
+    /** The colour of the dots, used when `dotted` is true. */
+    dot?: string;
+    /** Fill the area with a screen of dots rather than a flat tint. */
+    dotted?: boolean;
     strokeWidth?: number;
     testID?: string;
 };
+
+const PROFILE_STROKE_WIDTH = 1.6;
+
+/**
+ * The cell the fill's dots sit on, and their diameter as a fraction of it.
+ *
+ * The same relationship the icons are drawn with, a little heavier: an icon is
+ * read as a shape, whereas this is read as a surface, and at 0.36 the fill
+ * dissolved into a haze at arm's length.
+ */
+const DOT_CELL = 6;
+const DOT_RATIO = 0.4;
+
+/**
+ * How far the profile's stroke bleeds past its geometry on every side.
+ *
+ * The card offsets the drawing by this so the baseline and the closing plateau
+ * sit on the card's own edges: the profile is a background mark, and a gap
+ * along two edges reads as misalignment rather than as margin. The card clips,
+ * so the outer half of those strokes is simply not drawn.
+ */
+export const PROFILE_BLEED = PROFILE_STROKE_WIDTH / 2;
 
 /**
  * Draws a pour schedule. Knows nothing about cards — the caller supplies the
@@ -69,9 +96,15 @@ export default function PourProfile({
     height,
     stroke = onAccent.profileStroke,
     fill = onAccent.profileFill,
-    strokeWidth = 1.6,
+    dot = onAccent.profileDot,
+    dotted = false,
+    strokeWidth = PROFILE_STROKE_WIDTH,
     testID
 }: Props) {
+    // SVG ids are resolved document-wide, so a fixed one would leave every card
+    // in a list pointing at whichever profile mounted last. The punctuation React
+    // puts in its ids is not valid in an id used from a url() reference.
+    const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const path = buildProfilePath(pours, width, height);
     if (path === "") {
         return null;
@@ -82,12 +115,50 @@ export default function PourProfile({
     // plateau — the two most prominent runs of the mark, which would then render
     // at half the weight of the diagonals. Padding the viewBox by half a stroke
     // fixes that while keeping buildProfilePath and its tests in geometry units.
+    //
+    // The element is grown to match. An SVG whose aspect ratio differs from its
+    // viewBox's is fitted inside it and centred, so padding the viewBox alone
+    // inset the drawing horizontally while it still filled the height.
     const bleed = strokeWidth / 2;
     const viewBox = [-bleed, -bleed, width + strokeWidth, height + strokeWidth].join(" ");
 
+    const area = `${path} L${round(width)} ${round(height)} Z`;
+    const radius = (DOT_CELL * DOT_RATIO) / 2;
+
+    if (!dotted) {
+        return (
+            <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}
+                 viewBox={viewBox}>
+                <Path testID="profile-wash" d={area} fill={fill}/>
+                <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
+                      strokeLinejoin="round"/>
+            </Svg>
+        );
+    }
+
     return (
-        <Svg testID={testID} width={width} height={height} viewBox={viewBox}>
-            <Path d={`${path} L${round(width)} ${round(height)} Z`} fill={fill}/>
+        <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}
+             viewBox={viewBox}>
+            <Defs>
+                <ClipPath id={`${id}clip`}>
+                    <Path d={area}/>
+                </ClipPath>
+                {/* Alternate rows are offset by half a cell. A square grid reads
+                    as a page of holes; the stagger is what makes it a screen. */}
+                <Pattern id={`${id}dots`} width={DOT_CELL} height={DOT_CELL}
+                         patternUnits="userSpaceOnUse">
+                    <Circle testID="profile-dot" cx={DOT_CELL / 4} cy={DOT_CELL / 4}
+                            r={radius} fill={dot}/>
+                    <Circle testID="profile-dot" cx={(DOT_CELL * 3) / 4}
+                            cy={(DOT_CELL * 3) / 4} r={radius} fill={dot}/>
+                </Pattern>
+            </Defs>
+            {/* The pattern is painted over the whole plane and cut to the area,
+                rather than tiled from its corner, so the dots line up between
+                one card and the next instead of shifting with the shape. */}
+            <Rect testID="profile-fill" x={-bleed} y={-bleed}
+                  width={width + strokeWidth} height={height + strokeWidth}
+                  fill={`url(#${id}dots)`} clipPath={`url(#${id}clip)`}/>
             <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
                   strokeLinejoin="round"/>
         </Svg>

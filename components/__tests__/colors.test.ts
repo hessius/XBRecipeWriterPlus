@@ -1,5 +1,5 @@
 import {accents, onAccent, palette} from "@/constants/colors";
-import {contrast} from "@/test-utils/contrast";
+import {contrast, over} from "@/test-utils/contrast";
 
 const everyAccent = [...accents.coffee, ...accents.tea];
 
@@ -38,6 +38,40 @@ describe("accent inks", () => {
     it.each(everyAccent)("draws the pour profile stroke visibly on %s", (accent) => {
         // A stroke is a graphical object, which AA holds to 3:1.
         expect(contrast(onAccent.profileStroke, accent)).toBeGreaterThanOrEqual(3);
+    });
+});
+
+describe("the action key on an accent card", () => {
+    // The key is a translucent black well punched into the accent, and the tone
+    // ink is drawn on top of it. Two composites deep, so neither ratio can be
+    // reasoned about from the palette alone.
+    it.each(everyAccent)("takes the duplicate ink on %s", (accent) => {
+        expect(contrast(palette.success, over(onAccent.key, accent)))
+            .toBeGreaterThanOrEqual(3);
+    });
+
+    it.each(everyAccent)("takes the delete ink on %s", (accent) => {
+        expect(contrast(palette.danger, over(onAccent.key, accent)))
+            .toBeGreaterThanOrEqual(3);
+    });
+
+    it.each(everyAccent)("stays distinguishable from the accent itself on %s", (accent) => {
+        // A key that matched the card would leave the glyph floating with no
+        // suggestion that it is a separate, pressable thing.
+        expect(contrast(onAccent.key, accent)).toBeGreaterThanOrEqual(3);
+    });
+});
+
+describe("the row actions revealed by a swipe", () => {
+    // Colour appears here only as ink: the tile is the app's own surface. The
+    // caption is 10 px Doto, which is small text and held to 4.5:1 — the glyph
+    // beside it would pass at 3:1 and the caption would not.
+    it("carries the duplicate caption on the tile", () => {
+        expect(contrast(palette.success, palette.surface)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("carries the delete caption on the tile", () => {
+        expect(contrast(palette.danger, palette.surface)).toBeGreaterThanOrEqual(4.5);
     });
 });
 
