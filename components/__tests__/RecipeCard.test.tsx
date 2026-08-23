@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
+import {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import {accents, onAccent, palette} from "@/constants/colors";
@@ -216,6 +217,20 @@ describe("RecipeCard", () => {
         );
     });
 
+    it("runs the profile out to the card's own edges", async () => {
+        // The mark is a background, so a gap along the bottom and right reads as
+        // misalignment. It is offset by the stroke's bleed and the card clips,
+        // which puts the baseline and the closing plateau on the edges exactly.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        const layer = screen.getByTestId("recipe-card-profile").parent!;
+        expect(layer.props.style).toEqual(expect.objectContaining({
+            right:  -PROFILE_BLEED,
+            bottom: -PROFILE_BLEED
+        }));
+    });
+
     it("shows the grind for coffee and hides it for tea", async () => {
         // A tea card always writes the default grind, so showing a grind number
         // beside it would be a number the machine ignores.
@@ -316,8 +331,6 @@ describe("RecipeCard", () => {
         // the colour suite validates stops being the ratio that renders: at 0.5
         // the stroke measured 2.72:1 on Blossom against a 3:1 requirement.
         expect(style.opacity ?? 1).toBe(1);
-        expect(style.right).toBe(0);
-        expect(style.bottom).toBe(0);
 
         for (const accent of [...accents.coffee, ...accents.tea]) {
             expect(contrast(onAccent.profileStroke, accent))

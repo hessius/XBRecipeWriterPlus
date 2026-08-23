@@ -59,6 +59,18 @@ type Props = {
     testID?: string;
 };
 
+const PROFILE_STROKE_WIDTH = 1.6;
+
+/**
+ * How far the profile's stroke bleeds past its geometry on every side.
+ *
+ * The card offsets the drawing by this so the baseline and the closing plateau
+ * sit on the card's own edges: the profile is a background mark, and a gap
+ * along two edges reads as misalignment rather than as margin. The card clips,
+ * so the outer half of those strokes is simply not drawn.
+ */
+export const PROFILE_BLEED = PROFILE_STROKE_WIDTH / 2;
+
 /**
  * Draws a pour schedule. Knows nothing about cards — the caller supplies the
  * colours, so the same component serves an accent-filled card and a dark row.
@@ -69,7 +81,7 @@ export default function PourProfile({
     height,
     stroke = onAccent.profileStroke,
     fill = onAccent.profileFill,
-    strokeWidth = 1.6,
+    strokeWidth = PROFILE_STROKE_WIDTH,
     testID
 }: Props) {
     const path = buildProfilePath(pours, width, height);
@@ -82,11 +94,16 @@ export default function PourProfile({
     // plateau — the two most prominent runs of the mark, which would then render
     // at half the weight of the diagonals. Padding the viewBox by half a stroke
     // fixes that while keeping buildProfilePath and its tests in geometry units.
+    //
+    // The element is grown to match. An SVG whose aspect ratio differs from its
+    // viewBox's is fitted inside it and centred, so padding the viewBox alone
+    // inset the drawing horizontally while it still filled the height.
     const bleed = strokeWidth / 2;
     const viewBox = [-bleed, -bleed, width + strokeWidth, height + strokeWidth].join(" ");
 
     return (
-        <Svg testID={testID} width={width} height={height} viewBox={viewBox}>
+        <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}
+             viewBox={viewBox}>
             <Path d={`${path} L${round(width)} ${round(height)} Z`} fill={fill}/>
             <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
                   strokeLinejoin="round"/>

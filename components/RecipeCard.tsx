@@ -5,7 +5,7 @@ import {XStack, YStack, Text} from "tamagui";
 import DigitRoll from "@/components/DigitRoll";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
-import PourProfile from "@/components/PourProfile";
+import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {onAccent, palette} from "@/constants/colors";
@@ -177,7 +177,7 @@ export default function RecipeCard({
             style={{backgroundColor: accent}}>
 
             <View pointerEvents="none"
-                  style={{position: "absolute", right: 0, bottom: 0}}>
+                  style={{position: "absolute", right: -PROFILE_BLEED, bottom: -PROFILE_BLEED}}>
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
                              width={200} height={PROFILE_HEIGHT}/>
             </View>

@@ -100,4 +100,17 @@ describe("PourProfile", () => {
         const {minX, minY, vbWidth, vbHeight} = screen.getByTestId("pp").props;
         expect([minX, minY, vbWidth, vbHeight]).toEqual([-1, -1, 102, 42]);
     });
+
+    it("sizes itself to that padded viewBox, so nothing is letterboxed", async () => {
+        // An SVG whose element aspect differs from its viewBox aspect is fitted
+        // inside it and centred. Padding only the viewBox made the two differ,
+        // and the drawing was inset by a couple of points on the left and right
+        // while filling the height exactly -- which read as asymmetric padding.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}
+                         strokeWidth={2}/>
+        );
+        const svg = screen.getByTestId("pp");
+        expect([svg.props.width, svg.props.height]).toEqual([102, 42]);
+    });
 });
