@@ -12,6 +12,7 @@ function stage(volume = 96, temperature = 93): Pour {
     pour.flowRate = 3.2;
     pour.pauseTime = 30;
     pour.pourPattern = POUR_PATTERN.SPIRAL;
+    pour.agitation = 0;
     return pour;
 }
 
@@ -77,6 +78,22 @@ describe("StageTile", () => {
         await fireEvent.press(screen.getByLabelText("Increase Temperature"));
 
         expect(onChange).toHaveBeenCalledWith(2, "temperature", 94);
+    });
+
+    it("agitates before and after independently", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <StageTile pour={stage()} index={0} count={3} open
+                       accent="#F0B98E" isTea={false} {...NOOP} onChange={onChange}/>
+        );
+
+        expect(screen.getByText("Agitation")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Agitate before"));
+        expect(onChange).toHaveBeenCalledWith(0, "agitationBefore", 1);
+
+        await fireEvent.press(screen.getByLabelText("Agitate after"));
+        expect(onChange).toHaveBeenCalledWith(0, "agitationAfter", 1);
     });
 
     it("hides agitation for tea, which has none", async () => {

@@ -117,22 +117,23 @@ export default function StageTile({
                                  onChange={(v) => onChange(index, "pourPattern", Number(v))}/>
 
                     {!isTea && (
-                        <XStack gap="$2">
-                            <StageChoice label="Agitation" accent={accent}
-                                         value={pour.getAgitationBefore() ? "1" : "0"}
-                                         options={[
-                                             {value: "1", label: "BEFORE"},
-                                             {value: "0", label: "NO BEFORE"}
-                                         ]}
-                                         onChange={(v) => onChange(index, "agitationBefore", Number(v))}/>
-                            <StageChoice label="" accent={accent}
-                                         value={pour.getAgitationAfter() ? "1" : "0"}
-                                         options={[
-                                             {value: "1", label: "AFTER"},
-                                             {value: "0", label: "NO AFTER"}
-                                         ]}
-                                         onChange={(v) => onChange(index, "agitationAfter", Number(v))}/>
-                        </XStack>
+                        <StageToggles label="Agitation" accent={accent}
+                                      toggles={[
+                                          {
+                                              label: "BEFORE",
+                                              spoken: "Agitate before",
+                                              on:     pour.getAgitationBefore(),
+                                              onPress: (on) =>
+                                                  onChange(index, "agitationBefore", on ? 1 : 0)
+                                          },
+                                          {
+                                              label: "AFTER",
+                                              spoken: "Agitate after",
+                                              on:     pour.getAgitationAfter(),
+                                              onPress: (on) =>
+                                                  onChange(index, "agitationAfter", on ? 1 : 0)
+                                          }
+                                      ]}/>
                     )}
 
                     {count > 1 && (
@@ -210,6 +211,55 @@ function StageChoice({label, value, accent, options, onChange}: StageChoiceProps
                         </Pressable>
                     );
                 })}
+            </XStack>
+        </XStack>
+    );
+}
+
+
+type StageTogglesProps = {
+    label: string;
+    accent: string;
+    toggles: readonly {
+        label: string;
+        /** What a screen reader says. The chip itself is one word. */
+        spoken: string;
+        on: boolean;
+        onPress: (on: boolean) => void;
+    }[];
+};
+
+/**
+ * Independent on-off chips under one label.
+ *
+ * Agitation before and agitation after are two separate switches, not one
+ * choice between them, so they are checkboxes rather than a radio group. Drawn
+ * first as two adjacent two-option groups — BEFORE / NO BEFORE beside AFTER /
+ * NO AFTER, the second with no label of its own — which needed reading twice to
+ * work out that the right-hand pair was a second question.
+ */
+function StageToggles({label, accent, toggles}: StageTogglesProps) {
+    return (
+        <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
+            <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
+                  color={palette.muted}>
+                {label}
+            </Text>
+            <XStack gap={2}>
+                {toggles.map((toggle) => (
+                    <Pressable key={toggle.label} accessibilityRole="checkbox"
+                               accessibilityLabel={toggle.spoken}
+                               accessibilityState={{checked: toggle.on}}
+                               onPress={() => toggle.onPress(!toggle.on)}>
+                        <Text fontSize={10.5} fontWeight="600"
+                              paddingHorizontal="$2" paddingVertical="$1"
+                              borderRadius="$2"
+                              backgroundColor={toggle.on ? accent : palette.raised}
+                              color={toggle.on ? palette.base : palette.dim}>
+                            {toggle.label}
+                        </Text>
+                    </Pressable>
+                ))}
             </XStack>
         </XStack>
     );
