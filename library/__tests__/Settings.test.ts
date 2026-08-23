@@ -62,4 +62,15 @@ describe("Settings", () => {
         // preference like that belongs off by default.
         expect(new Settings(fakeStorage()).get("dotMatrixProfile")).toBe(false);
     });
+
+    it("defaults the help style to the explain mode", () => {
+        const settings = new Settings(fakeStorage());
+        expect(settings.get("helpStyle")).toBe("explain");
+    });
+
+    it("remembers a chosen help style", () => {
+        const settings = new Settings(fakeStorage());
+        settings.set("helpStyle", "markers");
+        expect(settings.get("helpStyle")).toBe("markers");
+    });
 });

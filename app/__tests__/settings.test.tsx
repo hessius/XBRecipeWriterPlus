@@ -55,4 +55,25 @@ describe("SettingsScreen", () => {
 
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
+
+    it("offers both help styles and marks the stored one", async () => {
+        const settings = new Settings(memoryStorage());
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        const explain = screen.getByRole("radio", {name: "Explain mode"});
+        const markers = screen.getByRole("radio", {name: "A marker per field"});
+
+        expect(explain.props.accessibilityState.checked).toBe(true);
+        expect(markers.props.accessibilityState.checked).toBe(false);
+    });
+
+    it("writes the chosen help style through to the store", async () => {
+        const storage = memoryStorage();
+        const settings = new Settings(storage);
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        await fireEvent.press(screen.getByRole("radio", {name: "A marker per field"}));
+
+        expect(new Settings(storage).get("helpStyle")).toBe("markers");
+    });
 });

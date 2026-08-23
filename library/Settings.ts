@@ -19,7 +19,16 @@ export const DEFAULTS = {
      * Off by default: the two read differently at card size and which is better
      * is a matter of taste, so the quieter one is what arrives unasked for.
      */
-    dotMatrixProfile: false
+    dotMatrixProfile: false,
+    /**
+     * How the long-form field explanations are delivered.
+     *
+     * Two modes ship because which reads better is a question a mockup cannot
+     * answer. `explain` is the default: its resting state is the calmer of the
+     * two, and one visible control is more discoverable than a marker beside
+     * every label. Expected to resolve to one mode after device testing.
+     */
+    helpStyle: "explain"
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -139,4 +148,24 @@ export class Settings {
             listener();
         }
     }
+}
+
+/** The two help deliveries. */
+export const HELP_STYLES = ["explain", "markers"] as const;
+
+export type HelpStyle = (typeof HELP_STYLES)[number];
+
+/**
+ * Narrow a stored setting back to a `HelpStyle`.
+ *
+ * `SettingValue` widens a string default to `string`, which is right for the
+ * store — it must accept whatever is in the database — and wrong for a consumer
+ * that has exactly two branches. Anything unrecognised falls back to the
+ * default rather than throwing: a bad row in SQLite should not take the screen
+ * down.
+ */
+export function asHelpStyle(value: string): HelpStyle {
+    return (HELP_STYLES as readonly string[]).includes(value)
+        ? (value as HelpStyle)
+        : "explain";
 }

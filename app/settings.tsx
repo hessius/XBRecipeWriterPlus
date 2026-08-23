@@ -4,7 +4,7 @@ import {ScrollView, Switch, Text, XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
-import type {Settings} from "@/library/Settings";
+import {asHelpStyle, type Settings} from "@/library/Settings";
 
 type Props = {
     /** Injected by tests. The route renders with the shared store. */
@@ -36,6 +36,49 @@ function ToggleRow({label, description, value, onChange}: RowProps) {
     );
 }
 
+type ChoiceRowProps<T extends string> = {
+    label: string;
+    description: string;
+    value: T;
+    options: readonly { value: T; label: string; description: string }[];
+    onChange: (value: T) => void;
+};
+
+/**
+ * A setting with more than two states.
+ *
+ * A radio group rather than a segmented control: the options carry a line of
+ * explanation each, which a segment has nowhere to put.
+ */
+function ChoiceRow<T extends string>({label, description, value, options, onChange}: ChoiceRowProps<T>) {
+    return (
+        <YStack gap="$2" paddingVertical="$3">
+            <YStack gap="$1">
+                <Text fontSize={16} color={palette.text}>{label}</Text>
+                <Text fontSize={13} color={palette.dim}>{description}</Text>
+            </YStack>
+            <YStack accessibilityRole="radiogroup" gap="$2" paddingTop="$1">
+                {options.map((option) => (
+                    <XStack key={option.value} accessible accessibilityRole="radio"
+                            accessibilityLabel={option.label}
+                            accessibilityState={{checked: option.value === value}}
+                            onPress={() => onChange(option.value)}
+                            alignItems="center" gap="$3"
+                            backgroundColor={palette.raised} borderRadius="$4"
+                            padding="$3"
+                            borderWidth={1}
+                            borderColor={option.value === value ? palette.text : palette.line}>
+                        <YStack flex={1} gap="$1">
+                            <Text fontSize={15} color={palette.text}>{option.label}</Text>
+                            <Text fontSize={12} color={palette.dim}>{option.description}</Text>
+                        </YStack>
+                    </XStack>
+                ))}
+            </YStack>
+        </YStack>
+    );
+}
+
 /**
  * The settings screen.
  *
@@ -48,6 +91,7 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
+    const [helpStyle, setHelpStyle] = useSetting("helpStyle", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -66,6 +110,29 @@ export default function SettingsScreen({settings}: Props) {
                     description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                     value={dotMatrixProfile}
                     onChange={setDotMatrixProfile}/>
+            </YStack>
+            <YStack gap="$2" paddingTop="$4">
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    EDITOR
+                </DotMatrixText>
+                <ChoiceRow
+                    label="Field explanations"
+                    description="Where the longer notes about a field live."
+                    value={asHelpStyle(helpStyle)}
+                    options={[
+                        {
+                            value:       "explain",
+                            label:       "Explain mode",
+                            description: "One switch in the header unfolds every note at once."
+                        },
+                        {
+                            value:       "markers",
+                            label:       "A marker per field",
+                            description: "A dot beside each label with more to say."
+                        }
+                    ]}
+                    onChange={setHelpStyle}/>
             </YStack>
         </ScrollView>
     );
