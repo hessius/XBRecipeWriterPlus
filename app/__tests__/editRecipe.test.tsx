@@ -36,12 +36,13 @@ jest.mock("@/library/NFC", () => ({
 
 const mockSetOptions = jest.fn();
 
-/** 18 g at 1:16 over two pours of 144: 288 ml, in balance. */
+/** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
     const r = new Recipe();
     r.dosage = 18;
     r.ratio = 16;
     r.addPour(0, false);
+    r.addPour(0);
     r.addPour(0);
     r.autoFixPourVolumes();
     return r;
@@ -145,5 +146,78 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Duplicate")).toBeTruthy();
         expect(screen.getByLabelText("Revert")).toBeTruthy();
+    });
+});
+
+describe("the stages deck", () => {
+    it("switches decks without leaving the screen", async () => {
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        expect(screen.getByTestId("stage-profile")).toBeTruthy();
+        // `FieldRow` uppercases with `textTransform`, which is a style — the
+        // text content stays as `RECIPE_HELP` holds it.
+        expect(screen.queryByText("Grind size")).toBeNull();
+    });
+
+    it("counts the stages on the switch", async () => {
+        await renderEditor();
+
+        // `DeckSwitch` draws the count into its chrome: `STAGES · ${stageCount}`.
+        // `toHaveTextContent` defaults to an exact, whitespace-normalised match,
+        // so the assertion is the full label rather than the bare digit.
+        expect(screen.getByLabelText("Stages, 3")).toHaveTextContent("STAGES · 3");
+    });
+
+    it("opens one stage at a time", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 3"));
+        expect(screen.getByLabelText("Stage 1 of 3").props.accessibilityState.expanded)
+            .toBe(true);
+
+        await fireEvent.press(screen.getByLabelText("Stage 2 of 3"));
+        expect(screen.getByLabelText("Stage 1 of 3").props.accessibilityState.expanded)
+            .toBe(false);
+    });
+
+    it("explains a mismatch and offers to fix it", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 3"));
+
+        await fireEvent.press(screen.getByLabelText("Decrease Stage volume"));
+
+        expect(screen.getByTestId("stage-mismatch")).toBeTruthy();
+        expect(screen.getByLabelText("Auto fix")).toBeTruthy();
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled)
+            .toBe(true);
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled)
+            .toBe(false);
+    });
+
+    it("clears the mismatch when auto fix is taken", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 3"));
+        await fireEvent.press(screen.getByLabelText("Decrease Stage volume"));
+
+        await fireEvent.press(screen.getByLabelText("Auto fix"));
+
+        expect(screen.queryByTestId("stage-mismatch")).toBeNull();
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled)
+            .toBe(false);
+    });
+
+    it("adds a stage", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        await fireEvent.press(screen.getByLabelText("Add stage"));
+
+        expect(screen.getByLabelText("Stage 4 of 4")).toBeTruthy();
+        expect(screen.getByLabelText("Stages, 4")).toBeTruthy();
     });
 });

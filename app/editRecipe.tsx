@@ -1,8 +1,9 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable} from "react-native";
+import {Pressable, useWindowDimensions} from "react-native";
 import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
 
+import Collapsible from "@/components/Collapsible";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -13,10 +14,13 @@ import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import RevertSheet from "@/components/RevertSheet";
 import SegmentedRow from "@/components/SegmentedRow";
+import StageProfile from "@/components/StageProfile";
+import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
 import {palette} from "@/constants/colors";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
+import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
@@ -176,23 +180,115 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
     );
 }
 
+type StagesDeckProps = {
+    recipe: Recipe;
+    balance: {poured: number; target: number; balanced: boolean};
+    accent: string;
+    isTea: boolean;
+    /** The open stage's index, or null. Held by the screen, not the tile. */
+    openStage: number | null;
+    setOpenStage: (value: number | null) => void;
+    editStage: (index: number, field: StageField, value: number) => void;
+    addPour: (pourNumber: number) => void;
+    deletePour: (pourNumber: number) => void;
+    autoAdjustPourVolumes: () => void;
+};
+
 /**
- * The STAGES deck lands in the next step (Task 15) together with the collapsing
- * hero. Until then this is an honest placeholder so the deck switch has
- * somewhere to send you, rather than a half-built editor that could write a
- * stage wrong.
+ * The whole brew as one shape, with a stage opening in place underneath it.
+ *
+ * There is no pager. The pours used to be a horizontal pager nested inside the
+ * vertical scroll and the two fought each other; here the stages are a plain
+ * vertical run and the profile above them draws the brew as a single curve
+ * against its target line.
+ *
+ * Which stage is open lives on the screen, not on the tile: one at a time, so
+ * the profile has a single band to highlight, and a tile that owned its own
+ * state would let three open at once.
+ *
+ * Module scope, so it is a stable component type across the screen's renders.
  */
-function StagesPlaceholder({stageCount}: {stageCount: number}) {
+function StagesDeck({
+    recipe, balance, accent, isTea, openStage, setOpenStage,
+    editStage, addPour, deletePour, autoAdjustPourVolumes
+}: StagesDeckProps) {
+    // The profile is drawn into an SVG of a fixed pixel size, so it has to be
+    // told how wide the screen is. `16` of screen padding either side and `$3`
+    // inside the card is 64 points in total.
+    const {width} = useWindowDimensions();
+
+    // Adding a fourth tea stage is refused by the hook with a toast; the tile is
+    // dimmed by swapping its colours, never by dropping the group's opacity —
+    // opacity multiplies with what is beneath and has produced a contrast defect
+    // in this sub-project before.
+    const addDisabled = isTea && recipe.pours.length >= 3;
+
     return (
-        <YStack testID="stages-placeholder" marginTop="$3" padding="$6"
-                alignItems="center" gap="$2" backgroundColor={palette.surface}
-                borderRadius="$5">
-            <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6} color={palette.dim}>
-                {`STAGES · ${stageCount}`}
-            </DotMatrixText>
-            <Text fontSize={12} color={palette.muted} textAlign="center">
-                The stage editor is not built yet.
-            </Text>
+        <YStack marginTop="$3">
+            <YStack backgroundColor={palette.surface} borderRadius="$5" padding="$3">
+                <StageProfile testID="stage-profile" pours={recipe.pours}
+                              target={balance.target} accent={accent}
+                              width={width - 64} height={92}
+                              selected={openStage ?? undefined}/>
+            </YStack>
+
+            {!balance.balanced && (
+                <XStack testID="stage-mismatch" alignItems="center" gap="$2.5"
+                        marginTop="$2.5" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.danger}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.danger}>
+                            {`${balance.poured} OF ${balance.target} ML`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            The machine rejects a recipe whose stages do not add up to
+                            the dose times the ratio.
+                        </Text>
+                    </YStack>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Auto fix"
+                               onPress={autoAdjustPourVolumes}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={accent}>
+                            AUTO FIX
+                        </DotMatrixText>
+                    </Pressable>
+                </XStack>
+            )}
+
+            {recipe.pours.map((pour, index) => (
+                <StageTile key={index} pour={pour} index={index}
+                           count={recipe.pours.length}
+                           open={openStage === index} accent={accent} isTea={isTea}
+                           onToggle={(i) => setOpenStage(openStage === i ? null : i)}
+                           onChange={editStage}
+                           onDelete={(i) => {
+                               // Close first, or `openStage` would point past
+                               // the end of the shortened list.
+                               setOpenStage(null);
+                               deletePour(i);
+                           }}/>
+            ))}
+
+            <Pressable accessibilityRole="button" accessibilityLabel="Add stage"
+                       accessibilityState={{disabled: addDisabled}}
+                       disabled={addDisabled}
+                       onPress={() => {
+                           // `Recipe.addPour(n)` copies `pours[n]` and splices
+                           // in after it, so appending is the last index.
+                           if (!addDisabled) addPour(recipe.pours.length - 1);
+                       }}>
+                <XStack alignItems="center" justifyContent="center" gap="$2"
+                        marginTop="$2.5" paddingVertical="$3.5" borderRadius="$5"
+                        borderWidth={1} borderColor={addDisabled ? palette.line : accent}
+                        borderStyle="dashed">
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.8}
+                                   color={addDisabled ? palette.dim : accent}>
+                        + ADD STAGE
+                    </DotMatrixText>
+                </XStack>
+            </Pressable>
         </YStack>
     );
 }
@@ -267,13 +363,17 @@ export default function EditRecipe() {
     const helpStyle = asHelpStyle(helpStyleRaw);
 
     const [deck, setDeck] = useState<Deck>("brew");
+    const [openStage, setOpenStage] = useState<number | null>(null);
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
 
+    const {collapsed, onScroll} = useCollapsibleHeader();
+
     const {
         recipe, key, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError
+        bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
+        editStage, addPour, deletePour, autoAdjustPourVolumes
     } = useRecipeEditor({
         recipeJSON:           recipeJSON as string | undefined,
         initiallySaveEnabled: saveEnabled === "true",
@@ -320,10 +420,19 @@ export default function EditRecipe() {
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
-            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 120}}>
-                <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
-                            xid={recipe.xid} accent={accent}
-                            beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
+            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 120}}
+                        onScroll={onScroll} scrollEventThrottle={16}>
+                {/* The hero collapses on scroll. It stays mounted and animates
+                    its height rather than unmounting: a subtree that has left
+                    layout cannot animate away, and whatever sits below it would
+                    snap up in one frame. The two-threshold hysteresis in
+                    `useCollapsibleHeader` is what keeps it from strobing when
+                    the list rests near the threshold. */}
+                <Collapsible open={!collapsed}>
+                    <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
+                                xid={recipe.xid} accent={accent}
+                                beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
+                </Collapsible>
 
                 {/* The tea banner is Task 16. */}
 
@@ -340,7 +449,11 @@ export default function EditRecipe() {
                               helpStyle={helpStyle} explaining={explaining}
                               onHelp={setHelpTopic} dispatch={dispatch}/>
                 ) : (
-                    <StagesPlaceholder stageCount={recipe.pours.length}/>
+                    <StagesDeck key={key} recipe={recipe} balance={balance} accent={accent}
+                                isTea={recipe.isTea()} openStage={openStage}
+                                setOpenStage={setOpenStage} editStage={editStage}
+                                addPour={addPour} deletePour={deletePour}
+                                autoAdjustPourVolumes={autoAdjustPourVolumes}/>
                 )}
             </ScrollView>
 
