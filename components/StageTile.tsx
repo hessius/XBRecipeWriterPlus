@@ -54,6 +54,15 @@ function runUpTo(index: number, count: number): Pour[] {
 export default function StageTile({
     pour, index, count, open, accent, isTea, onToggle, onChange, onDelete
 }: Props) {
+    "use no memo";
+
+    // These components draw a model that is mutated in place: `pour.getVolume()`
+    // is a method call, not a property read, so the React Compiler cannot see
+    // that the value moved and would serve a cached render. The screen used to
+    // force the redraw with a React `key`, but that remounts, and a remounted
+    // `Stepper` loses the chained timer behind hold-to-repeat after one step —
+    // on a stage volume that ranges to 240 ml, that is the whole feature.
+
     const fact = (value: number | string, unit?: string) => (
         <XStack alignItems="baseline" gap={2}>
             <DotMatrixText fontSize={16} weight="bold" color={palette.text}>

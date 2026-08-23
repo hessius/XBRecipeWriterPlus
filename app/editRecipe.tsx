@@ -93,6 +93,7 @@ function TextFieldRow({
 
 type BrewDeckProps = {
     recipe: Recipe;
+
     accent: string;
     balanceTarget: number;
     helpStyle: HelpStyle;
@@ -113,6 +114,15 @@ type BrewDeckProps = {
  * body is a new type on every render and would remount its whole subtree.
  */
 function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp, dispatch}: BrewDeckProps) {
+    "use no memo";
+
+    // These components draw a model that is mutated in place: `pour.getVolume()`
+    // is a method call, not a property read, so the React Compiler cannot see
+    // that the value moved and would serve a cached render. The screen used to
+    // force the redraw with a React `key`, but that remounts, and a remounted
+    // `Stepper` loses the chained timer behind hold-to-repeat after one step —
+    // on a stage volume that ranges to 240 ml, that is the whole feature.
+
     const isTea = recipe.isTea();
     // Grind size and speed are meaningless with the grinder off, and a tea card
     // always writes the default grind — so those two rows hide in both cases.
@@ -182,6 +192,7 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
 
 type StagesDeckProps = {
     recipe: Recipe;
+
     balance: {poured: number; target: number; balanced: boolean};
     accent: string;
     isTea: boolean;
@@ -212,6 +223,15 @@ function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage,
     editStage, addPour, deletePour, autoAdjustPourVolumes
 }: StagesDeckProps) {
+    "use no memo";
+
+    // These components draw a model that is mutated in place: `pour.getVolume()`
+    // is a method call, not a property read, so the React Compiler cannot see
+    // that the value moved and would serve a cached render. The screen used to
+    // force the redraw with a React `key`, but that remounts, and a remounted
+    // `Stepper` loses the chained timer behind hold-to-repeat after one step —
+    // on a stage volume that ranges to 240 ml, that is the whole feature.
+
     // The profile is drawn into an SVG of a fixed pixel size, so it has to be
     // told how wide the screen is. `16` of screen padding either side and `$3`
     // inside the card is 64 points in total.
@@ -356,6 +376,16 @@ function ActionBar({accent, canWrite, canSave, onWrite, onSave}: ActionBarProps)
  * the stale total (#40).
  */
 export default function EditRecipe() {
+    "use no memo";
+
+    // The screen owns a `Recipe` that every edit mutates in place, and it
+    // publishes those edits by bumping a counter rather than by cloning. The
+    // React Compiler cannot see through that — the recipe's identity never
+    // changes — so it is told not to cache this render or the elements it
+    // builds. Its children that draw the same model opt out for the same
+    // reason. Note that the compiler is off under jest, so no test can catch a
+    // regression here; see `babel-preset-expo` and `app.json`'s experiments.
+
     const {recipeJSON, saveEnabled} = useLocalSearchParams();
     const navigation = useNavigation();
 
@@ -371,7 +401,7 @@ export default function EditRecipe() {
     const {collapsed, onScroll} = useCollapsibleHeader();
 
     const {
-        recipe, key, balance, canWrite, canSave, revertSources,
+        recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
         editStage, addPour, deletePour, autoAdjustPourVolumes
     } = useRecipeEditor({
@@ -445,11 +475,11 @@ export default function EditRecipe() {
                     The key used to sit on the ScrollView, which sent the user
                     back to the top of the screen on every nudge. */}
                 {deck === "brew" ? (
-                    <BrewDeck key={key} recipe={recipe} accent={accent} balanceTarget={balance.target}
+                    <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               helpStyle={helpStyle} explaining={explaining}
                               onHelp={setHelpTopic} dispatch={dispatch}/>
                 ) : (
-                    <StagesDeck key={key} recipe={recipe} balance={balance} accent={accent}
+                    <StagesDeck recipe={recipe} balance={balance} accent={accent}
                                 isTea={recipe.isTea()} openStage={openStage}
                                 setOpenStage={setOpenStage} editStage={editStage}
                                 addPour={addPour} deletePour={deletePour}

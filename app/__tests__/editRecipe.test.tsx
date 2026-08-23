@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet} from "react-native";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -139,6 +139,20 @@ describe("the editor", () => {
         expect(style?.opacity ?? 1).toBe(1);
     });
 
+    it("redraws a value only the deck can see change", async () => {
+        await renderEditor();
+
+        // Grind size starts unset, so the first press is what lands on the
+        // floor of 40. Nothing else on the screen moves with it — no target, no
+        // balance — so this is the value that would go stale if the deck ever
+        // stopped being told the recipe had been edited.
+        await fireEvent.press(screen.getByLabelText("Increase Grind size"));
+        await fireEvent.press(screen.getByLabelText("Increase Grind size"));
+
+        expect(screen.getByLabelText(/^Grind size, /).props.accessibilityLabel)
+            .toBe("Grind size, 41");
+    });
+
     it("puts the rest behind the caret", async () => {
         await renderEditor();
 
@@ -209,6 +223,32 @@ describe("the stages deck", () => {
         expect(screen.queryByTestId("stage-mismatch")).toBeNull();
         expect(screen.getByLabelText("Write card").props.accessibilityState.disabled)
             .toBe(false);
+    });
+
+    it("keeps stepping a stage volume while the button is held", async () => {
+        // A remounted Stepper loses the chained timer behind hold-to-repeat, so
+        // this fails the moment the deck is redrawn by remounting it rather
+        // than re-rendering it — which is exactly what a React `key` on the
+        // deck does. Stage volume runs to 240 ml; tapping there is not an
+        // option.
+        jest.useFakeTimers();
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 3"));
+
+        await fireEvent(screen.getByLabelText("Decrease Stage volume"), "longPress");
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        const afterFirstTick = screen.getByLabelText(/^Stage volume, /).props.accessibilityLabel;
+
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        expect(screen.getByLabelText(/^Stage volume, /).props.accessibilityLabel)
+            .not.toBe(afterFirstTick);
+        jest.useRealTimers();
     });
 
     it("adds a stage", async () => {

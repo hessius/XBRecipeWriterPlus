@@ -58,6 +58,15 @@ type Props = {
 export default function StageProfile({
     pours, target, accent, width, height, selected, testID
 }: Props) {
+    "use no memo";
+
+    // These components draw a model that is mutated in place: `pour.getVolume()`
+    // is a method call, not a property read, so the React Compiler cannot see
+    // that the value moved and would serve a cached render. The screen used to
+    // force the redraw with a React `key`, but that remounts, and a remounted
+    // `Stepper` loses the chained timer behind hold-to-repeat after one step —
+    // on a stage volume that ranges to 240 ml, that is the whole feature.
+
     // SVG ids resolve document-wide, so two profiles on one screen would share
     // a pattern. useId returns punctuation that url() will not take.
     const hatchId = `hatch${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
