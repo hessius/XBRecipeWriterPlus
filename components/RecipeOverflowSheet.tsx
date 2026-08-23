@@ -36,11 +36,16 @@ export default function RecipeOverflowSheet({
         action();
     }
 
+    // A helper, not a component: it is called, never used as a JSX tag, so it
+    // does not become a new type on every render.
     const row = (
         label: string, icon: DotIconName, action: () => void,
-        tone: string = palette.text, testID?: string
+        {tone = palette.text, testID, caption, hint}: {
+            tone?: string; testID?: string; caption?: string; hint?: string;
+        } = {}
     ) => (
         <Pressable accessibilityRole="button" accessibilityLabel={label}
+                   accessibilityHint={hint}
                    onPress={() => pick(action)}>
             <XStack alignItems="center" gap="$3" paddingVertical="$3"
                     paddingHorizontal="$3" backgroundColor={palette.raised}
@@ -48,7 +53,7 @@ export default function RecipeOverflowSheet({
                 <DotIcon name={icon} size={16} color={tone}/>
                 <DotMatrixText testID={testID} fontSize={11} weight="bold"
                                letterSpacing={1.8} color={tone}>
-                    {label.toUpperCase()}
+                    {(caption ?? label).toUpperCase()}
                 </DotMatrixText>
             </XStack>
         </Pressable>
@@ -58,10 +63,25 @@ export default function RecipeOverflowSheet({
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE">
             <YStack gap="$2" paddingBottom="$4">
                 {row("Duplicate", "duplicate", onDuplicate)}
-                {canRefreshName && row("Refresh name from xBloom", "import", onRefreshName)}
+                {/* Spoken in full, but captioned short: the other four rows are
+                    one-word captions, and a sentence set in uppercase Doto
+                    beside them reads as a different kind of thing. */}
+                {canRefreshName && row(
+                    "Refresh name from xBloom", "import", onRefreshName,
+                    {caption: "Refresh name"}
+                )}
                 {row("Revert", "revert", onRevert)}
                 {row("Help", "info", onHelp)}
-                {row("Delete", "delete", onDelete, palette.danger, "overflow-delete-label")}
+                {/* Set apart, because it is the one row here that cannot be
+                    undone and there is no second question after it. */}
+                <YStack marginTop="$2" paddingTop="$2"
+                        borderTopWidth={1} borderTopColor={palette.line}>
+                    {row("Delete", "delete", onDelete, {
+                        tone:   palette.danger,
+                        testID: "overflow-delete-label",
+                        hint:   "Removes this recipe from the app. This cannot be undone."
+                    })}
+                </YStack>
             </YStack>
         </XbrwSheet>
     );

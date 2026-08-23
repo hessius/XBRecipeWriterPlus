@@ -60,4 +60,25 @@ describe("RecipeOverflowSheet", () => {
                 expect.objectContaining({color: palette.danger})
             ]));
     });
+
+    it("speaks the name refresh in full but captions it short", async () => {
+        // The other four captions are one word. A sentence set in uppercase
+        // Doto beside them reads as a different kind of thing.
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
+        );
+
+        expect(screen.getByText("REFRESH NAME")).toBeTruthy();
+        expect(screen.queryByText("REFRESH NAME FROM XBLOOM")).toBeNull();
+    });
+
+    it("says out loud that delete cannot be undone", async () => {
+        // It is the only row here with no second question after it.
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
+        );
+
+        expect(screen.getByLabelText("Delete").props.accessibilityHint)
+            .toMatch(/cannot be undone/);
+    });
 });
