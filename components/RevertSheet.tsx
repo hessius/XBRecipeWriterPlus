@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, {useRef, useState} from "react";
 import {ActivityIndicator, Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -66,18 +66,31 @@ type Props = {
     onReverted: () => void;
 };
 
-/** Undo, with the four things it could undo to spelled out. */
+/**
+ * Undo, with the four things it could undo to spelled out.
+ *
+ * A source it cannot use is dimmed by dropping its label from `text` to `dim`,
+ * never by an opacity on the row. Group opacity multiplies whatever is under
+ * it, and the reason a row is unavailable is the one string on that row that
+ * has to be read — an earlier version put it at 1.56:1 against the sheet.
+ */
 export default function RevertSheet({open, sources, onOpenChange, onReverted}: Props) {
     const [running, setRunning] = useState<RevertSourceId | null>(null);
+    // State alone does not close the door: two taps inside one frame both read
+    // the pre-commit `running`, and both fetch. The same stale-closure bug was
+    // fixed the same way in the stepper's hold-to-repeat.
+    const runningRef = useRef<RevertSourceId | null>(null);
 
     async function run(source: RevertSource) {
-        if (!source.available || running !== null) return;
+        if (!source.available || runningRef.current !== null) return;
+        runningRef.current = source.id;
         setRunning(source.id);
         try {
             await source.action();
         } catch (error) {
             notify({tone: "error", message: String(error)});
         } finally {
+            runningRef.current = null;
             setRunning(null);
             onOpenChange(false);
             onReverted();
@@ -94,21 +107,21 @@ export default function RevertSheet({open, sources, onOpenChange, onReverted}: P
                                accessibilityHint={source.available ? source.note : source.absent}
                                onPress={() => run(source)}>
                         <YStack backgroundColor={palette.raised} borderRadius="$4"
-                                padding="$3" gap="$1" opacity={source.available ? 1 : 0.42}>
+                                padding="$3" gap="$1">
                             <XStack alignItems="center" gap="$2">
-                                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                                               color={palette.text}>
+                                <Text fontSize={11} letterSpacing={1.6}
+                                      color={source.available ? palette.text : palette.dim}>
                                     {source.label}
-                                </DotMatrixText>
-                                <Text fontSize={8.5} letterSpacing={1.2}
-                                      color={source.needs === "ONLINE" ? palette.info : palette.muted}>
-                                    {source.needs}
                                 </Text>
+                                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                               color={source.needs === "ONLINE" ? palette.info : palette.dim}>
+                                    {source.needs}
+                                </DotMatrixText>
                                 {running === source.id && (
                                     <ActivityIndicator size="small" color={palette.dim}/>
                                 )}
                             </XStack>
-                            <Text fontSize={12} lineHeight={17} color={palette.muted}>
+                            <Text fontSize={12} lineHeight={17} color={palette.dim}>
                                 {source.available ? source.note : source.absent}
                             </Text>
                         </YStack>

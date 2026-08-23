@@ -1,5 +1,7 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
+
+import {palette} from "@/constants/colors";
 
 import RevertSheet, {REVERT_SOURCES, type RevertSource} from "@/components/RevertSheet";
 import {renderWithProviders} from "@/test-utils/render";
@@ -64,4 +66,39 @@ describe("RevertSheet", () => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
         expect(onReverted).toHaveBeenCalled();
     });
+
+    it("dims a source it cannot use without dimming the reason why", async () => {
+        // Never a group opacity: the reason is the one string on an unavailable
+        // row that has to be read.
+        await renderWithProviders(
+            <RevertSheet open sources={sources({card: false})}
+                         onOpenChange={jest.fn()} onReverted={jest.fn()}/>
+        );
+
+        expect(screen.getByText("THE CARD'S OWN BACKUP").props.style)
+            .toEqual(expect.objectContaining({color: palette.dim}));
+        expect(screen.getByText("THE SAVED COPY").props.style)
+            .toEqual(expect.objectContaining({color: palette.text}));
+        expect(screen.getByText("This recipe has never been read from a card.")
+            .props.style).toEqual(expect.objectContaining({color: palette.dim}));
+    });
+    it("fetches once when the same source is tapped twice in a frame", async () => {
+        // Both taps read `running` before React has committed the first one, so
+        // state alone does not stop the second fetch. Deliberately unawaited
+        // between the presses: awaiting is what lets the commit land, and a
+        // commit is exactly what a fast double tap does not wait for.
+        const list = sources();
+        await renderWithProviders(
+            <RevertSheet open sources={list} onOpenChange={jest.fn()}
+                         onReverted={jest.fn()}/>
+        );
+
+        const row = screen.getByLabelText("XBLOOM, BY RECIPE ID");
+        fireEvent.press(row);
+        fireEvent.press(row);
+        await act(async () => {});
+
+        expect(list[2].action).toHaveBeenCalledTimes(1);
+    });
+
 });
