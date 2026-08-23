@@ -28,7 +28,7 @@ export default function XbrwSheet({open, onOpenChange, title, children}: Props) 
         <XStack alignItems="center" justifyContent="space-between" gap="$3">
             <Dialog.Title unstyled>
                 <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
-                               color={palette.muted}>
+                               color={palette.dim}>
                     {title}
                 </DotMatrixText>
             </Dialog.Title>

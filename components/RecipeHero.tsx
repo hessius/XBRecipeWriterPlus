@@ -34,6 +34,13 @@ type Props = {
  * the same recipe is called.
  */
 export default function RecipeHero({name, named, xid, accent, beverage, pours}: Props) {
+    "use no memo";
+
+    // `pours` is the recipe's own array, mutated in place, and the watermark
+    // reads each pour through a getter rather than a property — so there is
+    // nothing for the React Compiler to compare and a stale watermark would
+    // survive a stage edit. The compiler is off under jest, so no test here can
+    // catch that. Same reason as `StageTile` and `StageProfile`.
     return (
         <YStack testID="recipe-hero" backgroundColor={accent} borderRadius="$6"
                 paddingHorizontal="$4" paddingTop="$3.5" paddingBottom="$3"

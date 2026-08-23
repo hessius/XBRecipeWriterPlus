@@ -68,7 +68,7 @@ export default function StageTile({
             <DotMatrixText fontSize={16} weight="bold" color={palette.text}>
                 {value}
             </DotMatrixText>
-            {unit && <Text fontSize={9.5} color={palette.muted} letterSpacing={1}>{unit}</Text>}
+            {unit && <Text fontSize={9.5} color={palette.dim} letterSpacing={1}>{unit}</Text>}
         </XStack>
     );
 
@@ -164,7 +164,7 @@ export default function StageTile({
                                    style={{alignSelf: "flex-start", paddingVertical: 8}}>
                             <XStack alignItems="center" gap="$2">
                                 <DotIcon name="delete" size={14} color={palette.danger}/>
-                                <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.8}
+                                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.8}
                                                color={palette.danger}>
                                     REMOVE
                                 </DotMatrixText>
@@ -188,7 +188,7 @@ function StageValue({label, value, min, max, step, accent, onChange}: StageValue
                 backgroundColor={palette.raised} borderRadius="$3"
                 paddingHorizontal="$2" paddingVertical="$1.5">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
-                  color={palette.muted}>
+                  color={palette.dim}>
                 {label}
             </Text>
             <Stepper label={label} value={value} min={min}
@@ -208,7 +208,7 @@ function StageChoice({label, value, accent, options, onChange}: StageChoiceProps
     return (
         <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
-                  color={palette.muted}>
+                  color={palette.dim}>
                 {label}
             </Text>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
@@ -261,7 +261,7 @@ function StageToggles({label, accent, toggles}: StageTogglesProps) {
     return (
         <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
-                  color={palette.muted}>
+                  color={palette.dim}>
                 {label}
             </Text>
             <XStack gap={2}>
