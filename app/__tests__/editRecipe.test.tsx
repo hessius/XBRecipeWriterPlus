@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
@@ -114,6 +115,27 @@ describe("the editor", () => {
         expect(screen.getByLabelText("Write card")).toBeTruthy();
         expect(screen.getByLabelText("Save")).toBeTruthy();
         expect(screen.queryByLabelText("Restore")).toBeNull();
+    });
+
+    it("stops writing a recipe the machine would reject, but still saves it", async () => {
+        await renderEditor();
+
+        // Raising the ratio moves the target away from what the stages pour.
+        await fireEvent.press(screen.getByLabelText("Increase Ratio"));
+
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+    });
+
+    it("dims the write action by its fill, never by the group's opacity", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Increase Ratio"));
+
+        // An opacity on the tile multiplies with what is beneath it and takes
+        // the word WRITE down with it. The tile swaps its fill instead.
+        const style = StyleSheet.flatten(screen.getByLabelText("Write card").props.style);
+
+        expect(style?.opacity ?? 1).toBe(1);
     });
 
     it("puts the rest behind the caret", async () => {

@@ -72,7 +72,12 @@ function TextFieldRow({
 }: TextFieldRowProps) {
     return (
         <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
-            <Input unstyled accessibilityLabel={label}
+            {/* Keyed on the value it mirrors, so an external change — a revert,
+                a refreshed xBloom name — remounts this one input and nothing
+                else. The screen used to carry the key bump on the scroll
+                container instead, which reset the scroll offset every time a
+                stepper was nudged. */}
+            <Input unstyled key={initialValue} accessibilityLabel={label}
                    defaultValue={initialValue} maxLength={maxLength}
                    autoCapitalize={autoCapitalize}
                    onEndEditing={(event) => onCommit(event.nativeEvent.text)}
@@ -117,7 +122,9 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
                 <DotMatrixText testID="brew-target" fontSize={22} weight="bold" color={accent}>
                     {balanceTarget}
                 </DotMatrixText>
-                <Text fontSize={10} letterSpacing={1.6} color={palette.muted}>ML TOTAL</Text>
+                {/* `dim`, not `muted`: muted is 4.12:1 and the palette says in
+                    as many words that it is not a text colour. */}
+                <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML TOTAL</Text>
             </XStack>
 
             <FieldRow topic="dose" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
@@ -214,10 +221,15 @@ function ActionBar({accent, canWrite, canSave, onWrite, onSave}: ActionBarProps)
             <Pressable accessibilityRole="button" accessibilityLabel="Write card"
                        accessibilityState={{disabled: !canWrite}}
                        onPress={() => canWrite && onWrite()}
-                       style={{flex: 2, opacity: canWrite ? 1 : 0.4}}>
+                       style={{flex: 2}}>
+                {/* Disabled by swapping the fill, not by dropping the group's
+                    opacity: opacity multiplies with whatever is beneath and
+                    takes the label down with it. A flat raised tile keeps the
+                    word legible while plainly not being the live accent. */}
                 <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                        backgroundColor={accent}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={palette.base}>
+                        backgroundColor={canWrite ? accent : palette.raised}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                   color={canWrite ? palette.base : palette.dim}>
                         WRITE
                     </DotMatrixText>
                 </YStack>
@@ -225,10 +237,11 @@ function ActionBar({accent, canWrite, canSave, onWrite, onSave}: ActionBarProps)
             <Pressable accessibilityRole="button" accessibilityLabel="Save"
                        accessibilityState={{disabled: !canSave}}
                        onPress={() => canSave && onSave()}
-                       style={{flex: 1, opacity: canSave ? 1 : 0.4}}>
+                       style={{flex: 1}}>
                 <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
                         borderWidth={1} borderColor={palette.line}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={palette.text}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                   color={canSave ? palette.text : palette.dim}>
                         SAVE
                     </DotMatrixText>
                 </YStack>
@@ -307,7 +320,7 @@ export default function EditRecipe() {
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
-            <ScrollView key={key} contentContainerStyle={{padding: 16, paddingBottom: 120}}>
+            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 120}}>
                 <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                             xid={recipe.xid} accent={accent}
                             beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
@@ -317,8 +330,13 @@ export default function EditRecipe() {
                 <DeckSwitch deck={deck} stageCount={recipe.pours.length}
                             accent={accent} onChange={setDeck}/>
 
+                {/* The deck is keyed on the counter, not the scroll container: the
+                    model is mutated in place, so `recipe` keeps its identity
+                    across an edit and the deck has to be told the value moved.
+                    The key used to sit on the ScrollView, which sent the user
+                    back to the top of the screen on every nudge. */}
                 {deck === "brew" ? (
-                    <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
+                    <BrewDeck key={key} recipe={recipe} accent={accent} balanceTarget={balance.target}
                               helpStyle={helpStyle} explaining={explaining}
                               onHelp={setHelpTopic} dispatch={dispatch}/>
                 ) : (
