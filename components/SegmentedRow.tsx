@@ -42,7 +42,7 @@ export default function SegmentedRow({
                             <Text fontSize={11} fontWeight="600"
                                   paddingHorizontal="$2.5" paddingVertical="$1.5"
                                   borderRadius="$2"
-                                  backgroundColor={selected ? (accent ?? palette.text) : "transparent"}
+                                  backgroundColor={selected ? (accent ?? palette.text) : undefined}
                                   color={selected ? palette.base : palette.dim}>
                                 {option.label}
                             </Text>

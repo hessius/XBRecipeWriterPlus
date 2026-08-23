@@ -99,6 +99,16 @@ describe("the editor", () => {
         expect(screen.getByTestId("tea-banner-body")).toBeTruthy();
     });
 
+    it("hides the cup and grinder rows on tea", async () => {
+        await renderEditor({cupType: CUP_TYPE.TEA});
+
+        // `TEA` is deliberately not one of the cup options, so the row could
+        // only ever show nothing selected — and tapping an option would turn
+        // the recipe into a coffee card. The grinder is inert on tea besides.
+        expect(screen.queryByText("Cup")).toBeNull();
+        expect(screen.queryByText("Grinder")).toBeNull();
+    });
+
     it("shows every brew field at once", async () => {
         await renderEditor();
 
@@ -179,6 +189,24 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Duplicate")).toBeTruthy();
         expect(screen.getByLabelText("Revert")).toBeTruthy();
+    });
+
+    it("duplicates the recipe in hand, not its stored row", async () => {
+        // A recipe read from a card or imported from a link has no row to
+        // re-read, and an edited one has changes the row does not know about.
+        // Cloning by uuid silently produced nothing in the first case and
+        // dropped every unsaved edit in the second.
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+
+        await renderEditor({xid: "CGL12"});
+        await fireEvent.press(screen.getByLabelText("More"));
+        await fireEvent.press(screen.getByLabelText("Duplicate"));
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.cloneRecipe).not.toHaveBeenCalled();
+        expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
+        expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
     });
 
     it("unfolds the notes in explain mode and folds them with the toggle", async () => {

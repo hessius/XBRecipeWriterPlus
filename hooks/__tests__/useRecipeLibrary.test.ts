@@ -64,3 +64,20 @@ describe("useRecipeLibrary", () => {
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
     });
 });
+
+describe("the store it reads through", () => {
+    it("is built once, not on every render", async () => {
+        // The default used to be a default parameter, so every render of Home
+        // ran `new RecipeDatabase()` — and each of those opens SQLite and
+        // replays the table setup. Home re-renders for scrolling, for the
+        // settings sheet and for NFC progress.
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+
+        const {rerender} = await renderHook(() => useRecipeLibrary());
+        await rerender(undefined);
+        await rerender(undefined);
+
+        expect(RecipeDatabase).toHaveBeenCalledTimes(1);
+    });
+});

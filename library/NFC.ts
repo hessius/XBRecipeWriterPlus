@@ -64,14 +64,29 @@ class NFC {
     }
 
     async open() {
-        if (Platform.OS === 'ios') {
-            console.log("Requesting Iso15693");
-            await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
-        } else {
-            console.log("Requesting NfcV");
-            await NfcManager.requestTechnology(NfcTech.NfcV);
-        }
+        // The session is marked open *before* the request resolves, not after.
+        // `requestTechnology` does not settle until a tag arrives or the user
+        // walks away, and a `close()` arriving during that window used to find
+        // `isClosed` still true and return without cancelling — so dismissing
+        // our overlay hid the ceremony while the native session kept running.
+        // Cancelling a pending request is the only thing that aborts it.
         this.isClosed = false;
+        try {
+            if (Platform.OS === 'ios') {
+                console.log("Requesting Iso15693");
+                await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
+            } else {
+                console.log("Requesting NfcV");
+                await NfcManager.requestTechnology(NfcTech.NfcV);
+            }
+        } catch (e) {
+            // Back to closed, which is what a failed open always looked like:
+            // before this method set the flag eagerly, a rejection left it
+            // true. Callers read `getIsClosed()` to tell a user cancellation
+            // from a real fault, so restoring it keeps that judgement intact.
+            this.isClosed = true;
+            throw e;
+        }
     }
 
     async getUID(): Promise<number[] | null> {

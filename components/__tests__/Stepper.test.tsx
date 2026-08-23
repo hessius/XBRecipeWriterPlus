@@ -254,3 +254,25 @@ describe("Stepper hold-to-repeat", () => {
         expect(screen.getByTestId("stepper-value")).toHaveTextContent("22");
     });
 });
+
+describe("the keyboard it asks for", () => {
+    async function openTheField(step: number) {
+        await renderWithProviders(
+            <Stepper label="Flow rate" value={3} min={3} max={3.5} step={step}
+                     onChange={jest.fn()}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Edit Flow rate"));
+        return screen.getByTestId("stepper-input");
+    }
+
+    it("is the numeric pad for a whole-number step", async () => {
+        expect((await openTheField(1)).props.inputMode).toBe("numeric");
+    });
+
+    it("is the decimal pad for a fractional step", async () => {
+        // The numeric pad has no separator on it, so under one the tap-to-type
+        // path this control advertises could not enter a stage flow rate of
+        // 3.2 at all — and flow rate is the one field that steps by a tenth.
+        expect((await openTheField(0.1)).props.inputMode).toBe("decimal");
+    });
+});

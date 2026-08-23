@@ -53,7 +53,11 @@ export default function HomeScreen({db, settings}: Props) {
     const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
-    const nfc = new NFC();
+    // Held for the screen's lifetime, not rebuilt per render. Starting a scan
+    // shows the overlay, which re-renders — so a per-render transport meant the
+    // Cancel the user could actually press closed a different `NFC` than the one
+    // `readCard` was awaiting, hiding the ceremony while the request lived on.
+    const [nfc] = useState(() => new NFC());
 
     const isEmpty = library.recipes.length === 0;
 
@@ -152,7 +156,14 @@ export default function HomeScreen({db, settings}: Props) {
 
     return (
         <>
-            <YStack flex={1} backgroundColor={palette.base}>
+            {/* The NFC ceremony is a modal moment, and an absolutely positioned
+                overlay only covers the screen visually. While it is up this
+                subtree hides its own descendants from the screen reader, so
+                TalkBack cannot reach and fire the controls behind it — the
+                Android half of what `accessibilityViewIsModal` does on iOS. */}
+            <YStack flex={1} backgroundColor={palette.base}
+                    accessibilityElementsHidden={scanning}
+                    importantForAccessibility={scanning ? "no-hide-descendants" : "auto"}>
                 <HomeHeader
                     count={library.recipes.length}
                     collapsed={collapsed}

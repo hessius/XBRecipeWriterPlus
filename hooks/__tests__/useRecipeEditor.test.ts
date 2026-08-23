@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {useRecipeEditor, RECIPE_LABELS} from "@/hooks/useRecipeEditor";
+import {useRecipeEditor, hasSource, RECIPE_LABELS} from "@/hooks/useRecipeEditor";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
@@ -137,5 +137,28 @@ describe("revert sources", () => {
 
         expect(byId.card).toBe(false);
         expect(byId.share).toBe(false);
+    });
+});
+
+describe("hasSource", () => {
+    it("does not count whitespace as an online identifier", async () => {
+        // `isValidXID` and the refresh gate both read a blank ID as no ID.
+        // Untrimmed, a recipe holding a single space offered an online revert
+        // and then fetched with an identifier the endpoint cannot answer.
+        const recipe = new Recipe();
+        recipe.xid = "   ";
+        recipe.shareId = "  ";
+
+        expect(hasSource(recipe, "xid")).toBe(false);
+        expect(hasSource(recipe, "share")).toBe(false);
+    });
+
+    it("still counts a real one", async () => {
+        const recipe = new Recipe();
+        recipe.xid = "CGL12";
+        recipe.shareId = "abc123";
+
+        expect(hasSource(recipe, "xid")).toBe(true);
+        expect(hasSource(recipe, "share")).toBe(true);
     });
 });

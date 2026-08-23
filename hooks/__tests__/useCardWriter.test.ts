@@ -166,3 +166,22 @@ describe("useCardWriter", () => {
         Platform.OS = "android";
     });
 });
+
+describe("the transport it writes through", () => {
+    it("is the same one across renders, so Cancel closes what is writing", async () => {
+        // Showing the overlay is a state change, so by the time the user can
+        // press Cancel the handler they press belongs to a later render. Built
+        // per render, that handler closed an `NFC` nobody was writing to: the
+        // ceremony vanished and the native session carried on.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const NFC = require("@/library/NFC").default;
+        NFC.mockClear();
+
+        const {result, rerender} = await renderHook(() => useCardWriter(jest.fn()));
+        await rerender(undefined);
+        await rerender(undefined);
+
+        expect(NFC).toHaveBeenCalledTimes(1);
+        expect(result.current.showNfcOverlay).toBe(false);
+    });
+});

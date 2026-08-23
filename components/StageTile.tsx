@@ -223,7 +223,7 @@ function StageChoice({label, value, accent, options, onChange}: StageChoiceProps
                             <Text fontSize={10.5} fontWeight="600"
                                   paddingHorizontal="$2" paddingVertical="$1"
                                   borderRadius="$2"
-                                  backgroundColor={selected ? accent : "transparent"}
+                                  backgroundColor={selected ? accent : undefined}
                                   color={selected ? palette.base : palette.dim}>
                                 {option.label}
                             </Text>

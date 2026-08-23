@@ -9,7 +9,7 @@ import Animated, {
 
 import {DOT_ICONS, DOT_ICON_GRID, litCells, type DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING, STAGGER, useReducedMotion} from "@/constants/motion";
 
 /**
  * Dot diameter as a fraction of a cell. Below about a third the icon reads as a
@@ -17,9 +17,6 @@ import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
  * shape, which is the thing the dot matrix exists not to be.
  */
 const DOT_RATIO = 0.36;
-
-/** Stagger between consecutive dots when the icon animates in. */
-const STAGGER_MS = 12;
 
 type Props = {
     name: DotIconName;
@@ -140,7 +137,7 @@ export default function DotIcon({
                         cell={cell}
                         dot={dot}
                         color={color}
-                        delay={staggered ? index * STAGGER_MS : 0}
+                        delay={staggered ? index * STAGGER.dot : 0}
                     />
                 ) : (
                     <StaticDot

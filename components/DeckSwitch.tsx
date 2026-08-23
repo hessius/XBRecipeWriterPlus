@@ -43,7 +43,7 @@ export default function DeckSwitch({deck, stageCount, accent, onChange}: Props) 
                            alignItems:      "center",
                            paddingVertical: 9,
                            borderRadius:    9,
-                           backgroundColor: active ? (accent ?? palette.text) : "transparent"
+                           backgroundColor: active ? (accent ?? palette.text) : undefined
                        }}>
                 <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.8}
                                color={active ? palette.base : palette.dim}>

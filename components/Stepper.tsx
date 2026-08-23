@@ -156,8 +156,14 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
                 a text field that is not on screen. */}
             <XStack alignItems="center" justifyContent="center" minWidth={54}>
                 {editing ? (
+                    // A whole-number step gets the numeric pad; a fractional
+                    // one gets the decimal pad, which is the only one with a
+                    // separator on it. Stage flow rate steps by 0.1, so under
+                    // a plain numeric keyboard the tap-to-type path this
+                    // control advertises could not enter 3.2 at all.
                     <Input unstyled autoFocus accessibilityLabel={label}
-                           inputMode="numeric" testID="stepper-input"
+                           inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
+                           testID="stepper-input"
                            value={draft ?? ""}
                            onChangeText={setDraft}
                            onBlur={commit}

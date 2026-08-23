@@ -89,11 +89,12 @@ function TextFieldRow({
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
 
-    // Report validity on mount and on every remount — the `key` below remounts
-    // this input when the value changes underneath it, e.g. a revert to a good
-    // ID. Without this the gate could not be reopened, because the field never
-    // sees a value it did not type. All three deps are stable (a module-scope
-    // validator and a useState setter), so this runs only on a real remount.
+    // Reports validity on mount, and this row is keyed on the value it mirrors
+    // by its call sites — so an external change (a revert to a good ID, a
+    // refreshed name) remounts the whole row and both the local `invalid` mark
+    // and the screen's gate are recomputed from the new value. Keying only the
+    // inner input left this state behind: the danger colour and the reason
+    // stayed on a field that now held something valid.
     useEffect(() => {
         if (validate) onInvalidChange?.(!validate(initialValue));
     }, [initialValue, validate, onInvalidChange]);
@@ -108,12 +109,9 @@ function TextFieldRow({
     return (
         <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                   error={invalid ? invalidReason : undefined}>
-            {/* Keyed on the value it mirrors, so an external change — a revert,
-                a refreshed xBloom name — remounts this one input and nothing
-                else. The screen used to carry the key bump on the scroll
-                container instead, which reset the scroll offset every time a
-                stepper was nudged. */}
-            <Input unstyled key={initialValue} accessibilityLabel={label}
+            {/* Not keyed here: the key belongs on the row, which is what owns
+                the `invalid` state this input feeds. */}
+            <Input unstyled accessibilityLabel={label}
                    defaultValue={initialValue} maxLength={maxLength}
                    autoCapitalize={autoCapitalize} onChangeText={onChangeText}
                    onEndEditing={(event) => onCommit(event.nativeEvent.text)}
@@ -203,22 +201,38 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
                 </FieldRow>
             )}
 
-            <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
-                          accent={accent} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
-                          onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
+            {/* Both rows are coffee-only. A tea card's cup type is `TEA`, which
+                is deliberately not among the three options — so on tea the row
+                showed nothing selected and tapping any option silently turned
+                the recipe into a coffee card. The grinder toggle is inert for
+                tea besides, since a tea card always writes the default grind.
+                The previous editor hid the pair for the same reasons. */}
+            {!isTea && (
+                <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
+                              accent={accent} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                              onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
+            )}
 
-            <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
-                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
-                          onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
+            {!isTea && (
+                <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
+                              helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                              onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
+            )}
 
-            <TextFieldRow topic="xid" label="Recipe ID" initialValue={recipe.xid}
+            {/* Keyed on the value it mirrors, so an external change — a
+                revert, a refreshed xBloom name — remounts this one row and
+                nothing else. It sits on the row rather than the input because
+                the row owns the validity state. The key bump used to live on
+                the scroll container, which reset the scroll offset every time
+                a stepper was nudged. */}
+            <TextFieldRow key={recipe.xid} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
-            <TextFieldRow topic="name" label="Name" initialValue={recipe.name}
+            <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                           onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
@@ -495,7 +509,11 @@ export default function EditRecipe() {
     };
 
     function duplicateRecipe() {
-        new RecipeDatabase().cloneRecipe(recipe!.uuid);
+        // The recipe in hand, not its stored row. A recipe read from a card or
+        // imported from a link has no row yet, so duplicating one used to
+        // create nothing and navigate back as though it had; for a saved one it
+        // copied the last save and dropped every unsaved edit.
+        new RecipeDatabase().duplicateRecipe(recipe!);
         navigation.goBack();
     }
 
@@ -505,7 +523,15 @@ export default function EditRecipe() {
     }
 
     return (
-        <YStack flex={1} backgroundColor={palette.base}>
+        <>
+            {/* The NFC ceremony is a modal moment, and an absolutely positioned
+                overlay only covers the screen visually. While it is up this
+                subtree hides its own descendants from the screen reader, so
+                TalkBack cannot reach and fire the controls behind it — the
+                Android half of what `accessibilityViewIsModal` does on iOS. */}
+            <YStack flex={1} backgroundColor={palette.base}
+                    accessibilityElementsHidden={showNfcOverlay}
+                    importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
             <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 120}}
                         onScroll={onScroll} scrollEventThrottle={16}>
                 {/* The hero collapses on scroll. It stays mounted and animates
@@ -562,9 +588,10 @@ export default function EditRecipe() {
                        onOpenChange={(open) => {
                            if (!open) setHelpTopic(null);
                        }}/>
+            </YStack>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>
-        </YStack>
+        </>
     );
 }

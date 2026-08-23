@@ -93,7 +93,11 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
                 if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
                     r.offline_backup = xbr.offline_backup;
                 }
-                setRecipe(r);
+                // The recipe is mutated in place, so the change is published by
+                // bumping the key. `setRecipe(r)` would hand React the object
+                // it already holds and be bailed out of, leaving the fetched
+                // name invisible on the hero until some unrelated edit.
+                setKey((prev) => prev + 1);
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
@@ -128,6 +132,7 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
                 return;
             }
             recipe.addPour(pourNumber);
+            setVolumeError(null);
             setKey((prev) => prev + 1);
         }
     }
@@ -135,6 +140,10 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
     function deletePour(pourNumber: number) {
         if (recipe && recipe.pours.length > 1) {
             recipe.deletePour(pourNumber);
+            // The message names a total that no longer exists. Any structural
+            // change to the stages invalidates it, so it is cleared rather than
+            // left to contradict the banner beside it.
+            setVolumeError(null);
             setKey((prev) => prev + 1);
         }
     }
@@ -176,6 +185,10 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
             }
         }
         setRecipe(restoredRecipe);
+        // A restore replaces the brew parameters wholesale, so a write-time
+        // volume complaint from the recipe that was here before no longer
+        // describes anything on screen.
+        setVolumeError(null);
     }
 
     /** Perform the revert for one source. Each body is unchanged from the old dialog. */
@@ -396,9 +409,13 @@ export function hasSource(recipe: Recipe, id: RevertSourceId): boolean {
         case "saved":
             return (recipe.offline_backup?.length ?? 0) > 0;
         case "xid":
-            return recipe.xid.length > 0;
+            // Trimmed, because `isValidXID` and the refresh gate both read
+            // whitespace as no identifier at all. Untrimmed, a recipe holding
+            // a single space offered an online revert and then fetched with an
+            // ID the endpoint cannot answer.
+            return recipe.xid.trim().length > 0;
         case "share":
-            return recipe.shareId.length > 0;
+            return recipe.shareId.trim().length > 0;
     }
 }
 
