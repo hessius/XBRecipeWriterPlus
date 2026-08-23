@@ -581,4 +581,21 @@ describe("RecipeCard", () => {
 
         expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
+
+    // `makeRecipe()` is the file's existing fixture and is already balanced:
+    // 18 g at 1:16 is 288 ml, poured in one stage of 288.
+    it("marks a recipe the machine would reject", async () => {
+        const recipe = makeRecipe();
+        recipe.pours[0].volume = 10;
+
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
+
+        expect(screen.getByLabelText("Will not write")).toBeTruthy();
+    });
+
+    it("leaves a balanced one unmarked", async () => {
+        await renderWithProviders(<RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>);
+
+        expect(screen.queryByLabelText("Will not write")).toBeNull();
+    });
 });

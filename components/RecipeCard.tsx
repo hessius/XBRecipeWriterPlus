@@ -214,6 +214,10 @@ export default function RecipeCard({
                             {marker}
                         </DotMatrixText>
                     )}
+                    {!recipe.isPourVolumeValid() && (
+                        <DotIcon name="error" size={12} color={onAccent.marker}
+                                 accessibilityLabel="Will not write"/>
+                    )}
                 </XStack>
             </XStack>
 
