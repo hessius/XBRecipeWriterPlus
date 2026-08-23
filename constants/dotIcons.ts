@@ -175,6 +175,30 @@ export const DOT_ICONS = {
         "....#....",
         ".........",
         "........."
+    ],
+    /** A single axis-aligned run. Steps a value down. */
+    minus: [
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".#######.",
+        ".........",
+        ".........",
+        ".........",
+        "........."
+    ],
+    /** Steps a value up. Never used on its own to mean "new". */
+    plus: [
+        ".........",
+        ".........",
+        "....#....",
+        "....#....",
+        ".#######.",
+        "....#....",
+        "....#....",
+        ".........",
+        "........."
     ]
 } as const satisfies Record<string, readonly string[]>;
 
