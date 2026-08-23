@@ -98,7 +98,11 @@ export default function SwipeableRecipeRow({
 
     function renderRightActions() {
         return (
-            <XStack paddingRight="$2" paddingVertical="$3" alignItems="stretch" gap="$2">
+            // The left padding is the gap between the card and the first tile.
+            // Without it the tile butts against the card's edge and reads as
+            // part of it, rather than as something the card slid off.
+            <XStack testID="row-actions" paddingLeft="$2" paddingRight="$2"
+                    paddingVertical="$3" alignItems="stretch" gap="$2">
                 <Tile icon="duplicate" caption="COPY" tone={palette.success}
                       testID="row-action-duplicate"
                       label={`Duplicate ${recipe.displayName()}`}

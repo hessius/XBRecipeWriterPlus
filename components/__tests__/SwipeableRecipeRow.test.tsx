@@ -43,6 +43,16 @@ function props(overrides = {}) {
 }
 
 describe("SwipeableRecipeRow", () => {
+    it("leaves a gap between the card and the first revealed action", async () => {
+        // Without it the copy tile butts straight up against the card's edge and
+        // reads as part of it, rather than as something the card slid off.
+        await renderWithProviders(<SwipeableRecipeRow {...props()}/>);
+        const actions = screen.getByTestId("row-actions", {includeHiddenElements: true});
+        const style = actions.props.style as {paddingLeft?: number};
+
+        expect(style.paddingLeft).toBeGreaterThan(0);
+    });
+
     it("renders the recipe", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={jest.fn()} onDelete={jest.fn()}
