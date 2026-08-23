@@ -46,6 +46,8 @@ function ToggleRow({label, description, value, onChange}: RowProps) {
 export default function SettingsScreen({settings}: Props) {
     const [showCoffeeMarker, setShowCoffeeMarker] =
         useSetting("showCoffeeMarker", settings);
+    const [dotMatrixProfile, setDotMatrixProfile] =
+        useSetting("dotMatrixProfile", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -59,6 +61,11 @@ export default function SettingsScreen({settings}: Props) {
                     description="The TEA marker is always shown. COFFEE is redundant in a mostly-coffee library."
                     value={showCoffeeMarker}
                     onChange={setShowCoffeeMarker}/>
+                <ToggleRow
+                    label="Dot matrix pour profile"
+                    description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
+                    value={dotMatrixProfile}
+                    onChange={setDotMatrixProfile}/>
             </YStack>
         </ScrollView>
     );

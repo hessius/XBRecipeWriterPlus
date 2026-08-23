@@ -54,8 +54,12 @@ type Props = {
     width: number;
     height: number;
     stroke?: string;
-    /** The colour of the dots the area under the curve is filled with. */
+    /** The flat fill under the curve, used when `dotted` is false. */
+    fill?: string;
+    /** The colour of the dots, used when `dotted` is true. */
     dot?: string;
+    /** Fill the area with a screen of dots rather than a flat tint. */
+    dotted?: boolean;
     strokeWidth?: number;
     testID?: string;
 };
@@ -91,7 +95,9 @@ export default function PourProfile({
     width,
     height,
     stroke = onAccent.profileStroke,
+    fill = onAccent.profileFill,
     dot = onAccent.profileDot,
+    dotted = false,
     strokeWidth = PROFILE_STROKE_WIDTH,
     testID
 }: Props) {
@@ -118,6 +124,17 @@ export default function PourProfile({
 
     const area = `${path} L${round(width)} ${round(height)} Z`;
     const radius = (DOT_CELL * DOT_RATIO) / 2;
+
+    if (!dotted) {
+        return (
+            <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}
+                 viewBox={viewBox}>
+                <Path testID="profile-wash" d={area} fill={fill}/>
+                <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
+                      strokeLinejoin="round"/>
+            </Svg>
+        );
+    }
 
     return (
         <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}

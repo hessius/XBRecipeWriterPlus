@@ -112,6 +112,8 @@ type Props = {
      * mostly-coffee library and sub-project 6 adds a setting to hide it.
      */
     showCoffeeMarker?: boolean;
+    /** Fill the pour profile with a dot screen. Owned by the settings screen. */
+    dottedProfile?: boolean;
 };
 
 /**
@@ -127,7 +129,8 @@ export default function RecipeCard({
     editing = false,
     onDuplicate,
     onDelete,
-    showCoffeeMarker = true
+    showCoffeeMarker = true,
+    dottedProfile = false
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -193,7 +196,7 @@ export default function RecipeCard({
                       bottom:   -(PROFILE_BLEED + PROFILE_OVERHANG)
                   }}>
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
-                             width={200} height={PROFILE_HEIGHT}/>
+                             width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
             </View>
 
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">

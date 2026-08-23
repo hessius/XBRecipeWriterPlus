@@ -40,4 +40,19 @@ describe("SettingsScreen", () => {
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText(/TEA marker is always shown/i)).toBeTruthy();
     });
+
+    it("offers the dot matrix pour profile, off unless it has been turned on", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByLabelText("Dot matrix pour profile")
+            .props.accessibilityState.checked).toBe(false);
+    });
+
+    it("persists the dot matrix pour profile", async () => {
+        const storage = memoryStorage();
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+        await fireEvent(screen.getByLabelText("Dot matrix pour profile"), "checkedChange", true);
+
+        expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
+    });
 });

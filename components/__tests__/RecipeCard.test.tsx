@@ -217,6 +217,18 @@ describe("RecipeCard", () => {
         );
     });
 
+    it("fills the profile flat by default and with dots when asked", async () => {
+        const flat = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+        expect(flat.queryByTestId("profile-dot")).toBeNull();
+
+        const dotted = await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} dottedProfile/>
+        );
+        expect(dotted.getAllByTestId("profile-dot").length).toBeGreaterThan(0);
+    });
+
     it("runs the profile out to the card's own edges", async () => {
         // The mark is a background, so a gap along the bottom and right reads as
         // misalignment. It is offset by the stroke's bleed and the card clips,

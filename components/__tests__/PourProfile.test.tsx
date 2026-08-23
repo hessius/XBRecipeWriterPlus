@@ -116,7 +116,7 @@ describe("PourProfile", () => {
 
     it("fills the area with a dot pattern rather than a flat wash", async () => {
         await renderWithProviders(
-            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
         );
         const filled = within(screen.getByTestId("pp")).getByTestId("profile-fill");
 
@@ -130,7 +130,7 @@ describe("PourProfile", () => {
         // A square grid reads as a page of holes. Offsetting alternate rows by
         // half a cell is what makes it a dot matrix.
         await renderWithProviders(
-            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
         );
         const dots = within(screen.getByTestId("pp")).getAllByTestId("profile-dot");
 
@@ -145,10 +145,10 @@ describe("PourProfile", () => {
         // "#profile" would leave every one of them at the mercy of whichever
         // mounted last.
         const first = await renderWithProviders(
-            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
         );
         const second = await renderWithProviders(
-            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40} dotted/>
         );
 
         const brushOf = (utils: typeof first) =>
@@ -156,5 +156,18 @@ describe("PourProfile", () => {
                 .props.fill as {brushRef: string}).brushRef;
 
         expect(brushOf(first)).not.toBe(brushOf(second));
+    });
+
+    it("fills flat unless the dot screen is asked for", async () => {
+        // The default, and the quieter of the two: the dots are a preference,
+        // and one that has to be turned on.
+        await renderWithProviders(
+            <PourProfile testID="pp" pours={pours([50, 50])} width={100} height={40}/>
+        );
+        const svg = within(screen.getByTestId("pp"));
+
+        expect(svg.queryByTestId("profile-fill")).toBeNull();
+        expect(svg.queryByTestId("profile-dot")).toBeNull();
+        expect(svg.getByTestId("profile-wash")).toBeTruthy();
     });
 });

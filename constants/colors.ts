@@ -75,6 +75,8 @@ export const onAccent = {
      * clears it on every accent, worst case 3.24:1 on Blossom.
      */
     profileStroke: "rgba(0,0,0,0.50)",
+    /** Pour profile fill, when the dot screen is turned off. */
+    profileFill:   "rgba(0,0,0,0.15)",
     /**
      * The dots the area under the curve is filled with.
      *

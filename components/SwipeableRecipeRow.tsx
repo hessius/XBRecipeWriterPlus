@@ -21,6 +21,8 @@ type Props = {
     editing?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
     showCoffeeMarker?: boolean;
+    /** Forwarded to the card. Owned by the settings screen. */
+    dottedProfile?: boolean;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -80,7 +82,8 @@ export default function SwipeableRecipeRow({
                                                onDuplicate,
                                                bounceOnMount = false,
                                                editing = false,
-                                               showCoffeeMarker = true
+                                               showCoffeeMarker = true,
+                                               dottedProfile = false
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -131,6 +134,7 @@ export default function SwipeableRecipeRow({
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
                             showCoffeeMarker={showCoffeeMarker}
+                            dottedProfile={dottedProfile}
                             onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>

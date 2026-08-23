@@ -12,7 +12,14 @@ export const DEFAULTS = {
      * The `TEA` marker is always shown; `COFFEE` is redundant in a mostly-coffee
      * library, so it can be turned off.
      */
-    showCoffeeMarker: true
+    showCoffeeMarker: true,
+    /**
+     * Fill the pour profile with a screen of dots instead of a flat tint.
+     *
+     * Off by default: the two read differently at card size and which is better
+     * is a matter of taste, so the quieter one is what arrives unasked for.
+     */
+    dotMatrixProfile: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

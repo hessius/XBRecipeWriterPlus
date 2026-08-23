@@ -44,6 +44,7 @@ export default function HomeScreen({db, settings}: Props) {
     const library = useRecipeLibrary(db);
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
+    const [dottedProfile] = useSetting("dotMatrixProfile", settings);
 
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
@@ -195,6 +196,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 recipe={item}
                                 editing={editing}
                                 showCoffeeMarker={showCoffeeMarker}
+                                dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
