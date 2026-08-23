@@ -1,344 +1,352 @@
-import ValidatedInput from "@/components/ValidatedInput";
-
-import Recipe, {CUP_TYPE, isValidXID, XID_LENGTH} from "@/library/Recipe";
-import {AntDesign} from "@expo/vector-icons";
 import {useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useCallback, useEffect, useRef, useState} from "react";
-import {ActivityIndicator, Pressable, useWindowDimensions} from "react-native";
-import {Button, getTokens, H6, ScrollView, Text, XStack, YStack} from "tamagui";
-import {MyButtonGroup} from "@/components/MyButtonGroup";
-import LabeledInput from "@/components/LabeledInput";
-import TotalVolumeComponent from "@/components/TotalVolumeComponent";
-import TooltipComponent from "@/components/TooltipComponent";
+import React, {useEffect, useState} from "react";
+import {Pressable} from "react-native";
+import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
+
+import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
+import DotIcon from "@/components/DotIcon";
+import DotMatrixText from "@/components/DotMatrixText";
+import FieldRow from "@/components/FieldRow";
+import HelpSheet from "@/components/HelpSheet";
 import NfcOverlay from "@/components/NfcOverlay";
-import Svg, {Path} from "react-native-svg";
-import Pour, {POUR_PATTERN} from "@/library/Pour";
-import {palette} from '@/constants/colors';
-import IconButton from "@/components/IconButton";
-import RestoreDialog, {RestoreOption} from "@/components/RestoreDialog";
+import RecipeHero from "@/components/RecipeHero";
+import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
+import RevertSheet from "@/components/RevertSheet";
+import SegmentedRow from "@/components/SegmentedRow";
+import Stepper from "@/components/Stepper";
+import {palette} from "@/constants/colors";
+import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
+import {useSetting} from "@/hooks/useSetting";
+import {resolveAccent} from "@/library/accent";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import RecipeDatabase from "@/library/RecipeDatabase";
+import {asHelpStyle, type HelpStyle} from "@/library/Settings";
 
+/** What a field's edit callback commits, given a label and the new value. */
+type Dispatch = (label: string, value: string) => void;
 
+/**
+ * The cup and grinder choices, as the segmented rows want them. Values are the
+ * strings `editInputComplete` dispatches on: `cupType` as a number, the grinder
+ * as the "1"/"0" its updater reads.
+ */
+const CUP_OPTIONS = [
+    {value: String(CUP_TYPE.XPOD), label: "XPOD"},
+    {value: String(CUP_TYPE.OMNI), label: "OMNI"},
+    {value: String(CUP_TYPE.OTHER), label: "OTHER"}
+] as const;
+
+const GRINDER_OPTIONS = [
+    {value: "1", label: "ON"},
+    {value: "0", label: "OFF"}
+] as const;
+
+type TextFieldRowProps = {
+    topic: HelpTopic;
+    label: string;
+    initialValue: string;
+    maxLength?: number;
+    autoCapitalize?: "none" | "characters";
+    helpStyle: HelpStyle;
+    explaining: boolean;
+    onHelp: (topic: HelpTopic) => void;
+    onCommit: (value: string) => void;
+};
+
+/**
+ * A `FieldRow` whose value is typed.
+ *
+ * Uncontrolled — the recipe is mutated in place and published by a key bump, so
+ * feeding the input back a controlled `value` on every keystroke would fight the
+ * cursor. It commits when editing ends, which is when the value is worth writing
+ * back.
+ *
+ * Declared at module scope so it is not a fresh component type on every render
+ * of the screen, which would remount it and drop the text mid-entry.
+ */
+function TextFieldRow({
+    topic, label, initialValue, maxLength, autoCapitalize,
+    helpStyle, explaining, onHelp, onCommit
+}: TextFieldRowProps) {
+    return (
+        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+            <Input unstyled accessibilityLabel={label}
+                   defaultValue={initialValue} maxLength={maxLength}
+                   autoCapitalize={autoCapitalize}
+                   onEndEditing={(event) => onCommit(event.nativeEvent.text)}
+                   textAlign="right" minWidth={110} fontSize={16}
+                   color={palette.text}/>
+        </FieldRow>
+    );
+}
+
+type BrewDeckProps = {
+    recipe: Recipe;
+    accent: string;
+    balanceTarget: number;
+    helpStyle: HelpStyle;
+    explaining: boolean;
+    onHelp: (topic: HelpTopic) => void;
+    dispatch: Dispatch;
+};
+
+/**
+ * Every brew value on one surface.
+ *
+ * A reader operates nothing — the user's account of a visit is that most often
+ * they only look at it — so there is no pager and no disclosure. The two fields
+ * the target is computed from, dose and ratio, are drawn in the accent to tie
+ * them to the readout above without a rule between them.
+ *
+ * Module scope, not an inline function: a component defined inside the screen's
+ * body is a new type on every render and would remount its whole subtree.
+ */
+function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp, dispatch}: BrewDeckProps) {
+    const isTea = recipe.isTea();
+    // Grind size and speed are meaningless with the grinder off, and a tea card
+    // always writes the default grind — so those two rows hide in both cases.
+    const showGrind = recipe.grinder && !isTea;
+
+    return (
+        <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
+                overflow="hidden">
+            <XStack alignItems="baseline" gap="$2"
+                    paddingHorizontal="$4" paddingTop="$4" paddingBottom="$3">
+                <DotMatrixText testID="brew-target" fontSize={22} weight="bold" color={accent}>
+                    {balanceTarget}
+                </DotMatrixText>
+                <Text fontSize={10} letterSpacing={1.6} color={palette.muted}>ML TOTAL</Text>
+            </XStack>
+
+            <FieldRow topic="dose" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                <Stepper label="Dose" value={recipe.dosage}
+                         min={1} max={isTea ? 10 : 31} step={1} unit="g" accent={accent}
+                         onChange={(value) => dispatch(RECIPE_LABELS.DOSE, String(value))}/>
+            </FieldRow>
+
+            <FieldRow topic="ratio" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                <Stepper label="Ratio" value={recipe.ratio}
+                         min={5} max={100} step={1} accent={accent}
+                         onChange={(value) => dispatch(RECIPE_LABELS.RATIO, String(value))}/>
+            </FieldRow>
+
+            {showGrind && (
+                <FieldRow topic="grindSize" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                    <Stepper label="Grind size" value={recipe.grindSize}
+                             min={40} max={80} step={1}
+                             onChange={(value) => dispatch(RECIPE_LABELS.GRIND_SIZE, String(value))}/>
+                </FieldRow>
+            )}
+
+            {showGrind && (
+                <FieldRow topic="grindSpeed" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                    <Stepper label="Grind speed" value={recipe.grindRPM}
+                             min={60} max={120} step={10} unit="rpm"
+                             onChange={(value) => dispatch(RECIPE_LABELS.GRIND_RPM, String(value))}/>
+                </FieldRow>
+            )}
+
+            <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
+                          accent={accent} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                          onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
+
+            <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
+                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                          onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
+
+            <TextFieldRow topic="xid" label="Recipe ID" initialValue={recipe.xid}
+                          maxLength={8} autoCapitalize="characters"
+                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                          onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
+
+            <TextFieldRow topic="name" label="Name" initialValue={recipe.name}
+                          maxLength={100}
+                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                          onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
+        </YStack>
+    );
+}
+
+/**
+ * The STAGES deck lands in the next step (Task 15) together with the collapsing
+ * hero. Until then this is an honest placeholder so the deck switch has
+ * somewhere to send you, rather than a half-built editor that could write a
+ * stage wrong.
+ */
+function StagesPlaceholder({stageCount}: {stageCount: number}) {
+    return (
+        <YStack testID="stages-placeholder" marginTop="$3" padding="$6"
+                alignItems="center" gap="$2" backgroundColor={palette.surface}
+                borderRadius="$5">
+            <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6} color={palette.dim}>
+                {`STAGES · ${stageCount}`}
+            </DotMatrixText>
+            <Text fontSize={12} color={palette.muted} textAlign="center">
+                The stage editor is not built yet.
+            </Text>
+        </YStack>
+    );
+}
+
+type ActionBarProps = {
+    accent: string;
+    canWrite: boolean;
+    canSave: boolean;
+    onWrite: () => void;
+    onSave: () => void;
+};
+
+/**
+ * The two actions that earn the bottom of the screen: WRITE and SAVE.
+ *
+ * Everything else lives behind the caret. Write is disabled while the recipe is
+ * one the machine would reject; save is not, because a half-finished recipe is
+ * still worth keeping.
+ *
+ * Module scope, so it is a stable component type across the screen's renders.
+ */
+function ActionBar({accent, canWrite, canSave, onWrite, onSave}: ActionBarProps) {
+    return (
+        <XStack position="absolute" bottom={0} left={0} right={0} gap="$2"
+                padding="$4" paddingBottom="$6" backgroundColor={palette.base}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Write card"
+                       accessibilityState={{disabled: !canWrite}}
+                       onPress={() => canWrite && onWrite()}
+                       style={{flex: 2, opacity: canWrite ? 1 : 0.4}}>
+                <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                        backgroundColor={accent}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={palette.base}>
+                        WRITE
+                    </DotMatrixText>
+                </YStack>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Save"
+                       accessibilityState={{disabled: !canSave}}
+                       onPress={() => canSave && onSave()}
+                       style={{flex: 1, opacity: canSave ? 1 : 0.4}}>
+                <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                        borderWidth={1} borderColor={palette.line}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={palette.text}>
+                        SAVE
+                    </DotMatrixText>
+                </YStack>
+            </Pressable>
+        </XStack>
+    );
+}
+
+/**
+ * The recipe editor: a spec sheet you can edit.
+ *
+ * The screen owns only what is about the screen — which deck is showing and
+ * which sheet is open. The recipe and every mutation on it come from
+ * `useRecipeEditor`; the NFC write path comes from `useCardWriter`. The balance
+ * is derived at render by the hook, not repainted by hand, which is what fixed
+ * the stale total (#40).
+ */
 export default function EditRecipe() {
     const {recipeJSON, saveEnabled} = useLocalSearchParams();
-    // disable scrolling when using sliders
-    const scrollViewRefs = useRef<Map<string, ScrollView>>(new Map());
-    const handleSlidingChange = useCallback((sliding: boolean) => {
-        scrollViewRefs.current.forEach(scrollView => {
-            scrollView.setNativeProps({scrollEnabled: !sliding});
-        });
-    }, []);
-    const setScrollViewRef = useCallback((key: string) => (ref: ScrollView | null) => {
-        if (ref) {
-            scrollViewRefs.current.set(key, ref);
-        } else {
-            scrollViewRefs.current.delete(key);
-        }
-    }, []);
-
-    const ON_OFF_BUTTON_CONFIG = {
-        buttons:      [1, 0],
-        getLabelText: (id: number) => id === 1 ? "On" : "Off"
-    };
-
     const navigation = useNavigation();
-    const {width} = useWindowDimensions();
+
+    const [helpStyleRaw] = useSetting("helpStyle");
+    const helpStyle = asHelpStyle(helpStyleRaw);
+
+    const [deck, setDeck] = useState<Deck>("brew");
+    const [overflowOpen, setOverflowOpen] = useState(false);
+    const [revertOpen, setRevertOpen] = useState(false);
+    const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
 
     const {
-        recipe, getRecipe, enableSave, inputError, setInputError, isLoadingTitle,
-        balance, revertSources,
-        bumpKey, handleReloadTitlePress, addPour, deletePour, autoAdjustPourVolumes,
-        saveRecipe, editInputComplete, setVolumeError
+        recipe, key, balance, canWrite, canSave, revertSources,
+        bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError
     } = useRecipeEditor({
         recipeJSON:           recipeJSON as string | undefined,
         initiallySaveEnabled: saveEnabled === "true",
         onSaved:              () => navigation.goBack()
     });
 
-    // The revert sheet's open state now belongs to the screen, not the hook.
-    // Task 14 replaces this screen and dialog wholesale; this is the smallest
-    // bridge that keeps the old one compiling against the new hook shape.
-    const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-    const restoreOptions: RestoreOption[] = revertSources
-        .filter((s) => s.available)
-        .map((s) => ({id: s.id, label: s.label, action: s.action}));
-
-    function restoreRecipe() {
-        setShowRestoreDialog(true);
-    }
-
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
-
-
-    function writeCardIcon() {
-        return (
-            <Svg width="40" height="35" viewBox="0 0 24 24" fill="none">
-                <Path
-                    d="M2,8.5h12.5M6,16.5h2M10.5,16.5h4M22,14.03v2.08c0,3.51-.89,4.39-4.44,4.39H6.44c-3.55,0-4.44-.88-4.44-4.39V7.89c0-3.51.89-4.39,4.44-4.39h8.06M20,9.5V3.5M20,3.5l-2,2M20,3.5l2,2"
-                    stroke={palette.text} stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-            </Svg>
-        )
-    }
 
     useEffect(() => {
         navigation.setOptions({
-            title:       'Edit Recipe',
+            title:       "Edit Recipe",
             headerShown: true,
-            headerRight: () => <IconButton onPress={() => writeCard(recipe)} title="" icon={writeCardIcon()}/>
-        })
-    }, [navigation, recipe]);
+            headerRight: () => (
+                <Pressable accessibilityRole="button" accessibilityLabel="More"
+                           onPress={() => setOverflowOpen(true)} hitSlop={12}>
+                    <DotIcon name="more" size={16} color={palette.dim}/>
+                </Pressable>
+            )
+        });
+    }, [navigation]);
 
+    if (!recipe) return null;
+
+    const accent = resolveAccent(recipe);
+    const explaining = helpStyle === "explain";
+
+    // Every edit republishes the recipe: the model is mutated in place, so a key
+    // bump is what repaints the steppers and the derived total. Several of the
+    // hook's field updaters do not bump the key themselves, so the screen does.
+    const dispatch: Dispatch = (label, value) => {
+        void editInputComplete(label, value);
+        bumpKey();
+    };
+
+    function duplicateRecipe() {
+        new RecipeDatabase().cloneRecipe(recipe!.uuid);
+        navigation.goBack();
+    }
+
+    function deleteRecipe() {
+        new RecipeDatabase().deleteRecipe(recipe!.uuid);
+        navigation.goBack();
+    }
 
     return (
-        <>
-            {recipe ?
-                <YStack maxWidth="100%" flex={1}>
-                    <XStack flex={1}>
-                        <ScrollView showsVerticalScrollIndicator={false} margin="$2" nestedScrollEnabled={true}
-                                    ref={setScrollViewRef('vertical')}>
-                            <YStack maxWidth="100%">
-                                <XStack alignItems="center">
-                                    <LabeledInput setErrorFunction={setInputError} maxLength={100}
-                                                  initialValue={getRecipe()!.name}
-                                                  label={RECIPE_LABELS.TITLE}
-                                                  onValidEditFunction={editInputComplete}
-                                                  validateInput={(data) => {
-                                                      return data.length > 0;
-                                                  }}
-                                                  errorMessage="You must have a title"
-                                                  key={`title-${isLoadingTitle}`}
-                                                  disabled={isLoadingTitle}
-                                    />
-                                    <XStack paddingLeft={"$4"} paddingRight={"$3"}>
-                                        {/* The refresh only ever queries by XID, so without one the
-                                            button is inert — disable it rather than let it silently
-                                            do nothing. */}
-                                        <Pressable onPress={handleReloadTitlePress}
-                                                   disabled={isLoadingTitle || !getRecipe()?.xid?.trim()}
-                                                   accessibilityLabel="Refresh the name from xBloom">
-                                            {isLoadingTitle ? (
-                                                <ActivityIndicator size={30} color={palette.muted}/>
-                                            ) : (
-                                                <AntDesign name="sync" size={30} color={palette.muted}/>
-                                            )}
-                                        </Pressable>
-                                    </XStack>
-                                </XStack>
-                                <XStack>
-                                    <LabeledInput setErrorFunction={setInputError} maxLength={XID_LENGTH}
-                                                  initialValue={getRecipe()!.xid} label={RECIPE_LABELS.XID}
-                                                  onValidEditFunction={editInputComplete}
-                                                  validateInput={isValidXID}
-                                                  errorMessage="Use a 3-letter vendor code, an optional T for tea, then 2-3 digits (e.g. CGL12, CGLT123). Leave empty for no online lookup."/>
-                                    <XStack flex={1} paddingLeft={"$2"}>
-                                        <TooltipComponent
-                                            content="Recipe ID used by the app to find recipes online. Format: <VENDOR>[T]<NUM> (3-char vendor code, optional T for tea, 2-3 digit number). The card does not store the recipe name, only this ID, so a card written without an XID will read back with an empty name. Remove or change to prevent wrong recipe display in app (machine will still work)."/>
-                                    </XStack>
-                                </XStack>
-                                <ValidatedInput setErrorFunction={setInputError} initialValue={getRecipe()!.dosage}
-                                                minimumValue={1} maximumValue={getRecipe()!.isTea() ? 10 : 31} step={1}
-                                                label={RECIPE_LABELS.DOSE}
-                                                maxLength={2} inputMode="numeric"
-                                                onValidEditFunction={editInputComplete}
-                                                onIsSlidingChange={handleSlidingChange}
-                                />
-                                <ValidatedInput setErrorFunction={setInputError} initialValue={getRecipe()!.ratio}
-                                                minimumValue={5} maximumValue={100} step={1} label={RECIPE_LABELS.RATIO}
-                                                maxLength={3}
-                                                inputMode="numeric" onValidEditFunction={editInputComplete}
-                                                onIsSlidingChange={handleSlidingChange}
-                                />
-                                {(getRecipe()!.grinder && !getRecipe()!.isTea()) && (
-                                    <>
-                                        <ValidatedInput setErrorFunction={setInputError}
-                                                        initialValue={getRecipe()!.grindSize}
-                                                        minimumValue={40} maximumValue={80} step={1}
-                                                        label={RECIPE_LABELS.GRIND_SIZE}
-                                                        maxLength={2} inputMode="numeric"
-                                                        onValidEditFunction={editInputComplete}
-                                                        onIsSlidingChange={handleSlidingChange}
-                                        />
-                                        <ValidatedInput setErrorFunction={setInputError}
-                                                        initialValue={getRecipe()!.grindRPM}
-                                                        minimumValue={60} maximumValue={120} step={10}
-                                                        label={RECIPE_LABELS.GRIND_RPM}
-                                                        maxLength={3} inputMode="numeric"
-                                                        onValidEditFunction={editInputComplete}
-                                                        onIsSlidingChange={handleSlidingChange}
-                                        />
-                                    </>
-                                )}
-                                {!getRecipe()!.isTea() && (
-                                    <>
-                                        <XStack>
-                                            <MyButtonGroup initialValue={"" + getRecipe()!.cupType}
-                                                           label={RECIPE_LABELS.CUP}
-                                                           size="$4" minWidth={"$5"}
-                                                           orientation="horizontal"
-                                                           onToggle={(val) => editInputComplete(RECIPE_LABELS.CUP, val)}
-                                                           buttons={[CUP_TYPE.XPOD, CUP_TYPE.OMNI, CUP_TYPE.OTHER]}
-                                                           getLabelText={Recipe.getCupTypeText}
-                                            />
-                                            <TooltipComponent
-                                                content={"Omni type disables overflow protection. Other type is used for third-party brewers."}/>
-                                        </XStack>
-                                        <XStack>
-                                            <MyButtonGroup initialValue={getRecipe()!.grinder ? "1" : "0"}
-                                                           label={RECIPE_LABELS.GRINDER} size="$4" minWidth={"$5"}
-                                                           orientation="horizontal"
-                                                           onToggle={(val) => editInputComplete(RECIPE_LABELS.GRINDER, val)}
-                                                           buttons={ON_OFF_BUTTON_CONFIG.buttons}
-                                                           getLabelText={ON_OFF_BUTTON_CONFIG.getLabelText}
-                                            />
-                                            <TooltipComponent
-                                                content={"Disabling grinder is experimental. It sets grind size to 81 (instead of 80 max). However, machine will not accept the card with the grinder disabled. As a workaround, you can load any other recipe with the grinder enabled first, either via a shortcut button, another card or an app. Once any other recipe is already loaded, the card with disabled grinder will work and you'll see '--' for the grind size. At the moment there is no better way to disable grinder from the recipe card."}/>
-                                        </XStack>
-                                    </>
-                                )}
-                                <XStack alignItems="center" flexWrap="wrap">
-                                    <XStack paddingRight="$4">
-                                        <TotalVolumeComponent recipe={getRecipe()!} />
-                                        <TooltipComponent
-                                            content={"This field shows the total volume of all pours versus the total volume based on your dosage and ratio (sum of all pour volumes / dose × ratio). The numbers need to match for a valid recipe that the machine will accept. Adjust pour volumes, ratio, and dose as needed.\n\nTea recipes show 90ml per pour, but the actual volume in the cup will be 120ml per pour since the machine automatically adds ~30ml to trigger the siphon. If the siphon triggers prematurely due to wet leaf expansion, reduce the volume of the latter steeps."}/>
-                                    </XStack>
-                                    <Button borderWidth={2} flex={1}
-                                            pressStyle={{backgroundColor: palette.dim, borderColor: palette.muted}}
-                                            borderColor={palette.muted} paddingHorizontal="$3" paddingVertical="$2"
-                                            marginHorizontal="$2" marginVertical="$2" backgroundColor={palette.text}
-                                            disabledStyle={{opacity: 0.5}}
-                                            fontWeight={700} fontSize="$5" color={palette.base} minWidth="100"
-                                            onPress={() => autoAdjustPourVolumes()}
-                                            disabled={balance.balanced}
-                                    >
-                                        Auto
-                                    </Button>
-                                </XStack>
+        <YStack flex={1} backgroundColor={palette.base}>
+            <ScrollView key={key} contentContainerStyle={{padding: 16, paddingBottom: 120}}>
+                <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
+                            xid={recipe.xid} accent={accent}
+                            beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
 
-                                <ScrollView showsHorizontalScrollIndicator={false} centerContent={true} horizontal
-                                            pagingEnabled={true} nestedScrollEnabled={true} removeClippedSubviews={true}
-                                            ref={setScrollViewRef('horizontal')}
-                                >
-                                    {getRecipe() ? getRecipe()!.pours.map((pour, index) => (
-                                        <YStack width={width - getTokens().size["$2"].val} key={index} borderWidth={2}
-                                                borderColor={palette.muted} marginInline="$2" borderRadius={10}>
-                                            <YStack padding="$2">
-                                                <XStack justifyContent="space-between">
-                                                    <H6 fontSize={20}
-                                                        fontWeight={700}>Pour {pour.getPourNumber()} of {getRecipe()?.pours.length}</H6>
-                                                    <XStack paddingRight="$2">
-                                                        <XStack paddingRight="$2">
-                                                            <IconButton onPress={() => deletePour(index)} title=""
-                                                                        icon={<AntDesign name="close-square" size={24}
-                                                                                         color={palette.danger}/>}></IconButton>
-                                                        </XStack>
-                                                        <IconButton onPress={() => addPour(index)} title=""
-                                                                    icon={<AntDesign name="plus-square" size={24}
-                                                                                     color={palette.success}/>}></IconButton>
-                                                    </XStack>
-                                                </XStack>
-                                                <ValidatedInput setErrorFunction={setInputError}
-                                                                initialValue={pour.getVolume()} minimumValue={1}
-                                                                maximumValue={getRecipe()!.isTea() ? 90 : 240} step={1}
-                                                                pourNumber={index} label={RECIPE_LABELS.VOLUME}
-                                                                maxLength={3}
-                                                                inputMode="numeric" style={{maxWidth: 100}}
-                                                                onValidEditFunction={editInputComplete}
-                                                                onIsSlidingChange={handleSlidingChange}
-                                                />
+                {/* The tea banner is Task 16. */}
 
-                                                <ValidatedInput setErrorFunction={setInputError}
-                                                                initialValue={pour.getTemperature()} minimumValue={39}
-                                                                maximumValue={99} step={1} pourNumber={index}
-                                                                label={RECIPE_LABELS.TEMPERATURE} maxLength={2}
-                                                                inputMode="numeric"
-                                                                onValidEditFunction={editInputComplete}
-                                                                onIsSlidingChange={handleSlidingChange}
-                                                />
+                <DeckSwitch deck={deck} stageCount={recipe.pours.length}
+                            accent={accent} onChange={setDeck}/>
 
-                                                <ValidatedInput setErrorFunction={setInputError}
-                                                                initialValue={pour.getFlowRate()} minimumValue={30}
-                                                                maximumValue={35} step={1} floatingPoint
-                                                                pourNumber={index} label={RECIPE_LABELS.FLOW_RATE}
-                                                                maxLength={4}
-                                                                inputMode="decimal"
-                                                                onValidEditFunction={editInputComplete}
-                                                                onIsSlidingChange={handleSlidingChange}
-                                                />
+                {deck === "brew" ? (
+                    <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
+                              helpStyle={helpStyle} explaining={explaining}
+                              onHelp={setHelpTopic} dispatch={dispatch}/>
+                ) : (
+                    <StagesPlaceholder stageCount={recipe.pours.length}/>
+                )}
+            </ScrollView>
 
-                                                <ValidatedInput setErrorFunction={setInputError}
-                                                                initialValue={pour.getPauseTime()} minimumValue={0}
-                                                                maximumValue={getRecipe()!.isTea() ? 360 : 59} step={1}
-                                                                pourNumber={index} label={RECIPE_LABELS.PAUSING}
-                                                                maxLength={3}
-                                                                inputMode="numeric"
-                                                                onValidEditFunction={editInputComplete}
-                                                                onIsSlidingChange={handleSlidingChange}
-                                                />
+            <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
+                       onWrite={() => writeCard(recipe)} onSave={saveRecipe}/>
 
-                                                <MyButtonGroup initialValue={"" + pour.getPourPattern()} minWidth={"$6"}
-                                                               label="Pattern" size="$4" orientation="horizontal"
-                                                               onToggle={(val) => editInputComplete(RECIPE_LABELS.PATTERN, val, index)}
-                                                               buttons={Object.values(POUR_PATTERN)}
-                                                               getLabelText={Pour.getPourPatternText}
-                                                />
-                                                {!getRecipe()!.isTea() && (
-                                                    <>
-                                                        <MyButtonGroup
-                                                            initialValue={pour.getAgitationBefore() ? "1" : "0"}
-                                                            label={RECIPE_LABELS.AGITATION_BEFORE} size="$4"
-                                                            minWidth={"$11"}
-                                                            orientation="horizontal"
-                                                            onToggle={(val) => editInputComplete(RECIPE_LABELS.AGITATION_BEFORE, val, index)}
-                                                            buttons={ON_OFF_BUTTON_CONFIG.buttons}
-                                                            getLabelText={ON_OFF_BUTTON_CONFIG.getLabelText}
+            <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
+                                 onOpenChange={setOverflowOpen}
+                                 onDuplicate={duplicateRecipe}
+                                 onRefreshName={handleReloadTitlePress}
+                                 onRevert={() => setRevertOpen(true)}
+                                 onHelp={() => setHelpTopic("all")}
+                                 onDelete={deleteRecipe}/>
 
-                                                        />
-                                                        <MyButtonGroup
-                                                            initialValue={pour.getAgitationAfter() ? "1" : "0"}
-                                                            label={RECIPE_LABELS.AGITATION_AFTER} size="$4"
-                                                            minWidth={"$11"}
-                                                            orientation="horizontal"
-                                                            onToggle={(val) => editInputComplete(RECIPE_LABELS.AGITATION_AFTER, val, index)}
-                                                            buttons={ON_OFF_BUTTON_CONFIG.buttons}
-                                                            getLabelText={ON_OFF_BUTTON_CONFIG.getLabelText}
-                                                        />
-                                                    </>
-                                                )}
-                                            </YStack>
-                                        </YStack>
-                                    )) : ""}
-                                </ScrollView>
-                            </YStack>
-                        </ScrollView>
-                    </XStack>
-                    {!balance.balanced && (
-                        <Text accessibilityRole="alert" fontSize={13} color={palette.danger}
-                              paddingHorizontal="$3" paddingBottom="$2">
-                            Your individual pour volumes must add up to the total volume.
-                        </Text>
-                    )}
-                    <XStack paddingVertical="$2" justifyContent="center" alignContent="center" alignItems="center"
-                            backgroundColor="$backgroundFocus">
-                        <Button marginHorizontal={"$2"} onPress={() => restoreRecipe()} width={150} fontSize={16}
-                                fontWeight={700}
-                                color={palette.base} backgroundColor={palette.text}>Restore</Button>
-                        <Button marginHorizontal={"$4"} onPress={() => saveRecipe()} width={150} fontSize={16}
-                                fontWeight={700}
-                                disabled={inputError || !enableSave} color={palette.base}
-                                backgroundColor={inputError || !enableSave ? palette.muted : palette.text}>Save</Button>
-                    </XStack>
-                    <NfcOverlay visible={showNfcOverlay} mode="write"
-                                progress={writeProgress}
-                                onCancel={onNFCDialogClose}/>
-                    <RestoreDialog
-                        open={showRestoreDialog}
-                        onOpenChange={setShowRestoreDialog}
-                        options={restoreOptions}
-                        onRestored={bumpKey}
-                    />
-                </YStack>
-                : ""}
-        </>
-    )
+            <RevertSheet open={revertOpen} sources={revertSources}
+                         onOpenChange={setRevertOpen} onReverted={bumpKey}/>
+
+            <HelpSheet open={helpTopic !== null} topic={helpTopic ?? "all"}
+                       onOpenChange={(open) => {
+                           if (!open) setHelpTopic(null);
+                       }}/>
+
+            <NfcOverlay visible={showNfcOverlay} mode="write"
+                        progress={writeProgress} onCancel={onNFCDialogClose}/>
+        </YStack>
+    );
 }

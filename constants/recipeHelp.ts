@@ -70,6 +70,10 @@ const ENTRIES = {
                 "nameless. Changing or clearing it stops the wrong recipe " +
                 "being shown in the app; the machine brews the same either way."
     },
+    name: {
+        title: "Name",
+        hint:  "Yours. The xBloom name is kept separate and not overwritten."
+    },
     volume: {
         title:  "Stage volume",
         hint:   "All stages together must equal the target.",
