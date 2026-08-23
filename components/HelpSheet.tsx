@@ -1,7 +1,6 @@
 import React from "react";
 import {ScrollView, Text, YStack} from "tamagui";
 
-import DotMatrixText from "@/components/DotMatrixText";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {DETAILED_TOPICS, RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
@@ -13,7 +12,13 @@ type Props = {
     onOpenChange: (open: boolean) => void;
 };
 
-/** The long-form notes, on demand rather than in the way. */
+/**
+ * The long-form notes, on demand rather than in the way.
+ *
+ * A topic's title is set the way `FieldRow` sets it, because it is the same
+ * string: the label beside the control and the heading of its paragraph must
+ * not arrive in two different faces depending on which route reached them.
+ */
 export default function HelpSheet({open, topic, onOpenChange}: Props) {
     const topics = topic === "all" ? DETAILED_TOPICS : [topic];
 
@@ -24,10 +29,10 @@ export default function HelpSheet({open, topic, onOpenChange}: Props) {
                 <YStack gap="$4" paddingBottom="$4">
                     {topics.map((key) => (
                         <YStack key={key} gap="$1.5">
-                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.8}
-                                           color={palette.text}>
+                            <Text fontSize={11} letterSpacing={1.5}
+                                  textTransform="uppercase" color={palette.text}>
                                 {RECIPE_HELP[key].title}
-                            </DotMatrixText>
+                            </Text>
                             <Text fontSize={13} lineHeight={19} color={palette.dim}>
                                 {RECIPE_HELP[key].detail ?? RECIPE_HELP[key].hint}
                             </Text>
