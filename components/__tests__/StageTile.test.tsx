@@ -9,7 +9,7 @@ function stage(volume = 96, temperature = 93): Pour {
     const pour = new Pour(1);
     pour.volume = volume;
     pour.temperature = temperature;
-    pour.flowRate = 3.2;
+    pour.flowRate = 32;
     pour.pauseTime = 30;
     pour.pourPattern = POUR_PATTERN.SPIRAL;
     pour.agitation = 0;
@@ -78,6 +78,20 @@ describe("StageTile", () => {
         await fireEvent.press(screen.getByLabelText("Increase Temperature"));
 
         expect(onChange).toHaveBeenCalledWith(2, "temperature", 94);
+    });
+
+    it("steps flow rate in tenths and reports the byte the card takes", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <StageTile pour={stage()} index={0} count={3} open
+                       accent="#F0B98E" isTea={false} {...NOOP} onChange={onChange}/>
+        );
+
+        expect(screen.getByLabelText("Flow rate, 3.2")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Increase Flow rate"));
+
+        expect(onChange).toHaveBeenCalledWith(0, "flowRate", 33);
     });
 
     it("agitates before and after independently", async () => {

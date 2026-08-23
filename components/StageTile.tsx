@@ -27,13 +27,19 @@ type Props = {
     onDelete: (index: number) => void;
 };
 
-/** The volumes of every stage up to and including this one, for its sparkline. */
+/**
+ * A flat run of stages up to and including this one, for the tile's sparkline.
+ *
+ * Every reached stage is given the same volume on purpose. The sparkline says
+ * how far into the recipe this stage falls, not what shape it pours — the shape
+ * is already drawn full size by StageProfile directly above the list, and a
+ * second, tinier copy of it beside every row would say the same thing five
+ * times. Do not feed the real volumes in.
+ */
 function runUpTo(index: number, count: number): Pour[] {
     return Array.from({length: count}, (_, i) => {
         const pour = new Pour(i + 1);
-        // A zero-volume tail would divide by zero in buildProfilePath, so the
-        // unreached stages carry a vanishing volume rather than none.
-        pour.volume = i <= index ? 1 : 0.001;
+        pour.volume = i <= index ? 1 : 0;
         return pour;
     });
 }
@@ -100,9 +106,15 @@ export default function StageTile({
                                     onChange={(v) => onChange(index, "temperature", v)}/>
                     </XStack>
                     <XStack gap="$2">
-                        <StageValue label="Flow rate" value={pour.getFlowRate()}
+                        {/* Flow rate is the one value the card stores in
+                            tenths: byte 30 is 3.0 ml/s. The stepper works in
+                            the units on the label and the byte is put back
+                            here, because a stage that reported 3.2 would be
+                            written to a card as three. */}
+                        <StageValue label="Flow rate" value={pour.getFlowRate() / 10}
                                     min={3} max={3.5} step={0.1}
-                                    onChange={(v) => onChange(index, "flowRate", v)}/>
+                                    onChange={(v) =>
+                                        onChange(index, "flowRate", Math.round(v * 10))}/>
                         <StageValue label="Pause" value={pour.getPauseTime()}
                                     min={0} max={isTea ? 360 : 59} step={1}
                                     onChange={(v) => onChange(index, "pauseTime", v)}/>
@@ -186,12 +198,10 @@ type StageChoiceProps = {
 function StageChoice({label, value, accent, options, onChange}: StageChoiceProps) {
     return (
         <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
-            {label !== "" && (
-                <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
-                      color={palette.muted}>
-                    {label}
-                </Text>
-            )}
+            <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
+                  color={palette.muted}>
+                {label}
+            </Text>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
                     borderRadius="$3" padding={2} gap={2}>
                 {options.map((option) => {
