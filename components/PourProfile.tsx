@@ -1,5 +1,5 @@
-import React from "react";
-import Svg, {Path} from "react-native-svg";
+import React, {useId} from "react";
+import Svg, {Circle, ClipPath, Defs, Path, Pattern, Rect} from "react-native-svg";
 
 import type Pour from "@/library/Pour";
 import {onAccent} from "@/constants/colors";
@@ -54,12 +54,23 @@ type Props = {
     width: number;
     height: number;
     stroke?: string;
-    fill?: string;
+    /** The colour of the dots the area under the curve is filled with. */
+    dot?: string;
     strokeWidth?: number;
     testID?: string;
 };
 
 const PROFILE_STROKE_WIDTH = 1.6;
+
+/**
+ * The cell the fill's dots sit on, and their diameter as a fraction of it.
+ *
+ * The same relationship the icons are drawn with, a little heavier: an icon is
+ * read as a shape, whereas this is read as a surface, and at 0.36 the fill
+ * dissolved into a haze at arm's length.
+ */
+const DOT_CELL = 6;
+const DOT_RATIO = 0.4;
 
 /**
  * How far the profile's stroke bleeds past its geometry on every side.
@@ -80,10 +91,14 @@ export default function PourProfile({
     width,
     height,
     stroke = onAccent.profileStroke,
-    fill = onAccent.profileFill,
+    dot = onAccent.profileDot,
     strokeWidth = PROFILE_STROKE_WIDTH,
     testID
 }: Props) {
+    // SVG ids are resolved document-wide, so a fixed one would leave every card
+    // in a list pointing at whichever profile mounted last. The punctuation React
+    // puts in its ids is not valid in an id used from a url() reference.
+    const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const path = buildProfilePath(pours, width, height);
     if (path === "") {
         return null;
@@ -101,10 +116,32 @@ export default function PourProfile({
     const bleed = strokeWidth / 2;
     const viewBox = [-bleed, -bleed, width + strokeWidth, height + strokeWidth].join(" ");
 
+    const area = `${path} L${round(width)} ${round(height)} Z`;
+    const radius = (DOT_CELL * DOT_RATIO) / 2;
+
     return (
         <Svg testID={testID} width={width + strokeWidth} height={height + strokeWidth}
              viewBox={viewBox}>
-            <Path d={`${path} L${round(width)} ${round(height)} Z`} fill={fill}/>
+            <Defs>
+                <ClipPath id={`${id}clip`}>
+                    <Path d={area}/>
+                </ClipPath>
+                {/* Alternate rows are offset by half a cell. A square grid reads
+                    as a page of holes; the stagger is what makes it a screen. */}
+                <Pattern id={`${id}dots`} width={DOT_CELL} height={DOT_CELL}
+                         patternUnits="userSpaceOnUse">
+                    <Circle testID="profile-dot" cx={DOT_CELL / 4} cy={DOT_CELL / 4}
+                            r={radius} fill={dot}/>
+                    <Circle testID="profile-dot" cx={(DOT_CELL * 3) / 4}
+                            cy={(DOT_CELL * 3) / 4} r={radius} fill={dot}/>
+                </Pattern>
+            </Defs>
+            {/* The pattern is painted over the whole plane and cut to the area,
+                rather than tiled from its corner, so the dots line up between
+                one card and the next instead of shifting with the shape. */}
+            <Rect testID="profile-fill" x={-bleed} y={-bleed}
+                  width={width + strokeWidth} height={height + strokeWidth}
+                  fill={`url(#${id}dots)`} clipPath={`url(#${id}clip)`}/>
             <Path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth}
                   strokeLinejoin="round"/>
         </Svg>

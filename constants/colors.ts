@@ -75,8 +75,14 @@ export const onAccent = {
      * clears it on every accent, worst case 3.24:1 on Blossom.
      */
     profileStroke: "rgba(0,0,0,0.50)",
-    /** Pour profile fill. Scaled with the stroke to keep the watermark's shape. */
-    profileFill:   "rgba(0,0,0,0.15)",
+    /**
+     * The dots the area under the curve is filled with.
+     *
+     * Carried a little heavier than the flat wash it replaced: a screen of dots
+     * covers less of the area than a solid does, so matching its opacity would
+     * have made the fill fainter rather than the same weight in another form.
+     */
+    profileDot:    "rgba(0,0,0,0.36)",
     /** Beverage marker and contactless mark. */
     marker:        "rgba(0,0,0,0.70)",
     /**
