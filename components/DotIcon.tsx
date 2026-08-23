@@ -46,45 +46,52 @@ type DotProps = {
     cell: number;
     dot: number;
     color: string;
-    /** 0 when static; otherwise this dot's place in the entry sequence. */
-    delay: number;
 };
 
-function IconDot({x, y, cell, dot, color, delay}: DotProps) {
-    const opacity = useSharedValue(delay > 0 ? 0 : 1);
+/** Where a dot sits and how big it is. Shared by both kinds of dot. */
+function dotStyle({x, y, cell, dot, color}: DotProps) {
+    return {
+        position:        "absolute" as const,
+        width:           dot,
+        height:          dot,
+        borderRadius:    dot / 2,
+        backgroundColor: color,
+        // Centred in the cell, then pulled back by its own radius, so the
+        // drawing occupies exactly `size` and a clipping ancestor cannot shave
+        // the outer dots.
+        left:            (x + 0.5) * cell - dot / 2,
+        top:             (y + 0.5) * cell - dot / 2
+    };
+}
+
+/**
+ * A dot that never moves.
+ *
+ * This is the common case by far — every navigation glyph, every card action,
+ * every swipe tile — and it is a plain View on purpose. Drawing it as an
+ * Animated.View gave each of some forty dots a shared value, an effect and an
+ * animated style to set up; mounting two glyphs on every row of a list took
+ * long enough to feel like a delay before edit mode appeared.
+ */
+function StaticDot(props: DotProps) {
+    return <View testID="dot-icon-dot" style={dotStyle(props)}/>;
+}
+
+/** A dot that fades up, optionally after waiting its turn in the sequence. */
+function AnimatedDot({delay, ...rest}: DotProps & {delay: number}) {
+    const opacity = useSharedValue(0);
 
     React.useEffect(() => {
-        if (delay > 0) {
-            opacity.value = withDelay(
-                delay,
-                withTiming(1, {duration: DURATION.fast, easing: EASING.out})
-            );
-        } else {
-            opacity.value = 1;
-        }
+        opacity.value = withDelay(
+            delay,
+            withTiming(1, {duration: DURATION.fast, easing: EASING.out})
+        );
     }, [delay, opacity]);
 
     const animatedStyle = useAnimatedStyle(() => ({opacity: opacity.value}));
 
     return (
-        <Animated.View
-            testID="dot-icon-dot"
-            style={[
-                {
-                    position:        "absolute",
-                    width:           dot,
-                    height:          dot,
-                    borderRadius:    dot / 2,
-                    backgroundColor: color,
-                    // Centred in the cell, then pulled back by its own radius,
-                    // so the drawing occupies exactly `size` and a clipping
-                    // ancestor cannot shave the outer dots.
-                    left:            (x + 0.5) * cell - dot / 2,
-                    top:             (y + 0.5) * cell - dot / 2
-                },
-                animatedStyle
-            ]}
-        />
+        <Animated.View testID="dot-icon-dot" style={[dotStyle(rest), animatedStyle]}/>
     );
 }
 
@@ -125,15 +132,26 @@ export default function DotIcon({
             importantForAccessibility={labelled ? "yes" : "no-hide-descendants"}
             style={{width: size, height: size}}>
             {cells.map((point, index) => (
-                <IconDot
-                    key={`${point.x}-${point.y}`}
-                    x={point.x}
-                    y={point.y}
-                    cell={cell}
-                    dot={dot}
-                    color={color}
-                    delay={staggered ? index * STAGGER_MS : animated ? 1 : 0}
-                />
+                animated ? (
+                    <AnimatedDot
+                        key={`${point.x}-${point.y}`}
+                        x={point.x}
+                        y={point.y}
+                        cell={cell}
+                        dot={dot}
+                        color={color}
+                        delay={staggered ? index * STAGGER_MS : 0}
+                    />
+                ) : (
+                    <StaticDot
+                        key={`${point.x}-${point.y}`}
+                        x={point.x}
+                        y={point.y}
+                        cell={cell}
+                        dot={dot}
+                        color={color}
+                    />
+                )
             ))}
         </View>
     );

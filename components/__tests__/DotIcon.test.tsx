@@ -34,6 +34,27 @@ describe("DotIcon", () => {
         expect(large.props.style.width).toBe(36);
     });
 
+    it("costs nothing to animate when it is not animating", async () => {
+        // Every dot used to be an Animated.View with its own shared value,
+        // effect and animated style, whether or not it ever moved. A card's two
+        // action glyphs are some sixty dots, and turning edit mode on across a
+        // list built sixty of those per row -- half a second before the mode
+        // appeared. A static icon is a static icon.
+        await renderWithProviders(<DotIcon name="delete" size={20}/>);
+        const animated = screen.getAllByTestId("dot-icon-dot", includeHidden)
+            .filter((dot) => dot.props.jestAnimatedStyle !== undefined);
+
+        expect(animated).toHaveLength(0);
+    });
+
+    it("still animates each dot when asked to", async () => {
+        await renderWithProviders(<DotIcon name="delete" size={20} animated/>);
+        const animated = screen.getAllByTestId("dot-icon-dot", includeHidden)
+            .filter((dot) => dot.props.jestAnimatedStyle !== undefined);
+
+        expect(animated).toHaveLength(litCells(DOT_ICONS.delete).length);
+    });
+
     it("is hidden from the accessibility tree by default", async () => {
         await renderWithProviders(<DotIcon name="error" size={20}/>);
         expect(screen.getByTestId("dot-icon", includeHidden).props.accessibilityElementsHidden)

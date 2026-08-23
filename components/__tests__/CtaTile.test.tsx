@@ -177,8 +177,10 @@ describe("CtaTile", () => {
         // available.
         const label = screen.getByText("SCAN").props.style as {color?: string}[];
         expect(label.some((s) => s?.color === palette.muted)).toBe(true);
+        // A static dot is a plain View with a plain style object; only the
+        // animated kind carries the array an animated style is merged into.
         const dots = screen.getAllByTestId("dot-icon-dot", {includeHiddenElements: true});
-        const dotStyle = dots[0].props.style as ({backgroundColor?: string} | undefined)[];
-        expect(dotStyle.some((s) => s?.backgroundColor === palette.muted)).toBe(true);
+        const dotStyle = dots[0].props.style as {backgroundColor?: string};
+        expect(dotStyle.backgroundColor).toBe(palette.muted);
     });
 });
