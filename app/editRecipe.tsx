@@ -516,14 +516,6 @@ export default function EditRecipe() {
     // neutral tint on the render where the recipe has not resolved yet.
     const accent = recipe ? resolveAccent(recipe) : palette.dim;
 
-    // The screen draws its own header, on the accent, inside `RecipeHero`. The
-    // native one was a second surface in a second colour carrying a back control
-    // the navigator had auto-labelled "index" and a title that said nothing the
-    // slab beneath it did not already say.
-    useEffect(() => {
-        navigation.setOptions({headerShown: false});
-    }, [navigation]);
-
     if (!recipe) return null;
 
     // Every edit republishes the recipe: the model is mutated in place, so a key

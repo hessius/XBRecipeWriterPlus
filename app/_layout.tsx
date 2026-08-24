@@ -69,7 +69,16 @@ export default function RootLayout() {
                                                 }
                                             }}>
                                             <Stack.Screen name="index" options={{}}/>
-                                            <Stack.Screen name="editRecipe" options={{title: "Edit Recipe"}}/>
+                                            {/* The editor draws its own header,
+                                                on the accent, inside RecipeHero.
+                                                Declared here rather than turned
+                                                off from inside the screen: an
+                                                effect runs after the first
+                                                paint, so the native bar it was
+                                                replacing got one frame to
+                                                flash. */}
+                                            <Stack.Screen name="editRecipe"
+                                                          options={{headerShown: false}}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>
                                         <Toasts/>
