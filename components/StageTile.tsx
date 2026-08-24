@@ -1,13 +1,19 @@
 import React from "react";
-import {View} from "react-native";
-// Gesture Handler's Pressable, not React Native's, for the header. A scroll
-// view holds a touch back while it decides whether the finger is starting a
-// scroll, and a tap that lands during that window is swallowed -- felt on a
-// deck of tap-to-open tiles as roughly every third tap doing nothing. React
-// Native used to expose `delaysContentTouches` to turn that off; 0.86 no longer
-// does. A Gesture Handler press is a native gesture that negotiates with the
-// scroll view's own rather than queueing behind its decision.
-import {Pressable} from "react-native-gesture-handler";
+import {Pressable, View} from "react-native";
+// Gesture Handler's press, for the tile header only.
+//
+// A scroll view holds a touch back while it decides whether the finger is
+// starting a scroll, and a tap that lands inside that window is swallowed --
+// felt on a deck of tap-to-open tiles as roughly every third tap doing nothing.
+// React Native used to expose `delaysContentTouches` to turn that off; 0.86 no
+// longer does. A Gesture Handler press is a native gesture that negotiates with
+// the scroll view's own rather than queueing behind its decision.
+//
+// Only the header. Everything below it lives inside the `Collapsible`, which
+// hides a closed stage by setting `pointerEvents` to none -- and a Gesture
+// Handler press is a native recogniser that does not necessarily honour an
+// ancestor's pointer events, so a closed tile's steppers could still be hit.
+import {Pressable as GesturePressable} from "react-native-gesture-handler";
 import {Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
@@ -84,10 +90,10 @@ export default function StageTile({
         <YStack backgroundColor={open ? palette.surface : palette.raised}
                 borderRadius="$5" padding="$3" marginTop="$2.5"
                 borderWidth={open ? 1 : 0} borderColor={accent}>
-            <Pressable accessibilityRole="button"
-                       accessibilityLabel={`Stage ${index + 1} of ${count}`}
-                       accessibilityState={{expanded: open}}
-                       onPress={() => onToggle(index)}>
+            <GesturePressable accessibilityRole="button"
+                              accessibilityLabel={`Stage ${index + 1} of ${count}`}
+                              accessibilityState={{expanded: open}}
+                              onPress={() => onToggle(index)}>
                 <XStack alignItems="center" gap="$2.5">
                     <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
                                    color={accent}>
@@ -113,7 +119,7 @@ export default function StageTile({
                                  color={open ? accent : palette.muted}/>
                     </View>
                 </XStack>
-            </Pressable>
+            </GesturePressable>
 
             <Collapsible open={open}>
                 <YStack gap="$2" paddingTop="$3">
