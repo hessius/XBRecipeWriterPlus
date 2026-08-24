@@ -52,6 +52,16 @@ type Props = {
     /** Where the hero is. */
     to: Rect;
     accent: string;
+    /**
+     * Which way the rectangle travels.
+     *
+     * `from` and `to` describe the card and the hero whichever it is, so going
+     * back is the same journey run backwards rather than a second animation
+     * with the ends swapped. The opacity ramp mirrors itself for free: the end
+     * that is transparent is the hero's, because the real hero is drawn there
+     * in both directions.
+     */
+    direction?: "in" | "out";
     /** Called once the rectangle has arrived and there is nothing left to draw. */
     onDone: () => void;
 };
@@ -69,14 +79,21 @@ type Props = {
  * production, and a transition that sometimes leaves a view stranded mid-screen
  * is worse than no transition at all.
  */
-export default function HeroMorph({from, to, accent, onDone}: Props) {
-    const progress = useSharedValue(0);
+export default function HeroMorph({from, to, accent, direction = "in", onDone}: Props) {
+    const progress = useSharedValue(direction === "in" ? 0 : 1);
 
     useEffect(() => {
-        progress.value = withTiming(1, {duration: DURATION.base, easing: EASING.out});
-        const timer = setTimeout(onDone, DURATION.base);
+        progress.value = withTiming(direction === "in" ? 1 : 0, {
+            duration: DURATION.transition,
+            easing:   EASING.emphasised
+        });
+
+        // A timer rather than `withTiming`'s callback: the callback runs on the
+        // UI thread and `onDone` navigates, and on the way out the whole screen
+        // is about to be torn down underneath it.
+        const timer = setTimeout(onDone, DURATION.transition);
         return () => clearTimeout(timer);
-    }, [progress, onDone]);
+    }, [progress, direction, onDone]);
 
     const style = useAnimatedStyle(() => morphStyle(progress.value, from, to));
 

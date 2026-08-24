@@ -1,6 +1,9 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, View, useWindowDimensions} from "react-native";
+import Animated, {
+    useAnimatedStyle, useSharedValue, withTiming
+} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
@@ -19,7 +22,7 @@ import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
 import {palette} from "@/constants/colors";
-import {useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -29,7 +32,6 @@ import {resolveAccent} from "@/library/accent";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
-import {asHelpStyle, type HelpStyle} from "@/library/Settings";
 
 /**
  * The rectangle the editor was opened out of, if it was opened out of one.
@@ -86,10 +88,7 @@ type TextFieldRowProps = {
     initialValue: string;
     maxLength?: number;
     autoCapitalize?: "none" | "characters";
-    helpStyle: HelpStyle;
-    explaining: boolean;
     showHint: boolean;
-    onHelp: (topic: HelpTopic) => void;
     onCommit: (value: string) => void;
     /** Validates on every keystroke; false marks the field and reports up. */
     validate?: (value: string) => boolean;
@@ -117,7 +116,7 @@ type TextFieldRowProps = {
  */
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
-    helpStyle, explaining, showHint, onHelp, onCommit,
+    showHint, onCommit,
     validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
@@ -140,8 +139,7 @@ function TextFieldRow({
     }
 
     return (
-        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining}
-                  showHint={showHint} onHelp={onHelp}
+        <FieldRow topic={topic} showHint={showHint}
                   error={invalid ? invalidReason : undefined}>
             {/* Not keyed here: the key belongs on the row, which is what owns
                 the `invalid` state this input feeds. */}
@@ -160,10 +158,7 @@ type BrewDeckProps = {
 
     accent: string;
     balanceTarget: number;
-    helpStyle: HelpStyle;
-    explaining: boolean;
     showHint: boolean;
-    onHelp: (topic: HelpTopic) => void;
     dispatch: Dispatch;
     /** Reports the recipe-ID field's validity into the screen's write/save gate. */
     onInputErrorChange: (invalid: boolean) => void;
@@ -181,7 +176,7 @@ type BrewDeckProps = {
  * body is a new type on every render and would remount its whole subtree.
  */
 function BrewDeck({
-    recipe, accent, balanceTarget, helpStyle, explaining, showHint, onHelp,
+    recipe, accent, balanceTarget, showHint,
     dispatch, onInputErrorChange
 }: BrewDeckProps) {
     "use no memo";
@@ -211,14 +206,14 @@ function BrewDeck({
                 <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML TOTAL</Text>
             </XStack>
 
-            <FieldRow topic="dose" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+            <FieldRow topic="dose"
                       showHint={showHint}>
                 <Stepper label="Dose" value={recipe.dosage}
                          min={1} max={isTea ? 10 : 31} step={1} unit="g" accent={accent}
                          onChange={(value) => dispatch(RECIPE_LABELS.DOSE, String(value))}/>
             </FieldRow>
 
-            <FieldRow topic="ratio" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+            <FieldRow topic="ratio"
                       showHint={showHint}>
                 <Stepper label="Ratio" value={recipe.ratio}
                          min={5} max={100} step={1} accent={accent}
@@ -226,7 +221,7 @@ function BrewDeck({
             </FieldRow>
 
             {showGrind && (
-                <FieldRow topic="grindSize" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                <FieldRow topic="grindSize"
                       showHint={showHint}>
                     <Stepper label="Grind size" value={recipe.grindSize}
                              min={40} max={80} step={1}
@@ -235,7 +230,7 @@ function BrewDeck({
             )}
 
             {showGrind && (
-                <FieldRow topic="grindSpeed" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                <FieldRow topic="grindSpeed"
                       showHint={showHint}>
                     <Stepper label="Grind speed" value={recipe.grindRPM}
                              min={60} max={120} step={10} unit="rpm"
@@ -251,14 +246,13 @@ function BrewDeck({
                 The previous editor hid the pair for the same reasons. */}
             {!isTea && (
                 <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
-                              accent={accent} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                              accent={accent}
                       showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
             )}
 
             {!isTea && (
                 <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
-                              helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                       showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
@@ -271,7 +265,6 @@ function BrewDeck({
                 a stepper was nudged. */}
             <TextFieldRow key={recipe.xid} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
-                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                       showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
@@ -279,7 +272,6 @@ function BrewDeck({
 
             <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
-                          helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                       showHint={showHint}
                           onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
         </YStack>
@@ -301,9 +293,6 @@ type StagesDeckProps = {
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
-    helpStyle: HelpStyle;
-    explaining: boolean;
-    onHelp: (topic: HelpTopic) => void;
 };
 
 type StageProfileCardProps = {
@@ -386,7 +375,6 @@ function StageProfileCard({
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
     editStage, addPour, deletePour, autoAdjustPourVolumes,
-    helpStyle, explaining, onHelp
 }: StagesDeckProps) {
     "use no memo";
 
@@ -444,7 +432,6 @@ function StagesDeck({
                            onToggle={(i) =>
                                setOpenStage((current) => (current === i ? null : i))}
                            onChange={editStage}
-                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                            onDelete={(i) => {
                                // Close first, or `openStage` would point past
                                // the end of the shortened list.
@@ -489,6 +476,40 @@ export function stageScrollTarget(deckY: number, tileY: number, stickyHeight: nu
     return Math.max(0, deckY + tileY - stickyHeight);
 }
 
+/**
+ * The screen, fading out while it is being left.
+ *
+ * Only the hero has a rectangle travelling back to the list for it; the deck
+ * below has nothing, and a deck still at full strength around a shrinking
+ * hero-sized patch of accent looks like a bug rather than a departure. So the
+ * whole body goes, and what is left at the end is the rectangle over the base
+ * colour -- which is what the list will replace.
+ *
+ * Its own component because the screen is marked `"use no memo"`, and the
+ * compiler will not follow a shared value through a component it has bailed out
+ * of: writing `fade.value` there is an error rather than a warning. It is the
+ * better shape regardless.
+ */
+function ExitFade({away, children}: {away: boolean; children: React.ReactNode}) {
+    const fade = useSharedValue(1);
+
+    useEffect(() => {
+        if (away) {
+            fade.value = withTiming(0, {
+                duration: DURATION.transition,
+                easing:   EASING.emphasised
+            });
+        }
+    }, [away, fade]);
+
+    // One key, always. Reanimated does not clear a property that a style stops
+    // returning -- it keeps applying the last value it saw -- so a style that
+    // changes its shape leaves whatever it dropped stuck on the view.
+    const style = useAnimatedStyle(() => ({opacity: fade.value}));
+
+    return <Animated.View style={[{flex: 1}, style]}>{children}</Animated.View>;
+}
+
 type ActionBarProps = {
     accent: string;
     canWrite: boolean;
@@ -508,19 +529,24 @@ type ActionBarProps = {
  *
  * Module scope, so it is a stable component type across the screen's renders.
  */
+/** How far the bar sits into the home indicator's inset. */
+const ACTION_BAR_SINK = 5;
+
 function ActionBar({accent, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
     return (
-        // The bottom padding is the home indicator's own height and nothing
-        // more. A gap on top of it floated the buttons above a strip of empty
-        // base: the inset already is the clearance, which is what it is for.
-        // The top padding is half the sides'. The bar is pinned over the deck,
-        // so every point above the buttons is a point taken off the control
-        // being edited underneath it.
+        // The bottom padding is the home indicator's own height, less a few
+        // points. The inset is clearance for a gesture, not a margin, and the
+        // buttons are tall enough that overlapping its outer edge costs nothing
+        // -- on the phone this was tuned against, the full inset still read as
+        // the bar floating. The top padding is half the sides'. The bar is
+        // pinned over the deck, so every point above the buttons is a point
+        // taken off the control being edited underneath it.
         <XStack testID="editor-actions"
                 position="absolute" bottom={0} left={0} right={0} gap="$2"
-                paddingHorizontal="$4" paddingTop="$2" paddingBottom={insets.bottom}
+                paddingHorizontal="$4" paddingTop="$2"
+                paddingBottom={Math.max(insets.bottom - ACTION_BAR_SINK, 0)}
                 backgroundColor={palette.base}
                 onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
             <Pressable accessibilityRole="button" accessibilityLabel="Write card"
@@ -580,8 +606,6 @@ export default function EditRecipe() {
     const {width: windowWidth} = useWindowDimensions();
     const reducedMotion = useReducedMotion();
 
-    const [helpStyleRaw] = useSetting("helpStyle");
-    const helpStyle = asHelpStyle(helpStyleRaw);
     const [showHint] = useSetting("showHints");
 
     const [deck, setDeck] = useState<Deck>("brew");
@@ -596,8 +620,29 @@ export default function EditRecipe() {
     // window, and a screen that is sliding is not where the window says it is.
     const [cardMorph] = useSetting("cardMorph");
     const [morphed, setMorphed] = useState(false);
+    const [leaving, setLeaving] = useState(false);
     const morphFrom = cardMorph ? openedFrom(fromRect) : null;
-    const showMorph = !morphed && !reducedMotion && morphFrom !== null && heroHeight > 0;
+    const canMorph = !reducedMotion && morphFrom !== null && heroHeight > 0;
+    const showMorph = canMorph && !morphed && !leaving;
+
+    /**
+     * Go back the way we came in.
+     *
+     * Running the entrance backwards rather than cutting: the card grew out of
+     * the list, so it has to go back into it, and the screen underneath is the
+     * list it came from. The body fades while the rectangle shrinks, because the
+     * rectangle only covers the hero and the deck showing through a hero-sized
+     * hole is worse than either. With the morph off there is a platform pop to
+     * do the same job, so this is not in the way of anything.
+     */
+    const goBack = () => {
+        if (canMorph && !leaving) {
+            setLeaving(true);
+        } else {
+            navigation.goBack();
+        }
+    };
+
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
     // and putting them in state would re-render the whole editor on every
@@ -625,11 +670,10 @@ export default function EditRecipe() {
     }
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
-    const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
+    const [helpOpen, setHelpOpen] = useState(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
     // without changing what the next recipe opens on.
-    const [explaining, setExplaining] = useState(helpStyle === "explain");
 
     const {collapsed, onScroll} = useCollapsibleHeader();
 
@@ -680,6 +724,7 @@ export default function EditRecipe() {
                 subtree hides its own descendants from the screen reader, so
                 TalkBack cannot reach and fire the controls behind it — the
                 Android half of what `accessibilityViewIsModal` does on iOS. */}
+            <ExitFade away={leaving}>
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={showNfcOverlay}
                     importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
@@ -698,14 +743,8 @@ export default function EditRecipe() {
             <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                         xid={recipe.xid} accent={accent} collapsed={collapsed}
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
-                        onBack={() => navigation.goBack()}
-                        onMore={() => setOverflowOpen(true)}
-                        // Only where there is a screenful of notes to fold: the
-                        // `markers` style hangs its long form off each label, so
-                        // a toggle there would have nothing to act on.
-                        explain={helpStyle === "explain"
-                            ? {active: explaining, onToggle: () => setExplaining((prev) => !prev)}
-                            : undefined}/>
+                        onBack={goBack}
+                        onMore={() => setOverflowOpen(true)}/>
             </View>
 
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
@@ -751,9 +790,7 @@ export default function EditRecipe() {
                     back to the top of the screen on every nudge. */}
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
-                              helpStyle={helpStyle} explaining={explaining}
-                              showHint={showHint}
-                              onHelp={setHelpTopic} dispatch={dispatch}
+                              showHint={showHint} dispatch={dispatch}
                               onInputErrorChange={setInputError}/>
                 ) : (
                     <View onLayout={(event) => {
@@ -766,9 +803,7 @@ export default function EditRecipe() {
                                     stageOffsets.current[index] = y;
                                 }}
                                 addPour={addPour} deletePour={deletePour}
-                                autoAdjustPourVolumes={autoAdjustPourVolumes}
-                                helpStyle={helpStyle} explaining={explaining}
-                                onHelp={setHelpTopic}/>
+                                autoAdjustPourVolumes={autoAdjustPourVolumes}/>
                     </View>
                 )}
             </ScrollView>
@@ -782,25 +817,24 @@ export default function EditRecipe() {
                                  onDuplicate={duplicateRecipe}
                                  onRefreshName={handleReloadTitlePress}
                                  onRevert={() => setRevertOpen(true)}
-                                 onHelp={() => setHelpTopic("all")}
+                                 onHelp={() => setHelpOpen(true)}
                                  onDelete={deleteRecipe}/>
 
             <RevertSheet open={revertOpen} sources={revertSources}
                          onOpenChange={setRevertOpen} onReverted={bumpKey}/>
 
-            <HelpSheet open={helpTopic !== null} topic={helpTopic ?? "all"}
-                       onOpenChange={(open) => {
-                           if (!open) setHelpTopic(null);
-                       }}/>
+            <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
             </YStack>
+            </ExitFade>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>
 
-            {showMorph && (
+            {(showMorph || leaving) && morphFrom !== null && (
                 <HeroMorph from={morphFrom} accent={accent}
+                           direction={leaving ? "out" : "in"}
                            to={{x: 0, y: 0, width: windowWidth, height: heroHeight}}
-                           onDone={() => setMorphed(true)}/>
+                           onDone={leaving ? () => navigation.goBack() : () => setMorphed(true)}/>
             )}
         </>
     );

@@ -5,6 +5,7 @@ import {act, fireEvent, screen} from "@testing-library/react-native";
 import EditRecipe, {PROFILE_HEIGHT, openedFrom, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
+import {DURATION} from "@/constants/motion";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
@@ -14,20 +15,18 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
-    useNavigation:        () => ({setOptions: mockSetOptions, goBack: jest.fn()})
+    useNavigation:        () => ({setOptions: mockSetOptions, goBack: mockGoBack})
 }));
 
 jest.mock("@/library/RecipeDatabase");
 
 // `useSetting` reaches for the shared SQLite-backed settings store, which
-// cannot open under jest. The editor only reads `helpStyle`; pin it. Held in a
-// `mock`-prefixed `let` — Babel rejects any other name read inside a hoisted
-// factory — so a test can pick the help style the way `mockRecipeJSON` picks
-// the recipe. (Not in the plan's sketch — added here because the real hook
-// opens a database.)
+// cannot open under jest. Held in a `mock`-prefixed `let` — Babel rejects any
+// other name read inside a hoisted factory — so a test can pick a setting the
+// way `mockRecipeJSON` picks the recipe. (Not in the plan's sketch — added here
+// because the real hook opens a database.)
 jest.mock("@/hooks/useSetting", () => ({
-    useSetting: (key: string) =>
-        [key === "helpStyle" ? mockHelpStyle : mockSettings[key], jest.fn()]
+    useSetting: (key: string) => [mockSettings[key], jest.fn()]
 }));
 
 jest.mock("@/library/NFC", () => ({
@@ -46,10 +45,11 @@ let mockParams: Record<string, string> | null = null;
 /** Where a tapped card was, for the morph. */
 const RECT = {x: 12, y: 300, width: 360, height: 120};
 
-/** Every setting other than `helpStyle`, which has its own knob above. */
+/** Whatever the editor reads out of the settings store. */
 let mockSettings: Record<string, unknown> = {};
 
 const mockSetOptions = jest.fn();
+const mockGoBack = jest.fn();
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -64,13 +64,12 @@ function fixture(): Recipe {
 }
 
 let mockRecipeJSON = JSON.stringify(fixture());
-let mockHelpStyle = "explain";
 
 beforeEach(() => {
     mockRecipeJSON = JSON.stringify(fixture());
-    mockHelpStyle = "explain";
     mockSettings = {};
     mockParams = null;
+    mockGoBack.mockClear();
 });
 
 /**
@@ -222,49 +221,31 @@ describe("the editor", () => {
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
     });
 
-    it("unfolds the notes in explain mode and folds them with the toggle", async () => {
-        // The `ratio` detail is only mounted while explaining — `FieldRow`
-        // mounts it rather than clipping it — so its presence is the queryable
-        // difference between the two states. A regex, because
-        // `getByText`/`queryByText` default to an exact whole-string match.
-        mockHelpStyle = "explain";
-        await renderEditor();
-
-        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
-
-        await fireEvent.press(screen.getByLabelText("Explain"));
-
-        expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
-    });
-
-    it("unfolds the notes again on a second press", async () => {
-        mockHelpStyle = "explain";
-        await renderEditor();
-
-        await fireEvent.press(screen.getByLabelText("Explain"));
-        expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
-
-        await fireEvent.press(screen.getByLabelText("Explain"));
-        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
-    });
-
-    it("opens the help sheet from a marker on the brew deck", async () => {
-        mockHelpStyle = "markers";
-        await renderEditor();
-
-        await fireEvent.press(screen.getByLabelText("What is Ratio?"));
-
-        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
-    });
-
-    it("offers no explain toggle when the help style has nothing to unfold", async () => {
-        // The `markers` style hangs its long form off a marker beside each
-        // label, not under the row, so there is no screenful to fold and the
-        // toggle would do nothing.
-        mockHelpStyle = "markers";
+    it("keeps the long form off the deck entirely", async () => {
+        // Two deliveries were built and both were withdrawn: a marker beside
+        // every complicated label dotted the screen with unanswered questions,
+        // and an EXPLAIN toggle that unfolded all of them at once doubled the
+        // deck's height. Neither leaves a trace on the deck now.
+        mockSettings = {showHints: true};
         await renderEditor();
 
         expect(screen.queryByLabelText("Explain")).toBeNull();
+        expect(screen.queryByLabelText("What is Ratio?")).toBeNull();
+        expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
+        // The hint is what the deck does carry.
+        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+            .toBeTruthy();
+    });
+
+    it("answers the long-form questions from one sheet under the caret", async () => {
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("More"));
+        await fireEvent.press(screen.getByLabelText("Help"));
+
+        expect(screen.getByText("What does the ratio set?")).toBeTruthy();
+        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
+        expect(screen.getByText("Can I turn the grinder off?")).toBeTruthy();
     });
 
     it("blocks write and save while the recipe ID is malformed, and says why", async () => {
@@ -533,6 +514,48 @@ describe("the morph out of the tapped card", () => {
         await layOutHero();
 
         expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true})).toBeNull();
+    });
+
+    it("runs backwards on the way out, and leaves only when it has arrived", async () => {
+        // The card grew out of the list, so it has to go back into it. Leaving
+        // before the rectangle has arrived would put the list back on screen
+        // with the rectangle still in the air over it.
+        jest.useFakeTimers();
+        try {
+            mockSettings = {cardMorph: true};
+            mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+            await renderEditor();
+            await layOutHero();
+
+            // Past the entrance, so the rectangle on screen is the exit's.
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.transition);
+            });
+            expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true}))
+                .toBeNull();
+
+            await fireEvent.press(screen.getByLabelText("Back"));
+
+            expect(screen.getByTestId("hero-morph", {includeHiddenElements: true}))
+                .toBeTruthy();
+            expect(mockGoBack).not.toHaveBeenCalled();
+
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.transition);
+            });
+            expect(mockGoBack).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("leaves at once when there is no morph to run", async () => {
+        await renderEditor();
+        await layOutHero();
+
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(mockGoBack).toHaveBeenCalledTimes(1);
     });
 });
 
