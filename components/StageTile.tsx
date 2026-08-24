@@ -23,7 +23,6 @@ import Stepper from "@/components/Stepper";
 import {palette} from "@/constants/colors";
 import {RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
-import type {HelpStyle} from "@/library/Settings";
 
 /** Which of a stage's values an edit refers to. */
 export type StageField =
@@ -40,10 +39,6 @@ type Props = {
     onToggle: (index: number) => void;
     onChange: (index: number, field: StageField, value: number) => void;
     onDelete: (index: number) => void;
-    helpStyle?: HelpStyle;
-    /** Explain mode is on. Only consulted when `helpStyle` is "explain". */
-    explaining?: boolean;
-    onHelp?: (topic: HelpTopic) => void;
 };
 
 /**
@@ -54,8 +49,7 @@ type Props = {
  * the row opened, and one row's tap target ran into the next one's.
  */
 export default function StageTile({
-    pour, index, count, open, accent, isTea, onToggle, onChange, onDelete,
-    helpStyle, explaining, onHelp
+    pour, index, count, open, accent, isTea, onToggle, onChange, onDelete
 }: Props) {
     "use no memo";
 
@@ -66,16 +60,10 @@ export default function StageTile({
     // `Stepper` loses the chained timer behind hold-to-repeat after one step —
     // on a stage volume that ranges to 240 ml, that is the whole feature.
 
-    // No always-on hint line here, unlike the BREW deck. A stage packs six
-    // controls into two columns, and a six-word note under each one doubles the
-    // height of a tile that already has to fit on a phone screen next to the
-    // profile it is being read against. The words are the same words; only the
-    // delivery is marker-or-explain rather than marker-or-explain-or-always.
-    const marker = (topic: HelpTopic) =>
-        helpStyle === "markers" && onHelp !== undefined && RECIPE_HELP[topic].detail !== undefined
-            ? () => onHelp(topic)
-            : undefined;
-    const explainingHere = helpStyle === "explain" && explaining === true;
+    // No hint line here, unlike the BREW deck. A stage packs six controls into
+    // two columns, and a six-word note under each one doubles the height of a
+    // tile that already has to fit on a phone screen next to the profile it is
+    // being read against. What a stage control means is in the help sheet.
 
     const fact = (value: number | string, unit?: string) => (
         <XStack alignItems="baseline" gap={2}>
@@ -123,17 +111,15 @@ export default function StageTile({
 
             <Collapsible open={open}>
                 <YStack gap="$2" paddingTop="$3">
-                    <StageRow topics={["volume", "temperature"]} explaining={explainingHere}>
+                    <StageRow topics={["volume", "temperature"]}>
                         <StageValue topic="volume" value={pour.getVolume()}
                                     min={1} max={isTea ? 90 : 240} step={1} accent={accent}
-                                    onHelp={marker("volume")}
                                     onChange={(v) => onChange(index, "volume", v)}/>
                         <StageValue topic="temperature" value={pour.getTemperature()}
                                     min={39} max={99} step={1}
-                                    onHelp={marker("temperature")}
                                     onChange={(v) => onChange(index, "temperature", v)}/>
                     </StageRow>
-                    <StageRow topics={["flowRate", "pause"]} explaining={explainingHere}>
+                    <StageRow topics={["flowRate", "pause"]}>
                         {/* Flow rate is the one value the card stores in
                             tenths: byte 30 is 3.0 ml/s. The stepper works in
                             the units on the label and the byte is put back
@@ -141,19 +127,16 @@ export default function StageTile({
                             written to a card as three. */}
                         <StageValue topic="flowRate" value={pour.getFlowRate() / 10}
                                     min={3} max={3.5} step={0.1}
-                                    onHelp={marker("flowRate")}
                                     onChange={(v) =>
                                         onChange(index, "flowRate", Math.round(v * 10))}/>
                         <StageValue topic="pause" value={pour.getPauseTime()}
                                     min={0} max={isTea ? 360 : 59} step={1}
-                                    onHelp={marker("pause")}
                                     onChange={(v) => onChange(index, "pauseTime", v)}/>
                     </StageRow>
 
-                    <StageRow topics={["pattern"]} explaining={explainingHere} row={false}>
+                    <StageRow topics={["pattern"]} row={false}>
                         <StageChoice topic="pattern" accent={accent}
                                      value={String(pour.getPourPattern())}
-                                     onHelp={marker("pattern")}
                                      options={Object.values(POUR_PATTERN).map((p) => ({
                                          value: String(p),
                                          label: Pour.getPourPatternText(p).toUpperCase()
@@ -162,9 +145,8 @@ export default function StageTile({
                     </StageRow>
 
                     {!isTea && (
-                        <StageRow topics={["agitation"]} explaining={explainingHere} row={false}>
+                        <StageRow topics={["agitation"]} row={false}>
                         <StageToggles topic="agitation" accent={accent}
-                                      onHelp={marker("agitation")}
                                       toggles={[
                                           {
                                               label: "BEFORE",
@@ -205,77 +187,49 @@ export default function StageTile({
 }
 
 /**
- * A control group, with the long form of its topics unfolded underneath.
+ * One group of a stage's controls.
  *
- * The detail cannot hang off the control itself: two of them sit side by side
- * in a half-width pill, and a paragraph inside one would push its neighbour's
- * stepper out of line. So the row owns the words for everything in it.
- *
- * Mounted only while explaining, never merely clipped — the same rule as
- * `FieldRow`, and for the same reason: a clipped paragraph makes a "the detail
- * is hidden" test pass for the wrong reason.
+ * Named by its topics rather than by a caption, so a row is findable by what it
+ * edits. It used to unfold the long form of those topics underneath itself as
+ * well, which is why it owns them: two controls sit side by side in half-width
+ * pills, and a paragraph inside one pushed its neighbour's stepper out of line.
+ * The long form is in the help sheet now and this is layout, but the shape is
+ * worth keeping -- it is the seam the tile is laid out along.
  */
-function StageRow({topics, explaining, row = true, children}: {
+function StageRow({topics, row = true, children}: {
     topics: readonly HelpTopic[];
-    explaining: boolean;
     /** False when the single child already lays itself out across the width. */
     row?: boolean;
     children: React.ReactNode;
 }) {
-    const details = explaining
-        ? topics.filter((topic) => RECIPE_HELP[topic].detail !== undefined)
-        : [];
-
-    // The same wrapper whether or not there is a detail to show. Returning a
-    // fragment in one case and a stack in the other changed the element type at
-    // this position, so React tore the controls down and rebuilt them every
-    // time the explain toggle moved -- and a control group that is rebuilt is
-    // one that has to be measured and laid out again from nothing.
     return (
         <YStack testID={`stage-row-${topics[0]}`} gap="$2">
             {row ? <XStack gap="$2">{children}</XStack> : children}
-            {details.map((topic) => (
-                <Text key={topic} fontSize={12} lineHeight={18} color={palette.dim}
-                      paddingLeft="$3" borderLeftWidth={2} borderLeftColor={palette.line}>
-                    <Text fontSize={12} fontWeight="700" color={palette.dim}>
-                        {RECIPE_HELP[topic].title}.{" "}
-                    </Text>
-                    {RECIPE_HELP[topic].detail}
-                </Text>
-            ))}
         </YStack>
     );
 }
 
 /**
- * A stage control's caption, with the marker that opens its long form.
+ * A stage control's caption.
  *
  * The words come from `RECIPE_HELP` rather than a `label` prop, the same rule
  * the BREW deck follows: a control is identified by its topic, so a control
  * nobody wrote a note for cannot be drawn.
  */
-function StageLabel({topic, onHelp}: {topic: HelpTopic; onHelp?: () => void}) {
-    const {title} = RECIPE_HELP[topic];
+function StageLabel({topic}: {topic: HelpTopic}) {
     return (
         <XStack alignItems="center" gap="$1.5">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
                   numberOfLines={1} color={palette.dim}>
-                {title}
+                {RECIPE_HELP[topic].title}
             </Text>
-            {onHelp && (
-                <Pressable accessibilityRole="button"
-                           accessibilityLabel={`What is ${title}?`}
-                           onPress={onHelp} hitSlop={10}>
-                    <DotIcon name="help" size={13} color={palette.dim}/>
-                </Pressable>
-            )}
         </XStack>
     );
 }
 
 type StageValueProps = {
     topic: HelpTopic; value: number; min: number; max: number; step: number;
-    accent?: string; onHelp?: () => void; onChange: (value: number) => void;
+    accent?: string; onChange: (value: number) => void;
 };
 
 /**
@@ -287,12 +241,12 @@ type StageValueProps = {
  * number in half — see the device screenshot that prompted this. Stacking gives
  * the stepper the pill's full width and costs one line of height.
  */
-function StageValue({topic, value, min, max, step, accent, onHelp, onChange}: StageValueProps) {
+function StageValue({topic, value, min, max, step, accent, onChange}: StageValueProps) {
     return (
         <YStack flex={1} alignItems="center" gap="$1"
                 backgroundColor={palette.raised} borderRadius="$3"
                 paddingHorizontal="$2" paddingVertical="$2">
-            <StageLabel topic={topic} onHelp={onHelp}/>
+            <StageLabel topic={topic}/>
             <Stepper label={RECIPE_HELP[topic].title} value={value} min={min}
                      max={max} step={step} accent={accent}
                      onChange={onChange}/>
@@ -303,11 +257,10 @@ function StageValue({topic, value, min, max, step, accent, onHelp, onChange}: St
 type StageChoiceProps = {
     topic: HelpTopic; value: string; accent: string;
     options: readonly { value: string; label: string }[];
-    onHelp?: () => void;
     onChange: (value: string) => void;
 };
 
-function StageChoice({topic, value, accent, options, onHelp, onChange}: StageChoiceProps) {
+function StageChoice({topic, value, accent, options, onChange}: StageChoiceProps) {
     return (
         // `alignSelf="stretch"`, never `flex`. These two groups are the only
         // controls here that sit directly in the tile's column rather than in a
@@ -317,7 +270,7 @@ function StageChoice({topic, value, accent, options, onHelp, onChange}: StageCho
         // bar rather than as the control it had been.
         <XStack testID={`stage-group-${topic}`} alignSelf="stretch" alignItems="center"
                 justifyContent="space-between" gap="$2">
-            <StageLabel topic={topic} onHelp={onHelp}/>
+            <StageLabel topic={topic}/>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
                     borderRadius="$3" padding={2} gap={2}>
                 {options.map((option) => {
@@ -346,7 +299,6 @@ function StageChoice({topic, value, accent, options, onHelp, onChange}: StageCho
 type StageTogglesProps = {
     topic: HelpTopic;
     accent: string;
-    onHelp?: () => void;
     toggles: readonly {
         label: string;
         /** What a screen reader says. The chip itself is one word. */
@@ -365,12 +317,12 @@ type StageTogglesProps = {
  * NO AFTER, the second with no label of its own — which needed reading twice to
  * work out that the right-hand pair was a second question.
  */
-function StageToggles({topic, accent, onHelp, toggles}: StageTogglesProps) {
+function StageToggles({topic, accent, toggles}: StageTogglesProps) {
     return (
         // See `StageChoice`: stretch, not flex. Same column, same trap.
         <XStack testID={`stage-group-${topic}`} alignSelf="stretch" alignItems="center"
                 justifyContent="space-between" gap="$2">
-            <StageLabel topic={topic} onHelp={onHelp}/>
+            <StageLabel topic={topic}/>
             <XStack gap={2}>
                 {toggles.map((toggle) => (
                     <Pressable key={toggle.label} accessibilityRole="checkbox"

@@ -36,64 +36,16 @@ describe("FieldRow", () => {
             .toBeTruthy();
     });
 
-    it("offers a help marker only in the marker style, and only when there is detail", async () => {
+    it("carries no help affordance of its own", async () => {
+        // The markers were tried and removed: fifteen small unanswered
+        // questions dotted over a screen someone was trying to work on. The
+        // long form is one entry in the overflow now, so nothing on this row
+        // opens anything.
         await renderWithProviders(
-            <FieldRow topic="ratio" helpStyle="markers" onHelp={jest.fn()}>
-                <Text>16</Text>
-            </FieldRow>
+            <FieldRow topic="grinder" showHint><Text>On</Text></FieldRow>
         );
 
-        expect(screen.getByLabelText("What is Ratio?")).toBeTruthy();
-    });
-
-    it("shows no marker for a field with nothing more to say", async () => {
-        await renderWithProviders(
-            <FieldRow topic="temperature" helpStyle="markers" onHelp={jest.fn()}>
-                <Text>93</Text>
-            </FieldRow>
-        );
-
-        expect(screen.queryByLabelText("What is Temperature?")).toBeNull();
-    });
-
-    it("shows no marker in the explain style", async () => {
-        await renderWithProviders(
-            <FieldRow topic="ratio" helpStyle="explain" onHelp={jest.fn()}>
-                <Text>16</Text>
-            </FieldRow>
-        );
-
-        expect(screen.queryByLabelText("What is Ratio?")).toBeNull();
-    });
-
-    it("asks for help when the marker is pressed", async () => {
-        const onHelp = jest.fn();
-        await renderWithProviders(
-            <FieldRow topic="grinder" helpStyle="markers" onHelp={onHelp}>
-                <Text>On</Text>
-            </FieldRow>
-        );
-
-        await fireEvent.press(screen.getByLabelText("What is Grinder?"));
-
-        expect(onHelp).toHaveBeenCalledWith("grinder");
-    });
-
-    it("unfolds the detail in place when explaining", async () => {
-        await renderWithProviders(
-            <FieldRow topic="grinder" helpStyle="explain" explaining>
-                <Text>On</Text>
-            </FieldRow>
-        );
-
-        expect(screen.getByText(/There is no better way to disable/)).toBeTruthy();
-    });
-
-    it("keeps the detail folded away when not explaining", async () => {
-        await renderWithProviders(
-            <FieldRow topic="grinder" helpStyle="explain"><Text>On</Text></FieldRow>
-        );
-
+        expect(screen.queryByLabelText("What is Grinder?")).toBeNull();
         expect(screen.queryByText(/There is no better way to disable/)).toBeNull();
     });
 });

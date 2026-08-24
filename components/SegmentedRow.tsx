@@ -5,7 +5,6 @@ import {Text, XStack} from "tamagui";
 import FieldRow from "@/components/FieldRow";
 import {palette} from "@/constants/colors";
 import type {HelpTopic} from "@/constants/recipeHelp";
-import type {HelpStyle} from "@/library/Settings";
 
 export type SegmentOption = {
     value: string;
@@ -19,19 +18,15 @@ type Props = {
     onChange: (value: string) => void;
     /** The recipe's accent, used to fill the selected segment. */
     accent?: string;
-    helpStyle?: HelpStyle;
-    explaining?: boolean;
     showHint?: boolean;
-    onHelp?: (topic: HelpTopic) => void;
 };
 
 /** A `FieldRow` whose value is one of a short list. */
 export default function SegmentedRow({
-    topic, value, options, onChange, accent, helpStyle, explaining, showHint, onHelp
+    topic, value, options, onChange, accent, showHint
 }: Props) {
     return (
-        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining}
-                  showHint={showHint} onHelp={onHelp}>
+        <FieldRow topic={topic} showHint={showHint}>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
                     borderRadius="$3" padding={2} gap={2}>
                 {options.map((option) => {

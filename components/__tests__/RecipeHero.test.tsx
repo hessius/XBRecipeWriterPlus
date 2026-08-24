@@ -110,25 +110,13 @@ describe("RecipeHero", () => {
         expect(found[0].props.style).toEqual(expect.objectContaining({fontSize: 26}));
     });
 
-    it("offers no EXPLAIN toggle when there is nothing to fold", async () => {
+    it("carries no help control", async () => {
+        // The hero once carried an EXPLAIN toggle that unfolded every note on
+        // the screen at once. The long form lives in one sheet behind the caret
+        // now, so the slab is back to being the recipe and its two buttons.
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
         expect(screen.queryByLabelText("Explain")).toBeNull();
-    });
-
-    it("toggles EXPLAIN when the help style has notes", async () => {
-        const onToggle = jest.fn();
-        await renderWithProviders(
-            <RecipeHero {...BASE} explain={{active: true, onToggle}}/>
-        );
-
-        const toggle = screen.getByLabelText("Explain");
-        expect(toggle.props.accessibilityState).toEqual(
-            expect.objectContaining({selected: true})
-        );
-
-        await fireEvent.press(toggle);
-        expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
     it("runs up behind the status bar", async () => {

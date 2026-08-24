@@ -71,24 +71,11 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("showHints")).toBe(true);
     });
 
-    it("offers both help styles and marks the stored one", async () => {
-        const settings = new Settings(memoryStorage());
-        await renderWithProviders(<SettingsScreen settings={settings}/>);
+    it("no longer asks where the field explanations go", async () => {
+        // There were two, and neither survived a phone. The long form is one
+        // sheet behind the caret now, so there is nothing left to choose.
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
-        const explain = screen.getByRole("radio", {name: "Explain mode"});
-        const markers = screen.getByRole("radio", {name: "A marker per field"});
-
-        expect(explain.props.accessibilityState.checked).toBe(true);
-        expect(markers.props.accessibilityState.checked).toBe(false);
-    });
-
-    it("writes the chosen help style through to the store", async () => {
-        const storage = memoryStorage();
-        const settings = new Settings(storage);
-        await renderWithProviders(<SettingsScreen settings={settings}/>);
-
-        await fireEvent.press(screen.getByRole("radio", {name: "A marker per field"}));
-
-        expect(new Settings(storage).get("helpStyle")).toBe("markers");
+        expect(screen.queryByText(/Field explanations/)).toBeNull();
     });
 });

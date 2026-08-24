@@ -3,55 +3,59 @@ import {ScrollView, Text, YStack} from "tamagui";
 
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
-import {DETAILED_TOPICS, RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
+import {DETAILED_TOPICS, helpQuestion} from "@/constants/recipeHelp";
 
 type Props = {
     open: boolean;
-    /** One topic, or every topic that has a long-form note. */
-    topic: HelpTopic | "all";
     onOpenChange: (open: boolean) => void;
 };
 
 /**
- * The long-form notes, on demand rather than in the way.
+ * How much of the screen the sheet takes.
  *
- * A topic's title is set the way `FieldRow` sets it, because it is the same
- * string: the label beside the control and the heading of its paragraph must
- * not arrive in two different faces depending on which route reached them.
+ * It is a reference rather than a note, so it wants the room: enough that the
+ * first questions are readable without a scroll, and enough that the screen
+ * behind it is plainly still there.
  */
+export const HELP_HEIGHT = 75;
+
 /**
- * How much of the screen each shape of the sheet takes.
+ * Everything the card format does not explain about itself, as one short FAQ.
  *
- * A single paragraph in a sheet covering seventy per cent of the screen read as
- * an error rather than a note. The all-topics sheet is a different object -- a
- * scrolling reference -- and wants the room.
+ * There used to be a marker beside every complicated label, and then a mode that
+ * unfolded all of them at once. Both put the depth on the screen you were trying
+ * to work on: the markers dotted it with fifteen small unanswered questions, and
+ * the mode doubled its height. The screen now carries the six-word version under
+ * each label and nothing more, and everything longer than that lives here,
+ * behind one entry in the overflow.
+ *
+ * Questions rather than field names as headings. Someone opens this having
+ * already read the label -- they are looking for what they wanted to know, not
+ * for the glossary entry they have just come from.
  */
-export const HELP_HEIGHT = {one: 42, all: 75} as const;
-
-export default function HelpSheet({open, topic, onOpenChange}: Props) {
-    const topics = topic === "all" ? DETAILED_TOPICS : [topic];
-
+export default function HelpSheet({open, onOpenChange}: Props) {
     return (
-        // No title. Every note in here is already headed by the name of the
-        // thing it describes, so a word above them saying ABOUT was chrome
-        // repeating what the first line said. It stays as the dialog's
-        // accessible name, which has no headings to look at.
-        <XbrwSheet open={open} onOpenChange={onOpenChange} showTitle={false}
-                   heightPercent={topic === "all" ? HELP_HEIGHT.all : HELP_HEIGHT.one}
-                   title={topic === "all" ? "About these settings" : RECIPE_HELP[topic].title}>
+        <XbrwSheet open={open} onOpenChange={onOpenChange} title="Help"
+                   heightPercent={HELP_HEIGHT}>
             <ScrollView>
                 <YStack gap="$4" paddingBottom="$4">
-                    {topics.map((key) => (
-                        <YStack key={key} gap="$1.5">
-                            <Text fontSize={11} letterSpacing={1.5}
-                                  textTransform="uppercase" color={palette.text}>
-                                {RECIPE_HELP[key].title}
-                            </Text>
-                            <Text fontSize={13} lineHeight={19} color={palette.dim}>
-                                {RECIPE_HELP[key].detail ?? RECIPE_HELP[key].hint}
-                            </Text>
-                        </YStack>
-                    ))}
+                    {DETAILED_TOPICS.map((topic) => {
+                        const entry = helpQuestion(topic);
+                        if (!entry) {
+                            return null;
+                        }
+
+                        return (
+                            <YStack key={topic} gap="$1.5">
+                                <Text fontSize={13} fontWeight="700" color={palette.text}>
+                                    {entry.question}
+                                </Text>
+                                <Text fontSize={12.5} lineHeight={19} color={palette.dim}>
+                                    {entry.detail}
+                                </Text>
+                            </YStack>
+                        );
+                    })}
                 </YStack>
             </ScrollView>
         </XbrwSheet>

@@ -64,14 +64,10 @@ describe("Settings", () => {
         expect(new Settings(fakeStorage()).get("showHints")).toBe(false);
     });
 
-    it("defaults the help style to the explain mode", () => {
-        const settings = new Settings(fakeStorage());
-        expect(settings.get("helpStyle")).toBe("explain");
-    });
-
-    it("remembers a chosen help style", () => {
-        const settings = new Settings(fakeStorage());
-        settings.set("helpStyle", "markers");
-        expect(settings.get("helpStyle")).toBe("markers");
+    it("has no help style left to store", () => {
+        // Two deliveries for the long-form notes shipped behind this key and
+        // both were withdrawn. A key nobody reads is a row that outlives the
+        // feature and confuses the next person to read the defaults.
+        expect(Object.keys(DEFAULTS)).not.toContain("helpStyle");
     });
 });

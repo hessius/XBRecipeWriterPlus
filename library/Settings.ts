@@ -21,22 +21,13 @@ export const DEFAULTS = {
      */
     dotMatrixProfile: false,
     /**
-     * How the long-form field explanations are delivered.
-     *
-     * Two modes ship because which reads better is a question a mockup cannot
-     * answer. `explain` is the default: its resting state is the calmer of the
-     * two, and one visible control is more discoverable than a marker beside
-     * every label. Expected to resolve to one mode after device testing.
-     */
-    helpStyle: "explain",
-    /**
      * Draw the one-line hint under every label on the BREW deck.
      *
      * Off by default. On a real phone the deck explained more than it needed
      * to: with a hint under all nine labels the screen is mostly prose about
      * fields whose captions already say what they are, and the values you came
-     * to edit are what gets pushed off the bottom. The long form is still one
-     * tap or one toggle away, which is what the help style is for.
+     * to edit are what gets pushed off the bottom. The long form is in the help
+     * sheet either way.
      */
     showHints: false,
     /**
@@ -169,24 +160,4 @@ export class Settings {
             listener();
         }
     }
-}
-
-/** The two help deliveries. */
-export const HELP_STYLES = ["explain", "markers"] as const;
-
-export type HelpStyle = (typeof HELP_STYLES)[number];
-
-/**
- * Narrow a stored setting back to a `HelpStyle`.
- *
- * `SettingValue` widens a string default to `string`, which is right for the
- * store — it must accept whatever is in the database — and wrong for a consumer
- * that has exactly two branches. Anything unrecognised falls back to the
- * default rather than throwing: a bad row in SQLite should not take the screen
- * down.
- */
-export function asHelpStyle(value: string): HelpStyle {
-    return (HELP_STYLES as readonly string[]).includes(value)
-        ? (value as HelpStyle)
-        : "explain";
 }

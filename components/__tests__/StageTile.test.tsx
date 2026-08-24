@@ -144,61 +144,23 @@ describe("StageTile help", () => {
         accent: "#F0B98E", isTea: false, ...NOOP
     };
 
-    it("offers no help at all when the tile is closed", async () => {
-        await renderWithProviders(
-            <StageTile {...OPEN} open={false} helpStyle="markers" onHelp={jest.fn()}/>
-        );
-
-        expect(screen.queryByLabelText("What is Pause?")).toBeNull();
-    });
-
-    it("hangs a marker off every control that has a long form", async () => {
-        const onHelp = jest.fn();
-        await renderWithProviders(
-            <StageTile {...OPEN} helpStyle="markers" onHelp={onHelp}/>
-        );
+    it("carries no help of its own, at any width", async () => {
+        // A stage packs six controls into two columns. A marker beside each
+        // caption dotted the tile with unanswered questions, and unfolding the
+        // long form under the rows doubled the height of a tile that has to fit
+        // on a phone next to the profile it is read against. Both were built and
+        // both were removed; the words are in the help sheet.
+        await renderWithProviders(<StageTile {...OPEN}/>);
 
         for (const title of ["Stage volume", "Pause", "Pattern", "Agitation"]) {
-            expect(screen.getByLabelText(`What is ${title}?`)).toBeTruthy();
+            expect(screen.queryByLabelText(`What is ${title}?`)).toBeNull();
         }
-
-        await fireEvent.press(screen.getByLabelText("What is Pause?"));
-        expect(onHelp).toHaveBeenCalledWith("pause");
-    });
-
-    it("leaves the controls that have nothing more to say unmarked", async () => {
-        await renderWithProviders(
-            <StageTile {...OPEN} helpStyle="markers" onHelp={jest.fn()}/>
-        );
-
-        // Temperature and flow rate are a range and nothing else: the caption
-        // already is the whole story, so a marker would open a sheet repeating
-        // the words beside it.
-        expect(screen.queryByLabelText("What is Temperature?")).toBeNull();
-        expect(screen.queryByLabelText("What is Flow rate?")).toBeNull();
-    });
-
-    it("shows no marker and no prose under markers-off, explain-off", async () => {
-        await renderWithProviders(<StageTile {...OPEN} helpStyle="explain" onHelp={jest.fn()}/>);
-
-        expect(screen.queryByLabelText("What is Pause?")).toBeNull();
         expect(screen.queryByText(/The wait comes after the water/)).toBeNull();
-    });
-
-    it("unfolds the long form under the row while explaining", async () => {
-        await renderWithProviders(
-            <StageTile {...OPEN} helpStyle="explain" explaining onHelp={jest.fn()}/>
-        );
-
-        expect(screen.getByText(/The wait comes after the water/)).toBeTruthy();
-        expect(screen.getByText(/Centered holds the stream in one place/)).toBeTruthy();
-        // Explain mode replaces the markers rather than joining them: the words
-        // are already on screen, so a button to open them again is noise.
-        expect(screen.queryByLabelText("What is Pause?")).toBeNull();
+        expect(screen.queryByText(/Centered holds the stream in one place/)).toBeNull();
     });
 
     it("keeps the full-width control groups out of the column's flex", async () => {
-        await renderWithProviders(<StageTile {...OPEN} helpStyle="markers" onHelp={jest.fn()}/>);
+        await renderWithProviders(<StageTile {...OPEN}/>);
 
         // These two sit directly in the tile's column. In React Native `flex: 1`
         // also sets a flex basis of zero, so a row that asks for it in a column
@@ -214,36 +176,26 @@ describe("StageTile help", () => {
         }
     });
 
-    it("keeps the pattern and agitation controls across an explain toggle", async () => {
-        // The tree has to keep its shape, not merely its contents. A row that
-        // returned a fragment with nothing to explain and a stack with
-        // something changed element type at that position, so React tore the
-        // controls down and rebuilt them every time the toggle moved.
-        const shape = () => ["pattern", "agitation"]
+    it("keeps every control group across a redraw", async () => {
+        // The tree has to keep its shape, not merely its contents. These rows
+        // once returned a fragment in one branch and a stack in the other, which
+        // changed the element type at that position and made React tear the
+        // controls down and rebuild them. The branch is gone, so this now guards
+        // against it coming back.
+        const shape = () => ["volume", "flowRate", "pattern", "agitation"]
             .map((topic) => screen.queryByTestId(`stage-row-${topic}`) !== null);
 
-        const {rerender} = await renderWithProviders(
-            <StageTile {...OPEN} helpStyle="explain" explaining onHelp={jest.fn()}/>
-        );
-        expect(shape()).toEqual([true, true]);
-        expect(screen.getByLabelText("CENTERED")).toBeTruthy();
+        const {rerender} = await renderWithProviders(<StageTile {...OPEN}/>);
+        expect(shape()).toEqual([true, true, true, true]);
 
-        await rerender(<StageTile {...OPEN} helpStyle="explain" onHelp={jest.fn()}/>);
-        expect(shape()).toEqual([true, true]);
+        await rerender(<StageTile {...OPEN} accent="#9FD8A8"/>);
+        expect(shape()).toEqual([true, true, true, true]);
         expect(screen.getByLabelText("CENTERED")).toBeTruthy();
-        expect(screen.getByLabelText("Agitate before")).toBeTruthy();
-
-        await rerender(
-            <StageTile {...OPEN} helpStyle="explain" explaining onHelp={jest.fn()}/>
-        );
-        expect(shape()).toEqual([true, true]);
         expect(screen.getByLabelText("Agitate before")).toBeTruthy();
     });
 
     it("never draws an always-on hint line", async () => {
-        await renderWithProviders(
-            <StageTile {...OPEN} helpStyle="markers" onHelp={jest.fn()}/>
-        );
+        await renderWithProviders(<StageTile {...OPEN}/>);
 
         // The BREW deck's six-word note under every label. A stage packs six
         // controls into two columns and cannot afford it.

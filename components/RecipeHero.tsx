@@ -44,11 +44,6 @@ type Props = {
     collapsed: boolean;
     onBack: () => void;
     onMore: () => void;
-    /**
-     * The EXPLAIN toggle, when the help style has notes to fold. Omitted
-     * entirely under `markers`, where there is nothing for it to act on.
-     */
-    explain?: {active: boolean; onToggle: () => void};
 };
 
 /**
@@ -71,7 +66,7 @@ type Props = {
  * the same recipe is called.
  */
 export default function RecipeHero({
-    name, named, xid, accent, beverage, pours, collapsed, onBack, onMore, explain
+    name, named, xid, accent, beverage, pours, collapsed, onBack, onMore
 }: Props) {
     "use no memo";
 
@@ -119,21 +114,6 @@ export default function RecipeHero({
                       color={named ? onAccent.text : onAccent.label}>
                     {collapsed ? name : ""}
                 </Text>
-
-                {explain && (
-                    <Pressable accessibilityRole="button" accessibilityLabel="Explain"
-                               accessibilityState={{selected: explain.active}}
-                               onPress={explain.onToggle} hitSlop={12}>
-                        <YStack backgroundColor={explain.active ? onAccent.key : undefined}
-                                borderRadius="$3" paddingHorizontal="$2" height={32}
-                                justifyContent="center">
-                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                                           color={explain.active ? accent : onAccent.label}>
-                                EXPLAIN
-                            </DotMatrixText>
-                        </YStack>
-                    </Pressable>
-                )}
 
                 <HeaderButton label="More" icon="overflow" accent={accent} onPress={onMore}/>
             </XStack>
