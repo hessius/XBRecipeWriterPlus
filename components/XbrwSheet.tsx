@@ -51,12 +51,18 @@ export default function XbrwSheet({
     // with it, and the sheet vanished rather than left. So the tree keeps it
     // for as long as it takes to slide away, and no longer.
     const [rendered, setRendered] = useState(open);
+    const [wasOpen, setWasOpen] = useState(open);
+
+    // Adjusted while rendering rather than from an effect. Opening has to take
+    // effect on this pass: an effect runs after the paint, so the sheet would
+    // spend one frame absent and then appear without its entrance.
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (open) setRendered(true);
+    }
 
     useEffect(() => {
-        if (open) {
-            setRendered(true);
-            return;
-        }
+        if (open) return;
         const timer = setTimeout(() => setRendered(false), EXIT_GRACE);
         return () => clearTimeout(timer);
     }, [open]);
