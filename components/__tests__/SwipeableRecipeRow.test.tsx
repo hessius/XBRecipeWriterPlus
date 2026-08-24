@@ -1,7 +1,8 @@
 import React from "react";
-import {fireEvent, screen, within} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import {View as RNView} from "react-native";
 import Recipe from "@/library/Recipe";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
@@ -62,6 +63,10 @@ describe("SwipeableRecipeRow", () => {
         expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
     });
 
+    // Several tests below stand in for the native measurement, which is a
+    // prototype method shared by every View in the run.
+    afterEach(() => jest.restoreAllMocks());
+
     it("calls onPress when the row is tapped", async () => {
         const onPress = jest.fn();
         await renderWithProviders(
@@ -71,7 +76,46 @@ describe("SwipeableRecipeRow", () => {
 
         await fireEvent.press(screen.getByText("Ethiopia Guji"));
 
-        expect(onPress).toHaveBeenCalled();
+        // No measurement comes back under the test renderer, which is exactly
+        // the case the deadline exists for: the recipe still opens.
+        await waitFor(() => expect(onPress).toHaveBeenCalledWith(undefined));
+    });
+
+    it("hands the editor the rectangle the card was at, so it can open out of it", async () => {
+        const onPress = jest.fn();
+        const rect = {x: 12, y: 300, width: 360, height: 120};
+        jest.spyOn(RNView.prototype, "measureInWindow").mockImplementation(
+            (callback: (x: number, y: number, width: number, height: number) => void) => {
+                callback(rect.x, rect.y, rect.width, rect.height);
+            }
+        );
+
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={onPress} onDelete={jest.fn()}
+                                onDuplicate={jest.fn()}/>
+        );
+
+        await fireEvent.press(screen.getByText("Ethiopia Guji"));
+
+        expect(onPress).toHaveBeenCalledWith(rect);
+    });
+
+    it("opens without a rectangle rather than animating from a card of no size", async () => {
+        const onPress = jest.fn();
+        jest.spyOn(RNView.prototype, "measureInWindow").mockImplementation(
+            (callback: (x: number, y: number, width: number, height: number) => void) => {
+                callback(0, 0, 0, 0);
+            }
+        );
+
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={onPress} onDelete={jest.fn()}
+                                onDuplicate={jest.fn()}/>
+        );
+
+        await fireEvent.press(screen.getByText("Ethiopia Guji"));
+
+        expect(onPress).toHaveBeenCalledWith(undefined);
     });
 
     it("fires delete and duplicate from the swipe actions", async () => {

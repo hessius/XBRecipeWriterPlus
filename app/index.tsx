@@ -15,6 +15,7 @@ import HomeHeader from "@/components/HomeHeader";
 import ImportRecipeComponent from "@/components/ImportRecipeComponent";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import type {Rect} from "@/components/HeroMorph";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -152,8 +153,18 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
-    function openRecipe(recipe: Recipe) {
-        router.push({pathname: "/editRecipe", params: {recipeJSON: JSON.stringify(recipe)}});
+    function openRecipe(recipe: Recipe, from?: Rect) {
+        router.push({
+            pathname: "/editRecipe",
+            params:   {
+                recipeJSON: JSON.stringify(recipe),
+                // The card's rectangle travels with the route rather than
+                // through a context, because the editor is also reachable from
+                // a share intent and a cold start, where there is no card to
+                // have come from and the transition has to do without one.
+                ...(from ? {fromRect: JSON.stringify(from)} : {})
+            }
+        });
     }
 
     return (
@@ -212,7 +223,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
-                                onPress={() => openRecipe(item)}
+                                onPress={(from) => openRecipe(item, from)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
                                     library.deleteRecipe(item);

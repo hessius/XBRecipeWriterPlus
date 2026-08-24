@@ -2,7 +2,7 @@ import React from "react";
 import {StyleSheet} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
+import EditRecipe, {PROFILE_HEIGHT, openedFrom, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
@@ -473,5 +473,31 @@ describe("stageScrollTarget", () => {
         // The first stage is already above the fold, and a negative offset
         // makes the list bounce rather than stay put.
         expect(stageScrollTarget(200, 0, 400)).toBe(0);
+    });
+});
+
+describe("openedFrom", () => {
+    it("gives nothing when the editor was not opened from a card", () => {
+        expect(openedFrom(undefined)).toBeNull();
+    });
+
+    it("reads the rectangle the card was at", () => {
+        expect(openedFrom(JSON.stringify({x: 12, y: 300, width: 360, height: 120})))
+            .toEqual({x: 12, y: 300, width: 360, height: 120});
+    });
+
+    it("refuses a rectangle with no area rather than animating a sliver", () => {
+        expect(openedFrom(JSON.stringify({x: 0, y: 0, width: 0, height: 120}))).toBeNull();
+    });
+
+    it("refuses a partial rectangle rather than animating from NaN", () => {
+        expect(openedFrom(JSON.stringify({x: 12, y: 300}))).toBeNull();
+        expect(openedFrom(JSON.stringify({x: 12, y: 300, width: 360, height: "tall"}))).toBeNull();
+    });
+
+    it("survives a param that is not JSON at all", () => {
+        expect(openedFrom("not json")).toBeNull();
+        expect(openedFrom(["a", "b"])).toBeNull();
+        expect(openedFrom(JSON.stringify(null))).toBeNull();
     });
 });

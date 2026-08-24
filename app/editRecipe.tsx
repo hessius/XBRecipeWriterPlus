@@ -8,6 +8,7 @@ import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
 import HelpSheet from "@/components/HelpSheet";
+import HeroMorph, {type Rect} from "@/components/HeroMorph";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
@@ -18,6 +19,7 @@ import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
 import {palette} from "@/constants/colors";
+import {useReducedMotion} from "@/constants/motion";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -28,6 +30,36 @@ import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {asHelpStyle, type HelpStyle} from "@/library/Settings";
+
+/**
+ * The rectangle the editor was opened out of, if it was opened out of one.
+ *
+ * Route params are strings and a param is whatever the last caller put there,
+ * so this is parsed defensively: a malformed or partial rectangle means no
+ * transition, never a view flying in from a corner or from NaN.
+ */
+export function openedFrom(raw: string | string[] | undefined): Rect | null {
+    if (typeof raw !== "string") {
+        return null;
+    }
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed === null || typeof parsed !== "object") {
+            return null;
+        }
+        const rect = parsed as Partial<Rect>;
+        const finite = (value: unknown): value is number =>
+            typeof value === "number" && Number.isFinite(value);
+        if (!finite(rect.x) || !finite(rect.y) || !finite(rect.width) || !finite(rect.height)) {
+            return null;
+        }
+        return rect.width > 0 && rect.height > 0
+            ? {x: rect.x, y: rect.y, width: rect.width, height: rect.height}
+            : null;
+    } catch {
+        return null;
+    }
+}
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -536,8 +568,10 @@ export default function EditRecipe() {
     // reason. Note that the compiler is off under jest, so no test can catch a
     // regression here; see `babel-preset-expo` and `app.json`'s experiments.
 
-    const {recipeJSON} = useLocalSearchParams();
+    const {recipeJSON, fromRect} = useLocalSearchParams<{recipeJSON: string; fromRect?: string}>();
     const navigation = useNavigation();
+    const {width: windowWidth} = useWindowDimensions();
+    const reducedMotion = useReducedMotion();
 
     const [helpStyleRaw] = useSetting("helpStyle");
     const helpStyle = asHelpStyle(helpStyleRaw);
@@ -546,6 +580,13 @@ export default function EditRecipe() {
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
     const [actionBarHeight, setActionBarHeight] = useState(0);
+    const [heroHeight, setHeroHeight] = useState(0);
+
+    // The morph is a one-shot entrance: once it has played, or once the user has
+    // asked for less motion, the screen is just a screen.
+    const [morphed, setMorphed] = useState(false);
+    const morphFrom = openedFrom(fromRect);
+    const showMorph = !morphed && !reducedMotion && morphFrom !== null && heroHeight > 0;
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
     // and putting them in state would re-render the whole editor on every
@@ -638,6 +679,7 @@ export default function EditRecipe() {
                 the list under it would snap up in one frame. The two-threshold
                 hysteresis in `useCollapsibleHeader` keeps it from strobing when
                 the list rests near the threshold. */}
+            <View onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
             <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                         xid={recipe.xid} accent={accent} collapsed={collapsed}
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
@@ -649,6 +691,7 @@ export default function EditRecipe() {
                         explain={helpStyle === "explain"
                             ? {active: explaining, onToggle: () => setExplaining((prev) => !prev)}
                             : undefined}/>
+            </View>
 
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
                 counts slots — so every slot below is always occupied, by an
@@ -734,6 +777,12 @@ export default function EditRecipe() {
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>
+
+            {showMorph && (
+                <HeroMorph from={morphFrom} accent={accent}
+                           to={{x: 0, y: 0, width: windowWidth, height: heroHeight}}
+                           onDone={() => setMorphed(true)}/>
+            )}
         </>
     );
 }

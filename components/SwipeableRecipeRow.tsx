@@ -7,12 +7,18 @@ import Recipe from "@/library/Recipe";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import RecipeCard from "@/components/RecipeCard";
+import type {Rect} from "@/components/HeroMorph";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 
 type Props = {
     recipe: Recipe;
-    onPress: () => void;
+    /**
+     * Handed where the card was on screen, so the editor can open out of it.
+     * Measuring is asynchronous and can fail on a view that has just been
+     * unmounted, in which case the press still happens without the rectangle.
+     */
+    onPress: (from?: Rect) => void;
     onDelete: () => void;
     onDuplicate: () => void;
     /** Nudges the row open briefly on mount so the swipe actions are discoverable. */
@@ -24,6 +30,14 @@ type Props = {
     /** Forwarded to the card. Owned by the settings screen. */
     dottedProfile?: boolean;
 };
+
+/**
+ * How long the press waits for the card's rectangle before opening without it.
+ *
+ * Short enough that a dropped callback is not felt as a dead tap, long enough
+ * that the usual round trip to the native side wins comfortably.
+ */
+const MEASURE_DEADLINE = 100;
 
 const BOUNCE_OPEN_DELAY = 300;
 const BOUNCE_CLOSE_DELAY = 1000;
@@ -86,6 +100,33 @@ export default function SwipeableRecipeRow({
                                                dottedProfile = false
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
+    const cardRef = useRef<View | null>(null);
+
+    function press() {
+        // The measurement decorates the navigation; it must never gate it. It
+        // crosses to the native side and comes back on a callback that a view
+        // torn down in between will simply never fire, so the press is armed
+        // with a deadline and whichever arrives first wins. Opening a recipe is
+        // the whole point of the row -- it cannot be allowed to depend on an
+        // animation's nicety.
+        let opened = false;
+        const open = (from?: Rect) => {
+            if (opened) {
+                return;
+            }
+            opened = true;
+            onPress(from);
+        };
+
+        const deadline = setTimeout(() => open(), MEASURE_DEADLINE);
+
+        // Window coordinates, because the editor's hero is measured against the
+        // window too and the two have no ancestor in common to be relative to.
+        cardRef.current?.measureInWindow?.((x, y, width, height) => {
+            clearTimeout(deadline);
+            open(width > 0 && height > 0 ? {x, y, width, height} : undefined);
+        });
+    }
 
     useEffect(() => {
         if (!bounceOnMount) {
@@ -132,10 +173,15 @@ export default function SwipeableRecipeRow({
                 rightThreshold={40}
                 overshootRight={false}
                 renderRightActions={renderRightActions}>
-                <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
-                            showCoffeeMarker={showCoffeeMarker}
-                            dottedProfile={dottedProfile}
-                            onDelete={onDelete} onDuplicate={onDuplicate}/>
+                {/* `collapsable={false}` keeps this view in the native
+                    hierarchy on Android, where a layout-only view is otherwise
+                    flattened away and has nothing left to measure. */}
+                <View ref={cardRef} collapsable={false}>
+                    <RecipeCard recipe={recipe} onPress={press} editing={editing}
+                                showCoffeeMarker={showCoffeeMarker}
+                                dottedProfile={dottedProfile}
+                                onDelete={onDelete} onDuplicate={onDuplicate}/>
+                </View>
             </Swipeable>
         </View>
     );

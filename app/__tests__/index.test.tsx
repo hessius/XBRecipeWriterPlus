@@ -120,9 +120,11 @@ describe("HomeScreen", () => {
     it("opens a recipe when its card is pressed", async () => {
         await renderWithProviders(<HomeScreen db={store([named("Ethiopia")])} settings={new Settings(memoryStorage())}/>);
         await fireEvent.press(screen.getByTestId("recipe-card"));
-        expect(mockPush).toHaveBeenCalledWith(
+        // The row measures the card before it navigates, so the push lands a
+        // beat after the press rather than on it.
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith(
             expect.objectContaining({pathname: "/editRecipe"})
-        );
+        ));
     });
 
     it("opens settings from the header", async () => {

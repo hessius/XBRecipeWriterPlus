@@ -88,7 +88,23 @@ export default function RootLayout() {
                                                 replacing got one frame to
                                                 flash. */}
                                             <Stack.Screen name="editRecipe"
-                                                          options={{headerShown: false}}/>
+                                                          options={{
+                                                              headerShown: false,
+                                                              // The editor's own
+                                                              // entrance is the
+                                                              // tapped card
+                                                              // growing into its
+                                                              // hero, which is
+                                                              // drawn inside the
+                                                              // screen. A slide
+                                                              // would carry that
+                                                              // rectangle in
+                                                              // from the right
+                                                              // while it was
+                                                              // trying to travel
+                                                              // up the screen.
+                                                              animation: "fade"
+                                                          }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>
                                         <Toasts/>
