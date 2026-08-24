@@ -9,11 +9,20 @@ type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;
+    /**
+     * Draw the title, or keep it only as the dialog's accessible name.
+     *
+     * The overflow sheet turns it off: its rows say what they do, so a word
+     * above them naming the noun they all act on was chrome that carried no
+     * information. The name still reaches the screen reader, which has no rows
+     * to look at.
+     */
+    showTitle?: boolean;
     children: React.ReactNode;
 };
 
 /** The house sheet: the ImportRecipeComponent pattern, with a dot-matrix title. */
-export default function XbrwSheet({open, onOpenChange, title, children}: Props) {
+export default function XbrwSheet({open, onOpenChange, title, showTitle = true, children}: Props) {
     // Not merely an optimisation, and not something Tamagui already does: with
     // `open={false}` and no guard, Tamagui still mounts the sheet frame off
     // screen. This keeps a dismissed sheet out of the tree entirely, and is
@@ -25,13 +34,16 @@ export default function XbrwSheet({open, onOpenChange, title, children}: Props) 
     // sheet's own chrome — the same register as the deck switch and the toast —
     // rather than copy about the recipe.
     const heading = (
-        <XStack alignItems="center" justifyContent="space-between" gap="$3">
-            <Dialog.Title unstyled>
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
-                               color={palette.dim}>
-                    {title}
-                </DotMatrixText>
-            </Dialog.Title>
+        <XStack alignItems="center" justifyContent={showTitle ? "space-between" : "flex-end"}
+                gap="$3">
+            {showTitle && (
+                <Dialog.Title unstyled>
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
+                                   color={palette.dim}>
+                        {title}
+                    </DotMatrixText>
+                </Dialog.Title>
+            )}
             <Pressable accessibilityRole="button" accessibilityLabel="Close"
                        onPress={() => onOpenChange(false)} hitSlop={12}>
                 <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
@@ -56,7 +68,7 @@ export default function XbrwSheet({open, onOpenChange, title, children}: Props) 
 
             <Dialog.Portal>
                 <Dialog.Overlay key="overlay" opacity={0.5}/>
-                <Dialog.Content bordered elevate maxWidth={440}
+                <Dialog.Content bordered elevate maxWidth={440} aria-label={title}
                                 backgroundColor={palette.surface}>
                     <YStack gap="$3">
                         {heading}

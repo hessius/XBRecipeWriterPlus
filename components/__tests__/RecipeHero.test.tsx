@@ -1,5 +1,5 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import RecipeHero from "@/components/RecipeHero";
 import {onAccent} from "@/constants/colors";
@@ -16,7 +16,10 @@ const BASE = {
     xid:      "AB12CD",
     accent:   "#F0B98E",
     beverage: "COFFEE" as const,
-    pours:    pours(96, 96, 96)
+    pours:    pours(96, 96, 96),
+    collapsed: false,
+    onBack:    () => {},
+    onMore:    () => {}
 };
 
 type Node = ReturnType<typeof screen.getByTestId>;
@@ -59,15 +62,72 @@ describe("RecipeHero", () => {
         expect(screen.queryByTestId("hero-xid")).toBeNull();
     });
 
-    it("is a picture, not a control", async () => {
+    it("is the screen's navigation, and nothing else is tappable", async () => {
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
         // Counted by the handler rather than by role. A bare Pressable declares
         // no accessibility role, so a query for buttons stays empty however
         // tappable the hero has quietly become; every touchable does set a
-        // responder on its host view.
-        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(0);
+        // responder on its host view. Two: back and more. The slab itself is
+        // still a picture — every value on it is edited in the deck below.
+        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(2);
         expect(screen.getByTestId("recipe-hero").props.accessibilityRole)
             .not.toBe("button");
+    });
+
+    it("goes back and opens the overflow", async () => {
+        const onBack = jest.fn();
+        const onMore = jest.fn();
+        await renderWithProviders(<RecipeHero {...BASE} onBack={onBack} onMore={onMore}/>);
+
+        await fireEvent.press(screen.getByLabelText("Back"));
+        await fireEvent.press(screen.getByLabelText("More"));
+
+        expect(onBack).toHaveBeenCalledTimes(1);
+        expect(onMore).toHaveBeenCalledTimes(1);
+    });
+
+    it("carries the name in its chrome row once collapsed", async () => {
+        await renderWithProviders(<RecipeHero {...BASE} collapsed/>);
+
+        // The folded-away slab keeps its own copy mounted so it has something
+        // to animate back to, but `Collapsible` hides it from the screen
+        // reader while it is closed — so only the chrome row's copy is
+        // reachable, and it is the small one.
+        const found = screen.getAllByText("Ethiopia Guji");
+        expect(found).toHaveLength(1);
+        expect(found[0].props.style).toEqual(expect.objectContaining({fontSize: 15}));
+    });
+
+    it("keeps the chrome row empty of the name while the slab is open", async () => {
+        await renderWithProviders(<RecipeHero {...BASE}/>);
+
+        // Only the slab's own headline, at its own size. A second copy of the
+        // name in the chrome row while the slab is open would be the title bar
+        // this header was built to get rid of.
+        const found = screen.getAllByText("Ethiopia Guji");
+        expect(found).toHaveLength(1);
+        expect(found[0].props.style).toEqual(expect.objectContaining({fontSize: 26}));
+    });
+
+    it("offers no EXPLAIN toggle when there is nothing to fold", async () => {
+        await renderWithProviders(<RecipeHero {...BASE}/>);
+
+        expect(screen.queryByLabelText("Explain")).toBeNull();
+    });
+
+    it("toggles EXPLAIN when the help style has notes", async () => {
+        const onToggle = jest.fn();
+        await renderWithProviders(
+            <RecipeHero {...BASE} explain={{active: true, onToggle}}/>
+        );
+
+        const toggle = screen.getByLabelText("Explain");
+        expect(toggle.props.accessibilityState).toEqual(
+            expect.objectContaining({selected: true})
+        );
+
+        await fireEvent.press(toggle);
+        expect(onToggle).toHaveBeenCalledTimes(1);
     });
 });

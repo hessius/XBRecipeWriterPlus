@@ -60,7 +60,7 @@ export default function RecipeOverflowSheet({
     );
 
     return (
-        <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE">
+        <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE" showTitle={false}>
             <YStack gap="$2" paddingBottom="$4">
                 {row("Duplicate", "duplicate", onDuplicate)}
                 {/* Spoken in full, but captioned short: the other four rows are

@@ -3,9 +3,7 @@ import React, {useEffect, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
 import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
 
-import Collapsible from "@/components/Collapsible";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
-import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
 import HelpSheet from "@/components/HelpSheet";
@@ -498,33 +496,13 @@ export default function EditRecipe() {
     // neutral tint on the render where the recipe has not resolved yet.
     const accent = recipe ? resolveAccent(recipe) : palette.dim;
 
+    // The screen draws its own header, on the accent, inside `RecipeHero`. The
+    // native one was a second surface in a second colour carrying a back control
+    // the navigator had auto-labelled "index" and a title that said nothing the
+    // slab beneath it did not already say.
     useEffect(() => {
-        navigation.setOptions({
-            title:       "Edit Recipe",
-            headerShown: true,
-            headerRight: () => (
-                <XStack alignItems="center" gap="$3">
-                    {/* Only where there is a screenful of notes to fold: the
-                        `markers` style hangs its long form off each label, so a
-                        toggle there would have nothing to act on. */}
-                    {helpStyle === "explain" && (
-                        <Pressable accessibilityRole="button" accessibilityLabel="Explain"
-                                   accessibilityState={{selected: explaining}}
-                                   onPress={() => setExplaining((prev) => !prev)} hitSlop={12}>
-                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                                           color={explaining ? accent : palette.dim}>
-                                EXPLAIN
-                            </DotMatrixText>
-                        </Pressable>
-                    )}
-                    <Pressable accessibilityRole="button" accessibilityLabel="More"
-                               onPress={() => setOverflowOpen(true)} hitSlop={12}>
-                        <DotIcon name="more" size={16} color={palette.dim}/>
-                    </Pressable>
-                </XStack>
-            )
-        });
-    }, [navigation, helpStyle, explaining, accent]);
+        navigation.setOptions({headerShown: false});
+    }, [navigation]);
 
     if (!recipe) return null;
 
@@ -560,28 +538,35 @@ export default function EditRecipe() {
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={showNfcOverlay}
                     importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
+            {/* Outside the scroll view, so it is the screen's header rather
+                than its first row. It collapses itself on scroll instead of
+                scrolling away: it stays mounted and animates its height,
+                because a subtree that has left layout cannot animate away and
+                the list under it would snap up in one frame. The two-threshold
+                hysteresis in `useCollapsibleHeader` keeps it from strobing when
+                the list rests near the threshold. */}
+            <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
+                        xid={recipe.xid} accent={accent} collapsed={collapsed}
+                        beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
+                        onBack={() => navigation.goBack()}
+                        onMore={() => setOverflowOpen(true)}
+                        // Only where there is a screenful of notes to fold: the
+                        // `markers` style hangs its long form off each label, so
+                        // a toggle there would have nothing to act on.
+                        explain={helpStyle === "explain"
+                            ? {active: explaining, onToggle: () => setExplaining((prev) => !prev)}
+                            : undefined}/>
+
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
                 counts slots — so every slot below is always occupied, by an
                 empty `YStack` when it has nothing to show. A conditional that
                 renders `false` would be dropped from the array and shift the
-                index onto the wrong child. Index 3 is the stage profile; on the
+                index onto the wrong child. Index 2 is the stage profile; on the
                 brew deck nothing sticks. */}
             <ScrollView testID="editor-scroll"
                         contentContainerStyle={{padding: 16, paddingBottom: 120}}
-                        stickyHeaderIndices={deck === "stages" ? [3] : undefined}
+                        stickyHeaderIndices={deck === "stages" ? [2] : undefined}
                         onScroll={onScroll} scrollEventThrottle={16}>
-                {/* The hero collapses on scroll. It stays mounted and animates
-                    its height rather than unmounting: a subtree that has left
-                    layout cannot animate away, and whatever sits below it would
-                    snap up in one frame. The two-threshold hysteresis in
-                    `useCollapsibleHeader` is what keeps it from strobing when
-                    the list rests near the threshold. */}
-                <Collapsible open={!collapsed}>
-                    <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
-                                xid={recipe.xid} accent={accent}
-                                beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
-                </Collapsible>
-
                 {recipe.isTea() ? <TeaBanner accent={accent}/> : <YStack/>}
 
                 <DeckSwitch deck={deck} stageCount={recipe.pours.length}

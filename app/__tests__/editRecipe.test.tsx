@@ -302,7 +302,7 @@ describe("the stages deck", () => {
         await fireEvent.press(screen.getByLabelText("Stages, 3"));
 
         const scroll = screen.getByTestId("editor-scroll");
-        expect(scroll.props.stickyHeaderIndices).toEqual([3]);
+        expect(scroll.props.stickyHeaderIndices).toEqual([2]);
 
         // A ScrollView wraps its children in a content container, so the slots
         // the index counts are one level in from the host node.
@@ -311,10 +311,10 @@ describe("the stages deck", () => {
             (container as React.ReactElement<{children: React.ReactNode}>).props.children
         ) as React.ReactElement<{pours?: unknown[]}>[];
 
-        // Slot 3 is the profile card and not the empty placeholder that stands
+        // Slot 2 is the profile card and not the empty placeholder that stands
         // in for it on the brew deck: only the card is handed the pours.
-        expect(slots).toHaveLength(5);
-        expect(slots[3].props.pours).toHaveLength(3);
+        expect(slots).toHaveLength(4);
+        expect(slots[2].props.pours).toHaveLength(3);
     });
 
     it("sticks nothing on the brew deck", async () => {

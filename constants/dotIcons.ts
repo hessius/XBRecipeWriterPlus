@@ -176,6 +176,43 @@ export const DOT_ICONS = {
         ".........",
         "........."
     ],
+    /**
+     * Three dots in a row: the overflow mark.
+     *
+     * Replaces the downward caret on the editor header. The caret pointed at
+     * the sheet that would rise, which was true but read as "collapse this"
+     * next to a title; three dots say "there is more here" and nothing else.
+     * Two dots wide and two tall, because a one-dot block greys out at 16px.
+     */
+    overflow: [
+        ".........",
+        ".........",
+        ".........",
+        ".##.##.##",
+        ".##.##.##",
+        ".........",
+        ".........",
+        ".........",
+        "........."
+    ],
+    /**
+     * A left chevron: back.
+     *
+     * Two dots thick rather than one. Pure diagonals, so every dot lands on the
+     * grid, but a single-dot stroke at header size is a hairline — and this is
+     * the one control on the screen that must never be missed.
+     */
+    back: [
+        ".........",
+        ".....##..",
+        "....##...",
+        "...##....",
+        "..##.....",
+        "...##....",
+        "....##...",
+        ".....##..",
+        "........."
+    ],
     /** A single axis-aligned run. Steps a value down. */
     minus: [
         ".........",
