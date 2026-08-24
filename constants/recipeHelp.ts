@@ -33,7 +33,7 @@ const ENTRIES = {
     },
     grindSize: {
         title: "Grind size",
-        hint:  "Lower is finer. 40 to 80."
+        hint:  "40 to 80. Lower is finer."
     },
     grindSpeed: {
         title:  "Grind speed",
@@ -93,16 +93,26 @@ const ENTRIES = {
         hint:  "3.0 to 3.5 ml per second."
     },
     pause: {
-        title: "Pause",
-        hint:  "Seconds of waiting before this stage pours."
+        title:  "Pause",
+        hint:   "How long the machine waits once this stage has poured.",
+        detail: "The wait comes after the water, not before it: this is the " +
+                "bloom on a first stage and the steep on a tea one, which is " +
+                "why a coffee stage stops at 59 seconds and a tea steep goes " +
+                "to 360."
     },
     pattern: {
-        title: "Pattern",
-        hint:  "The path the water takes over the bed."
+        title:  "Pattern",
+        hint:   "The path the water takes over the bed.",
+        detail: "Centered holds the stream in one place. Circular walks it " +
+                "round the bed at a fixed radius. Spiral works outward from " +
+                "the middle."
     },
     agitation: {
-        title: "Agitation",
-        hint:  "Shakes the basket to settle or disturb the bed."
+        title:  "Agitation",
+        hint:   "Shakes the basket, before this stage's pour or after it.",
+        detail: "Each stage can agitate before it pours, after it pours, both " +
+                "or neither. Before settles the bed the last stage left; " +
+                "after breaks up what this one has just built."
     },
     tea: {
         title:  "Tea",
