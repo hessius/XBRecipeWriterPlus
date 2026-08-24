@@ -2,7 +2,7 @@ import React from "react";
 import {StyleSheet} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import EditRecipe from "@/app/editRecipe";
+import EditRecipe, {stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
@@ -334,6 +334,19 @@ describe("the stages deck", () => {
         ).toBeGreaterThanOrEqual(200);
     });
 
+    it("opens the stage whose part of the curve was tapped", async () => {
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        // Nothing is open to begin with, so the tile offers no controls.
+        expect(screen.queryByLabelText("Temperature")).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("Show stage 2 of 3"));
+
+        expect(screen.getByLabelText("Stage 2 of 3").props.accessibilityState)
+            .toMatchObject({expanded: true});
+    });
+
     it("sticks nothing on the brew deck", async () => {
         await renderEditor();
 
@@ -425,5 +438,19 @@ describe("the stages deck", () => {
 
         expect(screen.getByLabelText("Stage 4 of 4")).toBeTruthy();
         expect(screen.getByLabelText("Stages, 4")).toBeTruthy();
+    });
+});
+
+describe("stageScrollTarget", () => {
+    it("puts the stage just under the pinned profile", () => {
+        // The profile is pinned over the top of the content, so a stage
+        // scrolled to its own offset would arrive underneath it.
+        expect(stageScrollTarget(200, 400, 120)).toBe(480);
+    });
+
+    it("refuses to scroll past the top", () => {
+        // The first stage is already above the fold, and a negative offset
+        // makes the list bounce rather than stay put.
+        expect(stageScrollTarget(200, 0, 400)).toBe(0);
     });
 });

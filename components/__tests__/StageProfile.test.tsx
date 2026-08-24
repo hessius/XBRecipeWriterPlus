@@ -1,5 +1,5 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import StageProfile, {bandFor, curveHeight, profileScale, targetY} from "@/components/StageProfile";
 import Pour from "@/library/Pour";
@@ -101,5 +101,29 @@ describe("StageProfile", () => {
         );
 
         expect(screen.queryByTestId("stage-profile-band")).toBeNull();
+    });
+
+    it("offers a way into each stage when it is given one", async () => {
+        // The curve is the thing being read, so it is the thing reached for.
+        // It was inert for a round of device testing and that was the note.
+        const onSelect = jest.fn();
+        await renderWithProviders(
+            <StageProfile pours={pours(96, 96, 96)} target={288} accent="#F0B98E"
+                          width={300} height={90} onSelect={onSelect}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Show stage 2 of 3"));
+
+        expect(onSelect).toHaveBeenCalledWith(1);
+    });
+
+    it("stays a readout when it is not given one", async () => {
+        // Every other screen that draws a profile has no stage list to move.
+        await renderWithProviders(
+            <StageProfile pours={pours(96, 96, 96)} target={288} accent="#F0B98E"
+                          width={300} height={90}/>
+        );
+
+        expect(screen.queryByLabelText("Show stage 2 of 3")).toBeNull();
     });
 });

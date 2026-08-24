@@ -1,4 +1,5 @@
 import React, {useId} from "react";
+import {Pressable, View} from "react-native";
 import Svg, {Defs, Line, Path, Pattern, Rect} from "react-native-svg";
 
 import {buildProfilePath, PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
@@ -45,18 +46,29 @@ type Props = {
     height: number;
     /** Index of the open stage, if one is open. */
     selected?: number;
+    /**
+     * Called with the stage whose part of the curve was tapped.
+     *
+     * Omit it and the profile is a readout, which is what it is on any screen
+     * that has no stage list to move.
+     */
+    onSelect?: (index: number) => void;
     testID?: string;
 };
 
 /**
  * The recipe as a shape, with the target it has to reach.
  *
- * A readout, not a control. Dragging it to shape a recipe is #42, deferred
- * until the app can author one at all — direct manipulation is an authoring
- * gesture, and every recipe here arrives already formed.
+ * Given `onSelect` it is also a way in: a tap on a stage's part of the curve
+ * moves the highlight to it and opens it below. Reaching for the shape rather
+ * than for the row is the obvious thing to do once the shape is the thing you
+ * are reading, and it was inert for one round of testing before this.
+ *
+ * Dragging it to *shape* a recipe is still #42, and still deferred: direct
+ * manipulation is an authoring gesture, and every recipe here arrives formed.
  */
 export default function StageProfile({
-    pours, target, accent, width, height, selected, testID
+    pours, target, accent, width, height, selected, onSelect, testID
 }: Props) {
     "use no memo";
 
@@ -83,7 +95,28 @@ export default function StageProfile({
         ? bandFor(selected, pours.length, width)
         : null;
 
-    return (
+    // The tap targets are laid out rather than computed from the tap's x. One
+    // flexed child per stage divides the width exactly as `bandFor` does, and
+    // unlike a coordinate test each one is a control a screen reader can find
+    // and name -- which an SVG path is not.
+    const bands = onSelect && pours.length > 0 && (
+        <View style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                      flexDirection: "row"}}>
+            {pours.map((pour, index) => (
+                <Pressable key={index} style={{flex: 1}}
+                           accessibilityRole="button"
+                           // Not the same wording as the tile below, which is
+                           // "Stage n of m": two controls with one name is a
+                           // screen reader reading the same thing twice and no
+                           // way to tell which one it has landed on.
+                           accessibilityLabel={`Show stage ${index + 1} of ${pours.length}`}
+                           accessibilityState={{selected: selected === index}}
+                           onPress={() => onSelect(index)}/>
+            ))}
+        </View>
+    );
+
+    const svg = (
         <Svg testID={testID} width={width + stroke} height={height + stroke}
              viewBox={`${-bleed} ${-bleed} ${width + stroke} ${height + stroke}`}>
             <Defs>
@@ -119,4 +152,10 @@ export default function StageProfile({
                   strokeWidth={1} strokeDasharray="4 3"/>
         </Svg>
     );
+
+    if (!bands) {
+        return svg;
+    }
+
+    return <View>{svg}{bands}</View>;
 }

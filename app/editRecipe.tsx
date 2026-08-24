@@ -1,6 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useEffect, useState} from "react";
-import {Pressable, useWindowDimensions} from "react-native";
+import React, {useEffect, useRef, useState} from "react";
+import {Pressable, type ScrollView as RNScrollView, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
 
@@ -263,6 +263,8 @@ type StagesDeckProps = {
     /** The open stage's index, or null. Held by the screen, not the tile. */
     openStage: number | null;
     setOpenStage: (value: number | null) => void;
+    /** Reports where a stage sits within the deck, so it can be scrolled to. */
+    onStageLayout: (index: number, y: number) => void;
     editStage: (index: number, field: StageField, value: number) => void;
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
@@ -278,6 +280,9 @@ type StageProfileCardProps = {
     accent: string;
     /** The stage the list has open, so the curve can highlight its band. */
     selected: number | null;
+    onSelect: (index: number) => void;
+    /** Reports how much of the content the pinned card covers, once laid out. */
+    onHeight: (height: number) => void;
 };
 
 /**
@@ -291,7 +296,9 @@ type StageProfileCardProps = {
  * The backdrop is opaque `base`: a sticky view has the list running underneath
  * it, and the card's rounded corners would otherwise show tiles sliding through.
  */
-function StageProfileCard({pours, target, accent, selected}: StageProfileCardProps) {
+function StageProfileCard({
+    pours, target, accent, selected, onSelect, onHeight
+}: StageProfileCardProps) {
     "use no memo";
 
     // The profile is drawn into an SVG of a fixed pixel size, so it has to be
@@ -300,12 +307,13 @@ function StageProfileCard({pours, target, accent, selected}: StageProfileCardPro
     const {width} = useWindowDimensions();
 
     return (
-        <YStack backgroundColor={palette.base} paddingTop="$3" paddingBottom="$2.5">
+        <YStack backgroundColor={palette.base} paddingTop="$3" paddingBottom="$2.5"
+                onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
             <YStack backgroundColor={palette.surface} borderRadius="$5" padding="$3">
                 <StageProfile testID="stage-profile" pours={pours}
                               target={target} accent={accent}
                               width={width - 64} height={92}
-                              selected={selected ?? undefined}/>
+                              selected={selected ?? undefined} onSelect={onSelect}/>
             </YStack>
         </YStack>
     );
@@ -326,7 +334,7 @@ function StageProfileCard({pours, target, accent, selected}: StageProfileCardPro
  * Module scope, so it is a stable component type across the screen's renders.
  */
 function StagesDeck({
-    recipe, balance, accent, isTea, openStage, setOpenStage,
+    recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
     editStage, addPour, deletePour, autoAdjustPourVolumes,
     helpStyle, explaining, onHelp
 }: StagesDeckProps) {
@@ -373,7 +381,9 @@ function StagesDeck({
             )}
 
             {recipe.pours.map((pour, index) => (
-                <StageTile key={index} pour={pour} index={index}
+                <View key={index}
+                      onLayout={(event) => onStageLayout(index, event.nativeEvent.layout.y)}>
+                <StageTile pour={pour} index={index}
                            count={recipe.pours.length}
                            open={openStage === index} accent={accent} isTea={isTea}
                            onToggle={(i) => setOpenStage(openStage === i ? null : i)}
@@ -385,6 +395,7 @@ function StagesDeck({
                                setOpenStage(null);
                                deletePour(i);
                            }}/>
+                </View>
             ))}
 
             <Pressable accessibilityRole="button" accessibilityLabel="Add stage"
@@ -407,6 +418,19 @@ function StagesDeck({
             </Pressable>
         </YStack>
     );
+}
+
+/**
+ * Where to scroll so a stage sits just under the pinned profile.
+ *
+ * `deckY` and `tileY` are both layout offsets -- the deck's within the scroll
+ * content, the tile's within the deck -- and the profile card is pinned over
+ * the top of the content, so its height has to come off. Clamped at zero
+ * because the first stage is already above the fold and scrolling to a negative
+ * offset would bounce.
+ */
+export function stageScrollTarget(deckY: number, tileY: number, stickyHeight: number) {
+    return Math.max(0, deckY + tileY - stickyHeight);
 }
 
 type ActionBarProps = {
@@ -504,6 +528,31 @@ export default function EditRecipe() {
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
     const [actionBarHeight, setActionBarHeight] = useState(0);
+
+    // Layout facts, not state: nothing on screen changes when a stage moves,
+    // and putting them in state would re-render the whole editor on every
+    // layout pass of every tile.
+    const scrollRef = useRef<RNScrollView>(null);
+    const stageOffsets = useRef<number[]>([]);
+    const deckOffset = useRef(0);
+    const profileHeight = useRef(0);
+
+    /**
+     * Open a stage from the curve and bring it into view.
+     *
+     * Selecting alone was not enough. The profile is pinned to the top, so from
+     * halfway down the list a tap on it would highlight and open a tile that
+     * was off screen in either direction, and nothing appeared to happen.
+     */
+    function selectStage(index: number) {
+        setOpenStage(index);
+        const tileY = stageOffsets.current[index];
+        if (tileY === undefined) return;
+        scrollRef.current?.scrollTo({
+            y:        stageScrollTarget(deckOffset.current, tileY, profileHeight.current),
+            animated: true
+        });
+    }
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
@@ -589,7 +638,7 @@ export default function EditRecipe() {
                 renders `false` would be dropped from the array and shift the
                 index onto the wrong child. Index 2 is the stage profile; on the
                 brew deck nothing sticks. */}
-            <ScrollView testID="editor-scroll"
+            <ScrollView testID="editor-scroll" ref={scrollRef}
                         contentContainerStyle={{
                             padding:       16,
                             // Measured, not guessed: the bar's height depends on
@@ -607,7 +656,11 @@ export default function EditRecipe() {
 
                 {deck === "stages" ? (
                     <StageProfileCard pours={recipe.pours} target={balance.target}
-                                      accent={accent} selected={openStage}/>
+                                      accent={accent} selected={openStage}
+                                      onSelect={selectStage}
+                                      onHeight={(height) => {
+                                          profileHeight.current = height;
+                                      }}/>
                 ) : <YStack/>}
 
                 {/* The deck is keyed on the counter, not the scroll container: the
@@ -622,13 +675,20 @@ export default function EditRecipe() {
                               onHelp={setHelpTopic} dispatch={dispatch}
                               onInputErrorChange={setInputError}/>
                 ) : (
+                    <View onLayout={(event) => {
+                        deckOffset.current = event.nativeEvent.layout.y;
+                    }}>
                     <StagesDeck recipe={recipe} balance={balance} accent={accent}
                                 isTea={recipe.isTea()} openStage={openStage}
                                 setOpenStage={setOpenStage} editStage={editStage}
+                                onStageLayout={(index, y) => {
+                                    stageOffsets.current[index] = y;
+                                }}
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
                                 helpStyle={helpStyle} explaining={explaining}
                                 onHelp={setHelpTopic}/>
+                    </View>
                 )}
             </ScrollView>
 
