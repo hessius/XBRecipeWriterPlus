@@ -221,7 +221,7 @@ The tooltips carry knowledge that exists nowhere else — the grinder-off
 workaround is a full paragraph and describes machine behaviour that is not
 documented anywhere. It cannot be dropped.
 
-**Hint lines are always present** — on the BREW deck. Every label there gets a
+**Hint lines are a setting, off by default** — and only on the BREW deck. Every label there gets a
 short line beneath it covering the ordinary case: the range, the unit, the
 gotcha in six words. "Whole numbers only." "Omni turns overflow protection off."
 "Off is experimental — see Help."
@@ -232,6 +232,10 @@ gotcha in six words. "Whole numbers only." "Omni turns overflow protection off."
 > above it. Stage help is `markers`-or-`explain` only, with the same words. This
 > was chosen over the alternatives of hinting only some controls, or hinting
 > them all and losing the profile off the top of the screen.
+>
+> The BREW deck kept its hint lines but they are now `showHints`, off by
+> default. Nine of them turn the deck into prose about fields whose captions
+> already say what they are, and the values push off the bottom of the phone.
 
 Beyond that, two modes ship, chosen by a setting, because which reads better in
 practice is a question the mockups cannot answer:
