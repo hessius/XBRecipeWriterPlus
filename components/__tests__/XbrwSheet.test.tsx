@@ -41,6 +41,10 @@ describe("XbrwSheet", () => {
             </XbrwSheet>
         );
 
-        expect(screen.toJSON()).toBeNull();
+        // The safe-area provider the test wrapper supplies is the only thing
+        // left; the sheet contributes nothing of its own.
+        const tree = screen.toJSON();
+        expect(Array.isArray(tree) ? tree : [tree]).toHaveLength(1);
+        expect(screen.queryByText("the body", {includeHiddenElements: true})).toBeNull();
     });
 });

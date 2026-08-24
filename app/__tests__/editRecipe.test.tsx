@@ -317,6 +317,23 @@ describe("the stages deck", () => {
         expect(slots[2].props.pours).toHaveLength(3);
     });
 
+    it("leaves room for exactly as much action bar as there is", async () => {
+        // The bottom padding used to be a fixed 120, chosen by eye while the
+        // whole app was being inset a second time. The bar's real height varies
+        // with the OS text size and the home indicator, so it is measured.
+        await renderEditor();
+
+        await fireEvent(
+            screen.getByTestId("editor-actions"),
+            "layout",
+            {nativeEvent: {layout: {height: 200, width: 390, x: 0, y: 0}}}
+        );
+
+        expect(
+            screen.getByTestId("editor-scroll").props.contentContainerStyle.paddingBottom
+        ).toBeGreaterThanOrEqual(200);
+    });
+
     it("sticks nothing on the brew deck", async () => {
         await renderEditor();
 

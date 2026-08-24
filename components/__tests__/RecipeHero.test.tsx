@@ -4,7 +4,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 import RecipeHero from "@/components/RecipeHero";
 import {onAccent} from "@/constants/colors";
 import Pour from "@/library/Pour";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, TEST_INSETS} from "@/test-utils/render";
 
 function pours(...volumes: number[]): Pour[] {
     return volumes.map((volume, index) => new Pour(index + 1, volume));
@@ -129,5 +129,15 @@ describe("RecipeHero", () => {
 
         await fireEvent.press(toggle);
         expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it("runs up behind the status bar", async () => {
+        // The accent slab is the top of the screen, not a card below it. When
+        // the app was inset as a whole this began under the notch and left a
+        // black strip above it.
+        await renderWithProviders(<RecipeHero {...BASE}/>);
+        const style = screen.getByTestId("recipe-hero").props.style;
+
+        expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
     });
 });

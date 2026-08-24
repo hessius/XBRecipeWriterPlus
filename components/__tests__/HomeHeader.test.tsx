@@ -2,7 +2,7 @@ import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import HomeHeader from "@/components/HomeHeader";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, TEST_INSETS} from "@/test-utils/render";
 
 function props(overrides = {}) {
     return {
@@ -134,5 +134,14 @@ describe("HomeHeader", () => {
         expect(handlers.onImport).toHaveBeenCalledTimes(1);
         expect(handlers.onSettings).toHaveBeenCalledTimes(1);
         expect(handlers.onToggleEdit).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears the status bar itself", async () => {
+        // This screen hides the navigation bar, so nothing above the header is
+        // holding the status bar off it.
+        await renderWithProviders(<HomeHeader {...props()}/>);
+        const style = screen.getByTestId("home-header").props.style;
+
+        expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
     });
 });

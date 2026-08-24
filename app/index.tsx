@@ -3,6 +3,7 @@ import {Platform} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
 import {XStack, YStack} from "tamagui";
@@ -38,6 +39,7 @@ type Props = {
  * scroll collapse to `useCollapsibleHeader`, and every message to `notify`.
  */
 export default function HomeScreen({db, settings}: Props) {
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const navigation = useNavigation();
 
@@ -199,6 +201,10 @@ export default function HomeScreen({db, settings}: Props) {
                         onScroll={onScroll}
                         scrollEventThrottle={16}
                         showsVerticalScrollIndicator={false}
+                        // The list runs to the bottom of the display and the
+                        // last card scrolls clear of the home indicator, rather
+                        // than the whole screen stopping short of it.
+                        contentContainerStyle={{paddingBottom: insets.bottom + 8}}
                         renderItem={({item, index}: {item: Recipe; index: number}) => (
                             <SwipeableRecipeRow
                                 recipe={item}

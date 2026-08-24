@@ -1,5 +1,6 @@
 import React from "react";
 import {Pressable, View} from "react-native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
@@ -74,6 +75,11 @@ export default function RecipeHero({
 }: Props) {
     "use no memo";
 
+    // The accent slab runs up behind the status bar rather than starting below
+    // it, so the screen has one surface at the top instead of a black strip
+    // above a coloured card.
+    const insets = useSafeAreaInsets();
+
     // `pours` is the recipe's own array, mutated in place, and the watermark
     // reads each pour through a getter rather than a property — so there is
     // nothing for the React Compiler to compare and a stale watermark would
@@ -82,7 +88,7 @@ export default function RecipeHero({
     return (
         <YStack testID="recipe-hero" backgroundColor={accent}
                 borderBottomLeftRadius="$6" borderBottomRightRadius="$6"
-                paddingHorizontal="$4" paddingTop="$2" paddingBottom="$3"
+                paddingHorizontal="$4" paddingTop={insets.top + 6} paddingBottom="$3"
                 overflow="hidden">
             {/* No opacity on this wrapper. The stroke colour already carries its
                 own dimming and a group opacity multiplies it — which is how the

@@ -1,6 +1,7 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
 
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
@@ -414,6 +415,8 @@ type ActionBarProps = {
     canSave: boolean;
     onWrite: () => void;
     onSave: () => void;
+    /** Reports how much of the screen the bar covers, once laid out. */
+    onHeight: (height: number) => void;
 };
 
 /**
@@ -425,10 +428,20 @@ type ActionBarProps = {
  *
  * Module scope, so it is a stable component type across the screen's renders.
  */
-function ActionBar({accent, canWrite, canSave, onWrite, onSave}: ActionBarProps) {
+function ActionBar({accent, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
+    const insets = useSafeAreaInsets();
+
     return (
-        <XStack position="absolute" bottom={0} left={0} right={0} gap="$2"
-                padding="$4" paddingBottom="$6" backgroundColor={palette.base}>
+        // The bottom padding is the home indicator's own height plus a small
+        // gap, rather than a fixed guess at it. The guess was made while the
+        // whole app was still being inset a second time by a SafeAreaView, so
+        // the two stacked and left the buttons floating well clear of the
+        // bottom of the screen.
+        <XStack testID="editor-actions"
+                position="absolute" bottom={0} left={0} right={0} gap="$2"
+                padding="$4" paddingBottom={insets.bottom + 10}
+                backgroundColor={palette.base}
+                onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
             <Pressable accessibilityRole="button" accessibilityLabel="Write card"
                        accessibilityState={{disabled: !canWrite}}
                        onPress={() => canWrite && onWrite()}
@@ -490,6 +503,7 @@ export default function EditRecipe() {
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
+    const [actionBarHeight, setActionBarHeight] = useState(0);
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpTopic, setHelpTopic] = useState<HelpTopic | "all" | null>(null);
@@ -576,7 +590,14 @@ export default function EditRecipe() {
                 index onto the wrong child. Index 2 is the stage profile; on the
                 brew deck nothing sticks. */}
             <ScrollView testID="editor-scroll"
-                        contentContainerStyle={{padding: 16, paddingBottom: 120}}
+                        contentContainerStyle={{
+                            padding:       16,
+                            // Measured, not guessed: the bar's height depends on
+                            // the OS text size and on the home indicator, and a
+                            // fixed 120 was both too much on some phones and
+                            // too little on others.
+                            paddingBottom: actionBarHeight + 16
+                        }}
                         stickyHeaderIndices={deck === "stages" ? [2] : undefined}
                         onScroll={onScroll} scrollEventThrottle={16}>
                 {recipe.isTea() ? <TeaBanner accent={accent}/> : <YStack/>}
@@ -612,7 +633,8 @@ export default function EditRecipe() {
             </ScrollView>
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
-                       onWrite={() => writeCard(recipe)} onSave={saveRecipe}/>
+                       onWrite={() => writeCard(recipe)} onSave={saveRecipe}
+                       onHeight={setActionBarHeight}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  onOpenChange={setOverflowOpen}
