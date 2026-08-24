@@ -69,18 +69,26 @@ describe("Collapsible", () => {
 
 describe("rowStyle", () => {
     it("gives the row its full height when open and none when closed", () => {
-        expect(rowStyle(1, 80)).toEqual({height: 80, opacity: 1});
-        expect(rowStyle(0, 80)).toEqual({height: 0, opacity: 0});
+        expect(rowStyle(1, 80, true)).toEqual({height: 80, opacity: 1});
+        expect(rowStyle(0, 80, false)).toEqual({height: 0, opacity: 0});
     });
 
     it("passes through the midpoint of the travel, rather than switching", () => {
         // The row has to give its height up gradually. Snapping from 80 to 0 at
         // some threshold is the jump this component exists to remove.
-        expect(rowStyle(0.5, 80)).toEqual({height: 40, opacity: 0.5});
+        expect(rowStyle(0.5, 80, true)).toEqual({height: 40, opacity: 0.5});
     });
 
-    it("leaves the height alone until the content has been measured", () => {
-        expect(rowStyle(1, null)).toEqual({opacity: 1});
+    it("leaves an open row's height alone until the content has been measured", () => {
+        expect(rowStyle(1, null, true)).toEqual({opacity: 1});
+    });
+
+    it("gives an unmeasured closed row no height at all", () => {
+        // Returning only an opacity left the row holding its full natural
+        // height while invisible, so a list of closed rows opened as a run of
+        // tile-tall gaps and each row only found its real size after being
+        // opened and closed once.
+        expect(rowStyle(0, null, false)).toEqual({height: 0, opacity: 0});
     });
 });
 

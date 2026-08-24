@@ -25,6 +25,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
+import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {asHelpStyle, type HelpStyle} from "@/library/Settings";
@@ -255,6 +256,45 @@ type StagesDeckProps = {
     autoAdjustPourVolumes: () => void;
 };
 
+type StageProfileCardProps = {
+    pours: Pour[];
+    target: number;
+    accent: string;
+    /** The stage the list has open, so the curve can highlight its band. */
+    selected: number | null;
+};
+
+/**
+ * The brew drawn as one curve, pinned to the top of the stages deck.
+ *
+ * A direct child of the screen's ScrollView rather than part of `StagesDeck`,
+ * because `stickyHeaderIndices` only sticks direct children. It keeps its place
+ * in the flow and pins once it reaches the top, so the curve stays in view while
+ * you scroll down to a stage and watch your edits move it.
+ *
+ * The backdrop is opaque `base`: a sticky view has the list running underneath
+ * it, and the card's rounded corners would otherwise show tiles sliding through.
+ */
+function StageProfileCard({pours, target, accent, selected}: StageProfileCardProps) {
+    "use no memo";
+
+    // The profile is drawn into an SVG of a fixed pixel size, so it has to be
+    // told how wide the screen is. `16` of screen padding either side and `$3`
+    // inside the card is 64 points in total.
+    const {width} = useWindowDimensions();
+
+    return (
+        <YStack backgroundColor={palette.base} paddingTop="$3" paddingBottom="$2.5">
+            <YStack backgroundColor={palette.surface} borderRadius="$5" padding="$3">
+                <StageProfile testID="stage-profile" pours={pours}
+                              target={target} accent={accent}
+                              width={width - 64} height={92}
+                              selected={selected ?? undefined}/>
+            </YStack>
+        </YStack>
+    );
+}
+
 /**
  * The whole brew as one shape, with a stage opening in place underneath it.
  *
@@ -282,11 +322,6 @@ function StagesDeck({
     // `Stepper` loses the chained timer behind hold-to-repeat after one step —
     // on a stage volume that ranges to 240 ml, that is the whole feature.
 
-    // The profile is drawn into an SVG of a fixed pixel size, so it has to be
-    // told how wide the screen is. `16` of screen padding either side and `$3`
-    // inside the card is 64 points in total.
-    const {width} = useWindowDimensions();
-
     // Adding a fourth tea stage is refused by the hook with a toast; the tile is
     // dimmed by swapping its colours, never by dropping the group's opacity —
     // opacity multiplies with what is beneath and has produced a contrast defect
@@ -294,14 +329,7 @@ function StagesDeck({
     const addDisabled = isTea && recipe.pours.length >= 3;
 
     return (
-        <YStack marginTop="$3">
-            <YStack backgroundColor={palette.surface} borderRadius="$5" padding="$3">
-                <StageProfile testID="stage-profile" pours={recipe.pours}
-                              target={balance.target} accent={accent}
-                              width={width - 64} height={92}
-                              selected={openStage ?? undefined}/>
-            </YStack>
-
+        <YStack>
             {!balance.balanced && (
                 <XStack testID="stage-mismatch" alignItems="center" gap="$2.5"
                         marginTop="$2.5" padding="$3" borderRadius="$4"
@@ -532,7 +560,15 @@ export default function EditRecipe() {
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={showNfcOverlay}
                     importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
-            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 120}}
+            {/* `stickyHeaderIndices` only sticks *direct* children, and it
+                counts slots — so every slot below is always occupied, by an
+                empty `YStack` when it has nothing to show. A conditional that
+                renders `false` would be dropped from the array and shift the
+                index onto the wrong child. Index 3 is the stage profile; on the
+                brew deck nothing sticks. */}
+            <ScrollView testID="editor-scroll"
+                        contentContainerStyle={{padding: 16, paddingBottom: 120}}
+                        stickyHeaderIndices={deck === "stages" ? [3] : undefined}
                         onScroll={onScroll} scrollEventThrottle={16}>
                 {/* The hero collapses on scroll. It stays mounted and animates
                     its height rather than unmounting: a subtree that has left
@@ -546,10 +582,15 @@ export default function EditRecipe() {
                                 beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}/>
                 </Collapsible>
 
-                {recipe.isTea() && <TeaBanner accent={accent}/>}
+                {recipe.isTea() ? <TeaBanner accent={accent}/> : <YStack/>}
 
                 <DeckSwitch deck={deck} stageCount={recipe.pours.length}
                             accent={accent} onChange={setDeck}/>
+
+                {deck === "stages" ? (
+                    <StageProfileCard pours={recipe.pours} target={balance.target}
+                                      accent={accent} selected={openStage}/>
+                ) : <YStack/>}
 
                 {/* The deck is keyed on the counter, not the scroll container: the
                     model is mutated in place, so `recipe` keeps its identity

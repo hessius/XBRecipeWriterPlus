@@ -5,9 +5,8 @@ import {Text, XStack, YStack} from "tamagui";
 import Collapsible from "@/components/Collapsible";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import PourProfile from "@/components/PourProfile";
 import Stepper from "@/components/Stepper";
-import {onAccent, palette} from "@/constants/colors";
+import {palette} from "@/constants/colors";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 
 /** Which of a stage's values an edit refers to. */
@@ -26,23 +25,6 @@ type Props = {
     onChange: (index: number, field: StageField, value: number) => void;
     onDelete: (index: number) => void;
 };
-
-/**
- * A flat run of stages up to and including this one, for the tile's sparkline.
- *
- * Every reached stage is given the same volume on purpose. The sparkline says
- * how far into the recipe this stage falls, not what shape it pours — the shape
- * is already drawn full size by StageProfile directly above the list, and a
- * second, tinier copy of it beside every row would say the same thing five
- * times. Do not feed the real volumes in.
- */
-function runUpTo(index: number, count: number): Pour[] {
-    return Array.from({length: count}, (_, i) => {
-        const pour = new Pour(i + 1);
-        pour.volume = i <= index ? 1 : 0;
-        return pour;
-    });
-}
 
 /**
  * One stage of the brew.
@@ -90,8 +72,11 @@ export default function StageTile({
                         {fact(pour.getTemperature(), "°C")}
                         {fact(Pour.getPourPatternText(pour.getPourPattern()).toUpperCase())}
                     </XStack>
-                    <PourProfile pours={runUpTo(index, count)} width={56} height={22}
-                                 stroke={accent} fill={onAccent.profileFill}/>
+                    {/* No sparkline here any more. It drew a flat run of equal
+                        bars saying only how far into the recipe this stage
+                        fell, which at 56x22 was unreadable — and the profile
+                        above the list now highlights the open stage, which says
+                        the same thing legibly and in one place. */}
                     {/* The same bitmap as the header caret, turned to point at
                         what it will reveal. Rotating one glyph beats drawing a
                         second that has to look like its sibling. DotIcon owns
@@ -182,19 +167,28 @@ type StageValueProps = {
     accent?: string; onChange: (value: number) => void;
 };
 
+/**
+ * One numeric stage value.
+ *
+ * The label sits *above* the stepper rather than beside it. Side by side, a
+ * label like STAGE VOLUME plus a 134 pt stepper needs more than the half-width
+ * pill has, so the pill clipped the plus button off its right edge and cut the
+ * number in half — see the device screenshot that prompted this. Stacking gives
+ * the stepper the pill's full width and costs one line of height.
+ */
 function StageValue({label, value, min, max, step, accent, onChange}: StageValueProps) {
     return (
-        <XStack flex={1} alignItems="center" justifyContent="space-between"
+        <YStack flex={1} alignItems="center" gap="$1"
                 backgroundColor={palette.raised} borderRadius="$3"
-                paddingHorizontal="$2" paddingVertical="$1.5">
+                paddingHorizontal="$2" paddingVertical="$2">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
-                  color={palette.dim}>
+                  numberOfLines={1} color={palette.dim}>
                 {label}
             </Text>
             <Stepper label={label} value={value} min={min}
                      max={max} step={step} accent={accent}
                      onChange={onChange}/>
-        </XStack>
+        </YStack>
     );
 }
 

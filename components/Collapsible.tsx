@@ -11,10 +11,16 @@ import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
  * evaluated on the UI thread and a test can only read the value it was given at
  * mount, which is never the interesting one.
  */
-export function rowStyle(progress: number, contentHeight: number | null) {
+export function rowStyle(progress: number, contentHeight: number | null, open: boolean) {
     "worklet";
     if (contentHeight === null) {
-        return {opacity: progress};
+        // Never measured. An open row takes its natural height, because
+        // assuming zero would collapse it on the first frame and have it spring
+        // open. A closed one must take none: returning only an opacity left it
+        // holding its full natural height while invisible, so the stages deck
+        // opened as four tile-tall gaps and each row only found its real size
+        // after being opened and closed once.
+        return open ? {opacity: progress} : {height: 0, opacity: progress};
     }
     return {height: progress * contentHeight, opacity: progress};
 }
@@ -70,9 +76,18 @@ export default function Collapsible({open, children}: Props) {
     // effect is the one place the compiler allows a shared value to be written.
     const height = useSharedValue<number | null>(null);
 
+    // `open` mirrored the same way and for the same reason: the style needs it
+    // before the first measurement, and a prop captured in the worklet's
+    // closure is not something the UI thread can be woken by.
+    const isOpen = useSharedValue(open);
+
     useEffect(() => {
         height.value = contentHeight;
     }, [contentHeight, height]);
+
+    useEffect(() => {
+        isOpen.value = open;
+    }, [open, isOpen]);
 
     useEffect(() => {
         const target = open ? 1 : 0;
@@ -81,10 +96,9 @@ export default function Collapsible({open, children}: Props) {
             : withTiming(target, {duration: DURATION.base, easing: EASING.out});
     }, [open, reduced, progress]);
 
-    // Before the first layout pass there is no height to animate to, so the row
-    // takes its natural one. Assuming zero would collapse it on the first frame
-    // and then have it spring open.
-    const style = useAnimatedStyle(() => rowStyle(progress.value, height.value));
+    // Before the first layout pass there is no height to animate to, so an open
+    // row takes its natural one and a closed row takes none.
+    const style = useAnimatedStyle(() => rowStyle(progress.value, height.value, isOpen.value));
 
     return (
         <Animated.View

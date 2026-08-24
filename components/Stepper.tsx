@@ -200,5 +200,12 @@ const stepStyle = {
     borderRadius:    10,
     alignItems:      "center" as const,
     justifyContent:  "center" as const,
-    backgroundColor: palette.raised
+    // `control`, not `raised`. On the stages deck these sit inside `raised`
+    // pills, so a `raised` fill made them the same colour as their container
+    // and the glyphs read as a stray dash and a stray cross rather than as two
+    // buttons. The hairline is the other half of that: an edge is what says a
+    // thing is a separate object you can press.
+    backgroundColor: palette.control,
+    borderWidth:     1,
+    borderColor:     palette.line
 };

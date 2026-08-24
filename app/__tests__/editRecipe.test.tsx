@@ -293,6 +293,37 @@ describe("the stages deck", () => {
         expect(screen.queryByText("Grind size")).toBeNull();
     });
 
+    it("pins the profile to the top, at the index the ScrollView sticks", async () => {
+        // `stickyHeaderIndices` addresses a *slot*, not an element, so this is
+        // the assertion that catches a child being added, removed or made
+        // conditional above the profile — after which the number would pin the
+        // wrong thing, silently and only on a real scroll.
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        const scroll = screen.getByTestId("editor-scroll");
+        expect(scroll.props.stickyHeaderIndices).toEqual([3]);
+
+        // A ScrollView wraps its children in a content container, so the slots
+        // the index counts are one level in from the host node.
+        const container = React.Children.toArray(scroll.props.children)[0];
+        const slots = React.Children.toArray(
+            (container as React.ReactElement<{children: React.ReactNode}>).props.children
+        ) as React.ReactElement<{pours?: unknown[]}>[];
+
+        // Slot 3 is the profile card and not the empty placeholder that stands
+        // in for it on the brew deck: only the card is handed the pours.
+        expect(slots).toHaveLength(5);
+        expect(slots[3].props.pours).toHaveLength(3);
+    });
+
+    it("sticks nothing on the brew deck", async () => {
+        await renderEditor();
+
+        expect(screen.getByTestId("editor-scroll").props.stickyHeaderIndices)
+            .toBeUndefined();
+    });
+
     it("counts the stages on the switch", async () => {
         await renderEditor();
 
