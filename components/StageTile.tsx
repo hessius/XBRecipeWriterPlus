@@ -1,5 +1,13 @@
 import React from "react";
-import {Pressable, View} from "react-native";
+import {View} from "react-native";
+// Gesture Handler's Pressable, not React Native's, for the header. A scroll
+// view holds a touch back while it decides whether the finger is starting a
+// scroll, and a tap that lands during that window is swallowed -- felt on a
+// deck of tap-to-open tiles as roughly every third tap doing nothing. React
+// Native used to expose `delaysContentTouches` to turn that off; 0.86 no longer
+// does. A Gesture Handler press is a native gesture that negotiates with the
+// scroll view's own rather than queueing behind its decision.
+import {Pressable} from "react-native-gesture-handler";
 import {Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
@@ -212,12 +220,13 @@ function StageRow({topics, explaining, row = true, children}: {
         ? topics.filter((topic) => RECIPE_HELP[topic].detail !== undefined)
         : [];
 
-    if (details.length === 0) {
-        return row ? <XStack gap="$2">{children}</XStack> : <>{children}</>;
-    }
-
+    // The same wrapper whether or not there is a detail to show. Returning a
+    // fragment in one case and a stack in the other changed the element type at
+    // this position, so React tore the controls down and rebuilt them every
+    // time the explain toggle moved -- and a control group that is rebuilt is
+    // one that has to be measured and laid out again from nothing.
     return (
-        <YStack gap="$2">
+        <YStack testID={`stage-row-${topics[0]}`} gap="$2">
             {row ? <XStack gap="$2">{children}</XStack> : children}
             {details.map((topic) => (
                 <Text key={topic} fontSize={12} lineHeight={18} color={palette.dim}
@@ -294,7 +303,14 @@ type StageChoiceProps = {
 
 function StageChoice({topic, value, accent, options, onHelp, onChange}: StageChoiceProps) {
     return (
-        <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
+        // `alignSelf="stretch"`, never `flex`. These two groups are the only
+        // controls here that sit directly in the tile's column rather than in a
+        // half-width pair, and in React Native `flex: 1` also sets a flex basis
+        // of zero -- so in a column that is a row asking to be nothing tall.
+        // The result was a sliver of the option pills, which read as a progress
+        // bar rather than as the control it had been.
+        <XStack testID={`stage-group-${topic}`} alignSelf="stretch" alignItems="center"
+                justifyContent="space-between" gap="$2">
             <StageLabel topic={topic} onHelp={onHelp}/>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
                     borderRadius="$3" padding={2} gap={2}>
@@ -345,7 +361,9 @@ type StageTogglesProps = {
  */
 function StageToggles({topic, accent, onHelp, toggles}: StageTogglesProps) {
     return (
-        <XStack flex={1} alignItems="center" justifyContent="space-between" gap="$2">
+        // See `StageChoice`: stretch, not flex. Same column, same trap.
+        <XStack testID={`stage-group-${topic}`} alignSelf="stretch" alignItems="center"
+                justifyContent="space-between" gap="$2">
             <StageLabel topic={topic} onHelp={onHelp}/>
             <XStack gap={2}>
                 {toggles.map((toggle) => (

@@ -1,5 +1,4 @@
 import React from "react";
-import {useWindowDimensions} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
 
 import XbrwSheet from "@/components/XbrwSheet";
@@ -20,19 +19,27 @@ type Props = {
  * string: the label beside the control and the heading of its paragraph must
  * not arrive in two different faces depending on which route reached them.
  */
+/**
+ * How much of the screen each shape of the sheet takes.
+ *
+ * A single paragraph in a sheet covering seventy per cent of the screen read as
+ * an error rather than a note. The all-topics sheet is a different object -- a
+ * scrolling reference -- and wants the room.
+ */
+export const HELP_HEIGHT = {one: 42, all: 75} as const;
+
 export default function HelpSheet({open, topic, onOpenChange}: Props) {
-    const window = useWindowDimensions();
     const topics = topic === "all" ? DETAILED_TOPICS : [topic];
 
     return (
-        // Sized to what it has to say. A single paragraph in a sheet covering
-        // seventy per cent of the screen read as an error rather than a note,
-        // and the same sheet has to hold every topic at once when it is opened
-        // from the overflow menu -- so the height cannot be a constant either
-        // way. The cap keeps the long form from filling the screen.
-        <XbrwSheet open={open} onOpenChange={onOpenChange} fitContent
-                   title={topic === "all" ? "ABOUT THESE SETTINGS" : "ABOUT"}>
-            <ScrollView maxHeight={window.height * 0.55}>
+        // No title. Every note in here is already headed by the name of the
+        // thing it describes, so a word above them saying ABOUT was chrome
+        // repeating what the first line said. It stays as the dialog's
+        // accessible name, which has no headings to look at.
+        <XbrwSheet open={open} onOpenChange={onOpenChange} showTitle={false}
+                   heightPercent={topic === "all" ? HELP_HEIGHT.all : HELP_HEIGHT.one}
+                   title={topic === "all" ? "About these settings" : RECIPE_HELP[topic].title}>
+            <ScrollView>
                 <YStack gap="$4" paddingBottom="$4">
                     {topics.map((key) => (
                         <YStack key={key} gap="$1.5">

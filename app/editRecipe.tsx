@@ -1,8 +1,8 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, type ScrollView as RNScrollView, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
+import {Input, Text, XStack, YStack} from "tamagui";
 
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -294,7 +294,7 @@ type StagesDeckProps = {
     isTea: boolean;
     /** The open stage's index, or null. Held by the screen, not the tile. */
     openStage: number | null;
-    setOpenStage: (value: number | null) => void;
+    setOpenStage: React.Dispatch<React.SetStateAction<number | null>>;
     /** Reports where a stage sits within the deck, so it can be scrolled to. */
     onStageLayout: (index: number, y: number) => void;
     editStage: (index: number, field: StageField, value: number) => void;
@@ -436,7 +436,13 @@ function StagesDeck({
                 <StageTile pour={pour} index={index}
                            count={recipe.pours.length}
                            open={openStage === index} accent={accent} isTea={isTea}
-                           onToggle={(i) => setOpenStage(openStage === i ? null : i)}
+                           // From the current value, not from the one this
+                           // render closed over. The curve above also sets it,
+                           // so two taps in quick succession -- or a tap
+                           // arriving after a selection -- would otherwise
+                           // decide against a stage that was already stale.
+                           onToggle={(i) =>
+                               setOpenStage((current) => (current === i ? null : i))}
                            onChange={editStage}
                            helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                            onDelete={(i) => {
@@ -506,14 +512,15 @@ function ActionBar({accent, canWrite, canSave, onWrite, onSave, onHeight}: Actio
     const insets = useSafeAreaInsets();
 
     return (
-        // The bottom padding is the home indicator's own height plus a small
-        // gap, rather than a fixed guess at it. The guess was made while the
-        // whole app was still being inset a second time by a SafeAreaView, so
-        // the two stacked and left the buttons floating well clear of the
-        // bottom of the screen.
+        // The bottom padding is the home indicator's own height and nothing
+        // more. A gap on top of it floated the buttons above a strip of empty
+        // base: the inset already is the clearance, which is what it is for.
+        // The top padding is half the sides'. The bar is pinned over the deck,
+        // so every point above the buttons is a point taken off the control
+        // being edited underneath it.
         <XStack testID="editor-actions"
                 position="absolute" bottom={0} left={0} right={0} gap="$2"
-                padding="$4" paddingBottom={insets.bottom + 10}
+                paddingHorizontal="$4" paddingTop="$2" paddingBottom={insets.bottom}
                 backgroundColor={palette.base}
                 onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
             <Pressable accessibilityRole="button" accessibilityLabel="Write card"
@@ -583,15 +590,19 @@ export default function EditRecipe() {
     const [heroHeight, setHeroHeight] = useState(0);
 
     // The morph is a one-shot entrance: once it has played, or once the user has
-    // asked for less motion, the screen is just a screen.
+    // asked for less motion, the screen is just a screen. It also has to be
+    // asked for. Off, the screen is pushed with the platform's own slide, and
+    // the rectangle must not be drawn at all -- it is measured against the
+    // window, and a screen that is sliding is not where the window says it is.
+    const [cardMorph] = useSetting("cardMorph");
     const [morphed, setMorphed] = useState(false);
-    const morphFrom = openedFrom(fromRect);
+    const morphFrom = cardMorph ? openedFrom(fromRect) : null;
     const showMorph = !morphed && !reducedMotion && morphFrom !== null && heroHeight > 0;
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
     // and putting them in state would re-render the whole editor on every
     // layout pass of every tile.
-    const scrollRef = useRef<RNScrollView>(null);
+    const scrollRef = useRef<ScrollView>(null);
     const stageOffsets = useRef<number[]>([]);
     const deckOffset = useRef(0);
     const profileHeight = useRef(0);
@@ -679,7 +690,11 @@ export default function EditRecipe() {
                 the list under it would snap up in one frame. The two-threshold
                 hysteresis in `useCollapsibleHeader` keeps it from strobing when
                 the list rests near the threshold. */}
-            <View onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
+            {/* The hero's own frame, measured. The morph has to know where it
+                is travelling to, and the hero draws its own safe-area padding,
+                so the height is not something the screen can work out. */}
+            <View testID="hero-slot"
+                  onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
             <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                         xid={recipe.xid} accent={accent} collapsed={collapsed}
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
@@ -699,6 +714,10 @@ export default function EditRecipe() {
                 renders `false` would be dropped from the array and shift the
                 index onto the wrong child. Index 2 is the stage profile; on the
                 brew deck nothing sticks. */}
+            {/* React Native's own scroll view, not Tamagui's. Nothing here
+                needs a style prop it would add, and `delaysContentTouches` --
+                which the deck of tap-to-open tiles depends on -- is not in
+                Tamagui's prop types. */}
             <ScrollView testID="editor-scroll" ref={scrollRef}
                         contentContainerStyle={{
                             padding:       16,

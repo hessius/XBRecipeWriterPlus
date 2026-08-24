@@ -20,14 +20,18 @@ type Props = {
      */
     showTitle?: boolean;
     /**
-     * Take only the height the content needs, rather than a fixed share of the
-     * screen.
+     * How much of the screen the sheet takes, as a percentage.
      *
-     * For a sheet whose content is a paragraph or two. The default is a large
-     * sheet, which is right for the ones that hold a list or a form and would
-     * otherwise resize as their content changed.
+     * A share of the screen rather than the height of the content. `fit` sizing
+     * was tried and is a trap here: Tamagui's fit-mode frame is content-sized,
+     * so a `flex: 1` child cannot grow inside it and the frame collapses to
+     * nothing. Tamagui compensates for this in its own `Sheet.ScrollView`, but
+     * every sheet in this app is reached through `Adapt`, which has to render a
+     * dialog on a wide screen as well -- and a `Sheet.ScrollView` in a dialog is
+     * not a thing. The sheet that hit this opened at zero height and looked
+     * exactly like a control that did nothing.
      */
-    fitContent?: boolean;
+    heightPercent?: number;
     children: React.ReactNode;
 };
 
@@ -42,7 +46,7 @@ export const EXIT_GRACE = DURATION.deliberate;
 
 /** The house sheet: the ImportRecipeComponent pattern, with a dot-matrix title. */
 export default function XbrwSheet({
-    open, onOpenChange, title, showTitle = true, fitContent = false, children
+    open, onOpenChange, title, showTitle = true, heightPercent = 70, children
 }: Props) {
     // With `open={false}` and no guard of our own, Tamagui still mounts the
     // sheet frame off screen, so a sheet that has never been opened is in the
@@ -97,8 +101,7 @@ export default function XbrwSheet({
         <Dialog modal open={open} onOpenChange={onOpenChange}>
             <Adapt platform="touch">
                 <Sheet transition="quick" zIndex={200000} modal dismissOnSnapToBottom
-                       snapPointsMode={fitContent ? "fit" : "percent"}
-                       snapPoints={fitContent ? undefined : [70]}>
+                       snapPointsMode="percent" snapPoints={[heightPercent]}>
                     <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
                         <Adapt.Contents/>
                     </Sheet.Frame>

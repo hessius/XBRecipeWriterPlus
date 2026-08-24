@@ -197,6 +197,49 @@ describe("StageTile help", () => {
         expect(screen.queryByLabelText("What is Pause?")).toBeNull();
     });
 
+    it("keeps the full-width control groups out of the column's flex", async () => {
+        await renderWithProviders(<StageTile {...OPEN} helpStyle="markers" onHelp={jest.fn()}/>);
+
+        // These two sit directly in the tile's column. In React Native `flex: 1`
+        // also sets a flex basis of zero, so a row that asks for it in a column
+        // asks to be nothing tall -- which drew the option pills as a sliver
+        // that read like a progress bar. Asserted on the prop rather than on a
+        // measured height, because the test renderer does no layout.
+        for (const topic of ["pattern", "agitation"]) {
+            const style = screen.getByTestId(`stage-group-${topic}`).props.style;
+            const flat = (Array.isArray(style) ? style.flat() : [style]).filter(Boolean) as
+                {flex?: unknown; alignSelf?: unknown}[];
+            expect(flat.some((entry) => entry.flex !== undefined)).toBe(false);
+            expect(flat.some((entry) => entry.alignSelf === "stretch")).toBe(true);
+        }
+    });
+
+    it("keeps the pattern and agitation controls across an explain toggle", async () => {
+        // The tree has to keep its shape, not merely its contents. A row that
+        // returned a fragment with nothing to explain and a stack with
+        // something changed element type at that position, so React tore the
+        // controls down and rebuilt them every time the toggle moved.
+        const shape = () => ["pattern", "agitation"]
+            .map((topic) => screen.queryByTestId(`stage-row-${topic}`) !== null);
+
+        const {rerender} = await renderWithProviders(
+            <StageTile {...OPEN} helpStyle="explain" explaining onHelp={jest.fn()}/>
+        );
+        expect(shape()).toEqual([true, true]);
+        expect(screen.getByLabelText("CENTERED")).toBeTruthy();
+
+        await rerender(<StageTile {...OPEN} helpStyle="explain" onHelp={jest.fn()}/>);
+        expect(shape()).toEqual([true, true]);
+        expect(screen.getByLabelText("CENTERED")).toBeTruthy();
+        expect(screen.getByLabelText("Agitate before")).toBeTruthy();
+
+        await rerender(
+            <StageTile {...OPEN} helpStyle="explain" explaining onHelp={jest.fn()}/>
+        );
+        expect(shape()).toEqual([true, true]);
+        expect(screen.getByLabelText("Agitate before")).toBeTruthy();
+    });
+
     it("never draws an always-on hint line", async () => {
         await renderWithProviders(
             <StageTile {...OPEN} helpStyle="markers" onHelp={jest.fn()}/>

@@ -12,7 +12,8 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 // `let` from inside a hoisted `jest.mock` factory: Babel rejects any name that
 // does not start with `mock`.
 jest.mock("expo-router", () => ({
-    useLocalSearchParams: () => ({recipeJSON: mockRecipeJSON, saveEnabled: "false"}),
+    useLocalSearchParams: () =>
+        mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
     useNavigation:        () => ({setOptions: mockSetOptions, goBack: jest.fn()})
 }));
 
@@ -25,7 +26,8 @@ jest.mock("@/library/RecipeDatabase");
 // the recipe. (Not in the plan's sketch — added here because the real hook
 // opens a database.)
 jest.mock("@/hooks/useSetting", () => ({
-    useSetting: () => [mockHelpStyle, jest.fn()]
+    useSetting: (key: string) =>
+        [key === "helpStyle" ? mockHelpStyle : mockSettings[key], jest.fn()]
 }));
 
 jest.mock("@/library/NFC", () => ({
@@ -37,6 +39,15 @@ jest.mock("@/library/NFC", () => ({
     })),
     setNfcAlertIOS: jest.fn()
 }));
+
+/** Route params, when a test needs more than the recipe. */
+let mockParams: Record<string, string> | null = null;
+
+/** Where a tapped card was, for the morph. */
+const RECT = {x: 12, y: 300, width: 360, height: 120};
+
+/** Every setting other than `helpStyle`, which has its own knob above. */
+let mockSettings: Record<string, unknown> = {};
 
 const mockSetOptions = jest.fn();
 
@@ -58,6 +69,8 @@ let mockHelpStyle = "explain";
 beforeEach(() => {
     mockRecipeJSON = JSON.stringify(fixture());
     mockHelpStyle = "explain";
+    mockSettings = {};
+    mockParams = null;
 });
 
 /**
@@ -232,6 +245,15 @@ describe("the editor", () => {
         expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
 
         await fireEvent.press(screen.getByLabelText("Explain"));
+        expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
+    });
+
+    it("opens the help sheet from a marker on the brew deck", async () => {
+        mockHelpStyle = "markers";
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("What is Ratio?"));
+
         expect(screen.getByText(/Half ratios cannot be stored/)).toBeTruthy();
     });
 
@@ -473,6 +495,44 @@ describe("stageScrollTarget", () => {
         // The first stage is already above the fold, and a negative offset
         // makes the list bounce rather than stay put.
         expect(stageScrollTarget(200, 0, 400)).toBe(0);
+    });
+});
+
+describe("the morph out of the tapped card", () => {
+    /** The rectangle has nowhere to travel to until the hero has been measured. */
+    const layOutHero = () => fireEvent(screen.getByTestId("hero-slot"), "layout", {
+        nativeEvent: {layout: {x: 0, y: 0, width: 390, height: 220}}
+    });
+
+    it("is not drawn when the setting is off", async () => {
+        mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+        await renderEditor();
+        await layOutHero();
+
+        // Hidden elements are included on purpose: the rectangle is
+        // decorative and hides itself from the accessibility tree, so a bare
+        // query would report it absent whether it had been drawn or not.
+        // Off, the platform pushes the screen with a slide, and a rectangle
+        // measured against the window would be drawn somewhere the sliding
+        // screen is not.
+        expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true})).toBeNull();
+    });
+
+    it("is drawn when the setting is on and there is a card to grow from", async () => {
+        mockSettings = {cardMorph: true};
+        mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+        await renderEditor();
+        await layOutHero();
+
+        expect(screen.getByTestId("hero-morph", {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("is not drawn when the editor was not opened from a card", async () => {
+        mockSettings = {cardMorph: true};
+        await renderEditor();
+        await layOutHero();
+
+        expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true})).toBeNull();
     });
 });
 
