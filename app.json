@@ -3,7 +3,7 @@
     "name": "XBRW++",
     "slug": "XBRecipeWriterPlus",
     "owner": "hessius",
-    "version": "2.4.0",
+    "version": "2.4.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "xbrecipewriter",
@@ -63,6 +63,8 @@
       "expo-share-intent",
       "expo-font",
       "expo-sqlite",
+      "./plugins/withUserScriptSandboxDisabled",
+      "./plugins/withExplicitModulesDisabled",
       "./plugins/withInhibitPodWarnings",
       "./plugins/withShareExtensionCcache"
     ],
