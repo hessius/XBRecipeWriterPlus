@@ -252,6 +252,9 @@ type StagesDeckProps = {
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
+    helpStyle: HelpStyle;
+    explaining: boolean;
+    onHelp: (topic: HelpTopic) => void;
 };
 
 type StageProfileCardProps = {
@@ -309,7 +312,8 @@ function StageProfileCard({pours, target, accent, selected}: StageProfileCardPro
  */
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage,
-    editStage, addPour, deletePour, autoAdjustPourVolumes
+    editStage, addPour, deletePour, autoAdjustPourVolumes,
+    helpStyle, explaining, onHelp
 }: StagesDeckProps) {
     "use no memo";
 
@@ -359,6 +363,7 @@ function StagesDeck({
                            open={openStage === index} accent={accent} isTea={isTea}
                            onToggle={(i) => setOpenStage(openStage === i ? null : i)}
                            onChange={editStage}
+                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
                            onDelete={(i) => {
                                // Close first, or `openStage` would point past
                                // the end of the shortened list.
@@ -592,7 +597,9 @@ export default function EditRecipe() {
                                 isTea={recipe.isTea()} openStage={openStage}
                                 setOpenStage={setOpenStage} editStage={editStage}
                                 addPour={addPour} deletePour={deletePour}
-                                autoAdjustPourVolumes={autoAdjustPourVolumes}/>
+                                autoAdjustPourVolumes={autoAdjustPourVolumes}
+                                helpStyle={helpStyle} explaining={explaining}
+                                onHelp={setHelpTopic}/>
                 )}
             </ScrollView>
 
