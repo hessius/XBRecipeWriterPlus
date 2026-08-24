@@ -38,7 +38,18 @@ export const DEFAULTS = {
      * to edit are what gets pushed off the bottom. The long form is still one
      * tap or one toggle away, which is what the help style is for.
      */
-    showHints: false
+    showHints: false,
+    /**
+     * Open a recipe by growing the card that was tapped into the editor's hero,
+     * rather than sliding the editor in from the right.
+     *
+     * Off by default. The two surfaces genuinely are the same object drawn
+     * twice, so the morph says something true about them -- but it replaces a
+     * transition the platform draws with one this app draws, and a transition
+     * the platform draws is the one a user already knows. It is offered rather
+     * than imposed for the same reason `dotMatrixProfile` is.
+     */
+    cardMorph: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

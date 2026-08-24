@@ -11,6 +11,7 @@ import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
+import {useSetting} from '@/hooks/useSetting';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -30,6 +31,7 @@ const AppTheme = {
 };
 
 export default function RootLayout() {
+    const [cardMorph] = useSetting("cardMorph");
     const [splashDone, setSplashDone] = useState(false);
     const [loaded] = useFonts({
         SpaceMono:        require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -87,23 +89,21 @@ export default function RootLayout() {
                                                 paint, so the native bar it was
                                                 replacing got one frame to
                                                 flash. */}
+                                            {/* The morph is drawn inside the
+                                                screen, so it only works if the
+                                                screen itself is not moving: a
+                                                slide would carry the rectangle
+                                                in from the right while it was
+                                                trying to travel up. When the
+                                                setting is off the platform's
+                                                own push is what a user already
+                                                knows, and is the default. */}
                                             <Stack.Screen name="editRecipe"
                                                           options={{
                                                               headerShown: false,
-                                                              // The editor's own
-                                                              // entrance is the
-                                                              // tapped card
-                                                              // growing into its
-                                                              // hero, which is
-                                                              // drawn inside the
-                                                              // screen. A slide
-                                                              // would carry that
-                                                              // rectangle in
-                                                              // from the right
-                                                              // while it was
-                                                              // trying to travel
-                                                              // up the screen.
-                                                              animation: "fade"
+                                                              animation: cardMorph
+                                                                  ? "none"
+                                                                  : "slide_from_right"
                                                           }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>

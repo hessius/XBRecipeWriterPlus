@@ -93,6 +93,7 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("dotMatrixProfile", settings);
     const [helpStyle, setHelpStyle] = useSetting("helpStyle", settings);
     const [showHints, setShowHints] = useSetting("showHints", settings);
+    const [cardMorph, setCardMorph] = useSetting("cardMorph", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -117,6 +118,11 @@ export default function SettingsScreen({settings}: Props) {
                                color={palette.dim}>
                     EDITOR
                 </DotMatrixText>
+                <ToggleRow
+                    label="Grow the card into the editor"
+                    description="Open a recipe by growing the tapped card into the header, instead of sliding the editor in from the right."
+                    value={cardMorph}
+                    onChange={setCardMorph}/>
                 <ToggleRow
                     label="One-line hints"
                     description="A short note under every label on the brew deck. The longer explanations are unaffected."
