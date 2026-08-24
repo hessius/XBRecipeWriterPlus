@@ -1,9 +1,10 @@
-import React from "react";
+import React, {useEffect, useState} from "react";
 import {Adapt, Dialog, Sheet, XStack, YStack} from "tamagui";
 import {Pressable} from "react-native";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
+import {DURATION} from "@/constants/motion";
 
 type Props = {
     open: boolean;
@@ -18,17 +19,49 @@ type Props = {
      * to look at.
      */
     showTitle?: boolean;
+    /**
+     * Take only the height the content needs, rather than a fixed share of the
+     * screen.
+     *
+     * For a sheet whose content is a paragraph or two. The default is a large
+     * sheet, which is right for the ones that hold a list or a form and would
+     * otherwise resize as their content changed.
+     */
+    fitContent?: boolean;
     children: React.ReactNode;
 };
 
+/**
+ * How long a dismissed sheet is kept in the tree so that it can animate away.
+ *
+ * A spring has no duration, so this is a ceiling rather than a measurement: it
+ * only has to outlast the animation. Being generous costs nothing, because the
+ * sheet is invisible and unreachable for the whole of it.
+ */
+export const EXIT_GRACE = DURATION.deliberate;
+
 /** The house sheet: the ImportRecipeComponent pattern, with a dot-matrix title. */
-export default function XbrwSheet({open, onOpenChange, title, showTitle = true, children}: Props) {
-    // Not merely an optimisation, and not something Tamagui already does: with
-    // `open={false}` and no guard, Tamagui still mounts the sheet frame off
-    // screen. This keeps a dismissed sheet out of the tree entirely, and is
-    // also why these sheets cannot animate out. That is accepted: a sheet that
-    // has been dismissed has nothing left to say.
-    if (!open) return null;
+export default function XbrwSheet({
+    open, onOpenChange, title, showTitle = true, fitContent = false, children
+}: Props) {
+    // With `open={false}` and no guard of our own, Tamagui still mounts the
+    // sheet frame off screen, so a sheet that has never been opened is in the
+    // tree and reachable. The guard cannot simply follow `open`, though:
+    // unmounting on the frame the sheet is dismissed takes the animation away
+    // with it, and the sheet vanished rather than left. So the tree keeps it
+    // for as long as it takes to slide away, and no longer.
+    const [rendered, setRendered] = useState(open);
+
+    useEffect(() => {
+        if (open) {
+            setRendered(true);
+            return;
+        }
+        const timer = setTimeout(() => setRendered(false), EXIT_GRACE);
+        return () => clearTimeout(timer);
+    }, [open]);
+
+    if (!rendered) return null;
 
     // Doto here, and Inter for whatever the caller puts inside. This is the
     // sheet's own chrome — the same register as the deck switch and the toast —
@@ -57,7 +90,9 @@ export default function XbrwSheet({open, onOpenChange, title, showTitle = true, 
     return (
         <Dialog modal open={open} onOpenChange={onOpenChange}>
             <Adapt platform="touch">
-                <Sheet snapPoints={[70]} zIndex={200000} modal dismissOnSnapToBottom>
+                <Sheet transition="quick" zIndex={200000} modal dismissOnSnapToBottom
+                       snapPointsMode={fitContent ? "fit" : "percent"}
+                       snapPoints={fitContent ? undefined : [70]}>
                     <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
                         <Adapt.Contents/>
                     </Sheet.Frame>
@@ -67,8 +102,12 @@ export default function XbrwSheet({open, onOpenChange, title, showTitle = true, 
             </Adapt>
 
             <Dialog.Portal>
-                <Dialog.Overlay key="overlay" opacity={0.5}/>
+                <Dialog.Overlay key="overlay" opacity={0.5} transition="quick"
+                                enterStyle={{opacity: 0}} exitStyle={{opacity: 0}}/>
                 <Dialog.Content bordered elevate maxWidth={440} aria-label={title}
+                                transition="quick"
+                                enterStyle={{opacity: 0, scale: 0.95, y: 8}}
+                                exitStyle={{opacity: 0, scale: 0.95, y: 8}}
                                 backgroundColor={palette.surface}>
                     <YStack gap="$3">
                         {heading}

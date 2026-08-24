@@ -1,4 +1,5 @@
 import React from "react";
+import {useWindowDimensions} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
 
 import XbrwSheet from "@/components/XbrwSheet";
@@ -20,12 +21,18 @@ type Props = {
  * not arrive in two different faces depending on which route reached them.
  */
 export default function HelpSheet({open, topic, onOpenChange}: Props) {
+    const window = useWindowDimensions();
     const topics = topic === "all" ? DETAILED_TOPICS : [topic];
 
     return (
-        <XbrwSheet open={open} onOpenChange={onOpenChange}
+        // Sized to what it has to say. A single paragraph in a sheet covering
+        // seventy per cent of the screen read as an error rather than a note,
+        // and the same sheet has to hold every topic at once when it is opened
+        // from the overflow menu -- so the height cannot be a constant either
+        // way. The cap keeps the long form from filling the screen.
+        <XbrwSheet open={open} onOpenChange={onOpenChange} fitContent
                    title={topic === "all" ? "ABOUT THESE SETTINGS" : "ABOUT"}>
-            <ScrollView>
+            <ScrollView maxHeight={window.height * 0.55}>
                 <YStack gap="$4" paddingBottom="$4">
                     {topics.map((key) => (
                         <YStack key={key} gap="$1.5">

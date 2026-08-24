@@ -1,8 +1,8 @@
 import React from "react";
 import {Text} from "react-native";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import XbrwSheet from "@/components/XbrwSheet";
+import XbrwSheet, {EXIT_GRACE} from "@/components/XbrwSheet";
 import {renderWithProviders} from "@/test-utils/render";
 
 function open(onOpenChange = jest.fn()) {
@@ -46,5 +46,28 @@ describe("XbrwSheet", () => {
         const tree = screen.toJSON();
         expect(Array.isArray(tree) ? tree : [tree]).toHaveLength(1);
         expect(screen.queryByText("the body", {includeHiddenElements: true})).toBeNull();
+    });
+
+    it("stays in the tree long enough to animate away", async () => {
+        // Unmounting on the frame the sheet is dismissed removes the animation
+        // along with the sheet, so it disappeared rather than left.
+        jest.useFakeTimers();
+        try {
+            const {rerender} = await open();
+
+            await rerender(
+                <XbrwSheet open={false} onOpenChange={jest.fn()} title="ABOUT">
+                    <Text>the body</Text>
+                </XbrwSheet>
+            );
+            expect(screen.queryByText("the body")).toBeTruthy();
+
+            await act(async () => {
+                jest.advanceTimersByTime(EXIT_GRACE);
+            });
+            expect(screen.queryByText("the body")).toBeNull();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });
