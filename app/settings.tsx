@@ -4,7 +4,7 @@ import {ScrollView, Switch, Text, XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
-import {type Settings} from "@/library/Settings";
+import {asTransition, type Settings} from "@/library/Settings";
 
 type Props = {
     /** Injected by tests. The route renders with the shared store. */
@@ -36,6 +36,66 @@ function ToggleRow({label, description, value, onChange}: RowProps) {
     );
 }
 
+type ChoiceRowProps<T extends string> = {
+    label: string;
+    description: string;
+    value: T;
+    options: readonly { value: T; label: string; description: string }[];
+    onChange: (value: T) => void;
+};
+
+/**
+ * A setting with more than two states.
+ *
+ * A radio group rather than a segmented control: the options carry a line of
+ * explanation each, which a segment has nowhere to put.
+ */
+function ChoiceRow<T extends string>({label, description, value, options, onChange}: ChoiceRowProps<T>) {
+    return (
+        <YStack gap="$2" paddingVertical="$3">
+            <YStack gap="$1">
+                <Text fontSize={16} color={palette.text}>{label}</Text>
+                <Text fontSize={13} color={palette.dim}>{description}</Text>
+            </YStack>
+            <YStack accessibilityRole="radiogroup" gap="$2" paddingTop="$1">
+                {options.map((option) => (
+                    <XStack key={option.value} accessible accessibilityRole="radio"
+                            accessibilityLabel={option.label}
+                            accessibilityState={{checked: option.value === value}}
+                            onPress={() => onChange(option.value)}
+                            alignItems="center" gap="$3"
+                            backgroundColor={palette.raised} borderRadius="$4"
+                            padding="$3"
+                            borderWidth={1}
+                            borderColor={option.value === value ? palette.text : palette.line}>
+                        <YStack flex={1} gap="$1">
+                            <Text fontSize={15} color={palette.text}>{option.label}</Text>
+                            <Text fontSize={12} color={palette.dim}>{option.description}</Text>
+                        </YStack>
+                    </XStack>
+                ))}
+            </YStack>
+        </YStack>
+    );
+}
+
+/**
+ * How each transition describes itself in settings.
+ *
+ * Written as what you will see rather than as what it is called, because the
+ * names are only meaningful once you have watched all four.
+ */
+const TRANSITION_OPTIONS = [
+    {value: "slide", label: "Slide in",
+     description: "The system's own push, from the right. What every other app does."},
+    {value: "morph", label: "Grow the card",
+     description: "The tapped card grows into the editor's header and back again."},
+    {value: "container", label: "Grow the card, with its name",
+     description: "The same, with the recipe's name carried across and the fields rising in behind."},
+    {value: "reveal", label: "Colour reveal",
+     description: "A disc of the recipe's colour opens from your finger and floods the screen."}
+] as const;
+
 /**
  * The settings screen.
  *
@@ -49,7 +109,7 @@ export default function SettingsScreen({settings}: Props) {
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
     const [showHints, setShowHints] = useSetting("showHints", settings);
-    const [cardMorph, setCardMorph] = useSetting("cardMorph", settings);
+    const [transition, setTransition] = useSetting("transition", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -74,11 +134,12 @@ export default function SettingsScreen({settings}: Props) {
                                color={palette.dim}>
                     EDITOR
                 </DotMatrixText>
-                <ToggleRow
-                    label="Grow the card into the editor"
-                    description="Open a recipe by growing the tapped card into the header, instead of sliding the editor in from the right."
-                    value={cardMorph}
-                    onChange={setCardMorph}/>
+                <ChoiceRow
+                    label="Opening a recipe"
+                    description="How the editor arrives when you tap a recipe."
+                    value={asTransition(transition)}
+                    options={TRANSITION_OPTIONS}
+                    onChange={setTransition}/>
                 <ToggleRow
                     label="One-line hints"
                     description="A short note under every label on the brew deck. The longer explanations live in Help, under the caret."

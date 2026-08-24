@@ -1,8 +1,8 @@
 import React from "react";
-import {StyleSheet} from "react-native";
+import {StyleSheet, View as RNView} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import EditRecipe, {PROFILE_HEIGHT, openedFrom, stageScrollTarget} from "@/app/editRecipe";
+import EditRecipe, {PROFILE_HEIGHT, openedFrom, stageScrollTarget, touchedAt} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import {DURATION} from "@/constants/motion";
@@ -479,13 +479,34 @@ describe("stageScrollTarget", () => {
     });
 });
 
-describe("the morph out of the tapped card", () => {
+describe("opening out of the tapped card", () => {
+    /**
+     * Make the hero report where it draws its name.
+     *
+     * The report is a measurement, and the test renderer measures nothing, so
+     * the round trip to the native side is stood in for. Restored afterwards:
+     * a prototype spy left in place would answer for every other view in the
+     * file as well.
+     */
+    const reportNameRect = async () => {
+        const measure = jest.spyOn(RNView.prototype, "measureInWindow")
+            .mockImplementation((callback: (x: number, y: number, w: number, h: number) => void) => {
+                callback(16, 120, 200, 31);
+            });
+        try {
+            await fireEvent(screen.getByTestId("hero-name"), "layout",
+                            {nativeEvent: {layout: {x: 16, y: 120, width: 200, height: 31}}});
+        } finally {
+            measure.mockRestore();
+        }
+    };
+
     /** The rectangle has nowhere to travel to until the hero has been measured. */
     const layOutHero = () => fireEvent(screen.getByTestId("hero-slot"), "layout", {
         nativeEvent: {layout: {x: 0, y: 0, width: 390, height: 220}}
     });
 
-    it("is not drawn when the setting is off", async () => {
+    it("draws nothing under the platform's own slide", async () => {
         mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
         await renderEditor();
         await layOutHero();
@@ -493,14 +514,14 @@ describe("the morph out of the tapped card", () => {
         // Hidden elements are included on purpose: the rectangle is
         // decorative and hides itself from the accessibility tree, so a bare
         // query would report it absent whether it had been drawn or not.
-        // Off, the platform pushes the screen with a slide, and a rectangle
+        // Under `slide` the platform pushes the screen, and a rectangle
         // measured against the window would be drawn somewhere the sliding
         // screen is not.
         expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true})).toBeNull();
     });
 
-    it("is drawn when the setting is on and there is a card to grow from", async () => {
-        mockSettings = {cardMorph: true};
+    it("grows a rectangle when there is a card to grow from", async () => {
+        mockSettings = {transition: "morph"};
         mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
         await renderEditor();
         await layOutHero();
@@ -509,7 +530,7 @@ describe("the morph out of the tapped card", () => {
     });
 
     it("is not drawn when the editor was not opened from a card", async () => {
-        mockSettings = {cardMorph: true};
+        mockSettings = {transition: "morph"};
         await renderEditor();
         await layOutHero();
 
@@ -522,7 +543,7 @@ describe("the morph out of the tapped card", () => {
         // with the rectangle still in the air over it.
         jest.useFakeTimers();
         try {
-            mockSettings = {cardMorph: true};
+            mockSettings = {transition: "morph"};
             mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
             await renderEditor();
             await layOutHero();
@@ -549,13 +570,118 @@ describe("the morph out of the tapped card", () => {
         }
     });
 
-    it("leaves at once when there is no morph to run", async () => {
+    it("leaves at once when there is no transition to run", async () => {
         await renderEditor();
         await layOutHero();
 
         await fireEvent.press(screen.getByLabelText("Back"));
 
         expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+
+    it("carries the recipe's name along under the container transform", async () => {
+        mockSettings = {transition: "container"};
+        mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+        await renderEditor();
+        await layOutHero();
+
+        // The hero reports where it draws its own name and the travelling copy
+        // flies to that spot, so without the report there is nowhere to fly to
+        // and the plain rectangle is all there is.
+        expect(screen.queryByTestId("hero-morph-label", {includeHiddenElements: true}))
+            .toBeNull();
+
+        await reportNameRect();
+
+        expect(screen.getByTestId("hero-morph-label", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("leaves the name out of the plain morph", async () => {
+        mockSettings = {transition: "morph"};
+        mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+        await renderEditor();
+        await layOutHero();
+        await reportNameRect();
+
+        expect(screen.queryByTestId("hero-morph-label", {includeHiddenElements: true}))
+            .toBeNull();
+    });
+});
+
+describe("opening as a reveal", () => {
+    const layOutHero = () => fireEvent(screen.getByTestId("hero-slot"), "layout", {
+        nativeEvent: {layout: {x: 0, y: 0, width: 390, height: 220}}
+    });
+
+    it("opens a disc from the point that was touched", async () => {
+        mockSettings = {transition: "reveal"};
+        mockParams = {
+            recipeJSON: mockRecipeJSON,
+            fromPoint:  JSON.stringify({x: 42, y: 610})
+        };
+        await renderEditor();
+
+        expect(screen.getByTestId("accent-reveal", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("needs no measured hero, unlike the morph", async () => {
+        // The disc has only one end. That is what makes it the transition that
+        // still works when the card's measurement never came back -- so it must
+        // not be made to wait for a hero it does not use.
+        mockSettings = {transition: "reveal"};
+        mockParams = {
+            recipeJSON: mockRecipeJSON,
+            fromPoint:  JSON.stringify({x: 42, y: 610})
+        };
+        await renderEditor();
+
+        expect(screen.queryByTestId("hero-slot")).toBeTruthy();
+        expect(screen.getByTestId("accent-reveal", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("is not drawn without a point to open from", async () => {
+        mockSettings = {transition: "reveal"};
+        mockParams = {recipeJSON: mockRecipeJSON, fromRect: JSON.stringify(RECT)};
+        await renderEditor();
+        await layOutHero();
+
+        // A rectangle is not a substitute: the reveal opens from a finger, and
+        // guessing the card's middle would be a different transition.
+        expect(screen.queryByTestId("accent-reveal", {includeHiddenElements: true}))
+            .toBeNull();
+        expect(screen.queryByTestId("hero-morph", {includeHiddenElements: true}))
+            .toBeNull();
+    });
+
+    it("closes back to the same point on the way out", async () => {
+        jest.useFakeTimers();
+        try {
+            mockSettings = {transition: "reveal"};
+            mockParams = {
+                recipeJSON: mockRecipeJSON,
+                fromPoint:  JSON.stringify({x: 42, y: 610})
+            };
+            await renderEditor();
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.transition);
+            });
+
+            await fireEvent.press(screen.getByLabelText("Back"));
+
+            expect(screen.getByTestId("accent-reveal", {includeHiddenElements: true}))
+                .toBeTruthy();
+            expect(mockGoBack).not.toHaveBeenCalled();
+
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.transition);
+            });
+            expect(mockGoBack).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });
 
@@ -582,5 +708,34 @@ describe("openedFrom", () => {
         expect(openedFrom("not json")).toBeNull();
         expect(openedFrom(["a", "b"])).toBeNull();
         expect(openedFrom(JSON.stringify(null))).toBeNull();
+    });
+});
+
+describe("touchedAt", () => {
+    it("gives nothing when the editor was not opened by a touch", () => {
+        expect(touchedAt(undefined)).toBeNull();
+    });
+
+    it("reads the point the card was touched at", () => {
+        expect(touchedAt(JSON.stringify({x: 42, y: 610}))).toEqual({x: 42, y: 610});
+    });
+
+    it("keeps a touch at the very corner, which is a point like any other", () => {
+        // Zero is a real coordinate. A truthiness check here would throw away
+        // the top left of the screen.
+        expect(touchedAt(JSON.stringify({x: 0, y: 0}))).toEqual({x: 0, y: 0});
+    });
+
+    it("refuses a partial point rather than revealing from NaN", () => {
+        // A disc centred on NaN has no size, so it never covers the screen and
+        // never finishes -- the editor would simply never arrive.
+        expect(touchedAt(JSON.stringify({x: 42}))).toBeNull();
+        expect(touchedAt(JSON.stringify({x: 42, y: "low"}))).toBeNull();
+    });
+
+    it("survives a param that is not JSON at all", () => {
+        expect(touchedAt("not json")).toBeNull();
+        expect(touchedAt(["a", "b"])).toBeNull();
+        expect(touchedAt(JSON.stringify(null))).toBeNull();
     });
 });

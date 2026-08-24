@@ -1,10 +1,14 @@
 import React, {useEffect} from "react";
+import {Text} from "react-native";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 
 import {DURATION, EASING} from "@/constants/motion";
 
 /** A rectangle in window coordinates. */
 export type Rect = {x: number; y: number; width: number; height: number};
+
+/** A point in window coordinates. */
+type Point = {x: number; y: number};
 
 /** The card's corners on the home screen, and the hero's at the top of the editor. */
 const CARD_RADIUS = 20;
@@ -19,6 +23,47 @@ const HERO_BOTTOM_RADIUS = 28;
  * own text and watermark -- be what lands.
  */
 const SOLID_UNTIL = 0.72;
+
+/**
+ * The travelling name: the card's size, the hero's size, and the card's inset.
+ *
+ * The hero's own position is measured rather than assumed -- it depends on the
+ * safe area and on whether the recipe has an ID badge above the name -- but the
+ * card's is fixed by its own padding, so there is nothing to measure at that
+ * end.
+ */
+const CARD_NAME_SIZE = 17;
+const HERO_NAME_SIZE = 26;
+const CARD_NAME_INSET = 14;
+
+/**
+ * When the travelling name is visible.
+ *
+ * It fades in after the journey has started and out before it ends, rather than
+ * matching the card's name at rest and the hero's at rest. Matching would be
+ * the purer version and is not worth what it costs: the label would have to sit
+ * exactly on top of two pieces of real text drawn by two other components, and
+ * a few pixels out at either end reads as a stutter, which is worse than a name
+ * that simply travels.
+ */
+const LABEL_IN = 0.12;
+const LABEL_FULL = 0.4;
+const LABEL_OUT = 0.78;
+
+/** Where the travelling name is at a given point in the travel. */
+export function labelStyle(progress: number, from: Point, to: Point) {
+    "worklet";
+    const between = (start: number, end: number) => start + (end - start) * progress;
+    const ramp = (start: number, end: number) =>
+        Math.min(1, Math.max(0, (progress - start) / (end - start)));
+
+    return {
+        left:      between(from.x, to.x),
+        top:       between(from.y, to.y),
+        opacity:   ramp(LABEL_IN, LABEL_FULL) * (1 - ramp(LABEL_OUT, 1)),
+        transform: [{scale: between(CARD_NAME_SIZE / HERO_NAME_SIZE, 1)}]
+    };
+}
 
 /**
  * Where the morphing rectangle is at a given point in the travel.
@@ -62,6 +107,14 @@ type Props = {
      * in both directions.
      */
     direction?: "in" | "out";
+    /**
+     * The recipe's name, travelling with the rectangle.
+     *
+     * Present for the container transform and absent for the plain morph. `to`
+     * is where the hero draws its own name, in window coordinates, which only
+     * the hero can say.
+     */
+    label?: {text: string; to: Point; color: string};
     /** Called once the rectangle has arrived and there is nothing left to draw. */
     onDone: () => void;
 };
@@ -79,7 +132,7 @@ type Props = {
  * production, and a transition that sometimes leaves a view stranded mid-screen
  * is worse than no transition at all.
  */
-export default function HeroMorph({from, to, accent, direction = "in", onDone}: Props) {
+export default function HeroMorph({from, to, accent, direction = "in", label, onDone}: Props) {
     const progress = useSharedValue(direction === "in" ? 0 : 1);
 
     useEffect(() => {
@@ -97,9 +150,37 @@ export default function HeroMorph({from, to, accent, direction = "in", onDone}: 
 
     const style = useAnimatedStyle(() => morphStyle(progress.value, from, to));
 
+    // Not conditional on `label`: a hook cannot be, and the style is cheap. The
+    // label's own start is the card's name, which sits at the card's padding.
+    const labelFrom = {x: from.x + CARD_NAME_INSET, y: from.y + CARD_NAME_INSET};
+    const labelTo = label?.to ?? labelFrom;
+    const nameStyle = useAnimatedStyle(() => labelStyle(progress.value, labelFrom, labelTo));
+
     return (
-        <Animated.View testID="hero-morph" pointerEvents="none"
-                       accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-                       style={[{position: "absolute", backgroundColor: accent}, style]}/>
+        <>
+            <Animated.View testID="hero-morph" pointerEvents="none"
+                           accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+                           style={[{position: "absolute", backgroundColor: accent}, style]}/>
+            {label !== undefined && (
+                // Scaled from its top left, so the text grows out of where it
+                // starts rather than about its own middle -- which would drift
+                // it left and up as it got bigger.
+                <Animated.View testID="hero-morph-label" pointerEvents="none"
+                               accessibilityElementsHidden
+                               importantForAccessibility="no-hide-descendants"
+                               style={[{position: "absolute", transformOrigin: "top left"},
+                                       nameStyle]}>
+                    <Text numberOfLines={1}
+                          style={{
+                              fontSize:   HERO_NAME_SIZE,
+                              lineHeight: 31,
+                              fontWeight: "700",
+                              color:      label.color
+                          }}>
+                        {label.text}
+                    </Text>
+                </Animated.View>
+            )}
+        </>
     );
 }

@@ -1,4 +1,4 @@
-import {DEFAULTS, Settings, type SettingsStorage} from "../Settings";
+import {asTransition, DEFAULTS, Settings, TRANSITIONS, type SettingsStorage} from "../Settings";
 
 /** A storage backend that keeps everything in memory. */
 function fakeStorage(seed: Record<string, string> = {}): SettingsStorage {
@@ -69,5 +69,22 @@ describe("Settings", () => {
         // both were withdrawn. A key nobody reads is a row that outlives the
         // feature and confuses the next person to read the defaults.
         expect(Object.keys(DEFAULTS)).not.toContain("helpStyle");
+    });
+});
+
+describe("asTransition", () => {
+    it("keeps a transition it knows", () => {
+        for (const name of TRANSITIONS) {
+            expect(asTransition(name)).toBe(name);
+        }
+    });
+
+    it("falls back to the slide for anything else", () => {
+        // Settings are stored as text and the store cannot know what a given
+        // key's values mean, so an unknown one is what a downgraded database
+        // looks like from here -- and the platform's own push is the safe
+        // answer, because it is the one that needs nothing measured.
+        expect(asTransition("kaleidoscope")).toBe("slide");
+        expect(asTransition("")).toBe("slide");
     });
 });

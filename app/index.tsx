@@ -15,6 +15,7 @@ import HomeHeader from "@/components/HomeHeader";
 import ImportRecipeComponent from "@/components/ImportRecipeComponent";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import type {Point} from "@/components/AccentReveal";
 import type {Rect} from "@/components/HeroMorph";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
@@ -153,16 +154,20 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
-    function openRecipe(recipe: Recipe, from?: Rect) {
+    function openRecipe(recipe: Recipe, from?: Rect, at?: Point) {
         router.push({
             pathname: "/editRecipe",
             params:   {
                 recipeJSON: JSON.stringify(recipe),
-                // The card's rectangle travels with the route rather than
-                // through a context, because the editor is also reachable from
-                // a share intent and a cold start, where there is no card to
-                // have come from and the transition has to do without one.
-                ...(from ? {fromRect: JSON.stringify(from)} : {})
+                // The card's rectangle and the point it was touched at travel
+                // with the route rather than through a context, because the
+                // editor is also reachable from a share intent and a cold
+                // start, where there is no card to have come from and the
+                // transition has to do without one. Both are sent whatever the
+                // setting says: the setting is read by the editor, and reading
+                // it here as well would be two places to keep in agreement.
+                ...(from ? {fromRect: JSON.stringify(from)} : {}),
+                ...(at ? {fromPoint: JSON.stringify(at)} : {})
             }
         });
     }
@@ -223,7 +228,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
-                                onPress={(from) => openRecipe(item, from)}
+                                onPress={(from, at) => openRecipe(item, from, at)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
                                     library.deleteRecipe(item);

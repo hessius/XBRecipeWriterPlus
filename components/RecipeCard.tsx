@@ -1,5 +1,5 @@
 import React from "react";
-import {View} from "react-native";
+import {View, type GestureResponderEvent} from "react-native";
 import {XStack, YStack, Text} from "tamagui";
 
 import DigitRoll from "@/components/DigitRoll";
@@ -102,7 +102,12 @@ function Action({label, icon, tone, testID, onPress}: ActionProps) {
 
 type Props = {
     recipe: Recipe;
-    onPress: () => void;
+    /**
+     * Handed the press itself, not just the fact of it: the colour reveal
+     * transition opens from the point that was touched, and that point exists
+     * nowhere but in the event.
+     */
+    onPress: (event: GestureResponderEvent) => void;
     /** When true, the destructive actions are visible rather than swipe-only. */
     editing?: boolean;
     onDuplicate?: () => void;
