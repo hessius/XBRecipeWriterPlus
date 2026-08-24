@@ -2,7 +2,7 @@ import React from "react";
 import {StyleSheet} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import EditRecipe, {stageScrollTarget} from "@/app/editRecipe";
+import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
@@ -345,6 +345,27 @@ describe("the stages deck", () => {
 
         expect(screen.getByLabelText("Stage 2 of 3").props.accessibilityState)
             .toMatchObject({expanded: true});
+    });
+
+    it("gives the curve's height back to the stages once the header collapses", async () => {
+        // Hero, profile and action bar are all pinned, which left a phone
+        // screen with very little of itself to edit in.
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        expect(screen.getByTestId("stage-profile").props.height)
+            .toBeGreaterThan(PROFILE_HEIGHT.full);
+
+        await fireEvent.scroll(screen.getByTestId("editor-scroll"), {
+            nativeEvent: {
+                contentOffset:     {y: 400, x: 0},
+                contentSize:       {height: 2000, width: 390},
+                layoutMeasurement: {height: 800, width: 390}
+            }
+        });
+
+        expect(screen.getByTestId("stage-profile").props.height)
+            .toBeLessThan(PROFILE_HEIGHT.full);
     });
 
     it("sticks nothing on the brew deck", async () => {

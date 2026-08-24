@@ -280,6 +280,8 @@ type StageProfileCardProps = {
     accent: string;
     /** The stage the list has open, so the curve can highlight its band. */
     selected: number | null;
+    /** The header has collapsed, so the screen is short of room. */
+    collapsed: boolean;
     onSelect: (index: number) => void;
     /** Reports how much of the content the pinned card covers, once laid out. */
     onHeight: (height: number) => void;
@@ -296,8 +298,19 @@ type StageProfileCardProps = {
  * The backdrop is opaque `base`: a sticky view has the list running underneath
  * it, and the card's rounded corners would otherwise show tiles sliding through.
  */
+/**
+ * How tall the curve is drawn, before and after the header collapses.
+ *
+ * Two pinned surfaces and a pinned action bar leave a phone screen with very
+ * little room to edit in. The curve is a shape rather than a chart -- it has no
+ * gridlines or labels to lose -- so it survives being read at forty points, and
+ * giving those forty points back to the stage being edited is worth more than
+ * the amplitude.
+ */
+export const PROFILE_HEIGHT = {full: 92, compact: 52} as const;
+
 function StageProfileCard({
-    pours, target, accent, selected, onSelect, onHeight
+    pours, target, accent, selected, collapsed, onSelect, onHeight
 }: StageProfileCardProps) {
     "use no memo";
 
@@ -307,12 +320,17 @@ function StageProfileCard({
     const {width} = useWindowDimensions();
 
     return (
-        <YStack backgroundColor={palette.base} paddingTop="$3" paddingBottom="$2.5"
+        <YStack backgroundColor={palette.base}
+                paddingTop={collapsed ? "$1.5" : "$3"} paddingBottom="$2.5"
                 onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
-            <YStack backgroundColor={palette.surface} borderRadius="$5" padding="$3">
+            <YStack backgroundColor={palette.surface} borderRadius="$5"
+                    padding={collapsed ? "$2" : "$3"}>
                 <StageProfile testID="stage-profile" pours={pours}
                               target={target} accent={accent}
-                              width={width - 64} height={92}
+                              width={collapsed ? width - 56 : width - 64}
+                              height={collapsed
+                                  ? PROFILE_HEIGHT.compact
+                                  : PROFILE_HEIGHT.full}
                               selected={selected ?? undefined} onSelect={onSelect}/>
             </YStack>
         </YStack>
@@ -657,6 +675,7 @@ export default function EditRecipe() {
                 {deck === "stages" ? (
                     <StageProfileCard pours={recipe.pours} target={balance.target}
                                       accent={accent} selected={openStage}
+                                      collapsed={collapsed}
                                       onSelect={selectStage}
                                       onHeight={(height) => {
                                           profileHeight.current = height;
