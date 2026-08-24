@@ -71,7 +71,7 @@ export default function RecipeOverflowSheet({
                     {caption: "Refresh name"}
                 )}
                 {row("Revert", "revert", onRevert)}
-                {row("Help", "info", onHelp)}
+                {row("Help", "help", onHelp)}
                 {/* Set apart, because it is the one row here that cannot be
                     undone and there is no second question after it. */}
                 <YStack marginTop="$2" paddingTop="$2"

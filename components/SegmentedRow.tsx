@@ -21,15 +21,17 @@ type Props = {
     accent?: string;
     helpStyle?: HelpStyle;
     explaining?: boolean;
+    showHint?: boolean;
     onHelp?: (topic: HelpTopic) => void;
 };
 
 /** A `FieldRow` whose value is one of a short list. */
 export default function SegmentedRow({
-    topic, value, options, onChange, accent, helpStyle, explaining, onHelp
+    topic, value, options, onChange, accent, helpStyle, explaining, showHint, onHelp
 }: Props) {
     return (
-        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining}
+                  showHint={showHint} onHelp={onHelp}>
             <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
                     borderRadius="$3" padding={2} gap={2}>
                 {options.map((option) => {

@@ -56,6 +56,21 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
 
+    it("offers the one-line hints, off unless they have been turned on", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByLabelText("One-line hints")
+            .props.accessibilityState.checked).toBe(false);
+    });
+
+    it("persists the one-line hints", async () => {
+        const storage = memoryStorage();
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+        await fireEvent(screen.getByLabelText("One-line hints"), "checkedChange", true);
+
+        expect(new Settings(storage).get("showHints")).toBe(true);
+    });
+
     it("offers both help styles and marks the stored one", async () => {
         const settings = new Settings(memoryStorage());
         await renderWithProviders(<SettingsScreen settings={settings}/>);

@@ -11,12 +11,34 @@ import {DOT_ICONS, DOT_ICON_GRID, litCells, type DotIconName} from "@/constants/
 import {palette} from "@/constants/colors";
 import {DURATION, EASING, STAGGER, useReducedMotion} from "@/constants/motion";
 
+/** Dot diameter as a fraction of a cell, at `LOOSE_AT` points and above. */
+const LOOSE_RATIO = 0.36;
+/** And at `DENSE_AT` points and below. */
+const DENSE_RATIO = 0.80;
+/** The size at and above which dots are drawn at `LOOSE_RATIO`. */
+const LOOSE_AT = 24;
+/** The size at and below which dots are drawn at `DENSE_RATIO`. */
+const DENSE_AT = 13;
+
 /**
- * Dot diameter as a fraction of a cell. Below about a third the icon reads as a
- * scatter of specks; above it the dots touch and the grid closes into a solid
+ * How fat a dot is, for an icon of this size.
+ *
+ * Not a constant, which is what it used to be. At 0.36 a 13-point icon draws
+ * dots 0.47 points across — under half a logical pixel — and every glyph greys
+ * into a smudge whatever its shape; that was the whole of the "the help marker
+ * is mangled" report, and no redrawing would have fixed it. A large icon does
+ * need the loose ratio: at 0.80 the dots touch and the grid closes into a solid
  * shape, which is the thing the dot matrix exists not to be.
+ *
+ * Ramped rather than stepped so that two icons a point apart in size are not
+ * visibly different weights.
  */
-const DOT_RATIO = 0.36;
+export function dotRatio(size: number): number {
+    if (size >= LOOSE_AT) return LOOSE_RATIO;
+    if (size <= DENSE_AT) return DENSE_RATIO;
+    const t = (LOOSE_AT - size) / (LOOSE_AT - DENSE_AT);
+    return LOOSE_RATIO + t * (DENSE_RATIO - LOOSE_RATIO);
+}
 
 type Props = {
     name: DotIconName;
@@ -109,7 +131,7 @@ export default function DotIcon({
 }: Props) {
     const reduced = useReducedMotion();
     const cell = size / DOT_ICON_GRID;
-    const dot = cell * DOT_RATIO;
+    const dot = cell * dotRatio(size);
     const cells = litCells(DOT_ICONS[name]);
 
     // Reduced Motion still gets a change of state -- every dot fades in at once

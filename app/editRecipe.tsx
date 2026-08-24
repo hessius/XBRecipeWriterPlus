@@ -55,6 +55,7 @@ type TextFieldRowProps = {
     autoCapitalize?: "none" | "characters";
     helpStyle: HelpStyle;
     explaining: boolean;
+    showHint: boolean;
     onHelp: (topic: HelpTopic) => void;
     onCommit: (value: string) => void;
     /** Validates on every keystroke; false marks the field and reports up. */
@@ -83,7 +84,7 @@ type TextFieldRowProps = {
  */
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
-    helpStyle, explaining, onHelp, onCommit,
+    helpStyle, explaining, showHint, onHelp, onCommit,
     validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
@@ -106,7 +107,8 @@ function TextFieldRow({
     }
 
     return (
-        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+        <FieldRow topic={topic} helpStyle={helpStyle} explaining={explaining}
+                  showHint={showHint} onHelp={onHelp}
                   error={invalid ? invalidReason : undefined}>
             {/* Not keyed here: the key belongs on the row, which is what owns
                 the `invalid` state this input feeds. */}
@@ -127,6 +129,7 @@ type BrewDeckProps = {
     balanceTarget: number;
     helpStyle: HelpStyle;
     explaining: boolean;
+    showHint: boolean;
     onHelp: (topic: HelpTopic) => void;
     dispatch: Dispatch;
     /** Reports the recipe-ID field's validity into the screen's write/save gate. */
@@ -144,7 +147,10 @@ type BrewDeckProps = {
  * Module scope, not an inline function: a component defined inside the screen's
  * body is a new type on every render and would remount its whole subtree.
  */
-function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp, dispatch, onInputErrorChange}: BrewDeckProps) {
+function BrewDeck({
+    recipe, accent, balanceTarget, helpStyle, explaining, showHint, onHelp,
+    dispatch, onInputErrorChange
+}: BrewDeckProps) {
     "use no memo";
 
     // These components draw a model that is mutated in place: `pour.getVolume()`
@@ -172,20 +178,23 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
                 <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML TOTAL</Text>
             </XStack>
 
-            <FieldRow topic="dose" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+            <FieldRow topic="dose" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}>
                 <Stepper label="Dose" value={recipe.dosage}
                          min={1} max={isTea ? 10 : 31} step={1} unit="g" accent={accent}
                          onChange={(value) => dispatch(RECIPE_LABELS.DOSE, String(value))}/>
             </FieldRow>
 
-            <FieldRow topic="ratio" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+            <FieldRow topic="ratio" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}>
                 <Stepper label="Ratio" value={recipe.ratio}
                          min={5} max={100} step={1} accent={accent}
                          onChange={(value) => dispatch(RECIPE_LABELS.RATIO, String(value))}/>
             </FieldRow>
 
             {showGrind && (
-                <FieldRow topic="grindSize" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                <FieldRow topic="grindSize" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}>
                     <Stepper label="Grind size" value={recipe.grindSize}
                              min={40} max={80} step={1}
                              onChange={(value) => dispatch(RECIPE_LABELS.GRIND_SIZE, String(value))}/>
@@ -193,7 +202,8 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
             )}
 
             {showGrind && (
-                <FieldRow topic="grindSpeed" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}>
+                <FieldRow topic="grindSpeed" helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}>
                     <Stepper label="Grind speed" value={recipe.grindRPM}
                              min={60} max={120} step={10} unit="rpm"
                              onChange={(value) => dispatch(RECIPE_LABELS.GRIND_RPM, String(value))}/>
@@ -209,12 +219,14 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
             {!isTea && (
                 <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
                               accent={accent} helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
             )}
 
             {!isTea && (
                 <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
                               helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
@@ -227,6 +239,7 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
             <TextFieldRow key={recipe.xid} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
@@ -234,6 +247,7 @@ function BrewDeck({recipe, accent, balanceTarget, helpStyle, explaining, onHelp,
             <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                           helpStyle={helpStyle} explaining={explaining} onHelp={onHelp}
+                      showHint={showHint}
                           onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
         </YStack>
     );
@@ -472,6 +486,7 @@ export default function EditRecipe() {
 
     const [helpStyleRaw] = useSetting("helpStyle");
     const helpStyle = asHelpStyle(helpStyleRaw);
+    const [showHint] = useSetting("showHints");
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
@@ -590,6 +605,7 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               helpStyle={helpStyle} explaining={explaining}
+                              showHint={showHint}
                               onHelp={setHelpTopic} dispatch={dispatch}
                               onInputErrorChange={setInputError}/>
                 ) : (

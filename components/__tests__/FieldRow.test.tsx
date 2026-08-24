@@ -7,14 +7,33 @@ import SegmentedRow from "@/components/SegmentedRow";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("FieldRow", () => {
-    it("draws the label, the hint and the value", async () => {
+    it("draws the label and the value", async () => {
         await renderWithProviders(
             <FieldRow topic="ratio"><Text>16</Text></FieldRow>
         );
 
         expect(screen.getByText("Ratio")).toBeTruthy();
-        expect(screen.getByText("Whole numbers only. Sets the target volume.")).toBeTruthy();
         expect(screen.getByText("16")).toBeTruthy();
+    });
+
+    it("keeps the one-line hint out of the way unless it is asked for", async () => {
+        await renderWithProviders(
+            <FieldRow topic="ratio"><Text>16</Text></FieldRow>
+        );
+
+        // Nine of these turned the deck into prose on a phone and pushed the
+        // values off the bottom, so the hint is off unless the setting is on.
+        expect(screen.queryByText("Whole numbers only. Sets the target volume."))
+            .toBeNull();
+    });
+
+    it("draws the one-line hint when it is asked for", async () => {
+        await renderWithProviders(
+            <FieldRow topic="ratio" showHint><Text>16</Text></FieldRow>
+        );
+
+        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+            .toBeTruthy();
     });
 
     it("offers a help marker only in the marker style, and only when there is detail", async () => {

@@ -92,6 +92,7 @@ export default function SettingsScreen({settings}: Props) {
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
     const [helpStyle, setHelpStyle] = useSetting("helpStyle", settings);
+    const [showHints, setShowHints] = useSetting("showHints", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -116,6 +117,11 @@ export default function SettingsScreen({settings}: Props) {
                                color={palette.dim}>
                     EDITOR
                 </DotMatrixText>
+                <ToggleRow
+                    label="One-line hints"
+                    description="A short note under every label on the brew deck. The longer explanations are unaffected."
+                    value={showHints}
+                    onChange={setShowHints}/>
                 <ChoiceRow
                     label="Field explanations"
                     description="Where the longer notes about a field live."

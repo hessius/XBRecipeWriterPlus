@@ -251,7 +251,7 @@ function StageLabel({topic, onHelp}: {topic: HelpTopic; onHelp?: () => void}) {
                 <Pressable accessibilityRole="button"
                            accessibilityLabel={`What is ${title}?`}
                            onPress={onHelp} hitSlop={10}>
-                    <DotIcon name="info" size={12} color={palette.dim}/>
+                    <DotIcon name="help" size={13} color={palette.dim}/>
                 </Pressable>
             )}
         </XStack>

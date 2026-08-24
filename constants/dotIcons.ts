@@ -129,6 +129,7 @@ export const DOT_ICONS = {
         ".#.....#.",
         "........."
     ],
+    /** A lowercase "i": the informational toast, and nothing else. */
     info: [
         ".........",
         "....#....",
@@ -138,6 +139,27 @@ export const DOT_ICONS = {
         "....#....",
         "...###...",
         ".........",
+        "........."
+    ],
+    /**
+     * A blocky question mark: the help marker.
+     *
+     * The markers used the "i" above, which is four separate one-dot features
+     * and greyed into a smudge at the 12-13px a marker is actually drawn at --
+     * though the larger part of that was the dot weight, see `DotIcon`.
+     * The hook here is two axis-aligned runs and one diagonal step, so there is
+     * no feature narrower than the stroke; the counter is what makes it
+     * readable rather than the stem.
+     */
+    help: [
+        "..#####..",
+        "..#...#..",
+        "......#..",
+        "....###..",
+        "....#....",
+        "....#....",
+        ".........",
+        "....#....",
         "........."
     ],
     /**

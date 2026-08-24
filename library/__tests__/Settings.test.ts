@@ -61,6 +61,7 @@ describe("Settings", () => {
         // A matter of taste, and the flat wash is the quieter of the two. A
         // preference like that belongs off by default.
         expect(new Settings(fakeStorage()).get("dotMatrixProfile")).toBe(false);
+        expect(new Settings(fakeStorage()).get("showHints")).toBe(false);
     });
 
     it("defaults the help style to the explain mode", () => {

@@ -12,6 +12,8 @@ type Props = {
     helpStyle?: HelpStyle;
     /** Explain mode is on. Only consulted when `helpStyle` is "explain". */
     explaining?: boolean;
+    /** Draw the always-on one-line hint under the label. Off by default. */
+    showHint?: boolean;
     /** A validation reason to show under the row. Prose, so it stays in Inter. */
     error?: string;
     onHelp?: (topic: HelpTopic) => void;
@@ -21,17 +23,21 @@ type Props = {
 /**
  * One line of the BREW deck.
  *
- * The hint is always drawn — it is the six-word version, and it is what makes
- * the screen readable without any help mode at all. What the two help styles
- * change is where the long form goes: behind a marker on the label, or unfolded
- * under the row.
+ * The hint is the six-word version. It used to be drawn unconditionally, on the
+ * argument that it is what makes the screen readable without any help mode at
+ * all; on a phone, nine of them turned the deck into prose and pushed the values
+ * off the bottom. It is now a setting, off by default. What the two help styles
+ * change is where the *long* form goes: behind a marker on the label, or
+ * unfolded under the row.
  *
  * The row has no label prop: it is identified by its help topic and takes its
  * words from `RECIPE_HELP`. A field on this deck without an entry there cannot
  * be drawn, which is the point — a field nobody wrote a note for is a field
  * nobody explained.
  */
-export default function FieldRow({topic, helpStyle, explaining, error, onHelp, children}: Props) {
+export default function FieldRow({
+    topic, helpStyle, explaining, showHint, error, onHelp, children
+}: Props) {
     const entry = RECIPE_HELP[topic];
     const hasDetail = entry.detail !== undefined;
     const showMarker = hasDetail && helpStyle === "markers";
@@ -52,11 +58,13 @@ export default function FieldRow({topic, helpStyle, explaining, error, onHelp, c
                                        accessibilityLabel={`What is ${entry.title}?`}
                                        onPress={() => onHelp(topic)}
                                        hitSlop={10}>
-                                <DotIcon name="info" size={13} color={palette.dim}/>
+                                <DotIcon name="help" size={13} color={palette.dim}/>
                             </Pressable>
                         )}
                     </XStack>
-                    <Text fontSize={11} color={palette.muted}>{entry.hint}</Text>
+                    {showHint && (
+                        <Text fontSize={11} color={palette.dim}>{entry.hint}</Text>
+                    )}
                 </YStack>
                 {children}
             </XStack>

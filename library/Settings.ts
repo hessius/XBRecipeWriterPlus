@@ -28,7 +28,17 @@ export const DEFAULTS = {
      * two, and one visible control is more discoverable than a marker beside
      * every label. Expected to resolve to one mode after device testing.
      */
-    helpStyle: "explain"
+    helpStyle: "explain",
+    /**
+     * Draw the one-line hint under every label on the BREW deck.
+     *
+     * Off by default. On a real phone the deck explained more than it needed
+     * to: with a hint under all nine labels the screen is mostly prose about
+     * fields whose captions already say what they are, and the values you came
+     * to edit are what gets pushed off the bottom. The long form is still one
+     * tap or one toggle away, which is what the help style is for.
+     */
+    showHints: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
