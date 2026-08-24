@@ -221,10 +221,17 @@ The tooltips carry knowledge that exists nowhere else — the grinder-off
 workaround is a full paragraph and describes machine behaviour that is not
 documented anywhere. It cannot be dropped.
 
-**Hint lines are always present.** Every label that needs one gets a short line
-beneath it covering the ordinary case: the range, the unit, the gotcha in six
-words. "Whole numbers only." "Omni turns overflow protection off." "Off is
-experimental — see Help."
+**Hint lines are always present** — on the BREW deck. Every label there gets a
+short line beneath it covering the ordinary case: the range, the unit, the
+gotcha in six words. "Whole numbers only." "Omni turns overflow protection off."
+"Off is experimental — see Help."
+
+> **Departure, after device testing.** The stages deck has no hint lines. An
+> open stage packs six controls into two columns, and a six-word note under each
+> doubles the height of a tile that has to be read against the profile pinned
+> above it. Stage help is `markers`-or-`explain` only, with the same words. This
+> was chosen over the alternatives of hinting only some controls, or hinting
+> them all and losing the profile off the top of the screen.
 
 Beyond that, two modes ship, chosen by a setting, because which reads better in
 practice is a question the mockups cannot answer:
