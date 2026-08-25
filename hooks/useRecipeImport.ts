@@ -95,6 +95,18 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     const [hint, setHint] = useState(false);
 
     /**
+     * The last text seen, tracked synchronously.
+     *
+     * The paste heuristic compares against the previous value, and reading that
+     * from `value` state is a trap: two `onChangeText` calls in one React batch
+     * would both see the pre-batch value, so the second computes a delta of 2
+     * and is misread as a paste -- which *navigates* without asking, yanking the
+     * user into the editor mid-keystroke. A ref updated inside the handler sees
+     * the true previous character, so batched typing stays typing.
+     */
+    const lastValue = useRef("");
+
+    /**
      * Which request is the newest.
      *
      * The `AbortSignal` is not enough on its own: a request can already have
@@ -212,7 +224,8 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     }
 
     function onChangeText(next: string) {
-        const previous = value;
+        const previous = lastValue.current;
+        lastValue.current = next;
         setValue(next);
         clearTimers();
         setHint(false);
@@ -257,11 +270,30 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         // someone who has just denied permission would be a lie.
         if (text.trim().length === 0) return;
 
+        // A paste is an edit, so it invalidates whatever is on screen *before*
+        // the parse attempt. Without this, a debounce armed by earlier typing
+        // could fire after the paste and show a panel for text no longer in the
+        // field. Unconditional and first, for the same reason `onChangeText`
+        // clears state on every keystroke.
+        clearTimers();
+        setHint(false);
+        generation.current++;
+        inFlight.current?.abort();
+        setState({status: "idle"});
+
+        lastValue.current = text;
         setValue(text);
         const source = parseImportInput(text);
         if (source) {
             void resolve(source, "atomic");
+            return;
         }
+
+        // A paste that does not parse gets the hint immediately, not after
+        // `ABANDONED_MS`. That delay exists to avoid scolding someone still
+        // typing; a paste is finished by definition, so there is no half-typed
+        // state to be polite about, and silence here would be the only feedback.
+        setHint(true);
     }
 
     function openFound() {
@@ -273,6 +305,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         clearTimers();
         generation.current++;
         inFlight.current?.abort();
+        lastValue.current = "";
         setValue("");
         setHint(false);
         setState({status: "idle"});
