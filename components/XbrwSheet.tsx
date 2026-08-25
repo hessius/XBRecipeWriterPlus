@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {Adapt, Dialog, Sheet, XStack, YStack} from "tamagui";
+import {Sheet, XStack, YStack} from "tamagui";
 import {InteractionManager, Pressable, View} from "react-native";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -58,29 +58,33 @@ export default function XbrwSheet({
     open, onOpenChange, title, showTitle = true, heightPercent = 70,
     prewarm = false, children
 }: Props) {
-    // Why the sheet is not simply mounted on `open`.
+    // The sheet is put in the tree closed, and opened on the frame after.
     //
-    // This guard was written when Tamagui mounted a closed sheet's frame off
-    // screen, leaving a sheet nobody had opened in the tree and reachable by a
-    // screen reader. That is no longer true of it -- a closed dialog now
-    // renders nothing -- but the guard still earns its place from the other
-    // end: unmounting on the frame the sheet is dismissed takes the exit
-    // animation with it, and the sheet vanishes rather than leaves. So the
-    // tree keeps it for as long as it takes to slide away, and no longer.
+    // Tamagui animates the entrance by transitioning from closed to open, so a
+    // sheet that arrives already open has nothing to transition from and simply
+    // appears at its resting place. Mounting it a frame early costs one frame
+    // and buys the slide.
     //
-    // The consequence worth knowing is that the contents are built on the way
-    // in, every time, because there is nothing to build them into until then.
-    // A sheet with an expensive body will hitch as it opens.
+    // It is taken back out again once it has finished leaving, rather than on
+    // the frame it is dismissed: unmounting immediately would take the exit
+    // animation with it, and the sheet would vanish rather than leave.
     const [rendered, setRendered] = useState(open);
+    const [shown, setShown] = useState(open);
     const [wasOpen, setWasOpen] = useState(open);
 
-    // Adjusted while rendering rather than from an effect. Opening has to take
-    // effect on this pass: an effect runs after the paint, so the sheet would
-    // spend one frame absent and then appear without its entrance.
+    // Adjusted while rendering rather than from an effect, so that the mount
+    // and the dismissal both take effect on this pass. Only the opening waits.
     if (open !== wasOpen) {
         setWasOpen(open);
         if (open) setRendered(true);
+        else setShown(false);
     }
+
+    useEffect(() => {
+        if (!open) return;
+        const frame = requestAnimationFrame(() => setShown(true));
+        return () => cancelAnimationFrame(frame);
+    }, [open]);
 
     useEffect(() => {
         if (open) return;
@@ -128,12 +132,10 @@ export default function XbrwSheet({
         <XStack alignItems="center" justifyContent={showTitle ? "space-between" : "flex-end"}
                 gap="$3">
             {showTitle && (
-                <Dialog.Title unstyled>
-                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
-                                   color={palette.dim}>
-                        {title}
-                    </DotMatrixText>
-                </Dialog.Title>
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
+                               color={palette.dim}>
+                    {title}
+                </DotMatrixText>
             )}
             <Pressable accessibilityRole="button" accessibilityLabel="Close"
                        onPress={() => onOpenChange(false)} hitSlop={12}>
@@ -145,38 +147,38 @@ export default function XbrwSheet({
         </XStack>
     );
 
+    // Not `modal`, which is the tempting default and is what broke the exit.
+    //
+    // A modal sheet is hung inside a gesture-handler root whose style is
+    // `height: 0` whenever the sheet is closed. That style is applied on the
+    // frame the sheet is dismissed rather than after it has left, so the body
+    // and the backdrop are cut away instantly and only the empty frame is left
+    // to slide out. Filmed at 60fps, the difference is unmistakable: without
+    // `modal` the rows travel down with the frame and the backdrop fades.
+    //
+    // Nothing is lost by dropping it here. A modal sheet buys the right to sit
+    // above the navigator, and every sheet in this app is opened from a screen
+    // that draws its own header, so there is nothing above to sit over.
     return (
-        <Dialog modal open={open} onOpenChange={onOpenChange}>
-            <Adapt platform="touch">
-                {/* `sheet`, not `quick`: a sheet is a large surface crossing
-                    most of the screen, and `quick` is underdamped enough to
-                    overshoot and then take its time settling -- which reads as
-                    the frame arriving before the movement has finished, rather
-                    than as one slide up from the bottom edge. */}
-                <Sheet transition="sheet" zIndex={200000} modal dismissOnSnapToBottom
-                       snapPointsMode="percent" snapPoints={[heightPercent]}>
-                    <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
-                        <Adapt.Contents/>
-                    </Sheet.Frame>
-                    <Sheet.Overlay transition="quick"
-                                   enterStyle={{opacity: 0}} exitStyle={{opacity: 0}}/>
-                </Sheet>
-            </Adapt>
-
-            <Dialog.Portal>
-                <Dialog.Overlay key="overlay" opacity={0.5} transition="quick"
-                                enterStyle={{opacity: 0}} exitStyle={{opacity: 0}}/>
-                <Dialog.Content bordered elevate maxWidth={440} aria-label={title}
-                                transition="quick"
-                                enterStyle={{opacity: 0, scale: 0.95, y: 8}}
-                                exitStyle={{opacity: 0, scale: 0.95, y: 8}}
-                                backgroundColor={palette.surface}>
-                    <YStack gap="$3">
-                        {heading}
-                        {children}
-                    </YStack>
-                </Dialog.Content>
-            </Dialog.Portal>
-        </Dialog>
+        <Sheet transition="sheet" zIndex={200000} dismissOnSnapToBottom
+               open={shown} onOpenChange={onOpenChange}
+               snapPointsMode="percent" snapPoints={[heightPercent]}>
+            <Sheet.Overlay transition="quick"
+                           enterStyle={{opacity: 0}} exitStyle={{opacity: 0}}/>
+            {/* The name and the modal flag go on the body, not on the frame:
+                Tamagui renders a second, empty copy of the frame, and two
+                sibling views that each claim to be the modal one make a screen
+                reader treat the other as hidden -- including the one with the
+                content in it. */}
+            <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
+                {/* Modal only while it is actually up. It stays in the tree
+                    through its exit, and a sheet on its way out must not go on
+                    hiding the screen it is uncovering. */}
+                <YStack gap="$3" aria-label={title} accessibilityViewIsModal={shown}>
+                    {heading}
+                    {children}
+                </YStack>
+            </Sheet.Frame>
+        </Sheet>
     );
 }

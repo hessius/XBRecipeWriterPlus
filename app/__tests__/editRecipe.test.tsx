@@ -265,6 +265,9 @@ describe("the editor", () => {
 
         await fireEvent.press(screen.getByLabelText("More"));
         await fireEvent.press(screen.getByLabelText("Show hints"));
+        // Dismissed first, because the sheet is modal while it is up: the deck
+        // behind it is deliberately out of a screen reader's reach until then.
+        await fireEvent.press(screen.getByLabelText("Close"));
 
         expect(screen.getByText("Whole numbers only. Sets the target volume."))
             .toBeTruthy();
