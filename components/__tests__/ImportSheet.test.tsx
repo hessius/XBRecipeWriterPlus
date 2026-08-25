@@ -15,15 +15,21 @@ jest.mock("expo-clipboard", () => ({
     hasStringAsync:         jest.fn(async () => false),
     getStringAsync:         jest.fn(async () => ""),
     isPasteButtonAvailable: false,
-    ClipboardPasteButton:   ({testID}: {testID?: string}) => {
+    ClipboardPasteButton:   ({testID, onPress}: {testID?: string; onPress?: (data: unknown) => void}) => {
         const {View} = jest.requireActual("react-native");
+        // Stash the handler so a test can drive it with a chosen payload; a bare
+        // View would leave the native paste path untested.
+        mockNativePasteOnPress = onPress;
         return <View testID={testID}/>;
     }
 }));
 
+let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
+
 beforeEach(() => {
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
+    mockNativePasteOnPress = undefined;
 });
 
 /** A hook stub. The sheet is layout; every rule under test lives in the hook. */
@@ -102,6 +108,9 @@ it("shows an error inline, never as an alert or a toast", async () => {
     );
 
     expect(await screen.findByText("No recipe with that code.")).toBeTruthy();
+    // Announced cross-platform, not on Android only: `alert` is the repo's
+    // portable announcement, so an iOS VoiceOver user is told the lookup failed.
+    expect(await screen.findByRole("alert")).toHaveTextContent("No recipe with that code.");
 });
 
 it("explains the format once the hook says they have stopped", async () => {
@@ -150,4 +159,62 @@ it("promotes the native control when iOS has one and there is something to paste
 
     await waitFor(() => expect(screen.queryByTestId("native-paste")).not.toBeNull());
     expect(screen.queryByLabelText("Paste from clipboard")).toBeNull();
+});
+
+it("falls back to the house button when iOS has the control but the clipboard is empty", async () => {
+    // The branch that decides whether an iOS 16 user with an empty clipboard
+    // gets a self-disabling system control or a working house button. Without
+    // it, `setNativePaste(has)` could ignore the clipboard entirely and pass.
+    (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+    );
+
+    expect(await screen.findByLabelText("Paste from clipboard")).toBeTruthy();
+    await waitFor(() => expect(Clipboard.hasStringAsync).toHaveBeenCalled());
+    expect(screen.queryByTestId("native-paste")).toBeNull();
+});
+
+it("forwards a native text paste, and forwards nothing for an image", async () => {
+    // The native control's handler, exercised directly: the mock exposes its
+    // `onPress` so both payload shapes reach the hook. Replacing the handler
+    // with a no-op would otherwise pass.
+    (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+    const importer = stubImport();
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} showField importer={importer}/>
+    );
+
+    await waitFor(() => expect(mockNativePasteOnPress).toBeDefined());
+
+    mockNativePasteOnPress!({type: "text", text: "ETH120"});
+    expect(importer.onPastedText).toHaveBeenCalledWith("ETH120");
+
+    mockNativePasteOnPress!({type: "image", data: "…"});
+    expect(importer.onPastedText).toHaveBeenCalledWith("");
+});
+
+it("does not offer the format hint while an error is showing", async () => {
+    // The hint is guidance for someone who has stopped; an error means they
+    // acted and it failed. Only one belongs on screen, so the hint is gated on
+    // `status === "idle"`.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} showField
+                     importer={stubImport({
+                         value: "ETH1", hint: true,
+                         state: {
+                             status:  "error",
+                             reason:  "notFound",
+                             message: "No recipe with that code."
+                         }
+                     })}/>
+    );
+
+    expect(await screen.findByText("No recipe with that code.")).toBeTruthy();
+    expect(screen.queryByText("Paste an xBloom share link, or a pod code like ETH120."))
+        .toBeNull();
 });

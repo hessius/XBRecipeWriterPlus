@@ -56,6 +56,28 @@ it("is silently without a mark when there is no photo", async () => {
     expect(screen.queryByTestId("import-result-pod")).toBeNull();
 });
 
+it("announces the figures as one sentence, not a loose pile of numbers", async () => {
+    // VoiceOver would otherwise read "18", "DOSE", "1:16", "RATIO"… as separate
+    // elements, and "1:16" as "one colon sixteen". The row is grouped with a
+    // composed label, the way `RecipeCard` announces a recipe.
+    await renderWithProviders(<ImportResult preview={preview()} onOpen={() => {}}/>);
+
+    expect(await screen.findByLabelText("18 grams, ratio 1 to 16, 2 stages")).toBeTruthy();
+});
+
+it("hides a pod photo that fails to load", async () => {
+    // The spec says a failed load is indistinguishable from a recipe that never
+    // had a photo. `onError` removes it entirely, so it no longer steals width
+    // from the name column.
+    await renderWithProviders(<ImportResult preview={preview()} onOpen={() => {}}/>);
+
+    const pod = await screen.findByTestId("import-result-pod");
+    await fireEvent(pod, "error");
+
+    expect(screen.queryByTestId("import-result-pod")).toBeNull();
+    expect(await screen.findByText("Ethiopia Guji")).toBeTruthy();
+});
+
 it("says IMPORT for a new recipe", async () => {
     await renderWithProviders(<ImportResult preview={preview()} onOpen={() => {}}/>);
 
