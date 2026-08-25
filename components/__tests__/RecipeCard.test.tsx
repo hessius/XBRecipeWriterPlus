@@ -4,7 +4,7 @@ import {fireEvent, screen, within} from "@testing-library/react-native";
 import RecipeCard from "@/components/RecipeCard";
 import {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import Pour from "@/library/Pour";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {accents, onAccent, palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {AA_LARGE, contrast} from "@/test-utils/contrast";
@@ -94,6 +94,23 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     recipe.pours = [new Pour(0, 288)];
 
     return Object.assign(recipe, overrides);
+}
+
+/**
+ * A recipe that passes every field check in cardWriteProblems.
+ *
+ * Used by tests that need a balanced AND writable recipe to verify the
+ * absence of the "Will not write" marker.
+ */
+function makeWritableRecipe(): Recipe {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.XPOD;
+    recipe.dosage = 15;
+    recipe.ratio = 15;
+    recipe.grindSize = 60;
+    recipe.grindRPM = 90;
+    recipe.pours = [new Pour(0, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+    return recipe;
 }
 
 describe("RecipeCard", () => {
@@ -582,8 +599,9 @@ describe("RecipeCard", () => {
         expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
 
-    // `makeRecipe()` is the file's existing fixture and is already balanced:
-    // 18 g at 1:16 is 288 ml, poured in one stage of 288.
+    // `makeRecipe()` is the file's existing display fixture and is balanced,
+    // but its fields (grindSize 25, flowRate -1, volume 288 ml) are outside the
+    // ranges the card can hold. The writable tests use `makeWritableRecipe()`.
     it("marks a recipe the machine would reject", async () => {
         const recipe = makeRecipe();
         recipe.pours[0].volume = 10;
@@ -594,8 +612,23 @@ describe("RecipeCard", () => {
     });
 
     it("leaves a balanced one unmarked", async () => {
-        await renderWithProviders(<RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>);
+        await renderWithProviders(<RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}/>);
 
         expect(screen.queryByLabelText("Will not write")).toBeNull();
+    });
+
+    it("marks a balanced recipe whose fields are out of range as unwritable", async () => {
+        // The card used to ask only whether the volumes summed, so this recipe --
+        // balanced, and holding a stage volume no byte can carry -- was shown as
+        // writable while writing it would emit nonsense.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 31;
+        recipe.ratio = 100;
+        recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+
+        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()} showCoffeeMarker/>);
+
+        expect(await screen.findByLabelText("Will not write")).toBeTruthy();
     });
 });

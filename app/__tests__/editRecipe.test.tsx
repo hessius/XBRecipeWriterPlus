@@ -72,10 +72,13 @@ function fixture(): Recipe {
     const r = new Recipe();
     r.dosage = 18;
     r.ratio = 16;
+    r.grindSize = 60;
+    r.grindRPM = 90;
     r.addPour(0, false);
     r.addPour(0);
     r.addPour(0);
     r.autoFixPourVolumes();
+    r.pours.forEach(p => { p.flowRate = 30; });
     return r;
 }
 
@@ -199,15 +202,14 @@ describe("the editor", () => {
     it("redraws a value only the deck can see change", async () => {
         await renderEditor();
 
-        // Grind size starts unset, so the first press is what lands on the
-        // floor of 40. Nothing else on the screen moves with it — no target, no
+        // Nothing else on the screen moves with grind size — no target, no
         // balance — so this is the value that would go stale if the deck ever
         // stopped being told the recipe had been edited.
         await fireEvent.press(screen.getByLabelText("Increase Grind size"));
         await fireEvent.press(screen.getByLabelText("Increase Grind size"));
 
         expect(screen.getByLabelText(/^Grind size, /).props.accessibilityLabel)
-            .toBe("Grind size, 41");
+            .toBe("Grind size, 62");
     });
 
     it("puts the rest behind the caret", async () => {
