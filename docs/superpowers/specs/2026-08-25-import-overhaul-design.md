@@ -124,10 +124,26 @@ change: in `onChangeText`, a jump of more than one character since the last
 value is a paste, and a jump of exactly one is typing.
 
 A pasted share link is a jump of dozens of characters and a pasted pod code five
-or six, so the inference is never close in practice. The single miss is pasting
-one character, which is treated as typing and merely waits for the debounce.
-**That failure is benign by construction**, which is what makes a heuristic
-acceptable here where a guess normally would not be.
+or six, so the inference is never close in practice. The single *accidental*
+miss is pasting one character, which is treated as typing and merely waits for
+the debounce — harmless, because it only makes an atomic value wait.
+
+The dangerous direction is the opposite one: a false *paste*, where typing is
+read as atomic and **navigates** without asking, yanking the user into the editor
+mid-keystroke. That is precisely the harm the atomic/deliberate rule exists to
+prevent, so it is not benign and must be guarded, not shrugged off.
+
+One way it could happen is a batching hole: two `onChangeText` calls in one React
+tick both reading the same pre-batch value, so the second sees a delta of two.
+That hole is closed by tracking the previous value in a ref updated
+*synchronously* inside the handler, rather than reading it from render state.
+
+The ref does **not** close a second hole: a multi-character *native* commit is
+genuinely indistinguishable from a paste. An Android IME committing a composed
+word, a keyboard suggestion-bar tap, a QuickType autocorrect replacing a token,
+or dictation all arrive as one `onChangeText` of more than one character and will
+navigate. `ETH120` is exactly the shape of token a suggestion bar offers as a
+single insert once it has been typed before. See Known risks.
 
 ### States and transitions
 
@@ -450,4 +466,13 @@ constraint does not bind. What does need real hardware:
   not change that; it only stops guessing which one to call.
 - A denied iOS paste is permanently indistinguishable from an empty clipboard.
   Designed around, not fixed.
+- A multi-character *native* text commit — an Android IME committing a composed
+  word, a suggestion-bar tap, QuickType autocorrect replacing a token, or
+  dictation — is indistinguishable from a paste and will navigate atomically
+  mid-typing. The synchronous-ref fix closes only the same-tick batching hole,
+  not this one; there is no signal in `onChangeText` that separates a native
+  commit from a paste. **Accepted, device verification owed:** exercise a
+  suggestion-bar tap and autocorrect of a `ETH120`-shaped token on a physical
+  Android and iOS device and confirm the resulting jolt into the editor is
+  tolerable before relying on the heuristic in the field.
 - The disguised tile may be rejected on review, as recorded in §6.
