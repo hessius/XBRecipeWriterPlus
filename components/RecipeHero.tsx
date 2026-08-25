@@ -123,10 +123,10 @@ export default function RecipeHero({
                     they are stuck, not from a menu of recipe operations. */}
                 <Pressable accessibilityRole="button" accessibilityLabel="Help"
                            onPress={onHelp} hitSlop={12}>
-                    <YStack borderRadius="$3" paddingHorizontal="$2" height={32}
-                            justifyContent="center">
+                    <YStack backgroundColor={onAccent.key} borderRadius="$3"
+                            paddingHorizontal="$2" height={32} justifyContent="center">
                         <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                                       color={onAccent.label}>
+                                       color={accent}>
                             HELP
                         </DotMatrixText>
                     </YStack>

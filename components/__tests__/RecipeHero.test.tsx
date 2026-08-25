@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import RecipeHero from "@/components/RecipeHero";
@@ -101,6 +102,19 @@ describe("RecipeHero", () => {
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
         expect(screen.getByText("HELP")).toBeTruthy();
+    });
+
+    it("draws help as a well in the accent, like the buttons beside it", async () => {
+        // Unfilled it read as a caption rather than a control, and sat quieter
+        // than the two dot-matrix buttons it shares the row with. The filled
+        // well is what the EXPLAIN toggle wore when it was on.
+        await renderWithProviders(<RecipeHero {...BASE}/>);
+
+        // Accent-on-key, the same inversion the back and overflow buttons use:
+        // the label takes the slab's colour because the well behind it is
+        // filled.
+        expect(StyleSheet.flatten(screen.getByText("HELP").props.style))
+            .toEqual(expect.objectContaining({color: BASE.accent}));
     });
 
     it("carries the name in its chrome row once collapsed", async () => {
