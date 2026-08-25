@@ -6,11 +6,12 @@ the text in place and leave the `##` headings and the `Title:` / `Hint:` /
 `constants/recipeHelp.ts`.
 
 - **Title** is the field's label on screen.
-- **Hint** is the one-line version, drawn under the label when *One-line
-  hints* is on in settings. It has to fit on one line on a phone, so six to
-  nine words.
+- **Hint** is the short version, drawn under the label when *One-line hints*
+  is on in settings. It wraps, but two lines on a phone is the limit — about
+  ninety characters. `_(none)_` is a real answer here: a field whose label
+  says everything is better off without a note that restates it.
 - **Question** and **Answer** are one entry of the help sheet, reached from
-  Help under the caret. The question is the heading, so write it as something
+  HELP in the recipe header. The question is the heading, so write it as something
   somebody would actually ask — the reader has just come from the label and
   is scanning for their own problem, not for a glossary term they already
   found on the screen.
@@ -26,7 +27,7 @@ away a fact.
 
 **Title:** Dose
 
-**Hint:** Coffee in the basket. Sets the target with the ratio.
+**Hint:** _(none)_
 
 **Question:** _(none — not in the help sheet)_
 
@@ -58,9 +59,9 @@ away a fact.
 
 **Hint:** 60 to 120 rpm, in tens.
 
-**Question:** Why is there only one grind speed?
+**Question:** _(none — not in the help sheet)_
 
-**Answer:** Only the first stage's speed is stored on the card, so this is one setting for the whole recipe rather than one per stage.
+**Answer:** _(none)_
 
 ## grinder
 
@@ -80,13 +81,13 @@ away a fact.
 
 **Question:** Which cup type should I pick?
 
-**Answer:** XPod is the standard cup. Omni disables overflow protection, which is what you want when the vessel is not the one the machine expects. Other is for third-party brewers.
+**Answer:** Omni disables overflow protection. Other is for third-party brewers.
 
 ## xid
 
 **Title:** Recipe ID
 
-**Hint:** Without one, a written card reads back nameless.
+**Hint:** xBloom online lookup ID. Without one, a written card reads back nameless (but works the same).
 
 **Question:** What is the recipe ID for?
 
@@ -96,7 +97,7 @@ away a fact.
 
 **Title:** Name
 
-**Hint:** Yours. The xBloom name is kept separate and not overwritten.
+**Hint:** For your own organization in this app. The xBloom name is kept separate, derived from the XID.
 
 **Question:** _(none — not in the help sheet)_
 
@@ -110,7 +111,7 @@ away a fact.
 
 **Question:** Why must the stage volumes add up?
 
-**Answer:** The machine checks the stage volumes against the dose times the ratio and refuses the card if they differ. Auto fix rescales every stage to close the gap and spreads the rounding error across the stages it fits worst. Changing the dose or the ratio moves the target instead of the stages, which is often the better fix.
+**Answer:** The machine checks the stage volumes against the dose times the ratio and refuses the card if they differ. Auto fix rescales every stage to close the gap and spreads the rounding error across the stages it fits worst. Manually assigning volumes to stages is recommended. Changing the dose or the ratio moves the target instead of the stages, which is also often a better fix.
 
 ## temperature
 
@@ -160,7 +161,7 @@ away a fact.
 
 **Question:** What does agitation do?
 
-**Answer:** Each stage can agitate before it pours, after it pours, both or neither. Before settles the bed the last stage left; after breaks up what this one has just built.
+**Answer:** Each stage can agitate, or shake the bed of coffee slightly before it pours, after it pours, both or neither. Agitation might provide a flatter, more evenly distributed bed of coffee but might also contribute to fines migration and slower drawdown.
 
 ## tea
 

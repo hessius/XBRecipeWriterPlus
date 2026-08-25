@@ -13,8 +13,15 @@
 export type HelpEntry = {
     /** The field's own label. */
     title: string;
-    /** The one-line note under the label, where the screen has room for it. */
-    hint: string;
+    /**
+     * The short note under the label, where the screen has room for it.
+     *
+     * Optional, because a field can be self-explanatory: `dose` is a weight in
+     * grams next to the word "Dose", and a note under it said nothing the label
+     * had not. A hint that restates its label is worse than no hint, since it
+     * teaches the reader that the notes are not worth reading.
+     */
+    hint?: string;
     /**
      * How the help sheet heads the long form.
      *
@@ -31,8 +38,7 @@ export type HelpEntry = {
 
 const ENTRIES = {
     dose: {
-        title: "Dose",
-        hint:  "Coffee in the basket. Sets the target with the ratio."
+        title: "Dose"
     },
     ratio: {
         title:  "Ratio",
@@ -47,11 +53,8 @@ const ENTRIES = {
         hint:  "40 to 80. Lower is finer."
     },
     grindSpeed: {
-        title:  "Grind speed",
-        hint:   "60 to 120 rpm, in tens.",
-        question: "Why is there only one grind speed?",
-        detail: "Only the first stage's speed is stored on the card, so this " +
-                "is one setting for the whole recipe rather than one per stage."
+        title: "Grind speed",
+        hint:  "60 to 120 rpm, in tens."
     },
     grinder: {
         title:  "Grinder",
@@ -70,13 +73,13 @@ const ENTRIES = {
         title:  "Cup",
         hint:   "Omni turns overflow protection off.",
         question: "Which cup type should I pick?",
-        detail: "XPod is the standard cup. Omni disables overflow protection, " +
-                "which is what you want when the vessel is not the one the " +
-                "machine expects. Other is for third-party brewers."
+        detail: "Omni disables overflow protection. Other is for " +
+                "third-party brewers."
     },
     xid: {
         title:  "Recipe ID",
-        hint:   "Without one, a written card reads back nameless.",
+        hint:   "xBloom online lookup ID. Without one, a written card reads " +
+                "back nameless (but works the same).",
         question: "What is the recipe ID for?",
         detail: "The recipe ID is how the app finds a recipe online. It is a " +
                 "three-letter vendor code, an optional T for tea, then two or " +
@@ -87,7 +90,8 @@ const ENTRIES = {
     },
     name: {
         title: "Name",
-        hint:  "Yours. The xBloom name is kept separate and not overwritten."
+        hint:  "For your own organization in this app. The xBloom name is " +
+               "kept separate, derived from the XID."
     },
     volume: {
         title:  "Stage volume",
@@ -96,9 +100,10 @@ const ENTRIES = {
         detail: "The machine checks the stage volumes against the dose times " +
                 "the ratio and refuses the card if they differ. Auto fix " +
                 "rescales every stage to close the gap and spreads the " +
-                "rounding error across the stages it fits worst. Changing the " +
+                "rounding error across the stages it fits worst. Manually " +
+                "assigning volumes to stages is recommended. Changing the " +
                 "dose or the ratio moves the target instead of the stages, " +
-                "which is often the better fix."
+                "which is also often a better fix."
     },
     temperature: {
         title: "Temperature",
@@ -129,9 +134,11 @@ const ENTRIES = {
         title:  "Agitation",
         hint:   "Shakes the basket, before this stage's pour or after it.",
         question: "What does agitation do?",
-        detail: "Each stage can agitate before it pours, after it pours, both " +
-                "or neither. Before settles the bed the last stage left; " +
-                "after breaks up what this one has just built."
+        detail: "Each stage can agitate, or shake the bed of coffee slightly " +
+                "before it pours, after it pours, both or neither. Agitation " +
+                "might provide a flatter, more evenly distributed bed of " +
+                "coffee but might also contribute to fines migration and " +
+                "slower drawdown."
     },
     tea: {
         title:  "Tea",

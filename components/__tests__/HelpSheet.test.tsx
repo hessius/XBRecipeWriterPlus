@@ -28,7 +28,7 @@ describe("HelpSheet", () => {
         // already under the label is not a question anyone came here with.
         await renderWithProviders(<HelpSheet open onOpenChange={jest.fn()}/>);
 
-        expect(screen.queryByText(RECIPE_HELP.grindSize.hint)).toBeNull();
+        expect(screen.queryByText(RECIPE_HELP.grindSize.hint!)).toBeNull();
     });
 
     it("heads its answers with questions, not with field names", async () => {

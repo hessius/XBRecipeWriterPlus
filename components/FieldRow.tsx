@@ -42,7 +42,7 @@ export default function FieldRow({topic, showHint, error, children}: Props) {
                           textTransform="uppercase" color={palette.muted}>
                         {entry.title}
                     </Text>
-                    {showHint && (
+                    {showHint && entry.hint !== undefined && (
                         <Text fontSize={11} color={palette.dim}>{entry.hint}</Text>
                     )}
                 </YStack>

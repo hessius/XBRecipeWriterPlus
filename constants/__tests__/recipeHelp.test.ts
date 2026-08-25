@@ -3,16 +3,28 @@ import {DETAILED_TOPICS, RECIPE_HELP, type HelpTopic} from "@/constants/recipeHe
 describe("the editor's help copy", () => {
     const topics = Object.keys(RECIPE_HELP) as HelpTopic[];
 
-    it("gives every topic a title and a hint", () => {
+    it("gives every topic a title", () => {
         topics.forEach((topic) => {
             expect(RECIPE_HELP[topic].title.length).toBeGreaterThan(0);
-            expect(RECIPE_HELP[topic].hint.length).toBeGreaterThan(0);
         });
     });
 
-    it("keeps hints to one short line", () => {
+    it("writes a hint or none at all, never an empty one", () => {
+        // A hint is optional -- a field whose label says everything is better
+        // off without one -- but the absence has to be the absence, not a blank
+        // string that draws an empty line under the label.
         topics.forEach((topic) => {
-            expect(RECIPE_HELP[topic].hint.length).toBeLessThanOrEqual(64);
+            const hint = RECIPE_HELP[topic].hint;
+            if (hint !== undefined) expect(hint.trim().length).toBeGreaterThan(0);
+        });
+    });
+
+    it("keeps hints to two lines of the row", () => {
+        // 64 was one line, and it was a cap on the writing rather than on the
+        // layout: the notes that had most to say were the ones being squeezed.
+        // The row wraps, so two lines is the real limit.
+        topics.forEach((topic) => {
+            expect(RECIPE_HELP[topic].hint?.length ?? 0).toBeLessThanOrEqual(96);
         });
     });
 
