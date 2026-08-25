@@ -32,6 +32,8 @@ function pending() {
 }
 
 beforeEach(() => {
+    NfcManager.start.mockReset();
+    NfcManager.start.mockResolvedValue(undefined);
     NfcManager.requestTechnology.mockReset();
     NfcManager.cancelTechnologyRequest.mockReset();
 });
@@ -81,5 +83,44 @@ describe("a session being opened", () => {
         await nfc.close();
 
         expect(NfcManager.cancelTechnologyRequest).not.toHaveBeenCalled();
+    });
+});
+
+describe("a session being cancelled before it opens", () => {
+    it("does not start a request when Cancel arrives during init", async () => {
+        // The overlay is up and cancellable while `init()` is still awaiting
+        // `NfcManager.start()`. A Cancel then found `isClosed` true, returned
+        // without doing anything, and `open()` went on to start a native
+        // session behind an overlay that was already gone.
+        const nfc = new NFC();
+
+        let releaseStart!: () => void;
+        NfcManager.start.mockReturnValueOnce(
+            new Promise<void>((resolve) => {
+                releaseStart = resolve;
+            })
+        );
+
+        const starting = nfc.init();
+        await nfc.close();
+        releaseStart();
+        await starting;
+
+        await expect(nfc.open()).rejects.toThrow();
+        expect(NfcManager.requestTechnology).not.toHaveBeenCalled();
+        expect(nfc.getIsClosed()).toBe(true);
+    });
+
+    it("forgets the cancellation when a new session is started", async () => {
+        const nfc = new NFC();
+
+        await nfc.init();
+        await nfc.close();
+
+        await nfc.init();
+        NfcManager.requestTechnology.mockResolvedValueOnce(undefined);
+        await nfc.open();
+
+        expect(nfc.getIsClosed()).toBe(false);
     });
 });

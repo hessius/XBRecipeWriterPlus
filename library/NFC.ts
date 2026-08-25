@@ -31,8 +31,21 @@ type NfcSystemInfo = {
 
 class NFC {
     private isClosed = true;
+    /**
+     * Whether Cancel has been pressed since this session was started.
+     *
+     * `isClosed` alone cannot answer that. It is true before `open()` runs, so
+     * a Cancel arriving while `init()` awaits `NfcManager.start()` was
+     * indistinguishable from a Cancel on a session that had never begun --
+     * `close()` returned without doing anything, and `open()` then started a
+     * native session behind a dismissed overlay. This flag spans init and open
+     * together, which is the window the user is actually looking at.
+     */
+    private cancelled = false;
 
     async init() {
+        // A new ceremony, so a Cancel from the last one does not carry over.
+        this.cancelled = false;
         try {
             await NfcManager.start();
         } catch (ex) {
@@ -50,6 +63,10 @@ class NFC {
 
 
     async close() {
+        // Recorded even when there is nothing to cancel yet: a Cancel during
+        // `init()` has to be remembered until `open()` can honour it.
+        this.cancelled = true;
+
         // Callers close explicitly and again from a `finally`; cancelling a
         // session that has already ended rejects with "Not even registered".
         if (this.isClosed) {
@@ -64,6 +81,15 @@ class NFC {
     }
 
     async open() {
+        // Cancelled while init was still running. Throwing rather than
+        // returning quietly keeps the caller's existing shape: `readCard` and
+        // `writeCard` already treat a throw with `getIsClosed()` true as the
+        // user having walked away, and report nothing.
+        if (this.cancelled) {
+            this.isClosed = true;
+            throw new Error("NFC session cancelled before it opened");
+        }
+
         // The session is marked open *before* the request resolves, not after.
         // `requestTechnology` does not settle until a tag arrives or the user
         // walks away, and a `close()` arriving during that window used to find
