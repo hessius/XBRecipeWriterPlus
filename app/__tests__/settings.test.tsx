@@ -71,48 +71,6 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("showHints")).toBe(true);
     });
 
-    it("offers all four ways of opening a recipe", async () => {
-        const settings = new Settings(memoryStorage());
-
-        await renderWithProviders(<SettingsScreen settings={settings}/>);
-
-        for (const label of ["Slide in", "Grow the card", "Grow the card, with its name",
-                             "Colour reveal"]) {
-            expect(screen.getByLabelText(label)).toBeTruthy();
-        }
-    });
-
-    it("starts on the platform's own slide", async () => {
-        const settings = new Settings(memoryStorage());
-
-        await renderWithProviders(<SettingsScreen settings={settings}/>);
-
-        expect(screen.getByLabelText("Slide in").props.accessibilityState.checked).toBe(true);
-        expect(screen.getByLabelText("Colour reveal").props.accessibilityState.checked)
-            .toBe(false);
-    });
-
-    it("persists the chosen transition", async () => {
-        const storage = memoryStorage();
-
-        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
-        await fireEvent.press(screen.getByLabelText("Colour reveal"));
-
-        expect(new Settings(storage).get("transition")).toBe("reveal");
-    });
-
-    it("falls back to the slide when the stored transition is not one it knows", async () => {
-        // A value written by a build that had a name this one does not, which
-        // is what a downgrade looks like from here. Showing nothing as chosen
-        // would leave the screen with no answer to a question it has asked.
-        const settings = new Settings(memoryStorage());
-        settings.set("transition", "kaleidoscope");
-
-        await renderWithProviders(<SettingsScreen settings={settings}/>);
-
-        expect(screen.getByLabelText("Slide in").props.accessibilityState.checked).toBe(true);
-    });
-
     it("no longer asks where the field explanations go", async () => {
         // There were two, and neither survived a phone. The long form is one
         // sheet behind the caret now, so there is nothing left to choose.

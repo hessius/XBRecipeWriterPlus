@@ -1,8 +1,7 @@
 import React from "react";
-import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import {fireEvent, screen, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
-import {View as RNView} from "react-native";
 import Recipe from "@/library/Recipe";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
@@ -43,14 +42,6 @@ function props(overrides = {}) {
     };
 }
 
-/**
- * Where the test renderer says a press happened.
- *
- * It synthesises no touch coordinates, so every press it makes lands at the
- * origin. The tests that care about the real point supply their own.
- */
-const ORIGIN = {x: 0, y: 0};
-
 describe("SwipeableRecipeRow", () => {
     it("leaves a gap between the card and the first revealed action", async () => {
         // Without it the copy tile butts straight up against the card's edge and
@@ -71,26 +62,6 @@ describe("SwipeableRecipeRow", () => {
         expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
     });
 
-    // Several tests below stand in for the native measurement, which is a
-    // prototype method shared by every View in the run.
-    afterEach(() => jest.restoreAllMocks());
-
-    it("hands on the point the card was touched at, for the reveal to open from", async () => {
-        const onPress = jest.fn();
-        await renderWithProviders(
-            <SwipeableRecipeRow recipe={makeRecipe()} onPress={onPress} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()}/>
-        );
-
-        await fireEvent.press(screen.getByText("Ethiopia Guji"),
-                              {nativeEvent: {pageX: 42, pageY: 610}});
-
-        // The point comes off the touch, not off the card: the reveal opens
-        // from wherever the finger was, which is the whole of its idea.
-        await waitFor(() =>
-            expect(onPress).toHaveBeenCalledWith(undefined, {x: 42, y: 610}));
-    });
-
     it("calls onPress when the row is tapped", async () => {
         const onPress = jest.fn();
         await renderWithProviders(
@@ -100,45 +71,7 @@ describe("SwipeableRecipeRow", () => {
 
         await fireEvent.press(screen.getByText("Ethiopia Guji"));
 
-        // No measurement comes back under the test renderer, which is exactly
-        // the case the deadline exists for: the recipe still opens.
-        await waitFor(() => expect(onPress).toHaveBeenCalledWith(undefined, ORIGIN));
-    });
-
-    it("hands the editor the rectangle the card was at, so it can open out of it", async () => {
-        const onPress = jest.fn();
-        const rect = {x: 12, y: 300, width: 360, height: 120};
-        jest.spyOn(RNView.prototype, "measureInWindow").mockImplementation(
-            (callback: (x: number, y: number, width: number, height: number) => void) => {
-                callback(rect.x, rect.y, rect.width, rect.height);
-            }
-        );
-
-        await renderWithProviders(
-            <SwipeableRecipeRow recipe={makeRecipe()} onPress={onPress} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()}/>
-        );
-
-        await fireEvent.press(screen.getByText("Ethiopia Guji"));
-
-        expect(onPress).toHaveBeenCalledWith(rect, ORIGIN);
-    });
-
-    it("opens without a rectangle rather than animating from a card of no size", async () => {
-        const onPress = jest.fn();
-        jest.spyOn(RNView.prototype, "measureInWindow").mockImplementation(
-            (callback: (x: number, y: number, width: number, height: number) => void) => {
-                callback(0, 0, 0, 0);
-            }
-        );
-
-        await renderWithProviders(
-            <SwipeableRecipeRow recipe={makeRecipe()} onPress={onPress} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()}/>
-        );
-
-        await fireEvent.press(screen.getByText("Ethiopia Guji"));
-        expect(onPress).toHaveBeenCalledWith(undefined, ORIGIN);
+        expect(onPress).toHaveBeenCalledTimes(1);
     });
 
     it("fires delete and duplicate from the swipe actions", async () => {

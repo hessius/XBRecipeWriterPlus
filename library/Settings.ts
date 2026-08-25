@@ -29,53 +29,8 @@ export const DEFAULTS = {
      * to edit are what gets pushed off the bottom. The long form is in the help
      * sheet either way.
      */
-    showHints: false,
-    /**
-     * How opening a recipe is animated. See `TRANSITIONS`.
-     *
-     * `slide` by default: it is what the platform draws everywhere else, so it
-     * is the one a user already knows, and the three alternatives all replace a
-     * transition the system owns with one this app has to get right on every
-     * device. They are offered rather than imposed, for the same reason
-     * `dotMatrixProfile` is.
-     */
-    transition: "slide"
+    showHints: false
 } as const;
-
-/**
- * The ways a recipe can open.
- *
- * The card on the list and the hero at the top of the editor are the same
- * object drawn at two sizes, in the same accent colour, so the question each of
- * these answers differently is what to do with that colour across the seam.
- *
- * - `slide`   the platform's push. The accent is on both screens but plays no
- *             part in the motion.
- * - `morph`   the tapped card's rectangle grows into the hero's. The accent is
- *             the mechanism, and the two surfaces read as one object resized.
- * - `container` the same journey with its details finished: the card's name
- *             travels and cross-fades into the hero's, and the deck below rises
- *             into place behind it.
- * - `reveal`  a disc of the recipe's accent opens from the point that was
- *             touched and floods the screen. Pure colour, and it says nothing
- *             about the card's shape -- drama rather than continuity.
- */
-export const TRANSITIONS = ["slide", "morph", "container", "reveal"] as const;
-
-export type Transition = (typeof TRANSITIONS)[number];
-
-/**
- * Read a stored transition, falling back to the default.
- *
- * Settings are stored as text and the store cannot know what any given key's
- * values mean, so a value written by an older build -- or by a newer one, on a
- * database that has been downgraded -- arrives here as an arbitrary string.
- */
-export function asTransition(value: string): Transition {
-    return (TRANSITIONS as readonly string[]).includes(value)
-        ? (value as Transition)
-        : DEFAULTS.transition;
-}
 
 export type SettingKey = keyof typeof DEFAULTS;
 

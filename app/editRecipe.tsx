@@ -1,9 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, View, useWindowDimensions} from "react-native";
-import Animated, {
-    useAnimatedStyle, useSharedValue, withDelay, withTiming
-} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
@@ -11,8 +8,6 @@ import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
 import HelpSheet from "@/components/HelpSheet";
-import AccentReveal, {type Point} from "@/components/AccentReveal";
-import HeroMorph, {type Rect} from "@/components/HeroMorph";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
@@ -22,73 +17,16 @@ import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
-import {onAccent, palette} from "@/constants/colors";
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {palette} from "@/constants/colors";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
-import {asTransition, type Transition} from "@/library/Settings";
 import {resolveAccent} from "@/library/accent";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
-
-/**
- * The rectangle the editor was opened out of, if it was opened out of one.
- *
- * Route params are strings and a param is whatever the last caller put there,
- * so this is parsed defensively: a malformed or partial rectangle means no
- * transition, never a view flying in from a corner or from NaN.
- */
-export function openedFrom(raw: string | string[] | undefined): Rect | null {
-    if (typeof raw !== "string") {
-        return null;
-    }
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (parsed === null || typeof parsed !== "object") {
-            return null;
-        }
-        const rect = parsed as Partial<Rect>;
-        const finite = (value: unknown): value is number =>
-            typeof value === "number" && Number.isFinite(value);
-        if (!finite(rect.x) || !finite(rect.y) || !finite(rect.width) || !finite(rect.height)) {
-            return null;
-        }
-        return rect.width > 0 && rect.height > 0
-            ? {x: rect.x, y: rect.y, width: rect.width, height: rect.height}
-            : null;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * The point the card was touched at, if it was opened by touching one.
- *
- * Parsed as defensively as `openedFrom`, and for the same reason: a param is
- * whatever the last caller put there, and a reveal from NaN would fill the
- * screen with accent and never leave.
- */
-export function touchedAt(raw: string | string[] | undefined): Point | null {
-    if (typeof raw !== "string") {
-        return null;
-    }
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (parsed === null || typeof parsed !== "object") {
-            return null;
-        }
-        const point = parsed as Partial<Point>;
-        const finite = (value: unknown): value is number =>
-            typeof value === "number" && Number.isFinite(value);
-        return finite(point.x) && finite(point.y) ? {x: point.x, y: point.y} : null;
-    } catch {
-        return null;
-    }
-}
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -503,88 +441,6 @@ export function stageScrollTarget(deckY: number, tileY: number, stickyHeight: nu
     return Math.max(0, deckY + tileY - stickyHeight);
 }
 
-/**
- * How far the deck rises into place behind the container transform.
- *
- * Small on purpose. This is the last few pixels of a movement the rectangle has
- * already made, not a movement of its own -- far enough and the deck reads as a
- * second thing arriving after the first.
- */
-const BODY_RISE = 14;
-
-/**
- * When the body's entrance starts, as a share of the transition.
- *
- * It waits: the whole point of a covering entrance is that the screen is not
- * assembled in front of you, and a body fading up under a rectangle that is
- * still travelling is exactly that.
- */
-const BODY_ENTER_AT = 0.55;
-
-/** What the screen's body does while a transition plays over it. */
-export type BodyMotion = "none" | "fade" | "rise";
-
-/**
- * The screen's body, arriving behind a transition and leaving under one.
- *
- * On the way out, only the hero has something travelling back to the list for
- * it; the deck below has nothing, and a deck still at full strength around a
- * shrinking hero-sized patch of accent looks like a bug rather than a
- * departure. So the whole body goes, whatever brought it in, and what is left
- * at the end is the overlay over the base colour -- which is what the list will
- * replace.
- *
- * On the way in it depends on what is covering it: the plain morph covers only
- * the hero, so the body is simply there; the container transform lifts it the
- * last few pixels; the reveal covers everything, so the body has to arrive from
- * nothing or it is just sitting there behind a disc.
- *
- * Its own component because the screen is marked `"use no memo"`, and the
- * compiler will not follow a shared value through a component it has bailed out
- * of: writing `fade.value` there is an error rather than a warning. It is the
- * better shape regardless.
- */
-function ScreenBody({enter, away, children}: {
-    enter: BodyMotion;
-    away: boolean;
-    children: React.ReactNode;
-}) {
-    const fade = useSharedValue(enter === "none" ? 1 : 0);
-    const rise = useSharedValue(enter === "rise" ? BODY_RISE : 0);
-
-    // Arriving and leaving in one effect, because they share `fade` and the
-    // compiler will not have a shared value written from two of them. Leaving
-    // wins: it can only be asked for once the entrance is long finished.
-    useEffect(() => {
-        if (away) {
-            fade.value = withTiming(0, {
-                duration: DURATION.transition,
-                easing:   EASING.emphasised
-            });
-            return;
-        }
-        if (enter === "none") {
-            return;
-        }
-        const timing = {
-            duration: DURATION.transition * (1 - BODY_ENTER_AT),
-            easing:   EASING.emphasised
-        };
-        fade.value = withDelay(DURATION.transition * BODY_ENTER_AT, withTiming(1, timing));
-        rise.value = withDelay(DURATION.transition * BODY_ENTER_AT, withTiming(0, timing));
-    }, [away, enter, fade, rise]);
-
-    // One shape, always. Reanimated does not clear a property that a style stops
-    // returning -- it keeps applying the last value it saw -- so a style that
-    // changes its shape leaves whatever it dropped stuck on the view.
-    const style = useAnimatedStyle(() => ({
-        opacity:   fade.value,
-        transform: [{translateY: rise.value}]
-    }));
-
-    return <Animated.View style={[{flex: 1}, style]}>{children}</Animated.View>;
-}
-
 type ActionBarProps = {
     accent: string;
     canWrite: boolean;
@@ -676,71 +532,14 @@ export default function EditRecipe() {
     // reason. Note that the compiler is off under jest, so no test can catch a
     // regression here; see `babel-preset-expo` and `app.json`'s experiments.
 
-    const {recipeJSON, fromRect, fromPoint} =
-        useLocalSearchParams<{recipeJSON: string; fromRect?: string; fromPoint?: string}>();
+    const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
     const navigation = useNavigation();
-    const {width: windowWidth} = useWindowDimensions();
-    const reducedMotion = useReducedMotion();
 
     const [showHint] = useSetting("showHints");
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
     const [actionBarHeight, setActionBarHeight] = useState(0);
-    const [heroHeight, setHeroHeight] = useState(0);
-
-    // The transition is a one-shot entrance: once it has played, or once the
-    // user has asked for less motion, the screen is just a screen. Under
-    // `slide` the screen is pushed with the platform's own animation and
-    // nothing may be drawn here at all -- everything below is measured against
-    // the window, and a screen that is sliding is not where the window says it
-    // is.
-    const [transitionSetting] = useSetting("transition");
-    const transition = asTransition(transitionSetting);
-    const [played, setPlayed] = useState(false);
-    const [leaving, setLeaving] = useState(false);
-    const [heroNameAt, setHeroNameAt] = useState<Point | null>(null);
-
-    // Both ends have to be known before anything can travel between them. The
-    // rectangle needs the card it came from and the hero it is going to; the
-    // disc needs only the point that was touched, which is why it is the one
-    // that still works when the measurement never came back.
-    const morphFrom = transition === "morph" || transition === "container"
-        ? openedFrom(fromRect)
-        : null;
-    const revealFrom = transition === "reveal" ? touchedAt(fromPoint) : null;
-
-    const overlay: Transition | null = reducedMotion
-        ? null
-        : morphFrom !== null && heroHeight > 0 ? transition
-            : revealFrom !== null ? "reveal"
-                : null;
-    const showOverlay = overlay !== null && (!played || leaving);
-
-    // What the body does while that plays over it. The plain morph covers the
-    // hero and nothing else, so there is nothing for the body to do.
-    const bodyEnter: BodyMotion = played || overlay === null || overlay === "morph"
-        ? "none"
-        : overlay === "container" ? "rise" : "fade";
-
-    /**
-     * Go back the way we came in.
-     *
-     * Running the entrance backwards rather than cutting: the card grew out of
-     * the list, so it has to go back into it, and the screen underneath is the
-     * list it came from. The body fades while the rectangle shrinks, because the
-     * rectangle only covers the hero and the deck showing through a hero-sized
-     * hole is worse than either. With the morph off there is a platform pop to
-     * do the same job, so this is not in the way of anything.
-     */
-    const goBack = () => {
-        if (overlay !== null && !leaving) {
-            setLeaving(true);
-        } else {
-            navigation.goBack();
-        }
-    };
-
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
     // and putting them in state would re-render the whole editor on every
@@ -822,7 +621,6 @@ export default function EditRecipe() {
                 subtree hides its own descendants from the screen reader, so
                 TalkBack cannot reach and fire the controls behind it — the
                 Android half of what `accessibilityViewIsModal` does on iOS. */}
-            <ScreenBody enter={bodyEnter} away={leaving}>
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={showNfcOverlay}
                     importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
@@ -833,18 +631,12 @@ export default function EditRecipe() {
                 the list under it would snap up in one frame. The two-threshold
                 hysteresis in `useCollapsibleHeader` keeps it from strobing when
                 the list rests near the threshold. */}
-            {/* The hero's own frame, measured. The morph has to know where it
-                is travelling to, and the hero draws its own safe-area padding,
-                so the height is not something the screen can work out. */}
-            <View testID="hero-slot"
-                  onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
             <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                         xid={recipe.xid} accent={accent} collapsed={collapsed}
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
-                        onNameRect={setHeroNameAt}
-                        onBack={goBack}
-                        onMore={() => setOverflowOpen(true)}/>
-            </View>
+                        onBack={() => navigation.goBack()}
+                        onMore={() => setOverflowOpen(true)}
+                        onHelp={() => setHelpOpen(true)}/>
 
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
                 counts slots — so every slot below is always occupied, by an
@@ -916,7 +708,6 @@ export default function EditRecipe() {
                                  onDuplicate={duplicateRecipe}
                                  onRefreshName={handleReloadTitlePress}
                                  onRevert={() => setRevertOpen(true)}
-                                 onHelp={() => setHelpOpen(true)}
                                  onDelete={deleteRecipe}/>
 
             <RevertSheet open={revertOpen} sources={revertSources}
@@ -924,27 +715,10 @@ export default function EditRecipe() {
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
             </YStack>
-            </ScreenBody>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>
 
-            {showOverlay && overlay !== "reveal" && morphFrom !== null && (
-                <HeroMorph from={morphFrom} accent={accent}
-                           direction={leaving ? "out" : "in"}
-                           to={{x: 0, y: 0, width: windowWidth, height: heroHeight}}
-                           label={overlay === "container" && heroNameAt !== null
-                               ? {text: recipe.displayName(), to: heroNameAt,
-                                  color: onAccent.text}
-                               : undefined}
-                           onDone={leaving ? () => navigation.goBack() : () => setPlayed(true)}/>
-            )}
-
-            {showOverlay && overlay === "reveal" && revealFrom !== null && (
-                <AccentReveal origin={revealFrom} accent={accent}
-                              direction={leaving ? "out" : "in"}
-                              onDone={leaving ? () => navigation.goBack() : () => setPlayed(true)}/>
-            )}
         </>
     );
 }

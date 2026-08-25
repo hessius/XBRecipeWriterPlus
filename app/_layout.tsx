@@ -11,8 +11,6 @@ import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
-import {useSetting} from '@/hooks/useSetting';
-import {asTransition} from '@/library/Settings';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -32,7 +30,6 @@ const AppTheme = {
 };
 
 export default function RootLayout() {
-    const [transition] = useSetting("transition");
     const [splashDone, setSplashDone] = useState(false);
     const [loaded] = useFonts({
         SpaceMono:        require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -90,22 +87,10 @@ export default function RootLayout() {
                                                 paint, so the native bar it was
                                                 replacing got one frame to
                                                 flash. */}
-                                            {/* Every transition but `slide`
-                                                is drawn inside the screen, so
-                                                it only works if the screen
-                                                itself is not moving: a push
-                                                would carry the rectangle in
-                                                from the right while it was
-                                                trying to travel up. `slide` is
-                                                that push, and is the default --
-                                                it is the one a user already
-                                                knows. */}
                                             <Stack.Screen name="editRecipe"
                                                           options={{
                                                               headerShown: false,
-                                                              animation: asTransition(transition) === "slide"
-                                                                  ? "slide_from_right"
-                                                                  : "none"
+                                                              animation: "slide_from_right"
                                                           }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>

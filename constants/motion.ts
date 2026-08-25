@@ -13,16 +13,6 @@ import {Easing} from "react-native-reanimated";
 export const DURATION = {
     fast:       120,
     base:       240,
-    /**
-     * One surface becoming another.
-     *
-     * Longer than `base` because it is the only motion in the app that has to
-     * be *read* rather than merely noticed: the card growing into the hero is
-     * making a claim that the two are the same object, and at 240 ms the eye
-     * arrived after the argument was over. This is the figure Material settled
-     * on for the same transition and for the same reason.
-     */
-    transition: 300,
     hold:       320,
     deliberate: 400
 } as const;
@@ -34,17 +24,7 @@ export const EASING = {
     /** Leaving. */
     in:    Easing.bezier(0.7, 0, 0.85, 0.15),
     /** Continuous or looping motion. */
-    inOut: Easing.bezier(0.45, 0, 0.25, 1),
-    /**
-     * Entering, for something large enough to be watched.
-     *
-     * `out` leaves almost all of its speed in the first third, which is right
-     * for a control answering a finger and wrong for a surface crossing the
-     * screen: the travel appeared to stall in the middle and then stop early.
-     * This spends longer at speed and settles late, so a shape that is changing
-     * size as it goes is legible for the whole journey.
-     */
-    emphasised: Easing.bezier(0.05, 0.7, 0.1, 1)
+    inOut: Easing.bezier(0.45, 0, 0.25, 1)
 } as const;
 
 /**
