@@ -17,6 +17,10 @@ function importedRecipe(xid = "ETH120"): Recipe {
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
     recipe.xid = xid;
+    // Balanced and writable: `dosage * ratio` (15 * 15 = 225) equals the single
+    // pour's volume, which the machine requires (`isPourVolumeValid`), and 225
+    // ml is inside `cardLimits`' 240 ml per-stage maximum. The roadmap's
+    // 18/16/288 would have been rejected -- 288 ml overflows that limit.
     recipe.dosage = 15;
     recipe.ratio = 15;
     recipe.grinder = true;
@@ -91,6 +95,29 @@ describe("a paste", () => {
 
         expect(onOpenRecipe).not.toHaveBeenCalled();
     });
+
+    it("does not misread two batched keystrokes as a paste", async () => {
+        // Two `onChangeText` calls dispatched in one tick, with no render flush
+        // between them. If the previous value were read from render state, the
+        // second call would still see the pre-batch `"ETH1"` and compute a delta
+        // of 2 for `"ETH120"` -- a parseable value -- and navigate atomically
+        // mid-keystroke. A ref updated synchronously inside the handler sees
+        // `"ETH12"` as the previous value, so `"ETH120"` is a +1 keystroke.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH1");
+        });
+
+        await act(async () => {
+            result.current.onChangeText("ETH12");
+            result.current.onChangeText("ETH120");
+        });
+
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+        expect(result.current.state.status).toBe("idle");
+    });
 });
 
 describe("a typed value", () => {
@@ -122,7 +149,11 @@ describe("a typed value", () => {
         expect(onOpenRecipe).toHaveBeenCalledTimes(1);
     });
 
-    it("clears the result when the text changes again", async () => {
+    it("clears a found result when the text is edited again", async () => {
+        // Typed one character at a time: feeding the whole value in one
+        // `onChangeText` is a +N delta, which the paste heuristic classifies as
+        // atomic and navigates, never reaching the invalidation branch this
+        // test names.
         const {onOpenRecipe, stored} = setup();
         const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
 
@@ -132,10 +163,31 @@ describe("a typed value", () => {
         await waitFor(() => expect(result.current.state.status).toBe("found"));
 
         await act(async () => {
-            result.current.onChangeText("ETH12");
+            result.current.onChangeText("E");
         });
 
         expect(result.current.state.status).toBe("idle");
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
+
+    it("clears an error the same way when the text is edited", async () => {
+        // The invalidation rule applies to `error` as well as `found`; a typo
+        // that failed must not linger once the user starts correcting it.
+        mockGetRecipe.mockReturnValueOnce(null);
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH999"}, "deliberate");
+        });
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+
+        await act(async () => {
+            result.current.onChangeText("E");
+        });
+
+        expect(result.current.state.status).toBe("idle");
+        expect(onOpenRecipe).not.toHaveBeenCalled();
     });
 });
 
@@ -252,6 +304,146 @@ describe("two lookups in flight", () => {
     });
 });
 
+describe("a paste affordance (onPastedText)", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("resolves and navigates when the pasted text parses", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onPastedText("https://share-h5.xbloom.com/r?id=abc123");
+        });
+
+        expect(onOpenRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("disarms a debounce armed by earlier typing", async () => {
+        // The trace: type `ETH12` (a 600 ms debounce is armed), then tap paste
+        // while the clipboard holds junk. If the paste did not invalidate, the
+        // stale debounce would fire 600 ms later and show a found panel for text
+        // no longer in the field -- pressing it imports something unrelated to
+        // what is on screen.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        for (const value of ["E", "ET", "ETH", "ETH1", "ETH12"]) {
+            await act(async () => {
+                result.current.onChangeText(value);
+            });
+        }
+
+        await act(async () => {
+            result.current.onPastedText("not a recipe at all");
+        });
+
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        expect(result.current.state.status).toBe("idle");
+        expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
+
+    it("shows the hint immediately when the pasted text does not parse", async () => {
+        // A paste is finished by definition, so the 2500 ms "still typing?"
+        // grace does not apply: unparseable paste would otherwise leave the
+        // silent sheet with no feedback at all until the user starts typing.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onPastedText("not a recipe at all");
+        });
+
+        // No timer advanced: the hint is up immediately, not after `ABANDONED_MS`.
+        expect(result.current.hint).toBe(true);
+    });
+});
+
+describe("resolving, reset and unmount", () => {
+    it("reports resolving while a lookup is in flight", async () => {
+        let releaseFetch!: () => void;
+        mockFetchRecipeDetail.mockImplementationOnce(
+            () => new Promise<void>((resolve) => {
+                releaseFetch = resolve;
+            })
+        );
+
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        expect(result.current.state.status).toBe("resolving");
+
+        await act(async () => {
+            releaseFetch();
+        });
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("reset() empties the field, returns to idle, and cancels an armed debounce", async () => {
+        jest.useFakeTimers();
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        for (const value of ["E", "ET", "ETH", "ETH1", "ETH12"]) {
+            await act(async () => {
+                result.current.onChangeText(value);
+            });
+        }
+
+        await act(async () => {
+            result.current.reset();
+        });
+
+        expect(result.current.value).toBe("");
+        expect(result.current.state.status).toBe("idle");
+
+        // The debounce armed before the reset must not later fire.
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+        expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
+
+        jest.useRealTimers();
+    });
+
+    it("does not call setState after unmounting mid-flight", async () => {
+        let releaseFetch!: () => void;
+        mockFetchRecipeDetail.mockImplementationOnce(
+            () => new Promise<void>((resolve) => {
+                releaseFetch = resolve;
+            })
+        );
+
+        const {onOpenRecipe, stored} = setup();
+        const {result, unmount} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await act(async () => {
+            unmount();
+        });
+
+        // Releasing the request after unmount must be inert: the generation was
+        // bumped and the controller aborted on cleanup, so the resolved lookup
+        // has nothing to say and never navigates.
+        await act(async () => {
+            releaseFetch();
+        });
+
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
+});
+
 describe("the lookup debounce", () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
@@ -270,11 +462,23 @@ describe("the lookup debounce", () => {
         }
         expect(result.current.state.status).toBe("idle");
 
+        // One millisecond short: the debounce must not have fired yet. This is
+        // what actually pins the constant. `waitFor` is fake-timer aware and
+        // advances the clock itself, so `advanceTimersByTime(600)` followed by a
+        // bare `waitFor` tolerates a debounce anywhere up to ~1600 ms -- it
+        // would pass at 1000 ms just as happily and pins nothing.
         await act(async () => {
-            jest.advanceTimersByTime(600);
+            jest.advanceTimersByTime(599);
+        });
+        expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
+        expect(result.current.state.status).toBe("idle");
+
+        // The 600th millisecond fires it. Asserted synchronously, no `waitFor`.
+        await act(async () => {
+            jest.advanceTimersByTime(1);
         });
 
-        await waitFor(() => expect(result.current.state.status).toBe("found"));
+        expect(result.current.state.status).toBe("found");
         // Still does not navigate: it was typed.
         expect(onOpenRecipe).not.toHaveBeenCalled();
     });
@@ -311,15 +515,15 @@ describe("the lookup debounce", () => {
             result.current.onChangeText("ETH120");
         });
         await act(async () => {
-            jest.advanceTimersByTime(400);
+            jest.advanceTimersByTime(599);
         });
 
         expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
 
         await act(async () => {
-            jest.advanceTimersByTime(200);
+            jest.advanceTimersByTime(1);
         });
-        await waitFor(() => expect(mockFetchRecipeDetail).toHaveBeenCalledTimes(1));
+        expect(mockFetchRecipeDetail).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -364,9 +568,23 @@ describe("the abandonment hint", () => {
         const {onOpenRecipe, stored} = setup();
         const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
 
-        await act(async () => {
-            result.current.onChangeText("ETH12");
-        });
+        // One character at a time so the parsing transition is a keystroke, not
+        // a paste. Fed whole, `ETH12` is a +5 change that resolves atomically
+        // and returns before the hint-arming code is ever evaluated -- so the
+        // original single-call test never reached the branch it names.
+        for (const value of ["E", "ET", "ETH", "ETH1", "ETH12"]) {
+            await act(async () => {
+                result.current.onChangeText(value);
+            });
+        }
+
+        // The parsing branch arms the debounce and returns; it must not also
+        // touch the hint. Asserted here, while the debounce is still pending,
+        // because the resolve it later fires calls `setHint(false)` -- so a hint
+        // wrongly shown for a parsing value would be scrubbed by the time it
+        // resolves, and only this pre-debounce check can see it.
+        expect(result.current.hint).toBe(false);
+
         await act(async () => {
             jest.advanceTimersByTime(3000);
         });
