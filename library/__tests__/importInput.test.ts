@@ -42,6 +42,28 @@ describe("share links", () => {
         expect(parseImportInput("https://share-h5.xbloom.com/recipe?id=")).toBeNull();
     });
 
+    it("rejects a URL whose id is only whitespace", () => {
+        // A blank id costs a guaranteed-failing request and shows a "no recipe"
+        // error instead of a clean parse rejection.
+        expect(parseImportInput("https://share-h5.xbloom.com/r?id=%20")).toBeNull();
+    });
+
+    it("trims whitespace around the id", () => {
+        expect(parseImportInput("https://share-h5.xbloom.com/r?id=%20abc123%20"))
+            .toEqual({kind: "share", id: "abc123"});
+    });
+
+    it("accepts an id at the length cap", () => {
+        const id = "a".repeat(256);
+        expect(parseImportInput(`https://share-h5.xbloom.com/r?id=${id}`))
+            .toEqual({kind: "share", id});
+    });
+
+    it("rejects an id beyond the length cap", () => {
+        const id = "a".repeat(257);
+        expect(parseImportInput(`https://share-h5.xbloom.com/r?id=${id}`)).toBeNull();
+    });
+
     it("rejects a non-http scheme", () => {
         expect(parseImportInput("ftp://share-h5.xbloom.com/r?id=abc123")).toBeNull();
     });

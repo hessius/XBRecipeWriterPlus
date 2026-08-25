@@ -46,6 +46,16 @@ export function parseImportInput(raw: string): ImportSource | null {
     return null;
 }
 
+/**
+ * A sanity cap on the share id, not a known protocol limit.
+ *
+ * xBloom does not document how long a share id can be, so this is not the real
+ * limit -- it is a guard against a pasted essay going straight into a POST body.
+ * Real ids seen in the wild are a few dozen characters; 256 leaves generous
+ * headroom while still rejecting anything absurd.
+ */
+const MAX_SHARE_ID_LENGTH = 256;
+
 function shareId(candidate: string): string | null {
     let url: URL;
     try {
@@ -58,7 +68,12 @@ function shareId(candidate: string): string | null {
         return null;
     }
 
-    // `URL` has already decoded this.
-    const id = url.searchParams.get("id");
-    return id !== null && id.length > 0 ? id : null;
+    // `URL` has already decoded this. A share often carries surrounding
+    // whitespace, so the trimmed value is what is checked and returned -- a
+    // whitespace-only id would otherwise cost a guaranteed-failing request.
+    const id = url.searchParams.get("id")?.trim();
+    if (id === undefined || id.length === 0 || id.length > MAX_SHARE_ID_LENGTH) {
+        return null;
+    }
+    return id;
 }
