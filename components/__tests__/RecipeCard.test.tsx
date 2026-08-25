@@ -599,22 +599,22 @@ describe("RecipeCard", () => {
         expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
 
-    // `makeRecipe()` is the file's existing display fixture and is balanced,
-    // but its fields (grindSize 25, flowRate -1, volume 288 ml) are outside the
-    // ranges the card can hold. The writable tests use `makeWritableRecipe()`.
-    it("marks a recipe the machine would reject", async () => {
-        const recipe = makeRecipe();
+    it("leaves a balanced one unmarked", async () => {
+        await renderWithProviders(<RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}/>);
+
+        expect(screen.queryByLabelText("Will not write")).toBeNull();
+    });
+
+    it("marks a recipe the machine would reject due to volume imbalance", async () => {
+        // Build from the writable fixture: imbalance is the only difference
+        // between this and the "leaves a balanced one unmarked" test above.
+        // dosage=15, ratio=15 → target=225 ml; setting volume to 10 breaks the balance.
+        const recipe = makeWritableRecipe();
         recipe.pours[0].volume = 10;
 
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
 
         expect(screen.getByLabelText("Will not write")).toBeTruthy();
-    });
-
-    it("leaves a balanced one unmarked", async () => {
-        await renderWithProviders(<RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}/>);
-
-        expect(screen.queryByLabelText("Will not write")).toBeNull();
     });
 
     it("marks a balanced recipe whose fields are out of range as unwritable", async () => {

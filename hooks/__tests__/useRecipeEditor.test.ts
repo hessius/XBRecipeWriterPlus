@@ -13,8 +13,8 @@ jest.mock("@/library/RecipeDatabase");
  * first one has to say `false` — there is nothing yet to copy from.
  *
  * 15 × 16 = 240 ml total. When the "hand-fix" test edits stage 0 to 10, the
- * compensating edit brings stage 1 to exactly 240 ml — the per-stage maximum —
- * so the recipe is writable after the fix without overflowing a byte.
+ * compensating edit brings stage 1 to 120 + 110 = 230 ml, keeping the recipe
+ * within the per-stage maximum so it is writable after the fix.
  */
 async function renderEditor(overrides: {onSaved?: () => void} = {}) {
     const recipe = new Recipe();

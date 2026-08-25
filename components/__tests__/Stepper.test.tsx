@@ -42,6 +42,21 @@ describe("Stepper", () => {
         expect(onChange).toHaveBeenCalledWith(15);
     });
 
+    it("floors a value below min to min on the first increment", async () => {
+        // Covers the case where a prop arrives below the allowed range (e.g.
+        // grindSize uninitialised at -1) — the first step should land at min+step,
+        // not at an arbitrary value.
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Grind size" value={-1} min={40} max={80} step={1}
+                     onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Grind size"));
+
+        expect(onChange).toHaveBeenCalledWith(40);
+    });
+
     it("will not step past its bounds", async () => {
         const onChange = jest.fn();
         await renderWithProviders(
