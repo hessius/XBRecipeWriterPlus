@@ -1,3 +1,4 @@
+import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
 
 /**
@@ -24,6 +25,16 @@ const GRIND_RPM: Range = {min: 60, max: 120};
 const TEMPERATURE: Range = {min: 39, max: 99};
 /** Tenths of a millilitre per second: the byte 30 means 3.0 ml/s. */
 const FLOW_RATE: Range = {min: 30, max: 35};
+/** Derived from POUR_PATTERN enum: CENTERED=0, CIRCULAR=1, SPIRAL=2. */
+const POUR_PATTERN_RANGE: Range = {
+    min: Math.min(...Object.values(POUR_PATTERN)),
+    max: Math.max(...Object.values(POUR_PATTERN)),
+};
+/** Derived from AGITATION enum: ALL_OFF=0 ... BEFORE_ON_AFTER_ON=3. */
+const AGITATION_RANGE: Range = {
+    min: Math.min(...Object.values(AGITATION)),
+    max: Math.max(...Object.values(AGITATION)),
+};
 
 /**
  * The pour count is written as `pours.length << 3` in a single byte, so 31 is
@@ -37,6 +48,17 @@ function outside(value: number, range: Range): boolean {
     return !Number.isFinite(value) || value < range.min || value > range.max;
 }
 
+/**
+ * Appends an integer-check problem if value is not a whole number.
+ * Only called after outside() has already passed — a value within range but
+ * fractional would be silently truncated by the card's byte encoding.
+ */
+function checkInteger(value: number, rangeMessage: string, problems: string[]): void {
+    if (!Number.isInteger(value)) {
+        problems.push(`${rangeMessage} It has to be a whole number.`);
+    }
+}
+
 export function cardWriteProblems(recipe: Recipe): string[] {
     const problems: string[] = [];
     const tea = recipe.isTea();
@@ -48,9 +70,7 @@ export function cardWriteProblems(recipe: Recipe): string[] {
 
     if (outside(recipe.ratio, RATIO)) {
         problems.push(`The ratio is 1:${recipe.ratio}. The range is 1:${RATIO.min}-1:${RATIO.max}.`);
-    }
-
-    if (!Number.isInteger(recipe.ratio)) {
+    } else if (!Number.isInteger(recipe.ratio)) {
         // The card holds a whole number, and a half would be silently truncated.
         problems.push(`The ratio is 1:${recipe.ratio}. It has to be a whole number.`);
     }
@@ -58,15 +78,17 @@ export function cardWriteProblems(recipe: Recipe): string[] {
     // Only when the grinder is on, and never on tea: a tea card always writes
     // the default grind size regardless of what the model holds.
     if (recipe.grinder && !tea) {
+        const grindSizeMsg = `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`;
         if (outside(recipe.grindSize, GRIND_SIZE)) {
-            problems.push(
-                `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`
-            );
+            problems.push(grindSizeMsg);
+        } else {
+            checkInteger(recipe.grindSize, grindSizeMsg, problems);
         }
+        const grindRPMMsg = `The grind speed is ${recipe.grindRPM} rpm. The range is ${GRIND_RPM.min}-${GRIND_RPM.max} rpm.`;
         if (outside(recipe.grindRPM, GRIND_RPM)) {
-            problems.push(
-                `The grind speed is ${recipe.grindRPM} rpm. The range is ${GRIND_RPM.min}-${GRIND_RPM.max} rpm.`
-            );
+            problems.push(grindRPMMsg);
+        } else {
+            checkInteger(recipe.grindRPM, grindRPMMsg, problems);
         }
     }
 
@@ -83,23 +105,49 @@ export function cardWriteProblems(recipe: Recipe): string[] {
     recipe.pours.forEach((pour, index) => {
         const stage = index + 1;
 
+        const volMsg = `Stage ${stage} pours ${pour.volume} ml. The most is ${maxVolume} ml.`;
         if (outside(pour.volume, {min: 1, max: maxVolume})) {
-            problems.push(`Stage ${stage} pours ${pour.volume} ml. The most is ${maxVolume} ml.`);
+            problems.push(volMsg);
+        } else {
+            checkInteger(pour.volume, volMsg, problems);
         }
+
+        const tempMsg =
+            `Stage ${stage} brews at ${pour.temperature} C. ` +
+            `The range is ${TEMPERATURE.min}-${TEMPERATURE.max} C.`;
         if (outside(pour.temperature, TEMPERATURE)) {
-            problems.push(
-                `Stage ${stage} brews at ${pour.temperature} C. ` +
-                `The range is ${TEMPERATURE.min}-${TEMPERATURE.max} C.`
-            );
+            problems.push(tempMsg);
+        } else {
+            checkInteger(pour.temperature, tempMsg, problems);
         }
+
+        const flowMsg =
+            `Stage ${stage} flows at ${pour.flowRate / 10} ml/s. ` +
+            `The range is ${FLOW_RATE.min / 10}-${FLOW_RATE.max / 10} ml/s.`;
         if (outside(pour.flowRate, FLOW_RATE)) {
+            problems.push(flowMsg);
+        } else {
+            checkInteger(pour.flowRate, flowMsg, problems);
+        }
+
+        const pauseMsg = `Stage ${stage} waits ${pour.pauseTime} s. The most is ${maxPause} s.`;
+        if (outside(pour.pauseTime, {min: 0, max: maxPause})) {
+            problems.push(pauseMsg);
+        } else {
+            checkInteger(pour.pauseTime, pauseMsg, problems);
+        }
+
+        if (outside(pour.pourPattern, POUR_PATTERN_RANGE)) {
             problems.push(
-                `Stage ${stage} flows at ${pour.flowRate / 10} ml/s. ` +
-                `The range is ${FLOW_RATE.min / 10}-${FLOW_RATE.max / 10} ml/s.`
+                `Stage ${stage} uses pour pattern ${pour.pourPattern}. ` +
+                `The range is ${POUR_PATTERN_RANGE.min}-${POUR_PATTERN_RANGE.max}.`
             );
         }
-        if (outside(pour.pauseTime, {min: 0, max: maxPause})) {
-            problems.push(`Stage ${stage} waits ${pour.pauseTime} s. The most is ${maxPause} s.`);
+        if (outside(pour.agitation, AGITATION_RANGE)) {
+            problems.push(
+                `Stage ${stage} uses agitation ${pour.agitation}. ` +
+                `The range is ${AGITATION_RANGE.min}-${AGITATION_RANGE.max}.`
+            );
         }
     });
 

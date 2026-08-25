@@ -3,7 +3,8 @@ import {Alert, Platform} from "react-native";
 
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useRecipeEditor} from "@/hooks/useRecipeEditor";
-import Recipe from "@/library/Recipe";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type NFC from "@/library/NFC";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
@@ -38,6 +39,16 @@ function invalidRecipe(): Recipe {
     return r;
 }
 
+function validRecipe(): Recipe {
+    const r = new Recipe();
+    r.cupType = CUP_TYPE.XPOD;
+    r.dosage = 15;
+    r.ratio = 15;
+    r.grinder = false;
+    r.pours = [new Pour(1, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+    return r;
+}
+
 describe("useCardWriter", () => {
     beforeEach(() => {
         (notify as jest.Mock).mockClear();
@@ -66,7 +77,7 @@ describe("useCardWriter", () => {
         await act(async () => result.current.writeCard(invalidRecipe()));
 
         expect(onVolumeError).toHaveBeenCalledWith(
-            "Your individual pour volumes must add up to the total volume."
+            "The recipe cannot be written to the card. Check that all values are within range."
         );
         expect(notify).not.toHaveBeenCalled();
     });
@@ -76,8 +87,7 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => useCardWriter(onVolumeError));
         await act(async () => result.current.writeCard(invalidRecipe()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockResolvedValue(undefined);
 
         await act(async () => result.current.writeCard(valid));
@@ -127,8 +137,7 @@ describe("useCardWriter", () => {
         Platform.OS = "ios";
         const {result} = await renderHook(() => useCardWriter(jest.fn()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockImplementation(
             async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
                 await progress(60);
@@ -149,8 +158,7 @@ describe("useCardWriter", () => {
         Platform.OS = "ios";
         const {result} = await renderHook(() => useCardWriter(jest.fn()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockImplementation(
             async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
                 await progress(60);

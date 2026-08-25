@@ -2,6 +2,7 @@ import {useState} from "react";
 import {Platform} from "react-native";
 import {notify} from "@/components/XbrwToast";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 type CardWriter = {
@@ -72,7 +73,7 @@ export function useCardWriter(
         try {
             if (recipe !== null) {
                 console.log(recipe);
-                if (recipe.isPourVolumeValid()) {
+                if (canWriteToCard(recipe)) {
                     onVolumeError(null);
                     setWriteProgress(0);
                     setShowNfcOverlay(true);
@@ -80,7 +81,7 @@ export function useCardWriter(
                     setShowNfcOverlay(false);
                 } else {
                     onVolumeError(
-                        "Your individual pour volumes must add up to the total volume."
+                        "The recipe cannot be written to the card. Check that all values are within range."
                     );
                 }
             }
