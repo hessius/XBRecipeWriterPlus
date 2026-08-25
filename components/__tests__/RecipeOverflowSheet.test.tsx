@@ -1,7 +1,8 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
-import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
+import RecipeOverflowSheet, {OVERFLOW_HEIGHT} from "@/components/RecipeOverflowSheet";
+import {HELP_HEIGHT} from "@/components/HelpSheet";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -17,6 +18,13 @@ const ACTIONS = {
 
 describe("RecipeOverflowSheet", () => {
     beforeEach(() => jest.clearAllMocks());
+
+    it("is sized to the handful of rows it holds", async () => {
+        // Nothing in here scrolls -- one switch and four rows -- so it has no
+        // use for the room the help sheet needs, and standing as tall as one
+        // left most of it empty.
+        expect(OVERFLOW_HEIGHT).toBeLessThan(HELP_HEIGHT);
+    });
 
     it("offers the four recipe operations that are not write or save", async () => {
         await renderWithProviders(

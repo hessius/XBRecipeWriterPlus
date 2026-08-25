@@ -8,6 +8,15 @@ import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 
+/**
+ * How much of the screen the more menu takes.
+ *
+ * It holds one switch and four rows and nothing that scrolls, so it is sized
+ * to them. At the house default it stood most of the way up the screen with
+ * two thirds of it empty, which read as a sheet that had failed to load.
+ */
+export const OVERFLOW_HEIGHT = 42;
+
 type Props = {
     open: boolean;
     /** False for a recipe with no xBloom identity to re-read a name from. */
@@ -65,7 +74,7 @@ export default function RecipeOverflowSheet({
     // does nothing but measure itself.
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE"
-                   showTitle={false} prewarm>
+                   showTitle={false} prewarm heightPercent={OVERFLOW_HEIGHT}>
             <YStack gap="$2" paddingBottom="$4">
                 {/* A switch, so it does not close the sheet the way the action
                     rows do: it is the one row here that has a state to show,
