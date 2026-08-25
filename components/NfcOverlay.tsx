@@ -66,6 +66,14 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
     return (
         <Animated.View
             testID="nfc-overlay"
+            // The ceremony owns the screen while it is up. Absolute positioning
+            // only covers the host visually: without this, VoiceOver and
+            // TalkBack still walk straight through to the header and the
+            // controls behind, and can fire them mid-write. iOS honours
+            // `accessibilityViewIsModal`; on Android the host screen hides its
+            // own descendants instead, which is the half this cannot do.
+            accessibilityViewIsModal
+            aria-modal
             entering={FadeIn.duration(reduced ? DURATION.fast : DURATION.base)}
             exiting={FadeOut.duration(DURATION.fast)}
             style={{

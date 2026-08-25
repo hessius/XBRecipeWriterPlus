@@ -1,10 +1,14 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
+import {cardWriteProblems} from "@/library/cardLimits";
 import Recipe from "@/library/Recipe";
+import Pour from "@/library/Pour";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
-import type {RestoreOption} from "@/components/RestoreDialog";
+import type {StageField} from "@/components/StageTile";
+import {REVERT_SOURCES} from "@/components/RevertSheet";
+import type {RevertSource, RevertSourceId} from "@/components/RevertSheet";
 
 /** Labels shown next to each editable field. Also the key the edit callback dispatches on. */
 export const RECIPE_LABELS = {
@@ -28,8 +32,6 @@ export const RECIPE_LABELS = {
 type Params = {
     /** Serialised recipe passed through the route params. */
     recipeJSON?: string;
-    /** Whether Save starts enabled, e.g. when arriving from a card read. */
-    initiallySaveEnabled: boolean;
     /** Called once the recipe has been persisted. */
     onSaved: () => void;
 };
@@ -41,30 +43,49 @@ type Params = {
  * bumping `key` rather than by replacing the object. That is why several
  * operations call `setKey` instead of `setRecipe`.
  */
-export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Params) {
+export function useRecipeEditor({recipeJSON, onSaved}: Params) {
     // Derived from the route param, so it is an initial value rather than an
     // effect: parsing it in an effect would render once with a null recipe.
     const [recipe, setRecipe] = useState<Recipe | null>(
         () => (recipeJSON && recipeJSON !== "") ? new Recipe(undefined, recipeJSON as string) : null
     );
     const [inputError, setInputError] = useState(false);
-    const [enableSave, setEnableSave] = useState(initiallySaveEnabled);
     const [key, setKey] = useState(0);
-    const [isLoadingTitle, setIsLoadingTitle] = useState(false);
-    const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-    const [restoreOptions, setRestoreOptions] = useState<RestoreOption[]>([]);
     const [volumeError, setVolumeError] = useState<string | null>(null);
 
-    const totalVolumeRef = useRef<{ forceUpdate: () => void } | null>(null);
-    const autoButtonRef = useRef<any>(null);
+    /**
+     * What the recipe pours against what the machine expects.
+     *
+     * Derived on every render rather than pushed into a child by hand. The
+     * previous editor repainted the total through an imperative handle and the
+     * Auto button through `setNativeProps`, so any edit that arrived by a route
+     * its author had not anticipated left both stale — which is #40.
+     */
+    const balance = {
+        poured:   recipe?.getPourTotalVolume() ?? 0,
+        target:   recipe?.getTotalVolume() ?? 0,
+        balanced: recipe?.isPourVolumeValid() ?? true
+    };
+
+    /**
+     * Every reason the machine would refuse this recipe.
+     *
+     * Balance used to be the whole test, and it let a balanced recipe with a
+     * 3100 ml stage through to `getData()`, where the volume became one byte.
+     * `cardWriteProblems` includes the balance check, so this is the only
+     * question the gate has to ask.
+     */
+    const writeProblems = recipe ? cardWriteProblems(recipe) : [];
+
+    /** A recipe the machine would reject cannot be written; it can still be kept. */
+    const canWrite = writeProblems.length === 0 && !inputError && recipe !== null;
+    const canSave = !inputError && recipe !== null;
 
     function getRecipe(): Recipe | null {
         return recipe;
     }
 
     const fetchRecipeTitle = async (r: Recipe) => {
-        setIsLoadingTitle(true);
-
         try {
             const xbRecipe = new XBloomRecipe(r.xid);
             await xbRecipe.fetchRecipeDetail();
@@ -83,13 +104,14 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
                     r.offline_backup = xbr.offline_backup;
                 }
-                setRecipe(r);
-                setEnableSave(true);
+                // The recipe is mutated in place, so the change is published by
+                // bumping the key. `setRecipe(r)` would hand React the object
+                // it already holds and be bailed out of, leaving the fetched
+                // name invisible on the hero until some unrelated edit.
+                setKey((prev) => prev + 1);
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
-        } finally {
-            setIsLoadingTitle(false);
         }
     };
 
@@ -121,16 +143,19 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
                 return;
             }
             recipe.addPour(pourNumber);
+            setVolumeError(null);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
     function deletePour(pourNumber: number) {
         if (recipe && recipe.pours.length > 1) {
             recipe.deletePour(pourNumber);
+            // The message names a total that no longer exists. Any structural
+            // change to the stages invalidates it, so it is cleared rather than
+            // left to contradict the banner beside it.
+            setVolumeError(null);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
@@ -139,138 +164,109 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             recipe.autoFixPourVolumes();
             setVolumeError(null);
             setKey((prev) => prev + 1);
-            setEnableSave(true);
         }
     }
 
-    function restoreRecipe() {
-        // Restoring replaces the brew parameters, not the recipe's identity:
-        // its uuid, the name the user chose, and the metadata the library sorts
-        // and colours by all survive a restore. Without `accentIndex` the card
-        // would silently change colour, and without `createdAt`/`source` a
-        // restored recipe would lose its provenance and placeholder name.
-        const alwaysKeepFields = ['uuid', 'backup', 'name', 'xbloomName',
-                                  'accentIndex', 'createdAt', 'source'];
+    // Restoring replaces the brew parameters, not the recipe's identity: its
+    // uuid, the name the user chose, and the metadata the library sorts and
+    // colours by all survive a restore. Without `accentIndex` the card would
+    // silently change colour, and without `createdAt`/`source` a restored
+    // recipe would lose its provenance and placeholder name.
+    const alwaysKeepFields = ['uuid', 'backup', 'name', 'xbloomName',
+                              'accentIndex', 'createdAt', 'source'];
 
+    function keepSettingsAndSave(
+        restoredRecipe: Recipe,
+        fieldsToKeep: (keyof Recipe)[] = []
+    ) {
+        if (!recipe) return;
+        let keepFields = [...alwaysKeepFields, ...fieldsToKeep];
+
+        for (const field of keepFields) {
+            const value = (recipe as any)[field];
+
+            if (
+                value !== undefined &&
+                ((((typeof value === 'string') || (typeof value === 'object'))
+                        && value.length > 0) ||
+                    typeof value === 'boolean' ||
+                    typeof value === 'number')
+            ) {
+                (restoredRecipe as any)[field] = value;
+            }
+        }
+        setRecipe(restoredRecipe);
+        // A restore replaces the brew parameters wholesale, so a write-time
+        // volume complaint from the recipe that was here before no longer
+        // describes anything on screen.
+        setVolumeError(null);
+    }
+
+    /** Perform the revert for one source. Each body is unchanged from the old dialog. */
+    async function runRevert(id: RevertSourceId) {
         if (!recipe) return;
 
-        const options: RestoreOption[] = [];
-
-        function keepSettingsAndSave(
-            restoredRecipe: Recipe,
-            fieldsToKeep: (keyof Recipe)[] = []
-        ) {
-            if (!recipe) return;
-            let keepFields = [...alwaysKeepFields, ...fieldsToKeep];
-
-            for (const field of keepFields) {
-                const value = (recipe as any)[field];
-
-                if (
-                    value !== undefined &&
-                    ((((typeof value === 'string') || (typeof value === 'object'))
-                            && value.length > 0) ||
-                        typeof value === 'boolean' ||
-                        typeof value === 'number')
-                ) {
-                    (restoredRecipe as any)[field] = value;
-                }
+        switch (id) {
+            case "card": {
+                const restoredRecipe = new Recipe(recipe.backup);
+                // keep shareId
+                keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
+                notify({tone: "success", message: "Recipe restored from the NFC backup."});
+                return;
             }
-            setRecipe(restoredRecipe);
-            setEnableSave(true);
-        }
-
-        // Check for NFC backup data
-        if (recipe.backup && recipe.backup.length > 0) {
-            options.push({
-                id:     'nfc',
-                label:  'Restore from NFC card backup',
-                action: async () => {
-                    const restoredRecipe = new Recipe(recipe.backup);
-                    // keep shareId
-                    keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    notify({tone: "success", message: "Recipe restored from the NFC backup."});
+            case "saved": {
+                const restoredRecipe = new Recipe(recipe.offline_backup, undefined, false);
+                // keep shareId
+                keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
+                notify({tone: "success", message: "Recipe restored from the offline backup."});
+                return;
+            }
+            case "xid": {
+                const xbRecipe = new XBloomRecipe(recipe.xid);
+                await xbRecipe.fetchRecipeDetail();
+                const restoredRecipe = xbRecipe.getRecipe();
+                if (restoredRecipe) {
+                    // keep shareId and cup type in case user has customized it
+                    // (default recipeVo for the same XID may have a different cup type)
+                    keepSettingsAndSave(restoredRecipe, ['shareId', 'cupType']);
+                    notify({tone: "success", message: "Recipe restored from the XID."});
+                } else {
+                    throw new Error('Could not fetch recipe data using XID');
                 }
-            });
-        }
-
-        // Check for offline backup from the online database
-        if (recipe.offline_backup && recipe.offline_backup.length > 0) {
-            options.push({
-                id:     'offline',
-                label:  'Restore from offline backup',
-                action: async () => {
-                    const restoredRecipe = new Recipe(recipe.offline_backup, undefined, false);
-                    // keep shareId
-                    keepSettingsAndSave(restoredRecipe, ['shareId', 'offline_backup']);
-                    notify({tone: "success", message: "Recipe restored from the offline backup."});
+                return;
+            }
+            case "share": {
+                const xbRecipe = new XBloomRecipe(recipe.shareId);
+                await xbRecipe.fetchRecipeDetail();
+                const restoredRecipe = xbRecipe.getRecipe();
+                if (restoredRecipe) {
+                    // keep original XID
+                    keepSettingsAndSave(restoredRecipe, ['xid']);
+                    notify({tone: "success", message: "Recipe restored from the share link."});
+                } else {
+                    throw new Error('Could not fetch recipe data using Share Link');
                 }
-            });
+                return;
+            }
         }
+    }
 
-        // Check for XID
-        if (recipe.xid && recipe.xid.trim().length > 0) {
-            options.push({
-                id:     'xid',
-                label:  'Restore by XID (online)',
-                action: async () => {
-                    const xbRecipe = new XBloomRecipe(recipe.xid);
-                    await xbRecipe.fetchRecipeDetail();
-                    const restoredRecipe = xbRecipe.getRecipe();
-                    if (restoredRecipe) {
-                        // keep shareId and cup type in case user has customized it
-                        // (default recipeVo for the same XID may have a different cup type)
-                        keepSettingsAndSave(restoredRecipe, ['shareId', 'cupType']);
-                        notify({tone: "success", message: "Recipe restored from the XID."});
-                    } else {
-                        throw new Error('Could not fetch recipe data using XID');
-                    }
-                }
-            });
-        }
-
-        // Check for shareId
-        if (recipe.shareId && recipe.shareId.trim().length > 0) {
-            options.push({
-                id:     'shareId',
-                label:  'Restore by Share Link (online)',
-                action: async () => {
-                    const xbRecipe = new XBloomRecipe(recipe.shareId);
-                    await xbRecipe.fetchRecipeDetail();
-                    const restoredRecipe = xbRecipe.getRecipe();
-                    if (restoredRecipe) {
-                        // keep original XID
-                        keepSettingsAndSave(restoredRecipe, ['xid']);
-                        notify({tone: "success", message: "Recipe restored from the share link."});
-                    } else {
-                        throw new Error('Could not fetch recipe data using Share Link');
-                    }
-                }
-            });
-        }
-
-        if (options.length === 0) {
-            notify({
-                tone:    "info",
-                message: "This recipe has no backup, XID or share link to restore from."
-            });
-            return;
-        }
-
-        setRestoreOptions(options);
-        setShowRestoreDialog(true);
+    /** All four sources, in a fixed order, each marked available or not. */
+    function buildRevertSources(): RevertSource[] {
+        return REVERT_SOURCES.map((source) => ({
+            ...source,
+            available: recipe !== null && hasSource(recipe, source.id),
+            action:    () => runRevert(source.id)
+        }));
     }
 
     function saveRecipe() {
         if (!recipe) return;
-        let db = new RecipeDatabase();
-        if (recipe.isPourVolumeValid()) {
-            setVolumeError(null);
-            db.updateRecipe(recipe.uuid, recipe);
-            onSaved();
-        } else {
-            setVolumeError("Your individual pour volumes must add up to the total volume.");
-        }
+        // Saves whether or not the volumes add up. Refusing to save a
+        // half-finished recipe loses work to enforce a rule that only matters
+        // at the moment of writing a card.
+        new RecipeDatabase().updateRecipe(recipe.uuid, recipe);
+        onSaved();
     }
 
     const editInputComplete = useCallback(async (label: string, value: string, pourNumber?: number) => {
@@ -351,7 +347,10 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             // Skip validation for non-numeric fields or validate numeric ones
             if (!fieldConfig.requiresNumber || !isNaN(Number(value))) {
                 fieldConfig.update(recipe, value);
-                setEnableSave(true);
+                // Publish the in-place edit. This used to ride on a
+                // `setEnableSave(true)` whose only surviving effect was the
+                // re-render; the save-enabled flag it set was never read.
+                setKey((prev) => prev + 1);
             }
         } else {
             // Handle pour-specific fields
@@ -359,61 +358,76 @@ export function useRecipeEditor({recipeJSON, initiallySaveEnabled, onSaved}: Par
             if (pourField) {
                 if (pourNumber !== undefined && !isNaN(Number(value))) {
                     pourField(recipe, value, pourNumber);
-                    setEnableSave(true);
+                    setKey((prev) => prev + 1);
                 }
             } else {
                 throw new Error("Unknown Edit Recipe Input field");
             }
         }
-        // Check if the field affects volume calculations and force update
-        if (label === RECIPE_LABELS.RATIO ||
-            label === RECIPE_LABELS.DOSE ||
-            label === RECIPE_LABELS.VOLUME) {
-            totalVolumeRef.current?.forceUpdate();
+    }, [recipe, setKey]);
 
-            // An edit that makes the pours add up retires the message, without
-            // waiting for another save. It is never raised here, only cleared:
-            // the mismatch is reported when the user asks for something to
-            // happen — Save, or a write — not while they are still typing.
-            if (recipe.isPourVolumeValid()) {
-                setVolumeError(null);
-            }
+    /** Edit one value of one stage. `Pour` stores agitation as flags, not numbers. */
+    function editStage(index: number, field: StageField, value: number) {
+        const pour = recipe?.pours[index];
+        if (!pour) return;
 
-            // Update Auto button disabled state without re-rendering the whole component
-            if (autoButtonRef.current) {
-                const isDisabled = recipe.isPourVolumeValid();
-                autoButtonRef.current.setNativeProps({
-                    disabled: isDisabled,
-                    style: { opacity: isDisabled ? 0.5 : 1 }
-                });
-            }
-        }
-    }, [recipe, setKey, setEnableSave, setVolumeError, totalVolumeRef, autoButtonRef]);
+        applyStageField(pour, field, value);
+        setKey((prev) => prev + 1);
+    }
 
     return {
         recipe,
         getRecipe,
         key,
-        enableSave,
         inputError,
         setInputError,
-        isLoadingTitle,
-        showRestoreDialog,
-        setShowRestoreDialog,
-        restoreOptions,
-        totalVolumeRef,
-        autoButtonRef,
+        balance,
+        canWrite,
+        canSave,
+        revertSources: buildRevertSources(),
         bumpKey: () => setKey((prev) => prev + 1),
         handleReloadTitlePress,
         addPour,
         deletePour,
         autoAdjustPourVolumes,
-        restoreRecipe,
+        editStage,
         saveRecipe,
         editInputComplete,
         volumeError,
         setVolumeError
     };
+}
+
+/**
+ * Write one stage field. `Pour` stores agitation as before/after flags rather
+ * than a number, so those two are set through their setters.
+ *
+ * Kept at module scope, like the pour-field writers `editInputComplete` uses,
+ * so the React Compiler's immutability check sees the mutation happen behind a
+ * function boundary rather than directly on a value derived from state.
+ */
+function applyStageField(pour: Pour, field: StageField, value: number) {
+    if (field === "agitationBefore") pour.setAgitationBefore(value === 1);
+    else if (field === "agitationAfter") pour.setAgitationAfter(value === 1);
+    else pour[field] = value;
+}
+
+/** Whether a recipe has the material a given revert source needs. */
+export function hasSource(recipe: Recipe, id: RevertSourceId): boolean {
+    switch (id) {
+        case "card":
+            return (recipe.backup?.length ?? 0) > 0;
+        case "saved":
+            return (recipe.offline_backup?.length ?? 0) > 0;
+        case "xid":
+            // Trimmed, because `isValidXID` and the refresh gate both read
+            // whitespace as no identifier at all. Untrimmed, a recipe holding
+            // a single space offered an online revert and then fetched with an
+            // ID the endpoint cannot answer.
+            return recipe.xid.trim().length > 0;
+        case "share":
+            return recipe.shareId.trim().length > 0;
+    }
 }
 
 export default useRecipeEditor;

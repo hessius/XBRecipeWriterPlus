@@ -32,20 +32,25 @@ export type RecipeLibrary = {
  *
  * @param db Injected by tests. Production call sites omit it.
  */
-export function useRecipeLibrary(db: RecipeStore = new RecipeDatabase()): RecipeLibrary {
-    const [recipes, setRecipes] = useState<Recipe[]>(() => read(db));
+export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
+    // One store for the hook's lifetime. As a default parameter this ran on
+    // every render, and every `new RecipeDatabase()` opens SQLite and replays
+    // the table setup — on a screen that re-renders for scrolling, for the
+    // settings sheet and for NFC progress.
+    const [store] = useState<RecipeStore>(() => db ?? new RecipeDatabase());
+    const [recipes, setRecipes] = useState<Recipe[]>(() => read(store));
 
     function reload() {
-        setRecipes(read(db));
+        setRecipes(read(store));
     }
 
     function deleteRecipe(recipe: Recipe) {
-        db.deleteRecipe(recipe.uuid);
+        store.deleteRecipe(recipe.uuid);
         reload();
     }
 
     function duplicateRecipe(recipe: Recipe) {
-        db.cloneRecipe(recipe.uuid);
+        store.cloneRecipe(recipe.uuid);
         reload();
     }
 

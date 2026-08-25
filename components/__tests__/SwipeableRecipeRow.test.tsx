@@ -71,7 +71,7 @@ describe("SwipeableRecipeRow", () => {
 
         await fireEvent.press(screen.getByText("Ethiopia Guji"));
 
-        expect(onPress).toHaveBeenCalled();
+        expect(onPress).toHaveBeenCalledTimes(1);
     });
 
     it("fires delete and duplicate from the swipe actions", async () => {

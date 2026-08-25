@@ -4,7 +4,7 @@ import {ScrollView, Switch, Text, XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
-import type {Settings} from "@/library/Settings";
+import {type Settings} from "@/library/Settings";
 
 type Props = {
     /** Injected by tests. The route renders with the shared store. */

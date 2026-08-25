@@ -27,8 +27,20 @@ export const EASING = {
     inOut: Easing.bezier(0.45, 0, 0.25, 1)
 } as const;
 
-/** Spring configs, for anything a finger drives. */
-export const SPRING = {
+/**
+ * Delays between the parts of one composite animation.
+ *
+ * Here rather than beside the component that uses it, because this module is
+ * the single source of motion timing and a stagger is timing: an icon whose
+ * dots light 12 ms apart has to stay in step with everything else if these
+ * numbers are ever retuned.
+ */
+export const STAGGER = {
+    /** Between consecutive dots of a `DotIcon` lighting up. */
+    dot: 12
+} as const;
+
+/** Spring configs, for anything a finger drives. */export const SPRING = {
     /** Cards, sheets, anything with weight. */
     gentle: {damping: 20, stiffness: 160, mass: 1},
     /** Toggles and small controls. */

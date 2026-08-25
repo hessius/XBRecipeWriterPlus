@@ -5,7 +5,8 @@ const names = Object.keys(DOT_ICONS) as DotIconName[];
 describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
-            ["delete", "duplicate", "edit", "error", "import", "info", "scan",
+            ["back", "delete", "duplicate", "edit", "error", "help", "import",
+             "info", "minus", "more", "overflow", "plus", "revert", "scan",
              "settings", "success"]
         );
     });
@@ -46,5 +47,19 @@ describe("litCells", () => {
 
     it("returns nothing for an entirely unlit grid", () => {
         expect(litCells(["..", ".."])).toEqual([]);
+    });
+});
+
+describe("the new editor glyphs", () => {
+    it("draws revert as two chevrons, symmetric about the middle row", () => {
+        const rows = DOT_ICONS.revert;
+        for (let y = 0; y < DOT_ICON_GRID; y++) {
+            expect(rows[y]).toBe(rows[DOT_ICON_GRID - 1 - y]);
+        }
+    });
+
+    it("draws more as a caret that is symmetric about the middle column", () => {
+        const reverse = (row: string) => [...row].reverse().join("");
+        DOT_ICONS.more.forEach((row) => expect(row).toBe(reverse(row)));
     });
 });

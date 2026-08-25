@@ -1,7 +1,7 @@
 import React from "react";
 import {screen} from "@testing-library/react-native";
 
-import DotIcon from "@/components/DotIcon";
+import DotIcon, {dotRatio} from "@/components/DotIcon";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -66,5 +66,36 @@ describe("DotIcon", () => {
             <DotIcon name="edit" size={20} accessibilityLabel="Edit recipes"/>
         );
         expect(screen.getByLabelText("Edit recipes")).toBeTruthy();
+    });
+});
+
+describe("dotRatio", () => {
+    it("keeps a large icon loose, so the grid stays a grid", async () => {
+        expect(dotRatio(24)).toBeCloseTo(0.36);
+        expect(dotRatio(44)).toBeCloseTo(0.36);
+    });
+
+    it("fattens the dots on a small icon, so it is not a smudge", async () => {
+        // A 13-point icon at the old flat 0.36 drew dots 0.47 points across,
+        // under half a logical pixel. That, and not the bitmap, is why the help
+        // marker was unreadable.
+        expect(dotRatio(13) * (13 / 9)).toBeGreaterThan(1);
+        expect(dotRatio(12)).toBeCloseTo(0.80);
+    });
+
+    it("is what the drawing actually uses", async () => {
+        // The ramp is only worth anything if the renderer reads it. This is the
+        // assertion that fails if `dot` goes back to a flat constant.
+        await renderWithProviders(<DotIcon name="help" size={13}/>);
+
+        const [dot] = screen.getAllByTestId("dot-icon-dot", includeHidden);
+        expect(dot.props.style.width).toBeCloseTo((13 / 9) * dotRatio(13));
+        expect(dot.props.style.width).toBeGreaterThan((13 / 9) * 0.36);
+    });
+
+    it("ramps between the two, so neighbouring sizes are not different weights", async () => {
+        expect(dotRatio(16)).toBeGreaterThan(dotRatio(20));
+        expect(dotRatio(20)).toBeGreaterThan(dotRatio(24));
+        expect(dotRatio(18)).toBeCloseTo(0.36 + (6 / 11) * 0.44);
     });
 });

@@ -1,5 +1,6 @@
 import React, {useEffect} from "react";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
@@ -94,6 +95,8 @@ export default function HomeHeader({
     onImport,
     onSettings
 }: Props) {
+    const insets = useSafeAreaInsets();
+
     const reduced = useReducedMotion();
 
     // Two values, not one. Under Reduced Motion the glyphs must still fade, so
@@ -120,8 +123,12 @@ export default function HomeHeader({
     }));
 
     return (
-        <XStack alignItems="center" justifyContent="space-between" gap="$2"
-                paddingHorizontal="$3" paddingVertical="$2">
+        // The screen has no navigation bar to clear the status bar for it, so
+        // the header carries the top inset itself.
+        <XStack testID="home-header"
+                alignItems="center" justifyContent="space-between" gap="$2"
+                paddingHorizontal="$3" paddingVertical="$2"
+                paddingTop={insets.top + 8}>
             <ScreenTitle title="Recipes" count={count}
                          fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 

@@ -85,18 +85,34 @@ class RecipeDatabase {
 
     }
 
+    /**
+     * Insert a copy of a recipe value.
+     *
+     * Takes the recipe rather than a uuid so that duplicating does not depend
+     * on the original having been saved: a recipe just read off a card or
+     * imported from a link has no row to re-read, and one being edited has
+     * changes the row does not know about.
+     *
+     * The value is deep-copied through its own JSON form before anything is
+     * changed, so the caller's recipe keeps its uuid, name and colour.
+     */
+    public duplicateRecipe(source: Recipe): void {
+        const copy = new Recipe(undefined, JSON.stringify(source));
+        const names = (this.retrieveAllRecipes() ?? []).map((r) => r.name);
+        copy.generateNewUUID();
+        copy.name = copyName(copy.name, names);
+        copy.source = "duplicate";
+        copy.createdAt = Date.now();
+        // Cleared so the copy is assigned its own colour on insert rather
+        // than sitting on the original's.
+        copy.accentIndex = undefined;
+        this.insertRecipe(copy);
+    }
+
     public cloneRecipe(uuid: string): void {
         let recipe = this.getRecipe(uuid);
         if (recipe) {
-            const names = (this.retrieveAllRecipes() ?? []).map((r) => r.name);
-            recipe.generateNewUUID();
-            recipe.name = copyName(recipe.name, names);
-            recipe.source = "duplicate";
-            recipe.createdAt = Date.now();
-            // Cleared so the copy is assigned its own colour on insert rather
-            // than sitting on the original's.
-            recipe.accentIndex = undefined;
-            this.insertRecipe(recipe);
+            this.duplicateRecipe(recipe);
         }
     }
 

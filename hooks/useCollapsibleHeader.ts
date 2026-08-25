@@ -19,15 +19,50 @@ export const COLLAPSE_AT = 72;
 export const EXPAND_AT = 24;
 
 /**
+ * How much shorter the page gets when the header collapses.
+ *
+ * A deliberate overestimate. It is the height of everything the two screens
+ * fold away -- the home screen's tiles, or the editor's name slab and the tall
+ * form of its curve -- and it is only ever used to decide whether there is
+ * enough page to bother collapsing at all. Guessing high means refusing to
+ * collapse a page that could just about have managed it; guessing low means the
+ * strobe comes back. Those are not comparable mistakes.
+ */
+export const COLLAPSE_SHRINK = 140;
+
+/**
  * The next collapsed state, given where the list is and where the header is now.
  *
  * Pure, and the whole of the decision. Two discrete states rather than an
  * interpolation: interpolating leaves the tiles resting at an arbitrary
  * half-size whenever the list stops mid-threshold, which is a state nobody
  * designed.
+ *
+ * `extent` is the furthest the list can scroll. It matters because collapsing
+ * the header is not a passive observer of the scroll position -- it shortens the
+ * page, and a list resting at the bottom of that page is dragged up by however
+ * much was taken away. On a screen only slightly taller than the phone that
+ * carried the offset back under `EXPAND_AT`, the header expanded, the page grew,
+ * the list fell to the bottom again, and it strobed for as long as you held it
+ * there.
+ *
+ * So a collapse is refused unless the page would still be scrolled past
+ * `EXPAND_AT` after the collapse has taken its `COLLAPSE_SHRINK` back. That
+ * makes the state a fixed point of its own consequences, which is the property
+ * the dead band alone could not provide. There is no matching guard on
+ * expanding: expanding lengthens the page, and a longer page cannot move a list
+ * that is already near its top.
+ *
+ * Omitting `extent` asks for the decision without that guard, for callers with
+ * no measurement to hand.
  */
-export function nextCollapsed(offset: number, collapsed: boolean): boolean {
-    return collapsed ? offset > EXPAND_AT : offset > COLLAPSE_AT;
+export function nextCollapsed(
+    offset: number, collapsed: boolean, extent: number = Infinity
+): boolean {
+    if (collapsed) {
+        return offset > EXPAND_AT;
+    }
+    return offset > COLLAPSE_AT && extent - COLLAPSE_SHRINK > EXPAND_AT;
 }
 
 export type CollapsibleHeader = {
@@ -45,8 +80,9 @@ export function useCollapsibleHeader(): CollapsibleHeader {
     const [collapsed, setCollapsed] = useState(false);
 
     function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-        const offset = event.nativeEvent.contentOffset.y;
-        setCollapsed((current) => nextCollapsed(offset, current));
+        const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+        const extent = contentSize.height - layoutMeasurement.height;
+        setCollapsed((current) => nextCollapsed(contentOffset.y, current, extent));
     }
 
     return {collapsed, onScroll};

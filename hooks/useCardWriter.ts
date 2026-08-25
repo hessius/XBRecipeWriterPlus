@@ -1,8 +1,8 @@
 import {useState} from "react";
 import {Platform} from "react-native";
-
 import {notify} from "@/components/XbrwToast";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 type CardWriter = {
@@ -23,9 +23,11 @@ type CardWriter = {
  * the system NFC sheet, while `writeProgress` drives the `NfcOverlay` on
  * both platforms.
  *
- * A fresh `NFC` instance is created per render, matching the previous
- * behaviour in editRecipe.tsx — `NFC` tracks whether its session is closed,
- * and holding one across renders would change when that flag is reset.
+ * One `NFC` instance is held for the hook's lifetime. It used to be built per
+ * render, which quietly broke Cancel: showing the overlay is a state change, so
+ * by the time the user could press Cancel the handler they pressed belonged to
+ * a later render and closed a transport nobody was writing to. The write went
+ * on behind a dismissed overlay.
  */
 export function useCardWriter(
     // The pour-volume mismatch is one state of one recipe, not an event, and
@@ -38,7 +40,10 @@ export function useCardWriter(
     const [writeProgress, setWriteProgress] = useState(0);
     const [showNfcOverlay, setShowNfcOverlay] = useState(false);
 
-    const nfc = new NFC();
+    // A lazy `useState` rather than `useMemo`: React only promises `useMemo` as
+    // a hint and may drop the cache, and a dropped cache here would be the very
+    // bug this replaces. This one must genuinely be constructed once.
+    const [nfc] = useState(() => new NFC());
 
     async function onNFCDialogClose() {
         await nfc.close();
@@ -68,7 +73,7 @@ export function useCardWriter(
         try {
             if (recipe !== null) {
                 console.log(recipe);
-                if (recipe.isPourVolumeValid()) {
+                if (canWriteToCard(recipe)) {
                     onVolumeError(null);
                     setWriteProgress(0);
                     setShowNfcOverlay(true);
@@ -76,7 +81,7 @@ export function useCardWriter(
                     setShowNfcOverlay(false);
                 } else {
                     onVolumeError(
-                        "Your individual pour volumes must add up to the total volume."
+                        "The recipe cannot be written to the card. Check that all values are within range."
                     );
                 }
             }

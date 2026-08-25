@@ -26,6 +26,16 @@ export const palette = {
     /** Hairlines and borders. */
     line:    "#262626",
     /**
+     * The fill of a small control that has to read as tappable.
+     *
+     * A step above `raised`, because a stepper's buttons sit inside `raised`
+     * pills on the stages deck — filled with `raised` they were the same colour
+     * as the thing containing them, and a plus that cannot be seen is not a
+     * button. One token rather than a per-surface choice: this is light enough
+     * to read on `base`, `surface` and `raised` alike.
+     */
+    control: "#2E2E2E",
+    /**
      * Disabled controls and decorative marks.
      *
      * 4.12:1 on `base` — under AA, so this is not a text colour. It reads as the

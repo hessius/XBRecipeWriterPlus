@@ -1,10 +1,11 @@
 import {useFonts} from 'expo-font';
 import {DarkTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
 import React, {useEffect, useState} from 'react';
+import {View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
 import config from '../tamagui.config' // your configuration
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {Toasts} from '@backpackapp-io/react-native-toast';
 import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
@@ -57,7 +58,16 @@ export default function RootLayout() {
                     <Theme name="dark">
                             <SafeAreaProvider>
                                 <ThemeProvider value={AppTheme}>
-                                    <SafeAreaView style={{flex: 1, backgroundColor: palette.base}}>
+                                    {/* A plain view, not a SafeAreaView. Insetting
+                                        here inset every screen on every edge, which
+                                        left the app floating in black bars: the list
+                                        stopped short of the bottom of the display and
+                                        the editor's accent slab began below the status
+                                        bar instead of running up behind it. The insets
+                                        are applied as padding by the surfaces that
+                                        actually need them, so backgrounds can reach the
+                                        edges while their contents do not. */}
+                                    <View style={{flex: 1, backgroundColor: palette.base}}>
                                         <Stack
                                             screenOptions={{
                                                 headerStyle:      {
@@ -69,12 +79,24 @@ export default function RootLayout() {
                                                 }
                                             }}>
                                             <Stack.Screen name="index" options={{}}/>
-                                            <Stack.Screen name="editRecipe" options={{title: "Edit Recipe"}}/>
+                                            {/* The editor draws its own header,
+                                                on the accent, inside RecipeHero.
+                                                Declared here rather than turned
+                                                off from inside the screen: an
+                                                effect runs after the first
+                                                paint, so the native bar it was
+                                                replacing got one frame to
+                                                flash. */}
+                                            <Stack.Screen name="editRecipe"
+                                                          options={{
+                                                              headerShown: false,
+                                                              animation: "slide_from_right"
+                                                          }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
-                                    </SafeAreaView>
+                                    </View>
                                     <SplashOverlay visible={!splashDone}
                                                    onFinished={() => setSplashDone(true)}/>
                                 </ThemeProvider>

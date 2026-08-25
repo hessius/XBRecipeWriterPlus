@@ -129,6 +129,7 @@ export const DOT_ICONS = {
         ".#.....#.",
         "........."
     ],
+    /** A lowercase "i": the informational toast, and nothing else. */
     info: [
         ".........",
         "....#....",
@@ -137,6 +138,124 @@ export const DOT_ICONS = {
         "....#....",
         "....#....",
         "...###...",
+        ".........",
+        "........."
+    ],
+    /**
+     * A blocky question mark: the help marker.
+     *
+     * The markers used the "i" above, which is four separate one-dot features
+     * and greyed into a smudge at the 12-13px a marker is actually drawn at --
+     * though the larger part of that was the dot weight, see `DotIcon`.
+     * The hook here is two axis-aligned runs and one diagonal step, so there is
+     * no feature narrower than the stroke; the counter is what makes it
+     * readable rather than the stem.
+     */
+    help: [
+        "..#####..",
+        "..#...#..",
+        "......#..",
+        "....###..",
+        "....#....",
+        "....#....",
+        ".........",
+        "....#....",
+        "........."
+    ],
+    /**
+     * Two backward chevrons: the rewind mark.
+     *
+     * A curved arrow was drawn first and thrown away. It is the shape class the
+     * note at the top of this file warns about — a one-dot stroke that is
+     * neither axis-aligned nor a pure diagonal aliases into noise. Chevrons are
+     * nothing but diagonals, so every dot lands on the grid.
+     */
+    revert: [
+        ".........",
+        "....#...#",
+        "...#...#.",
+        "..#...#..",
+        ".#...#...",
+        "..#...#..",
+        "...#...#.",
+        "....#...#",
+        "........."
+    ],
+    /**
+     * A downward caret.
+     *
+     * Points at the sheet that will rise, rather than at a menu that will drop.
+     * Also used, rotated, as the disclosure mark on a stage tile.
+     */
+    more: [
+        ".........",
+        ".........",
+        "#.......#",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#....",
+        ".........",
+        "........."
+    ],
+    /**
+     * Three dots in a row: the overflow mark.
+     *
+     * Replaces the downward caret on the editor header. The caret pointed at
+     * the sheet that would rise, which was true but read as "collapse this"
+     * next to a title; three dots say "there is more here" and nothing else.
+     * Two dots wide and two tall, because a one-dot block greys out at 16px.
+     */
+    overflow: [
+        ".........",
+        ".........",
+        ".........",
+        ".##.##.##",
+        ".##.##.##",
+        ".........",
+        ".........",
+        ".........",
+        "........."
+    ],
+    /**
+     * A left chevron: back.
+     *
+     * Two dots thick rather than one. Pure diagonals, so every dot lands on the
+     * grid, but a single-dot stroke at header size is a hairline — and this is
+     * the one control on the screen that must never be missed.
+     */
+    back: [
+        ".........",
+        ".....##..",
+        "....##...",
+        "...##....",
+        "..##.....",
+        "...##....",
+        "....##...",
+        ".....##..",
+        "........."
+    ],
+    /** A single axis-aligned run. Steps a value down. */
+    minus: [
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".#######.",
+        ".........",
+        ".........",
+        ".........",
+        "........."
+    ],
+    /** Steps a value up. Never used on its own to mean "new". */
+    plus: [
+        ".........",
+        ".........",
+        "....#....",
+        "....#....",
+        ".#######.",
+        "....#....",
+        "....#....",
         ".........",
         "........."
     ]

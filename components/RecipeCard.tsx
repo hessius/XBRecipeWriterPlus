@@ -8,6 +8,7 @@ import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
+import {canWriteToCard} from "@/library/cardLimits";
 import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 
@@ -213,6 +214,13 @@ export default function RecipeCard({
                                        color={onAccent.marker}>
                             {marker}
                         </DotMatrixText>
+                    )}
+                    {/* The same authority as the editor's WRITE gate. Asking
+                        only whether the volumes summed marked a recipe with a
+                        3100 ml stage as writable. */}
+                    {!canWriteToCard(recipe) && (
+                        <DotIcon name="error" size={12} color={onAccent.marker}
+                                 accessibilityLabel="Will not write"/>
                     )}
                 </XStack>
             </XStack>

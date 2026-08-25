@@ -29,14 +29,20 @@ describe("Collapsible", () => {
         expect(screen.getByText("TILES", includeHidden)).toBeTruthy();
     });
 
-    it("takes its natural height until it has been measured", async () => {
-        // Before the first layout pass the content's height is unknown. Guessing
-        // at zero would collapse the row on the first frame and then have it
-        // spring open, which is worse than the jump being fixed here.
-        await renderWithProviders(<Collapsible open>{body()}</Collapsible>);
-        const node = screen.getByTestId("collapsible", includeHidden);
+    it("measures its content off to the side until it knows how tall it is", async () => {
+        // The row itself is clipped, so the content cannot be measured inside
+        // it. Taking it out of the row's flow for the one pass it takes to
+        // learn the height is what lets a row that mounted closed still know
+        // what to open to.
+        await renderWithProviders(<Collapsible open={false}>{body()}</Collapsible>);
+        const content = screen.getByTestId("collapsible-content", includeHidden);
 
-        expect(node.props.jestAnimatedStyle?.value?.height).toBeUndefined();
+        expect(content.props.style).toMatchObject({position: "absolute"});
+
+        await measure(80);
+        expect(
+            screen.getByTestId("collapsible-content", includeHidden).props.style
+        ).toBeUndefined();
     });
 
     it("measures its content", async () => {
@@ -79,8 +85,22 @@ describe("rowStyle", () => {
         expect(rowStyle(0.5, 80)).toEqual({height: 40, opacity: 0.5});
     });
 
-    it("leaves the height alone until the content has been measured", () => {
-        expect(rowStyle(1, null)).toEqual({opacity: 1});
+    it("always names both properties, whatever it knows", () => {
+        // The bug this replaces: an unmeasured row returned an opacity and no
+        // height at all, and Reanimated does not restore a property that stops
+        // being returned -- it keeps applying the last value it was given. A
+        // row that mounted closed was handed height zero, and every later
+        // style that omitted the height left that zero in place, so the row
+        // could never open, never be laid out, and never be measured.
+        for (const style of [rowStyle(1, null), rowStyle(0, null), rowStyle(1, 80)]) {
+            expect(Object.keys(style).sort()).toEqual(["height", "opacity"]);
+        }
+    });
+
+    it("gives an unmeasured row no height, open or not", () => {
+        // Nothing is lost by it: until the height is known the content is
+        // positioned outside the row anyway, so the row has nothing to show.
+        expect(rowStyle(1, null)).toEqual({height: 0, opacity: 1});
     });
 });
 
@@ -88,6 +108,13 @@ describe("nextHeight", () => {
     it("takes the measurement when the row is open", () => {
         expect(nextHeight(null, 80, true)).toBe(80);
         expect(nextHeight(80, 96, true)).toBe(96);
+    });
+
+    it("takes the first measurement even from a closed row", () => {
+        // The first one is made with the content lifted out of the clipped row,
+        // so a closed row's first report is as truthful as an open row's -- and
+        // it is the only chance a row that mounted closed gets.
+        expect(nextHeight(null, 80, false)).toBe(80);
     });
 
     it("ignores anything measured while the row is closed", () => {

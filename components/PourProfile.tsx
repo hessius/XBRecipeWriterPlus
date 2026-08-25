@@ -64,7 +64,7 @@ type Props = {
     testID?: string;
 };
 
-const PROFILE_STROKE_WIDTH = 1.6;
+export const PROFILE_STROKE_WIDTH = 1.6;
 
 /**
  * The cell the fill's dots sit on, and their diameter as a fraction of it.

@@ -3,6 +3,7 @@ import {Platform} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
 import {XStack, YStack} from "tamagui";
@@ -38,6 +39,7 @@ type Props = {
  * scroll collapse to `useCollapsibleHeader`, and every message to `notify`.
  */
 export default function HomeScreen({db, settings}: Props) {
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const navigation = useNavigation();
 
@@ -53,7 +55,11 @@ export default function HomeScreen({db, settings}: Props) {
     const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
-    const nfc = new NFC();
+    // Held for the screen's lifetime, not rebuilt per render. Starting a scan
+    // shows the overlay, which re-renders — so a per-render transport meant the
+    // Cancel the user could actually press closed a different `NFC` than the one
+    // `readCard` was awaiting, hiding the ceremony while the request lived on.
+    const [nfc] = useState(() => new NFC());
 
     const isEmpty = library.recipes.length === 0;
 
@@ -126,13 +132,10 @@ export default function HomeScreen({db, settings}: Props) {
 
             router.push({
                 pathname: "/editRecipe",
-                params:   {
-                    recipeJSON: JSON.stringify(toOpen),
-                    // An already-saved recipe opens with Save disabled, as it
-                    // would from the list; only a genuinely new read arrives
-                    // needing to be saved.
-                    saveEnabled: isExisting ? "false" : "true"
-                }
+                // No `saveEnabled`: the editor lets any recipe be saved now,
+                // including one that will not write, so there is nothing left
+                // for a caller to disable.
+                params:   {recipeJSON: JSON.stringify(toOpen)}
             });
         } catch {
             setScanning(false);
@@ -150,12 +153,28 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function openRecipe(recipe: Recipe) {
-        router.push({pathname: "/editRecipe", params: {recipeJSON: JSON.stringify(recipe)}});
+        router.push({
+            pathname: "/editRecipe",
+            params:   {recipeJSON: JSON.stringify(recipe)}
+        });
     }
+
+    // An empty id mounts the import component but presents nothing (it gates on
+    // `props.recipeId`), so only a real id actually covers the screen.
+    const screenCovered = scanning || Boolean(importId);
 
     return (
         <>
-            <YStack flex={1} backgroundColor={palette.base}>
+            {/* The NFC ceremony is a modal moment, and an absolutely positioned
+                overlay only covers the screen visually. While it -- or the
+                import dialog, whose Tamagui portal is a host-tree portal rather
+                than a native Modal and so isolates nothing on Android -- is up,
+                this subtree hides its own descendants from the screen reader, so
+                TalkBack cannot reach and fire the controls behind it — the
+                Android half of what `accessibilityViewIsModal` does on iOS. */}
+            <YStack flex={1} backgroundColor={palette.base}
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 <HomeHeader
                     count={library.recipes.length}
                     collapsed={collapsed}
@@ -191,6 +210,10 @@ export default function HomeScreen({db, settings}: Props) {
                         onScroll={onScroll}
                         scrollEventThrottle={16}
                         showsVerticalScrollIndicator={false}
+                        // The list runs to the bottom of the display and the
+                        // last card scrolls clear of the home indicator, rather
+                        // than the whole screen stopping short of it.
+                        contentContainerStyle={{paddingBottom: insets.bottom + 8}}
                         renderItem={({item, index}: {item: Recipe; index: number}) => (
                             <SwipeableRecipeRow
                                 recipe={item}

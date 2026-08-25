@@ -55,4 +55,21 @@ describe("SettingsScreen", () => {
 
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
+
+    it("does not offer the one-line hints", async () => {
+        // The hints toggle lives in the editor's more menu, beside the deck it
+        // annotates, rather than a screen away from it.
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.queryByLabelText("One-line hints")).toBeNull();
+        expect(screen.queryByText(/EDITOR/)).toBeNull();
+    });
+
+    it("no longer asks where the field explanations go", async () => {
+        // There were two, and neither survived a phone. The long form is one
+        // sheet behind the caret now, so there is nothing left to choose.
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.queryByText(/Field explanations/)).toBeNull();
+    });
 });

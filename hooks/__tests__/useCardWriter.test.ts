@@ -3,7 +3,8 @@ import {Alert, Platform} from "react-native";
 
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useRecipeEditor} from "@/hooks/useRecipeEditor";
-import Recipe from "@/library/Recipe";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type NFC from "@/library/NFC";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
@@ -38,6 +39,16 @@ function invalidRecipe(): Recipe {
     return r;
 }
 
+function validRecipe(): Recipe {
+    const r = new Recipe();
+    r.cupType = CUP_TYPE.XPOD;
+    r.dosage = 15;
+    r.ratio = 15;
+    r.grinder = false;
+    r.pours = [new Pour(1, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+    return r;
+}
+
 describe("useCardWriter", () => {
     beforeEach(() => {
         (notify as jest.Mock).mockClear();
@@ -66,7 +77,7 @@ describe("useCardWriter", () => {
         await act(async () => result.current.writeCard(invalidRecipe()));
 
         expect(onVolumeError).toHaveBeenCalledWith(
-            "Your individual pour volumes must add up to the total volume."
+            "The recipe cannot be written to the card. Check that all values are within range."
         );
         expect(notify).not.toHaveBeenCalled();
     });
@@ -76,8 +87,7 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => useCardWriter(onVolumeError));
         await act(async () => result.current.writeCard(invalidRecipe()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockResolvedValue(undefined);
 
         await act(async () => result.current.writeCard(valid));
@@ -100,7 +110,6 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => {
             const editor = useRecipeEditor({
                 recipeJSON:           invalidJSON,
-                initiallySaveEnabled: true,
                 onSaved:              jest.fn()
             });
             const writer = useCardWriter(editor.setVolumeError);
@@ -128,8 +137,7 @@ describe("useCardWriter", () => {
         Platform.OS = "ios";
         const {result} = await renderHook(() => useCardWriter(jest.fn()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockImplementation(
             async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
                 await progress(60);
@@ -150,8 +158,7 @@ describe("useCardWriter", () => {
         Platform.OS = "ios";
         const {result} = await renderHook(() => useCardWriter(jest.fn()));
 
-        const valid = invalidRecipe();
-        jest.spyOn(valid, "isPourVolumeValid").mockReturnValue(true);
+        const valid = validRecipe();
         jest.spyOn(valid, "writeCard").mockImplementation(
             async (_nfc: NFC, progress: (progress: number, id?: string) => Promise<string | undefined>) => {
                 await progress(60);
@@ -165,5 +172,24 @@ describe("useCardWriter", () => {
         );
         expect(setNfcAlertIOS).not.toHaveBeenCalledWith(expect.stringContaining("%"));
         Platform.OS = "android";
+    });
+});
+
+describe("the transport it writes through", () => {
+    it("is the same one across renders, so Cancel closes what is writing", async () => {
+        // Showing the overlay is a state change, so by the time the user can
+        // press Cancel the handler they press belongs to a later render. Built
+        // per render, that handler closed an `NFC` nobody was writing to: the
+        // ceremony vanished and the native session carried on.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const NFC = require("@/library/NFC").default;
+        NFC.mockClear();
+
+        const {result, rerender} = await renderHook(() => useCardWriter(jest.fn()));
+        await rerender(undefined);
+        await rerender(undefined);
+
+        expect(NFC).toHaveBeenCalledTimes(1);
+        expect(result.current.showNfcOverlay).toBe(false);
     });
 });

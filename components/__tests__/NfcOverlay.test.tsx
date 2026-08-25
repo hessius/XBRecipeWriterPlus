@@ -111,3 +111,15 @@ describe("NfcOverlay", () => {
         });
     });
 });
+
+describe("the ceremony's hold on the screen", () => {
+    it("claims to be modal to the screen reader", async () => {
+        // Absolute positioning covers the host visually and nothing more:
+        // without this, VoiceOver walks straight past the overlay to the header
+        // and the recipe controls behind it, and can fire them mid-write.
+        await renderWithProviders(<NfcOverlay {...props()}/>);
+
+        const overlay = screen.getByTestId("nfc-overlay");
+        expect(overlay.props.accessibilityViewIsModal).toBe(true);
+    });
+});

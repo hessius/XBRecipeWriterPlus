@@ -61,5 +61,13 @@ describe("Settings", () => {
         // A matter of taste, and the flat wash is the quieter of the two. A
         // preference like that belongs off by default.
         expect(new Settings(fakeStorage()).get("dotMatrixProfile")).toBe(false);
+        expect(new Settings(fakeStorage()).get("showHints")).toBe(false);
+    });
+
+    it("has no help style left to store", () => {
+        // Two deliveries for the long-form notes shipped behind this key and
+        // both were withdrawn. A key nobody reads is a row that outlives the
+        // feature and confuses the next person to read the defaults.
+        expect(Object.keys(DEFAULTS)).not.toContain("helpStyle");
     });
 });

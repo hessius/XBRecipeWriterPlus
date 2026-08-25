@@ -44,16 +44,12 @@ export default function ImportRecipeComponent(props: {
         }
         recipe.source = "import";
         const db = new RecipeDatabase();
-        const {recipe: toOpen, isExisting} =
-            resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
+        const {recipe: toOpen} = resolveOnOpen(db.retrieveAllRecipes() ?? [], recipe);
         // Defer navigation until after the dialog state has propagated
         setTimeout(() => {
             router.push({
                 pathname: '/editRecipe',
-                params:   {
-                    recipeJSON:  JSON.stringify(toOpen),
-                    saveEnabled: isExisting ? "false" : "true"
-                }
+                params:   {recipeJSON: JSON.stringify(toOpen)}
             });
         }, 0);
     }
