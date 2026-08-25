@@ -48,12 +48,19 @@ export const EXIT_GRACE = DURATION.deliberate;
 export default function XbrwSheet({
     open, onOpenChange, title, showTitle = true, heightPercent = 70, children
 }: Props) {
-    // With `open={false}` and no guard of our own, Tamagui still mounts the
-    // sheet frame off screen, so a sheet that has never been opened is in the
-    // tree and reachable. The guard cannot simply follow `open`, though:
-    // unmounting on the frame the sheet is dismissed takes the animation away
-    // with it, and the sheet vanished rather than left. So the tree keeps it
-    // for as long as it takes to slide away, and no longer.
+    // Why the sheet is not simply mounted on `open`.
+    //
+    // This guard was written when Tamagui mounted a closed sheet's frame off
+    // screen, leaving a sheet nobody had opened in the tree and reachable by a
+    // screen reader. That is no longer true of it -- a closed dialog now
+    // renders nothing -- but the guard still earns its place from the other
+    // end: unmounting on the frame the sheet is dismissed takes the exit
+    // animation with it, and the sheet vanishes rather than leaves. So the
+    // tree keeps it for as long as it takes to slide away, and no longer.
+    //
+    // The consequence worth knowing is that the contents are built on the way
+    // in, every time, because there is nothing to build them into until then.
+    // A sheet with an expensive body will hitch as it opens.
     const [rendered, setRendered] = useState(open);
     const [wasOpen, setWasOpen] = useState(open);
 
@@ -100,7 +107,12 @@ export default function XbrwSheet({
     return (
         <Dialog modal open={open} onOpenChange={onOpenChange}>
             <Adapt platform="touch">
-                <Sheet transition="quick" zIndex={200000} modal dismissOnSnapToBottom
+                {/* `sheet`, not `quick`: a sheet is a large surface crossing
+                    most of the screen, and `quick` is underdamped enough to
+                    overshoot and then take its time settling -- which reads as
+                    the frame arriving before the movement has finished, rather
+                    than as one slide up from the bottom edge. */}
+                <Sheet transition="sheet" zIndex={200000} modal dismissOnSnapToBottom
                        snapPointsMode="percent" snapPoints={[heightPercent]}>
                     <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
                         <Adapt.Contents/>

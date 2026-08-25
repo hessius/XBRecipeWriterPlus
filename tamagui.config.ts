@@ -22,6 +22,16 @@ const animations = createAnimations({
     damping: 20,
     mass: 1.2,
     stiffness: 250
+  },
+  // For a surface that travels: near-critically damped, so it arrives once and
+  // stays. `quick` sits around a 0.58 damping ratio, which is right for a
+  // control answering a finger and wrong for a sheet -- the overshoot on
+  // something the height of the screen is read as a wobble, not as life.
+  sheet: {
+    type: "spring",
+    damping: 30,
+    mass: 0.85,
+    stiffness: 320
   }
 });
 
