@@ -25,9 +25,10 @@ export const HELP_HEIGHT = 75;
  * There used to be a marker beside every complicated label, and then a mode that
  * unfolded all of them at once. Both put the depth on the screen you were trying
  * to work on: the markers dotted it with fifteen small unanswered questions, and
- * the mode doubled its height. The screen now carries the six-word version under
- * each label and nothing more, and everything longer than that lives here,
- * behind one entry in the overflow.
+ * the mode doubled its height. What is left is a six-word hint under each label
+ * -- a setting, and off by default -- and everything longer than that in here,
+ * opened by the HELP button in the recipe's header rather than from the
+ * overflow. Help is not a rare action, so it is not behind a menu.
  *
  * Questions rather than field names as headings. Someone opens this having
  * already read the label -- they are looking for what they wanted to know, not
