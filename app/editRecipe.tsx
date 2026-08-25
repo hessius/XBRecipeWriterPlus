@@ -686,16 +686,23 @@ export default function EditRecipe() {
         navigation.goBack();
     }
 
+    // Anything that sits over the screen -- the NFC ceremony or any open sheet
+    // -- must also hide the screen from TalkBack, which an absolutely
+    // positioned overlay only covers visually. This is the Android half of what
+    // `accessibilityViewIsModal` does on iOS.
+    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen;
+
     return (
         <>
             {/* The NFC ceremony is a modal moment, and an absolutely positioned
-                overlay only covers the screen visually. While it is up this
-                subtree hides its own descendants from the screen reader, so
-                TalkBack cannot reach and fire the controls behind it — the
-                Android half of what `accessibilityViewIsModal` does on iOS. */}
+                overlay only covers the screen visually. While it -- or any
+                sheet -- is up this subtree hides its own descendants from the
+                screen reader, so TalkBack cannot reach and fire the controls
+                behind it — the Android half of what `accessibilityViewIsModal`
+                does on iOS. */}
             <YStack flex={1} backgroundColor={palette.base}
-                    accessibilityElementsHidden={showNfcOverlay}
-                    importantForAccessibility={showNfcOverlay ? "no-hide-descendants" : "auto"}>
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
             {/* Outside the scroll view, so it is the screen's header rather
                 than its first row. It collapses itself on scroll instead of
                 scrolling away: it stays mounted and animates its height,
@@ -787,6 +794,8 @@ export default function EditRecipe() {
                        }}
                        onHeight={setActionBarHeight}/>
 
+            </YStack>
+
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  onOpenChange={setOverflowOpen}
                                  showHints={showHint} onShowHintsChange={setShowHint}
@@ -805,7 +814,6 @@ export default function EditRecipe() {
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
-            </YStack>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>

@@ -278,7 +278,6 @@ describe("the editor", () => {
     it("answers the long-form questions from one sheet under the caret", async () => {
         await renderEditor();
 
-        await fireEvent.press(screen.getByLabelText("More"));
         await fireEvent.press(screen.getByLabelText("Help"));
 
         expect(screen.getByText("What does the ratio set?")).toBeTruthy();

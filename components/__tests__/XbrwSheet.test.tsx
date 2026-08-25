@@ -146,4 +146,19 @@ describe("XbrwSheet", () => {
             jest.useRealTimers();
         }
     });
+
+    it("hides the content behind it from Android's screen reader while it is up", async () => {
+        // `accessibilityViewIsModal` only isolates siblings on iOS, and this sheet
+        // is deliberately not `modal`, so without this TalkBack walks straight
+        // past the sheet into the screen underneath.
+        await renderWithProviders(
+            <XbrwSheet open onOpenChange={() => {}} title="Import">
+                <Text>Body</Text>
+            </XbrwSheet>
+        );
+
+        const guard = await screen.findByTestId("sheet-android-guard",
+            {includeHiddenElements: true});
+        expect(guard.props.importantForAccessibility).toBe("no-hide-descendants");
+    });
 });
