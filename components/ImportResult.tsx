@@ -31,6 +31,14 @@ type Props = {
 export default function ImportResult({preview, onOpen}: Props) {
     const {recipe, isExisting, name, subtitle, imageURL} = preview;
     const [podLoaded, setPodLoaded] = useState(false);
+    const [podFailed, setPodFailed] = useState(false);
+
+    // Composed as one sentence, the way `RecipeCard` announces a recipe:
+    // otherwise VoiceOver reads six loose elements -- "18", "DOSE", "1:16",
+    // "RATIO" -- and "1:16" is spoken "one colon sixteen". `accessible` on the
+    // row groups them, so this label is the whole of what is heard.
+    const figuresLabel =
+        `${recipe.dosage} grams, ratio 1 to ${recipe.ratio}, ${recipe.pours.length} stages`;
 
     return (
         <YStack gap="$3" paddingTop="$2">
@@ -50,12 +58,16 @@ export default function ImportResult({preview, onOpen}: Props) {
                     recipe, so there is no placeholder and no spinner: the panel
                     is only as tall as the two lines of text beside this, and
                     the layout does not lurch between a pod recipe and a shared
-                    one. A failed load is indistinguishable from a recipe that
-                    never had a photo, and is never reported. */}
-                {imageURL.length > 0 && (
+                    one. A failed load is skipped entirely rather than left as an
+                    empty circle, so it is genuinely indistinguishable from a
+                    recipe that never had a photo -- including the width it would
+                    otherwise steal from the name column -- and is never
+                    reported. */}
+                {imageURL.length > 0 && !podFailed && (
                     <Image testID="import-result-pod"
                            source={{uri: imageURL}}
                            onLoad={() => setPodLoaded(true)}
+                           onError={() => setPodFailed(true)}
                            style={{
                                width:        POD_SIZE,
                                height:       POD_SIZE,
@@ -70,7 +82,7 @@ export default function ImportResult({preview, onOpen}: Props) {
                          width={PROFILE_WIDTH} height={PROFILE_HEIGHT}
                          stroke={palette.dim} fill={palette.line}/>
 
-            <XStack gap="$4">
+            <XStack accessible accessibilityLabel={figuresLabel} gap="$4">
                 <Figure label="DOSE" value={String(recipe.dosage)}/>
                 <Figure label="RATIO" value={`1:${recipe.ratio}`}/>
                 <Figure label="STAGES" value={String(recipe.pours.length)}/>

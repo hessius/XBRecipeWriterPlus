@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import React, {useEffect, useState} from "react";
 import {Input, Spinner, Text, XStack, YStack} from "tamagui";
+import type {ColorTokens} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import ImportResult from "@/components/ImportResult";
@@ -36,6 +37,18 @@ type Props = {
 export default function ImportSheet({open, onOpenChange, showField, importer}: Props) {
     const {state, value, hint, onChangeText, onPastedText, openFound} = importer;
     const [nativePaste, setNativePaste] = useState(false);
+    const [wasOpen, setWasOpen] = useState(open);
+
+    // Reset when the sheet closes, in render rather than from the effect below.
+    // The lint rule forbids a synchronous `setState` in an effect body, and
+    // this is the same adjust-state-during-render pattern `XbrwSheet` uses.
+    // Without it the stale `true` from the last session survives the close and
+    // flashes the native control for a tick on reopen, before the async
+    // presence check has resolved.
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (!open) setNativePaste(false);
+    }
 
     useEffect(() => {
         if (!open || !Clipboard.isPasteButtonAvailable) {
@@ -69,11 +82,27 @@ export default function ImportSheet({open, onOpenChange, showField, importer}: P
                         <Input
                             accessibilityLabel={FIELD_LABEL}
                             placeholder={FIELD_LABEL}
+                            // The palette is a plain module of raw strings, not
+                            // Tamagui tokens, because roughly half the app's
+                            // colour call sites are plain RN/SVG props that
+                            // cannot take a `$token`; the cast reconciles that
+                            // with Tamagui typing this prop as `ColorTokens`.
+                            // `dim`, not `muted`: the placeholder is the field's
+                            // only visible label, so it must clear AA, and
+                            // Tamagui sets no default, leaving the unreadable
+                            // platform placeholder colour on this dark surface.
+                            placeholderTextColor={palette.dim as ColorTokens}
                             value={value}
                             onChangeText={onChangeText}
                             autoCapitalize="characters"
                             autoCorrect={false}
-                            autoFocus
+                            // Only when open: `prewarm` renders these real
+                            // children in a hidden view while the sheet is
+                            // closed, and a mounted `TextInput` calls `focus()`
+                            // regardless of layout, so an unconditional
+                            // `autoFocus` would raise the keyboard on the home
+                            // screen with no visible field.
+                            autoFocus={open}
                             backgroundColor={palette.raised}
                             borderColor={palette.line}
                             color={palette.text}/>
@@ -90,6 +119,15 @@ export default function ImportSheet({open, onOpenChange, showField, importer}: P
                                 testID="native-paste"
                                 displayMode="iconAndLabel"
                                 cornerStyle="capsule"
+                                // Text only: the default also accepts `image`,
+                                // so a mixed clipboard -- or one changed between
+                                // the presence check and the tap -- could
+                                // deliver `type: "image"`, which reaches
+                                // `onPastedText("")` and dead-ends on the hook's
+                                // early return, so the primary action would do
+                                // nothing with no explanation. `url` keeps
+                                // shared links active.
+                                acceptedContentTypes={["plain-text", "url"]}
                                 backgroundColor={palette.raised}
                                 foregroundColor={palette.text}
                                 onPress={(data) => onPastedText(data.type === "text" ? data.text : "")}
@@ -131,6 +169,14 @@ export default function ImportSheet({open, onOpenChange, showField, importer}: P
                     // reader is looking -- and the app's vocabulary has no
                     // native alert in it.
                     <Text color={palette.danger} fontSize={13}
+                          // `alert` as well as the live region: the region is
+                          // Android-only, so without the role an iOS VoiceOver
+                          // user who mistypes a code is told nothing, which
+                          // defeats the point of naming the failure. `alert` is
+                          // the repo's cross-platform announcement -- see
+                          // `XbrwToast` -- and interrupting is right here,
+                          // because a lookup that failed is worth interrupting.
+                          accessibilityRole="alert"
                           accessibilityLiveRegion="polite">
                         {state.message}
                     </Text>
@@ -138,7 +184,12 @@ export default function ImportSheet({open, onOpenChange, showField, importer}: P
 
                 {/* Guidance, not a validation failure, and deliberately not in
                     `danger`: nobody has done anything wrong, they have stopped.
-                    Polite so a screen reader picks it up without interrupting. */}
+                    Polite so a screen reader picks it up without interrupting,
+                    and deliberately not `accessibilityRole="alert"`: unlike the
+                    error, this is guidance rather than a failure, so
+                    interrupting whatever the reader is doing would be wrong. The
+                    cost is that iOS says nothing, which is acceptable for a hint
+                    that only repeats what the empty field already implies. */}
                 {hint && state.status === "idle" && (
                     <Text color={palette.dim} fontSize={13}
                           accessibilityLiveRegion="polite">

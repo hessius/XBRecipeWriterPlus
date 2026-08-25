@@ -405,8 +405,8 @@ everywhere — because every other path already works without it.
 ### Inside the sheet
 
 The paste affordance in the sheet is **not** disguised: on iOS 16+ it is a
-visible `ClipboardPasteButton`, palette-coloured and `iconOnly`, promoted to the
-primary action whenever the clipboard holds text. Android and iOS 15 get a
+visible `ClipboardPasteButton`, palette-coloured and `iconAndLabel`, promoted to
+the primary action whenever the clipboard holds text. Android and iOS 15 get a
 house-styled button calling `getStringAsync()`, where Android's system toast
 fires on a tap the user just made, which is where it belongs.
 
