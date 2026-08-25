@@ -20,7 +20,7 @@ export default function ImportRecipeComponent(props: {
     useEffect(() => {
         if (props.recipeId) {
             console.log("Import Recipe component id:" + props.recipeId);
-            let xbloom = new XBloomRecipe(props.recipeId);
+            let xbloom = new XBloomRecipe({kind: "share", id: props.recipeId});
             xbloom.fetchRecipeDetail().then(() => {
                 if (xbloom) {
                     console.log("URL:" + xbloom.getImageURL());
