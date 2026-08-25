@@ -55,6 +55,16 @@ type TextFieldRowProps = {
     autoCapitalize?: "none" | "characters";
     showHint: boolean;
     onCommit: (value: string) => void;
+    /**
+     * Every keystroke, so the screen can flush an unblurred field.
+     *
+     * A `Pressable` does not blur a focused `TextInput`, so WRITE, SAVE, More
+     * and Back can all fire while this row still holds a value the recipe has
+     * never seen. The draft goes to a ref rather than to state: this row is
+     * keyed on the value it mirrors, so publishing per keystroke would remount
+     * it and take the cursor with it.
+     */
+    onDraft?: (value: string) => void;
     /** Validates on every keystroke; false marks the field and reports up. */
     validate?: (value: string) => boolean;
     /** The reason shown while `validate` returns false. Prose, not a caption. */
@@ -81,7 +91,7 @@ type TextFieldRowProps = {
  */
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
-    showHint, onCommit,
+    showHint, onCommit, onDraft,
     validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
@@ -97,6 +107,7 @@ function TextFieldRow({
     }, [initialValue, validate, onInvalidChange]);
 
     function onChangeText(value: string) {
+        onDraft?.(value);
         if (!validate) return;
         const bad = !validate(value);
         setInvalid(bad);
@@ -125,6 +136,8 @@ type BrewDeckProps = {
     balanceTarget: number;
     showHint: boolean;
     dispatch: Dispatch;
+    /** Records an unblurred field's current text, for the screen to flush. */
+    onDraft: (label: string, value: string) => void;
     /** Reports the recipe-ID field's validity into the screen's write/save gate. */
     onInputErrorChange: (invalid: boolean) => void;
 };
@@ -142,7 +155,7 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onInputErrorChange
+    dispatch, onDraft, onInputErrorChange
 }: BrewDeckProps) {
     "use no memo";
 
@@ -233,11 +246,13 @@ function BrewDeck({
                       showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
+                          onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
             <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                       showHint={showHint}
+                          onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
         </YStack>
     );
@@ -550,6 +565,15 @@ export default function EditRecipe() {
     const profileHeight = useRef(0);
 
     /**
+     * What the text fields hold but the recipe has not been told about.
+     *
+     * A ref rather than state: it changes on every keystroke, and nothing on
+     * screen renders from it. It is drained before any action that reads the
+     * recipe, and cleared when a field commits normally.
+     */
+    const drafts = useRef(new Map<string, string>());
+
+    /**
      * Open a stage from the curve and bring it into view.
      *
      * Selecting alone was not enough. The profile is pinned to the top, so from
@@ -596,11 +620,29 @@ export default function EditRecipe() {
     // bump is what repaints the steppers and the derived total. Several of the
     // hook's field updaters do not bump the key themselves, so the screen does.
     const dispatch: Dispatch = (label, value) => {
+        drafts.current.delete(label);
         void editInputComplete(label, value);
         bumpKey();
     };
 
-    function duplicateRecipe() {
+    /**
+     * Apply anything typed but not committed.
+     *
+     * Awaited rather than fired and forgotten: `editInputComplete` is async, and
+     * the callers of this are about to read the recipe.
+     */
+    async function flushDrafts() {
+        if (drafts.current.size === 0) return;
+        const pending = Array.from(drafts.current.entries());
+        drafts.current.clear();
+        for (const [label, value] of pending) {
+            await editInputComplete(label, value);
+        }
+        bumpKey();
+    }
+
+    async function duplicateRecipe() {
+        await flushDrafts();
         // The recipe in hand, not its stored row. A recipe read from a card or
         // imported from a link has no row yet, so duplicating one used to
         // create nothing and navigate back as though it had; for a saved one it
@@ -609,7 +651,8 @@ export default function EditRecipe() {
         navigation.goBack();
     }
 
-    function deleteRecipe() {
+    async function deleteRecipe() {
+        await flushDrafts();
         new RecipeDatabase().deleteRecipe(recipe!.uuid);
         navigation.goBack();
     }
@@ -634,7 +677,7 @@ export default function EditRecipe() {
             <RecipeHero name={recipe.displayName()} named={recipe.hasName()}
                         xid={recipe.xid} accent={accent} collapsed={collapsed}
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
-                        onBack={() => navigation.goBack()}
+                        onBack={async () => { await flushDrafts(); navigation.goBack(); }}
                         onMore={() => setOverflowOpen(true)}
                         onHelp={() => setHelpOpen(true)}/>
 
@@ -682,6 +725,7 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
+                              onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (
                     <View onLayout={(event) => {
@@ -700,7 +744,8 @@ export default function EditRecipe() {
             </ScrollView>
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
-                       onWrite={() => writeCard(recipe)} onSave={saveRecipe}
+                       onWrite={async () => { await flushDrafts(); await writeCard(recipe); }}
+                       onSave={async () => { await flushDrafts(); await saveRecipe(); }}
                        onHeight={setActionBarHeight}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}

@@ -519,3 +519,51 @@ describe("stageScrollTarget", () => {
 
 
 
+
+describe("flushing an unblurred field before an action", () => {
+    // A `Pressable` does not blur a focused `TextInput`, so `onEndEditing`
+    // never fires -- and navigating away unmounts the field before it could.
+    // Every action drains what a text row is still holding before it reads the
+    // recipe.
+    const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+
+    it("saves the name being typed when SAVE is tapped without blurring first", async () => {
+        RecipeDatabase.mockClear();
+        await renderEditor();
+
+        await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
+        await fireEvent.press(screen.getByLabelText("Save"));
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls[0][1].name).toBe("New name");
+    });
+
+    it("keeps the name being typed when Back is tapped, which unmounts the field", async () => {
+        // The most dangerous of the four: navigation tears the input down, so
+        // `onEndEditing` can never rescue the value. `goBack` is mocked, so the
+        // screen stays mounted and the flushed name surfaces on the hero.
+        await renderEditor();
+
+        await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(mockGoBack).toHaveBeenCalled();
+        expect(screen.getByText("New name")).toBeTruthy();
+    });
+
+    it("drops a committed field's draft, so a later flush cannot re-apply it", async () => {
+        // A normal commit clears that field's draft. It is the committed value
+        // a later flush must honour, never an earlier keystroke's draft -- so
+        // the two are made to differ to prove the draft was dropped.
+        RecipeDatabase.mockClear();
+        await renderEditor();
+
+        const name = screen.getByLabelText("Name");
+        await fireEvent.changeText(name, "Draft");
+        await fireEvent(name, "endEditing", {nativeEvent: {text: "Committed"}});
+        await fireEvent.press(screen.getByLabelText("Save"));
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls[0][1].name).toBe("Committed");
+    });
+});
