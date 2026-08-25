@@ -1,23 +1,31 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeEditor, hasSource, RECIPE_LABELS} from "@/hooks/useRecipeEditor";
-import Recipe from "@/library/Recipe";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
 
 /**
- * 18 g at 1:16 over two equal pours: 288 ml, 144 each, in balance.
+ * 15 g at 1:16 over two equal pours: 240 ml, 120 each, in balance.
  *
  * `addPour` inserts after the index it is given and copies from it, so the
  * first one has to say `false` — there is nothing yet to copy from.
+ *
+ * 15 × 16 = 240 ml total. When the "hand-fix" test edits stage 0 to 10, the
+ * compensating edit brings stage 1 to exactly 240 ml — the per-stage maximum —
+ * so the recipe is writable after the fix without overflowing a byte.
  */
 async function renderEditor(overrides: {onSaved?: () => void} = {}) {
     const recipe = new Recipe();
-    recipe.dosage = 18;
+    recipe.dosage = 15;
     recipe.ratio = 16;
+    recipe.grindSize = 60;
+    recipe.grindRPM = 90;
     recipe.addPour(0, false);
     recipe.addPour(0);
     recipe.autoFixPourVolumes();
+    recipe.pours.forEach(p => { p.flowRate = 30; });
 
     return renderHook(() => useRecipeEditor({
         recipeJSON:           JSON.stringify(recipe),
@@ -29,14 +37,14 @@ describe("the volume readout (#40)", () => {
     it("follows the ratio without being told to repaint", async () => {
         const {result} = await renderEditor();
 
-        expect(result.current.balance.target).toBe(288);
+        expect(result.current.balance.target).toBe(240);
 
         await act(async () => {
             await result.current.editInputComplete(RECIPE_LABELS.RATIO, "17");
         });
 
         expect(result.current.balance.target).toBe(result.current.recipe!.getTotalVolume());
-        expect(result.current.balance.target).toBe(18 * 17);
+        expect(result.current.balance.target).toBe(15 * 17);
     });
 
     it("follows the dose too", async () => {
@@ -160,5 +168,56 @@ describe("hasSource", () => {
 
         expect(hasSource(recipe, "xid")).toBe(true);
         expect(hasSource(recipe, "share")).toBe(true);
+    });
+});
+
+describe("the write gate", () => {
+    it("is closed for a balanced recipe whose fields are out of range", async () => {
+        // Balanced and unwritable at the same time: dose 31 at ratio 100 asks
+        // for 3100 ml, and one stage can hold at most 240.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 31;
+        recipe.ratio = 100;
+        recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+
+        const {result} = await renderHook(() =>
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+        );
+
+        expect(result.current.balance.balanced).toBe(true);
+        expect(result.current.canWrite).toBe(false);
+    });
+
+    it("is open for a recipe within range", async () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 15;
+        recipe.ratio = 15;
+        recipe.grindSize = 60;
+        recipe.grindRPM = 90;
+        recipe.pours = [new Pour(1, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+
+        const {result} = await renderHook(() =>
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+        );
+
+        expect(result.current.canWrite).toBe(true);
+    });
+
+    it("still allows saving a recipe that cannot be written", async () => {
+        // Keeping a recipe and writing it are different permissions. A recipe
+        // the machine would reject is still worth having in the library.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 31;
+        recipe.ratio = 100;
+        recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+
+        const {result} = await renderHook(() =>
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+        );
+
+        expect(result.current.canSave).toBe(true);
     });
 });

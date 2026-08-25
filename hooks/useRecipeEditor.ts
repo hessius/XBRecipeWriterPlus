@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
+import {cardWriteProblems} from "@/library/cardLimits";
 import Recipe from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -66,8 +67,18 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
         balanced: recipe?.isPourVolumeValid() ?? true
     };
 
+    /**
+     * Every reason the machine would refuse this recipe.
+     *
+     * Balance used to be the whole test, and it let a balanced recipe with a
+     * 3100 ml stage through to `getData()`, where the volume became one byte.
+     * `cardWriteProblems` includes the balance check, so this is the only
+     * question the gate has to ask.
+     */
+    const writeProblems = recipe ? cardWriteProblems(recipe) : [];
+
     /** A recipe the machine would reject cannot be written; it can still be kept. */
-    const canWrite = balance.balanced && !inputError && recipe !== null;
+    const canWrite = writeProblems.length === 0 && !inputError && recipe !== null;
     const canSave = !inputError && recipe !== null;
 
     function getRecipe(): Recipe | null {
