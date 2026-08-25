@@ -226,17 +226,26 @@ describe("the editor", () => {
         // re-read, and an edited one has changes the row does not know about.
         // Cloning by uuid silently produced nothing in the first case and
         // dropped every unsaved edit in the second.
+        //
+        // Fake timers because the overflow sheet only becomes interactive on
+        // the `requestAnimationFrame` that plays its entrance: pressing a row
+        // in the frame before that lands on a sheet that is in the tree but not
+        // yet accepting touches, and the tap is silently dropped.
+        jest.useFakeTimers();
         const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
         RecipeDatabase.mockClear();
 
         await renderEditor({xid: "CGL12"});
         await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Duplicate"));
+        await act(async () => { jest.advanceTimersByTime(500); });
 
         const store = RecipeDatabase.mock.instances.at(-1)!;
         expect(store.cloneRecipe).not.toHaveBeenCalled();
         expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
+        jest.useRealTimers();
     });
 
     it("keeps the long form off the deck entirely", async () => {
@@ -259,6 +268,12 @@ describe("the editor", () => {
         // The hints are a property of the screen being read, so the switch for
         // them belongs on that screen. Reaching settings meant leaving the
         // recipe, and the setting was invisible from where it applied.
+        //
+        // Fake timers because the overflow sheet only becomes interactive on
+        // the `requestAnimationFrame` that plays its entrance: the switch has
+        // to be reached after that frame, or the tap lands on a sheet that is
+        // in the tree but not yet accepting touches and never toggles.
+        jest.useFakeTimers();
         mockSettings = {showHints: false};
         await renderEditor();
 
@@ -266,13 +281,17 @@ describe("the editor", () => {
             .toBeNull();
 
         await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Show hints"));
+        await act(async () => { jest.advanceTimersByTime(500); });
         // Dismissed first, because the sheet is modal while it is up: the deck
         // behind it is deliberately out of a screen reader's reach until then.
         await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
 
         expect(screen.getByText("Whole numbers only. Sets the target volume."))
             .toBeTruthy();
+        jest.useRealTimers();
     });
 
     it("answers the long-form questions from the Help sheet in the header", async () => {
