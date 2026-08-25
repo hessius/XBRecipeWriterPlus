@@ -374,10 +374,12 @@ behaviour the tile would have had anyway.
 
 ### Coloured to the tile, not to black
 
-`baseBackgroundColor` and `baseForegroundColor` both take `palette.raised`
+`backgroundColor` and `foregroundColor` both take `palette.raised`
 (`#161616`), the tile's own colour, so the control disappears into the tile with
 its glyph invisible. `displayMode` is `iconOnly` and `cornerStyle` matches the
-tile.
+tile. (The installed `expo-clipboard` exposes these as the unprefixed
+`backgroundColor` / `foregroundColor`, not the `base…`-prefixed names of the
+native `UIPasteControl` configuration.)
 
 Deliberately **not** `opacity: 0`. An opacity-zeroed control is far more likely
 to be treated as hidden by UIKit than one that is merely the same colour as its
@@ -390,8 +392,16 @@ surroundings.
    hear a label contradicting the screen. When `isScreenReaderEnabled()` is true
    the tile is a plain button. The shortcut is a sighted convenience; what gets
    announced stays honest.
-2. **A pressable stays underneath.** If the control ever fails to mount, the tile
-   still opens the sheet rather than becoming dead furniture.
+2. **A pressable stays underneath — for the case it can cover.** The wrapper
+   around the disguised control carries the `onOpen` route, so if the control
+   renders *nothing* (`isPasteButtonAvailable` flips false, iOS < 16) the tap
+   still opens the sheet. This does **not** cover a control that renders but is
+   *inactive* — an HTML-only clipboard (a Safari or Mail copy) makes
+   `hasStringAsync` true while nothing conforms to `acceptedContentTypes`, and a
+   `UIPasteControl` with no conformant content is disabled but, per standard
+   UIKit hit-testing, most likely still swallows the tap rather than passing it
+   to the wrapper. Whether it does is undocumented and not observable from JS, so
+   it is a device-verification item (§8), not a guarantee.
 3. **The header glyph does not do this.** Tile only. A 44 px disguised control is
    more fragile for less gain, and the glyph opens the sheet where the paste
    affordance lives anyway.
@@ -458,6 +468,12 @@ constraint does not bind. What does need real hardware:
 - That a `raised`-on-`raised` `UIPasteControl` genuinely renders invisibly, with
   no border or system material bleeding through, and that the overlay does not
   swallow the tap. Neither is checkable in Jest or a simulator.
+- **The inactive-control fallback.** Copy rich text from Safari (HTML, no plain
+  text) so `hasStringAsync` is true but nothing conforms to
+  `acceptedContentTypes`, then tap `IMPORT`. Confirm the sheet still opens. If a
+  disabled `UIPasteControl` swallows the tap, the tile does nothing — the exact
+  regression the wrapper fallback exists to prevent, and one no Jest test can
+  see. If it fails, force plain mode.
 - Android's toast asymmetry: no prompt, a toast on read.
 
 ## Known risks

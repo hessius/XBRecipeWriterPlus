@@ -3828,6 +3828,11 @@ Tick each:
       **no prompt**, the sheet appears already resolving, and the editor opens.
 - [ ] Copy an unrelated message. Tap `IMPORT`: the sheet opens with an **empty**
       field, indistinguishable from a plain open.
+- [ ] Copy **rich text from Safari** (HTML, no plain text), so the clipboard has
+      text but nothing conforming to `plain-text`/`url`. Tap `IMPORT`: the sheet
+      still opens. If the disabled `UIPasteControl` swallows the tap and the tile
+      does nothing, **force plain mode** — the wrapper fallback only covers a
+      control that renders nothing, not one that renders inactive.
 - [ ] Clear the clipboard. Tap `IMPORT`: a plain tile, the sheet opens.
 - [ ] Turn VoiceOver on. The tile announces "Import a recipe", not "Paste", and
       tapping it opens the sheet.
