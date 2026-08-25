@@ -14,15 +14,27 @@ jest.mock("expo-router", () => ({
     useFocusEffect: jest.fn()
 }));
 
+let mockShareIntentState: {
+    hasShareIntent:   boolean;
+    shareIntent:      Record<string, unknown>;
+    resetShareIntent: jest.Mock;
+};
+
 jest.mock("expo-share-intent", () => ({
-    useShareIntentContext: () => ({
-        hasShareIntent:   false,
-        shareIntent:      {},
-        resetShareIntent: jest.fn()
-    })
+    useShareIntentContext: () => mockShareIntentState
 }));
 
 jest.mock("@/library/RecipeDatabase");
+
+jest.mock("@/library/XBloomRecipe", () => ({
+    XBloomRecipe: jest.fn().mockImplementation(() => ({
+        fetchRecipeDetail: jest.fn().mockResolvedValue(undefined),
+        getImageURL:       jest.fn(() => ""),
+        getName:           jest.fn(() => "Imported"),
+        getSubtitle:       jest.fn(() => ""),
+        getRecipe:         jest.fn()
+    }))
+}));
 
 const mockNotify = jest.fn();
 
@@ -74,7 +86,14 @@ function store(recipes: Recipe[]) {
     };
 }
 
-beforeEach(() => mockPush.mockClear());
+beforeEach(() => {
+    mockPush.mockClear();
+    mockShareIntentState = {
+        hasShareIntent:   false,
+        shareIntent:      {},
+        resetShareIntent: jest.fn()
+    };
+});
 
 describe("HomeScreen", () => {
     it("lists the saved recipes as cards", async () => {
@@ -199,5 +218,26 @@ describe("HomeScreen", () => {
     it("offers no edit toggle with an empty library", async () => {
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
         expect(screen.queryByLabelText("Edit recipes")).toBeNull();
+    });
+
+    it("takes the screen out of the reader's reach while the import dialog is open", async () => {
+        // The import dialog is a Dialog+Sheet modal, but Tamagui's portal is a
+        // host-tree portal rather than a native Modal, so Android gets no
+        // isolation from it -- the screen behind it must hide its own subtree.
+        // It is opened the only way it can be: through a share intent.
+        mockShareIntentState = {
+            hasShareIntent:   true,
+            shareIntent:      {type: "weburl", webUrl: "https://xbloom.com/?id=abc123"},
+            resetShareIntent: jest.fn()
+        };
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia")])} settings={new Settings(memoryStorage())}/>
+        );
+
+        // The header button behind the dialog is unreachable to the screen
+        // reader...
+        await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
+        // ...but still in the tree: it is hidden, not unmounted.
+        expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
     });
 });

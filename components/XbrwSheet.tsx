@@ -165,18 +165,6 @@ export default function XbrwSheet({
                snapPointsMode="percent" snapPoints={[heightPercent]}>
             <Sheet.Overlay transition="quick"
                            enterStyle={{opacity: 0}} exitStyle={{opacity: 0}}/>
-            {/* The Android half of `accessibilityViewIsModal`.
-                That prop only isolates siblings on iOS, and this sheet is
-                deliberately not `modal`, so on Android TalkBack could walk past
-                the sheet and fire the controls on the screen behind it. This
-                covers the screen for the accessibility tree only: it is
-                zero-opacity and untouchable, so nothing about the picture
-                changes. */}
-            <View testID="sheet-android-guard"
-                  pointerEvents="none"
-                  accessibilityElementsHidden={false}
-                  importantForAccessibility={shown ? "no-hide-descendants" : "auto"}
-                  style={{position: "absolute", left: 0, right: 0, top: 0, bottom: 0}}/>
             {/* The name and the modal flag go on the body, not on the frame:
                 Tamagui renders a second, empty copy of the frame, and two
                 sibling views that each claim to be the modal one make a screen
@@ -185,7 +173,15 @@ export default function XbrwSheet({
             <Sheet.Frame padding="$4" backgroundColor={palette.surface}>
                 {/* Modal only while it is actually up. It stays in the tree
                     through its exit, and a sheet on its way out must not go on
-                    hiding the screen it is uncovering. */}
+                    hiding the screen it is uncovering.
+
+                    `accessibilityViewIsModal` is iOS-only. Android has no
+                    in-window equivalent, and a non-modal sheet cannot express
+                    one from in here: it renders in place as a sibling of the
+                    screen rather than through a Portal, so it cannot reach the
+                    subtree it needs to hide. Each host screen instead marks its
+                    own subtree `no-hide-descendants` while a sheet is open --
+                    see `app/editRecipe.tsx` and `app/index.tsx`. */}
                 <YStack gap="$3" aria-label={title} accessibilityViewIsModal={shown}>
                     {heading}
                     {children}

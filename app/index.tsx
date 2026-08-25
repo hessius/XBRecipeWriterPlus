@@ -159,16 +159,22 @@ export default function HomeScreen({db, settings}: Props) {
         });
     }
 
+    // An empty id mounts the import component but presents nothing (it gates on
+    // `props.recipeId`), so only a real id actually covers the screen.
+    const screenCovered = scanning || Boolean(importId);
+
     return (
         <>
             {/* The NFC ceremony is a modal moment, and an absolutely positioned
-                overlay only covers the screen visually. While it is up this
-                subtree hides its own descendants from the screen reader, so
+                overlay only covers the screen visually. While it -- or the
+                import dialog, whose Tamagui portal is a host-tree portal rather
+                than a native Modal and so isolates nothing on Android -- is up,
+                this subtree hides its own descendants from the screen reader, so
                 TalkBack cannot reach and fire the controls behind it — the
                 Android half of what `accessibilityViewIsModal` does on iOS. */}
             <YStack flex={1} backgroundColor={palette.base}
-                    accessibilityElementsHidden={scanning}
-                    importantForAccessibility={scanning ? "no-hide-descendants" : "auto"}>
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 <HomeHeader
                     count={library.recipes.length}
                     collapsed={collapsed}

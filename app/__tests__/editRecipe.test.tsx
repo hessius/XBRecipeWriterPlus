@@ -275,7 +275,7 @@ describe("the editor", () => {
             .toBeTruthy();
     });
 
-    it("answers the long-form questions from one sheet under the caret", async () => {
+    it("answers the long-form questions from the Help sheet in the header", async () => {
         await renderEditor();
 
         await fireEvent.press(screen.getByLabelText("Help"));
