@@ -56,19 +56,13 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
 
-    it("offers the one-line hints, off unless they have been turned on", async () => {
+    it("does not offer the one-line hints", async () => {
+        // The hints toggle lives in the editor's more menu, beside the deck it
+        // annotates, rather than a screen away from it.
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
-        expect(screen.getByLabelText("One-line hints")
-            .props.accessibilityState.checked).toBe(false);
-    });
 
-    it("persists the one-line hints", async () => {
-        const storage = memoryStorage();
-
-        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
-        await fireEvent(screen.getByLabelText("One-line hints"), "checkedChange", true);
-
-        expect(new Settings(storage).get("showHints")).toBe(true);
+        expect(screen.queryByLabelText("One-line hints")).toBeNull();
+        expect(screen.queryByText(/EDITOR/)).toBeNull();
     });
 
     it("no longer asks where the field explanations go", async () => {

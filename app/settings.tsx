@@ -48,7 +48,6 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
-    const [showHints, setShowHints] = useSetting("showHints", settings);
 
     return (
         <ScrollView backgroundColor={palette.base} contentContainerStyle={{padding: 16}}>
@@ -67,17 +66,6 @@ export default function SettingsScreen({settings}: Props) {
                     description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                     value={dotMatrixProfile}
                     onChange={setDotMatrixProfile}/>
-            </YStack>
-            <YStack gap="$2" paddingTop="$4">
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
-                    EDITOR
-                </DotMatrixText>
-                <ToggleRow
-                    label="One-line hints"
-                    description="A short note under every label on the brew deck. The longer explanations live in Help, under the caret."
-                    value={showHints}
-                    onChange={setShowHints}/>
             </YStack>
         </ScrollView>
     );
