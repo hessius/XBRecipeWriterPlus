@@ -6,6 +6,29 @@ import type Recipe from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 
 /**
+ * How long after a keystroke a parsing value is looked up.
+ *
+ * This cannot be a "finished typing" detector, and does not pretend to be. The
+ * pod grammar is prefix-ambiguous -- `^[A-Za-z]{3}T?[0-9]{2,3}$` takes two or
+ * three digits -- so `ETH12` and `ETH120` are both complete, and no timer can
+ * tell "finished typing ETH12" from "paused halfway through ETH120". Pausing to
+ * think is exactly when it fires.
+ *
+ * That is survivable only because a typed result does not navigate. A premature
+ * resolve costs one wasted request and shows a name the user can see is wrong.
+ * If typing is ever made to navigate, this constant becomes dangerous.
+ */
+const DEBOUNCE_MS = 600;
+
+/**
+ * How long a non-parsing value sits before the format is explained.
+ *
+ * Long, deliberately. Telling someone their half-typed code is invalid is
+ * scolding them for not having finished.
+ */
+const ABANDONED_MS = 2500;
+
+/**
  * Why a lookup failed.
  *
  * Three reasons rather than one, because "something went wrong" is not worth
@@ -80,6 +103,9 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     const generation = useRef(0);
     const inFlight = useRef<AbortController | null>(null);
 
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     /**
      * The library, read at the moment a result lands rather than captured when
      * the lookup started -- a save can happen in between.
@@ -95,11 +121,20 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     }, [onOpenRecipe]);
 
     useEffect(() => () => {
+        clearTimers();
         generation.current++;
         inFlight.current?.abort();
     }, []);
 
+    function clearTimers() {
+        if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
+        if (hintTimer.current !== null) clearTimeout(hintTimer.current);
+        debounceTimer.current = null;
+        hintTimer.current = null;
+    }
+
     async function resolve(source: ImportSource, intent: ImportIntent) {
+        clearTimers();
         setHint(false);
         const mine = ++generation.current;
         inFlight.current?.abort();
@@ -179,6 +214,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     function onChangeText(next: string) {
         const previous = value;
         setValue(next);
+        clearTimers();
         setHint(false);
 
         // React Native 0.86 has no `onPaste` on `TextInput`, so a paste is
@@ -199,6 +235,19 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         generation.current++;
         inFlight.current?.abort();
         setState({status: "idle"});
+
+        if (source) {
+            debounceTimer.current = setTimeout(() => {
+                void resolve(source, "deliberate");
+            }, DEBOUNCE_MS);
+            return;
+        }
+
+        // Nothing to look up. If they have also stopped, explain the format --
+        // the sheet has no button to press and would otherwise sit in silence.
+        if (next.trim().length > 0) {
+            hintTimer.current = setTimeout(() => setHint(true), ABANDONED_MS);
+        }
     }
 
     function onPastedText(text: string) {
@@ -221,6 +270,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     }
 
     function reset() {
+        clearTimers();
         generation.current++;
         inFlight.current?.abort();
         setValue("");

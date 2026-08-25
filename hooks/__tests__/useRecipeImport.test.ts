@@ -251,3 +251,162 @@ describe("two lookups in flight", () => {
         expect(onOpenRecipe.mock.calls[0][0].xid).toBe("NEW22");
     });
 });
+
+describe("the lookup debounce", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("waits 600 ms after a parsing value is typed, then resolves", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        // Typed a character at a time -- each `onChangeText` in its own `act`
+        // so the render flushes and the change is inferred as +1 (typing), not
+        // a bulk paste.
+        for (const value of ["E", "ET", "ETH", "ETH1", "ETH12"]) {
+            await act(async () => {
+                result.current.onChangeText(value);
+            });
+        }
+        expect(result.current.state.status).toBe("idle");
+
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("found"));
+        // Still does not navigate: it was typed.
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
+
+    it("does not fire for a value that does not parse", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH1");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
+    });
+
+    it("restarts on each keystroke", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        // Typed to `ETH12` a character at a time so the parsing transition is a
+        // keystroke, not a paste; a bulk change would navigate atomically.
+        for (const value of ["E", "ET", "ETH", "ETH1", "ETH12"]) {
+            await act(async () => {
+                result.current.onChangeText(value);
+            });
+        }
+        await act(async () => {
+            jest.advanceTimersByTime(400);
+        });
+        await act(async () => {
+            result.current.onChangeText("ETH120");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(400);
+        });
+
+        expect(mockFetchRecipeDetail).not.toHaveBeenCalled();
+
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        await waitFor(() => expect(mockFetchRecipeDetail).toHaveBeenCalledTimes(1));
+    });
+});
+
+describe("the abandonment hint", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("appears after 2500 ms on a value that does not parse", async () => {
+        // The sheet is otherwise silent while idle -- there is no button to
+        // press -- so without this a user whose value never parses sits in
+        // front of a sheet that simply does nothing.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH1");
+        });
+        expect(result.current.hint).toBe(false);
+
+        await act(async () => {
+            jest.advanceTimersByTime(2500);
+        });
+
+        expect(result.current.hint).toBe(true);
+    });
+
+    it("says nothing before the timer, because a half-typed code is not a mistake", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH1");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(2400);
+        });
+
+        expect(result.current.hint).toBe(false);
+    });
+
+    it("never appears for a value that parses", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH12");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(3000);
+        });
+
+        expect(result.current.hint).toBe(false);
+    });
+
+    it("never appears for an empty field", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("E");
+        });
+        await act(async () => {
+            result.current.onChangeText("");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(3000);
+        });
+
+        expect(result.current.hint).toBe(false);
+    });
+
+    it("clears as soon as the value parses", async () => {
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ETH1");
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(2500);
+        });
+        expect(result.current.hint).toBe(true);
+
+        await act(async () => {
+            result.current.onChangeText("ETH12");
+        });
+
+        expect(result.current.hint).toBe(false);
+    });
+});
