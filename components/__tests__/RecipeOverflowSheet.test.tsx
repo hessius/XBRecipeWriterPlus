@@ -6,12 +6,13 @@ import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 const ACTIONS = {
-    onDuplicate: jest.fn(),
-    onRefreshName: jest.fn(),
-    onRevert: jest.fn(),
-    onHelp: jest.fn(),
-    onDelete: jest.fn(),
-    onOpenChange: jest.fn()
+    showHints:         false,
+    onShowHintsChange: jest.fn(),
+    onDuplicate:       jest.fn(),
+    onRefreshName:     jest.fn(),
+    onRevert:          jest.fn(),
+    onDelete:          jest.fn(),
+    onOpenChange:      jest.fn()
 };
 
 describe("RecipeOverflowSheet", () => {
@@ -30,6 +31,40 @@ describe("RecipeOverflowSheet", () => {
         // Help is not one of them. The caret holds things done *to* the recipe;
         // help is reading matter, and sits in the hero's chrome row instead.
         expect(screen.queryByLabelText("Help")).toBeNull();
+    });
+
+    it("toggles the deck's hints without dismissing itself", async () => {
+        // Unlike every other row here, this one has a state to show. Closing on
+        // the tap -- which is what `pick` does for the actions -- would take the
+        // answer off the screen at the moment it changed.
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS} showHints={false}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Show hints"));
+
+        expect(ACTIONS.onShowHintsChange).toHaveBeenCalledWith(true);
+        expect(ACTIONS.onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("shows which way the hints switch is set", async () => {
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS} showHints/>
+        );
+
+        expect(screen.getByTestId("show-hints-state").props.children).toBe("ON");
+        expect(screen.getByLabelText("Show hints").props.accessibilityState)
+            .toEqual(expect.objectContaining({checked: true}));
+    });
+
+    it("turns the hints back off", async () => {
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS} showHints/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Show hints"));
+
+        expect(ACTIONS.onShowHintsChange).toHaveBeenCalledWith(false);
     });
 
     it("leaves the name refresh out when there is nothing to refresh from", async () => {

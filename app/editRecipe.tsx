@@ -535,7 +535,7 @@ export default function EditRecipe() {
     const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
     const navigation = useNavigation();
 
-    const [showHint] = useSetting("showHints");
+    const [showHint, setShowHint] = useSetting("showHints");
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
@@ -705,6 +705,7 @@ export default function EditRecipe() {
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  onOpenChange={setOverflowOpen}
+                                 showHints={showHint} onShowHintsChange={setShowHint}
                                  onDuplicate={duplicateRecipe}
                                  onRefreshName={handleReloadTitlePress}
                                  onRevert={() => setRevertOpen(true)}

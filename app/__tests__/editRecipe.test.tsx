@@ -25,7 +25,19 @@ jest.mock("@/library/RecipeDatabase");
 // way `mockRecipeJSON` picks the recipe. (Not in the plan's sketch — added here
 // because the real hook opens a database.)
 jest.mock("@/hooks/useSetting", () => ({
-    useSetting: (key: string) => [mockSettings[key], jest.fn()]
+    useSetting: (key: string) => {
+        // A real store, not a constant: the caret's hints switch writes through
+        // this hook and the deck reads back through it, so a setter that threw
+        // the value away would leave that wiring untested.
+        const [, bump] = mockReact.useState(0);
+        return [
+            mockSettings[key],
+            (value: unknown) => {
+                mockSettings = {...mockSettings, [key]: value};
+                bump((n: number) => n + 1);
+            }
+        ];
+    }
 }));
 
 jest.mock("@/library/NFC", () => ({
@@ -43,6 +55,14 @@ let mockParams: Record<string, string> | null = null;
 
 /** Whatever the editor reads out of the settings store. */
 let mockSettings: Record<string, unknown> = {};
+
+/**
+ * `mock`-prefixed so the hoisted `useSetting` factory is allowed to read it.
+ *
+ * Only read when a component renders, which is long after this has been
+ * assigned -- the factory itself runs at import time and touches nothing.
+ */
+const mockReact = React;
 
 const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
@@ -229,6 +249,23 @@ describe("the editor", () => {
         expect(screen.queryByLabelText("What is Ratio?")).toBeNull();
         expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
         // The hint is what the deck does carry.
+        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+            .toBeTruthy();
+    });
+
+    it("turns the deck's hints on from the caret, not only from settings", async () => {
+        // The hints are a property of the screen being read, so the switch for
+        // them belongs on that screen. Reaching settings meant leaving the
+        // recipe, and the setting was invisible from where it applied.
+        mockSettings = {showHints: false};
+        await renderEditor();
+
+        expect(screen.queryByText("Whole numbers only. Sets the target volume."))
+            .toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("More"));
+        await fireEvent.press(screen.getByLabelText("Show hints"));
+
         expect(screen.getByText("Whole numbers only. Sets the target volume."))
             .toBeTruthy();
     });
