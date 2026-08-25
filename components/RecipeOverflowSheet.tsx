@@ -16,7 +16,6 @@ type Props = {
     onDuplicate: () => void;
     onRefreshName: () => void;
     onRevert: () => void;
-    onHelp: () => void;
     onDelete: () => void;
 };
 
@@ -29,7 +28,7 @@ type Props = {
  */
 export default function RecipeOverflowSheet({
     open, canRefreshName, onOpenChange,
-    onDuplicate, onRefreshName, onRevert, onHelp, onDelete
+    onDuplicate, onRefreshName, onRevert, onDelete
 }: Props) {
     function pick(action: () => void) {
         onOpenChange(false);
@@ -71,7 +70,6 @@ export default function RecipeOverflowSheet({
                     {caption: "Refresh name"}
                 )}
                 {row("Revert", "revert", onRevert)}
-                {row("Help", "help", onHelp)}
                 {/* Set apart, because it is the one row here that cannot be
                     undone and there is no second question after it. */}
                 <YStack marginTop="$2" paddingTop="$2"

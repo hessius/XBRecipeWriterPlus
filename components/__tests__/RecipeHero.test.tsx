@@ -19,7 +19,8 @@ const BASE = {
     pours:    pours(96, 96, 96),
     collapsed: false,
     onBack:    () => {},
-    onMore:    () => {}
+    onMore:    () => {},
+    onHelp:    () => {}
 };
 
 type Node = ReturnType<typeof screen.getByTestId>;
@@ -68,23 +69,38 @@ describe("RecipeHero", () => {
         // Counted by the handler rather than by role. A bare Pressable declares
         // no accessibility role, so a query for buttons stays empty however
         // tappable the hero has quietly become; every touchable does set a
-        // responder on its host view. Two: back and more. The slab itself is
-        // still a picture — every value on it is edited in the deck below.
-        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(2);
+        // responder on its host view. Three: back, help and more. The slab
+        // itself is still a picture — every value on it is edited in the deck
+        // below.
+        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(3);
         expect(screen.getByTestId("recipe-hero").props.accessibilityRole)
             .not.toBe("button");
     });
 
-    it("goes back and opens the overflow", async () => {
+    it("goes back, opens help, and opens the overflow", async () => {
         const onBack = jest.fn();
         const onMore = jest.fn();
-        await renderWithProviders(<RecipeHero {...BASE} onBack={onBack} onMore={onMore}/>);
+        const onHelp = jest.fn();
+        await renderWithProviders(
+            <RecipeHero {...BASE} onBack={onBack} onMore={onMore} onHelp={onHelp}/>
+        );
 
         await fireEvent.press(screen.getByLabelText("Back"));
+        await fireEvent.press(screen.getByLabelText("Help"));
         await fireEvent.press(screen.getByLabelText("More"));
 
         expect(onBack).toHaveBeenCalledTimes(1);
+        expect(onHelp).toHaveBeenCalledTimes(1);
         expect(onMore).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps help in the chrome row, where it can be reached from any deck", async () => {
+        // Not behind the caret with the recipe operations: help is what the
+        // one-line hints point at, and it is wanted from where the reader is
+        // stuck rather than from a menu of things to do to the recipe.
+        await renderWithProviders(<RecipeHero {...BASE}/>);
+
+        expect(screen.getByText("HELP")).toBeTruthy();
     });
 
     it("carries the name in its chrome row once collapsed", async () => {
@@ -110,10 +126,10 @@ describe("RecipeHero", () => {
         expect(found[0].props.style).toEqual(expect.objectContaining({fontSize: 26}));
     });
 
-    it("carries no help control", async () => {
+    it("carries no EXPLAIN toggle", async () => {
         // The hero once carried an EXPLAIN toggle that unfolded every note on
-        // the screen at once. The long form lives in one sheet behind the caret
-        // now, so the slab is back to being the recipe and its two buttons.
+        // the screen at once. The long form is one sheet now, opened from the
+        // HELP button that took the toggle's place.
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
         expect(screen.queryByLabelText("Explain")).toBeNull();

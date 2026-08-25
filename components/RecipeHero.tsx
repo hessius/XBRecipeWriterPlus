@@ -1,4 +1,4 @@
-import React, {useRef} from "react";
+import React from "react";
 import {Pressable, View} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Text, XStack, YStack} from "tamagui";
@@ -40,18 +40,12 @@ type Props = {
     accent: string;
     beverage: "COFFEE" | "TEA";
     pours: Pour[];
-    /**
-     * Reports where the name is drawn, in window coordinates.
-     *
-     * Only for the container transform, which flies a copy of the name into
-     * this position. The hero is the only thing that knows it: it depends on
-     * the safe area inset and on whether there is an ID badge above the name.
-     */
-    onNameRect?: (rect: {x: number; y: number}) => void;
     /** Folds the slab down to its chrome row, which then carries the name. */
     collapsed: boolean;
     onBack: () => void;
     onMore: () => void;
+    /** Opens the help sheet. In the chrome row, because help is not a rare action. */
+    onHelp: () => void;
 };
 
 /**
@@ -74,7 +68,7 @@ type Props = {
  * the same recipe is called.
  */
 export default function RecipeHero({
-    name, named, xid, accent, beverage, pours, collapsed, onBack, onMore, onNameRect
+    name, named, xid, accent, beverage, pours, collapsed, onBack, onMore, onHelp
 }: Props) {
     "use no memo";
 
@@ -82,7 +76,6 @@ export default function RecipeHero({
     // it, so the screen has one surface at the top instead of a black strip
     // above a coloured card.
     const insets = useSafeAreaInsets();
-    const nameRef = useRef<View | null>(null);
 
     // `pours` is the recipe's own array, mutated in place, and the watermark
     // reads each pour through a getter rather than a property — so there is
@@ -124,6 +117,21 @@ export default function RecipeHero({
                     {collapsed ? name : ""}
                 </Text>
 
+                {/* In the chrome row rather than behind the caret. Help is
+                    not a rare action -- it is what the deck's one-line hints
+                    point at -- and a reader who wants it wants it from where
+                    they are stuck, not from a menu of recipe operations. */}
+                <Pressable accessibilityRole="button" accessibilityLabel="Help"
+                           onPress={onHelp} hitSlop={12}>
+                    <YStack borderRadius="$3" paddingHorizontal="$2" height={32}
+                            justifyContent="center">
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={onAccent.label}>
+                            HELP
+                        </DotMatrixText>
+                    </YStack>
+                </Pressable>
+
                 <HeaderButton label="More" icon="overflow" accent={accent} onPress={onMore}/>
             </XStack>
 
@@ -147,22 +155,12 @@ export default function RecipeHero({
                 {/* Bounded to the same scale Doto is, exactly as the home card
                     is, so a long name at a large text size does not swallow the
                     slab. */}
-                <View
-                    testID="hero-name"
-                    // Window coordinates, because the transition that wants
-                    // them is drawn against the window and has no ancestor in
-                    // common with this. Measured on layout rather than read
-                    // from a style: the padding above it is the safe area
-                    // inset, which is not known until the device says.
-                    ref={nameRef}
-                    onLayout={() => nameRef.current?.measureInWindow?.((x, y) => onNameRect?.({x, y}))}>
-                    <Text fontSize={26} fontWeight="700" lineHeight={31} marginTop="$2"
-                          maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                          color={named ? onAccent.text : onAccent.label}
-                          numberOfLines={2} maxWidth="72%">
-                        {name}
-                    </Text>
-                </View>
+                <Text fontSize={26} fontWeight="700" lineHeight={31} marginTop="$2"
+                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                      color={named ? onAccent.text : onAccent.label}
+                      numberOfLines={2} maxWidth="72%">
+                    {name}
+                </Text>
             </Collapsible>
         </YStack>
     );

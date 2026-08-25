@@ -17,7 +17,7 @@ const ACTIONS = {
 describe("RecipeOverflowSheet", () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it("offers the five things that are not write or save", async () => {
+    it("offers the four recipe operations that are not write or save", async () => {
         await renderWithProviders(
             <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
         );
@@ -25,8 +25,11 @@ describe("RecipeOverflowSheet", () => {
         expect(screen.getByLabelText("Duplicate")).toBeTruthy();
         expect(screen.getByLabelText("Refresh name from xBloom")).toBeTruthy();
         expect(screen.getByLabelText("Revert")).toBeTruthy();
-        expect(screen.getByLabelText("Help")).toBeTruthy();
         expect(screen.getByLabelText("Delete")).toBeTruthy();
+
+        // Help is not one of them. The caret holds things done *to* the recipe;
+        // help is reading matter, and sits in the hero's chrome row instead.
+        expect(screen.queryByLabelText("Help")).toBeNull();
     });
 
     it("leaves the name refresh out when there is nothing to refresh from", async () => {
