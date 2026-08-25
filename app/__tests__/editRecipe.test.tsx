@@ -566,4 +566,35 @@ describe("flushing an unblurred field before an action", () => {
         const store = RecipeDatabase.mock.instances.at(-1)!;
         expect(store.updateRecipe.mock.calls[0][1].name).toBe("Committed");
     });
+
+    it("drops an unblurred draft when a revert replaces the recipe", async () => {
+        // The revert swaps the whole `Recipe` out from under the rows. A draft
+        // typed against the old one used to evaporate when its row remounted;
+        // held in a ref, it outlived the recipe and the next save wrote it back
+        // over the restored values. The restore keeps the name, so the saved
+        // name must be the original one, never the keystroke the revert answered.
+        //
+        // Fake timers because the sheet gates its open state on a
+        // `requestAnimationFrame`, and this test opens two of them in turn: the
+        // overflow menu, then the revert sheet reached through it.
+        jest.useFakeTimers();
+        RecipeDatabase.mockClear();
+        const backing = fixture();
+        backing.xid = "CGL12";
+        await renderEditor({name: "Original", offline_backup: backing.getData()});
+
+        await fireEvent.changeText(screen.getByLabelText("Name"), "Stale");
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Revert"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("THE SAVED COPY"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Save"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls.at(-1)![1].name).toBe("Original");
+        jest.useRealTimers();
+    });
 });

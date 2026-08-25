@@ -17,6 +17,7 @@ import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
@@ -641,19 +642,47 @@ export default function EditRecipe() {
         bumpKey();
     }
 
+    /**
+     * Answer a revert by forgetting what was being typed against the old recipe.
+     *
+     * A revert is the one action that swaps the `Recipe` instance out from under
+     * the rows (every source runs through `keepSettingsAndSave`, the hook's only
+     * `setRecipe`). An unblurred keystroke used to evaporate when the row
+     * remounted on its new value, so a revert was safe; holding the draft in a
+     * ref made it outlive the recipe it was typed against, and the next flush
+     * would write it back over the restored values. Dropping the drafts here is
+     * what keeps the revert honest.
+     */
+    function onRecipeReplaced() {
+        drafts.current.clear();
+        bumpKey();
+    }
+
     async function duplicateRecipe() {
         await flushDrafts();
         // The recipe in hand, not its stored row. A recipe read from a card or
         // imported from a link has no row yet, so duplicating one used to
         // create nothing and navigate back as though it had; for a saved one it
         // copied the last save and dropped every unsaved edit.
-        new RecipeDatabase().duplicateRecipe(recipe!);
+        try {
+            new RecipeDatabase().duplicateRecipe(recipe!);
+        } catch {
+            // The store throwing is the only way this fails, and swallowing it
+            // would navigate back as though a copy had been made.
+            notify({tone: "error", message: "Could not duplicate the recipe."});
+            return;
+        }
         navigation.goBack();
     }
 
     async function deleteRecipe() {
         await flushDrafts();
-        new RecipeDatabase().deleteRecipe(recipe!.uuid);
+        try {
+            new RecipeDatabase().deleteRecipe(recipe!.uuid);
+        } catch {
+            notify({tone: "error", message: "Could not delete the recipe."});
+            return;
+        }
         navigation.goBack();
     }
 
@@ -745,19 +774,35 @@ export default function EditRecipe() {
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        onWrite={async () => { await flushDrafts(); await writeCard(recipe); }}
-                       onSave={async () => { await flushDrafts(); await saveRecipe(); }}
+                       onSave={async () => {
+                           await flushDrafts();
+                           // `saveRecipe` navigates away on success, so a store
+                           // failure has to be caught here rather than left to
+                           // reject unhandled behind a `() => void` prop.
+                           try {
+                               await saveRecipe();
+                           } catch {
+                               notify({tone: "error", message: "Could not save the recipe."});
+                           }
+                       }}
                        onHeight={setActionBarHeight}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  onOpenChange={setOverflowOpen}
                                  showHints={showHint} onShowHintsChange={setShowHint}
                                  onDuplicate={duplicateRecipe}
-                                 onRefreshName={handleReloadTitlePress}
+                                 onRefreshName={async () => {
+                                     // Refresh fetches against the recipe ID, so
+                                     // a just-typed ID has to be committed first
+                                     // or it fetches the previous one.
+                                     await flushDrafts();
+                                     await handleReloadTitlePress();
+                                 }}
                                  onRevert={() => setRevertOpen(true)}
                                  onDelete={deleteRecipe}/>
 
             <RevertSheet open={revertOpen} sources={revertSources}
-                         onOpenChange={setRevertOpen} onReverted={bumpKey}/>
+                         onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
             </YStack>
