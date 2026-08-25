@@ -61,8 +61,11 @@ export default function RecipeOverflowSheet({
         </Pressable>
     );
 
+    // Safe to warm: every row here is a function of its props, so the warm copy
+    // does nothing but measure itself.
     return (
-        <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE" showTitle={false}>
+        <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE"
+                   showTitle={false} prewarm>
             <YStack gap="$2" paddingBottom="$4">
                 {/* A switch, so it does not close the sheet the way the action
                     rows do: it is the one row here that has a state to show,

@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {Adapt, Dialog, Sheet, XStack, YStack} from "tamagui";
-import {Pressable} from "react-native";
+import {InteractionManager, Pressable, View} from "react-native";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
@@ -32,6 +32,15 @@ type Props = {
      * exactly like a control that did nothing.
      */
     heightPercent?: number;
+    /**
+     * Build the contents before they are asked for.
+     *
+     * Off by default, and deliberately opt-in: the warm copy is a second render
+     * of `children`, so it is only safe for a body that is a picture of its
+     * props. A child that fetches, subscribes or writes on mount would do it
+     * twice, and do it while nobody is looking.
+     */
+    prewarm?: boolean;
     children: React.ReactNode;
 };
 
@@ -46,7 +55,8 @@ export const EXIT_GRACE = DURATION.deliberate;
 
 /** The house sheet: the ImportRecipeComponent pattern, with a dot-matrix title. */
 export default function XbrwSheet({
-    open, onOpenChange, title, showTitle = true, heightPercent = 70, children
+    open, onOpenChange, title, showTitle = true, heightPercent = 70,
+    prewarm = false, children
 }: Props) {
     // Why the sheet is not simply mounted on `open`.
     //
@@ -78,7 +88,38 @@ export default function XbrwSheet({
         return () => clearTimeout(timer);
     }, [open]);
 
-    if (!rendered) return null;
+    // Once the screen has finished whatever it was doing. The whole point is to
+    // move this cost somewhere nobody is waiting, and running it during the
+    // navigation that brought the screen here would simply move the hitch.
+    const [warm, setWarm] = useState(false);
+    useEffect(() => {
+        if (!prewarm || warm) return;
+        const task = InteractionManager.runAfterInteractions(() => setWarm(true));
+        return () => task.cancel();
+    }, [prewarm, warm]);
+
+    if (!rendered) {
+        // Laid out at the real width so the text is measured the way it will be
+        // measured for real -- that measurement is what is being bought -- but
+        // clipped to no height, so it cannot affect the screen it sits in. It
+        // is hidden from the screen reader and cannot be touched, which is the
+        // same guarantee the unmounted sheet gave.
+        return warm ? (
+            <View testID="sheet-prewarm" pointerEvents="none"
+                  accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+                  style={{
+                      position: "absolute",
+                      left:     0,
+                      right:    0,
+                      top:      0,
+                      height:   0,
+                      opacity:  0,
+                      overflow: "hidden"
+                  }}>
+                {children}
+            </View>
+        ) : null;
+    }
 
     // Doto here, and Inter for whatever the caller puts inside. This is the
     // sheet's own chrome — the same register as the deck switch and the toast —

@@ -36,7 +36,7 @@ export const HELP_HEIGHT = 75;
 export default function HelpSheet({open, onOpenChange}: Props) {
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="Help"
-                   heightPercent={HELP_HEIGHT}>
+                   heightPercent={HELP_HEIGHT} prewarm>
             <ScrollView>
                 <YStack gap="$4" paddingBottom="$4">
                     {DETAILED_TOPICS.map((topic) => {
