@@ -3,3 +3,18 @@
 global.console.log = jest.fn();
 global.console.info = jest.fn();
 global.console.debug = jest.fn();
+
+/**
+ * `expo-clipboard` is a native module, so Jest sees nothing without this.
+ *
+ * `getStringAsync` returns `''` by default, which is the same answer the real
+ * module gives for an empty clipboard *and* for a paste the user denied — iOS
+ * offers no way to tell those apart, so the app treats both as "nothing
+ * happened". Tests that want a value override it per case.
+ */
+jest.mock("expo-clipboard", () => ({
+    hasStringAsync:         jest.fn(async () => false),
+    getStringAsync:         jest.fn(async () => ""),
+    isPasteButtonAvailable: false,
+    ClipboardPasteButton:   () => null
+}));

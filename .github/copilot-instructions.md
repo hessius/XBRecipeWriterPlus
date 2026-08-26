@@ -78,7 +78,7 @@ Other domain invariants:
   would not resolve inside a sub-theme such as `light_Button` — hence the plain module.
   Add a semantically named entry (`danger`, `surface`, `muted`) rather than a literal one (`red`).
 - **Tamagui** is the component/styling system (`tamagui.config.ts`, providers in `app/_layout.tsx`). Use `XStack`/`YStack`/`Button`/`Dialog` and `$`-prefixed tokens rather than raw RN `StyleSheet`. `@expo/vector-icons` is used for icons (v15 uses kebab-case AntDesign names, e.g. `plus-circle`, not `pluscircle`).
-- Dialogs follow the `Dialog` + `Adapt platform="touch"` + `Sheet` pattern (see `ImportRecipeComponent.tsx`).
+- Dialogs follow the `Dialog` + `Adapt platform="touch"` + `Sheet` pattern, wrapped once in `XbrwSheet.tsx` so every sheet inherits it rather than re-deriving it (see `ImportSheet.tsx` for a consumer).
 - **Mutate the `Recipe` object in place and bump a `key` counter** (`setKey(prev => prev + 1)`) to re-render, instead of cloning into state. This was a deliberate performance change — don't "fix" it by making `Recipe` immutable or re-serializing on every keystroke. Hot spots use refs + `useImperativeHandle` (`TotalVolumeComponent.forceUpdate`) to repaint a single value.
 - `ValidatedInput` owns numeric entry: min/max/step, slider, long-press repeat, and it reports validity upward via `setErrorFunction` — the save button is gated on that.
 - Screen headers are configured with `navigation.setOptions` inside `useEffect`, not via static route options.
@@ -88,7 +88,7 @@ Other domain invariants:
   limitation and is accepted in `useRecipeEditor` and `RestoreDialog`.
 - `react-hooks/exhaustive-deps` is set to **warn**, not error, because the compiler owns
   memoisation. The remaining warnings are deliberate. The other hook rules are errors.
-- Import happens through `expo-share-intent`: a shared xBloom URL's `id` query param is pulled out in `app/index.tsx` and handed to `ImportRecipeComponent`.
+- Import has three doors — the header glyph, `ImportTile.tsx`, and an `expo-share-intent` share — that all open the one `ImportSheet.tsx`; `app/index.tsx` wires them together. `library/importInput.ts` (`parseImportInput`) is the single place that knows what an xBloom link or pod code looks like, so the field and the share intent cannot drift apart; `hooks/useRecipeImport.ts` owns the lookup state machine (debounce, paste-vs-type, de-duplication, atomic-vs-deliberate navigation) and `ImportResult.tsx` draws a found recipe.
 
 ## Platform notes
 

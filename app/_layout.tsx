@@ -29,6 +29,16 @@ const AppTheme = {
     }
 };
 
+// Hoisted to module scope so it is one stable identity, not a fresh object each
+// render. `useShareIntent` re-runs its `refreshShareIntent` effect on
+// `[url, options.disabled]`, so an inline literal here re-invoked the native
+// refresh on every render -- one of the paths by which the same share intent was
+// re-delivered and imported twice.
+const shareIntentOptions = {
+    debug:             false,
+    resetOnBackground: true
+};
+
 export default function RootLayout() {
     const [splashDone, setSplashDone] = useState(false);
     const [loaded] = useFonts({
@@ -48,11 +58,7 @@ export default function RootLayout() {
     }
 
     return (
-        <ShareIntentProvider
-            options={{
-                debug:             false,
-                resetOnBackground: true
-            }}>
+        <ShareIntentProvider options={shareIntentOptions}>
             <GestureHandlerRootView style={{flex: 1}}>
                 <TamaguiProvider config={config} defaultTheme="dark">
                     <Theme name="dark">

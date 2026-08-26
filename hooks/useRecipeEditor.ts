@@ -87,7 +87,7 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
 
     const fetchRecipeTitle = async (r: Recipe) => {
         try {
-            const xbRecipe = new XBloomRecipe(r.xid);
+            const xbRecipe = new XBloomRecipe({kind: "xid", xid: r.xid});
             await xbRecipe.fetchRecipeDetail();
 
             let recipeTitle = xbRecipe.getRecipeTitle();
@@ -222,7 +222,7 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
                 return;
             }
             case "xid": {
-                const xbRecipe = new XBloomRecipe(recipe.xid);
+                const xbRecipe = new XBloomRecipe({kind: "xid", xid: recipe.xid});
                 await xbRecipe.fetchRecipeDetail();
                 const restoredRecipe = xbRecipe.getRecipe();
                 if (restoredRecipe) {
@@ -236,7 +236,7 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
                 return;
             }
             case "share": {
-                const xbRecipe = new XBloomRecipe(recipe.shareId);
+                const xbRecipe = new XBloomRecipe({kind: "share", id: recipe.shareId});
                 await xbRecipe.fetchRecipeDetail();
                 const restoredRecipe = xbRecipe.getRecipe();
                 if (restoredRecipe) {

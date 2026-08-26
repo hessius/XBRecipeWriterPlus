@@ -1,5 +1,6 @@
 import Pour, {POUR_PATTERN} from "./Pour";
 import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import type {ImportSource} from "./importInput";
 
 export class XBloomRecipe {
     private xbRecipeJSON: any | null = null
@@ -9,13 +10,12 @@ export class XBloomRecipe {
     private id = "";
     private byXid = false;
 
-    constructor(id: string) {
-        this.id = id;
-        // Use different endpoint for XID-based requests
-        if (id.length > 0 && id.length <= 7) {
-            console.log("Got XID:", id);
-            this.byXid = true;
-        }
+    constructor(source: ImportSource) {
+        // Told, not guessed. The endpoint used to be chosen by `id.length <= 7`,
+        // which sent a short share id to the pod endpoint; `parseImportInput`
+        // has already distinguished the two by the time we get here.
+        this.byXid = source.kind === "xid";
+        this.id = source.kind === "xid" ? source.xid : source.id;
     }
 
     private containsChineseCustomChars(inputString: string) {
@@ -161,7 +161,14 @@ export class XBloomRecipe {
         return this.imageURL;
     }
 
-    public async fetchRecipeDetail() {
+    /**
+     * Fetch the recipe.
+     *
+     * The signal lets a superseded lookup actually stop rather than merely have
+     * its result ignored: the import field can be edited while a request is in
+     * flight, and the hook's generation counter is the braces to this belt.
+     */
+    public async fetchRecipeDetail(signal?: AbortSignal) {
         let apiEndpoint = this.byXid ?
             "https://client-api.xbloom.com/tRecipeDetailOfPods.thtml" :
             "https://client-api.xbloom.com/RecipeDetail.html";
@@ -193,7 +200,8 @@ export class XBloomRecipe {
                 Referer:           "https://share-h5.xbloom.com/"
             },
             body:    JSON.stringify(requestBody),
-            method:  "POST"
+            method:  "POST",
+            signal
         });
 
         if (!response.ok) {

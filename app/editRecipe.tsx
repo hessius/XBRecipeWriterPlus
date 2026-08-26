@@ -1,6 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, ScrollView, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, TextInput, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
@@ -96,6 +96,9 @@ function TextFieldRow({
     validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
+    // The whole row focuses this, so a short or empty value no longer leaves a
+    // wide strip of the row looking tappable while only the input responds.
+    const inputRef = useRef<React.ElementRef<typeof Input>>(null);
 
     // Reports validity on mount, and this row is keyed on the value it mirrors
     // by its call sites — so an external change (a revert to a good ID, a
@@ -116,17 +119,28 @@ function TextFieldRow({
     }
 
     return (
-        <FieldRow topic={topic} showHint={showHint}
-                  error={invalid ? invalidReason : undefined}>
-            {/* Not keyed here: the key belongs on the row, which is what owns
-                the `invalid` state this input feeds. */}
-            <Input unstyled accessibilityLabel={label}
-                   defaultValue={initialValue} maxLength={maxLength}
-                   autoCapitalize={autoCapitalize} onChangeText={onChangeText}
-                   onEndEditing={(event) => onCommit(event.nativeEvent.text)}
-                   textAlign="right" minWidth={110} fontSize={16}
-                   color={invalid ? palette.danger : palette.text}/>
-        </FieldRow>
+        // The whole row is the touch target, not just the right-aligned input.
+        // `accessible={false}` keeps this wrapper out of the accessibility tree
+        // so the `Input` below stays the single announced element under its own
+        // `label` -- the same one-announced-target rule `ImportTile` follows,
+        // where the wrapper carries the label and the inner control is hidden.
+        // This press only lives in `TextFieldRow`, not in `FieldRow`: a Stepper
+        // or segmented row shares `FieldRow`, and a row-wide press there would
+        // swallow the taps meant for the stepper's - and + controls.
+        <Pressable accessible={false} testID={`field-row-${label}`}
+                   onPress={() => (inputRef.current as TextInput | null)?.focus()}>
+            <FieldRow topic={topic} showHint={showHint}
+                      error={invalid ? invalidReason : undefined}>
+                {/* Not keyed here: the key belongs on the row, which is what owns
+                    the `invalid` state this input feeds. */}
+                <Input ref={inputRef} unstyled accessibilityLabel={label}
+                       defaultValue={initialValue} maxLength={maxLength}
+                       autoCapitalize={autoCapitalize} onChangeText={onChangeText}
+                       onEndEditing={(event) => onCommit(event.nativeEvent.text)}
+                       textAlign="right" minWidth={110} fontSize={16}
+                       color={invalid ? palette.danger : palette.text}/>
+            </FieldRow>
+        </Pressable>
     );
 }
 
@@ -241,8 +255,15 @@ function BrewDeck({
                 nothing else. It sits on the row rather than the input because
                 the row owns the validity state. The key bump used to live on
                 the scroll container, which reset the scroll offset every time
-                a stepper was nudged. */}
-            <TextFieldRow key={recipe.xid} topic="xid" label="Recipe ID" initialValue={recipe.xid}
+                a stepper was nudged.
+
+                The field name prefixes the key so two rows can never collide: a
+                share-link import arrives with `xid` and `name` both empty
+                strings, and bare `key={recipe.xid}` / `key={recipe.name}` would
+                then be the same key on sibling rows — React logs "two children
+                with the same key". The prefix keeps each row's key in its own
+                namespace. */}
+            <TextFieldRow key={`xid-${recipe.xid}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
@@ -250,7 +271,7 @@ function BrewDeck({
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
-            <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
+            <TextFieldRow key={`name-${recipe.name}`} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                       showHint={showHint}
                           onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}

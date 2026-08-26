@@ -53,7 +53,7 @@ type Props = {
  */
 export const EXIT_GRACE = DURATION.deliberate;
 
-/** The house sheet: the ImportRecipeComponent pattern, with a dot-matrix title. */
+/** The house sheet: a bottom sheet with a dot-matrix title and CLOSE affordance. */
 export default function XbrwSheet({
     open, onOpenChange, title, showTitle = true, heightPercent = 70,
     prewarm = false, children
