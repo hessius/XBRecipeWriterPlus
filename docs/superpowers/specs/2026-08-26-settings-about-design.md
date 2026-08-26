@@ -24,12 +24,15 @@ Sub-project 3 shipped `app/settings.tsx` so the home screen's gear would not
 open onto nothing. It has one section and two rows. This sub-project restructures
 it rather than creating it.
 
-### One accumulated toggle was never wired up
+### The accumulated toggle already has a home, and it is not here
 
-Sub-project 4 added `showHints` to `library/Settings.ts` and its own spec records
-that it "adds one row" to the settings screen. The row was never added, so the
-setting exists, has a default of `false`, and cannot be changed by any means the
-app offers. Turning it on is part of this sub-project's work, not a nicety.
+An earlier draft of this spec recorded `showHints` as orphaned. It is not.
+Sub-project 4 put it in the editor's overflow sheet, beside the deck it
+annotates, and `app/__tests__/settings.test.tsx` asserts that the settings screen
+does **not** offer it. That is the better placement and it stands.
+
+So this sub-project adds no hints row. The settings screen grows from two rows to
+seven, not eight.
 
 ### This sub-project carries new capability
 
@@ -71,7 +74,7 @@ bumped and the app rebuilt.
 Five areas, in this order. Each is independently reviewable and independently
 shippable.
 
-1. Settings restructure (including the orphaned `showHints` row)
+1. Settings restructure
 2. Units
 3. About
 4. Backup and restore
@@ -88,7 +91,6 @@ A sectioned list. Sections, in order:
 |---|---|
 | *(identity)* | About XBRW++ → pushes `app/about.tsx` |
 | Recipe list | Show the COFFEE marker; Dot matrix pour profile |
-| Editor | Show field hints |
 | Units | Temperature (°C / °F) |
 | Library | Back up my recipes; Restore from a backup; Delete all recipes |
 
@@ -102,7 +104,7 @@ look.
 
 ### The screen becomes rows, not JSX
 
-`app/settings.tsx` goes from two rows to eight. Four components at module
+`app/settings.tsx` goes from two rows to seven. Four components at module
 scope, all in `components/`, so the screen becomes a declaration:
 
 | Component | Responsibility |
@@ -296,7 +298,7 @@ that means nothing went wrong.
 | `units.ts` | A conversion table; both boundaries (39 °C, 99 °C); round-trip C→F→C identity; the step-always-moves property; clamping |
 | `backup.ts` | Round-trip; truncated JSON; wrong `format`; a future `version`; missing fields; a recipe blob that will not parse; an empty array |
 | `mergeRecipes` | All new, all duplicate, a mixture, and an empty library |
-| Settings screen | Every row renders, reads its setting, and writes it. The `showHints` row exists |
+| Settings screen | Every row renders, reads its setting, and writes it. The hints toggle stays out, in the editor where sub-project 4 put it |
 | About | Every required content block is present. The disclaimer is not behind an interaction |
 | Motion | The ticker starts only after its delay, and never under Reduce Motion |
 
