@@ -9,6 +9,8 @@ import {XBloomRecipe} from "@/library/XBloomRecipe";
 import type {StageField} from "@/components/StageTile";
 import {REVERT_SOURCES} from "@/components/RevertSheet";
 import type {RevertSource, RevertSourceId} from "@/components/RevertSheet";
+import {useSetting} from "@/hooks/useSetting";
+import type {TemperatureUnit} from "@/library/units";
 
 /** Labels shown next to each editable field. Also the key the edit callback dispatches on. */
 export const RECIPE_LABELS = {
@@ -75,7 +77,10 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
      * `cardWriteProblems` includes the balance check, so this is the only
      * question the gate has to ask.
      */
-    const writeProblems = recipe ? cardWriteProblems(recipe) : [];
+    const [temperatureUnit] = useSetting("temperatureUnit");
+    const writeProblems = recipe
+        ? cardWriteProblems(recipe, temperatureUnit as TemperatureUnit)
+        : [];
 
     /** A recipe the machine would reject cannot be written; it can still be kept. */
     const canWrite = writeProblems.length === 0 && !inputError && recipe !== null;

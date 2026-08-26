@@ -107,7 +107,7 @@ const ENTRIES = {
     },
     temperature: {
         title: "Temperature",
-        hint:  "39 to 99 °C."
+        hint:  "39 to 99 °C, or 102 to 210 °F."
     },
     flowRate: {
         title: "Flow rate",

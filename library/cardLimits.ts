@@ -1,5 +1,6 @@
 import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
+import {displayRange, toDisplay, type TemperatureUnit} from "./units";
 
 /**
  * Whether a recipe can be written to a card, and why not.
@@ -60,7 +61,10 @@ function checkInteger(value: number, rangeMessage: string, problems: string[]): 
     }
 }
 
-export function cardWriteProblems(recipe: Recipe): string[] {
+export function cardWriteProblems(
+    recipe: Recipe,
+    temperatureUnit: TemperatureUnit = "C"
+): string[] {
     const problems: string[] = [];
     const tea = recipe.isTea();
 
@@ -113,9 +117,14 @@ export function cardWriteProblems(recipe: Recipe): string[] {
             checkInteger(pour.volume, volMsg, problems);
         }
 
+        // Said in the unit the user is reading the editor in. A message that
+        // reports a Fahrenheit field as out of a Celsius range gives them a
+        // number they cannot act on.
+        const shownTemp = toDisplay(pour.temperature, temperatureUnit);
+        const tempRange = displayRange(temperatureUnit);
         const tempMsg =
-            `Stage ${stage} brews at ${pour.temperature} C. ` +
-            `The range is ${TEMPERATURE.min}-${TEMPERATURE.max} C.`;
+            `Stage ${stage} brews at ${shownTemp} ${temperatureUnit}. ` +
+            `The range is ${tempRange.min}-${tempRange.max} ${temperatureUnit}.`;
         if (outside(pour.temperature, TEMPERATURE)) {
             problems.push(tempMsg);
         } else {

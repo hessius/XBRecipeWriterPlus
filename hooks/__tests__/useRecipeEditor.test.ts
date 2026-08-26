@@ -6,6 +6,14 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
 
+// `useSetting` reaches for the shared SQLite-backed settings store, which
+// cannot open under jest — see the same mock in app/__tests__/editRecipe.test.tsx.
+// This hook only reads `temperatureUnit`, and every test here is written
+// against Celsius messages, so the mock is a constant rather than a store.
+jest.mock("@/hooks/useSetting", () => ({
+    useSetting: () => ["C", jest.fn()]
+}));
+
 /**
  * 15 g at 1:16 over two equal pours: 240 ml, 120 each, in balance.
  *

@@ -37,6 +37,13 @@ describe("the editor's help copy", () => {
         expect(RECIPE_HELP.grinder.detail).toContain("with the grinder enabled");
     });
 
+    it("gives the temperature range in both units", () => {
+        expect(RECIPE_HELP.temperature.hint).toContain("39");
+        expect(RECIPE_HELP.temperature.hint).toContain("99");
+        expect(RECIPE_HELP.temperature.hint).toContain("102");
+        expect(RECIPE_HELP.temperature.hint).toContain("210");
+    });
+
     it("offers changing the dose or ratio as an alternative to rescaling stage volumes", () => {
         expect(RECIPE_HELP.volume.detail).toMatch(/dose or (the )?ratio/);
     });

@@ -71,6 +71,24 @@ describe("a recipe outside the machine's bounds", () => {
 
         expect(cardWriteProblems(recipe).length).toBeGreaterThanOrEqual(2);
     });
+
+    it("reports an out-of-range temperature in Celsius by default", () => {
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 120;
+        expect(cardWriteProblems(recipe)).toContain(
+            "Stage 1 brews at 120 C. The range is 39-99 C."
+        );
+    });
+
+    it("reports an out-of-range temperature in Fahrenheit when that is what is shown", () => {
+        // A user reading the editor in Fahrenheit and told the range is 39-99
+        // has been given a number they cannot act on.
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 120;
+        expect(cardWriteProblems(recipe, "F")).toContain(
+            "Stage 1 brews at 248 F. The range is 102-210 F."
+        );
+    });
 });
 
 describe("a tea recipe", () => {
