@@ -5,6 +5,7 @@
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import ImportResult from "@/components/ImportResult";
+import {PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -36,7 +37,29 @@ it("shows enough for a wrong result to be recognised", async () => {
     expect(await screen.findByText("18")).toBeTruthy();     // dose
     expect(await screen.findByText("1:16")).toBeTruthy();   // ratio
     expect(await screen.findByText("2")).toBeTruthy();      // stages
+
+    // The graph appears only once the panel has measured a width for it.
+    const frame = await screen.findByTestId("import-result-profile-frame");
+    await fireEvent(frame, "layout", {nativeEvent: {layout: {width: 320}}});
     expect(await screen.findByTestId("import-result-profile")).toBeTruthy();
+});
+
+it("sizes the graph to the width it measures, not a constant", async () => {
+    // The old panel drew the graph at a hard-coded 240 and left dead space on a
+    // wider sheet. Now it fills the measured width: the rendered SVG element is
+    // exactly the panel's width, with the stroke bleed folded back in so it does
+    // not overrun the container by a stroke.
+    await renderWithProviders(<ImportResult preview={preview()} onOpen={() => {}}/>);
+
+    // Nothing is drawn before the first measurement, so the panel cannot reflow.
+    expect(screen.queryByTestId("import-result-profile")).toBeNull();
+
+    const frame = await screen.findByTestId("import-result-profile-frame");
+    await fireEvent(frame, "layout", {nativeEvent: {layout: {width: 320}}});
+
+    const profile = await screen.findByTestId("import-result-profile");
+    expect(profile.props.width).toBe(320);
+    expect(profile.props.width).not.toBe(240 + PROFILE_STROKE_WIDTH);
 });
 
 it("shows the pod mark when there is a photo", async () => {

@@ -3,13 +3,12 @@ import {Image} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
-import PourProfile from "@/components/PourProfile";
+import PourProfile, {PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {palette} from "@/constants/colors";
 import type {ImportPreview} from "@/hooks/useRecipeImport";
 
 /** The pod mark's diameter. Two lines of text tall, so nothing below it moves. */
 const POD_SIZE = 44;
-const PROFILE_WIDTH = 240;
 const PROFILE_HEIGHT = 44;
 
 type Props = {
@@ -20,9 +19,10 @@ type Props = {
 /**
  * What the lookup found, on the typed path.
  *
- * A picture of its props: no fetching, no timers, no subscription -- which is
- * what makes the sheet's `prewarm` safe, since a pre-warm renders this a second
- * time before it is seen.
+ * Its only state is the width it measures for the graph: no fetching, no
+ * timers, no subscription -- which is what keeps the sheet's `prewarm` safe,
+ * since a pre-warm renders this a second time, hidden, before it is seen. An
+ * `onLayout` still fires there, so the graph arrives already sized.
  *
  * It says more than a name because it is the entire defence against a typo. A
  * typed value resolves without navigating precisely so that this panel can be
@@ -32,6 +32,13 @@ export default function ImportResult({preview, onOpen}: Props) {
     const {recipe, isExisting, name, subtitle, imageURL} = preview;
     const [podLoaded, setPodLoaded] = useState(false);
     const [podFailed, setPodFailed] = useState(false);
+    // The graph is an SVG with a computed viewBox, so it needs a real number,
+    // not a percentage. We measure the panel and let the graph fill it: at a
+    // fixed 240 it huddled against the left of a phone-wide sheet with dead
+    // space to the right. Nothing is drawn until the first measurement lands,
+    // inside a box already reserving the graph's height, so the panel does not
+    // reflow when it appears -- only the graph fades in at its final size.
+    const [profileWidth, setProfileWidth] = useState(0);
 
     // Composed as one sentence, the way `RecipeCard` announces a recipe:
     // otherwise VoiceOver reads six loose elements -- "18", "DOSE", "1:16",
@@ -77,10 +84,21 @@ export default function ImportResult({preview, onOpen}: Props) {
                 )}
             </XStack>
 
-            <PourProfile testID="import-result-profile"
-                         pours={recipe.pours}
-                         width={PROFILE_WIDTH} height={PROFILE_HEIGHT}
-                         stroke={palette.dim} fill={palette.line}/>
+            <YStack testID="import-result-profile-frame" height={PROFILE_HEIGHT}
+                    onLayout={(event) => setProfileWidth(event.nativeEvent.layout.width)}>
+                {/* The Svg draws itself half a stroke wider than its geometry on
+                    every side, so a width equal to the panel would overrun it by
+                    one stroke. Handing the geometry `measured - strokeWidth`
+                    lands the rendered element back on the panel's own width,
+                    the way the cards absorb the same bleed by offsetting it. */}
+                {profileWidth > 0 && (
+                    <PourProfile testID="import-result-profile"
+                                 pours={recipe.pours}
+                                 width={profileWidth - PROFILE_STROKE_WIDTH}
+                                 height={PROFILE_HEIGHT}
+                                 stroke={palette.dim} fill={palette.line}/>
+                )}
+            </YStack>
 
             <XStack accessible accessibilityLabel={figuresLabel} gap="$4">
                 <Figure label="DOSE" value={String(recipe.dosage)}/>
