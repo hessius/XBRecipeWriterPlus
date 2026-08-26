@@ -277,7 +277,17 @@ This mirrors the card read path exactly:
 - **Atomic**: the existing recipe opens, and `notify({tone: "info", message:
   "Already in your library"})` fires, as a card read already does.
 - **Deliberate**: the panel says so where it would have said `FOUND`, and its
-  button reads `OPEN` rather than `IMPORT`.
+  button reads `OPEN` rather than `IMPORT`. When the stored copy carries a name
+  the user gave it, the line names it — `Already in your library as "Custom
+  Name"` — because that name is how they recognise which of their recipes this
+  is, and it is the most useful thing the panel can add. Only a *custom* name
+  qualifies: it reads `recipe.name` directly, not `displayName()`/`hasName()`,
+  which fold in the XID and the xBloom title (every import carries an XID, and
+  the title is already the panel's heading, so repeating it says nothing). With
+  no custom name the bare line stands — no empty quotes. The name is drawn in
+  straight quotes, matching the app's ASCII copy, but the spoken
+  `accessibilityLabel` drops them so VoiceOver does not announce "quote … quote",
+  and it is clipped to one line so a long name cannot blow up the layout.
 
 One vocabulary for both ways a recipe can turn out to be already known.
 

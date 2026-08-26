@@ -10,7 +10,7 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
-function preview(overrides: Partial<{name: string; subtitle: string; imageURL: string; isExisting: boolean}> = {}) {
+function preview(overrides: Partial<{recipe: Recipe; name: string; subtitle: string; imageURL: string; isExisting: boolean}> = {}) {
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
     recipe.dosage = 18;
@@ -114,6 +114,39 @@ it("says OPEN, and says why, for one already in the library", async () => {
 
     expect(await screen.findByText("OPEN")).toBeTruthy();
     expect(await screen.findByText("Already in your library")).toBeTruthy();
+});
+
+it("names the stored recipe when the user gave it a custom name", async () => {
+    // The custom name is how the user recognises which of theirs this is, so it
+    // is the most useful thing on the panel. Straight quotes are drawn (matching
+    // the app's ASCII copy) but the spoken label drops them.
+    const recipe = preview().recipe;
+    recipe.name = "My Morning Cup";
+    await renderWithProviders(
+        <ImportResult preview={preview({isExisting: true, recipe})} onOpen={() => {}}/>
+    );
+
+    expect(await screen.findByText('Already in your library as "My Morning Cup"')).toBeTruthy();
+    // Read aloud without the awkward "quote … quote".
+    expect(await screen.findByLabelText("Already in your library as My Morning Cup")).toBeTruthy();
+    // The bare form is gone -- the name replaced it, it was not appended.
+    expect(screen.queryByText("Already in your library")).toBeNull();
+});
+
+it("does not print empty quotes, or the xBloom title, when there is no custom name", async () => {
+    // `recipe.name` is empty for a never-renamed import, even though it carries
+    // an XID and an xBloom title. The bare line shows; no quotes, and the title
+    // (already the heading) is not repeated.
+    const recipe = preview().recipe;
+    recipe.name = "";
+    recipe.xbloomName = "Ethiopia Guji";
+    recipe.xid = "ETH120";
+    await renderWithProviders(
+        <ImportResult preview={preview({isExisting: true, recipe})} onOpen={() => {}}/>
+    );
+
+    expect(await screen.findByText("Already in your library")).toBeTruthy();
+    expect(screen.queryByText(/Already in your library as/)).toBeNull();
 });
 
 it("hands the press upward", async () => {

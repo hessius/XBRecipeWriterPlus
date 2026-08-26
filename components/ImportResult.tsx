@@ -47,6 +47,16 @@ export default function ImportResult({preview, onOpen}: Props) {
     const figuresLabel =
         `${recipe.dosage} grams, ratio 1 to ${recipe.ratio}, ${recipe.pours.length} stages`;
 
+    // The name the user gave a recipe they already hold -- the most useful thing
+    // on this panel, because it is how they recognise which of theirs this is.
+    // Only the name *they* chose: `recipe.name` is exactly that field. Neither
+    // `hasName()` nor `displayName()` is right here -- both fold in `xbloomName`
+    // and `xid`, so for a never-renamed import (which always carries an XID)
+    // they would report a name, and `displayName()` would print the xBloom
+    // title, which is already the heading above. Repeating the heading says
+    // nothing, so the row is drawn only when a custom name genuinely exists.
+    const customName = recipe.name.trim();
+
     return (
         <YStack gap="$3" paddingTop="$2">
             <XStack alignItems="flex-start" gap="$3">
@@ -107,9 +117,25 @@ export default function ImportResult({preview, onOpen}: Props) {
             </XStack>
 
             {isExisting && (
-                <Text color={palette.info} fontSize={13}>
-                    Already in your library
-                </Text>
+                customName.length > 0 ? (
+                    <Text color={palette.info} fontSize={13} numberOfLines={1}
+                          // Straight quotes, to match the app's ASCII copy
+                          // (`Couldn't`, `can't`) -- it uses no typographic
+                          // marks. But VoiceOver reads them aloud as
+                          // "quote … quote", so the spoken form drops them, the
+                          // way `figuresLabel` above and `RecipeCard` compose a
+                          // label that reads differently from what is drawn. The
+                          // label keeps the whole name; `numberOfLines` only
+                          // clips the drawn line, so a long custom name cannot
+                          // blow up the layout the way a long title once did.
+                          accessibilityLabel={`Already in your library as ${customName}`}>
+                        {`Already in your library as "${customName}"`}
+                    </Text>
+                ) : (
+                    <Text color={palette.info} fontSize={13}>
+                        Already in your library
+                    </Text>
+                )
             )}
 
             <XStack
