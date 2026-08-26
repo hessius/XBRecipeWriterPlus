@@ -30,8 +30,16 @@ jest.mock("@/hooks/useSetting", () => ({
         // this hook and the deck reads back through it, so a setter that threw
         // the value away would leave that wiring untested.
         const [, bump] = mockReact.useState(0);
+        // Falls back to the real `DEFAULTS`, the way `Settings.get` does, rather
+        // than handing back `undefined` for an unset key. `mockSettings = {}`
+        // is meant to model "nothing written yet", and the real store never
+        // returns `undefined` for that — so a bare lookup here would let a
+        // caller that dropped a value on the floor and read `undefined` back
+        // pass by accident, wearing the default it was never actually given.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const {DEFAULTS: mockDefaults} = require("@/library/Settings");
         return [
-            mockSettings[key],
+            mockSettings[key] ?? mockDefaults[key],
             (value: unknown) => {
                 mockSettings = {...mockSettings, [key]: value};
                 bump((n: number) => n + 1);
@@ -570,7 +578,14 @@ describe("the stages deck", () => {
         await renderEditor();
         await fireEvent.press(screen.getByLabelText("Stages, 3"));
 
+        // The fixture's stages are all 39 C, which the collapsed header shows
+        // as a bare number beside the suffix. 39 C is 102 F: asserting only the
+        // suffix would pass for an implementation that swapped the label and
+        // left the number in Celsius, so this checks both sides of the
+        // conversion actually reached the tile.
         expect(screen.getAllByText("°F").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("102").length).toBeGreaterThan(0);
+        expect(screen.queryByText("39")).toBeNull();
     });
 });
 
