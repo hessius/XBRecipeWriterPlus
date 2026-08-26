@@ -23,6 +23,16 @@ describe("Settings", () => {
         expect(settings.get("showCoffeeMarker")).toBe(false);
     });
 
+    it("shows temperatures in Celsius unless told otherwise", () => {
+        expect(new Settings(fakeStorage()).get("temperatureUnit")).toBe("C");
+    });
+
+    it("remembers a switch to Fahrenheit", () => {
+        const storage = fakeStorage();
+        new Settings(storage).set("temperatureUnit", "F");
+        expect(new Settings(storage).get("temperatureUnit")).toBe("F");
+    });
+
     it("round-trips false rather than treating it as unset", () => {
         // The bug this guards: `stored ?? default` is correct, `stored ||
         // default` is not, and for a boolean setting whose default is true the
