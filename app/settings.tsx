@@ -1,16 +1,23 @@
 import React from "react";
 import {ScrollView, YStack} from "tamagui";
 
+import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
 import {type Settings} from "@/library/Settings";
+import type {TemperatureUnit} from "@/library/units";
 
 type Props = {
     /** Injected by tests. The route renders with the shared store. */
     settings?: Settings;
 };
+
+const TEMPERATURE_OPTIONS = [
+    {value: "C", label: "°C"},
+    {value: "F", label: "°F"}
+] as const;
 
 /**
  * The settings screen.
@@ -30,6 +37,8 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
+    const [temperatureUnit, setTemperatureUnit] =
+        useSetting("temperatureUnit", settings);
 
     return (
         <ScrollView backgroundColor={palette.base}
@@ -46,6 +55,15 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
+                </SettingsSection>
+
+                <SettingsSection title="Units">
+                    <SettingsChoiceRow
+                        label="Temperature"
+                        description="What the editor shows and takes. The card always stores Celsius, so switching back and forth changes nothing that is written."
+                        value={temperatureUnit}
+                        options={TEMPERATURE_OPTIONS}
+                        onChange={(value) => setTemperatureUnit(value as TemperatureUnit)}/>
                 </SettingsSection>
             </YStack>
         </ScrollView>

@@ -77,4 +77,26 @@ describe("SettingsScreen", () => {
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText("RECIPE LIST")).toBeTruthy();
     });
+
+    it("offers Celsius and Fahrenheit, starting on Celsius", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.getByText("UNITS")).toBeTruthy();
+        expect(screen.getByLabelText("°C").props.accessibilityState.checked).toBe(true);
+        expect(screen.getByLabelText("°F").props.accessibilityState.checked).toBe(false);
+    });
+
+    it("persists a switch to Fahrenheit", async () => {
+        const storage = memoryStorage();
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+        await fireEvent.press(screen.getByLabelText("°F"));
+
+        expect(new Settings(storage).get("temperatureUnit")).toBe("F");
+    });
+
+    it("says what the unit changes and what it does not", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByText(/card always stores/i)).toBeTruthy();
+    });
 });
