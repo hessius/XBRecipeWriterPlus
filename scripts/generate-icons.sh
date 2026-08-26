@@ -96,8 +96,8 @@ ICON_SVG="$WORK/icon.svg"
 ADAPTIVE_SVG="$WORK/adaptive.svg"
 
 # The home-screen tile. At full bleed the mark crowded the rounded edges; inset
-# so the dots fill ~84% of the tile, leaving a calmer margin.
-inset "$ICON_SVG" fill 0.84
+# so the dots fill ~76% of the tile, leaving a calmer margin.
+inset "$ICON_SVG" fill 0.76
 
 # Android masks an adaptive icon's foreground: only the middle ~66% is
 # guaranteed to survive. The mark is scaled to 0.66 of the raw drawing so it
