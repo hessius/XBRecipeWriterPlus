@@ -107,7 +107,8 @@ export default function LivingMark({size}: Props) {
             <XStack width={size} height={dot * DOT_ICON_GRID + gap * (DOT_ICON_GRID - 1)}>
                 {CELLS.map((cell) => (
                     <MarkDot key={`${cell.row}-${cell.column}`} cell={cell}
-                             dot={dot} gap={gap} breath={breath} scatter={scatter}/>
+                             dot={dot} gap={gap} breath={breath} scatter={scatter}
+                             reduced={reduced}/>
                 ))}
             </XStack>
         </Pressable>
@@ -120,6 +121,13 @@ type DotProps = {
     gap: number;
     breath: SharedValue<number>;
     scatter: SharedValue<number>;
+    /**
+     * `breath.value` is pinned at 0 under Reduce Motion, but 0 is a point in
+     * the middle of the ripple, not its neutral phase — so the frozen frame
+     * still needs telling to ignore each dot's phase offset rather than
+     * evaluating `sin` of it.
+     */
+    reduced: boolean;
 };
 
 /**
@@ -129,9 +137,11 @@ type DotProps = {
  * `LivingMark` it would be a new type on every render and React would remount
  * every dot, taking each one's animation with it.
  */
-function MarkDot({cell, dot, gap, breath, scatter}: DotProps) {
+function MarkDot({cell, dot, gap, breath, scatter, reduced}: DotProps) {
     const style = useAnimatedStyle(() => {
-        const phased = Math.sin((breath.value * 360 + cell.phase) * Math.PI / 180);
+        const phased = reduced
+            ? 0
+            : Math.sin((breath.value * 360 + cell.phase) * Math.PI / 180);
         return {
             opacity: 0.72 + phased * 0.28 - scatter.value * 0.4,
             transform: [
