@@ -72,4 +72,9 @@ describe("SettingsScreen", () => {
 
         expect(screen.queryByText(/Field explanations/)).toBeNull();
     });
+
+    it("heads the toggles with the part of the app they change", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByText("RECIPE LIST")).toBeTruthy();
+    });
 });
