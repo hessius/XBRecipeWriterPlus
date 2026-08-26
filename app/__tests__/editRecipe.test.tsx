@@ -563,6 +563,15 @@ describe("the stages deck", () => {
         expect(screen.getByLabelText("Stage 4 of 4")).toBeTruthy();
         expect(screen.getByLabelText("Stages, 4")).toBeTruthy();
     });
+
+    it("draws stage temperatures in the unit the user chose", async () => {
+        mockSettings = {temperatureUnit: "F"};
+
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        expect(screen.getAllByText("°F").length).toBeGreaterThan(0);
+    });
 });
 
 describe("stageScrollTarget", () => {

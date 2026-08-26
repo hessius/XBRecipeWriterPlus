@@ -28,6 +28,7 @@ import {resolveAccent} from "@/library/accent";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import type {TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -295,6 +296,7 @@ type StagesDeckProps = {
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
+    temperatureUnit: TemperatureUnit;
 };
 
 type StageProfileCardProps = {
@@ -376,7 +378,7 @@ function StageProfileCard({
  */
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
-    editStage, addPour, deletePour, autoAdjustPourVolumes,
+    editStage, addPour, deletePour, autoAdjustPourVolumes, temperatureUnit,
 }: StagesDeckProps) {
     "use no memo";
 
@@ -426,6 +428,7 @@ function StagesDeck({
                 <StageTile pour={pour} index={index}
                            count={recipe.pours.length}
                            open={openStage === index} accent={accent} isTea={isTea}
+                           temperatureUnit={temperatureUnit}
                            // From the current value, not from the one this
                            // render closed over. The curve above also sets it,
                            // so two taps in quick succession -- or a tap
@@ -573,6 +576,7 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
+    const [temperatureUnit] = useSetting("temperatureUnit");
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
@@ -795,7 +799,8 @@ export default function EditRecipe() {
                                     stageOffsets.current[index] = y;
                                 }}
                                 addPour={addPour} deletePour={deletePour}
-                                autoAdjustPourVolumes={autoAdjustPourVolumes}/>
+                                autoAdjustPourVolumes={autoAdjustPourVolumes}
+                                temperatureUnit={temperatureUnit as TemperatureUnit}/>
                     </View>
                 )}
             </ScrollView>
