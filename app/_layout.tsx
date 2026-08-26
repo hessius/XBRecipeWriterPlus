@@ -99,6 +99,7 @@ export default function RootLayout() {
                                                               animation: "slide_from_right"
                                                           }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
+                                            <Stack.Screen name="about" options={{title: "About"}}/>
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>

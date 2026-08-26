@@ -1,0 +1,53 @@
+import React from "react";
+import {screen} from "@testing-library/react-native";
+
+import AboutScreen from "@/app/about";
+import {renderWithProviders} from "@/test-utils/render";
+
+jest.mock("expo-application", () => ({
+    nativeApplicationVersion: "2.6.0",
+    nativeBuildVersion: "42"
+}));
+
+describe("AboutScreen", () => {
+    it("says which version this is, because a bug report without one is useless", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByText(/2\.6\.0/)).toBeTruthy();
+        expect(screen.getByText(/42/)).toBeTruthy();
+    });
+
+    it("states that it is unofficial, in plain sight", async () => {
+        // Not behind a tap, an accordion or a scroll-to-reveal. The app uses
+        // xBloom's marks, reads their cards and calls their undocumented API,
+        // and has never said so anywhere.
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByText(/not affiliated with/i)).toBeTruthy();
+        expect(screen.getByText(/xBloom/)).toBeTruthy();
+    });
+
+    it("says what leaves the phone", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByText(/stay on this phone/i)).toBeTruthy();
+    });
+
+    it("explains why only genuine cards work", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByText(/signature/i)).toBeTruthy();
+    });
+
+    it("offers somewhere to report a fault", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByRole("link", {name: /report an issue/i})).toBeTruthy();
+        expect(screen.getByRole("link", {name: /source code/i})).toBeTruthy();
+    });
+
+    it("lists the open-source licences", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByText(/open-source/i)).toBeTruthy();
+    });
+
+    it("draws the mark", async () => {
+        await renderWithProviders(<AboutScreen/>);
+        expect(screen.getByLabelText("XBRW++")).toBeTruthy();
+    });
+});
