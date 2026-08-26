@@ -5,6 +5,7 @@ import * as Clipboard from "expo-clipboard";
 
 import HomeScreen from "@/app/index";
 import Recipe from "@/library/Recipe";
+import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 
@@ -117,6 +118,7 @@ function store(recipes: Recipe[]) {
 beforeEach(() => {
     mockPush.mockClear();
     mockNotify.mockClear();
+    (XBloomRecipe as jest.Mock).mockClear();
     mockFetchRecipeDetail = () => Promise.resolve();
     mockGetRecipe = () => undefined;
     mockNativePasteOnPress = undefined;
@@ -322,8 +324,64 @@ describe("import", () => {
     it("ignores a shared URL that is not an xBloom link", async () => {
         await renderHome({shareIntent: {type: "weburl", webUrl: "https://example.com/"}});
 
+        // The stricter parse is the whole point: a non-xBloom URL must be
+        // dropped without a lookup. Asserting only that the resolving row and
+        // the field are absent cannot see that -- with the default mock an
+        // *accepted* URL resolves to the error state, which shows neither
+        // element either, so the test would pass just as well for a URL that
+        // was looked up and failed. Pin it to the two things that only an
+        // ignored URL produces: nothing was ever constructed to look it up...
+        expect(XBloomRecipe).not.toHaveBeenCalled();
+        // ...and the sheet never opened, so the screen behind stays reachable
+        // (a covered screen hides its own subtree, including this button).
+        expect(screen.getByLabelText("Settings")).toBeTruthy();
+        // The original assertions, now backed by the two above rather than
+        // standing in for them.
         expect(screen.queryByTestId("import-resolving")).toBeNull();
         expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
+    });
+
+    it("closes the sheet when an atomic import opens the recipe", async () => {
+        // After a share intent resolves atomically it navigates to the editor,
+        // and the sheet must close behind it -- otherwise it is still open on
+        // top of the list when the editor is dismissed. The covered screen
+        // hides its own subtree, so the header becoming reachable again is the
+        // observable proof that the sheet closed.
+        mockGetRecipe = () => new Recipe();
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"}
+        });
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByLabelText("Settings")).toBeTruthy());
+    });
+
+    it("says nothing when a fresh import opens a recipe", async () => {
+        // The de-duplication toast belongs only to a match. A first-time import
+        // opens the editor, which is confirmation enough; a "Already in your
+        // library" toast on a recipe that is *not* already there would be a lie.
+        mockGetRecipe = () => new Recipe();
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"}
+        });
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalled());
+        expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it("disarms the share intent so it cannot fire again", async () => {
+        // A share intent must be reset once consumed, or the next render that
+        // reads it re-opens the sheet unprompted -- the guard the deleted
+        // ImportRecipeComponent suite carried as "does not re-open unprompted".
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"}
+        });
+
+        await waitFor(() => expect(mockShareIntentState.resetShareIntent).toHaveBeenCalled());
+        // And the intent is consumed exactly once: a second lookup would mean
+        // the effect re-fired on a re-render instead of on the intent alone.
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
     });
 
     it("resolves at once when a pasted value parses, with no field to type in", async () => {
@@ -379,6 +437,28 @@ describe("import", () => {
 
         expect(screen.getByLabelText("Share link or pod code")).toBeTruthy();
         expect(screen.queryByTestId("import-resolving")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("reloads the library when the sheet closes", async () => {
+        // An import that saved a recipe reaches this list only on a reload, and
+        // closing the sheet is that reload's trigger. The store's reader is
+        // called once on mount (`useFocusEffect` is stubbed out here, so it does
+        // not add a second); closing the sheet must call it again.
+        jest.useFakeTimers();
+        const db = store([named("Ethiopia")]);
+        await renderWithProviders(
+            <HomeScreen db={db} settings={new Settings(memoryStorage())}/>
+        );
+        const before = db.retrieveAllRecipes.mock.calls.length;
+
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(db.retrieveAllRecipes.mock.calls.length).toBeGreaterThan(before);
         jest.useRealTimers();
     });
 
