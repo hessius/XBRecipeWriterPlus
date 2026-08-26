@@ -127,8 +127,22 @@ export function cardWriteProblems(
             `The range is ${tempRange.min}-${tempRange.max} ${temperatureUnit}.`;
         if (outside(pour.temperature, TEMPERATURE)) {
             problems.push(tempMsg);
-        } else {
-            checkInteger(pour.temperature, tempMsg, problems);
+        } else if (!Number.isInteger(pour.temperature)) {
+            // `shownTemp` is rounded by `toDisplay`, so a fractional stored
+            // Celsius value (from an import or restore, never a stepper) can
+            // convert to something that already looks whole in Fahrenheit —
+            // 92.5 C rounds to 199 F, and "It has to be a whole number" next
+            // to a number that already is one is not actionable. Report the
+            // exact, unrounded conversion instead, so the figure the user
+            // reads is the one that is actually fractional.
+            const exactTemp = temperatureUnit === "C"
+                ? pour.temperature
+                : pour.temperature * 9 / 5 + 32;
+            problems.push(
+                `Stage ${stage} brews at ${exactTemp} ${temperatureUnit}. ` +
+                `The range is ${tempRange.min}-${tempRange.max} ${temperatureUnit}. ` +
+                `It has to be a whole number.`
+            );
         }
 
         const flowMsg =
