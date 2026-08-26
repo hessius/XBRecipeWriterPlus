@@ -241,8 +241,15 @@ function BrewDeck({
                 nothing else. It sits on the row rather than the input because
                 the row owns the validity state. The key bump used to live on
                 the scroll container, which reset the scroll offset every time
-                a stepper was nudged. */}
-            <TextFieldRow key={recipe.xid} topic="xid" label="Recipe ID" initialValue={recipe.xid}
+                a stepper was nudged.
+
+                The field name prefixes the key so two rows can never collide: a
+                share-link import arrives with `xid` and `name` both empty
+                strings, and bare `key={recipe.xid}` / `key={recipe.name}` would
+                then be the same key on sibling rows — React logs "two children
+                with the same key". The prefix keeps each row's key in its own
+                namespace. */}
+            <TextFieldRow key={`xid-${recipe.xid}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
@@ -250,7 +257,7 @@ function BrewDeck({
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
-            <TextFieldRow key={recipe.name} topic="name" label="Name" initialValue={recipe.name}
+            <TextFieldRow key={`name-${recipe.name}`} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                       showHint={showHint}
                           onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}

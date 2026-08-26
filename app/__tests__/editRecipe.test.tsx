@@ -338,6 +338,24 @@ describe("the editor", () => {
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
         expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
     });
+
+    it("does not collide row keys when xid and name are both empty", async () => {
+        // A share-link import arrives with `xid` and `name` both `""`. The two
+        // TextFieldRows are keyed on those values, so without namespacing the
+        // keys they would clash and React would log a duplicate-key warning.
+        // The suite does not silence `console.error`, so spy on it directly.
+        const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+        try {
+            await renderEditor({xid: "", name: ""});
+
+            const collided = errorSpy.mock.calls.some((args) =>
+                args.some((arg) => typeof arg === "string" && /same key/i.test(arg))
+            );
+            expect(collided).toBe(false);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
 });
 
 describe("the stages deck", () => {
