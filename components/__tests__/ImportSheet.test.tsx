@@ -4,7 +4,7 @@
  */
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
-import {Keyboard} from "react-native";
+import {Keyboard, TextInput} from "react-native";
 
 import ImportSheet from "@/components/ImportSheet";
 import type {RecipeImport} from "@/hooks/useRecipeImport";
@@ -41,6 +41,7 @@ function stubImport(overrides: Partial<RecipeImport> = {}): RecipeImport {
         state:        {status: "idle"},
         value:        "",
         showField:    true,
+        focusField:   true,
         hint:         false,
         onChangeText: jest.fn(),
         resolveNow:   jest.fn(),
@@ -319,6 +320,106 @@ it("does not dismiss the keyboard when a lookup fails", async () => {
     });
     expect(dismiss).not.toHaveBeenCalled();
 
+    dismiss.mockRestore();
+});
+
+it("does not raise the keyboard when a failed share intent restores the field", async () => {
+    // The bug: a share intent hides the field while it resolves, so a failure
+    // remounts the `TextInput`. If that remount grabs focus the keyboard rises
+    // on someone whose attention is still in the app they shared from -- an
+    // ambush. The hook says so by handing back `focusField: false`, and the
+    // field's `autoFocus` obeys it, so the field comes back as a retry
+    // affordance but the keyboard stays down. Focus does not fire `onFocus`
+    // under the test renderer, so this spies on the imperative `focus` the way
+    // the repo already does elsewhere.
+    const focus = jest.spyOn(TextInput.prototype, "focus");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false, state: {status: "resolving"}})}/>
+    );
+    // The field is hidden here, so nothing legitimately focuses; clear any
+    // async focus scheduled by a neighbouring test so only the remount counts.
+    focus.mockClear();
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({
+                             showField: true, focusField: false,
+                             state:     {
+                                 status:  "error",
+                                 reason:  "network",
+                                 message: "Couldn't reach xBloom. Check your connection."
+                             }
+                         })}/>
+        );
+    });
+
+    expect(focus).not.toHaveBeenCalled();
+    focus.mockRestore();
+});
+
+it("raises the keyboard when a failed shortcut restores the field", async () => {
+    // The counterpart, and the guard against fixing the ambush by killing focus
+    // everywhere: a tile shortcut also hides its field, but the user tapped the
+    // tile and is now in the sheet, so its restored field *does* take focus --
+    // `focusField` stays true -- ready to type the next code.
+    const focus = jest.spyOn(TextInput.prototype, "focus");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false, state: {status: "resolving"}})}/>
+    );
+    focus.mockClear();
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({
+                             showField: true, focusField: true,
+                             state:     {
+                                 status:  "error",
+                                 reason:  "notFound",
+                                 message: "No recipe with that code."
+                             }
+                         })}/>
+        );
+    });
+
+    expect(focus).toHaveBeenCalled();
+    focus.mockRestore();
+});
+
+it("leaves the keyboard alone when a typed lookup fails", async () => {
+    // The positive case for the typed path: its field never unmounts, so a
+    // failure neither remounts-and-refocuses nor dismisses. The keyboard the
+    // user was typing with stays exactly where it was, ready to correct the
+    // typo. The initial mount focuses once (the field is present from the
+    // start); clear that, then assert the *failure* transition touches nothing.
+    const focus = jest.spyOn(TextInput.prototype, "focus");
+    const dismiss = jest.spyOn(Keyboard, "dismiss");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: true, state: {status: "resolving"}})}/>
+    );
+    focus.mockClear();
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({
+                             showField: true, focusField: true,
+                             state:     {
+                                 status:  "error",
+                                 reason:  "notFound",
+                                 message: "No recipe with that code."
+                             }
+                         })}/>
+        );
+    });
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(dismiss).not.toHaveBeenCalled();
+    focus.mockRestore();
     dismiss.mockRestore();
 });
 

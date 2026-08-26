@@ -135,10 +135,13 @@ export default function HomeScreen({db, settings}: Props) {
         if (source) {
             // Reacting to an inbound share intent — an external system pushing
             // into React, which is what effects are for. The field is hidden by
-            // the hook's atomic path, not here.
+            // the hook's `"shared"` path, not here; and if the lookup fails the
+            // hook restores the field without focus, so the keyboard does not
+            // ambush someone whose attention is still in the app they shared
+            // from.
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setImportOpen(true);
-            importer.resolveNow(source, "atomic");
+            importer.resolveNow(source, "shared");
         }
         resetShareIntent();
         // `importer` is rebuilt every render; depending on it would re-run this

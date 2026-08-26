@@ -152,22 +152,42 @@ States are `idle | resolving | found | error`.
 | From | Event | To |
 |---|---|---|
 | any | text changes by 1 character | `idle`, debounce armed |
-| any | text changes by more than 1 character | `resolving`, **atomic** |
-| any | the sheet's paste affordance is used | `resolving`, **atomic** |
+| any | text changes by more than 1 character | `resolving`, **atomic**, field kept |
+| any | the sheet's paste affordance is used | `resolving`, **atomic**, field kept |
 | any | the tile's paste shortcut delivers text (§6) | `resolving`, **shortcut**, field hidden |
-| any | a share intent delivers an id | `resolving`, **atomic**, field hidden |
-| `idle` | debounce elapses, input parses | `resolving`, **deliberate** |
+| any | a share intent delivers an id | `resolving`, **shared**, field hidden |
+| `idle` | debounce elapses, input parses | `resolving`, **deliberate**, field kept |
 | `idle` | debounce elapses, input does not parse | `idle` — no request |
-| `resolving` | resolved, atomic | `onOpenRecipe` called immediately |
+| `resolving` | resolved, atomic **or** shared | `onOpenRecipe` called immediately |
 | `resolving` | resolved, shortcut, recipe **not** already held | `onOpenRecipe` called immediately |
-| `resolving` | resolved, shortcut, recipe already held | `found`, **field restored** — degrades, does not navigate |
+| `resolving` | resolved, shortcut, recipe already held | `found`, **field restored, focused** — degrades, does not navigate |
 | `resolving` | resolved, deliberate | `found` — waits for a press |
-| `resolving` | failed | `error`, **field restored** — a failed lookup always leaves a field to retry from |
+| `resolving` | failed, **shared** | `error`, **field restored, _not_ focused** — retry without the keyboard |
+| `resolving` | failed, any other intent | `error`, **field restored, focused** — a failed lookup always leaves a field to retry from |
 | `found` or `error` | text changes | `idle`, result cleared |
 
 **Atomic input navigates; deliberate input waits.** A paste, a share intent and
 the tile shortcut all deliver a complete value in one event, chosen deliberately
 by the user. Typing delivers a value that is complete only by guesswork.
+
+**Four intents, because "arrived whole" hides a real fork.** `deliberate` is
+typing; the other three each deliver a complete value the user chose, but they
+diverge on two axes — whether the field is hidden while the lookup runs, and, on
+failure, whether the restored field takes focus:
+
+- `atomic` is a **paste into the sheet's own field**. The field and its keyboard
+  are already there and the user is looking at them, so the field is *kept* while
+  the lookup runs (hiding it would only flicker) and a failure lands under a field
+  that never left, keyboard still up — the right place to retry.
+- `shared` is a **share intent pushed in from another app**. The user's context
+  is that other app, so the field is hidden while resolving and, on failure, is
+  restored *without focus*. Raising the keyboard on someone who never opened this
+  sheet is an ambush; the field still comes back as the retry affordance, just
+  quietly. This is the one intent that vetoes focus.
+- `shortcut` is the **tile's paste shortcut** (§6): atomic that degrades. The
+  field is hidden while resolving; on a degrade or a failure it is restored *with*
+  focus, because the user tapped the tile and is now in the sheet, ready to type
+  the next code.
 
 **The shortcut is atomic that degrades.** The tile's paste shortcut (§6)
 navigates like an atomic value on a *new* recipe, but the clipboard is sticky:
@@ -175,21 +195,30 @@ after importing recipe A its link is still there, so tapping IMPORT resolves A
 again. Re-opening A would make the shortcut a trap. Instead a shortcut that
 resolves to a recipe already in the library **does not navigate** — it degrades
 to the `found` panel *and* restores the field, so the user can enter a different
-recipe, which is what they opened the tile for. A share intent stays atomic and
-still navigates to a held recipe (with the "Already in your library" toast),
+recipe, which is what they opened the tile for. A share intent stays atomic-like
+and still navigates to a held recipe (with the "Already in your library" toast),
 because re-sharing a specific link is a fresh deliberate act on that link. An
-in-sheet paste into the field also stays atomic: the user is already looking at
-the field, so navigating with the toast is coherent and the field is right there
-as the escape hatch.
+in-sheet paste into the field also navigates to a held recipe: the user is
+already looking at the field, so navigating with the toast is coherent and the
+field is right there as the escape hatch.
 
-**`showField` is the hook's, not the screen's.** Whether the sheet draws its
-input field is owned by `useRecipeImport`, because the shortcut's degrade is
-discovered only *after* the fetch — the screen cannot decide it from a prop set
-when the sheet opened. The hook hides the field while an atomic or shortcut value
+**`showField` and `focusField` are the hook's, not the screen's.** Whether the
+sheet draws its input field, and whether that field takes focus, both follow from
+the intent — which only the hook knows — so both are owned by `useRecipeImport`.
+`showField` is needed on the screen because the shortcut's degrade is discovered
+only *after* the fetch, so the screen cannot decide it from a prop set when the
+sheet opened: the hook hides the field while a share intent or the shortcut
 resolves and restores it when a shortcut degrades or when any lookup fails — a
 failure has nothing to navigate to, so the field must come back as the way to
-retry or correct; the sheet reads `importer.showField`. There is no `showField` prop and no screen-level state for
-it: one rule, one place.
+retry or correct. `focusField` is the veto that keeps a *failed share intent*
+from raising the keyboard: the field is only unmounted and remounted for the two
+intents that hide it, and a remounted `TextInput` that grabs focus is what raised
+the keyboard on a share-intent failure. It is true everywhere except that one
+case. The sheet reads both off `importer` and owns the focus itself (an
+imperative `focus()` on the field's edge onto screen, gated by `focusField`,
+rather than a bare `autoFocus` that fires on *every* remount); the policy is the
+hook's. There is no `showField`/`focusField` prop and no screen-level state for
+either: one rule, one place.
 
 ### Two timers, with different jobs
 
@@ -314,10 +343,23 @@ rule forbids a `setState` in an effect, but a plain imperative call is fine and 
 side effect must never run during render. It fires once per resolution, gated on
 the field having been on screen *before* `found`: a share intent or the tile
 shortcut resolves with the field hidden, so its keyboard was never up, and a
-degrading shortcut restores the field at `found` and lets `autoFocus` raise the
-keyboard on purpose — dismissing there would fight it. The `error` state is
-excluded for free by keying on `found`, which is right: a mistyped code needs the
-keyboard kept up to be corrected.
+degrading shortcut restores the field at `found` and the sheet's focus effect
+raises the keyboard on purpose (see `focusField`) — dismissing there would fight
+it. The `error` state is excluded for free by keying on `found`, which is right:
+a mistyped code needs the keyboard kept up to be corrected.
+
+**The keyboard is _not_ raised when a share intent fails.** A share intent hides
+the field while it resolves, so a failure has to *remount* the field to give the
+user something to retry from. A remounted `TextInput` that grabs focus raises the
+keyboard — which is exactly what a bare `autoFocus` did, ambushing someone whose
+attention is still in the app they shared from. So the field's focus is driven
+imperatively, on the edge of the field coming onto screen, and gated on the
+hook's `focusField`, which drops to false only for a failed share intent. Every
+other appearance keeps focus: a plain open, a shortcut degrade, a shortcut
+failure, and the typed and in-field-paste paths (which never hide the field, so
+there is no edge and their keyboard is left exactly as the user left it). The
+distinction between a `shared` failure and a `shortcut` failure is the whole
+reason "arrived whole" is split into two intents rather than one.
 
 The pod photo from `podsVo.imagePath` appears as a **circular mark in the top
 right**, and is simply absent otherwise. Two constraints follow:
@@ -379,10 +421,13 @@ performs is safe — which is the condition `XbrwSheet` documents for it.
 ### A share intent
 
 It arrives with an id already, often into a cold start, and there is nothing to
-type. It is the atomic case, so it resolves and navigates without asking. The
-sheet still opens, showing only the fetching state, so that a share into a slow
-network is acknowledged rather than appearing to do nothing. The field never
-appears because there is nothing to put in it.
+type. It is the `shared` intent: it resolves and navigates without asking, like a
+paste. The sheet still opens, showing only the fetching state, so that a share
+into a slow network is acknowledged rather than appearing to do nothing. The
+field never appears because there is nothing to put in it — and if the lookup
+fails, the hook restores the field *without focus* so the keyboard does not
+ambush someone whose attention is still in the app they shared from (see the
+keyboard section under §3).
 
 **Handled once per payload.** `expo-share-intent` can hand the same intent back
 more than once: `useShareIntent` recreates `resetShareIntent` on every render and
@@ -397,10 +442,12 @@ link can be shared again later on purpose. This is the one place idempotency can
 live: the screen owns navigation, and the payload identity is the only thing that
 distinguishes a redelivery from a genuine re-share.
 
-Three doors, one sheet, one state machine. The only branch is whether the field
-is shown — which is exactly the atomic/deliberate distinction that already
-governs whether it navigates on its own (with the shortcut's degrade, §2, the one
-place it does not).
+Three doors, one sheet, one state machine. The only branches are whether the
+field is shown and whether it takes focus — which follow from the intent that
+also governs whether the lookup navigates on its own (with the shortcut's
+degrade, §2, the one place a hidden field comes back on success, and the share
+intent's silent failure, §3, the one place the restored field does *not* pull the
+keyboard up with it).
 
 ## 6. The paste-through import tile
 

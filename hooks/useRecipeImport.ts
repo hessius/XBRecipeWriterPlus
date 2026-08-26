@@ -58,16 +58,32 @@ export type ImportState =
  * Whether the value arrived whole, a character at a time, or as a shortcut.
  *
  * Atomic input navigates on its own; deliberate input waits to be asked. A
- * paste, a share intent and the tile's shortcut all deliver a complete value in
- * one event that the user chose. Typing delivers a value that is complete only
- * by guesswork.
+ * paste into the field, a share intent and the tile's shortcut all deliver a
+ * complete value in one event that the user chose. Typing delivers a value that
+ * is complete only by guesswork.
+ *
+ * The four are split because "arrived whole" conflates two genuinely different
+ * situations that must diverge on *failure*:
+ *
+ *  - `"atomic"` is a paste into the sheet's own field, with the sheet open and
+ *    the user's attention on it. The field stays drawn beside the running
+ *    lookup -- there was already something to type in -- so nothing unmounts and
+ *    the keyboard the user pasted with stays up. A failure lands under a field
+ *    that never left, which is the right place to retry.
+ *  - `"shared"` is a share intent pushed in from another app. The user's context
+ *    is that other app, not this sheet, so the field is hidden while the lookup
+ *    runs and -- crucially -- when a failure restores the field it must come back
+ *    *without* focus, or the keyboard ambushes someone who never opened this
+ *    sheet. See `focusField`.
  *
  * `"shortcut"` is the tile's paste shortcut: atomic, so it navigates on a fresh
  * recipe, but it must not re-open a recipe the sticky clipboard still points at.
  * Instead the shortcut degrades to the found panel *and* the field, so the user
- * can reach a different recipe -- which is what they opened the tile for.
+ * can reach a different recipe -- which is what they opened the tile for. The
+ * user is already in the sheet, so a degrade or a failure restores the field
+ * *with* focus, ready to type the next code -- unlike the share intent.
  */
-export type ImportIntent = "atomic" | "deliberate" | "shortcut";
+export type ImportIntent = "atomic" | "deliberate" | "shared" | "shortcut";
 
 type Options = {
     /** The library, for de-duplication. Passed in rather than re-opened here. */
@@ -83,15 +99,31 @@ export type RecipeImport = {
     /**
      * Whether the sheet should draw its input field.
      *
-     * False while an atomic value (a paste or a share intent) or the tile's
-     * shortcut resolves -- there is nothing to type -- and true otherwise,
-     * including when a shortcut degrades to the found panel because the recipe
-     * is already held, and whenever a lookup fails, so an error always leaves a
-     * field to retry from. The rule lives here, the sole authority, not on the
-     * screen: the degrade is discovered only after the fetch, so the sheet
-     * cannot decide it from a prop set when it opened.
+     * False while a share intent or the tile's shortcut resolves -- there is
+     * nothing to type and the value came from outside the field -- and true
+     * otherwise, including for a paste into the field itself (`"atomic"`), for a
+     * shortcut that degrades to the found panel because the recipe is already
+     * held, and whenever a lookup fails, so an error always leaves a field to
+     * retry from. The rule lives here, the sole authority, not on the screen:
+     * the degrade is discovered only after the fetch, so the sheet cannot decide
+     * it from a prop set when it opened.
      */
     showField: boolean;
+    /**
+     * Whether the field, when the sheet draws it, should take focus.
+     *
+     * The field is only unmounted and remounted for the two intents that hide it
+     * -- a share intent and the tile shortcut -- so this only decides the
+     * keyboard for those. True everywhere except when a *share intent* fails: its
+     * field was hidden, so restoring it remounts a `TextInput` whose focus would
+     * raise the keyboard, and a share came from another app, not this sheet, so
+     * an unbidden keyboard is an ambush. A shortcut failure or degrade keeps
+     * focus -- the user tapped the tile and is now in the sheet, ready to type
+     * the next code. A typed or in-field-paste failure never unmounts the field,
+     * so this does not touch its keyboard at all. Read by the sheet, which owns
+     * the focus itself; the policy is the hook's.
+     */
+    focusField: boolean;
     /** Whether the "paste a link or a code" hint is showing. */
     hint: boolean;
     /** From the field. Decides paste versus typing from the size of the change. */
@@ -113,10 +145,17 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     /**
      * Whether the sheet draws its field. See `showField` on `RecipeImport`. The
      * default is true (a plain tile tap opens an empty field); `resolve` hides
-     * it for atomic and shortcut input and restores it when a shortcut degrades
-     * or when a lookup fails.
+     * it for a share intent and the tile shortcut and restores it when a
+     * shortcut degrades or when a lookup fails.
      */
     const [showField, setShowField] = useState(true);
+    /**
+     * Whether the field takes focus when the sheet next draws it. See
+     * `focusField` on `RecipeImport`. The default is true (every ordinary
+     * appearance of the field wants the keyboard); only a failed share intent
+     * sets it false, so its restored field comes back quietly.
+     */
+    const [focusField, setFocusField] = useState(true);
 
     /**
      * The last text seen, tracked synchronously.
@@ -172,11 +211,17 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     async function resolve(source: ImportSource, intent: ImportIntent) {
         clearTimers();
         setHint(false);
-        // Atomic and shortcut input carry a whole value, so there is nothing to
-        // type: hide the field while the lookup runs. Only deliberate typing
-        // keeps the field. A degrading shortcut restores it below, after the
-        // fetch, once the recipe turns out to be already held.
-        setShowField(intent === "deliberate");
+        // A share intent and the tile shortcut carry a whole value that came
+        // from outside the field, so there is nothing to type: hide the field
+        // while the lookup runs. Typing keeps its field, and so does a paste
+        // *into* the field -- the field was already there and the keyboard with
+        // it, so hiding it would only flicker. A degrading shortcut restores the
+        // field below, after the fetch, once the recipe turns out to be held.
+        setShowField(intent === "deliberate" || intent === "atomic");
+        // Any field the sheet draws next wants focus, until an error decides
+        // otherwise. Reset here so a prior share-intent failure cannot leave a
+        // later lookup's field quiet.
+        setFocusField(true);
         const mine = ++generation.current;
         inFlight.current?.abort();
         const controller = new AbortController();
@@ -185,13 +230,21 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
 
         const xb = new XBloomRecipe(source);
 
-        // A failed lookup always restores the field, whatever the intent. An
-        // atomic or shortcut value hid it while resolving, but an error has
-        // nothing to navigate to, so the field must come back as the way to
-        // retry or correct -- otherwise the sheet strands the user on an error
-        // line with no input and no button.
+        // A failed lookup always restores the field, whatever the intent: an
+        // error has nothing to navigate to, so the field must come back as the
+        // way to retry or correct -- otherwise the sheet strands the user on an
+        // error line with no input and no button.
+        //
+        // Whether that restored field grabs focus is the one thing that differs.
+        // A share intent hid its field, so restoring it remounts a `TextInput`
+        // whose focus would raise the keyboard on someone whose attention is
+        // still in the app they shared from -- an ambush. Every other intent
+        // either never hid the field (typed, in-field paste: the keyboard is
+        // already where the user put it) or wants it back (the shortcut: the
+        // user tapped the tile and is now here to type the next code).
         function fail(reason: ImportErrorReason, message: string) {
             setShowField(true);
+            if (intent === "shared") setFocusField(false);
             setState({status: "error", reason, message});
         }
 
@@ -228,18 +281,25 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
 
         const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate);
 
-        // Atomic always navigates. A shortcut navigates only for a recipe not
-        // already held: the tile's paste shortcut degrades, rather than
-        // re-opening a recipe the sticky clipboard still points at, so the user
-        // can reach a different one.
-        if (intent === "atomic" || (intent === "shortcut" && !isExisting)) {
+        // A paste into the field and a share intent both navigate on their own.
+        // A shortcut navigates only for a recipe not already held: the tile's
+        // paste shortcut degrades, rather than re-opening a recipe the sticky
+        // clipboard still points at, so the user can reach a different one. A
+        // share intent still navigates to a held recipe (with the "already in
+        // your library" reveal), because re-sharing a specific link is a fresh
+        // deliberate act on that link.
+        if (
+            intent === "atomic" ||
+            intent === "shared" ||
+            (intent === "shortcut" && !isExisting)
+        ) {
             handOff(recipe, isExisting);
             return;
         }
 
-        // A degrading shortcut restores the field the atomic path hid, so the
-        // found panel and an input to type something else are shown together --
-        // which is the whole point of the degrade.
+        // A degrading shortcut restores the field it hid, so the found panel and
+        // an input to type something else are shown together -- which is the
+        // whole point of the degrade.
         if (intent === "shortcut") setShowField(true);
 
         setState({
@@ -361,8 +421,9 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         setValue("");
         setHint(false);
         setShowField(true);
+        setFocusField(true);
         setState({status: "idle"});
     }
 
-    return {state, value, showField, hint, onChangeText, resolveNow, onPastedText, openFound, reset};
+    return {state, value, showField, focusField, hint, onChangeText, resolveNow, onPastedText, openFound, reset};
 }

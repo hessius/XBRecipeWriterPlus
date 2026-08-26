@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import React, {useEffect, useRef, useState} from "react";
-import {Keyboard} from "react-native";
+import {Keyboard, TextInput} from "react-native";
 import {Input, Spinner, Text, XStack, YStack} from "tamagui";
 import type {ColorTokens} from "tamagui";
 
@@ -54,12 +54,14 @@ type Props = {
  * `useRecipeImport`.
  */
 export default function ImportSheet({open, onOpenChange, importer}: Props) {
-    // `showField` is the hook's, not a prop: the one branch in the sheet is the
-    // atomic/deliberate distinction that also decides whether the hook navigates
-    // on its own, so it lives in exactly one place. False while a share intent
-    // or the tile's shortcut resolves (nothing to type beside a running lookup);
-    // true otherwise, including when a shortcut degrades to the found panel.
-    const {state, value, showField, hint, onChangeText, onPastedText, openFound} = importer;
+    // `showField` and `focusField` are the hook's, not props: whether the field
+    // is drawn and whether it grabs focus both follow from the import intent,
+    // which only the hook knows, so they live in exactly one place. `showField`
+    // is false while a share intent or the tile's shortcut resolves (nothing to
+    // type beside a running lookup) and true otherwise, including when a shortcut
+    // degrades to the found panel; `focusField` gates the field's focus so
+    // a failed share intent can restore the field without raising the keyboard.
+    const {state, value, showField, focusField, hint, onChangeText, onPastedText, openFound} = importer;
     const [nativePaste, setNativePaste] = useState(false);
     const [wasOpen, setWasOpen] = useState(open);
 
@@ -93,10 +95,10 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
     // gated on the field having been on screen *before* this render, which is
     // true only of the typed path: a share intent or the tile shortcut resolves
     // with the field hidden (`showField` false), so its keyboard was never up,
-    // and a degrading shortcut restores the field at found and lets its
-    // `autoFocus` raise the keyboard on purpose -- dismissing there would fight
-    // it. The error state is excluded for free by keying on found, which is
-    // right: a mistyped code needs the keyboard kept up to be corrected.
+    // and a degrading shortcut restores the field at found and the focus effect
+    // below raises the keyboard on purpose -- dismissing there would fight it.
+    // The error state is excluded for free by keying on found, which is right: a
+    // mistyped code needs the keyboard kept up to be corrected.
     const previous = useRef({status: state.status, showField});
     useEffect(() => {
         const enteredFound =
@@ -107,6 +109,32 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
         }
         previous.current = {status: state.status, showField};
     }, [state.status, showField]);
+
+    // Raise the keyboard when the field comes on screen, unless the hook vetoes
+    // it. This is the imperative replacement for `autoFocus`: `autoFocus` fires
+    // on every remount, and a share intent hides the field then remounts it on
+    // failure, which would raise the keyboard on someone whose attention is
+    // still in the app they shared from. So focus is driven here, on the
+    // false->true edge of the field being shown, and gated on `focusField` --
+    // which the hook drops to false only for that one case. A plain open, a
+    // shortcut degrade and a shortcut failure all keep `focusField` true and so
+    // still focus; the typed and in-field-paste paths never hide the field, so
+    // there is no edge and their keyboard is left exactly as the user left it.
+    // Focus lives in the sheet, not the hook: `useRecipeImport` owns the import
+    // rules and holds no React Native import, and which control has focus is
+    // presentation. A programmatic `focus()` does not fire `onFocus` under the
+    // test renderer, which is why the tests spy on `TextInput.prototype.focus`.
+    const inputRef = useRef<React.ElementRef<typeof Input>>(null);
+    const fieldWasShown = useRef(false);
+    useEffect(() => {
+        const shown = open && showField;
+        if (shown && !fieldWasShown.current && focusField) {
+            // The cast matches `editRecipe.tsx`: Tamagui types the ref as its own
+            // element, but an `Input`'s node is the RN `TextInput` underneath.
+            (inputRef.current as TextInput | null)?.focus();
+        }
+        fieldWasShown.current = shown;
+    }, [open, showField, focusField]);
 
     useEffect(() => {
         if (!open || !Clipboard.isPasteButtonAvailable) {
@@ -138,6 +166,7 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                 {showField && (
                     <>
                         <Input
+                            ref={inputRef}
                             accessibilityLabel={FIELD_LABEL}
                             placeholder={FIELD_LABEL}
                             // The palette is a plain module of raw strings, not
@@ -154,13 +183,6 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                             onChangeText={onChangeText}
                             autoCapitalize="characters"
                             autoCorrect={false}
-                            // Only when open: `prewarm` renders these real
-                            // children in a hidden view while the sheet is
-                            // closed, and a mounted `TextInput` calls `focus()`
-                            // regardless of layout, so an unconditional
-                            // `autoFocus` would raise the keyboard on the home
-                            // screen with no visible field.
-                            autoFocus={open}
                             backgroundColor={palette.raised}
                             borderColor={palette.line}
                             color={palette.text}/>

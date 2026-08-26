@@ -82,6 +82,34 @@ describe("a paste", () => {
         expect(onOpenRecipe.mock.calls[0][1]).toBe(false);
     });
 
+    it("keeps the field on screen while it resolves, since it was pasted into one", async () => {
+        // A paste *into* the field is not a share intent: the field and its
+        // keyboard are already there, so hiding them while the lookup runs would
+        // only flicker. The field stays, beside the running lookup -- which is
+        // also why an in-field-paste failure needs no re-focus, the keyboard
+        // never left.
+        let releaseFetch!: () => void;
+        mockFetchRecipeDetail.mockImplementationOnce(
+            () => new Promise<void>((resolve) => {
+                releaseFetch = resolve;
+            })
+        );
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        expect(result.current.state.status).toBe("resolving");
+        expect(result.current.showField).toBe(true);
+
+        await act(async () => {
+            releaseFetch();
+        });
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+    });
+
     it("is inferred from the size of the change, since RN has no onPaste", async () => {
         // A one-character change is typing, however valid the result.
         const {onOpenRecipe, stored} = setup();
@@ -246,6 +274,51 @@ describe("a recipe already in the library", () => {
     });
 });
 
+describe("a share intent", () => {
+    it("hides the field while it resolves, since the value came from outside it", async () => {
+        // A share intent arrives from another app with nothing to type, so the
+        // field is hidden while the lookup runs -- the sheet shows only that it
+        // is working. This is the state `app/index.tsx` opens the sheet into.
+        let releaseFetch!: () => void;
+        mockFetchRecipeDetail.mockImplementationOnce(
+            () => new Promise<void>((resolve) => {
+                releaseFetch = resolve;
+            })
+        );
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "shared");
+        });
+
+        expect(result.current.state.status).toBe("resolving");
+        expect(result.current.showField).toBe(false);
+
+        await act(async () => {
+            releaseFetch();
+        });
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("navigates to a recipe already in the library, unlike the tile shortcut", async () => {
+        // Re-sharing a specific link is a fresh deliberate act on that link, so
+        // a share intent still opens a held recipe (with the reveal), rather than
+        // degrading to the field the way the sticky-clipboard shortcut does.
+        const existing = importedRecipe();
+        const {onOpenRecipe, stored} = setup([existing]);
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "shared");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+        expect(onOpenRecipe.mock.calls[0][0]).toBe(existing);
+        expect(onOpenRecipe.mock.calls[0][1]).toBe(true);
+    });
+});
+
 describe("failure", () => {
     it("reports an unreachable server without blaming the input", async () => {
         mockFetchRecipeDetail.mockRejectedValueOnce(new Error("offline"));
@@ -329,6 +402,59 @@ describe("failure", () => {
 
         await waitFor(() => expect(result.current.state.status).toBe("error"));
         expect(result.current.showField).toBe(true);
+    });
+
+    it("restores a failed share intent's field but leaves it unfocused", async () => {
+        // The share-intent fix: a share hid its field while resolving, so a
+        // failure remounts it -- and a remounted field with focus raises the
+        // keyboard on someone whose attention is still in the app they shared
+        // from. The field must come back to retry from, but *quietly*, so the
+        // hook reports `focusField: false` and the sheet's `autoFocus` obeys it.
+        mockFetchRecipeDetail.mockRejectedValueOnce(new Error("offline"));
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "shared");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+        expect(result.current.showField).toBe(true);
+        expect(result.current.focusField).toBe(false);
+    });
+
+    it("keeps a failed shortcut's restored field focused", async () => {
+        // The share intent is the only quiet failure. A shortcut also hid its
+        // field, but the user tapped the tile and is now in the sheet, so its
+        // restored field keeps focus (`focusField` stays true) ready for the
+        // next code -- the same reason the shortcut degrade raises the keyboard.
+        mockGetRecipe.mockReturnValueOnce(null);
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH999"}, "shortcut");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+        expect(result.current.focusField).toBe(true);
+    });
+
+    it("keeps a failed typed lookup's field focusable", async () => {
+        // The typed path never hides its field, so `focusField` stays true and
+        // the keyboard the user was typing with is left alone to correct the
+        // typo -- the veto is reserved for the share intent alone.
+        mockGetRecipe.mockReturnValueOnce(null);
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH999"}, "deliberate");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+        expect(result.current.showField).toBe(true);
+        expect(result.current.focusField).toBe(true);
     });
 });
 
