@@ -78,8 +78,19 @@ export default function HomeScreen({db, settings}: Props) {
     // `options` identity (a literal passed by `_layout`) and recreates
     // `resetShareIntent` every render, and `resetOnBackground` re-fires across a
     // foreground transition -- and without this each delivery pushed another
-    // editor, stacking two screens for one shared link. Cleared when the intent
-    // goes away, so the same link can be shared again later on purpose.
+    // editor, stacking two screens for one shared link.
+    //
+    // A redelivery and a deliberate re-share of the same link are *identical* in
+    // `hasShareIntent`/`shareIntent`: both are `false -> true` with the same
+    // `webUrl`. So the guard cannot be cleared on the intent going away -- that
+    // absence is one we cause ourselves by calling `resetShareIntent`, which
+    // fires between the first handling and the redelivery and would forget the
+    // payload just in time to import it again (the race the previous fix only
+    // sometimes won). What actually tells the two apart is the user: a
+    // deliberate re-share happens only after they backed out of the editor this
+    // import opened and returned *here*. So the guard is cleared on this screen
+    // regaining focus (the `useFocusEffect` below) -- an explicit user action --
+    // and never on the mere absence of an intent.
     const handledShareUrl = useRef<string | null>(null);
 
     const importer = useRecipeImport({
@@ -105,6 +116,14 @@ export default function HomeScreen({db, settings}: Props) {
     useFocusEffect(
         React.useCallback(() => {
             library.refresh();
+            // Regaining focus is the one signal that separates a redelivery of a
+            // shared link from a deliberate re-share of it: a re-share only
+            // happens after the user left the editor this import opened and came
+            // back here, whereas a redelivery arrives while that editor is still
+            // opening or open and this screen never re-focuses. So this is where
+            // the share guard is forgotten -- an explicit return by the user,
+            // not the absence of an intent, which we cause ourselves.
+            handledShareUrl.current = null;
             // Refreshing on focus is how a recipe saved in the editor appears
             // here. `library` is rebuilt every render, so depending on it would
             // re-run this on every render instead of on every focus.
@@ -114,10 +133,11 @@ export default function HomeScreen({db, settings}: Props) {
 
     useEffect(() => {
         if (!hasShareIntent || shareIntent.type !== "weburl" || !shareIntent.webUrl) {
-            // No live intent: forget what we handled, so re-sharing the same
-            // link later is a fresh act that imports again rather than being
-            // ignored as a repeat.
-            handledShareUrl.current = null;
+            // No live intent. The guard is *not* cleared here: this absence is
+            // the one we cause by calling `resetShareIntent` after handling, and
+            // clearing on it is exactly what let a redelivery re-import. The
+            // guard is cleared only when the user returns to this screen (see the
+            // `useFocusEffect` above).
             return;
         }
         if (handledShareUrl.current === shareIntent.webUrl) {

@@ -11,11 +11,29 @@ import {Settings, type SettingsStorage} from "@/library/Settings";
 
 const mockPush = jest.fn();
 
-jest.mock("expo-router", () => ({
-    useRouter:      () => ({push: mockPush}),
-    useNavigation:  () => ({setOptions: jest.fn()}),
-    useFocusEffect: jest.fn()
-}));
+// Bumped by a test to make the home screen's `useFocusEffect` callback re-run,
+// standing in for the screen regaining focus (the user returning from the
+// editor). It is part of the mock effect's dependency list, so incrementing it
+// and re-rendering makes React itself re-invoke the focus callback -- calling a
+// captured, compiler-memoised callback by hand does not run its body.
+let mockFocusEpoch = 0;
+
+jest.mock("expo-router", () => {
+    const actualReact = jest.requireActual("react");
+    return {
+        useRouter:     () => ({push: mockPush}),
+        useNavigation: () => ({setOptions: jest.fn()}),
+        // Mirror expo-router closely enough for these tests: run the focus
+        // callback on mount (mount is the first focus) and again whenever
+        // `mockFocusEpoch` changes, which a test uses to simulate a refocus.
+        useFocusEffect: (cb: () => void) => {
+            const epoch = mockFocusEpoch;
+            actualReact.useEffect(() => {
+                cb();
+            }, [cb, epoch]);
+        }
+    };
+});
 
 let mockShareIntentState: {
     hasShareIntent:   boolean;
@@ -122,6 +140,7 @@ beforeEach(() => {
     mockFetchRecipeDetail = () => Promise.resolve();
     mockGetRecipe = () => undefined;
     mockNativePasteOnPress = undefined;
+    mockFocusEpoch = 0;
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
@@ -384,12 +403,15 @@ describe("import", () => {
         expect(XBloomRecipe).toHaveBeenCalledTimes(1);
     });
 
-    it("imports once when the library re-delivers the same intent", async () => {
-        // expo-share-intent can hand the same payload back: it recreates
-        // `resetShareIntent` every render and re-runs its refresh on a new
-        // `options` identity, and `resetOnBackground` re-fires across a
-        // foreground. Each redelivery used to push a second editor. The handler
-        // remembers the payload it acted on and ignores a repeat.
+    it("imports once when a redelivery follows the reset it caused", async () => {
+        // The device sequence the previous guard missed. Handling a share calls
+        // `resetShareIntent`, which drives `hasShareIntent` false; the library
+        // then redelivers the *same* payload -- a fresh `refreshShareIntent`, a
+        // foreground `resetOnBackground` -- and it goes true again. No user
+        // returned to this screen in between (the editor is opening on top), so
+        // it must import once, not push a second editor. The old guard cleared
+        // itself on that interim false and re-imported; this pins that it does
+        // not any more.
         mockFetchRecipeDetail = () => new Promise<void>(() => {});
         const db = store([]);
         const settings = new Settings(memoryStorage());
@@ -402,8 +424,17 @@ describe("import", () => {
         );
         await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
 
-        // Same payload, fresh `resetShareIntent` identity -- exactly what the
-        // library does on the next render while `hasShareIntent` is still true.
+        // The reset we call after handling drives the intent false -- the exact
+        // interim state the old guard forgot the payload on.
+        mockShareIntentState = {
+            hasShareIntent: false, shareIntent: {}, resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        // The library hands the same payload back. The user has not returned
+        // here, so the guard still holds and nothing is imported again.
         mockShareIntentState = {
             hasShareIntent: true, shareIntent: intent, resetShareIntent: jest.fn()
         };
@@ -414,10 +445,13 @@ describe("import", () => {
         expect(XBloomRecipe).toHaveBeenCalledTimes(1);
     });
 
-    it("imports again when the same link is shared a second time later", async () => {
-        // The guard must not be permanent. Once the intent clears, sharing the
-        // same link again is a fresh deliberate act and must import once more --
-        // otherwise a recipe could never be re-shared after its first import.
+    it("imports again when the same link is shared after returning here", async () => {
+        // The guard must not be permanent. Sharing the same link again is a
+        // fresh deliberate act -- but only once the user has come back to this
+        // screen from the editor the first import opened. That return, a focus
+        // regain, is what clears the guard; without it this sequence is
+        // byte-identical to the redelivery above, which must be ignored. The
+        // divergence between the two tests is exactly that one focus event.
         mockFetchRecipeDetail = () => new Promise<void>(() => {});
         const db = store([]);
         const settings = new Settings(memoryStorage());
@@ -436,6 +470,14 @@ describe("import", () => {
             hasShareIntent: false, shareIntent: {}, resetShareIntent: jest.fn()
         };
         await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        // The user backs out of the editor and returns to the library: the
+        // screen regains focus, the deliberate action that forgets the last
+        // handled link.
+        await act(async () => {
+            mockFocusEpoch++;
             rerender(<HomeScreen db={db} settings={settings}/>);
         });
 

@@ -437,10 +437,30 @@ across a foreground transition. Each redelivery is a *sequential* resolve — th
 first completes and navigates before the second starts — so the hook's generation
 counter, which only drops a superseded in-flight lookup, does not catch it, and
 two editors would stack. The screen therefore remembers the `webUrl` it acted on
-in a ref and ignores a repeat, clearing it once the intent goes away so the same
-link can be shared again later on purpose. This is the one place idempotency can
-live: the screen owns navigation, and the payload identity is the only thing that
-distinguishes a redelivery from a genuine re-share.
+in a ref and ignores a repeat.
+
+The hard part is *when to forget* it, because a redelivery and a deliberate
+re-share of the same link are byte-identical in `hasShareIntent`/`shareIntent`:
+both are a `false → true` transition carrying the same `webUrl`. The obvious
+"clear the ref when the intent goes away" is therefore wrong, and was the
+regression: the app *itself* drives the intent to `false` by calling
+`resetShareIntent` immediately after handling, so the ref was forgotten in the
+gap between the first handling and the redelivery — and any redelivery landing
+after that gap re-imported. It only ever "worked" by winning that race, which the
+later `atomic → shared` change (extra `showField`/`focusField` writes shifting
+commit timing) lost for good. No guard keyed on the payload plus `hasShareIntent`
+can tell the two cases apart, because in those values they are the same.
+
+What actually separates them is the **user**: a deliberate re-share happens only
+after they backed out of the editor this import opened and returned to the
+library. So the ref is cleared in the home screen's `useFocusEffect` — on the
+screen *regaining focus* — and never on the absence of an intent. A redelivery
+arrives while that editor is still opening or open and this screen never
+re-focuses, so the guard holds and the second import is dropped deterministically,
+not by winning a race. A re-share only reaches the handler after a real focus
+regain has cleared the guard, so it imports again. This is correct by
+construction: the redelivery is dropped because nothing cleared the guard, and
+the re-share works because the user's return did.
 
 Three doors, one sheet, one state machine. The only branches are whether the
 field is shown and whether it takes focus — which follow from the intent that
