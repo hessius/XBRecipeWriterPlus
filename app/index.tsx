@@ -41,6 +41,8 @@ type Props = {
  * Layout only. Loading and mutating recipes belong to `useRecipeLibrary`, the
  * scroll collapse to `useCollapsibleHeader`, and every message to `notify`.
  */
+let navigatingToEditor = false;
+
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -104,15 +106,19 @@ export default function HomeScreen({db, settings}: Props) {
     // reads as a fresh delivery.
     const lastSeenShareUrl = useRef<string | null>(null);
 
-    // True from the moment a push to the editor is issued until this screen is
-    // focused again. Everything upstream of this guards one particular way a
+    // True from the moment a push to the editor is issued until a library screen
+    // is focused again. Everything upstream of this guards one particular way a
     // recipe can arrive twice -- a redelivered share intent, a double tap, a
     // paste racing a share -- and each of those guards has to model its own
-    // source correctly to work. This one models nothing: opening a second
-    // editor while the first is still opening is never what the user asked
-    // for, whatever produced the second recipe. It is the last line, not the
-    // first.
-    const navigatingToEditor = useRef(false);
+    // source correctly to work. This one models nothing: opening a second editor
+    // while the first is still opening is never what the user asked for,
+    // whatever produced the second recipe.
+    //
+    // Deliberately module state rather than a ref. The bug this exists to stop
+    // was two library screens mounted at once, each importing the same shared
+    // link, and a ref would have given each of them its own private guard and
+    // caught nothing. `+native-intent` stops that pair from forming; this is
+    // what holds if anything ever mounts a second one again.
 
     const importer = useRecipeImport({
         stored:       library.recipes,
@@ -157,7 +163,7 @@ export default function HomeScreen({db, settings}: Props) {
             library.refresh();
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
-            navigatingToEditor.current = false;
+            navigatingToEditor = false;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -296,10 +302,10 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function openRecipe(recipe: Recipe): boolean {
-        if (navigatingToEditor.current) {
+        if (navigatingToEditor) {
             return false;
         }
-        navigatingToEditor.current = true;
+        navigatingToEditor = true;
         router.push({
             pathname: "/editRecipe",
             params:   {recipeJSON: JSON.stringify(recipe)}
