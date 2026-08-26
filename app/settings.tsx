@@ -1,6 +1,9 @@
+import * as Application from "expo-application";
+import {useRouter} from "expo-router";
 import React from "react";
 import {ScrollView, YStack} from "tamagui";
 
+import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
@@ -19,6 +22,8 @@ const TEMPERATURE_OPTIONS = [
     {value: "F", label: "°F"}
 ] as const;
 
+const VERSION = Application.nativeApplicationVersion ?? "unknown";
+
 /**
  * The settings screen.
  *
@@ -33,6 +38,7 @@ const TEMPERATURE_OPTIONS = [
  * decision in place.
  */
 export default function SettingsScreen({settings}: Props) {
+    const router = useRouter();
     const [showCoffeeMarker, setShowCoffeeMarker] =
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
@@ -44,6 +50,17 @@ export default function SettingsScreen({settings}: Props) {
         <ScrollView backgroundColor={palette.base}
                     contentContainerStyle={{padding: 16, paddingBottom: 48}}>
             <YStack>
+                {/* At the top rather than the conventional bottom. The row
+                    carries the app's name and version, so it reads as the
+                    screen's identity rather than its footnote — the shape iOS
+                    uses for the Apple ID row — and it is the row an App Store
+                    reviewer comes here looking for. */}
+                <SettingsSection>
+                    <SettingsActionRow label="About XBRW++"
+                                       detail={`Version ${VERSION}`}
+                                       onPress={() => router.push("/about")}/>
+                </SettingsSection>
+
                 <SettingsSection title="Recipe list">
                     <SettingsToggleRow
                         label="Show the COFFEE marker"

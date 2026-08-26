@@ -5,6 +5,12 @@ import SettingsScreen from "@/app/settings";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {renderWithProviders} from "@/test-utils/render";
 
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+    ...jest.requireActual("expo-router"),
+    useRouter: () => ({push: mockPush})
+}));
+
 function memoryStorage(): SettingsStorage {
     const values = new Map<string, string>();
     return {
@@ -98,5 +104,17 @@ describe("SettingsScreen", () => {
     it("says what the unit changes and what it does not", async () => {
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText(/card always stores/i)).toBeTruthy();
+    });
+
+    it("opens About from the top of the screen, not the bottom", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        // SettingsActionRow folds its label and detail into one accessible
+        // name (see components/__tests__/SettingsRows.test.tsx), so the row's
+        // name here is "About XBRW++, Version ..." rather than the label alone.
+        const about = screen.getByRole("button", {name: /^About XBRW\+\+/});
+        await fireEvent.press(about);
+
+        expect(mockPush).toHaveBeenCalledWith("/about");
     });
 });
