@@ -203,3 +203,51 @@ describe("StageTile help", () => {
         expect(screen.queryByText(/The path the water takes/)).toBeNull();
     });
 });
+
+describe("StageTile in Fahrenheit", () => {
+    it("shows the stage temperature in Fahrenheit", async () => {
+        const pour = new Pour(1);
+        pour.setTemperature(93);
+
+        await renderWithProviders(
+            <StageTile pour={pour} index={0} count={1} open={false} accent="#FFFFFF"
+                       isTea={false} temperatureUnit="F"
+                       onToggle={() => {}} onChange={() => {}} onDelete={() => {}}/>
+        );
+
+        expect(screen.getByText("199")).toBeTruthy();
+        expect(screen.getByText("°F")).toBeTruthy();
+        expect(screen.queryByText("93")).toBeNull();
+    });
+
+    it("shows the stage temperature in Celsius by default", async () => {
+        const pour = new Pour(1);
+        pour.setTemperature(93);
+
+        await renderWithProviders(
+            <StageTile pour={pour} index={0} count={1} open={false} accent="#FFFFFF"
+                       isTea={false}
+                       onToggle={() => {}} onChange={() => {}} onDelete={() => {}}/>
+        );
+
+        expect(screen.getByText("93")).toBeTruthy();
+        expect(screen.getByText("°C")).toBeTruthy();
+    });
+
+    it("reports a Fahrenheit step back to the model in Celsius", async () => {
+        const pour = new Pour(1);
+        pour.setTemperature(93);
+        const onChange = jest.fn();
+
+        await renderWithProviders(
+            <StageTile pour={pour} index={0} count={1} open accent="#FFFFFF"
+                       isTea={false} temperatureUnit="F"
+                       onToggle={() => {}} onChange={onChange} onDelete={() => {}}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        // 93 °C is 199 °F; the next value on the ladder is 201 °F, which is 94 °C.
+        expect(onChange).toHaveBeenCalledWith(0, "temperature", 94);
+    });
+});

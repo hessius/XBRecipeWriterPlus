@@ -23,6 +23,8 @@ import Stepper from "@/components/Stepper";
 import {palette} from "@/constants/colors";
 import {RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
+import {displayValues, displayRange, fromDisplay, toDisplay, unitSuffix,
+        type TemperatureUnit} from "@/library/units";
 
 /** Which of a stage's values an edit refers to. */
 export type StageField =
@@ -36,6 +38,12 @@ type Props = {
     open: boolean;
     accent: string;
     isTea: boolean;
+    /**
+     * The unit to draw and edit the temperature in. Passed in rather than read
+     * here: this tile is presentational, and a settings hook inside it would
+     * make every test of it depend on a store.
+     */
+    temperatureUnit?: TemperatureUnit;
     onToggle: (index: number) => void;
     onChange: (index: number, field: StageField, value: number) => void;
     onDelete: (index: number) => void;
@@ -49,7 +57,7 @@ type Props = {
  * the row opened, and one row's tap target ran into the next one's.
  */
 export default function StageTile({
-    pour, index, count, open, accent, isTea, onToggle, onChange, onDelete
+    pour, index, count, open, accent, isTea, temperatureUnit = "C", onToggle, onChange, onDelete
 }: Props) {
     "use no memo";
 
@@ -89,7 +97,8 @@ export default function StageTile({
                     </DotMatrixText>
                     <XStack flex={1} gap="$3" alignItems="baseline">
                         {fact(pour.getVolume(), "ml")}
-                        {fact(pour.getTemperature(), "°C")}
+                        {fact(toDisplay(pour.getTemperature(), temperatureUnit),
+                              unitSuffix(temperatureUnit))}
                         {fact(Pour.getPourPatternText(pour.getPourPattern()).toUpperCase())}
                     </XStack>
                     {/* No sparkline here any more. It drew a flat run of equal
@@ -115,9 +124,20 @@ export default function StageTile({
                         <StageValue topic="volume" value={pour.getVolume()}
                                     min={1} max={isTea ? 90 : 240} step={1} accent={accent}
                                     onChange={(v) => onChange(index, "volume", v)}/>
-                        <StageValue topic="temperature" value={pour.getTemperature()}
-                                    min={39} max={99} step={1}
-                                    onChange={(v) => onChange(index, "temperature", v)}/>
+                        {/* The one field in the app whose displayed value is not
+                            its stored value. The ladder is what the card can
+                            actually hold: in Fahrenheit the storable values are
+                            not one apart, and a step that did not move the
+                            stored value would read as a dead button. */}
+                        <StageValue topic="temperature"
+                                    value={toDisplay(pour.getTemperature(), temperatureUnit)}
+                                    min={displayRange(temperatureUnit).min}
+                                    max={displayRange(temperatureUnit).max}
+                                    step={1}
+                                    values={displayValues(temperatureUnit)}
+                                    onChange={(v) =>
+                                        onChange(index, "temperature",
+                                                 fromDisplay(v, temperatureUnit))}/>
                     </StageRow>
                     <StageRow topics={["flowRate", "pause"]}>
                         {/* Flow rate is the one value the card stores in
@@ -229,6 +249,7 @@ function StageLabel({topic}: {topic: HelpTopic}) {
 
 type StageValueProps = {
     topic: HelpTopic; value: number; min: number; max: number; step: number;
+    values?: readonly number[];
     accent?: string; onChange: (value: number) => void;
 };
 
@@ -241,14 +262,14 @@ type StageValueProps = {
  * number in half — see the device screenshot that prompted this. Stacking gives
  * the stepper the pill's full width and costs one line of height.
  */
-function StageValue({topic, value, min, max, step, accent, onChange}: StageValueProps) {
+function StageValue({topic, value, min, max, step, values, accent, onChange}: StageValueProps) {
     return (
         <YStack flex={1} alignItems="center" gap="$1"
                 backgroundColor={palette.raised} borderRadius="$3"
                 paddingHorizontal="$2" paddingVertical="$2">
             <StageLabel topic={topic}/>
             <Stepper label={RECIPE_HELP[topic].title} value={value} min={min}
-                     max={max} step={step} accent={accent}
+                     max={max} step={step} values={values} accent={accent}
                      onChange={onChange}/>
         </YStack>
     );
