@@ -30,11 +30,27 @@ describe("SegmentedControl", () => {
         expect(onChange).toHaveBeenCalledWith("F");
     });
 
-    it("is announced as one radio group rather than two loose buttons", async () => {
+    it("is announced as one radio group carrying the name it was given", async () => {
         await renderWithProviders(
-            <SegmentedControl value="C" options={OPTIONS} onChange={() => {}}/>
+            <SegmentedControl value="C" options={OPTIONS} onChange={() => {}}
+                              accessibilityLabel="Temperature"/>
         );
 
-        expect(screen.getByRole("radiogroup")).toBeTruthy();
+        const group = screen.getByLabelText("Temperature");
+        expect(group.props.accessibilityRole).toBe("radiogroup");
+    });
+
+    it("leaves each segment reachable rather than collapsing into one element", async () => {
+        await renderWithProviders(
+            <SegmentedControl value="C" options={OPTIONS} onChange={() => {}}
+                              accessibilityLabel="Temperature"/>
+        );
+
+        // `accessible` on the group would hide the segments inside it on iOS,
+        // giving a control that reads both labels and activates neither. The
+        // test renderer does not model that collapse, so the prop itself is
+        // what has to be asserted on.
+        expect(screen.getByLabelText("Temperature").props.accessible).toBeUndefined();
+        expect(screen.getAllByRole("radio")).toHaveLength(2);
     });
 });

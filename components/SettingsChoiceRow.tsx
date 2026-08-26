@@ -23,7 +23,8 @@ export default function SettingsChoiceRow({
                 <Text fontSize={16} color={palette.text}>{label}</Text>
                 <Text fontSize={13} color={palette.dim}>{description}</Text>
             </YStack>
-            <SegmentedControl value={value} options={options} onChange={onChange}/>
+            <SegmentedControl value={value} options={options} onChange={onChange}
+                              accessibilityLabel={label}/>
         </XStack>
     );
 }

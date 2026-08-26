@@ -26,11 +26,14 @@ export default function SettingsActionRow({label, detail, tone = "default", onPr
     const ink = tone === "danger" ? palette.danger : palette.text;
 
     return (
-        <Pressable accessibilityRole="button" accessibilityLabel={label}
-                   accessibilityHint={detail}
+        // The detail joins the label rather than staying in the hint: VoiceOver
+        // hints can be switched off, and a version number nobody hears is not
+        // shown at all.
+        <Pressable accessibilityRole="button"
+                   accessibilityLabel={detail === undefined ? label : `${label}, ${detail}`}
                    onPress={onPress}>
             <XStack alignItems="center" justifyContent="space-between" gap="$4"
-                    paddingVertical="$3.5" borderBottomWidth={1}
+                    paddingVertical="$3" borderBottomWidth={1}
                     borderBottomColor={palette.line}>
                 <YStack flex={1} gap="$1">
                     <Text fontSize={16} color={ink}>{label}</Text>

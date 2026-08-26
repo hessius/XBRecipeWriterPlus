@@ -67,7 +67,9 @@ describe("SettingsActionRow", () => {
                                onPress={() => {}}/>
         );
 
-        const row = screen.getByRole("button", {name: "About XBRW++"});
+        // One button announcing both: the detail must not depend on VoiceOver
+        // hints being switched on.
+        const row = screen.getByRole("button", {name: "About XBRW++, Version 2.6.0"});
         expect(row).toBeTruthy();
         expect(screen.getByText("Version 2.6.0")).toBeTruthy();
     });
