@@ -12,17 +12,20 @@ import Collapsible from "@/components/Collapsible";
 import CtaTile from "@/components/CtaTile";
 import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
-import ImportRecipeComponent from "@/components/ImportRecipeComponent";
+import ImportSheet from "@/components/ImportSheet";
+import ImportTile from "@/components/ImportTile";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {resolveOnOpen} from "@/library/duplicates";
+import {parseImportInput} from "@/library/importInput";
 import type {Settings} from "@/library/Settings";
 
 type Props = {
@@ -51,7 +54,6 @@ export default function HomeScreen({db, settings}: Props) {
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [readProgress, setReadProgress] = useState(0);
-    const [importId, setImportId] = useState<string | null>(null);
     const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
@@ -62,6 +64,26 @@ export default function HomeScreen({db, settings}: Props) {
     const [nfc] = useState(() => new NFC());
 
     const isEmpty = library.recipes.length === 0;
+
+    // `importId` used to do double duty -- "is the sheet open" and "what to
+    // import" -- which is why `""` meant open-with-nothing and `null` meant
+    // closed. Two questions, two answers.
+    const [importOpen, setImportOpen] = useState(false);
+    const [importShowField, setImportShowField] = useState(true);
+
+    const importer = useRecipeImport({
+        stored:       library.recipes,
+        onOpenRecipe: (recipe, isExisting) => {
+            setImportOpen(false);
+            if (isExisting) {
+                // The same words a card read already uses when it turns out the
+                // library has this one. `resolveOnOpen` never makes a copy, so
+                // opening the existing recipe is the whole reveal.
+                notify({tone: "info", message: "Already in your library"});
+            }
+            openRecipe(recipe);
+        }
+    });
 
     // The header owns the whole strip, so the navigator's own bar would be a
     // second title above ours.
@@ -83,14 +105,23 @@ export default function HomeScreen({db, settings}: Props) {
         if (!hasShareIntent || shareIntent.type !== "weburl" || !shareIntent.webUrl) {
             return;
         }
-        const id = new URL(shareIntent.webUrl).searchParams.get("id");
-        if (id) {
+        // The screen no longer knows what an xBloom link looks like. One module
+        // does, and it is the same one the field uses -- two that had to agree
+        // eventually would not.
+        const source = parseImportInput(shareIntent.webUrl);
+        if (source) {
             // Reacting to an inbound share intent — an external system pushing
             // into React, which is what effects are for.
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setImportId(id);
-            resetShareIntent();
+            /* eslint-disable react-hooks/set-state-in-effect */
+            setImportShowField(false);
+            setImportOpen(true);
+            /* eslint-enable react-hooks/set-state-in-effect */
+            importer.resolveNow(source, "atomic");
         }
+        resetShareIntent();
+        // `importer` is rebuilt every render; depending on it would re-run this
+        // on every render instead of on every intent.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasShareIntent, shareIntent, resetShareIntent]);
 
     async function progressCallback(progress: number): Promise<string | undefined> {
@@ -159,19 +190,21 @@ export default function HomeScreen({db, settings}: Props) {
         });
     }
 
-    // An empty id mounts the import component but presents nothing (it gates on
-    // `props.recipeId`), so only a real id actually covers the screen.
-    const screenCovered = scanning || Boolean(importId);
+    // The import sheet covers the screen while it is open, and the NFC ceremony
+    // while a scan is running. Both hide the subtree below from the reader.
+    const screenCovered = scanning || importOpen;
 
     return (
         <>
             {/* The NFC ceremony is a modal moment, and an absolutely positioned
                 overlay only covers the screen visually. While it -- or the
-                import dialog, whose Tamagui portal is a host-tree portal rather
-                than a native Modal and so isolates nothing on Android -- is up,
-                this subtree hides its own descendants from the screen reader, so
-                TalkBack cannot reach and fire the controls behind it — the
-                Android half of what `accessibilityViewIsModal` does on iOS. */}
+                import sheet, a non-modal Tamagui sheet that renders as a sibling
+                of this screen rather than through a native Modal and so isolates
+                nothing on Android -- is up, this subtree hides its own
+                descendants from the screen reader, so TalkBack cannot reach and
+                fire the controls behind it — the Android half of what
+                `accessibilityViewIsModal` does on iOS. The sheet is rendered
+                outside this guarded subtree, so it never hides itself. */}
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
@@ -180,24 +213,34 @@ export default function HomeScreen({db, settings}: Props) {
                     collapsed={collapsed}
                     editing={editing}
                     showEdit={!isEmpty}
-                    canImport={false}
+                    canImport
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
-                    onImport={() => setImportId("")}
+                    onImport={() => {
+                        setImportShowField(true);
+                        setImportOpen(true);
+                    }}
                     onSettings={() => router.push("/settings")}/>
 
                 <Collapsible open={!collapsed}>
                     <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
                         <CtaTile icon="scan" label="READ CARD"
                                  accessibilityLabel="Read a card" onPress={readCard}/>
-                        {/* Shown but inert until sub-project 5. The sheet
-                            behind it previews a recipe it is handed by a
-                            share intent and has no way to be given one
-                            here, so the tile holds its place in the layout
-                            rather than claiming an action it cannot do. */}
-                        <CtaTile icon="import" label="IMPORT" disabled
-                                 accessibilityLabel="Import a recipe"
-                                 onPress={() => setImportId("")}/>
+                        <ImportTile
+                            onOpen={() => {
+                                setImportShowField(true);
+                                setImportOpen(true);
+                            }}
+                            onPasted={(text) => {
+                                const source = parseImportInput(text);
+                                // A value that does not parse is not put in the
+                                // field: the sheet opens exactly as a plain tap
+                                // would have, and the user cannot tell the two
+                                // apart.
+                                setImportShowField(source === null);
+                                setImportOpen(true);
+                                if (source) importer.resolveNow(source, "atomic");
+                            }}/>
                     </XStack>
                 </Collapsible>
 
@@ -234,15 +277,17 @@ export default function HomeScreen({db, settings}: Props) {
                 )}
             </YStack>
 
-            {importId !== null && (
-                <ImportRecipeComponent
-                    key={`import-${importId}`}
-                    recipeId={importId}
-                    onClose={() => {
-                        setImportId(null);
+            <ImportSheet
+                open={importOpen}
+                showField={importShowField}
+                importer={importer}
+                onOpenChange={(open) => {
+                    setImportOpen(open);
+                    if (!open) {
+                        importer.reset();
                         library.refresh();
-                    }}/>
-            )}
+                    }
+                }}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>

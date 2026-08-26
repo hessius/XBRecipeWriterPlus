@@ -1,5 +1,7 @@
 import React from "react";
-import {screen, fireEvent, waitFor} from "@testing-library/react-native";
+import {AccessibilityInfo} from "react-native";
+import {act, screen, fireEvent, waitFor} from "@testing-library/react-native";
+import * as Clipboard from "expo-clipboard";
 
 import HomeScreen from "@/app/index";
 import Recipe from "@/library/Recipe";
@@ -26,14 +28,40 @@ jest.mock("expo-share-intent", () => ({
 
 jest.mock("@/library/RecipeDatabase");
 
+// Configurable so a test can leave a lookup in flight (a never-resolving
+// `fetchRecipeDetail` holds the sheet in its resolving state) or hand back a
+// real recipe (`getRecipe`) to exercise the de-duplication reveal. The
+// `mock`-prefixed names are the only ones `jest.mock`'s hoist lets a factory
+// reach out to.
+let mockFetchRecipeDetail: () => Promise<void> = () => Promise.resolve();
+let mockGetRecipe: () => Recipe | undefined = () => undefined;
+
 jest.mock("@/library/XBloomRecipe", () => ({
     XBloomRecipe: jest.fn().mockImplementation(() => ({
-        fetchRecipeDetail: jest.fn().mockResolvedValue(undefined),
-        getImageURL:       jest.fn(() => ""),
-        getName:           jest.fn(() => "Imported"),
-        getSubtitle:       jest.fn(() => ""),
-        getRecipe:         jest.fn()
+        fetchRecipeDetail: () => mockFetchRecipeDetail(),
+        getImageURL:       () => "",
+        getName:           () => "Imported",
+        getSubtitle:       () => "",
+        getRecipe:         () => mockGetRecipe()
     }))
+}));
+
+// The import tile samples the clipboard on mount. Under jest, and off iOS 16,
+// paste mode never engages, so the tile is a plain button -- but the module
+// must still exist and answer the presence check. `isPasteButtonAvailable` and
+// `hasStringAsync` are flipped per-test to reach the disguised-paste path, and
+// the control stashes its `onPress` so a test can drive a chosen payload.
+let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
+
+jest.mock("expo-clipboard", () => ({
+    hasStringAsync:         jest.fn(async () => false),
+    getStringAsync:         jest.fn(async () => ""),
+    isPasteButtonAvailable: false,
+    ClipboardPasteButton:   ({onPress, ...rest}: {onPress?: (data: unknown) => void}) => {
+        const {Pressable} = jest.requireActual("react-native");
+        mockNativePasteOnPress = onPress;
+        return <Pressable {...rest}/>;
+    }
 }));
 
 const mockNotify = jest.fn();
@@ -88,12 +116,45 @@ function store(recipes: Recipe[]) {
 
 beforeEach(() => {
     mockPush.mockClear();
+    mockNotify.mockClear();
+    mockFetchRecipeDetail = () => Promise.resolve();
+    mockGetRecipe = () => undefined;
+    mockNativePasteOnPress = undefined;
+    (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
+    jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
     mockShareIntentState = {
         hasShareIntent:   false,
         shareIntent:      {},
         resetShareIntent: jest.fn()
     };
 });
+
+afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+});
+
+/**
+ * Render the home screen the way every import test needs it.
+ *
+ * A share intent is a module-level stub read on mount, so it is set before the
+ * render rather than passed as a prop.
+ */
+async function renderHome(
+    options: {shareIntent?: Record<string, unknown>; recipes?: Recipe[]} = {}
+) {
+    if (options.shareIntent) {
+        mockShareIntentState = {
+            hasShareIntent:   true,
+            shareIntent:      options.shareIntent,
+            resetShareIntent: jest.fn()
+        };
+    }
+    return renderWithProviders(
+        <HomeScreen db={store(options.recipes ?? [])} settings={new Settings(memoryStorage())}/>
+    );
+}
 
 describe("HomeScreen", () => {
     it("lists the saved recipes as cards", async () => {
@@ -118,22 +179,6 @@ describe("HomeScreen", () => {
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
         expect(screen.getByLabelText("Read a card")).toBeTruthy();
         expect(screen.getByLabelText("Import a recipe")).toBeTruthy();
-    });
-
-    it("shows import as unavailable rather than pretending it works", async () => {
-        // ImportRecipeComponent is a preview-and-confirm sheet for an id it is
-        // handed; it has no field to type one into, and only ever opened from a
-        // share intent. Until sub-project 5 gives it a way in, a tile that
-        // silently does nothing when pressed is worse than one that says so.
-        await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
-        const tile = screen.getByLabelText("Import a recipe");
-
-        expect(tile.props.accessibilityState.disabled).toBe(true);
-
-        // Still there, still saying IMPORT, and pressing it goes nowhere.
-        await fireEvent.press(tile);
-        expect(screen.getByText("IMPORT")).toBeTruthy();
-        expect(mockPush).not.toHaveBeenCalled();
     });
 
     it("opens a recipe when its card is pressed", async () => {
@@ -220,11 +265,11 @@ describe("HomeScreen", () => {
         expect(screen.queryByLabelText("Edit recipes")).toBeNull();
     });
 
-    it("takes the screen out of the reader's reach while the import dialog is open", async () => {
-        // The import dialog is a Dialog+Sheet modal, but Tamagui's portal is a
-        // host-tree portal rather than a native Modal, so Android gets no
+    it("takes the screen out of the reader's reach while the import sheet is open", async () => {
+        // The import sheet is a non-modal Tamagui sheet: it renders as a sibling
+        // of this screen rather than through a native Modal, so Android gets no
         // isolation from it -- the screen behind it must hide its own subtree.
-        // It is opened the only way it can be: through a share intent.
+        // A share intent opens it without any interaction.
         mockShareIntentState = {
             hasShareIntent:   true,
             shareIntent:      {type: "weburl", webUrl: "https://xbloom.com/?id=abc123"},
@@ -239,5 +284,115 @@ describe("HomeScreen", () => {
         await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
         // ...but still in the tree: it is hidden, not unmounted.
         expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
+    });
+});
+
+describe("import", () => {
+    /** Put the tile into its iOS disguised-paste mode and wait for the control. */
+    async function renderPasteMode() {
+        (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
+        (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+        await renderHome();
+        await waitFor(() => expect(mockNativePasteOnPress).toBeDefined());
+    }
+
+    it("opens the sheet from the tile", async () => {
+        await renderHome();
+
+        await fireEvent.press(await screen.findByLabelText("Import a recipe"));
+
+        expect(await screen.findByLabelText("Share link or pod code")).toBeTruthy();
+    });
+
+    it("opens the sheet already resolving when a share intent arrives", async () => {
+        // A share intent carries an id and nothing to type. It is the atomic
+        // case: it resolves and navigates without asking. The sheet still opens
+        // so that a share into a slow network is acknowledged rather than
+        // appearing to do nothing. The lookup is held in flight so the resolving
+        // state is the one on screen.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"}
+        });
+
+        expect(await screen.findByTestId("import-resolving")).toBeTruthy();
+        expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
+    });
+
+    it("ignores a shared URL that is not an xBloom link", async () => {
+        await renderHome({shareIntent: {type: "weburl", webUrl: "https://example.com/"}});
+
+        expect(screen.queryByTestId("import-resolving")).toBeNull();
+        expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
+    });
+
+    it("resolves at once when a pasted value parses, with no field to type in", async () => {
+        // The tile's paste shortcut is atomic input: a value that parses resolves
+        // without asking and needs no field, exactly like a share intent.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        await renderPasteMode();
+
+        await act(async () => {
+            mockNativePasteOnPress!({type: "text", text: "ETH120"});
+        });
+
+        expect(await screen.findByTestId("import-resolving")).toBeTruthy();
+        expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
+    });
+
+    it("opens a plain field when a pasted value does not parse", async () => {
+        // The fallback the whole shortcut rests on: junk on the clipboard opens
+        // the sheet exactly as a plain tap would, indistinguishable from one.
+        await renderPasteMode();
+
+        await act(async () => {
+            mockNativePasteOnPress!({type: "text", text: "just a note"});
+        });
+
+        expect(await screen.findByLabelText("Share link or pod code")).toBeTruthy();
+        expect(screen.queryByTestId("import-resolving")).toBeNull();
+    });
+
+    it("resets the importer when the sheet is closed", async () => {
+        // Fake timers because the sheet only becomes interactive on the
+        // `requestAnimationFrame` that plays its entrance: pressing CLOSE before
+        // that lands on a sheet that is in the tree but not yet accepting
+        // touches, and the tap is silently dropped. Advance past it after each
+        // sheet-opening step.
+        //
+        // Closing must abort an in-flight lookup, not merely hide it. Reopening
+        // the sheet shows a clean field; without the reset the stale resolving
+        // state would still be there.
+        jest.useFakeTimers();
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"}
+        });
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(screen.getByTestId("import-resolving")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByLabelText("Share link or pod code")).toBeTruthy();
+        expect(screen.queryByTestId("import-resolving")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("says the recipe is already saved when the import matches one in the library", async () => {
+        // De-duplication with a reveal: `resolveOnOpen` opens the stored copy
+        // rather than making a second, and the toast is the only account of why.
+        mockGetRecipe = () => new Recipe();
+        await renderHome({
+            shareIntent: {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"},
+            recipes:     [named("Ethiopia")]
+        });
+
+        await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(
+            expect.objectContaining({tone: "info", message: "Already in your library"})
+        ));
     });
 });
