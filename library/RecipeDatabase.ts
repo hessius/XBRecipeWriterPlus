@@ -69,6 +69,17 @@ class RecipeDatabase {
         );
     }
 
+    /**
+     * Empties the library.
+     *
+     * `DELETE FROM` rather than dropping the table: the schema is created in the
+     * constructor and a dropped table would leave every other database object in
+     * this process holding a handle to something that no longer exists.
+     */
+    public deleteAllRecipes(): void {
+        this.db.runSync("DELETE FROM recipes");
+    }
+
     public getRecipe(uuid: string): Recipe | null {
         let recipeJSON: any = this.db.getFirstSync(
             `SELECT *
