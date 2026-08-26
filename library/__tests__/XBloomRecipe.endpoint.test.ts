@@ -42,3 +42,21 @@ it("passes an abort signal through to fetch", async () => {
 
     expect((global.fetch as jest.Mock).mock.calls[0][1].signal).toBe(controller.signal);
 });
+
+it("yields no recipe when the machine reports the pod does not exist", async () => {
+    // The live pod endpoint answers HTTP 200 with `{result: "fail"}` and no
+    // `recipeVo` for a code it does not recognise (e.g. the machine's own
+    // "the xPod does not exist"). `getRecipe` must read that as nothing found --
+    // returning null so the hook shows "No recipe with that code." -- rather
+    // than hanging or building a blank recipe. Its `recipeVo`-less access throws
+    // and the method's catch turns that into the null this pins.
+    global.fetch = jest.fn(async () => ({
+        ok: true, status: 200,
+        json: async () => ({info: "The machine detected that the xPod does not exist", result: "fail"})
+    })) as unknown as typeof fetch;
+
+    const xb = new XBloomRecipe({kind: "xid", xid: "ETH120"});
+    await xb.fetchRecipeDetail();
+
+    expect(xb.getRecipe()).toBeNull();
+});

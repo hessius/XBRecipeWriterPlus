@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {Platform} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
@@ -72,6 +72,16 @@ export default function HomeScreen({db, settings}: Props) {
     // the screen only owns "is the sheet open".
     const [importOpen, setImportOpen] = useState(false);
 
+    // The web URL of the share intent we have already acted on, so a re-delivery
+    // of the *same* payload is ignored. expo-share-intent can hand the same
+    // intent back more than once -- `useShareIntent` re-runs its refresh on a new
+    // `options` identity (a literal passed by `_layout`) and recreates
+    // `resetShareIntent` every render, and `resetOnBackground` re-fires across a
+    // foreground transition -- and without this each delivery pushed another
+    // editor, stacking two screens for one shared link. Cleared when the intent
+    // goes away, so the same link can be shared again later on purpose.
+    const handledShareUrl = useRef<string | null>(null);
+
     const importer = useRecipeImport({
         stored:       library.recipes,
         onOpenRecipe: (recipe, isExisting) => {
@@ -104,8 +114,20 @@ export default function HomeScreen({db, settings}: Props) {
 
     useEffect(() => {
         if (!hasShareIntent || shareIntent.type !== "weburl" || !shareIntent.webUrl) {
+            // No live intent: forget what we handled, so re-sharing the same
+            // link later is a fresh act that imports again rather than being
+            // ignored as a repeat.
+            handledShareUrl.current = null;
             return;
         }
+        if (handledShareUrl.current === shareIntent.webUrl) {
+            // Already acted on this exact payload; a re-delivery is a no-op. The
+            // hook's generation counter does not save us here -- these deliveries
+            // are sequential, so the first resolve completes and navigates before
+            // the second even starts. Idempotency has to live at the source.
+            return;
+        }
+        handledShareUrl.current = shareIntent.webUrl;
         // The screen no longer knows what an xBloom link looks like. One module
         // does, and it is the same one the field uses -- two that had to agree
         // eventually would not.

@@ -356,9 +356,23 @@ sheet still opens, showing only the fetching state, so that a share into a slow
 network is acknowledged rather than appearing to do nothing. The field never
 appears because there is nothing to put in it.
 
+**Handled once per payload.** `expo-share-intent` can hand the same intent back
+more than once: `useShareIntent` recreates `resetShareIntent` on every render and
+re-runs its refresh whenever the `options` identity changes (so `_layout` passes
+one hoisted, stable object, not a literal), and `resetOnBackground` re-delivers
+across a foreground transition. Each redelivery is a *sequential* resolve — the
+first completes and navigates before the second starts — so the hook's generation
+counter, which only drops a superseded in-flight lookup, does not catch it, and
+two editors would stack. The screen therefore remembers the `webUrl` it acted on
+in a ref and ignores a repeat, clearing it once the intent goes away so the same
+link can be shared again later on purpose. This is the one place idempotency can
+live: the screen owns navigation, and the payload identity is the only thing that
+distinguishes a redelivery from a genuine re-share.
+
 Three doors, one sheet, one state machine. The only branch is whether the field
 is shown — which is exactly the atomic/deliberate distinction that already
-governs whether it navigates on its own.
+governs whether it navigates on its own (with the shortcut's degrade, §2, the one
+place it does not).
 
 ## 6. The paste-through import tile
 

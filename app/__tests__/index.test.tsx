@@ -384,6 +384,73 @@ describe("import", () => {
         expect(XBloomRecipe).toHaveBeenCalledTimes(1);
     });
 
+    it("imports once when the library re-delivers the same intent", async () => {
+        // expo-share-intent can hand the same payload back: it recreates
+        // `resetShareIntent` every render and re-runs its refresh on a new
+        // `options` identity, and `resetOnBackground` re-fires across a
+        // foreground. Each redelivery used to push a second editor. The handler
+        // remembers the payload it acted on and ignores a repeat.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const db = store([]);
+        const settings = new Settings(memoryStorage());
+        const intent = {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"};
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: intent, resetShareIntent: jest.fn()
+        };
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        // Same payload, fresh `resetShareIntent` identity -- exactly what the
+        // library does on the next render while `hasShareIntent` is still true.
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: intent, resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports again when the same link is shared a second time later", async () => {
+        // The guard must not be permanent. Once the intent clears, sharing the
+        // same link again is a fresh deliberate act and must import once more --
+        // otherwise a recipe could never be re-shared after its first import.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const db = store([]);
+        const settings = new Settings(memoryStorage());
+        const url = "https://share-h5.xbloom.com/r?id=abc123";
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        // The intent clears, as it does once consumed.
+        mockShareIntentState = {
+            hasShareIntent: false, shareIntent: {}, resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        // The same link arrives again, on purpose this time.
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(2));
+    });
+
     it("resolves at once when a pasted value parses, with no field to type in", async () => {
         // The tile's paste shortcut is atomic input: a value that parses resolves
         // without asking and needs no field, exactly like a share intent.
