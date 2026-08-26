@@ -61,7 +61,7 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
     // type beside a running lookup) and true otherwise, including when a shortcut
     // degrades to the found panel; `focusField` gates the field's focus so
     // a failed share intent can restore the field without raising the keyboard.
-    const {state, value, showField, focusField, hint, onChangeText, onPastedText, openFound} = importer;
+    const {state, value, showField, focusField, hint, onChangeText, onSelectionChange, onPastedText, openFound} = importer;
     const [nativePaste, setNativePaste] = useState(false);
     const [wasOpen, setWasOpen] = useState(open);
 
@@ -181,7 +181,19 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                             placeholderTextColor={palette.dim as ColorTokens}
                             value={value}
                             onChangeText={onChangeText}
-                            autoCapitalize="characters"
+                            onSelectionChange={onSelectionChange}
+                            // `none`, not `characters`: this one field takes
+                            // both a pod code and a share URL, and force-
+                            // upper-casing corrupts a typed URL -- `?id=abc`
+                            // becomes `?ID=ABC`, and both the query key and the
+                            // opaque share id are case-sensitive, so the lookup
+                            // then misses the parameter or hits a modified id. A
+                            // pod code needs no help from the keyboard: it is
+                            // short, and `parseImportInput` upper-cases it
+                            // before it is ever validated or looked up. Toggling
+                            // the mode by what has been typed so far would fight
+                            // the IME mid-word for no correctness gain.
+                            autoCapitalize="none"
                             autoCorrect={false}
                             backgroundColor={palette.raised}
                             borderColor={palette.line}

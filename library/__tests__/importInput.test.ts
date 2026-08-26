@@ -91,6 +91,20 @@ describe("pod codes", () => {
         expect(parseImportInput("eth120")).toEqual({kind: "xid", xid: "ETH120"});
     });
 
+    it("upper-cases a lower-case tea code, whose marker is a literal upper-case T", () => {
+        // The grammar's tea `T` is upper-case, so `sigt58` only validates once
+        // it has been normalised -- validating the raw input would reject it.
+        expect(parseImportInput("sigt58")).toEqual({kind: "xid", xid: "SIGT58"});
+    });
+
+    it("upper-cases a mixed-case tea code", () => {
+        expect(parseImportInput("SiGt58")).toEqual({kind: "xid", xid: "SIGT58"});
+    });
+
+    it("upper-cases a mixed-case non-tea code", () => {
+        expect(parseImportInput("EtH120")).toEqual({kind: "xid", xid: "ETH120"});
+    });
+
     it("trims a code", () => {
         expect(parseImportInput("  ETH120  ")).toEqual({kind: "xid", xid: "ETH120"});
     });

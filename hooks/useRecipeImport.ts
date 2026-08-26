@@ -85,6 +85,16 @@ export type ImportState =
  */
 export type ImportIntent = "atomic" | "deliberate" | "shared" | "shortcut";
 
+/**
+ * The shape both React Native's `TextInputSelectionChangeEventData` event and
+ * Tamagui's narrower `onSelectionChange` prop satisfy. Only the selection is
+ * read, so the handler is typed to the least it needs -- the full
+ * `NativeSyntheticEvent` is wider than Tamagui's prop and would not assign.
+ */
+export type SelectionChangeEvent = {
+    nativeEvent: {selection: {start: number; end: number}};
+};
+
 type Options = {
     /** The library, for de-duplication. Passed in rather than re-opened here. */
     stored: Recipe[];
@@ -128,6 +138,12 @@ export type RecipeImport = {
     hint: boolean;
     /** From the field. Decides paste versus typing from the size of the change. */
     onChangeText: (next: string) => void;
+    /**
+     * From the field. Tracks the selection so `onChangeText` can tell how many
+     * characters a change inserted, not just the net change in length -- a code
+     * pasted over a selected one nets zero and must still count as a paste.
+     */
+    onSelectionChange: (event: SelectionChangeEvent) => void;
     /** From a paste affordance, a share intent, or the tile shortcut. */
     resolveNow: (source: ImportSource, intent: ImportIntent) => void;
     /** Text from a paste affordance, which may or may not parse. */
@@ -168,6 +184,27 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
      * the true previous character, so batched typing stays typing.
      */
     const lastValue = useRef("");
+
+    /**
+     * The field's selection just before the change now being handled.
+     *
+     * Paste detection needs the count of characters *inserted*, not the net
+     * change in length. Selecting a six-character code and pasting a different
+     * six-character code over it is a net delta of zero, and pasting a shorter
+     * code is negative, so a net-length test misreads both as typing and fails
+     * to navigate. Knowing how many characters the change replaced recovers the
+     * inserted count: `inserted = newLength - oldLength + replacedLength`.
+     *
+     * The span is reset to a collapsed cursor the instant it is consumed (see
+     * `onChangeText`). The field reports a selection through `onSelectionChange`
+     * *before* the edit that replaces it; if that report is ever missing or
+     * stale, the collapsed default makes `replacedLength` zero, which degrades
+     * to the old net-length test rather than inventing a replacement. That
+     * one-way default is deliberate: over-counting the replaced span is the only
+     * way this could turn typing into a false paste, so the unknown case must
+     * count nothing, never something.
+     */
+    const selection = useRef({start: 0, end: 0});
 
     /**
      * Which request is the newest.
@@ -318,20 +355,37 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         void resolve(source, intent);
     }
 
+    function onSelectionChange(event: SelectionChangeEvent) {
+        selection.current = event.nativeEvent.selection;
+    }
+
     function onChangeText(next: string) {
         const previous = lastValue.current;
+        // Take the span this edit replaced, then forget it: the next change is a
+        // fresh cursor until `onSelectionChange` says otherwise, so a stale span
+        // can never inflate a later keystroke into a false paste.
+        const replaced = Math.abs(selection.current.end - selection.current.start);
+        selection.current = {start: 0, end: 0};
         lastValue.current = next;
         setValue(next);
         clearTimers();
         setHint(false);
 
         // React Native 0.86 has no `onPaste` on `TextInput`, so a paste is
-        // inferred from the size of the change: more than one character at a
-        // time is a paste. A pasted link is dozens of characters and a pasted
-        // pod code five or six, so the inference is never close in practice.
-        // The one miss -- pasting a single character -- is treated as typing
-        // and merely waits, which is why a heuristic is acceptable here.
-        const pasted = next.length - previous.length > 1;
+        // inferred from how many characters this change *inserted*: more than
+        // one at a time is a paste. Inserted, not the net change in length --
+        // pasting a code over a selected one is a net delta of zero or negative
+        // and would otherwise be misread as typing. `replaced` (the selection
+        // the change overwrote) recovers the count. A pasted link is dozens of
+        // characters and a pasted pod code five or six, so the inference is
+        // never close in practice. The one miss -- inserting a single character
+        // -- is treated as typing and merely waits, which is why a heuristic is
+        // acceptable here; the dangerous opposite miss (typing read as a paste,
+        // which navigates) cannot arise from `replaced`, since typing into a
+        // collapsed cursor leaves it zero and a selection replaced by one
+        // character still nets a single insert.
+        const inserted = next.length - previous.length + replaced;
+        const pasted = inserted > 1;
         const source = parseImportInput(next);
 
         if (pasted && source) {
@@ -425,5 +479,5 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         setState({status: "idle"});
     }
 
-    return {state, value, showField, focusField, hint, onChangeText, resolveNow, onPastedText, openFound, reset};
+    return {state, value, showField, focusField, hint, onChangeText, onSelectionChange, resolveNow, onPastedText, openFound, reset};
 }

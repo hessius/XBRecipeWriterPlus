@@ -35,12 +35,16 @@ export function parseImportInput(raw: string): ImportSource | null {
         return {kind: "share", id: share};
     }
 
-    // `isValidXID` accepts an empty string -- a recipe brews without an ID --
-    // and the empty case is already gone above.
-    if (isValidXID(trimmed)) {
-        // Upper-cased because that is how the card holds it, so a code typed in
-        // lower case produces the same recipe as one pasted from a pack.
-        return {kind: "xid", xid: trimmed.toUpperCase()};
+    // Normalise *before* validating, not after. The grammar's tea marker is a
+    // literal upper-case `T`, so a lower-case tea code like `sigt58` fails
+    // `isValidXID` while `SIGT58` passes; validating the raw input would then
+    // reject the very code this upper-cases, breaking the promise that a code
+    // typed in lower case produces the same recipe as one pasted from a pack.
+    // (`isValidXID` accepts an empty string -- a recipe brews without an ID --
+    // but the empty case is already gone above.)
+    const xid = trimmed.toUpperCase();
+    if (isValidXID(xid)) {
+        return {kind: "xid", xid};
     }
 
     return null;

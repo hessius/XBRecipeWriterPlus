@@ -44,6 +44,7 @@ function stubImport(overrides: Partial<RecipeImport> = {}): RecipeImport {
         focusField:   true,
         hint:         false,
         onChangeText: jest.fn(),
+        onSelectionChange: jest.fn(),
         resolveNow:   jest.fn(),
         onPastedText: jest.fn(),
         openFound:    jest.fn(),
@@ -98,6 +99,19 @@ it("passes typing to the hook", async () => {
     );
 
     expect(importer.onChangeText).toHaveBeenCalledWith("ETH120");
+});
+
+it("does not force-upper-case the field, so a typed share URL survives", async () => {
+    // The field takes a URL as well as a pod code, and both the `id` query key
+    // and the opaque id are case-sensitive; `autoCapitalize=\"characters\"` would
+    // turn `?id=abc` into `?ID=ABC` and break the lookup. A pod code needs no
+    // help -- `parseImportInput` upper-cases it before validating.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    const field = await screen.findByLabelText("Share link or pod code");
+    expect(field.props.autoCapitalize).toBe("none");
 });
 
 it("shows an error inline, never as an alert or a toast", async () => {

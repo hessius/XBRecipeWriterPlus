@@ -146,6 +146,116 @@ describe("a paste", () => {
         expect(onOpenRecipe).not.toHaveBeenCalled();
         expect(result.current.state.status).toBe("idle");
     });
+
+    it("navigates when a code is pasted over a whole selected code, a net delta of zero", async () => {
+        // Select all of a six-character code and paste a different six-character
+        // code over it: the length does not change, so a net-length test reads
+        // it as typing and never navigates. Counting the replaced selection
+        // recovers the six inserted characters, and the paste navigates.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        // Seed a value without navigating: `ABCDEF` is six characters that does
+        // not parse, so it resolves to nothing and merely sits in the field.
+        await act(async () => {
+            result.current.onChangeText("ABCDEF");
+        });
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+
+        await act(async () => {
+            result.current.onSelectionChange(
+                {nativeEvent: {selection: {start: 0, end: 6}}} as never
+            );
+            result.current.onChangeText("ETH120");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("navigates when a shorter code is pasted over a longer selection, a negative net delta", async () => {
+        // Eight selected characters replaced by five: the length drops, so a
+        // net-length test reads a paste as typing. The five inserted characters,
+        // recovered from the replaced span, still exceed one, so it navigates.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.onChangeText("ABCDEFGH");
+        });
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+
+        await act(async () => {
+            result.current.onSelectionChange(
+                {nativeEvent: {selection: {start: 0, end: 8}}} as never
+            );
+            result.current.onChangeText("ETH12");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("does not navigate when a selection is replaced by a single typed character", async () => {
+        // The asymmetry that governs this whole heuristic: replacing one
+        // selected character with one typed character inserts exactly one and
+        // must stay typing, even though the result parses. Counting the replaced
+        // span must never turn this into a false paste that navigates mid-edit.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        // Seed `ETH12Z` without navigating: it is six characters that does not
+        // parse, so it resolves to nothing and merely sits in the field.
+        await act(async () => {
+            result.current.onChangeText("ETH12Z");
+        });
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+
+        // Select the trailing `Z` and type `0` over it: one character replaces
+        // one, netting a single insert, and `ETH120` parses. If this were
+        // misread as a paste it would navigate; it must not.
+        await act(async () => {
+            result.current.onSelectionChange(
+                {nativeEvent: {selection: {start: 5, end: 6}}} as never
+            );
+            result.current.onChangeText("ETH120");
+        });
+
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
+
+    it("forgets a selection once consumed, so a later keystroke is not read as a paste", async () => {
+        // The replaced span is reset the instant a change consumes it. Without
+        // that, a six-character selection consumed by one edit would still be in
+        // hand on the next edit and inflate a net-zero, in-place keystroke into
+        // a false paste that navigates.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        // Seed `ETH12X` (six characters, does not parse) so nothing navigates.
+        await act(async () => {
+            result.current.onChangeText("ETH12X");
+        });
+
+        // Select all six and replace them with six other non-parsing characters:
+        // a paste by count, but with nothing to look up, so still no navigation.
+        // This is the edit that consumes -- and must clear -- the selection.
+        await act(async () => {
+            result.current.onSelectionChange(
+                {nativeEvent: {selection: {start: 0, end: 6}}} as never
+            );
+            result.current.onChangeText("ETH12Y");
+        });
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+
+        // A single in-place edit with no fresh selection: `ETH120` for `ETH12Y`
+        // is a net delta of zero and one changed character. With the span
+        // cleared this is typing; if the consumed span lingered it would count
+        // as six inserted and navigate.
+        await act(async () => {
+            result.current.onChangeText("ETH120");
+        });
+
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+    });
 });
 
 describe("a typed value", () => {

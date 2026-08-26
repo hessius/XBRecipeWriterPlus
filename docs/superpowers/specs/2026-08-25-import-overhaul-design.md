@@ -62,6 +62,7 @@ history or recents, QR scanning, and bulk import.
 | Question | Decision |
 |---|---|
 | What the field accepts | Share link or bare pod code, sniffed — no mode switch |
+| The field's auto-capitalisation | `none` — it takes a URL too, and force-upper-casing corrupts one |
 | After a successful lookup | The editor opens unsaved. No confirm step |
 | Paste vs typing | A paste resolves *and* navigates; typing resolves but waits |
 | Why | A paste is atomic; typing has no reliable "finished" signal |
@@ -93,6 +94,32 @@ The two cannot be confused for one another, which is why there is no mode switch
 in the UI. Asking the user to declare which one they hold would be asking for
 information the app already has.
 
+### A pod code is normalised before it is validated
+
+A code is upper-cased so a lower-case entry produces the same recipe as one
+pasted from a pack. The order matters: the grammar's tea marker is a **literal
+upper-case `T`**, so `sigt58` fails `isValidXID` while `SIGT58` passes.
+Validating the raw input and upper-casing only the result would reject the very
+tea codes it means to accept, and a user typing a tea code in lower case would
+be told "No recipe with that code." So `parseImportInput` upper-cases first,
+then validates the normalised value. The shared `isValidXID` grammar is left
+untouched -- it is load-bearing card logic used by the recipe editor's ID field
+too -- and the fix is confined to the ordering in `importInput.ts`.
+
+### The field does not auto-capitalise
+
+The single field takes a share URL as well as a pod code, so it sets
+`autoCapitalize="none"`. `"characters"` would help a pod-code typist see the
+upper-case they expect, but it corrupts a *typed* URL: `?id=abc` becomes
+`?ID=ABC`, and both the `id` query key and the opaque share id are
+case-sensitive, so parsing then misses the parameter or the server receives a
+modified id. A pod code needs no help from the keyboard — it is short, and
+`parseImportInput` upper-cases it before it is ever validated or looked up, so
+the value the app acts on is identical either way. Switching the mode by what has
+been typed so far (a code until a `:` or `/` appears) was considered and rejected:
+it would fight the IME mid-word for a purely cosmetic gain on a value that is
+normalised regardless.
+
 ### The host is deliberately not checked
 
 Any `http(s)` URL with an `id` is accepted, without an allowlist of xBloom
@@ -119,31 +146,49 @@ paste/typing distinction exists.
 ### Detecting a paste
 
 React Native 0.86 has no `onPaste` on `TextInput` — verified by grepping the
-component, not assumed. A paste is therefore inferred from the size of the
-change: in `onChangeText`, a jump of more than one character since the last
-value is a paste, and a jump of exactly one is typing.
+component, not assumed. A paste is therefore inferred from how many characters a
+change **inserted**: in `onChangeText`, more than one inserted character is a
+paste, exactly one is typing.
+
+Inserted, not the net change in length. Selecting a six-character code and
+pasting a different six-character code over it is a net delta of *zero*, and
+pasting a shorter code is *negative*; a net-length test misreads both as typing
+and never navigates, breaking the promise that a paste navigates. The inserted
+count is recovered from the span the change replaced:
+`inserted = newLength - oldLength + replacedLength`. That replaced span is read
+from `onSelectionChange`, which reports the selection *before* the edit that
+overwrites it, tracked in a ref alongside the previous value.
 
 A pasted share link is a jump of dozens of characters and a pasted pod code five
 or six, so the inference is never close in practice. The single *accidental*
-miss is pasting one character, which is treated as typing and merely waits for
+miss is inserting one character, which is treated as typing and merely waits for
 the debounce — harmless, because it only makes an atomic value wait.
 
 The dangerous direction is the opposite one: a false *paste*, where typing is
 read as atomic and **navigates** without asking, yanking the user into the editor
 mid-keystroke. That is precisely the harm the atomic/deliberate rule exists to
-prevent, so it is not benign and must be guarded, not shrugged off.
+prevent, so it is not benign and must be guarded, not shrugged off. Counting the
+replaced span is safe against it in both directions: typing into a collapsed
+cursor leaves `replacedLength` zero, so the formula degrades to the old
+net-length test; and a selection replaced by a single typed character still nets
+a single insert, which stays typing. The one way it *could* invent a false paste
+— a stale span lingering onto a later keystroke — is closed by resetting the ref
+to a collapsed cursor the instant a change consumes it. If a selection report is
+ever missing or late, that collapsed default counts *nothing*, never something,
+so the fix can only ever add paste-detection power, never subtract typing safety.
 
-One way it could happen is a batching hole: two `onChangeText` calls in one React
-tick both reading the same pre-batch value, so the second sees a delta of two.
-That hole is closed by tracking the previous value in a ref updated
-*synchronously* inside the handler, rather than reading it from render state.
+One further way a false paste could happen is a batching hole: two `onChangeText`
+calls in one React tick both reading the same pre-batch value, so the second sees
+a delta of two. That hole is closed by tracking the previous value in a ref
+updated *synchronously* inside the handler, rather than reading it from render
+state.
 
-The ref does **not** close a second hole: a multi-character *native* commit is
+The refs do **not** close a second hole: a multi-character *native* commit is
 genuinely indistinguishable from a paste. An Android IME committing a composed
 word, a keyboard suggestion-bar tap, a QuickType autocorrect replacing a token,
-or dictation all arrive as one `onChangeText` of more than one character and will
-navigate. `ETH120` is exactly the shape of token a suggestion bar offers as a
-single insert once it has been typed before. See Known risks.
+or dictation all arrive as one `onChangeText` of more than one inserted character
+and will navigate. `ETH120` is exactly the shape of token a suggestion bar offers
+as a single insert once it has been typed before. See Known risks.
 
 ### States and transitions
 
@@ -151,8 +196,8 @@ States are `idle | resolving | found | error`.
 
 | From | Event | To |
 |---|---|---|
-| any | text changes by 1 character | `idle`, debounce armed |
-| any | text changes by more than 1 character | `resolving`, **atomic**, field kept |
+| any | one character inserted | `idle`, debounce armed |
+| any | more than one character inserted | `resolving`, **atomic**, field kept |
 | any | the sheet's paste affordance is used | `resolving`, **atomic**, field kept |
 | any | the tile's paste shortcut delivers text (§6) | `resolving`, **shortcut**, field hidden |
 | any | a share intent delivers an id | `resolving`, **shared**, field hidden |
@@ -633,12 +678,26 @@ constraint does not bind. What does need real hardware:
   word, a suggestion-bar tap, QuickType autocorrect replacing a token, or
   dictation — is indistinguishable from a paste and will navigate atomically
   mid-typing. The synchronous-ref fix closes only the same-tick batching hole,
-  not this one; there is no signal in `onChangeText` that separates a native
-  commit from a paste. **Accepted, device verification owed:** exercise a
-  suggestion-bar tap and autocorrect of a `NLC001`-shaped token on a physical
-  Android and iOS device and confirm the resulting jolt into the editor is
-  tolerable before relying on the heuristic in the field. `NLC001` is a **real
-  pod code the author owns** and resolves against the live API, so the jolt
-  actually lands in the editor -- keep it, do not swap in a fictional code like
-  `ETH120`, which the API rejects.
+  and the selection-aware inserted count closes only the select-then-paste
+  misclassification; neither closes this one, because there is no signal in
+  `onChangeText` that separates a native commit from a paste. **Accepted, device
+  verification owed:** exercise a suggestion-bar tap and autocorrect of a
+  `NLC001`-shaped token on a physical Android and iOS device and confirm the
+  resulting jolt into the editor is tolerable before relying on the heuristic in
+  the field. `NLC001` is a **real pod code the author owns** and resolves against
+  the live API, so the jolt actually lands in the editor -- keep it, do not swap
+  in a fictional code like `ETH120`, which the API rejects.
+- **Select-then-paste relies on `onSelectionChange` firing before the replacing
+  edit.** The inserted-count fix reads the replaced span from the last selection
+  the field reported, and both iOS and Android fire `onSelectionChange` when the
+  user makes the selection — well before the paste that overwrites it — so the
+  span is in hand at `onChangeText` time. Where a platform or IME does *not*
+  report a selection (e.g. a composing-region replacement with no visible
+  highlight), the span defaults to a collapsed cursor and the check degrades to
+  the old net-length test rather than inventing a replacement. That default is
+  one-way by design: it can only fail to *detect* a paste (benign — the value
+  still resolves and waits), never manufacture a false one. **Device
+  verification owed:** confirm on a physical device that selecting a code and
+  pasting another of equal or shorter length navigates, and that ordinary
+  gesture/word-suggestion typing does not start navigating as a side effect.
 - The disguised tile may be rejected on review, as recorded in §6.
