@@ -1,4 +1,5 @@
 import {
+    asTemperatureUnit,
     CELSIUS_RANGE,
     displayRange,
     displayValues,
@@ -144,5 +145,26 @@ describe("unitSuffix", () => {
     it("names the unit", () => {
         expect(unitSuffix("C")).toBe("°C");
         expect(unitSuffix("F")).toBe("°F");
+    });
+});
+
+describe("asTemperatureUnit", () => {
+    it("passes the two real units through unchanged", () => {
+        expect(asTemperatureUnit("C")).toBe("C");
+        expect(asTemperatureUnit("F")).toBe("F");
+    });
+
+    it("falls back to Celsius, the documented default, for anything else", () => {
+        // `Settings.get` only checks `typeof value === "string"`, so a stray
+        // key, an old value from a settings format that changed, or an empty
+        // string can all reach here. `toDisplay`/`unitSuffix` treat anything
+        // that is not literally "C" as Fahrenheit, so this is the one place
+        // that has to refuse to let that happen by accident.
+        expect(asTemperatureUnit(undefined)).toBe("C");
+        expect(asTemperatureUnit(null)).toBe("C");
+        expect(asTemperatureUnit("")).toBe("C");
+        expect(asTemperatureUnit("f")).toBe("C");
+        expect(asTemperatureUnit("Fahrenheit")).toBe("C");
+        expect(asTemperatureUnit(0)).toBe("C");
     });
 });

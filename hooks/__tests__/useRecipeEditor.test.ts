@@ -3,16 +3,9 @@ import {act, renderHook} from "@testing-library/react-native";
 import {useRecipeEditor, hasSource, RECIPE_LABELS} from "@/hooks/useRecipeEditor";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import type {TemperatureUnit} from "@/library/units";
 
 jest.mock("@/library/RecipeDatabase");
-
-// `useSetting` reaches for the shared SQLite-backed settings store, which
-// cannot open under jest — see the same mock in app/__tests__/editRecipe.test.tsx.
-// This hook only reads `temperatureUnit`, and every test here is written
-// against Celsius messages, so the mock is a constant rather than a store.
-jest.mock("@/hooks/useSetting", () => ({
-    useSetting: () => ["C", jest.fn()]
-}));
 
 /**
  * 15 g at 1:16 over two equal pours: 240 ml, 120 each, in balance.
@@ -24,7 +17,7 @@ jest.mock("@/hooks/useSetting", () => ({
  * compensating edit brings stage 1 to 120 + 110 = 230 ml, keeping the recipe
  * within the per-stage maximum so it is writable after the fix.
  */
-async function renderEditor(overrides: {onSaved?: () => void} = {}) {
+async function renderEditor(overrides: {onSaved?: () => void; temperatureUnit?: TemperatureUnit} = {}) {
     const recipe = new Recipe();
     recipe.dosage = 15;
     recipe.ratio = 16;
@@ -37,6 +30,7 @@ async function renderEditor(overrides: {onSaved?: () => void} = {}) {
 
     return renderHook(() => useRecipeEditor({
         recipeJSON:           JSON.stringify(recipe),
+        temperatureUnit:      overrides.temperatureUnit ?? "C",
         onSaved:              overrides.onSaved ?? jest.fn()
     }));
 }
@@ -190,7 +184,7 @@ describe("the write gate", () => {
         recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
 
         const {result} = await renderHook(() =>
-            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), temperatureUnit: "C", onSaved: () => {}})
         );
 
         expect(result.current.balance.balanced).toBe(true);
@@ -207,7 +201,7 @@ describe("the write gate", () => {
         recipe.pours = [new Pour(1, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
 
         const {result} = await renderHook(() =>
-            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), temperatureUnit: "C", onSaved: () => {}})
         );
 
         expect(result.current.canWrite).toBe(true);
@@ -223,9 +217,31 @@ describe("the write gate", () => {
         recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
 
         const {result} = await renderHook(() =>
-            useRecipeEditor({recipeJSON: JSON.stringify(recipe), onSaved: () => {}})
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), temperatureUnit: "C", onSaved: () => {}})
         );
 
         expect(result.current.canSave).toBe(true);
+    });
+
+    it("phrases a temperature problem in the unit it was handed, not a hard-coded C", async () => {
+        // 93 C is in range, but 260 C is not, and it converts to a distinctive
+        // Fahrenheit figure (500 F). An implementation that hard-coded "C",
+        // ignored the parameter, or fell through to the "C" default would
+        // still produce a Celsius message here, so this only passes if the
+        // unit actually reaches `cardWriteProblems`.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 15;
+        recipe.ratio = 15;
+        recipe.grindSize = 60;
+        recipe.grindRPM = 90;
+        recipe.pours = [new Pour(1, 225, 260, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+
+        const {result} = await renderHook(() =>
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), temperatureUnit: "F", onSaved: () => {}})
+        );
+
+        expect(result.current.writeProblems.some((p) => p.includes("500 F"))).toBe(true);
+        expect(result.current.writeProblems.some((p) => p.includes("260 C"))).toBe(false);
     });
 });

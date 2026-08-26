@@ -11,13 +11,6 @@ jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
 jest.mock("@/library/RecipeDatabase");
 
-// `useSetting` reaches for the shared SQLite-backed settings store, which
-// cannot open under jest — see the same mock in
-// hooks/__tests__/useRecipeEditor.test.ts.
-jest.mock("@/hooks/useSetting", () => ({
-    useSetting: () => ["C", jest.fn()]
-}));
-
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
 // (which still evaluates the real module to learn its shape) is not enough.
@@ -117,6 +110,7 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => {
             const editor = useRecipeEditor({
                 recipeJSON:           invalidJSON,
+                temperatureUnit:      "C",
                 onSaved:              jest.fn()
             });
             const writer = useCardWriter(editor.setVolumeError);

@@ -28,7 +28,7 @@ import {resolveAccent} from "@/library/accent";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
-import type {TemperatureUnit} from "@/library/units";
+import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -576,7 +576,8 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
-    const [temperatureUnit] = useSetting("temperatureUnit");
+    const [rawTemperatureUnit] = useSetting("temperatureUnit");
+    const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
@@ -630,6 +631,7 @@ export default function EditRecipe() {
         setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
+        temperatureUnit,
         onSaved:    () => navigation.goBack()
     });
 
@@ -800,7 +802,7 @@ export default function EditRecipe() {
                                 }}
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
-                                temperatureUnit={temperatureUnit as TemperatureUnit}/>
+                                temperatureUnit={temperatureUnit}/>
                     </View>
                 )}
             </ScrollView>

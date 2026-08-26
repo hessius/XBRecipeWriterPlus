@@ -11,6 +11,21 @@
 
 export type TemperatureUnit = "C" | "F";
 
+/**
+ * Narrows an unchecked stored value to a `TemperatureUnit`.
+ *
+ * `Settings.get` only checks `typeof value === "string"`, so anything —
+ * an old key, a corrupted store, a stray `""` — can come back as the
+ * "temperatureUnit" setting. `toDisplay` and `unitSuffix` both read
+ * `unit === "C"` and treat every other string as Fahrenheit, so an
+ * unrecognised value would silently mean °F. This is the one place that
+ * decides otherwise: only the literal `"F"` means Fahrenheit, and everything
+ * else — including garbage — falls back to the documented default, Celsius.
+ */
+export function asTemperatureUnit(value: unknown): TemperatureUnit {
+    return value === "F" ? "F" : "C";
+}
+
 /** What the card can hold, in whole Celsius. Mirrors `cardLimits`. */
 export const CELSIUS_RANGE = {min: 39, max: 99} as const;
 

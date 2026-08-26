@@ -9,7 +9,6 @@ import {XBloomRecipe} from "@/library/XBloomRecipe";
 import type {StageField} from "@/components/StageTile";
 import {REVERT_SOURCES} from "@/components/RevertSheet";
 import type {RevertSource, RevertSourceId} from "@/components/RevertSheet";
-import {useSetting} from "@/hooks/useSetting";
 import type {TemperatureUnit} from "@/library/units";
 
 /** Labels shown next to each editable field. Also the key the edit callback dispatches on. */
@@ -34,6 +33,14 @@ export const RECIPE_LABELS = {
 type Params = {
     /** Serialised recipe passed through the route params. */
     recipeJSON?: string;
+    /**
+     * The unit `cardWriteProblems` should phrase its temperature messages in.
+     * Passed in rather than read from the settings store here: the caller
+     * already reads it once for the tiles, and a second read of the same key
+     * inside this hook would give it a store dependency nothing else in it
+     * needs, and no way to be tested without mocking that store.
+     */
+    temperatureUnit: TemperatureUnit;
     /** Called once the recipe has been persisted. */
     onSaved: () => void;
 };
@@ -45,7 +52,7 @@ type Params = {
  * bumping `key` rather than by replacing the object. That is why several
  * operations call `setKey` instead of `setRecipe`.
  */
-export function useRecipeEditor({recipeJSON, onSaved}: Params) {
+export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) {
     // Derived from the route param, so it is an initial value rather than an
     // effect: parsing it in an effect would render once with a null recipe.
     const [recipe, setRecipe] = useState<Recipe | null>(
@@ -77,9 +84,8 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
      * `cardWriteProblems` includes the balance check, so this is the only
      * question the gate has to ask.
      */
-    const [temperatureUnit] = useSetting("temperatureUnit");
     const writeProblems = recipe
-        ? cardWriteProblems(recipe, temperatureUnit as TemperatureUnit)
+        ? cardWriteProblems(recipe, temperatureUnit)
         : [];
 
     /** A recipe the machine would reject cannot be written; it can still be kept. */
@@ -389,6 +395,12 @@ export function useRecipeEditor({recipeJSON, onSaved}: Params) {
         balance,
         canWrite,
         canSave,
+        // Reasons a write is refused, in the unit the caller asked for. Not
+        // yet surfaced anywhere in the UI beyond the disabled write button,
+        // but exposed here so the seam that phrases them in the caller's unit
+        // is something a test can observe rather than only infer from a
+        // boolean.
+        writeProblems,
         revertSources: buildRevertSources(),
         bumpKey: () => setKey((prev) => prev + 1),
         handleReloadTitlePress,

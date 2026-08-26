@@ -9,8 +9,8 @@ import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
-import {type Settings} from "@/library/Settings";
-import type {TemperatureUnit} from "@/library/units";
+import type {Settings} from "@/library/Settings";
+import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
     /** Injected by tests. The route renders with the shared store. */
@@ -80,7 +80,7 @@ export default function SettingsScreen({settings}: Props) {
                         description="What the editor shows and takes. The card always stores Celsius, so switching back and forth changes nothing that is written."
                         value={temperatureUnit}
                         options={TEMPERATURE_OPTIONS}
-                        onChange={(value) => setTemperatureUnit(value as TemperatureUnit)}/>
+                        onChange={(value) => setTemperatureUnit(asTemperatureUnit(value))}/>
                 </SettingsSection>
             </YStack>
         </ScrollView>
