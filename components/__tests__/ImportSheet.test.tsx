@@ -15,12 +15,14 @@ jest.mock("expo-clipboard", () => ({
     hasStringAsync:         jest.fn(async () => false),
     getStringAsync:         jest.fn(async () => ""),
     isPasteButtonAvailable: false,
-    ClipboardPasteButton:   ({testID, onPress}: {testID?: string; onPress?: (data: unknown) => void}) => {
+    ClipboardPasteButton:   ({onPress, ...rest}: {onPress?: (data: unknown) => void}) => {
         const {View} = jest.requireActual("react-native");
         // Stash the handler so a test can drive it with a chosen payload; a bare
-        // View would leave the native paste path untested.
+        // View would leave the native paste path untested. `rest` is spread so
+        // the real props under test -- the testID and the accessibility-hiding
+        // pair `PasteOverlay` sets -- reach the RN view where RNTL can see them.
         mockNativePasteOnPress = onPress;
-        return <View testID={testID}/>;
+        return <View {...rest}/>;
     }
 }));
 
@@ -134,6 +136,37 @@ it("shows the found panel and opens what it found", async () => {
     expect(importer.openFound).toHaveBeenCalledTimes(1);
 });
 
+it("renders the shared paste face with the house fallback (no native control)", async () => {
+    // Finding 1: one definition of the face, drawn on both platforms -- not two
+    // lookalikes kept in sync. Here the house fallback: the dot-matrix `PASTE`
+    // face is present and no native control is laid over it.
+    (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+    );
+
+    expect(screen.getByTestId("import-paste-face", {includeHiddenElements: true}))
+        .toHaveTextContent("PASTE");
+    expect(screen.queryByTestId("native-paste", {includeHiddenElements: true})).toBeNull();
+});
+
+it("renders the same shared paste face with the native control over it", async () => {
+    // The other branch: the invisible `UIPasteControl` is laid over the *same*
+    // face. Asserting the shared `import-paste-face` testID -- not a lookalike --
+    // is what proves the two branches cannot drift apart.
+    (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+    );
+
+    await waitFor(() =>
+        expect(screen.queryByTestId("native-paste", {includeHiddenElements: true})).not.toBeNull()
+    );
+    expect(screen.getByTestId("import-paste-face", {includeHiddenElements: true}))
+        .toHaveTextContent("PASTE");
+});
+
 it("offers a paste button on a platform without the native control", async () => {
     const importer = stubImport();
     await renderWithProviders(
@@ -147,9 +180,11 @@ it("offers a paste button on a platform without the native control", async () =>
     expect(importer.onPastedText).toHaveBeenCalledWith("");
 });
 
-it("promotes the native control when iOS has one and there is something to paste", async () => {
-    // Not disguised in here, unlike the tile: this is the action the user came
-    // for, and the real control means no prompt.
+it("lays the native control over the face when iOS has one and there is something to paste", async () => {
+    // The disguise now matches the tile: the control is present but invisible
+    // and hidden from accessibility, so the visible affordance is the app's own
+    // face and the tap still reaches the real `UIPasteControl` (no prompt). The
+    // one announced element stays the wrapper's "Paste from clipboard" label.
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
 
@@ -157,8 +192,13 @@ it("promotes the native control when iOS has one and there is something to paste
         <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
     );
 
-    await waitFor(() => expect(screen.queryByTestId("native-paste")).not.toBeNull());
-    expect(screen.queryByLabelText("Paste from clipboard")).toBeNull();
+    await waitFor(() =>
+        expect(screen.queryByTestId("native-paste", {includeHiddenElements: true})).not.toBeNull()
+    );
+    // Hidden from accessibility, so the default (visible-only) query cannot reach
+    // it -- only the wrapper is announced.
+    expect(screen.queryByTestId("native-paste")).toBeNull();
+    expect(await screen.findByLabelText("Paste from clipboard")).toBeTruthy();
 });
 
 it("falls back to the house button when iOS has the control but the clipboard is empty", async () => {
@@ -174,7 +214,7 @@ it("falls back to the house button when iOS has the control but the clipboard is
 
     expect(await screen.findByLabelText("Paste from clipboard")).toBeTruthy();
     await waitFor(() => expect(Clipboard.hasStringAsync).toHaveBeenCalled());
-    expect(screen.queryByTestId("native-paste")).toBeNull();
+    expect(screen.queryByTestId("native-paste", {includeHiddenElements: true})).toBeNull();
 });
 
 it("forwards a native text paste, and forwards nothing for an image", async () => {

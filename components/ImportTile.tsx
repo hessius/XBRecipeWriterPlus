@@ -1,10 +1,10 @@
 import * as Clipboard from "expo-clipboard";
 import {useFocusEffect} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, View} from "react-native";
+import {AccessibilityInfo, AppState, Platform, StyleSheet} from "react-native";
 
 import CtaTile from "@/components/CtaTile";
-import {palette} from "@/constants/colors";
+import PasteOverlay from "@/components/PasteOverlay";
 
 /** The face is decorative; every route to the sheet lives on the wrapper. */
 const noop = () => {};
@@ -137,11 +137,13 @@ export default function ImportTile({onOpen, onPasted}: Props) {
     }
 
     return (
-        // The wrapper -- not the disguised control -- carries the label and the
-        // `onOpen` route, for two reasons:
+        // On iOS 16+ with text on the clipboard, `PasteOverlay` lays an invisible
+        // `UIPasteControl` over the tile face so one tap pastes with no prompt.
+        // The wrapper -- not the control -- carries the label and the `onOpen`
+        // route, for two reasons:
         //
-        //  - Fallback. A real tap only reaches here when the control on top
-        //    declines it. It declines cleanly when it renders *nothing*
+        //  - Fallback. A real tap only reaches the wrapper when the control on
+        //    top declines it. It declines cleanly when it renders *nothing*
         //    (`isPasteButtonAvailable` flips false, iOS < 16). It is far less
         //    clear that a control that renders but is *inactive* -- an HTML-only
         //    clipboard makes `hasStringAsync` true while nothing conforms to
@@ -154,93 +156,42 @@ export default function ImportTile({onOpen, onPasted}: Props) {
         //    is hidden, `alpha < 0.01`, or has user interaction disabled -- it
         //    does *not* skip a merely *disabled* `UIControl`, so an inactive
         //    control most likely still swallows the touch and this wrapper never
-        //    sees it. Whether `UIPasteControl` clears `isUserInteractionEnabled`
-        //    when inactive is undocumented and invisible from JS. So this
-        //    covers the renders-nothing case honestly and no more; the
-        //    inactive-control case is device-verifiable and is on the §8/Task 22
-        //    checklist (copy rich text from Safari, tap IMPORT, expect the
-        //    sheet).
+        //    sees it. So this covers the renders-nothing case honestly and no
+        //    more; the inactive-control case is device-verifiable and is on the
+        //    §8/Task 22 checklist (copy rich text from Safari, tap IMPORT,
+        //    expect the sheet).
         //
-        //  - Accessibility. `pointerEvents="none"` hides the face from *touch*
-        //    but not from the accessibility tree, and the native control forces
-        //    itself into that tree announcing "Paste". `isScreenReaderEnabled()`
-        //    is false for Voice Control, Switch Control and Full Keyboard
-        //    Access, so those users see paste mode permanently. Making the
-        //    wrapper the single `accessible` element, hiding the control from
-        //    accessibility, and hanging `onOpen` on the wrapper means the one
-        //    announced element ("Import a recipe") is also the one a synthesized
-        //    activation reaches.
-        <Pressable
-            accessible
-            accessibilityRole="button"
+        //  - Accessibility. The native control forces itself into the
+        //    accessibility tree announcing "Paste". `isScreenReaderEnabled()` is
+        //    false for Voice Control, Switch Control and Full Keyboard Access, so
+        //    those users would otherwise see paste mode permanently. Hanging the
+        //    label and `onOpen` on the wrapper -- and hiding the control from
+        //    accessibility -- means the one announced element ("Import a recipe")
+        //    is also the one a synthesized activation reaches.
+        <PasteOverlay
+            native
             accessibilityLabel="Import a recipe"
             onPress={onOpen}
-            style={styles.wrapper}>
-            {/* The visible tile face. Decorative: `pointerEvents="none"` so a
-                sighted tap falls through to the control -- with that control the
-                tap is the consent, so it must be the layer that receives it.
-                `flex: 1` so it fills the wrapper, which the home row stretches
-                to the READ CARD tile's height: without it `CtaTile`'s own
-                `flex: 1` (= `flexBasis: 0`) collapses to nothing and the paste
-                tile renders shorter than its neighbour. Hidden from
-                accessibility so the wrapper is the sole announced element rather
-                than a second one saying "Import a recipe" underneath the
-                control's "Paste". */}
-            <View testID="import-tile-face" pointerEvents="none"
-                  style={styles.face}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants">
-                <CtaTile icon="import" label="IMPORT" onPress={noop}/>
-            </View>
-
-            {/* Rendered last, so it is the topmost layer and receives the tap.
-                Made invisible by alpha on the RN view (`styles.ghost`), not by
-                its colours: iOS treats `UIPasteControl`'s own
-                background/foreground as *requests* and overrides them when the
-                result would be illegible -- an invisible glyph on an identical
-                background is exactly that, since it is a system privacy control
-                defending its own visibility. A parent view's alpha is outside
-                that enforcement, so `opacity: 0.02` hides it while UIKit still
-                hit-tests it. The matched `backgroundColor`/`foregroundColor` =
-                `raised` stay as belt-and-braces should the alpha ever be
-                clamped. `accessibilityElementsHidden` / `no-hide-descendants`
-                keep it out of the accessibility tree it would otherwise force
-                itself into, so only the wrapper is announced. No cast is needed
-                here (unlike `placeholderTextColor` in `ImportSheet`): these
-                props are typed `string | null`, which the raw palette string
-                already satisfies. */}
-            <Clipboard.ClipboardPasteButton
-                testID="native-paste-control"
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-                displayMode="iconOnly"
-                // `medium` rounds the corners toward the tile's own rounded rect
-                // rather than the pill a `capsule` would draw. With `opacity:
-                // 0.02` the shape is invisible anyway; this only matters as the
-                // fallback if the alpha is ever clamped, where a rounded rect
-                // reads far closer to the tile than a capsule.
-                cornerStyle="medium"
-                // The default also accepts `image`, so an image on the clipboard
-                // could activate the control and deliver a payload with no text;
-                // `url` keeps shared links active. Same choice `ImportSheet`
-                // makes for the visible in-sheet control.
-                acceptedContentTypes={["plain-text", "url"]}
-                backgroundColor={palette.raised}
-                foregroundColor={palette.raised}
-                onPress={(data) => {
-                    // `PasteEventPayload` is a union; only the text arm carries a
-                    // string. An empty or blank value means an empty clipboard or
-                    // a denied paste -- iOS gives no way to tell them apart -- so
-                    // open the sheet exactly as a plain tap would have.
-                    const text = data.type === "text" ? data.text : "";
-                    if (text.trim().length === 0) {
-                        onOpen();
-                        return;
-                    }
-                    onPasted(text);
-                }}
-                style={[StyleSheet.absoluteFill, styles.ghost]}/>
-        </Pressable>
+            onPaste={(text) => {
+                // An empty or blank value means an empty clipboard or a denied
+                // paste -- iOS gives no way to tell them apart -- so open the
+                // sheet exactly as a plain tap would have.
+                if (text.trim().length === 0) {
+                    onOpen();
+                    return;
+                }
+                onPasted(text);
+            }}
+            controlTestID="native-paste-control"
+            faceTestID="import-tile-face"
+            style={styles.wrapper}
+            faceStyle={styles.face}>
+            {/* The visible tile face. `flex: 1` so it fills the wrapper, which
+                the home row stretches to the READ CARD tile's height: without it
+                `CtaTile`'s own `flex: 1` (= `flexBasis: 0`) collapses to nothing
+                and the paste tile renders shorter than its neighbour. */}
+            <CtaTile icon="import" label="IMPORT" onPress={noop}/>
+        </PasteOverlay>
     );
 }
 
@@ -249,9 +200,5 @@ const styles = StyleSheet.create({
     // The face fills the wrapper so `CtaTile`'s `flexBasis: 0` has a definite
     // height to expand into; otherwise the paste tile collapses shorter than
     // READ CARD beside it.
-    face: {flex: 1},
-    // Below UIKit's `alpha < 0.01` hit-testing cutoff would drop the control
-    // from touch entirely and silently break the shortcut; above it, `0.02` is
-    // invisible yet still tappable. A future reader must not "tidy" this to `0`.
-    ghost: {opacity: 0.02}
+    face: {flex: 1}
 });

@@ -5,12 +5,39 @@ import type {ColorTokens} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import ImportResult from "@/components/ImportResult";
+import PasteOverlay from "@/components/PasteOverlay";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import type {RecipeImport} from "@/hooks/useRecipeImport";
 
 const FIELD_LABEL = "Share link or pod code";
 const FORMAT_HINT = "Paste an xBloom share link, or a pod code like ETH120.";
+
+/**
+ * The app's own face for the paste affordance.
+ *
+ * One definition, drawn on both platforms. On iOS 16+ `PasteOverlay` lays an
+ * invisible `UIPasteControl` over it so the tap pastes with no prompt;
+ * everywhere else the wrapper's `getStringAsync` fallback handles the tap. Both
+ * routes show this same dot-matrix `PASTE`, so the sheet never renders an
+ * obvious system control beside its own language.
+ */
+function PasteFace() {
+    return (
+        <XStack
+            alignItems="center"
+            justifyContent="center"
+            paddingVertical="$3"
+            borderRadius="$6"
+            backgroundColor={palette.raised}
+            borderWidth={1}
+            borderColor={palette.line}>
+            <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5} color={palette.text}>
+                PASTE
+            </DotMatrixText>
+        </XStack>
+    );
+}
 
 type Props = {
     open: boolean;
@@ -107,51 +134,23 @@ export default function ImportSheet({open, onOpenChange, showField, importer}: P
                             borderColor={palette.line}
                             color={palette.text}/>
 
-                        {/* Not disguised, unlike the tile: in here the paste is
-                            the action the user came for, so it says so. On iOS
-                            16+ with something to paste it is the real system
-                            control, promoted to the primary action -- which
-                            also means no prompt. Everywhere else it is a house
-                            button calling `getStringAsync`, where Android's
-                            system toast fires on a tap the user just made. */}
-                        {nativePaste ? (
-                            <Clipboard.ClipboardPasteButton
-                                testID="native-paste"
-                                displayMode="iconAndLabel"
-                                cornerStyle="capsule"
-                                // Text only: the default also accepts `image`,
-                                // so a mixed clipboard -- or one changed between
-                                // the presence check and the tap -- could
-                                // deliver `type: "image"`, which reaches
-                                // `onPastedText("")` and dead-ends on the hook's
-                                // early return, so the primary action would do
-                                // nothing with no explanation. `url` keeps
-                                // shared links active.
-                                acceptedContentTypes={["plain-text", "url"]}
-                                backgroundColor={palette.raised}
-                                foregroundColor={palette.text}
-                                onPress={(data) => onPastedText(data.type === "text" ? data.text : "")}
-                                style={{height: 48, width: "100%"}}/>
-                        ) : (
-                            <XStack
-                                accessible
-                                accessibilityRole="button"
-                                accessibilityLabel="Paste from clipboard"
-                                onPress={paste}
-                                alignItems="center"
-                                justifyContent="center"
-                                paddingVertical="$3"
-                                borderRadius="$6"
-                                backgroundColor={palette.raised}
-                                borderWidth={1}
-                                borderColor={palette.line}
-                                pressStyle={{opacity: 0.7, scale: 0.99}}>
-                                <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
-                                               color={palette.text}>
-                                    PASTE
-                                </DotMatrixText>
-                            </XStack>
-                        )}
+                        {/* One paste face on both platforms, not two lookalikes.
+                            On iOS 16+ with text on the clipboard `PasteOverlay`
+                            lays the real `UIPasteControl` over it invisibly, so
+                            the tap pastes with no prompt; everywhere else the
+                            wrapper's `getStringAsync` fallback runs, where
+                            Android's system toast fires on a tap the user just
+                            made. Either way the sheet shows its own dot-matrix
+                            `PASTE`, not an obvious system control. */}
+                        <PasteOverlay
+                            native={nativePaste}
+                            accessibilityLabel="Paste from clipboard"
+                            onPress={paste}
+                            onPaste={onPastedText}
+                            controlTestID="native-paste"
+                            faceTestID="import-paste-face">
+                            <PasteFace/>
+                        </PasteOverlay>
                     </>
                 )}
 
