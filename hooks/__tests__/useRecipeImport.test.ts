@@ -301,6 +301,35 @@ describe("failure", () => {
         expect(result.current.state).toMatchObject({reason: "unusable"});
         expect(onOpenRecipe).not.toHaveBeenCalled();
     });
+
+    it("restores the field after an atomic paste fails, so the user can retry", async () => {
+        // The paste hid the field while resolving; a network error has nothing
+        // to navigate to, so the field must come back or the sheet strands the
+        // user on an error line with no input and no button.
+        mockFetchRecipeDetail.mockRejectedValueOnce(new Error("offline"));
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+        expect(result.current.showField).toBe(true);
+    });
+
+    it("restores the field after a shortcut lookup fails", async () => {
+        mockGetRecipe.mockReturnValueOnce(null);
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH999"}, "shortcut");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("error"));
+        expect(result.current.showField).toBe(true);
+    });
 });
 
 describe("two lookups in flight", () => {

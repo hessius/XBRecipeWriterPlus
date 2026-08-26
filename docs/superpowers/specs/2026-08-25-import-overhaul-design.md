@@ -162,7 +162,7 @@ States are `idle | resolving | found | error`.
 | `resolving` | resolved, shortcut, recipe **not** already held | `onOpenRecipe` called immediately |
 | `resolving` | resolved, shortcut, recipe already held | `found`, **field restored** — degrades, does not navigate |
 | `resolving` | resolved, deliberate | `found` — waits for a press |
-| `resolving` | failed | `error` |
+| `resolving` | failed | `error`, **field restored** — a failed lookup always leaves a field to retry from |
 | `found` or `error` | text changes | `idle`, result cleared |
 
 **Atomic input navigates; deliberate input waits.** A paste, a share intent and
@@ -186,8 +186,9 @@ as the escape hatch.
 input field is owned by `useRecipeImport`, because the shortcut's degrade is
 discovered only *after* the fetch — the screen cannot decide it from a prop set
 when the sheet opened. The hook hides the field while an atomic or shortcut value
-resolves and restores it when a shortcut degrades; the sheet reads
-`importer.showField`. There is no `showField` prop and no screen-level state for
+resolves and restores it when a shortcut degrades or when any lookup fails — a
+failure has nothing to navigate to, so the field must come back as the way to
+retry or correct; the sheet reads `importer.showField`. There is no `showField` prop and no screen-level state for
 it: one rule, one place.
 
 ### Two timers, with different jobs

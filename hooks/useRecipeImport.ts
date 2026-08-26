@@ -86,7 +86,8 @@ export type RecipeImport = {
      * False while an atomic value (a paste or a share intent) or the tile's
      * shortcut resolves -- there is nothing to type -- and true otherwise,
      * including when a shortcut degrades to the found panel because the recipe
-     * is already held. The rule lives here, the sole authority, not on the
+     * is already held, and whenever a lookup fails, so an error always leaves a
+     * field to retry from. The rule lives here, the sole authority, not on the
      * screen: the degrade is discovered only after the fetch, so the sheet
      * cannot decide it from a prop set when it opened.
      */
@@ -112,7 +113,8 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     /**
      * Whether the sheet draws its field. See `showField` on `RecipeImport`. The
      * default is true (a plain tile tap opens an empty field); `resolve` hides
-     * it for atomic and shortcut input and restores it when a shortcut degrades.
+     * it for atomic and shortcut input and restores it when a shortcut degrades
+     * or when a lookup fails.
      */
     const [showField, setShowField] = useState(true);
 
@@ -183,17 +185,23 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
 
         const xb = new XBloomRecipe(source);
 
+        // A failed lookup always restores the field, whatever the intent. An
+        // atomic or shortcut value hid it while resolving, but an error has
+        // nothing to navigate to, so the field must come back as the way to
+        // retry or correct -- otherwise the sheet strands the user on an error
+        // line with no input and no button.
+        function fail(reason: ImportErrorReason, message: string) {
+            setShowField(true);
+            setState({status: "error", reason, message});
+        }
+
         try {
             await xb.fetchRecipeDetail(controller.signal);
         } catch {
             // An abort lands here too, and is caught by the generation check --
             // a superseded lookup has nothing to say.
             if (mine !== generation.current) return;
-            setState({
-                status:  "error",
-                reason:  "network",
-                message: "Couldn't reach xBloom. Check your connection."
-            });
+            fail("network", "Couldn't reach xBloom. Check your connection.");
             return;
         }
 
@@ -203,11 +211,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         if (!candidate) {
             // Named after the input rather than the server: this is where a
             // typo lands, and it is far more likely than an outage.
-            setState({
-                status:  "error",
-                reason:  "notFound",
-                message: "No recipe with that code."
-            });
+            fail("notFound", "No recipe with that code.");
             return;
         }
 
@@ -218,11 +222,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
             // `findDuplicate` treats one whose fingerprint throws as
             // identity-less, so it would slip past de-duplication and land in
             // the library as a permanent unwritable copy.
-            setState({
-                status:  "error",
-                reason:  "unusable",
-                message: "That recipe can't be used here."
-            });
+            fail("unusable", "That recipe can't be used here.");
             return;
         }
 
