@@ -291,3 +291,74 @@ describe("the keyboard it asks for", () => {
         expect((await openTheField(0.1)).props.inputMode).toBe("decimal");
     });
 });
+
+describe("Stepper walking an explicit ladder", () => {
+    // The Fahrenheit case: the card stores whole Celsius, so the values a
+    // temperature field can settle on are not one apart.
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("steps to the next value on the ladder, not the next integer", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={194} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("steps back down the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={196} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(194);
+    });
+
+    it("stays put at the top of the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={201} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("snaps a typed value onto the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={194} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Edit Temperature"));
+        await fireEvent.changeText(screen.getByTestId("stepper-input"), "195");
+        await fireEvent(screen.getByTestId("stepper-input"), "submitEditing");
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("steps by one from a value that is not on the ladder", async () => {
+        // A recipe imported before the unit was switched can hold a value the
+        // ladder does not contain. The stepper must still move, and must move
+        // onto the ladder rather than off into the gaps.
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={195} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+});
