@@ -51,10 +51,10 @@ type Props = {
  * Wraps `CtaTile` rather than changing it: `CtaTile` is shared with `READ CARD`
  * and should not learn about clipboards.
  *
- * On iOS 16+ with text on the clipboard the tile is a `UIPasteControl` coloured
- * to disappear into itself, so one tap pastes and -- if the value parses --
- * starts resolving, with no prompt, because with that control the tap *is* the
- * consent. Everywhere else it is an ordinary pressable that opens the sheet.
+ * On iOS 16+ with text on the clipboard the tile is a `UIPasteControl` made
+ * effectively invisible so one tap pastes and -- if the value parses -- starts
+ * resolving, with no prompt, because with that control the tap *is* the consent.
+ * Everywhere else it is an ordinary pressable that opens the sheet.
  *
  * `hasStringAsync` reports that text exists, not that it is an xBloom link, so
  * most taps in paste mode will hand over something irrelevant. Every one of
@@ -178,34 +178,48 @@ export default function ImportTile({onOpen, onPasted}: Props) {
             style={styles.wrapper}>
             {/* The visible tile face. Decorative: `pointerEvents="none"` so a
                 sighted tap falls through to the control -- with that control the
-                tap is the consent, so it must be the layer that receives it --
-                and it gives the stack its height as the only in-flow child.
-                Hidden from accessibility so the wrapper is the sole announced
-                element rather than a second one saying "Import a recipe"
-                underneath the control's "Paste". */}
+                tap is the consent, so it must be the layer that receives it.
+                `flex: 1` so it fills the wrapper, which the home row stretches
+                to the READ CARD tile's height: without it `CtaTile`'s own
+                `flex: 1` (= `flexBasis: 0`) collapses to nothing and the paste
+                tile renders shorter than its neighbour. Hidden from
+                accessibility so the wrapper is the sole announced element rather
+                than a second one saying "Import a recipe" underneath the
+                control's "Paste". */}
             <View testID="import-tile-face" pointerEvents="none"
+                  style={styles.face}
                   accessibilityElementsHidden
                   importantForAccessibility="no-hide-descendants">
                 <CtaTile icon="import" label="IMPORT" onPress={noop}/>
             </View>
 
             {/* Rendered last, so it is the topmost layer and receives the tap.
-                Coloured to the tile rather than zeroed in opacity: an
-                opacity-zero control is far more likely to be treated as hidden
-                by UIKit than one that is merely the same colour as what is
-                behind it. `iconOnly` and `foregroundColor` = `raised` leave no
-                visible glyph, so the tile's own face reads instead.
-                `accessibilityElementsHidden` / `no-hide-descendants` keep it out
-                of the accessibility tree it would otherwise force itself into,
-                so only the wrapper is announced. No cast is needed here (unlike
-                `placeholderTextColor` in `ImportSheet`): these props are typed
-                `string | null`, which the raw palette string already satisfies. */}
+                Made invisible by alpha on the RN view (`styles.ghost`), not by
+                its colours: iOS treats `UIPasteControl`'s own
+                background/foreground as *requests* and overrides them when the
+                result would be illegible -- an invisible glyph on an identical
+                background is exactly that, since it is a system privacy control
+                defending its own visibility. A parent view's alpha is outside
+                that enforcement, so `opacity: 0.02` hides it while UIKit still
+                hit-tests it. The matched `backgroundColor`/`foregroundColor` =
+                `raised` stay as belt-and-braces should the alpha ever be
+                clamped. `accessibilityElementsHidden` / `no-hide-descendants`
+                keep it out of the accessibility tree it would otherwise force
+                itself into, so only the wrapper is announced. No cast is needed
+                here (unlike `placeholderTextColor` in `ImportSheet`): these
+                props are typed `string | null`, which the raw palette string
+                already satisfies. */}
             <Clipboard.ClipboardPasteButton
                 testID="native-paste-control"
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 displayMode="iconOnly"
-                cornerStyle="capsule"
+                // `medium` rounds the corners toward the tile's own rounded rect
+                // rather than the pill a `capsule` would draw. With `opacity:
+                // 0.02` the shape is invisible anyway; this only matters as the
+                // fallback if the alpha is ever clamped, where a rounded rect
+                // reads far closer to the tile than a capsule.
+                cornerStyle="medium"
                 // The default also accepts `image`, so an image on the clipboard
                 // could activate the control and deliver a payload with no text;
                 // `url` keeps shared links active. Same choice `ImportSheet`
@@ -225,11 +239,19 @@ export default function ImportTile({onOpen, onPasted}: Props) {
                     }
                     onPasted(text);
                 }}
-                style={StyleSheet.absoluteFill}/>
+                style={[StyleSheet.absoluteFill, styles.ghost]}/>
         </Pressable>
     );
 }
 
 const styles = StyleSheet.create({
-    wrapper: {flex: 1}
+    wrapper: {flex: 1},
+    // The face fills the wrapper so `CtaTile`'s `flexBasis: 0` has a definite
+    // height to expand into; otherwise the paste tile collapses shorter than
+    // READ CARD beside it.
+    face: {flex: 1},
+    // Below UIKit's `alpha < 0.01` hit-testing cutoff would drop the control
+    // from touch entirely and silently break the shortcut; above it, `0.02` is
+    // invisible yet still tappable. A future reader must not "tidy" this to `0`.
+    ghost: {opacity: 0.02}
 });

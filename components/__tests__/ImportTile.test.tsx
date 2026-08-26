@@ -1,6 +1,6 @@
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
-import {AccessibilityInfo, AppState} from "react-native";
+import {AccessibilityInfo, AppState, StyleSheet} from "react-native";
 
 import ImportTile from "@/components/ImportTile";
 import {palette} from "@/constants/colors";
@@ -144,6 +144,42 @@ it("keeps the visible tile face in paste mode", async () => {
     );
 
     expect(screen.getByTestId("cta-tile-icon", {includeHiddenElements: true})).toBeTruthy();
+});
+
+it("stretches the tile face to the wrapper instead of collapsing it", async () => {
+    // The face wraps `CtaTile`, whose own `flex: 1` is `flexBasis: 0` and
+    // collapses to nothing unless the face gives it a definite height. The home
+    // row stretches the wrapper to the READ CARD tile's height, so the face
+    // must carry `flex: 1` to pass that height down. react-test-renderer does no
+    // layout, so this cannot assert measured height -- it asserts the style prop
+    // that produces the stretch instead.
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+
+    await renderWithProviders(<ImportTile onOpen={() => {}} onPasted={() => {}}/>);
+    await waitFor(() =>
+        expect(screen.queryByTestId("native-paste-control", {includeHiddenElements: true})).not.toBeNull()
+    );
+
+    const face = screen.getByTestId("import-tile-face", {includeHiddenElements: true});
+    expect(StyleSheet.flatten(face.props.style)).toMatchObject({flex: 1});
+});
+
+it("makes the paste control invisible by alpha, not tappably by zero", async () => {
+    // The disguise now rides on view alpha, which iOS cannot override the way it
+    // overrides the control's own colours. `0.02` is below visibility yet above
+    // UIKit's `alpha < 0.01` hit-testing cutoff, so the control still receives
+    // the tap. Zero would drop it from hit-testing and silently break paste.
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+
+    await renderWithProviders(<ImportTile onOpen={() => {}} onPasted={() => {}}/>);
+    await waitFor(() =>
+        expect(screen.queryByTestId("native-paste-control", {includeHiddenElements: true})).not.toBeNull()
+    );
+
+    const control = screen.getByTestId("native-paste-control", {includeHiddenElements: true});
+    const style = StyleSheet.flatten(control.props.style);
+    expect(style.opacity).toBe(0.02);
+    expect(style.opacity).toBeGreaterThanOrEqual(0.01);
 });
 
 it("draws the paste control above the face so the tap is the consent", async () => {

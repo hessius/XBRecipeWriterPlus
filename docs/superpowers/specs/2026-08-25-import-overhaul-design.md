@@ -372,18 +372,30 @@ exists, not that it is an xBloom link, so most taps will paste something
 irrelevant — a message, an address. Every one of those degrades to precisely the
 behaviour the tile would have had anyway.
 
-### Coloured to the tile, not to black
+### Invisible by alpha, not by colour
 
-`backgroundColor` and `foregroundColor` both take `palette.raised`
-(`#161616`), the tile's own colour, so the control disappears into the tile with
-its glyph invisible. `displayMode` is `iconOnly` and `cornerStyle` matches the
-tile. (The installed `expo-clipboard` exposes these as the unprefixed
+The disguise rides on **view alpha**, not on the control's colours. iOS treats a
+`UIPasteControl`'s `baseBackgroundColor` / `baseForegroundColor` as *requests*
+and overrides them when the result would be illegible — an invisible glyph on an
+identical background is exactly that, because it is a system privacy control
+defending its own visibility. So colour-matching alone (the first attempt) could
+not hide it.
+
+Instead the React Native view carries `opacity: 0.02`. UIKit's contrast
+enforcement applies to the control's own configuration, not to a parent view's
+alpha, so this sidesteps it. `0.02` is below the threshold of visibility but
+deliberately **above** UIKit's `alpha < 0.01` hit-testing cutoff, so the control
+still receives the tap — going to `0` would make it untappable and silently
+break the shortcut. The matched `backgroundColor` / `foregroundColor` =
+`palette.raised` (`#161616`) stay as belt-and-braces should the alpha ever be
+clamped. `displayMode` is `iconOnly` and `cornerStyle` is `medium`, a rounded
+rect closer to the tile than a `capsule` for that same fallback case. (The
+installed `expo-clipboard` exposes the colours as the unprefixed
 `backgroundColor` / `foregroundColor`, not the `base…`-prefixed names of the
 native `UIPasteControl` configuration.)
 
-Deliberately **not** `opacity: 0`. An opacity-zeroed control is far more likely
-to be treated as hidden by UIKit than one that is merely the same colour as its
-surroundings.
+This alpha approach is the last attempt before giving up on the disguise. If it
+too fails device review, the remedy is unchanged: force plain mode.
 
 ### Three mitigations, built in
 
