@@ -92,6 +92,17 @@ export default function HomeScreen({db, settings}: Props) {
     // regaining focus (the `useFocusEffect` below) -- an explicit user action --
     // and never on the mere absence of an intent.
     const handledShareUrl = useRef<string | null>(null);
+    // The share URL present on the *previous* render, so the effect can act on a
+    // genuinely new delivery rather than on a live intent merely continuing to
+    // sit there. A dropped redelivery is not consumed by `resetShareIntent`
+    // (there is nothing left to import), so `hasShareIntent` stays true with the
+    // same `webUrl` until the next focus clears the guard -- at which point the
+    // guard alone would let that still-live intent re-import. Keyed on the URL
+    // going from absent (or different) to present, the effect ignores that
+    // unchanged intent no matter when focus lands, while a deliberate re-share --
+    // which the app's own `resetShareIntent` first drives to absent -- still
+    // reads as a fresh delivery.
+    const lastSeenShareUrl = useRef<string | null>(null);
 
     const importer = useRecipeImport({
         stored:       library.recipes,
@@ -106,6 +117,19 @@ export default function HomeScreen({db, settings}: Props) {
             openRecipe(recipe);
         }
     });
+
+    // The URL of a live web-URL share intent, or null when there is none. A
+    // redelivery of the same payload and a deliberate re-share both surface here
+    // as the same string; the effect below tells them apart by *when* the URL
+    // appears, not by the value.
+    const liveShareUrl =
+        hasShareIntent && shareIntent.type === "weburl" && shareIntent.webUrl
+            ? shareIntent.webUrl
+            : null;
+    // A failed shared lookup has nothing left to guard, and its intent is
+    // already consumed. Read as a primitive so the clearing effect depends on
+    // the status, not on the per-render `importer` identity.
+    const importStatus = importer.state.status;
 
     // The header owns the whole strip, so the navigator's own bar would be a
     // second title above ours.
@@ -132,26 +156,39 @@ export default function HomeScreen({db, settings}: Props) {
     );
 
     useEffect(() => {
-        if (!hasShareIntent || shareIntent.type !== "weburl" || !shareIntent.webUrl) {
-            // No live intent. The guard is *not* cleared here: this absence is
-            // the one we cause by calling `resetShareIntent` after handling, and
-            // clearing on it is exactly what let a redelivery re-import. The
-            // guard is cleared only when the user returns to this screen (see the
-            // `useFocusEffect` above).
+        // `useShareIntent` recreates `resetShareIntent` every render and hands a
+        // redelivery back as a fresh object, so this effect re-runs over one
+        // unchanging intent again and again. Acting only when the live URL
+        // *differs from the one present last render* is what makes a redelivery
+        // -- the same URL still sitting there -- a no-op, whether it arrives
+        // while the editor is opening or survives untouched to a later focus.
+        // The previous guard leaned on focus never landing during a redelivery;
+        // but a dropped redelivery is never consumed, so it outlived the focus
+        // that then cleared the guard and re-imported. A deliberate re-share is
+        // a real change: the app reset the intent after handling, so the URL was
+        // absent in between and reappears as a genuine new delivery.
+        const previousUrl = lastSeenShareUrl.current;
+        lastSeenShareUrl.current = liveShareUrl;
+        if (!liveShareUrl || liveShareUrl === previousUrl) {
+            // No live intent, or the same one we already saw last render. The
+            // guard is *not* cleared here: that absence is one we cause by
+            // calling `resetShareIntent` after handling, and clearing on it is
+            // exactly what let a redelivery re-import. The guard is cleared only
+            // when the user returns to this screen (the `useFocusEffect` above).
             return;
         }
-        if (handledShareUrl.current === shareIntent.webUrl) {
-            // Already acted on this exact payload; a re-delivery is a no-op. The
-            // hook's generation counter does not save us here -- these deliveries
-            // are sequential, so the first resolve completes and navigates before
-            // the second even starts. Idempotency has to live at the source.
+        if (handledShareUrl.current === liveShareUrl) {
+            // A genuinely new delivery, but of a payload we already acted on: the
+            // redelivery that follows the reset we caused. Consume it so it
+            // cannot linger in `useShareIntent` and re-fire across a foreground.
+            resetShareIntent();
             return;
         }
-        handledShareUrl.current = shareIntent.webUrl;
+        handledShareUrl.current = liveShareUrl;
         // The screen no longer knows what an xBloom link looks like. One module
         // does, and it is the same one the field uses -- two that had to agree
         // eventually would not.
-        const source = parseImportInput(shareIntent.webUrl);
+        const source = parseImportInput(liveShareUrl);
         if (source) {
             // Reacting to an inbound share intent — an external system pushing
             // into React, which is what effects are for. The field is hidden by
@@ -167,7 +204,20 @@ export default function HomeScreen({db, settings}: Props) {
         // `importer` is rebuilt every render; depending on it would re-run this
         // on every render instead of on every intent.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hasShareIntent, shareIntent, resetShareIntent]);
+    }, [liveShareUrl, resetShareIntent]);
+
+    useEffect(() => {
+        // A shared link that failed (network down, not found) leaves its guard
+        // set while its intent is already consumed, so re-sharing the same link
+        // to retry would be dropped until the user navigated away and back. An
+        // error has nothing left to guard against a redelivery of, so forget it
+        // and let a retry land. A fresh delivery is still required to act (see
+        // the share effect), so clearing here cannot re-run the failed import on
+        // its own.
+        if (importStatus === "error") {
+            handledShareUrl.current = null;
+        }
+    }, [importStatus]);
 
     async function progressCallback(progress: number): Promise<string | undefined> {
         if (Platform.OS === "ios") {

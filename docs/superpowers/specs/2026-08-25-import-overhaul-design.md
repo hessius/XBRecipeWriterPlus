@@ -496,16 +496,47 @@ later `atomic → shared` change (extra `showField`/`focusField` writes shifting
 commit timing) lost for good. No guard keyed on the payload plus `hasShareIntent`
 can tell the two cases apart, because in those values they are the same.
 
-What actually separates them is the **user**: a deliberate re-share happens only
-after they backed out of the editor this import opened and returned to the
-library. So the ref is cleared in the home screen's `useFocusEffect` — on the
-screen *regaining focus* — and never on the absence of an intent. A redelivery
-arrives while that editor is still opening or open and this screen never
-re-focuses, so the guard holds and the second import is dropped deterministically,
-not by winning a race. A re-share only reaches the handler after a real focus
-regain has cleared the guard, so it imports again. This is correct by
-construction: the redelivery is dropped because nothing cleared the guard, and
-the re-share works because the user's return did.
+What separates them is the **user**: a deliberate re-share happens only after
+they backed out of the editor this import opened and returned to the library. So
+the guard is cleared in the home screen's `useFocusEffect` — on the screen
+*regaining focus* — and never on the absence of an intent. A redelivery arrives
+while that editor is still opening or open and this screen never re-focuses, so
+the guard holds and the second import is dropped.
+
+But the guard alone is not enough, because **dropping a redelivery consumes
+nothing**. Only the *handling* path calls `resetShareIntent`; the drop path just
+returns. So a dropped redelivery leaves `hasShareIntent` true with the same
+`webUrl` still live, and nothing drives it false — returning from the editor is
+not a foreground (`active`) event and does not change the linking URL, so
+`useShareIntent`'s refresh and `resetOnBackground` never re-fire. That stale
+intent then *outlives* the guard: when the user backs out, the `useFocusEffect`
+clears the guard while the same intent is still sitting there, the share effect
+re-runs (its `resetShareIntent` dep changes identity every render), and a
+guard-keyed check re-imports the very link it just dropped — the `4c610f7`
+regression, merely deferred to the next focus.
+
+So the effect keys on the **delivery**, not the payload: it acts only when the
+live `webUrl` *differs from the one present on the previous render* (tracked in a
+second ref). A redelivery — the same URL still sitting there — is unchanged from
+last render whether it lands while the editor opens or survives to a later focus,
+so it is a no-op no matter when the guard is cleared. A deliberate re-share is a
+genuine change: the app's own `resetShareIntent` first drives the URL absent, so
+its reappearance reads as a new delivery, and the focus-cleared guard lets it
+through. The guard still catches the one new-delivery case that is *not* a fresh
+share — the redelivery that follows the reset we caused (URL went absent, then
+back) — and consumes it with `resetShareIntent` so it cannot linger and re-fire
+across a foreground. Three signals, each pulling its weight: the delivery edge
+ignores an unchanged intent, the focus clear admits a real return, and the guard
+plus consume-on-drop swallow a same-payload redelivery.
+
+One gap is closed alongside: a **failed** shared lookup leaves the user on the
+library with the sheet open and its intent already consumed, and home never
+re-focuses to clear the guard — so re-sharing the same link to retry would be
+dropped. An error has nothing left to guard, so the guard is forgotten when the
+lookup fails (a small effect keyed on the import status), and the retry lands as
+a fresh delivery. The delivery edge still prevents this from re-running the
+failed import on its own: clearing the guard admits nothing until a new share
+actually arrives.
 
 Three doors, one sheet, one state machine. The only branches are whether the
 field is shown and whether it takes focus — which follow from the intent that

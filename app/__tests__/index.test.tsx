@@ -493,6 +493,101 @@ describe("import", () => {
         await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(2));
     });
 
+    it("imports once when a dropped redelivery outlives the guard to a later focus", async () => {
+        // The device sequence 4c610f7 deferred rather than fixed. A redelivery
+        // is *dropped* by the guard, but the drop consumes nothing, so
+        // `hasShareIntent` stays true with the same `webUrl` still live. No
+        // `resetShareIntent`, no foreground -- nothing drives it false. Then the
+        // user backs out to the library: the screen regains focus and the
+        // `useFocusEffect` clears the guard while that unchanged intent is *still
+        // live*. Keyed on the payload alone, the effect would re-import and stack
+        // a second editor; keyed on the URL being a new delivery, the still-live
+        // intent is the same one it already saw, so it stays put.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const db = store([]);
+        const settings = new Settings(memoryStorage());
+        const url = "https://share-h5.xbloom.com/r?id=abc123";
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        // The redelivery: the same live intent handed back as a fresh object,
+        // `useShareIntent` re-rendered (a new `resetShareIntent` identity), and
+        // `hasShareIntent` never dips false. This is what the drop leaves behind.
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+
+        // The user returns to the library. Focus regains and clears the guard --
+        // but the intent above is still live, handed back once more as the hook
+        // re-renders. The old guard-only check re-imported here; the delivery
+        // check does not, because the URL never went away.
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            mockFocusEpoch++;
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports the same shared link again after a failed lookup, without leaving here", async () => {
+        // A shared import that fails (network down) leaves the user on the
+        // library with the sheet open and its intent already consumed -- home
+        // never re-focuses to clear the guard. Re-sharing the same link to retry
+        // must still land: an error has nothing left to guard, so the guard is
+        // forgotten when the lookup fails, and the fresh delivery re-imports.
+        mockFetchRecipeDetail = () => Promise.reject(new Error("network"));
+        const db = store([]);
+        const settings = new Settings(memoryStorage());
+        const url = "https://share-h5.xbloom.com/r?id=abc123";
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+        // The lookup has failed and restored the field.
+        await waitFor(() =>
+            expect(screen.getByLabelText("Share link or pod code")).toBeTruthy()
+        );
+
+        // The intent clears, as it does once handled. No focus regain: the user
+        // never left the library.
+        mockShareIntentState = {
+            hasShareIntent: false, shareIntent: {}, resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        // The user shares the same link again to retry.
+        mockShareIntentState = {
+            hasShareIntent: true, shareIntent: {type: "weburl", webUrl: url},
+            resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(2));
+    });
+
     it("resolves at once when a pasted value parses, with no field to type in", async () => {
         // The tile's paste shortcut is atomic input: a value that parses resolves
         // without asking and needs no field, exactly like a share intent.
