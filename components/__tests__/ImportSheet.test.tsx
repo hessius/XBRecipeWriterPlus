@@ -2,8 +2,9 @@
  * `render` and `fireEvent` are asynchronous in this repository. Without the
  * `await`, `screen` is empty and the test passes for the wrong reason.
  */
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
+import {Keyboard} from "react-native";
 
 import ImportSheet from "@/components/ImportSheet";
 import type {RecipeImport} from "@/hooks/useRecipeImport";
@@ -258,4 +259,87 @@ it("does not offer the format hint while an error is showing", async () => {
     expect(await screen.findByText("No recipe with that code.")).toBeTruthy();
     expect(screen.queryByText("Paste an xBloom share link, or a pod code like ETH120."))
         .toBeNull();
+});
+
+it("dismisses the keyboard when a typed lookup resolves to the found panel", async () => {
+    // Finding 1: a typed value resolves without navigating so the panel can be
+    // read, but the keyboard is still up from typing and covers it. On the
+    // transition into found, from the typed path (the field was on screen while
+    // resolving), the keyboard is dropped -- once.
+    const dismiss = jest.spyOn(Keyboard, "dismiss");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: true, state: {status: "resolving"}})}/>
+    );
+    expect(dismiss).not.toHaveBeenCalled();
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({showField: true, state: foundState()})}/>
+        );
+    });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+
+    // Not again on a repaint that keeps the found panel: it is once per
+    // resolution, not once per render.
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({showField: true, state: foundState()})}/>
+        );
+    });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+
+    dismiss.mockRestore();
+});
+
+it("does not dismiss the keyboard when a lookup fails", async () => {
+    // A mistyped code lands on the error state, where the user needs the
+    // keyboard kept up to correct it. The dismiss is keyed on found, so error
+    // never triggers it.
+    const dismiss = jest.spyOn(Keyboard, "dismiss");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: true, state: {status: "resolving"}})}/>
+    );
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({
+                             showField: true,
+                             state:     {
+                                 status:  "error",
+                                 reason:  "notFound",
+                                 message: "No recipe with that code."
+                             }
+                         })}/>
+        );
+    });
+    expect(dismiss).not.toHaveBeenCalled();
+
+    dismiss.mockRestore();
+});
+
+it("does not dismiss the keyboard when a shortcut degrades to the found panel", async () => {
+    // The tile shortcut resolves with the field hidden, so its keyboard was
+    // never up; a degrade restores the field at found and lets `autoFocus`
+    // raise the keyboard on purpose. Dismissing there would fight that, so the
+    // dismiss is gated on the field having been on screen *before* found.
+    const dismiss = jest.spyOn(Keyboard, "dismiss");
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false, state: {status: "resolving"}})}/>
+    );
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({showField: true, state: foundState()})}/>
+        );
+    });
+    expect(dismiss).not.toHaveBeenCalled();
+
+    dismiss.mockRestore();
 });

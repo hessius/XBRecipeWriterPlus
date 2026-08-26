@@ -291,6 +291,23 @@ It carries the name, the subtitle, the pour profile, and dose, ratio and stage
 count in Doto. Those values come back from both endpoints, so the panel is always
 the same panel.
 
+**The keyboard is dismissed when a typed lookup reaches it.** A typed value
+resolves without navigating precisely so the panel can be *read* first — but the
+keyboard is still up from typing and covers the panel it exists to be read. So on
+the transition into `found`, on the typed path, the keyboard is dropped. This is
+presentation, not a rule, so it lives in `ImportSheet` (which owns focus and
+imports from React Native) rather than in `useRecipeImport` (which owns the
+import rules and holds no React Native import). It is a side effect, so it runs
+in an effect and not in the render-phase adjust-state block — that block's lint
+rule forbids a `setState` in an effect, but a plain imperative call is fine and a
+side effect must never run during render. It fires once per resolution, gated on
+the field having been on screen *before* `found`: a share intent or the tile
+shortcut resolves with the field hidden, so its keyboard was never up, and a
+degrading shortcut restores the field at `found` and lets `autoFocus` raise the
+keyboard on purpose — dismissing there would fight it. The `error` state is
+excluded for free by keying on `found`, which is right: a mistyped code needs the
+keyboard kept up to be corrected.
+
 The pod photo from `podsVo.imagePath` appears as a **circular mark in the top
 right**, and is simply absent otherwise. Two constraints follow:
 

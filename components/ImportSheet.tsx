@@ -1,5 +1,6 @@
 import * as Clipboard from "expo-clipboard";
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
+import {Keyboard} from "react-native";
 import {Input, Spinner, Text, XStack, YStack} from "tamagui";
 import type {ColorTokens} from "tamagui";
 
@@ -72,6 +73,40 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
         setWasOpen(open);
         if (!open) setNativePaste(false);
     }
+
+    // Dismiss the keyboard when a *typed* lookup lands on the found panel.
+    //
+    // A typed value resolves without navigating precisely so the user can read
+    // the panel first -- but the keyboard is still up from typing and covers the
+    // panel it exists to be read. Reaching found is the moment to drop it.
+    //
+    // This is a side effect, not a state change, so it belongs in an effect and
+    // *not* in the render-phase adjust-state block above: the lint rule that
+    // block satisfies forbids a synchronous `setState` in an effect, but says
+    // nothing about a plain imperative call, and a side effect must never run
+    // during render. It lives in the sheet, not the hook: `useRecipeImport` owns
+    // the import *rules* and holds no React Native import, and which control has
+    // focus is presentation.
+    //
+    // The transition is detected against the previous render, so the dismiss
+    // fires once per resolution rather than on every repaint while found. It is
+    // gated on the field having been on screen *before* this render, which is
+    // true only of the typed path: a share intent or the tile shortcut resolves
+    // with the field hidden (`showField` false), so its keyboard was never up,
+    // and a degrading shortcut restores the field at found and lets its
+    // `autoFocus` raise the keyboard on purpose -- dismissing there would fight
+    // it. The error state is excluded for free by keying on found, which is
+    // right: a mistyped code needs the keyboard kept up to be corrected.
+    const previous = useRef({status: state.status, showField});
+    useEffect(() => {
+        const enteredFound =
+            state.status === "found" && previous.current.status !== "found";
+        const fromTypedPath = previous.current.showField;
+        if (enteredFound && fromTypedPath) {
+            Keyboard.dismiss();
+        }
+        previous.current = {status: state.status, showField};
+    }, [state.status, showField]);
 
     useEffect(() => {
         if (!open || !Clipboard.isPasteButtonAvailable) {
