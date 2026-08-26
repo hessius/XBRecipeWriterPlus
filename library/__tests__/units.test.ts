@@ -8,6 +8,21 @@ import {
     unitSuffix,
     type TemperatureUnit
 } from "@/library/units";
+import {snapThrough} from "@/components/Stepper";
+import {TEMPERATURE} from "@/library/cardLimits";
+
+/**
+ * `library/units` restates the card's temperature bounds rather than importing
+ * them, so that it stays free of every other module. This test is what makes the
+ * two move together: it fails loudly if they stop matching, instead of letting a
+ * field clamp to a value the card would refuse at write time.
+ */
+describe("CELSIUS_RANGE", () => {
+    it("matches what the card will accept", () => {
+        expect(CELSIUS_RANGE.min).toBe(TEMPERATURE.min);
+        expect(CELSIUS_RANGE.max).toBe(TEMPERATURE.max);
+    });
+});
 
 describe("toDisplay", () => {
     it("leaves Celsius alone", () => {
@@ -101,6 +116,20 @@ describe("snapToStorable", () => {
     it("clamps out-of-range input rather than extrapolating", () => {
         expect(snapToStorable(400, "F")).toBe(210);
         expect(snapToStorable(0, "F")).toBe(102);
+    });
+
+    it("agrees with the stepper's rule everywhere on the dial", () => {
+        // Two functions promising "the nearest" that disagree would give a
+        // typed temperature one answer and a tapped one another. They did.
+        const ladder = displayValues("F");
+        for (let value = 100; value <= 212; value += 0.5) {
+            expect(snapToStorable(value, "F")).toBe(snapThrough(value, ladder));
+        }
+    });
+
+    it("is nearest by distance, not by a trip through Celsius", () => {
+        // 104.5 is half a degree from 104 and a degree and a half from 106.
+        expect(snapToStorable(104.5, "F")).toBe(104);
     });
 });
 

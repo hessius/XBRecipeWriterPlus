@@ -54,9 +54,20 @@ export function displayValues(unit: TemperatureUnit): readonly number[] {
     return values;
 }
 
-/** The nearest value the field can settle on. For a typed entry. */
+/**
+ * The nearest value the field can settle on. For a typed entry.
+ *
+ * Walks the ladder rather than converting and converting back. Rounding through
+ * Celsius is not "nearest": 104.5 °F is half a degree from 104 and a degree and
+ * a half from 106, but the round trip lands on 106. It also resolved the exact
+ * midpoints in whichever direction the Celsius arithmetic happened to fall,
+ * which disagreed with the stepper's rule on half the reachable inputs. There is
+ * one definition of nearest, and this and `snapThrough` both use it.
+ */
 export function snapToStorable(value: number, unit: TemperatureUnit): number {
-    return toDisplay(fromDisplay(Math.round(value), unit), unit);
+    if (!Number.isFinite(value)) return toDisplay(CELSIUS_RANGE.min, unit);
+    return displayValues(unit).reduce((best, candidate) =>
+        Math.abs(candidate - value) <= Math.abs(best - value) ? candidate : best);
 }
 
 /** The bounds to hand a stepper. */

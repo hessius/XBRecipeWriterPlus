@@ -1,7 +1,7 @@
 import React from "react";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import Stepper, {clamp, stepped} from "@/components/Stepper";
+import Stepper, {clamp, snapThrough, stepped, steppedThrough} from "@/components/Stepper";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("clamp", () => {
@@ -360,5 +360,71 @@ describe("Stepper walking an explicit ladder", () => {
         await fireEvent.press(screen.getByLabelText("Increase Temperature"));
 
         expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("stays put at the bottom of the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={190} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("steps down onto the ladder from a value that is not on it", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={195} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(194);
+    });
+});
+
+describe("steppedThrough", () => {
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("clamps at both ends rather than wrapping or falling off", () => {
+        expect(steppedThrough(201, LADDER, 1)).toBe(201);
+        expect(steppedThrough(190, LADDER, -1)).toBe(190);
+    });
+
+    it("moves in the direction asked for from off the ladder", () => {
+        expect(steppedThrough(195, LADDER, 1)).toBe(196);
+        expect(steppedThrough(195, LADDER, -1)).toBe(194);
+    });
+
+    it("refuses to move past the ends from off the ladder", () => {
+        expect(steppedThrough(300, LADDER, 1)).toBe(300);
+        expect(steppedThrough(100, LADDER, -1)).toBe(100);
+    });
+
+    it("leaves a value alone when there is no ladder to walk", () => {
+        expect(steppedThrough(195, [], 1)).toBe(195);
+    });
+});
+
+describe("snapThrough", () => {
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("takes the nearest value", () => {
+        expect(snapThrough(193.4, LADDER)).toBe(194);
+        expect(snapThrough(196.9, LADDER)).toBe(196);
+    });
+
+    it("breaks an exact tie towards the higher value", () => {
+        // Arbitrary, but it has to be one of them and it has to be the same
+        // rule `library/units` uses, or a typed value and a tapped one disagree.
+        expect(snapThrough(195, LADDER)).toBe(196);
+    });
+
+    it("leaves a value alone when there is no ladder to snap to", () => {
+        expect(snapThrough(195, [])).toBe(195);
     });
 });
