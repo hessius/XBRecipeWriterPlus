@@ -1,6 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, ScrollView, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, TextInput, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
@@ -96,6 +96,9 @@ function TextFieldRow({
     validate, invalidReason, onInvalidChange
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
+    // The whole row focuses this, so a short or empty value no longer leaves a
+    // wide strip of the row looking tappable while only the input responds.
+    const inputRef = useRef<React.ElementRef<typeof Input>>(null);
 
     // Reports validity on mount, and this row is keyed on the value it mirrors
     // by its call sites — so an external change (a revert to a good ID, a
@@ -116,17 +119,28 @@ function TextFieldRow({
     }
 
     return (
-        <FieldRow topic={topic} showHint={showHint}
-                  error={invalid ? invalidReason : undefined}>
-            {/* Not keyed here: the key belongs on the row, which is what owns
-                the `invalid` state this input feeds. */}
-            <Input unstyled accessibilityLabel={label}
-                   defaultValue={initialValue} maxLength={maxLength}
-                   autoCapitalize={autoCapitalize} onChangeText={onChangeText}
-                   onEndEditing={(event) => onCommit(event.nativeEvent.text)}
-                   textAlign="right" minWidth={110} fontSize={16}
-                   color={invalid ? palette.danger : palette.text}/>
-        </FieldRow>
+        // The whole row is the touch target, not just the right-aligned input.
+        // `accessible={false}` keeps this wrapper out of the accessibility tree
+        // so the `Input` below stays the single announced element under its own
+        // `label` -- the same one-announced-target rule `ImportTile` follows,
+        // where the wrapper carries the label and the inner control is hidden.
+        // This press only lives in `TextFieldRow`, not in `FieldRow`: a Stepper
+        // or segmented row shares `FieldRow`, and a row-wide press there would
+        // swallow the taps meant for the stepper's - and + controls.
+        <Pressable accessible={false} testID={`field-row-${label}`}
+                   onPress={() => (inputRef.current as TextInput | null)?.focus()}>
+            <FieldRow topic={topic} showHint={showHint}
+                      error={invalid ? invalidReason : undefined}>
+                {/* Not keyed here: the key belongs on the row, which is what owns
+                    the `invalid` state this input feeds. */}
+                <Input ref={inputRef} unstyled accessibilityLabel={label}
+                       defaultValue={initialValue} maxLength={maxLength}
+                       autoCapitalize={autoCapitalize} onChangeText={onChangeText}
+                       onEndEditing={(event) => onCommit(event.nativeEvent.text)}
+                       textAlign="right" minWidth={110} fontSize={16}
+                       color={invalid ? palette.danger : palette.text}/>
+            </FieldRow>
+        </Pressable>
     );
 }
 

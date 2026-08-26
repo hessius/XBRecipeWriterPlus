@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet} from "react-native";
+import {StyleSheet, TextInput} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
@@ -337,6 +337,32 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
         expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+    });
+
+    it("focuses the name input from anywhere on its row, not only the field", async () => {
+        // On a short or empty value the input was a thin target on the right of
+        // a wide row. The whole row now focuses it. Spying on the prototype is
+        // how a programmatic `focus()` is observed: it does not fire `onFocus`
+        // under the test renderer.
+        const focus = jest.spyOn(TextInput.prototype, "focus");
+        await renderEditor();
+
+        // The label area, the far side of the row from the input.
+        await fireEvent.press(screen.getByTestId("field-row-Name"));
+
+        expect(focus).toHaveBeenCalledTimes(1);
+        focus.mockRestore();
+    });
+
+    it("focuses the recipe ID input from anywhere on its row too", async () => {
+        // Same wrapper, so the other TextFieldRow call site gets it for free.
+        const focus = jest.spyOn(TextInput.prototype, "focus");
+        await renderEditor();
+
+        await fireEvent.press(screen.getByTestId("field-row-Recipe ID"));
+
+        expect(focus).toHaveBeenCalledTimes(1);
+        focus.mockRestore();
     });
 
     it("does not collide row keys when xid and name are both empty", async () => {
