@@ -440,6 +440,68 @@ describe("import", () => {
         jest.useRealTimers();
     });
 
+    it("shows a clean sheet after a typed import opens a recipe", async () => {
+        // The other close path: opening the found recipe navigates to the
+        // editor, which never fires the sheet's `onOpenChange`. The reset must
+        // still happen, or the next tile tap reopens onto the previous recipe's
+        // found panel with its code still typed in.
+        jest.useFakeTimers();
+        mockGetRecipe = () => new Recipe();
+        await renderHome();
+
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // One character at a time, so the heuristic reads typing rather than a
+        // paste -- a bulk change navigates atomically and never raises the found
+        // panel this path is about.
+        const field = screen.getByLabelText("Share link or pod code");
+        for (const text of ["E", "ET", "ETH", "ETH1", "ETH12", "ETH120"]) {
+            await fireEvent.changeText(field, text);
+        }
+        // Past the 600ms debounce, so the deliberate lookup fires and resolves.
+        await act(async () => { jest.advanceTimersByTime(600); });
+
+        await fireEvent.press(screen.getByLabelText("Open Imported"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(mockPush).toHaveBeenCalled();
+
+        // Back from the editor, reopen from the tile: a clean field and no
+        // lingering found panel from the recipe just opened.
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByLabelText("Share link or pod code").props.value).toBe("");
+        expect(screen.queryByLabelText("Open Imported")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("shows an empty field after an atomic paste into it opens a recipe", async () => {
+        // The atomic-paste-in-field twin of the case above: a whole value typed
+        // in one change is a paste, so it resolves and navigates on its own,
+        // leaving `value` holding the pasted text. Reopening must not prefill
+        // the field with it.
+        jest.useFakeTimers();
+        mockGetRecipe = () => new Recipe();
+        await renderHome();
+
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        await fireEvent.changeText(
+            screen.getByLabelText("Share link or pod code"),
+            "https://share-h5.xbloom.com/r?id=abc123"
+        );
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(mockPush).toHaveBeenCalled();
+
+        await fireEvent.press(screen.getByLabelText("Import a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByLabelText("Share link or pod code").props.value).toBe("");
+        jest.useRealTimers();
+    });
+
     it("reloads the library when the sheet closes", async () => {
         // An import that saved a recipe reaches this list only on a reload, and
         // closing the sheet is that reload's trigger. The store's reader is

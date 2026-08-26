@@ -202,8 +202,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate);
 
         if (intent === "atomic") {
-            setState({status: "idle"});
-            onOpenRef.current(recipe, isExisting);
+            handOff(recipe, isExisting);
             return;
         }
 
@@ -296,9 +295,26 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         setHint(true);
     }
 
+    /**
+     * Hand the recipe to the screen and clear this interaction in one act.
+     *
+     * The reset belongs here, in the authority, not on the screen. Opening a
+     * recipe closes the sheet by navigating (`onOpenRecipe` -> `router.push`),
+     * which never re-fires the sheet's `onOpenChange` -- so a reset wired only
+     * to that close path (see `app/index.tsx`) would leave the found panel and
+     * the typed value alive under the pushed editor, and the next time the tile
+     * opened the sheet they would still be there. Resetting the moment the
+     * recipe is handed over means every close path is covered, and a fourth one
+     * added later cannot forget.
+     */
+    function handOff(recipe: Recipe, isExisting: boolean) {
+        onOpenRef.current(recipe, isExisting);
+        reset();
+    }
+
     function openFound() {
         if (state.status !== "found") return;
-        onOpenRef.current(state.preview.recipe, state.preview.isExisting);
+        handOff(state.preview.recipe, state.preview.isExisting);
     }
 
     function reset() {
