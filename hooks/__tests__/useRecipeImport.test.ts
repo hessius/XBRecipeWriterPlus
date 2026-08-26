@@ -191,10 +191,47 @@ describe("a typed value", () => {
     });
 });
 
+describe("the tile's paste shortcut", () => {
+    it("navigates on a recipe not already in the library", async () => {
+        // Atomic-like: a fresh recipe reached from the shortcut opens the editor
+        // straight away, with no field to type in.
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "shortcut");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+        expect(onOpenRecipe.mock.calls[0][1]).toBe(false);
+    });
+
+    it("degrades to the found panel with the field shown when the recipe is already held", async () => {
+        // The sticky-clipboard fix: tapping IMPORT with recipe A still on the
+        // clipboard after importing A must not re-open A. Instead the shortcut
+        // stops at the found panel and restores the field, so the user can enter
+        // a different recipe -- which is what they opened the tile for.
+        const existing = importedRecipe();
+        const {onOpenRecipe, stored} = setup([existing]);
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "shortcut");
+        });
+
+        await waitFor(() => expect(result.current.state.status).toBe("found"));
+        expect(onOpenRecipe).not.toHaveBeenCalled();
+        expect(result.current.showField).toBe(true);
+        expect(result.current.state).toMatchObject({preview: {isExisting: true}});
+    });
+});
+
 describe("a recipe already in the library", () => {
     it("opens the stored one and says so", async () => {
         // `resolveOnOpen` never creates a second copy; opening the existing
-        // recipe is the reveal, exactly as a card read already does.
+        // recipe is the reveal, exactly as a card read already does. This is the
+        // atomic path -- a share intent -- which still navigates to a held
+        // recipe, unlike the tile shortcut which degrades.
         const existing = importedRecipe();
         const {onOpenRecipe, stored} = setup([existing]);
         const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));

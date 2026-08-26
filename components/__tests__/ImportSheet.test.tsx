@@ -39,6 +39,7 @@ function stubImport(overrides: Partial<RecipeImport> = {}): RecipeImport {
     return {
         state:        {status: "idle"},
         value:        "",
+        showField:    true,
         hint:         false,
         onChangeText: jest.fn(),
         resolveNow:   jest.fn(),
@@ -66,7 +67,7 @@ function foundState() {
 
 it("shows the field when there is something to type into it", async () => {
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     expect(await screen.findByLabelText("Share link or pod code")).toBeTruthy();
@@ -76,8 +77,8 @@ it("hides the field when the value arrived whole", async () => {
     // A share intent and the tile shortcut both deliver a complete value, so
     // there is nothing to put in a field and no reason to draw one.
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField={false}
-                     importer={stubImport({state: {status: "resolving"}})}/>
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false, state: {status: "resolving"}})}/>
     );
 
     expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
@@ -87,7 +88,7 @@ it("hides the field when the value arrived whole", async () => {
 it("passes typing to the hook", async () => {
     const importer = stubImport();
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={importer}/>
+        <ImportSheet open onOpenChange={() => {}} importer={importer}/>
     );
 
     await fireEvent.changeText(
@@ -99,7 +100,7 @@ it("passes typing to the hook", async () => {
 
 it("shows an error inline, never as an alert or a toast", async () => {
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField
+        <ImportSheet open onOpenChange={() => {}}
                      importer={stubImport({
                          state: {
                              status:  "error",
@@ -117,7 +118,7 @@ it("shows an error inline, never as an alert or a toast", async () => {
 
 it("explains the format once the hook says they have stopped", async () => {
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField
+        <ImportSheet open onOpenChange={() => {}}
                      importer={stubImport({value: "ETH1", hint: true})}/>
     );
 
@@ -128,7 +129,7 @@ it("explains the format once the hook says they have stopped", async () => {
 it("shows the found panel and opens what it found", async () => {
     const importer = stubImport({state: foundState()});
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={importer}/>
+        <ImportSheet open onOpenChange={() => {}} importer={importer}/>
     );
 
     await fireEvent.press(await screen.findByLabelText("Open Ethiopia Guji"));
@@ -142,7 +143,7 @@ it("renders the shared paste face with the house fallback (no native control)", 
     // face is present and no native control is laid over it.
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     expect(screen.getByTestId("import-paste-face", {includeHiddenElements: true}))
@@ -157,7 +158,7 @@ it("renders the same shared paste face with the native control over it", async (
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     await waitFor(() =>
@@ -170,7 +171,7 @@ it("renders the same shared paste face with the native control over it", async (
 it("offers a paste button on a platform without the native control", async () => {
     const importer = stubImport();
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={importer}/>
+        <ImportSheet open onOpenChange={() => {}} importer={importer}/>
     );
 
     await fireEvent.press(await screen.findByLabelText("Paste from clipboard"));
@@ -189,7 +190,7 @@ it("lays the native control over the face when iOS has one and there is somethin
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
 
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     await waitFor(() =>
@@ -209,7 +210,7 @@ it("falls back to the house button when iOS has the control but the clipboard is
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
 
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={stubImport()}/>
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     expect(await screen.findByLabelText("Paste from clipboard")).toBeTruthy();
@@ -226,7 +227,7 @@ it("forwards a native text paste, and forwards nothing for an image", async () =
     const importer = stubImport();
 
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField importer={importer}/>
+        <ImportSheet open onOpenChange={() => {}} importer={importer}/>
     );
 
     await waitFor(() => expect(mockNativePasteOnPress).toBeDefined());
@@ -243,7 +244,7 @@ it("does not offer the format hint while an error is showing", async () => {
     // acted and it failed. Only one belongs on screen, so the hint is gated on
     // `status === "idle"`.
     await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}} showField
+        <ImportSheet open onOpenChange={() => {}}
                      importer={stubImport({
                          value: "ETH1", hint: true,
                          state: {

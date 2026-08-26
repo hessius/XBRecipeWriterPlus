@@ -154,11 +154,13 @@ States are `idle | resolving | found | error`.
 | any | text changes by 1 character | `idle`, debounce armed |
 | any | text changes by more than 1 character | `resolving`, **atomic** |
 | any | the sheet's paste affordance is used | `resolving`, **atomic** |
-| any | the tile's paste shortcut delivers text (§6) | `resolving`, **atomic**, field hidden |
+| any | the tile's paste shortcut delivers text (§6) | `resolving`, **shortcut**, field hidden |
 | any | a share intent delivers an id | `resolving`, **atomic**, field hidden |
 | `idle` | debounce elapses, input parses | `resolving`, **deliberate** |
 | `idle` | debounce elapses, input does not parse | `idle` — no request |
 | `resolving` | resolved, atomic | `onOpenRecipe` called immediately |
+| `resolving` | resolved, shortcut, recipe **not** already held | `onOpenRecipe` called immediately |
+| `resolving` | resolved, shortcut, recipe already held | `found`, **field restored** — degrades, does not navigate |
 | `resolving` | resolved, deliberate | `found` — waits for a press |
 | `resolving` | failed | `error` |
 | `found` or `error` | text changes | `idle`, result cleared |
@@ -166,6 +168,27 @@ States are `idle | resolving | found | error`.
 **Atomic input navigates; deliberate input waits.** A paste, a share intent and
 the tile shortcut all deliver a complete value in one event, chosen deliberately
 by the user. Typing delivers a value that is complete only by guesswork.
+
+**The shortcut is atomic that degrades.** The tile's paste shortcut (§6)
+navigates like an atomic value on a *new* recipe, but the clipboard is sticky:
+after importing recipe A its link is still there, so tapping IMPORT resolves A
+again. Re-opening A would make the shortcut a trap. Instead a shortcut that
+resolves to a recipe already in the library **does not navigate** — it degrades
+to the `found` panel *and* restores the field, so the user can enter a different
+recipe, which is what they opened the tile for. A share intent stays atomic and
+still navigates to a held recipe (with the "Already in your library" toast),
+because re-sharing a specific link is a fresh deliberate act on that link. An
+in-sheet paste into the field also stays atomic: the user is already looking at
+the field, so navigating with the toast is coherent and the field is right there
+as the escape hatch.
+
+**`showField` is the hook's, not the screen's.** Whether the sheet draws its
+input field is owned by `useRecipeImport`, because the shortcut's degrade is
+discovered only *after* the fetch — the screen cannot decide it from a prop set
+when the sheet opened. The hook hides the field while an atomic or shortcut value
+resolves and restores it when a shortcut degrades; the sheet reads
+`importer.showField`. There is no `showField` prop and no screen-level state for
+it: one rule, one place.
 
 ### Two timers, with different jobs
 
@@ -358,8 +381,11 @@ the app's back.
 `IMPORT` label laid over it at `pointerEvents="none"` so the tap reaches the
 control. Its `onPress` hands over the text:
 
-- it parses → the sheet opens straight into `resolving`, as a share intent does,
-  then the editor;
+- it parses → the sheet opens straight into `resolving` on the **shortcut**
+  intent, then the editor — *unless* the recipe is already in the library, in
+  which case the shortcut degrades to the `found` panel with the field shown
+  (§2), because the clipboard is sticky and re-opening the same recipe would make
+  the tile a trap;
 - it does not parse → the sheet opens idle with an **empty** field. The
   non-conforming value is not populated, and the user cannot tell this apart from
   a normal open.

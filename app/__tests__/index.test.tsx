@@ -411,6 +411,40 @@ describe("import", () => {
         expect(screen.queryByTestId("import-resolving")).toBeNull();
     });
 
+    it("opens the editor when the shortcut resolves a recipe not yet held", async () => {
+        // The tile's promise is one tap: a genuinely new recipe on the clipboard
+        // navigates straight to the editor, exactly as a share intent would.
+        mockGetRecipe = () => new Recipe();
+        await renderPasteMode();
+
+        await act(async () => {
+            mockNativePasteOnPress!({type: "text", text: "ETH120"});
+        });
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    });
+
+    it("stops at the field when the shortcut resolves a recipe already held", async () => {
+        // The sticky-clipboard trap: recipe A's link is still on the clipboard
+        // after importing A, so tapping IMPORT resolves A again. The shortcut
+        // must not re-open A -- it degrades to the found panel and restores the
+        // field so a second recipe can be entered, which is what the tile is for.
+        mockGetRecipe = () => new Recipe();
+        (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
+        (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+        await renderHome({recipes: [named("Ethiopia")]});
+        await waitFor(() => expect(mockNativePasteOnPress).toBeDefined());
+
+        await act(async () => {
+            mockNativePasteOnPress!({type: "text", text: "ETH120"});
+        });
+
+        // The field is drawn again so a different recipe can be typed...
+        expect(await screen.findByLabelText("Share link or pod code")).toBeTruthy();
+        // ...and A was never re-opened.
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
     it("resets the importer when the sheet is closed", async () => {
         // Fake timers because the sheet only becomes interactive on the
         // `requestAnimationFrame` that plays its entrance: pressing CLOSE before

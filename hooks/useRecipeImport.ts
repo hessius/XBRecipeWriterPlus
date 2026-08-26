@@ -55,14 +55,19 @@ export type ImportState =
     | {status: "error"; reason: ImportErrorReason; message: string};
 
 /**
- * Whether the value arrived whole or a character at a time.
+ * Whether the value arrived whole, a character at a time, or as a shortcut.
  *
  * Atomic input navigates on its own; deliberate input waits to be asked. A
  * paste, a share intent and the tile's shortcut all deliver a complete value in
  * one event that the user chose. Typing delivers a value that is complete only
  * by guesswork.
+ *
+ * `"shortcut"` is the tile's paste shortcut: atomic, so it navigates on a fresh
+ * recipe, but it must not re-open a recipe the sticky clipboard still points at.
+ * Instead the shortcut degrades to the found panel *and* the field, so the user
+ * can reach a different recipe -- which is what they opened the tile for.
  */
-export type ImportIntent = "atomic" | "deliberate";
+export type ImportIntent = "atomic" | "deliberate" | "shortcut";
 
 type Options = {
     /** The library, for de-duplication. Passed in rather than re-opened here. */
@@ -75,6 +80,17 @@ export type RecipeImport = {
     state: ImportState;
     /** The field's text. */
     value: string;
+    /**
+     * Whether the sheet should draw its input field.
+     *
+     * False while an atomic value (a paste or a share intent) or the tile's
+     * shortcut resolves -- there is nothing to type -- and true otherwise,
+     * including when a shortcut degrades to the found panel because the recipe
+     * is already held. The rule lives here, the sole authority, not on the
+     * screen: the degrade is discovered only after the fetch, so the sheet
+     * cannot decide it from a prop set when it opened.
+     */
+    showField: boolean;
     /** Whether the "paste a link or a code" hint is showing. */
     hint: boolean;
     /** From the field. Decides paste versus typing from the size of the change. */
@@ -93,6 +109,12 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     const [value, setValue] = useState("");
     const [state, setState] = useState<ImportState>({status: "idle"});
     const [hint, setHint] = useState(false);
+    /**
+     * Whether the sheet draws its field. See `showField` on `RecipeImport`. The
+     * default is true (a plain tile tap opens an empty field); `resolve` hides
+     * it for atomic and shortcut input and restores it when a shortcut degrades.
+     */
+    const [showField, setShowField] = useState(true);
 
     /**
      * The last text seen, tracked synchronously.
@@ -148,6 +170,11 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
     async function resolve(source: ImportSource, intent: ImportIntent) {
         clearTimers();
         setHint(false);
+        // Atomic and shortcut input carry a whole value, so there is nothing to
+        // type: hide the field while the lookup runs. Only deliberate typing
+        // keeps the field. A degrading shortcut restores it below, after the
+        // fetch, once the recipe turns out to be already held.
+        setShowField(intent === "deliberate");
         const mine = ++generation.current;
         inFlight.current?.abort();
         const controller = new AbortController();
@@ -201,10 +228,19 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
 
         const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate);
 
-        if (intent === "atomic") {
+        // Atomic always navigates. A shortcut navigates only for a recipe not
+        // already held: the tile's paste shortcut degrades, rather than
+        // re-opening a recipe the sticky clipboard still points at, so the user
+        // can reach a different one.
+        if (intent === "atomic" || (intent === "shortcut" && !isExisting)) {
             handOff(recipe, isExisting);
             return;
         }
+
+        // A degrading shortcut restores the field the atomic path hid, so the
+        // found panel and an input to type something else are shown together --
+        // which is the whole point of the degrade.
+        if (intent === "shortcut") setShowField(true);
 
         setState({
             status:  "found",
@@ -324,8 +360,9 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         lastValue.current = "";
         setValue("");
         setHint(false);
+        setShowField(true);
         setState({status: "idle"});
     }
 
-    return {state, value, hint, onChangeText, resolveNow, onPastedText, openFound, reset};
+    return {state, value, showField, hint, onChangeText, resolveNow, onPastedText, openFound, reset};
 }

@@ -67,9 +67,10 @@ export default function HomeScreen({db, settings}: Props) {
 
     // `importId` used to do double duty -- "is the sheet open" and "what to
     // import" -- which is why `""` meant open-with-nothing and `null` meant
-    // closed. Two questions, two answers.
+    // closed. Two questions, two answers. Whether the field is drawn is no
+    // longer a third: that rule moved into `useRecipeImport` (`showField`), so
+    // the screen only owns "is the sheet open".
     const [importOpen, setImportOpen] = useState(false);
-    const [importShowField, setImportShowField] = useState(true);
 
     const importer = useRecipeImport({
         stored:       library.recipes,
@@ -111,11 +112,10 @@ export default function HomeScreen({db, settings}: Props) {
         const source = parseImportInput(shareIntent.webUrl);
         if (source) {
             // Reacting to an inbound share intent — an external system pushing
-            // into React, which is what effects are for.
-            /* eslint-disable react-hooks/set-state-in-effect */
-            setImportShowField(false);
+            // into React, which is what effects are for. The field is hidden by
+            // the hook's atomic path, not here.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setImportOpen(true);
-            /* eslint-enable react-hooks/set-state-in-effect */
             importer.resolveNow(source, "atomic");
         }
         resetShareIntent();
@@ -216,10 +216,7 @@ export default function HomeScreen({db, settings}: Props) {
                     canImport
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
-                    onImport={() => {
-                        setImportShowField(true);
-                        setImportOpen(true);
-                    }}
+                    onImport={() => setImportOpen(true)}
                     onSettings={() => router.push("/settings")}/>
 
                 <Collapsible open={!collapsed}>
@@ -227,19 +224,19 @@ export default function HomeScreen({db, settings}: Props) {
                         <CtaTile icon="scan" label="READ CARD"
                                  accessibilityLabel="Read a card" onPress={readCard}/>
                         <ImportTile
-                            onOpen={() => {
-                                setImportShowField(true);
-                                setImportOpen(true);
-                            }}
+                            onOpen={() => setImportOpen(true)}
                             onPasted={(text) => {
                                 const source = parseImportInput(text);
-                                // A value that does not parse is not put in the
-                                // field: the sheet opens exactly as a plain tap
-                                // would have, and the user cannot tell the two
-                                // apart.
-                                setImportShowField(source === null);
                                 setImportOpen(true);
-                                if (source) importer.resolveNow(source, "atomic");
+                                // The tile's paste shortcut: atomic, but the hook
+                                // degrades it to the found panel with the field
+                                // shown when the recipe is already in the library,
+                                // so a sticky clipboard cannot trap the user on
+                                // the recipe they just imported. A value that does
+                                // not parse opens the sheet with a plain field
+                                // (the hook's default), indistinguishable from a
+                                // plain tap.
+                                if (source) importer.resolveNow(source, "shortcut");
                             }}/>
                     </XStack>
                 </Collapsible>
@@ -279,7 +276,6 @@ export default function HomeScreen({db, settings}: Props) {
 
             <ImportSheet
                 open={importOpen}
-                showField={importShowField}
                 importer={importer}
                 onOpenChange={(open) => {
                     setImportOpen(open);

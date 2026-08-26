@@ -42,27 +42,23 @@ function PasteFace() {
 type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    /**
-     * Whether there is anything to type.
-     *
-     * False for a share intent and for the tile's paste shortcut: both deliver
-     * a complete value in one event, so a field would be an empty box beside a
-     * lookup already running. This is the only branch in the sheet, and it is
-     * exactly the atomic/deliberate distinction that also decides whether the
-     * hook navigates on its own.
-     */
-    showField: boolean;
     importer: RecipeImport;
 };
 
 /**
  * The one import sheet, reached from three doors.
  *
- * Layout only. Every rule about when a lookup starts, whether it navigates and
- * what is said when it fails belongs to `useRecipeImport`.
+ * Layout only. Every rule about when a lookup starts, whether it navigates,
+ * whether the field is drawn and what is said when it fails belongs to
+ * `useRecipeImport`.
  */
-export default function ImportSheet({open, onOpenChange, showField, importer}: Props) {
-    const {state, value, hint, onChangeText, onPastedText, openFound} = importer;
+export default function ImportSheet({open, onOpenChange, importer}: Props) {
+    // `showField` is the hook's, not a prop: the one branch in the sheet is the
+    // atomic/deliberate distinction that also decides whether the hook navigates
+    // on its own, so it lives in exactly one place. False while a share intent
+    // or the tile's shortcut resolves (nothing to type beside a running lookup);
+    // true otherwise, including when a shortcut degrades to the found panel.
+    const {state, value, showField, hint, onChangeText, onPastedText, openFound} = importer;
     const [nativePaste, setNativePaste] = useState(false);
     const [wasOpen, setWasOpen] = useState(open);
 
