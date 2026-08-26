@@ -540,7 +540,10 @@ constraint does not bind. What does need real hardware:
   mid-typing. The synchronous-ref fix closes only the same-tick batching hole,
   not this one; there is no signal in `onChangeText` that separates a native
   commit from a paste. **Accepted, device verification owed:** exercise a
-  suggestion-bar tap and autocorrect of a `ETH120`-shaped token on a physical
+  suggestion-bar tap and autocorrect of a `NLC001`-shaped token on a physical
   Android and iOS device and confirm the resulting jolt into the editor is
-  tolerable before relying on the heuristic in the field.
+  tolerable before relying on the heuristic in the field. `NLC001` is a **real
+  pod code the author owns** and resolves against the live API, so the jolt
+  actually lands in the editor -- keep it, do not swap in a fictional code like
+  `ETH120`, which the API rejects.
 - The disguised tile may be rejected on review, as recorded in §6.

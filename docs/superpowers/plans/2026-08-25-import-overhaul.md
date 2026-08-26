@@ -3840,9 +3840,11 @@ Tick each:
       "Allow Paste?" prompt appears. **Allow**: the value lands and resolves.
 - [ ] Repeat and **Deny**: nothing happens. No error, no state change, focus
       stays in the field.
-- [ ] Type a real pod XID slowly (the code printed on a genuine xBloom pod --
-      `ETH120` here is only illustrative; the live API rejects it as a machine
-      that "does not exist"). It resolves after the pause and shows the panel,
+- [ ] Type a real pod XID slowly. Use `NLC001` -- a **genuine pod code the
+      author physically owns**, which resolves against the live xBloom API. Do
+      not "tidy" it back to a fictional code like `ETH120`: the live API rejects
+      that as a machine that "does not exist", so the typed path would appear
+      broken for no reason. It resolves after the pause and shows the panel,
       and does **not** navigate until the panel is pressed.
 - [ ] Type `ETH1` and stop. After roughly two and a half seconds the format hint
       appears, in grey. Type another digit: it clears.
