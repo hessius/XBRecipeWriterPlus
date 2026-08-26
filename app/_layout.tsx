@@ -100,6 +100,7 @@ export default function RootLayout() {
                                                           }}/>
                                             <Stack.Screen name="settings" options={{title: "Settings"}}/>
                                             <Stack.Screen name="about" options={{title: "About"}}/>
+                                            <Stack.Screen name="licences" options={{title: "Licences"}}/>
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>

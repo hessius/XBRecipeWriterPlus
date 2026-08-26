@@ -1,5 +1,5 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutScreen from "@/app/about";
 import {renderWithProviders} from "@/test-utils/render";
@@ -8,6 +8,13 @@ jest.mock("expo-application", () => ({
     nativeApplicationVersion: "2.6.0",
     nativeBuildVersion: "42"
 }));
+
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({router: {push: (path: string) => mockPush(path)}}));
+
+beforeEach(() => {
+    mockPush.mockClear();
+});
 
 describe("AboutScreen", () => {
     it("says which version this is, because a bug report without one is useless", async () => {
@@ -41,9 +48,19 @@ describe("AboutScreen", () => {
         expect(screen.getByRole("link", {name: /source code/i})).toBeTruthy();
     });
 
-    it("lists the open-source licences", async () => {
+    it("offers the licences without mounting all of them here", async () => {
+        // The list runs to hundreds of entries. It lives on its own route so
+        // that opening About does not build them, and so that the route that
+        // does show them can virtualise.
         await renderWithProviders(<AboutScreen/>);
-        expect(screen.getByText(/open-source/i)).toBeTruthy();
+
+        const link = screen.getByRole("link", {name: /read the licences/i});
+        expect(link).toBeTruthy();
+        expect(screen.queryByText(/^react-native /)).toBeNull();
+
+        await fireEvent.press(link);
+
+        expect(mockPush).toHaveBeenCalledWith("/licences");
     });
 
     it("draws the mark", async () => {

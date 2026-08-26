@@ -1,11 +1,13 @@
 import * as Application from "expo-application";
-import React, {useState} from "react";
-import {Linking} from "react-native";
+import {router} from "expo-router";
+import React from "react";
+import {Linking, Pressable} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
 
 import AboutTicker from "@/components/AboutTicker";
 import LivingMark from "@/components/LivingMark";
 import SettingsSection from "@/components/SettingsSection";
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {LICENCES} from "@/constants/licences";
 
@@ -108,40 +110,12 @@ export default function AboutScreen() {
             <SettingsSection title="Third-party licences">
                 <AboutParagraph>
                     This app stands on {LICENCES.length} open-source packages.
+                    Their licences, and the copyright notices those licences
+                    require reproducing, are listed in full.
                 </AboutParagraph>
-                <LicenceList/>
+                <AboutLink label="Read the licences" onPress={() => router.push("/licences")}/>
             </SettingsSection>
         </ScrollView>
-    );
-}
-
-/**
- * The full licence list, collapsed by default.
- *
- * `LICENCES` is generated from the whole dependency tree and runs to hundreds
- * of entries — mounting all of them as `Text` nodes the moment this screen
- * opens is work nobody asked for, since the count above already satisfies the
- * distribution obligation at a glance. Expanding is a deliberate act, and the
- * list is thrown away again on collapse rather than kept mounted off-screen.
- */
-function LicenceList() {
-    const [expanded, setExpanded] = useState(false);
-
-    return (
-        <YStack paddingTop="$2" gap="$1">
-            <Text accessibilityRole="button"
-                  accessibilityLabel={expanded ? "Hide licences" : "Show licences"}
-                  fontSize={13} color={palette.text} paddingVertical="$1.5"
-                  textDecorationLine="underline"
-                  onPress={() => setExpanded((current) => !current)}>
-                {expanded ? "Hide licences" : "Show licences"}
-            </Text>
-            {expanded && LICENCES.map((entry) => (
-                <Text key={entry.name} fontSize={11} color={palette.muted}>
-                    {entry.name} {entry.version} — {entry.licence}
-                </Text>
-            ))}
-        </YStack>
     );
 }
 
@@ -154,13 +128,33 @@ function AboutParagraph({children}: {children: React.ReactNode}) {
     );
 }
 
-function AboutLink({label, url}: {label: string; url: string}) {
+/**
+ * A tappable line.
+ *
+ * A bare `Text` with an `onPress` is about thirty points tall and gives no
+ * feedback; `Pressable` with a minimum height is what `SettingsActionRow` uses,
+ * and these are the same kind of affordance.
+ */
+function AboutLink({label, url, onPress}: {label: string; url?: string; onPress?: () => void}) {
     return (
-        <Text accessibilityRole="link" accessibilityLabel={label}
-              fontSize={14} color={palette.text} paddingVertical="$1.5"
-              textDecorationLine="underline"
-              onPress={() => Linking.openURL(url)}>
-            {label}
-        </Text>
+        <Pressable accessibilityRole="link" accessibilityLabel={label}
+                   style={({pressed}) => ({minHeight: 44, justifyContent: "center",
+                       opacity: pressed ? 0.6 : 1})}
+                   onPress={() => {
+                       if (onPress !== undefined) return onPress();
+                       // `openURL` rejects when nothing can handle the scheme —
+                       // a managed device with no browser, say. Unhandled, that
+                       // is a red box in development and silence in production.
+                       if (url !== undefined) {
+                           Linking.openURL(url).catch(() => notify({
+                               tone: "error",
+                               message: "Could not open that link."
+                           }));
+                       }
+                   }}>
+            <Text fontSize={14} color={palette.text} textDecorationLine="underline">
+                {label}
+            </Text>
+        </Pressable>
     );
 }
