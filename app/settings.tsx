@@ -1,14 +1,20 @@
 import * as Application from "expo-application";
 import {useRouter} from "expo-router";
-import React from "react";
+import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
+import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
+import {useBackup} from "@/hooks/useBackup";
+import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {mergeRecipes, type BackupPayload} from "@/library/backup";
+import RecipeDatabase from "@/library/RecipeDatabase";
 import type {Settings} from "@/library/Settings";
 import {asTemperatureUnit} from "@/library/units";
 
@@ -46,6 +52,65 @@ export default function SettingsScreen({settings}: Props) {
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
 
+    const library = useRecipeLibrary();
+    const {exportBackup, pickBackup} = useBackup();
+    const [pending, setPending] = useState<BackupPayload | null>(null);
+
+    function settingsSnapshot() {
+        return {showCoffeeMarker, dotMatrixProfile, temperatureUnit};
+    }
+
+    async function onBackUp() {
+        const outcome = await exportBackup(library.recipes, settingsSnapshot(), VERSION);
+        if (!outcome.ok) notify({tone: "error", message: outcome.reason});
+    }
+
+    async function onRestore() {
+        const outcome = await pickBackup();
+        // Cancelling is not a failure. The user withdrew, and a message here
+        // would be the app arguing with a decision they already made.
+        if (outcome.cancelled) return;
+        if (!outcome.result.ok) {
+            notify({tone: "error", message: outcome.result.reason});
+            return;
+        }
+        setPending(outcome.result.payload);
+    }
+
+    function applySettings(incoming: Record<string, unknown>) {
+        // Only the keys this app knows, and only values of the right shape. A
+        // backup is a document from anywhere, so its settings block is input
+        // rather than instruction.
+        if (typeof incoming.showCoffeeMarker === "boolean") {
+            setShowCoffeeMarker(incoming.showCoffeeMarker);
+        }
+        if (typeof incoming.dotMatrixProfile === "boolean") {
+            setDotMatrixProfile(incoming.dotMatrixProfile);
+        }
+        if (incoming.temperatureUnit === "C" || incoming.temperatureUnit === "F") {
+            setTemperatureUnit(incoming.temperatureUnit);
+        }
+    }
+
+    function applyRestore(payload: BackupPayload, choice: RestoreChoice) {
+        const store = new RecipeDatabase();
+        if (choice.replace) store.deleteAllRecipes();
+
+        const target = choice.replace ? [] : library.recipes;
+        const {toAdd} = mergeRecipes(target, payload.recipes);
+        for (const recipe of toAdd) store.insertRecipe(recipe);
+
+        if (choice.includeSettings) applySettings(payload.settings);
+
+        library.refresh();
+        notify({
+            tone: "success",
+            message: toAdd.length === 1
+                ? "1 recipe restored"
+                : `${toAdd.length} recipes restored`
+        });
+    }
+
     return (
         <ScrollView backgroundColor={palette.base}
                     contentContainerStyle={{padding: 16, paddingBottom: 48}}>
@@ -82,7 +147,26 @@ export default function SettingsScreen({settings}: Props) {
                         options={TEMPERATURE_OPTIONS}
                         onChange={(value) => setTemperatureUnit(asTemperatureUnit(value))}/>
                 </SettingsSection>
+
+                <SettingsSection title="Library">
+                    <SettingsActionRow label="Back up my recipes"
+                                       detail="Writes a file and hands it to the share sheet."
+                                       onPress={onBackUp}/>
+                    <SettingsActionRow label="Restore from a backup"
+                                       detail="Adds anything your library does not already have."
+                                       onPress={onRestore}/>
+                </SettingsSection>
             </YStack>
+
+            {pending !== null && (
+                <RestoreSheet open payload={pending} existing={library.recipes}
+                              onCancel={() => setPending(null)}
+                              onRestore={(choice) => {
+                                  applyRestore(pending, choice);
+                                  setPending(null);
+                              }}/>
+            )}
         </ScrollView>
     );
 }
+

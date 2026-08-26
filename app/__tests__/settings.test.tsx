@@ -11,6 +11,38 @@ jest.mock("expo-router", () => ({
     useRouter: () => ({push: mockPush})
 }));
 
+const mockExportBackup = jest.fn();
+const mockPickBackup = jest.fn();
+jest.mock("@/hooks/useBackup", () => ({
+    useBackup: () => ({
+        exportBackup: (...args: unknown[]) => mockExportBackup(...args),
+        pickBackup: (...args: unknown[]) => mockPickBackup(...args)
+    })
+}));
+
+// notify lives in components/XbrwToast, not library/notify — the toast body
+// and its dispatcher share that module, and that is what every other screen
+// in this app imports it from.
+const mockNotify = jest.fn();
+jest.mock("@/components/XbrwToast", () => ({
+    ...jest.requireActual("@/components/XbrwToast"),
+    notify: (...args: unknown[]) => mockNotify(...args)
+}));
+
+// useRecipeLibrary's default store is a real RecipeDatabase, which opens
+// expo-sqlite — a native module with no working implementation under Jest.
+// The screen has no seam of its own for this (unlike HomeScreen's `db` prop),
+// so the hook is mocked here rather than exercising SQLite in every test.
+const mockRefresh = jest.fn();
+jest.mock("@/hooks/useRecipeLibrary", () => ({
+    useRecipeLibrary: () => ({
+        recipes:         [],
+        refresh:         mockRefresh,
+        deleteRecipe:    jest.fn(),
+        duplicateRecipe: jest.fn()
+    })
+}));
+
 function memoryStorage(): SettingsStorage {
     const values = new Map<string, string>();
     return {
@@ -22,6 +54,8 @@ function memoryStorage(): SettingsStorage {
 }
 
 describe("SettingsScreen", () => {
+    beforeEach(() => jest.clearAllMocks());
+
     it("shows the coffee marker toggle in its stored state", async () => {
         const settings = new Settings(memoryStorage());
         settings.set("showCoffeeMarker", false);
@@ -104,6 +138,41 @@ describe("SettingsScreen", () => {
     it("says what the unit changes and what it does not", async () => {
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText(/card always stores/i)).toBeTruthy();
+    });
+
+    it("offers backup and restore", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.getByText("LIBRARY")).toBeTruthy();
+        expect(screen.getByRole("button",
+            {name: "Back up my recipes, Writes a file and hands it to the share sheet."})).toBeTruthy();
+        expect(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."})).toBeTruthy();
+    });
+
+    it("says nothing at all when the picker was cancelled", async () => {
+        // The user withdrew. A message would be the app arguing with them.
+        mockPickBackup.mockResolvedValue({cancelled: true});
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+
+        expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it("reports a file it could not read", async () => {
+        mockPickBackup.mockResolvedValue({
+            cancelled: false, result: {ok: false, reason: "That file could not be read."}
+        });
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+
+        expect(mockNotify).toHaveBeenCalledWith(
+            expect.objectContaining({tone: "error", message: "That file could not be read."})
+        );
     });
 
     it("opens About from the top of the screen, not the bottom", async () => {
