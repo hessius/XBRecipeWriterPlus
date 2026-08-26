@@ -776,3 +776,77 @@ describe("import", () => {
         ));
     });
 });
+
+describe("HomeScreen, opening one editor at a time", () => {
+    it("opens one editor when a recipe is tapped twice in a row", async () => {
+        // A push is not instantaneous, so an impatient second tap lands while
+        // the first editor is still on its way and would stack a second copy of
+        // the same recipe on top of it -- two screens deep, both dismissable,
+        // for one intention.
+        await renderHome({recipes: [named("Ethiopia")]});
+        const card = (await screen.findAllByTestId("recipe-card"))[0];
+
+        await act(async () => {
+            fireEvent.press(card);
+            fireEvent.press(card);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens the editor again once the user has come back from it", async () => {
+        // The refusal lasts exactly as long as the journey it protects. Coming
+        // back to the library ends that journey, and the next tap is a new one.
+        const db = store([named("Ethiopia")]);
+        const settings = new Settings(memoryStorage());
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await act(async () => {
+            fireEvent.press((await screen.findAllByTestId("recipe-card"))[0]);
+        });
+        expect(mockPush).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            mockFocusEpoch++;
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+        await act(async () => {
+            fireEvent.press((await screen.findAllByTestId("recipe-card"))[0]);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(2);
+    });
+
+    it("says nothing about an import it refuses to open", async () => {
+        // A recipe that arrives while an editor is already opening is dropped
+        // whole. Announcing a recipe the user cannot see would be worse than
+        // saying nothing: the toast would sit over the editor of a different
+        // recipe entirely.
+        mockGetRecipe = () => named("Ethiopia");
+        const db = store([named("Ethiopia")]);
+        const settings = new Settings(memoryStorage());
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await act(async () => {
+            fireEvent.press((await screen.findAllByTestId("recipe-card"))[0]);
+        });
+        expect(mockPush).toHaveBeenCalledTimes(1);
+
+        mockShareIntentState = {
+            hasShareIntent: true,
+            shareIntent:    {type: "weburl", webUrl: "https://share-h5.xbloom.com/r?id=abc123"},
+            resetShareIntent: jest.fn()
+        };
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalled());
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockNotify).not.toHaveBeenCalledWith(
+            expect.objectContaining({message: "Already in your library"})
+        );
+    });
+});

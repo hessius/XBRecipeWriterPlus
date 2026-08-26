@@ -104,17 +104,32 @@ export default function HomeScreen({db, settings}: Props) {
     // reads as a fresh delivery.
     const lastSeenShareUrl = useRef<string | null>(null);
 
+    // True from the moment a push to the editor is issued until this screen is
+    // focused again. Everything upstream of this guards one particular way a
+    // recipe can arrive twice -- a redelivered share intent, a double tap, a
+    // paste racing a share -- and each of those guards has to model its own
+    // source correctly to work. This one models nothing: opening a second
+    // editor while the first is still opening is never what the user asked
+    // for, whatever produced the second recipe. It is the last line, not the
+    // first.
+    const navigatingToEditor = useRef(false);
+
     const importer = useRecipeImport({
         stored:       library.recipes,
         onOpenRecipe: (recipe, isExisting) => {
             setImportOpen(false);
+            // Ask to navigate first: a recipe that arrives while an editor is
+            // already opening is dropped whole, and a dropped arrival must not
+            // announce itself either.
+            if (!openRecipe(recipe)) {
+                return;
+            }
             if (isExisting) {
                 // The same words a card read already uses when it turns out the
                 // library has this one. `resolveOnOpen` never makes a copy, so
                 // opening the existing recipe is the whole reveal.
                 notify({tone: "info", message: "Already in your library"});
             }
-            openRecipe(recipe);
         }
     });
 
@@ -140,6 +155,9 @@ export default function HomeScreen({db, settings}: Props) {
     useFocusEffect(
         React.useCallback(() => {
             library.refresh();
+            // Back from the editor, so the next recipe to arrive is a new
+            // journey and may open one of its own.
+            navigatingToEditor.current = false;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -252,17 +270,16 @@ export default function HomeScreen({db, settings}: Props) {
             // of this screen with the recipe in it, which says it better than a
             // toast could. The one thing the editor cannot say for itself is
             // why Save arrives disabled, so that message stays.
+            //
+            // No `saveEnabled` param: the editor lets any recipe be saved now,
+            // including one that will not write, so there is nothing left for a
+            // caller to disable.
+            if (!openRecipe(toOpen)) {
+                return;
+            }
             if (isExisting) {
                 notify({tone: "info", message: "Already in your library"});
             }
-
-            router.push({
-                pathname: "/editRecipe",
-                // No `saveEnabled`: the editor lets any recipe be saved now,
-                // including one that will not write, so there is nothing left
-                // for a caller to disable.
-                params:   {recipeJSON: JSON.stringify(toOpen)}
-            });
         } catch {
             setScanning(false);
             // A cancelled Android scan throws. That is the user getting what
@@ -278,11 +295,16 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
-    function openRecipe(recipe: Recipe) {
+    function openRecipe(recipe: Recipe): boolean {
+        if (navigatingToEditor.current) {
+            return false;
+        }
+        navigatingToEditor.current = true;
         router.push({
             pathname: "/editRecipe",
             params:   {recipeJSON: JSON.stringify(recipe)}
         });
+        return true;
     }
 
     // The import sheet covers the screen while it is open, and the NFC ceremony
