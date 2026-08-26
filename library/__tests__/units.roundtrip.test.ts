@@ -1,52 +1,114 @@
-import {toDisplay, fromDisplay, CELSIUS_RANGE} from "@/library/units";
+import {useState, createElement} from "react";
+import {fireEvent, screen} from "@testing-library/react-native";
+
+import StageTile, {type StageField} from "@/components/StageTile";
 import Recipe from "@/library/Recipe";
+import {renderWithProviders} from "@/test-utils/render";
 
 /**
  * The promise the units feature makes: switching to Fahrenheit and back must
  * produce a byte-identical card.
  *
- * Deliberately at the byte level rather than at the field. Every arithmetic
- * check in units.test.ts could pass while something converted twice, or
- * converted on save, and only the bytes would show it.
+ * The previous version of this test called `toDisplay`/`fromDisplay` directly
+ * and diffed `getData()`, but that only proves `fromDisplay ∘ toDisplay = id`
+ * — which `units.test.ts` already covers as arithmetic. Every failure mode the
+ * comment here used to worry about ("something converted twice, or converted
+ * on save") lives in the seam between the two functions and the screen, not
+ * inside either function, and calling them directly skips that seam entirely.
+ * So this drives the real control instead: `StageTile`'s stepper, in
+ * Fahrenheit, is what a user actually taps — and the recipe it mutates is the
+ * very one whose bytes are compared, not a freshly built stand-in, so a
+ * conversion that leaked into the stored value cannot hide behind a
+ * from-scratch rebuild at the same nominal starting temperature.
  *
- * Two deviations from the plan's sketch, both forced by the real signatures in
- * `library/Recipe.ts` rather than the plan's assumption:
- * - `getData` takes the 32-byte signature prefix as a plain `number[]`, not a
- *   `Uint8Array`, so `new Array(32).fill(0)` is used instead.
- * - `new Recipe()` starts with zero pours (`public pours: Pour[] = []`), so a
- *   loop over `recipe.pours` would silently do nothing and `recipe.pours[0]`
- *   would throw. A stage is added explicitly so the assertion is actually
- *   exercised.
+ * This file is `.ts`, not `.tsx` (outside the set of files this task may
+ * rename), so the tree below is built with `createElement` rather than JSX.
+ *
+ * Its first case used to seed a temperature of 39 — `CELSIUS_RANGE.min` —
+ * which is exactly what `fromDisplay`'s clamp returns for any out-of-range or
+ * non-finite input, so that case would have passed against a `fromDisplay`
+ * that ignored its argument entirely. The temperatures below are the middle
+ * and both non-`min` ends of the reachable range instead.
  */
-function recipeWithAStage(): Recipe {
-    const recipe = new Recipe();
-    recipe.addPour(0, false);
-    return recipe;
+
+/**
+ * Writes the temperature back onto the recipe's first pour. Kept at module
+ * scope, the same way `useRecipeEditor.ts`'s `applyStageField` is, so the
+ * mutation happens behind a function boundary the compiler's immutability
+ * check does not see as touching a hook argument directly.
+ */
+function applyTemperature(recipe: Recipe, field: StageField, value: number): void {
+    if (field === "temperature") recipe.pours[0].temperature = value;
 }
 
-describe("switching units and switching back", () => {
-    it("leaves the card bytes untouched", () => {
-        const recipe = recipeWithAStage();
-        const before = JSON.stringify(recipe.getData(new Array(32).fill(0)));
+/**
+ * Renders one `StageTile` bound to `recipe.pours[0]`, mutated in place by the
+ * stepper the way the real editor mutates it, and republished by bumping a
+ * key — the same convention `useRecipeEditor` uses.
+ */
+function RoundTripHarness({recipe}: {recipe: Recipe}) {
+    "use no memo";
+    const [, setKey] = useState(0);
 
-        for (const pour of recipe.pours) {
-            const shown = toDisplay(pour.temperature, "F");
-            pour.temperature = fromDisplay(shown, "F");
-        }
-
-        expect(JSON.stringify(recipe.getData(new Array(32).fill(0)))).toBe(before);
+    return createElement(StageTile, {
+        pour: recipe.pours[0], index: 0, count: 1, open: true,
+        accent: "#FFFFFF", isTea: false, temperatureUnit: "F",
+        onToggle: () => {},
+        onChange: (_index: number, field: StageField, value: number) => {
+            applyTemperature(recipe, field, value);
+            setKey((k) => k + 1);
+        },
+        onDelete: () => {}
     });
+}
 
-    it("survives a pass through every storable temperature", () => {
-        const recipe = recipeWithAStage();
-        for (let c = CELSIUS_RANGE.min; c <= CELSIUS_RANGE.max; c++) {
-            recipe.pours[0].temperature = c;
-            const before = JSON.stringify(recipe.getData(new Array(32).fill(0)));
+function bytesOf(recipe: Recipe): string {
+    return JSON.stringify(recipe.getData(new Array(32).fill(0)));
+}
 
-            recipe.pours[0].temperature =
-                fromDisplay(toDisplay(c, "F"), "F");
+function recipeAt(celsius: number): Recipe {
+    const r = new Recipe();
+    r.addPour(0, false);
+    r.pours[0].temperature = celsius;
+    return r;
+}
 
-            expect(JSON.stringify(recipe.getData(new Array(32).fill(0)))).toBe(before);
+describe("stepping the temperature in Fahrenheit and back", () => {
+    it.each([40, 65, 98])(
+        "leaves the card bytes untouched for a stage that started at %i C",
+        async (initialCelsius) => {
+            const recipe = recipeAt(initialCelsius);
+            const before = bytesOf(recipe);
+
+            await renderWithProviders(createElement(RoundTripHarness, {recipe}));
+
+            await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+            await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+            // The very recipe the harness mutated, not a fresh stand-in built
+            // at the same nominal temperature — a leaked conversion changes
+            // this object's stored value, and a rebuild would not see it.
+            expect(bytesOf(recipe)).toBe(before);
         }
+    );
+
+    it("actually moves the stored value on the way, rather than the step being a no-op", async () => {
+        // Without this, the test above would also pass for a stepper that was
+        // wired to do nothing at all.
+        const onChange = jest.fn();
+        const recipe = recipeAt(65);
+
+        await renderWithProviders(createElement(StageTile, {
+            pour: recipe.pours[0], index: 0, count: 1, open: true,
+            accent: "#FFFFFF", isTea: false, temperatureUnit: "F",
+            onToggle: () => {}, onChange, onDelete: () => {}
+        }));
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        // 65 C is 149 F; the next storable Fahrenheit value is 151 F, which is
+        // 66 C — a change a byte-identical-after-a-round-trip assertion alone
+        // would not catch if the wiring silently dropped the edit.
+        expect(onChange).toHaveBeenCalledWith(0, "temperature", 66);
     });
 });
