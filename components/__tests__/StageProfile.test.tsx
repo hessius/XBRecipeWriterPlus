@@ -4,6 +4,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 import StageProfile, {bandFor, curveHeight, profileScale, targetY} from "@/components/StageProfile";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+import {palette} from "@/constants/colors";
 
 function pours(...volumes: number[]): Pour[] {
     return volumes.map((volume, index) => new Pour(index, volume));
@@ -57,6 +58,28 @@ describe("bandFor", () => {
     });
 });
 
+/**
+ * The stroke of an element, as a hex string.
+ *
+ * react-native-svg normalises a colour into an ARGB integer before it reaches
+ * the props, so the value that went in as a palette entry comes back out as a
+ * number and cannot be compared to one.
+ */
+function strokeOf(testID: string): string {
+    const {payload} = screen.getByTestId(testID).props.stroke as {payload: number};
+    return `#${(payload >>> 0).toString(16).padStart(8, "0").slice(2)}`;
+}
+
+/** Every fill painted anywhere inside an element. */
+function fillsWithin(element: unknown): string[] {
+    const node = element as {props?: {fill?: unknown}; children?: unknown[]};
+    const here = typeof node.props?.fill === "string" ? [node.props.fill] : [];
+    const below = (node.children ?? [])
+        .filter((child) => typeof child === "object" && child !== null)
+        .flatMap(fillsWithin);
+    return [...here, ...below];
+}
+
 describe("StageProfile", () => {
     it("draws a target line", async () => {
         await renderWithProviders(
@@ -67,20 +90,33 @@ describe("StageProfile", () => {
         expect(screen.getByTestId("stage-profile-target")).toBeTruthy();
     });
 
-    it("hatches the gap only when the stages fall short", async () => {
+    it("reddens the target line, and only that, when the stages fall short", async () => {
         const {rerender} = await renderWithProviders(
             <StageProfile pours={pours(96, 96, 96)} target={288} accent="#F0B98E"
                           width={300} height={90}/>
         );
 
-        expect(screen.queryByTestId("stage-profile-shortfall")).toBeNull();
+        expect(strokeOf("stage-profile-target")).toBe(palette.dim.toLowerCase());
 
         await rerender(
             <StageProfile pours={pours(96, 96, 96)} target={324} accent="#F0B98E"
                           width={300} height={90}/>
         );
 
-        expect(screen.getByTestId("stage-profile-shortfall")).toBeTruthy();
+        expect(strokeOf("stage-profile-target")).toBe(palette.danger.toLowerCase());
+    });
+
+    it("draws nothing else over the gap it is short by", async () => {
+        // A diagonal hatch used to appear here at the same moment the line
+        // turned red. Two marks changing at once read as one mark changing
+        // oddly -- specifically, as the dashes of the line having rotated.
+        await renderWithProviders(
+            <StageProfile pours={pours(96, 96, 96)} target={324} accent="#F0B98E"
+                          width={300} height={90} testID="profile"/>
+        );
+
+        const drawn = fillsWithin(screen.getByTestId("profile"));
+        expect(drawn.filter((fill) => fill.startsWith("url("))).toHaveLength(0);
     });
 
     it("marks the selected stage's band", async () => {
