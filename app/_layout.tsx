@@ -98,9 +98,13 @@ export default function RootLayout() {
                                                               headerShown: false,
                                                               animation: "slide_from_right"
                                                           }}/>
-                                            <Stack.Screen name="settings" options={{title: "Settings"}}/>
-                                            <Stack.Screen name="about" options={{title: "About"}}/>
-                                            <Stack.Screen name="licences" options={{title: "Licences"}}/>
+                                            {/* These three draw ScreenHeader
+                                                instead, for the same reason
+                                                and declared in the same
+                                                place. */}
+                                            <Stack.Screen name="settings" options={{headerShown: false}}/>
+                                            <Stack.Screen name="about" options={{headerShown: false}}/>
+                                            <Stack.Screen name="licences" options={{headerShown: false}}/>
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>

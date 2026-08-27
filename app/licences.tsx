@@ -1,7 +1,9 @@
+import {router} from "expo-router";
 import React from "react";
 import {FlatList, type ListRenderItemInfo} from "react-native";
 import {Text, YStack} from "tamagui";
 
+import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {LICENCES, type Licence} from "@/constants/licences";
 
@@ -22,11 +24,13 @@ import {LICENCES, type Licence} from "@/constants/licences";
  */
 export default function LicencesScreen({entries = LICENCES}: {entries?: readonly Licence[]}) {
     return (
-        <FlatList data={entries}
-                  keyExtractor={(entry) => entry.name}
-                  renderItem={renderLicenceRow}
-                  style={{backgroundColor: palette.base}}
-                  contentContainerStyle={{padding: 16, paddingBottom: 48}}/>
+        <YStack flex={1} backgroundColor={palette.base}>
+            <ScreenHeader title="Licences" onBack={() => router.back()}/>
+            <FlatList data={entries}
+                      keyExtractor={(entry) => entry.name}
+                      renderItem={renderLicenceRow}
+                      contentContainerStyle={{padding: 16, paddingBottom: 48}}/>
+        </YStack>
     );
 }
 

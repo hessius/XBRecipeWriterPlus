@@ -5,6 +5,7 @@ import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
+import ScreenHeader from "@/components/ScreenHeader";
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
@@ -141,8 +142,9 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     return (
-        <ScrollView backgroundColor={palette.base}
-                    contentContainerStyle={{padding: 16, paddingBottom: 48}}>
+        <YStack flex={1} backgroundColor={palette.base}>
+            <ScreenHeader title="Settings" onBack={() => router.back()}/>
+            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 48}}>
             <YStack>
                 {/* At the top rather than the conventional bottom. The row
                     carries the app's name and version, so it reads as the
@@ -201,7 +203,8 @@ export default function SettingsScreen({settings}: Props) {
                             onCancel={() => setConfirmingDeleteAll(false)}
                             onBackUpFirst={onBackUpFirst}
                             onDelete={onDeleteAll}/>
-        </ScrollView>
+            </ScrollView>
+        </YStack>
     );
 }
 
