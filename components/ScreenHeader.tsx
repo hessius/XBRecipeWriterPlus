@@ -13,11 +13,6 @@ const KEY_SIZE = 32;
 type Props = {
     title: string;
     onBack: () => void;
-    /**
-     * Drawn behind the header instead of the page background. The About screen
-     * uses it to let the mark's colour bleed up under the status bar.
-     */
-    background?: string;
 };
 
 /**
@@ -32,12 +27,16 @@ type Props = {
  * The route that uses this must set `headerShown: false` in `app/_layout.tsx`
  * and not from inside the screen: an effect runs after the first paint, so the
  * native bar this replaces would otherwise get one frame to flash.
+ *
+ * The title is announced as a heading because the bar it replaces was: without
+ * it, a screen reader arriving on a pushed screen has nothing for the rotor to
+ * land on and no announcement saying where it landed.
  */
-export default function ScreenHeader({title, onBack, background = palette.base}: Props) {
+export default function ScreenHeader({title, onBack}: Props) {
     const insets = useSafeAreaInsets();
 
     return (
-        <YStack backgroundColor={background} paddingTop={insets.top}>
+        <YStack backgroundColor={palette.base} paddingTop={insets.top}>
             <XStack alignItems="center" gap="$3"
                     paddingHorizontal="$4" paddingTop="$2" paddingBottom="$3">
                 <Pressable accessibilityRole="button" accessibilityLabel="Back"
@@ -48,7 +47,7 @@ export default function ScreenHeader({title, onBack, background = palette.base}:
                         <DotIcon name="back" size={16} color={palette.text}/>
                     </YStack>
                 </Pressable>
-                <ScreenTitle title={title}/>
+                <ScreenTitle title={title} heading/>
             </XStack>
         </YStack>
     );

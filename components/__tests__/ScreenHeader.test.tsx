@@ -21,4 +21,12 @@ describe("ScreenHeader", () => {
         await renderWithProviders(<ScreenHeader title="About" onBack={jest.fn()}/>);
         expect(screen.getByLabelText("Back")).toBeTruthy();
     });
+
+    it("announces the title as a heading, as the bar it replaces did", async () => {
+        // The native navigation bar carried the header trait, which is what
+        // VoiceOver's rotor navigates by. Dropping it leaves a reader arriving
+        // on a pushed screen with nothing to land on.
+        await renderWithProviders(<ScreenHeader title="Settings" onBack={jest.fn()}/>);
+        expect(screen.getByRole("header", {name: "Settings"})).toBeTruthy();
+    });
 });
