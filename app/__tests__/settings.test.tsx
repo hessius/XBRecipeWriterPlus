@@ -1,10 +1,26 @@
+import * as Application from "expo-application";
 import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
+import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import SettingsScreen from "@/app/settings";
 import {palette} from "@/constants/colors";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {renderWithProviders} from "@/test-utils/render";
+
+/**
+ * The rendered text of a `toJSON()` tree, in document order.
+ *
+ * Order across sibling elements is not something `getByText`/`getByRole` can
+ * compare directly — each finds one node, not a position — so a test that
+ * cares which section comes first has to walk the tree itself.
+ */
+function renderOrder(node: ReactTestRendererJSON | ReactTestRendererJSON[] | string | null): string[] {
+    if (node === null) return [];
+    if (typeof node === "string") return [node];
+    if (Array.isArray(node)) return node.flatMap(renderOrder);
+    return renderOrder(node.children as ReactTestRendererJSON[] | null ?? []);
+}
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -200,10 +216,25 @@ describe("SettingsScreen", () => {
 
         // SettingsActionRow folds its label and detail into one accessible
         // name (see components/__tests__/SettingsRows.test.tsx), so the row's
-        // name here is "About XBRW++, Version ..." rather than the label alone.
-        const about = screen.getByRole("button", {name: /^About XBRW\+\+/});
+        // full name is "About XBRW++, Version ..." rather than the label
+        // alone — matched here in full, not by a prefix, so this test would
+        // notice if the version ever stopped reaching the name.
+        const version = Application.nativeApplicationVersion ?? "unknown";
+        const about = screen.getByRole("button", {name: `About XBRW++, Version ${version}`});
         await fireEvent.press(about);
 
         expect(mockPush).toHaveBeenCalledWith("/about");
+
+        // The name only proves the row exists and works; it says nothing about
+        // where it sits. Moving About to the bottom — the regression this test
+        // is named for — would leave the assertion above green, so position is
+        // checked directly against every other section, including the two
+        // this task adds.
+        const order = renderOrder(screen.toJSON());
+        const indexOf = (text: string) => order.indexOf(text);
+        expect(indexOf("About XBRW++")).toBeGreaterThanOrEqual(0);
+        expect(indexOf("About XBRW++")).toBeLessThan(indexOf("RECIPE LIST"));
+        expect(indexOf("RECIPE LIST")).toBeLessThan(indexOf("UNITS"));
+        expect(indexOf("UNITS")).toBeLessThan(indexOf("LIBRARY"));
     });
 });
