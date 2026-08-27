@@ -41,10 +41,14 @@ function renderLicenceRow({item}: ListRenderItemInfo<Licence>) {
 /**
  * One package.
  *
- * `copyright` is the notice MIT and BSD both require reproducing, present on
- * 368 of the 809 entries -- the name, version and licence alone do not
- * discharge that obligation, so it is rendered here when the generator found
- * one.
+ * `copyright` is the notice MIT and BSD both require reproducing -- the name,
+ * version and licence alone do not discharge that obligation, so it is rendered
+ * here when the generator found one.
+ *
+ * `note` is present only where the generator inferred a licence the package did
+ * not state, and it is shown for the same reason: a reader auditing this list
+ * needs to be able to tell what was read off a package from what was reasoned
+ * about it, and to re-check the reasoning.
  */
 function LicenceRow({entry}: { entry: Licence }) {
     return (
@@ -54,6 +58,14 @@ function LicenceRow({entry}: { entry: Licence }) {
             </Text>
             {entry.copyright !== undefined && (
                 <Text fontSize={10} color={palette.dim}>{entry.copyright}</Text>
+            )}
+            {entry.note !== undefined && (
+                // Shown rather than kept in the generator, because a licence
+                // this app inferred rather than read is exactly the row a
+                // reviewer would want to check for themselves.
+                <Text fontSize={10} fontStyle="italic" color={palette.dim}>
+                    {entry.note}
+                </Text>
             )}
         </YStack>
     );

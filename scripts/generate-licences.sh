@@ -117,6 +117,24 @@ def licence_field(data):
 # instance is kept here and merged, rather than the first one seen winning
 # and the rest going unattributed.
 by_name = {}
+# Scopes whose monorepo carries one licence at its root that some of its
+# published packages forget to declare individually.
+#
+# Not a guess dressed up as a fact: nothing is inherited unless the scope's
+# other packages overwhelmingly agree on the licence named here, and if they
+# ever stop agreeing the generator fails rather than quietly keeps asserting it.
+# Each row records where a human verified the root licence, so the claim can be
+# re-checked rather than taken on trust.
+INHERITED_BY_SCOPE = {
+    "@tamagui": {
+        "licence": "MIT",
+        "source": "https://github.com/tamagui/tamagui/blob/main/LICENSE"
+    }
+}
+
+# How much of a scope must agree before a silent sibling inherits from it.
+INHERITANCE_AGREEMENT = 0.9
+
 for path_str in sorted(lock.get("packages", {})):
     if not path_str.startswith("node_modules/"):
         continue  # the root package itself
@@ -159,8 +177,38 @@ for path_str in sorted(lock.get("packages", {})):
     by_name.setdefault(name, []).append({
         "version": info.get("version") or data.get("version") or "unknown",
         "licence": licence,
-        "copyright": copyright_notice
+        "copyright": copyright_notice,
+        "note": None
     })
+
+for scope, rule in INHERITED_BY_SCOPE.items():
+    siblings = [
+        instance
+        for name, instances in by_name.items() if name.startswith(scope + "/")
+        for instance in instances
+    ]
+    declared = [i for i in siblings if i["licence"] != "See package"]
+    if not declared:
+        continue
+    agreeing = [i for i in declared if i["licence"] == rule["licence"]]
+    share = len(agreeing) / len(declared)
+    if share < INHERITANCE_AGREEMENT:
+        raise SystemExit(
+            "%s: only %d of %d packages declare %s, so the root licence can no "
+            "longer be assumed for the silent ones. Re-check %s and update "
+            "INHERITED_BY_SCOPE." % (scope, len(agreeing), len(declared),
+                                     rule["licence"], rule["source"])
+        )
+    for instance in siblings:
+        if instance["licence"] == "See package":
+            instance["licence"] = rule["licence"]
+            instance["note"] = (
+                "Ships no licence of its own. Recorded as %s because that is "
+                "the licence at the root of its monorepo (%s), and because %d "
+                "of the %d packages under %s that do state a licence all state "
+                "that one." % (rule["licence"], rule["source"], len(agreeing),
+                               len(declared), scope)
+            )
 
 lines = [
     "/**",
@@ -176,6 +224,11 @@ lines = [
     "    licence: string;",
     "    /** The notice MIT and BSD both require reproducing, when one was found. */",
     "    copyright?: string;",
+    "    /**",
+    "     * Why this package's licence is recorded as it is, when the package",
+    "     * itself did not say. Present only where the answer was inferred.",
+    "     */",
+    "    note?: string;",
     "};",
     "",
     "export const LICENCES: readonly Licence[] = ["
@@ -194,6 +247,8 @@ for name in sorted(by_name):
     entry_version = ", ".join(versions)
     entry_licence = " / ".join(licences)
     entry_copyright = "; ".join(copyrights) if copyrights else None
+    notes = sorted({instance["note"] for instance in instances if instance.get("note")})
+    entry_note = "; ".join(notes) if notes else None
 
     fields = [
         "name: %s" % json.dumps(name),
@@ -202,6 +257,8 @@ for name in sorted(by_name):
     ]
     if entry_copyright:
         fields.append("copyright: %s" % json.dumps(entry_copyright))
+    if entry_note:
+        fields.append("note: %s" % json.dumps(entry_note))
     lines.append("    {%s}," % ", ".join(fields))
 lines.append("];")
 lines.append("")

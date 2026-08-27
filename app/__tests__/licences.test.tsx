@@ -34,4 +34,28 @@ describe("LicencesScreen", () => {
         expect(LICENCES.length).toBeGreaterThan(700);
         expect(LICENCES.some((entry) => entry.copyright !== undefined)).toBe(true);
     });
+
+    it("says so when a licence was inferred rather than read", async () => {
+        // Five @tamagui packages ship no licence field and no licence file. The
+        // list records them as MIT on the strength of their monorepo's root
+        // licence, which is a reasonable inference and not a fact read off the
+        // package -- so the list has to show its working.
+        const inferred = LICENCES.filter((entry) => entry.note !== undefined);
+        expect(inferred.length).toBeGreaterThan(0);
+        for (const entry of inferred) {
+            expect(entry.licence).not.toBe("See package");
+            expect(entry.note).toMatch(/monorepo/);
+        }
+
+        await renderWithProviders(<LicencesScreen entries={inferred.slice(0, 1)}/>);
+        expect(screen.getByText(/Ships no licence of its own/)).toBeTruthy();
+    });
+
+    it("leaves no package without a licence at all", () => {
+        // "See package" means the generator found nothing and nobody has since
+        // worked out what the package is under. That is an unanswered question
+        // in a document whose whole job is answering it.
+        const unresolved = LICENCES.filter((entry) => entry.licence === "See package");
+        expect(unresolved.map((entry) => entry.name)).toEqual([]);
+    });
 });
