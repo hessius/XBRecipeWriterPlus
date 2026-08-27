@@ -1,7 +1,7 @@
 import React, {useEffect} from "react";
 import {Pressable, View} from "react-native";
 import Animated, {
-    Easing, type SharedValue,
+    type SharedValue,
     interpolateColor, useAnimatedStyle, useSharedValue, withDelay, withRepeat,
     withSpring, withTiming, withSequence
 } from "react-native-reanimated";
@@ -9,7 +9,7 @@ import {XStack} from "tamagui";
 
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, DOT_ICON_GRID, litCells} from "@/constants/dotIcons";
-import {SPRING, useReducedMotion} from "@/constants/motion";
+import {ATTRACT, EASING, SPRING, useReducedMotion} from "@/constants/motion";
 
 type Cell = {
     row: number;
@@ -26,7 +26,6 @@ type Cell = {
     bearing: number;
 };
 
-const BREATH_MS = 2400;
 
 /**
  * The tap responses, one picked at random per tap.
@@ -60,16 +59,13 @@ export function nextVariant(random: () => number, previous: number): number {
 }
 
 /**
- * How long the glimmer takes to cross, and how long the mark rests between.
+ * Sweep plus rest, run as one repeating timing.
  *
- * The rest is much the longer of the two on purpose. A shimmer that runs
- * continuously is a loading indicator, and the eye stops seeing it within
- * seconds; one that arrives every several seconds is caught in peripheral
- * vision and looks like the mark is alive.
+ * The whole cycle is a single linear pass so that there are no zero-duration
+ * steps to be dropped or reordered; `crestAt` scales progress back up so the
+ * crest has crossed and gone before the rest of the cycle plays out.
  */
-const GLIMMER_MS = 1100;
-const GLIMMER_REST_MS = 4400;
-const GLIMMER_CYCLE_MS = GLIMMER_MS + GLIMMER_REST_MS;
+const GLIMMER_CYCLE_MS = ATTRACT.glimmer + ATTRACT.glimmerRest;
 
 /**
  * How wide the bright crest of the glimmer is, as a fraction of the sweep.
@@ -103,7 +99,7 @@ const FIELD_REST = 0.55;
 export function crestAt(progress: number): number {
     "worklet";
     const span = 1 + GLIMMER_WIDTH * 2;
-    return -GLIMMER_WIDTH + progress * span * (GLIMMER_CYCLE_MS / GLIMMER_MS);
+    return -GLIMMER_WIDTH + progress * span * (GLIMMER_CYCLE_MS / ATTRACT.glimmer);
 }
 
 /**
@@ -275,8 +271,8 @@ export default function LivingMark({size, decorative = false}: Props) {
         }
         breath.value = withRepeat(
             withSequence(
-                withTiming(1, {duration: BREATH_MS / 2}),
-                withTiming(0, {duration: BREATH_MS / 2})
+                withTiming(1, {duration: ATTRACT.breath / 2}),
+                withTiming(0, {duration: ATTRACT.breath / 2})
             ),
             -1, false
         );
@@ -291,7 +287,7 @@ export default function LivingMark({size, decorative = false}: Props) {
             return;
         }
         glimmer.value = withRepeat(
-            withTiming(1, {duration: GLIMMER_CYCLE_MS, easing: Easing.linear}),
+            withTiming(1, {duration: GLIMMER_CYCLE_MS, easing: EASING.linear}),
             -1, false
         );
     }, [reduced, glimmer]);
@@ -300,8 +296,8 @@ export default function LivingMark({size, decorative = false}: Props) {
         if (reduced) return;
         variant.value = nextVariant(Math.random, variant.value);
         scatter.value = withSequence(
-            withTiming(1, {duration: 220}),
-            withDelay(120, withSpring(0, SPRING.gentle))
+            withTiming(1, {duration: ATTRACT.tap}),
+            withDelay(ATTRACT.tapHold, withSpring(0, SPRING.gentle))
         );
     }
 

@@ -1,33 +1,16 @@
 import React, {useEffect, useState} from "react";
 import {View, type LayoutChangeEvent} from "react-native";
 import Animated, {
-    Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
+    runOnJS, useAnimatedStyle, useSharedValue, withTiming
 } from "react-native-reanimated";
 
 import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
-import {useReducedMotion} from "@/constants/motion";
+import {ATTRACT, EASING, useReducedMotion} from "@/constants/motion";
 
-/** Long enough that nobody reading the screen meets it by accident. */
-const DEFAULT_DELAY_MS = 8000;
 const FONT_SIZE = 11;
 
-/**
- * How fast a line crosses the screen, in points per second.
- *
- * Slow enough to read without chasing it, fast enough that a phrase does not
- * outstay the few seconds of attention that summoned it.
- */
-const POINTS_PER_SECOND = 46;
 
-/**
- * The pause after one line has left before the next one arrives.
- *
- * The band is deliberately empty for this whole time. A ticker that starts its
- * next line the instant the last one clears is a wall of moving text; the beat
- * between them is what makes each phrase land as a separate thought.
- */
-const GAP_MS = 1400;
 
 /**
  * Where the line waits before it has been measured.
@@ -99,7 +82,7 @@ export function crossing(lineWidth: number, bandWidth: number):
     return {
         from: bandWidth,
         to: -lineWidth,
-        duration: (distance / POINTS_PER_SECOND) * 1000
+        duration: (distance / ATTRACT.tickerSpeed) * 1000
     };
 }
 
@@ -132,7 +115,7 @@ type Props = {
  */
 export default function AboutTicker({
     lines,
-    delayMs = DEFAULT_DELAY_MS,
+    delayMs = ATTRACT.tickerDelay,
     random = Math.random
 }: Props) {
     const reduced = useReducedMotion();
@@ -171,13 +154,13 @@ export default function AboutTicker({
                 offset.value = PARKED;
                 setLineWidth(0);
                 setIndex((current) => (current + 1) % order.length);
-            }, GAP_MS);
+            }, ATTRACT.tickerGap);
         }
 
         offset.value = plan.from;
         offset.value = withTiming(
             plan.to,
-            {duration: plan.duration, easing: Easing.linear},
+            {duration: plan.duration, easing: EASING.linear},
             (finished) => {
                 if (finished) runOnJS(advance)();
             }
