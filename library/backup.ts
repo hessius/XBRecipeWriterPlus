@@ -75,8 +75,15 @@ export function parseBackup(text: string): ParseResult {
     }
 
     // Checked before the contents, so a file this app genuinely cannot read is
-    // named as such rather than reported as a pile of unreadable recipes.
-    if (typeof envelope.version === "number" && envelope.version > BACKUP_VERSION) {
+    // named as such rather than reported as a pile of unreadable recipes. A
+    // version that is present but not a number is the same problem wearing a
+    // different hat: the field exists precisely to be compared, and one that
+    // cannot be compared is not a version this app should parse past.
+    if (typeof envelope.version !== "number") {
+        return {ok: false, reason: "That file is not an XBRW++ backup."};
+    }
+
+    if (envelope.version > BACKUP_VERSION) {
         return {
             ok: false,
             reason: "That backup was made by a newer version of XBRW++. Update the app and try again."
@@ -96,6 +103,18 @@ export function parseBackup(text: string): ParseResult {
     }
 
     if (recipes.length === 0) {
+        // "Empty" and "full of things this app could not read" are opposite
+        // messages. The first says nothing was lost; the second says keep this
+        // file, because the restore did not happen. Reporting the second as the
+        // first is the most dangerous sentence this module could say.
+        if (skipped > 0) {
+            return {
+                ok: false,
+                reason: skipped === 1
+                    ? "The one recipe in that backup could not be read. Keep the file."
+                    : `None of the ${skipped} recipes in that backup could be read. Keep the file.`
+            };
+        }
         return {ok: false, reason: "There are no recipes in that backup."};
     }
 
@@ -131,7 +150,11 @@ export function mergeRecipes(
         else {
             toAdd.push(recipe);
             // Guards a backup that contains the same UUID twice, which would
-            // otherwise be inserted twice and break the library's key.
+            // otherwise be inserted twice and break the library's key. The
+            // second copy is counted with the ones already present rather than
+            // dropped from both tallies: it will be in the library once the
+            // restore is done, and a summary the user is asked to judge the
+            // restore by has to add up to the number of entries in the file.
             known.add(recipe.uuid);
         }
     }
@@ -144,14 +167,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function reviveRecipe(entry: unknown): Recipe | null {
-    if (!isPlainObject(entry) || typeof entry.uuid !== "string" || entry.uuid === "") {
-        return null;
-    }
+    if (!isPlainObject(entry)) return null;
     try {
         // The constructor's `json` parameter is a string, not the parsed
         // object the envelope already gives us — re-stringifying here is
         // cheaper than reshaping the constructor for a caller of one.
-        return new Recipe(undefined, JSON.stringify(entry));
+        //
+        // A missing UUID is not a reason to throw the recipe away: the
+        // constructor mints one, and this whole feature exists so a user does
+        // not lose recipes. A duplicate on a second restore is an annoyance
+        // they can delete; a recipe dropped for a field the model can
+        // regenerate is gone.
+        const recipe = new Recipe(undefined, JSON.stringify(entry));
+        return typeof recipe.uuid === "string" && recipe.uuid !== "" ? recipe : null;
     } catch {
         return null;
     }

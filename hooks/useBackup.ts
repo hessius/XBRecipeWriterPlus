@@ -23,6 +23,34 @@ function fileNameForToday(): string {
 }
 
 /**
+ * Best-effort removal of a file the user was never given.
+ *
+ * A failed export must not leave a truncated backup lying around: the next
+ * export would either trip over it or, worse, a user browsing the cache would
+ * find a file that looks like a backup and is not a whole one. Nothing useful
+ * can be done if the deletion itself fails, and saying so would replace the real
+ * failure with a less interesting one, so it is swallowed deliberately.
+ */
+function discard(file: File): void {
+    try {
+        file.delete();
+    } catch {
+        // Deliberately ignored; see above.
+    }
+}
+
+/**
+ * A failure the user can act on, rather than one shape for three problems.
+ *
+ * "No file browser could be opened", "nothing came back" and "the file itself
+ * would not read" call for different next moves, and collapsing them into one
+ * sentence leaves the user retrying the one thing that cannot work.
+ */
+function unreadable(reason: string): PickOutcome {
+    return {cancelled: false, result: {ok: false, reason}};
+}
+
+/**
  * Writing a backup out and reading one back in.
  *
  * The file and share-sheet side, kept out of the screen for the reason
@@ -43,13 +71,23 @@ export function useBackup(): BackupActions {
             return {ok: false, reason: "This device cannot share files, so the backup was not made."};
         }
 
+        // The cache directory, not the document one: this file exists only long
+        // enough to be handed to the share sheet, and the user's chosen
+        // destination is the real copy. Left in the document directory it would
+        // be a permanent second copy of the whole library, swept into the
+        // device's own cloud backup, that the app never shows and never prunes.
+        //
         // create()/write() are synchronous in this SDK's File API and throw
         // rather than reject, so they share one try/catch with no `await`.
-        const file = new File(Paths.document, fileNameForToday());
+        // overwrite is required: create() throws on an existing path, and the
+        // name is per-day, so without it the second export of any day fails and
+        // blames the device for a file this app wrote an hour ago.
+        const file = new File(Paths.cache, fileNameForToday());
         try {
-            file.create();
+            file.create({overwrite: true});
             file.write(buildBackup(recipes, settings, appVersion));
         } catch {
+            discard(file);
             return {ok: false, reason: "The backup could not be written to this device."};
         }
 
@@ -60,6 +98,7 @@ export function useBackup(): BackupActions {
                 UTI: "public.json"
             });
         } catch {
+            discard(file);
             return {ok: false, reason: "The backup was made but could not be shared."};
         }
 
@@ -78,21 +117,21 @@ export function useBackup(): BackupActions {
                 copyToCacheDirectory: true
             });
         } catch {
-            return {cancelled: false, result: {ok: false, reason: "That file could not be read."}};
+            return unreadable("No file browser could be opened on this device.");
         }
 
         if (picked.canceled) return {cancelled: true};
 
         const uri = picked.assets?.[0]?.uri;
         if (uri === undefined) {
-            return {cancelled: false, result: {ok: false, reason: "That file could not be read."}};
+            return unreadable("No file came back from the file browser.");
         }
 
         try {
             const text = await new File(uri).text();
             return {cancelled: false, result: parseBackup(text)};
         } catch {
-            return {cancelled: false, result: {ok: false, reason: "That file could not be read."}};
+            return unreadable("That file could not be read.");
         }
     }
 

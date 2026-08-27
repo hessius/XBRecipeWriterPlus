@@ -49,6 +49,44 @@ describe("the round trip", () => {
         if (!result.ok) return;
         expect(result.payload.recipes[0].pours[0].temperature).toBe(93);
     });
+
+    it("preserves the raw card bytes, which nothing else can regenerate", () => {
+        // backup, offline_backup and uid are bytes read off a genuine xBloom
+        // card. The 32-byte signature in them is derived from the card's serial
+        // and this app never recomputes it, so a recipe that comes back without
+        // them cannot be written to that card again. Losing a name is an
+        // annoyance; losing these is losing the card.
+        const recipe = recipeNamed("Morning", "u1");
+        recipe.backup = [0, 127, 128, 255, 1, 2, 3];
+        recipe.offline_backup = [9, 8, 7, 6];
+        recipe.uid = [224, 4, 1, 80, 8, 0, 0, 0];
+
+        const result = parseBackup(buildBackup([recipe], {}));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const restored = result.payload.recipes[0];
+        expect(restored.backup).toEqual(recipe.backup);
+        expect(restored.offline_backup).toEqual(recipe.offline_backup);
+        expect(restored.uid).toEqual(recipe.uid);
+    });
+
+    it("restores a recipe whose UUID went missing rather than dropping it", () => {
+        // The constructor mints a UUID when one is absent. Discarding an
+        // otherwise readable recipe over a field the model can regenerate is
+        // the one outcome this whole feature exists to prevent.
+        const entry = JSON.parse(JSON.stringify(recipeNamed("Nameless", "u1")));
+        delete entry.uuid;
+
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION, recipes: [entry]
+        }));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].name).toBe("Nameless");
+        expect(result.payload.recipes[0].uuid).toBeTruthy();
+    });
 });
 
 describe("parseBackup refuses, with a reason", () => {
@@ -110,6 +148,50 @@ describe("parseBackup refuses, with a reason", () => {
         expect(result.payload.skipped).toBe(2);
     });
 
+    it("refuses another app's file even when its recipes look plausible", () => {
+        // The obvious test — a bare {hello:"world"} — is refused by the missing
+        // recipes array, so it passes with the format check deleted. This is
+        // the input that actually holds that check: everything else is right,
+        // and only the name on the envelope is wrong.
+        const result = parseBackup(JSON.stringify({
+            format: "some-other-app", version: BACKUP_VERSION,
+            recipes: [JSON.parse(buildBackup([recipeNamed("A", "u1")], {})).recipes[0]]
+        }));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/not an XBRW\+\+ backup/i);
+    });
+
+    it("refuses a version it cannot compare", () => {
+        // The field exists to be compared against BACKUP_VERSION. One that is
+        // present but not a number bypasses the comparison and is parsed
+        // optimistically — which is the silent misreading the version was added
+        // to prevent.
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: "2",
+            recipes: [JSON.parse(buildBackup([recipeNamed("A", "u1")], {})).recipes[0]]
+        }));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/not an XBRW\+\+ backup/i);
+    });
+
+    it("says a backup was unreadable rather than calling it empty", () => {
+        // "Nothing was in there" and "none of your forty recipes could be read"
+        // ask for opposite things from the user: the first says the file is
+        // spent, the second says keep it. Reporting the second as the first is
+        // how a user throws away the only copy.
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION,
+            recipes: [{nonsense: true}, null, 42]
+        }));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/3 recipes/);
+        expect(result.reason).toMatch(/keep the file/i);
+        expect(result.reason).not.toMatch(/no recipes/i);
+    });
+
     it("never throws, whatever it is handed", () => {
         for (const input of ["", "null", "[]", "0", '"a string"', "undefined"]) {
             expect(() => parseBackup(input)).not.toThrow();
@@ -160,5 +242,14 @@ describe("mergeRecipes", () => {
         const result = mergeRecipes([recipeNamed("A", "u1")], []);
         expect(result.toAdd).toHaveLength(0);
         expect(result.alreadyPresent).toBe(0);
+    });
+
+    it("adds a repeated UUID once, and still accounts for both entries", () => {
+        // The summary is what the user judges the restore by, so the two counts
+        // have to add up to the number of entries in the file. A second copy
+        // that appears in neither tally reads as a silently lost recipe.
+        const result = mergeRecipes([], [recipeNamed("A", "u1"), recipeNamed("A again", "u1")]);
+        expect(result.toAdd).toHaveLength(1);
+        expect(result.toAdd.length + result.alreadyPresent).toBe(2);
     });
 });
