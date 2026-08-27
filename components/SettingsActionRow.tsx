@@ -29,12 +29,29 @@ export default function SettingsActionRow({label, detail, tone = "default", onPr
         // The detail joins the label rather than staying in the hint: VoiceOver
         // hints can be switched off, and a version number nobody hears is not
         // shown at all.
+        //
+        // The dim on press is CtaTile's (`opacity: 0.7, scale: 0.98`), so every
+        // primary tap in the app answers the finger the same way. It rides the
+        // Pressable's own pressed state rather than a Tamagui `pressStyle`
+        // because this row is a plain React Native Pressable — the thing that
+        // owns the button role and the composed label — and RN's press system
+        // does not drive Tamagui's.
         <Pressable accessibilityRole="button"
                    accessibilityLabel={detail === undefined ? label : `${label}, ${detail}`}
-                   onPress={onPress}>
-            <XStack alignItems="center" justifyContent="space-between" gap="$4"
-                    paddingVertical="$3" borderBottomWidth={1}
-                    borderBottomColor={palette.line}>
+                   onPress={onPress}
+                   style={({pressed}) => ({
+                       opacity:   pressed ? 0.7 : 1,
+                       transform: [{scale: pressed ? 0.98 : 1}]
+                   })}>
+            {/* No borderBottom here any more: the card in `SettingsSection`
+                draws the dividers between rows, so the first and last meet its
+                rounded corners with no stray hairline. `paddingHorizontal="$4"`
+                and `minHeight={44}` are the editor `FieldRow`'s inset and iOS's
+                minimum touch target — a one-line action row would otherwise fall
+                just short of 44pt. */}
+            <XStack testID="settings-action-row"
+                    alignItems="center" justifyContent="space-between" gap="$4"
+                    minHeight={44} paddingVertical="$3" paddingHorizontal="$4">
                 <YStack flex={1} gap="$1">
                     <Text fontSize={16} color={ink}>{label}</Text>
                     {detail !== undefined && (

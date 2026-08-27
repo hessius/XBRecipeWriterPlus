@@ -1,5 +1,5 @@
 import React from "react";
-import {screen, fireEvent} from "@testing-library/react-native";
+import {screen, fireEvent, act} from "@testing-library/react-native";
 
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
@@ -61,6 +61,12 @@ describe("SettingsChoiceRow", () => {
 });
 
 describe("SettingsActionRow", () => {
+    // Real timers are the default; only the press-feedback test switches to
+    // fake ones, and this puts them back so nothing after it inherits them.
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
     it("is a button carrying its label and detail", async () => {
         await renderWithProviders(
             <SettingsActionRow label="About XBRW++" detail="Version 2.6.0"
@@ -101,5 +107,56 @@ describe("SettingsActionRow", () => {
 
         expect(screen.getByText("Back up my recipes").props.style)
             .toEqual(expect.objectContaining({color: palette.text}));
+    });
+
+    it("stays a 44pt target even as a single line", async () => {
+        // The one-line rows ("Back up my recipes") have no detail to give them
+        // height, so the row carries an explicit minimum rather than relying on
+        // its padding to clear the platform's 44pt touch target.
+        await renderWithProviders(
+            <SettingsActionRow label="Back up my recipes" onPress={() => {}}/>
+        );
+
+        expect(screen.getByTestId("settings-action-row").props.style)
+            .toEqual(expect.objectContaining({minHeight: 44}));
+    });
+
+    it("dims and shrinks under the finger, then returns", async () => {
+        // The same press answer as every other primary tap in the app
+        // (CtaTile's opacity 0.7 / scale 0.98): a user must see the row
+        // acknowledge the touch and let go again when the finger lifts.
+        //
+        // The feedback rides React Native's Pressability state machine, which is
+        // driven by the responder events, not by an `onPressIn` prop — so the
+        // test grants and releases the responder rather than firing `pressIn`,
+        // which would find no handler and silently prove nothing. A synthetic
+        // grant needs `persist` and a measurable target; the timers it schedules
+        // are advanced so the pressed state actually lands.
+        const grantEvent = {
+            persist:       () => {},
+            nativeEvent:   {},
+            dispatchConfig: {},
+            currentTarget: {measure: (cb: (...n: number[]) => void) => cb(0, 0, 44, 44, 0, 0)}
+        };
+        jest.useFakeTimers();
+        await renderWithProviders(
+            <SettingsActionRow label="Back up my recipes" onPress={() => {}}/>
+        );
+        const button = screen.getByRole("button", {name: "Back up my recipes"});
+        expect(button.props.style).toEqual(expect.objectContaining({opacity: 1}));
+
+        await fireEvent(button, "responderGrant", grantEvent);
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(button.props.style).toEqual(
+            expect.objectContaining({opacity: 0.7, transform: [{scale: 0.98}]})
+        );
+
+        await fireEvent(button, "responderRelease", grantEvent);
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        expect(button.props.style).toEqual(expect.objectContaining({opacity: 1}));
     });
 });
