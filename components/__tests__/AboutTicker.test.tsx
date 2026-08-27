@@ -1,5 +1,6 @@
 import React from "react";
 import {act, screen} from "@testing-library/react-native";
+import {StyleSheet} from "react-native";
 
 import AboutTicker, {crossing, shuffled} from "@/components/AboutTicker";
 import {useReducedMotion} from "@/constants/motion";
@@ -11,6 +12,9 @@ jest.mock("@/constants/motion", () => ({
 }));
 
 const mockReducedMotion = jest.mocked(useReducedMotion);
+
+/** Animated styles arrive as arrays; this reads them either way. */
+const flatten = (style: unknown) => StyleSheet.flatten(style as never) as Record<string, unknown>;
 
 /** A repeatable stand-in for Math.random, so a shuffle can be asserted on. */
 function seededRandom(seed: number): () => number {
@@ -193,5 +197,36 @@ describe("AboutTicker", () => {
         expect(scheduled.some((id) => cleared.includes(id))).toBe(true);
         setTimeoutSpy.mockRestore();
         clearTimeoutSpy.mockRestore();
+    });
+
+    it("gives the line room to be its own length, and does not stretch it", async () => {
+        // The bug this exists to catch is invisible on device: a line laid out
+        // in a container the width of the band gets stretched to it by the
+        // default `align-items: stretch`, `numberOfLines` ellipsises it, and
+        // the marquee scrolls a truncated phrase for ever while looking
+        // entirely deliberate. Both halves are asserted -- room to lay out in,
+        // and a child that shrinks to its content rather than filling it.
+        await renderWithProviders(<AboutTicker lines={["A VERY LONG PHRASE INDEED"]}
+                                               delayMs={8000} random={() => 0}/>);
+        await act(async () => {
+            jest.advanceTimersByTime(8100);
+        });
+        const row = flatten(screen.getByTestId("about-ticker", {includeHiddenElements: true}).props.style);
+        const line = flatten(screen.getByTestId("about-ticker-line", {includeHiddenElements: true}).props.style);
+        expect(row.width).toBeGreaterThan(1200);
+        expect(line.alignSelf).toBe("flex-start");
+    });
+
+    it("keeps the line off screen until it has been measured", async () => {
+        // Otherwise the reader gets a phrase blinking into the middle of the
+        // band, blinking out again, and only then the ticker starting.
+        await renderWithProviders(<AboutTicker lines={["FIRST"]} delayMs={8000}
+                                               random={() => 0}/>);
+        await act(async () => {
+            jest.advanceTimersByTime(8100);
+        });
+        const row = flatten(screen.getByTestId("about-ticker", {includeHiddenElements: true}).props.style);
+        const shift = (row.transform as unknown as {translateX: number}[])?.[0]?.translateX;
+        expect(shift).toBeGreaterThan(600);
     });
 });

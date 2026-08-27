@@ -30,6 +30,26 @@ const POINTS_PER_SECOND = 46;
 const GAP_MS = 1400;
 
 /**
+ * Where the line waits before it has been measured.
+ *
+ * Far enough right to be off any screen. It has to be the shared value's
+ * *initial* value rather than something assigned in an effect: a line placed at
+ * zero for even one frame appears in the middle of the band, and what the
+ * reader sees is a phrase blinking into place, blinking out, and only then the
+ * ticker starting.
+ */
+const PARKED = 10000;
+
+/**
+ * The room the line is given to lay itself out in.
+ *
+ * Generously wider than any phone, because the line is measured at its natural
+ * width and a container narrower than the text would truncate it before the
+ * measurement ever happened.
+ */
+const MEASURE_WIDTH = 4000;
+
+/**
  * The height the band occupies, reserved whether or not it has anything in it.
  *
  * Computed from the drawn font size rather than measured, so it is known on the
@@ -120,7 +140,7 @@ export default function AboutTicker({
     const [index, setIndex] = useState(0);
     const [lineWidth, setLineWidth] = useState(0);
     const [bandWidth, setBandWidth] = useState(0);
-    const offset = useSharedValue(0);
+    const offset = useSharedValue(PARKED);
     const silent = reduced || lines.length === 0;
 
     // Shuffled once, in a state initialiser, so a re-render cannot deal a new
@@ -145,6 +165,10 @@ export default function AboutTicker({
                 // be measured before it moves. Without it the new line would
                 // start crossing on the previous line's width and either cut
                 // its own tail off or hang off the edge for a beat.
+                // Parked before the next phrase renders, for the same reason
+                // the initial value is parked: an unmeasured line at zero is a
+                // line sitting visibly in the middle of the band.
+                offset.value = PARKED;
                 setLineWidth(0);
                 setIndex((current) => (current + 1) % order.length);
             }, GAP_MS);
@@ -190,16 +214,18 @@ export default function AboutTicker({
               style={{height: bandHeight(), overflow: "hidden",
                       justifyContent: "center", alignSelf: "stretch"}}>
             {started && !silent ? (
-                // Absolutely positioned, which is what lets the line measure to
-                // its own width. As a flow child it would stretch to the band
-                // and Yoga would measure it with an at-most constraint of one
-                // band width, ellipsising anything longer and then scrolling
-                // the truncation.
+                // Given far more width than the band, and holding a child that
+                // shrinks to its own content. Both halves matter: a child laid
+                // out in a container the width of the band is stretched to it
+                // by the default `align-items: stretch`, and `numberOfLines`
+                // then ellipsises the phrase and the marquee spends its life
+                // scrolling a truncated copy that looks entirely deliberate.
                 <Animated.View testID="about-ticker"
                                style={[{position: "absolute", top: 0, bottom: 0,
-                                        left: 0, justifyContent: "center"}, scroll]}>
+                                        left: 0, width: MEASURE_WIDTH,
+                                        justifyContent: "center"}, scroll]}>
                     <View testID="about-ticker-line" onLayout={onLineLayout}
-                          style={{flexShrink: 0}}>
+                          style={{alignSelf: "flex-start", flexShrink: 0}}>
                         <DotMatrixText fontSize={FONT_SIZE} weight="bold"
                                        letterSpacing={2} numberOfLines={1}
                                        color={palette.muted}>
