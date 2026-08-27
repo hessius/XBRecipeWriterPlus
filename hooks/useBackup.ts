@@ -102,6 +102,13 @@ export function useBackup(): BackupActions {
             return {ok: false, reason: "The backup was made but could not be shared."};
         }
 
+        // `shareAsync` resolves once the share sheet has finished with the file,
+        // so the copy the user chose to keep has already been written elsewhere
+        // and this one has no further job. Discarding only on the failure paths
+        // meant every successful export left a full copy of the library behind
+        // -- and because the name carries the date, a new one each day, none of
+        // which the app ever showed or pruned.
+        discard(file);
         return {ok: true};
     }
 
@@ -127,10 +134,18 @@ export function useBackup(): BackupActions {
             return unreadable("No file came back from the file browser.");
         }
 
+        // `copyToCacheDirectory` means the picker has already made an app-owned
+        // copy of whatever was chosen, and that copy is ours to clean up. Held
+        // in a variable so both exits can reach it: a restore that failed to
+        // parse leaves a complete backup file behind just as surely as one that
+        // succeeded, and a user restoring repeatedly accumulates them.
+        const copy = new File(uri);
         try {
-            const text = await new File(uri).text();
+            const text = await copy.text();
+            discard(copy);
             return {cancelled: false, result: parseBackup(text)};
         } catch {
+            discard(copy);
             return unreadable("That file could not be read.");
         }
     }

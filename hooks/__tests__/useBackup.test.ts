@@ -188,6 +188,22 @@ describe("exportBackup", () => {
         expect(outcome).toEqual({ok: false, reason: expect.stringMatching(/could not be shared/i)});
         expect(mockFiles.size).toBe(0);
     });
+
+    it("clears up after a share that worked, not only after one that failed", async () => {
+        // `shareAsync` resolves once the sheet is done with the file, so by then
+        // the copy the user chose to keep has been written elsewhere. Leaving
+        // this one meant a full, dated copy of the library accumulating in the
+        // cache on every export -- invisible, and never pruned by the app.
+        const {result} = await renderHook(() => useBackup());
+
+        let outcome;
+        await act(async () => {
+            outcome = await result.current.exportBackup([recipeNamed("A", "u1")], {});
+        });
+
+        expect(outcome).toEqual({ok: true});
+        expect(mockFiles.size).toBe(0);
+    });
 });
 
 describe("pickBackup", () => {
@@ -231,6 +247,7 @@ describe("pickBackup", () => {
         mockGetDocumentAsync.mockResolvedValue({
             canceled: false, assets: [{uri: "file:///picked.json"}]
         });
+        mockFiles.add("file:///picked.json");
         mockText.mockResolvedValue(JSON.stringify({
             format: "xbrw-backup", version: 1,
             recipes: [JSON.parse(JSON.stringify(recipeNamed("A", "u1")))]
@@ -245,12 +262,15 @@ describe("pickBackup", () => {
         expect(outcome!.cancelled).toBe(false);
         if (outcome!.cancelled) return;
         expect(outcome!.result.ok).toBe(true);
+        // The picker copies into our own cache, so the copy is ours to remove.
+        expect(mockFiles.has("file:///picked.json")).toBe(false);
     });
 
     it("reports a file it could not read", async () => {
         mockGetDocumentAsync.mockResolvedValue({
             canceled: false, assets: [{uri: "file:///picked.json"}]
         });
+        mockFiles.add("file:///picked.json");
         mockText.mockRejectedValue(new Error("gone"));
         const {result} = await renderHook(() => useBackup());
 
@@ -264,5 +284,8 @@ describe("pickBackup", () => {
         expect(outcome!.result.ok).toBe(false);
         if (outcome!.result.ok) return;
         expect(outcome!.result.reason).toMatch(/could not be read/i);
+        // A backup that failed to parse leaves a file behind just as surely as
+        // one that succeeded, and somebody retrying a bad restore does it often.
+        expect(mockFiles.has("file:///picked.json")).toBe(false);
     });
 });
