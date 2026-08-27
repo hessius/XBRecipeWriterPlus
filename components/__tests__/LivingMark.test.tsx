@@ -1,7 +1,8 @@
 import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
+import {StyleSheet} from "react-native";
 
-import LivingMark from "@/components/LivingMark";
+import LivingMark, {VARIANTS, nextVariant} from "@/components/LivingMark";
 import {palette} from "@/constants/colors";
 import {useReducedMotion} from "@/constants/motion";
 import {renderWithProviders} from "@/test-utils/render";
@@ -12,6 +13,19 @@ jest.mock("@/constants/motion", () => ({
 }));
 
 const mockReducedMotion = jest.mocked(useReducedMotion);
+
+/** Styles arrive as arrays once a dot is animated; this reads them either way. */
+/** The colour's red, green and blue, whatever notation it was written in. */
+function channels(colour: unknown): [number, number, number] {
+    const value = String(colour);
+    const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
+    if (hex) return [1, 2, 3].map((part) => parseInt(hex[part], 16)) as [number, number, number];
+    const rgb = /rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)/.exec(value);
+    if (rgb) return [1, 2, 3].map((part) => Number(rgb[part])) as [number, number, number];
+    throw new Error(`unrecognised colour: ${value}`);
+}
+
+const flatten = (style: unknown) => StyleSheet.flatten(style as never) as Record<string, number>;
 
 // Each plus glyph lights 11 cells of its 9x9 bitmap; the mark is two glyphs
 // side by side, so this is the one count that means "the whole mark drew".
@@ -92,6 +106,54 @@ describe("LivingMark", () => {
         const merged = Object.assign(
             {}, ...[screen.getAllByTestId("living-mark-dot")[0].props.style].flat(Infinity)
         );
-        expect(merged.backgroundColor).toBe(palette.brand);
+        // Reanimated composites the colour now that a tap can flash it, so it
+        // comes back as rgba rather than the hex it went in as. Compared by
+        // channel rather than by string: the same colour in a different
+        // notation is not a regression, a different colour is.
+        expect(channels(merged.backgroundColor)).toEqual(channels(palette.brand));
+    });
+
+    it("groups the field into bands, rather than animating every dot", async () => {
+        // The whole point of the banding: the glimmer runs on a few dozen
+        // animated views instead of 255 style worklets per frame. If a future
+        // change gives each dot its own wrapper, this catches it.
+        await renderWithProviders(<LivingMark size={120}/>);
+        const bands = screen.getAllByTestId("living-mark-band").length;
+        const dots = screen.getAllByTestId("living-mark-field-dot").length;
+        expect(bands).toBeLessThan(dots / 4);
+    });
+
+    it("still draws every field dot once, now they are grouped", async () => {
+        // Grouping is a refactor of where the dots live, not of how many there
+        // are; a band that dropped its cells would quietly shrink the disc.
+        await renderWithProviders(<LivingMark size={120}/>);
+        const dots = screen.getAllByTestId("living-mark-field-dot");
+        const places = new Set(dots.map((dot) => {
+            const style = flatten(dot.props.style);
+            return `${style.left}-${style.top}`;
+        }));
+        expect(places.size).toBe(dots.length);
+    });
+
+    it("never gives the same tap response twice running", async () => {
+        // Independent picks would repeat one tap in five, and a repeat reads as
+        // the mark having one trick that intermittently fails to fire.
+        for (const previous of Object.values(VARIANTS)) {
+            for (const roll of [0, 0.25, 0.5, 0.75, 0.999]) {
+                expect(nextVariant(() => roll, previous)).not.toBe(previous);
+            }
+        }
+    });
+
+    it("can still reach every response from any starting point", async () => {
+        // A skip implemented by clamping rather than shifting would make one
+        // variant unreachable, which is invisible until someone counts.
+        for (const previous of Object.values(VARIANTS)) {
+            const reached = new Set<number>();
+            for (let roll = 0; roll < 1; roll += 0.05) {
+                reached.add(nextVariant(() => roll, previous));
+            }
+            expect(reached.size).toBe(Object.keys(VARIANTS).length - 1);
+        }
     });
 });
