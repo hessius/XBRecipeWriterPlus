@@ -22,6 +22,21 @@ jest.mock("expo-sqlite", () => ({
             execSync: () => {
                 // Only ever a CREATE TABLE / PRAGMA; nothing to do in memory.
             },
+            // A faithful-enough transaction: it snapshots the rows, runs the
+            // task, and on any throw restores the snapshot before re-raising.
+            // Without the rollback this mock could not tell an atomic replace
+            // from a delete-then-loop, which is the whole point of the method
+            // it is here to test.
+            withTransactionSync: (task: () => void) => {
+                const snapshot = rows.map((row) => ({...row}));
+                try {
+                    task();
+                } catch (error) {
+                    rows.length = 0;
+                    rows.push(...snapshot);
+                    throw error;
+                }
+            },
             runSync: (source: string, params: unknown[] = []) => {
                 if (/^\s*INSERT INTO recipes/i.test(source)) {
                     rows.push({uuid: params[0] as string, recipeJSON: params[1] as string});
@@ -72,6 +87,61 @@ describe("RecipeDatabase", () => {
             const db = freshDatabase();
             expect(() => db.deleteAllRecipes()).not.toThrow();
             expect(db.retrieveAllRecipes()).toBeNull();
+        });
+    });
+
+    describe("replaceAllRecipes", () => {
+        it("swaps the library for the given recipes", () => {
+            const db = freshDatabase();
+            db.insertRecipe(recipeNamed("old"));
+
+            const fresh = [recipeNamed("A"), recipeNamed("B")];
+            db.replaceAllRecipes(fresh);
+
+            expect((db.retrieveAllRecipes() ?? []).map((r) => r.name).sort())
+                .toEqual(["A", "B"]);
+        });
+
+        it("leaves the original library untouched when an insert throws", () => {
+            // The heart of the critical fix: a replace must be all-or-nothing.
+            // Two recipes sharing a uuid make the second insert throw
+            // "Recipe already exists"; if the delete and the first insert were
+            // not rolled back with it, the library would be emptied and half
+            // filled — the exact data loss the backup feature exists to prevent.
+            const db = freshDatabase();
+            const survivor = recipeNamed("survivor");
+            db.insertRecipe(survivor);
+
+            const clash = recipeNamed("clash");
+            const twin = recipeNamed("twin");
+            twin.uuid = clash.uuid;
+
+            expect(() => db.replaceAllRecipes([clash, twin])).toThrow();
+            expect((db.retrieveAllRecipes() ?? []).map((r) => r.name))
+                .toEqual(["survivor"]);
+        });
+    });
+
+    describe("insertRecipes", () => {
+        it("adds every recipe in the batch", () => {
+            const db = freshDatabase();
+            db.insertRecipes([recipeNamed("A"), recipeNamed("B")]);
+
+            expect((db.retrieveAllRecipes() ?? []).map((r) => r.name).sort())
+                .toEqual(["A", "B"]);
+        });
+
+        it("adds none of the batch when one insert throws", () => {
+            const db = freshDatabase();
+            db.insertRecipe(recipeNamed("existing"));
+
+            const one = recipeNamed("one");
+            const two = recipeNamed("two");
+            two.uuid = one.uuid;
+
+            expect(() => db.insertRecipes([one, two])).toThrow();
+            expect((db.retrieveAllRecipes() ?? []).map((r) => r.name))
+                .toEqual(["existing"]);
         });
     });
 });

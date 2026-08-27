@@ -14,8 +14,7 @@ import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
-import {mergeRecipes, type BackupPayload} from "@/library/backup";
-import RecipeDatabase from "@/library/RecipeDatabase";
+import {type BackupPayload} from "@/library/backup";
 import type {Settings} from "@/library/Settings";
 import {asTemperatureUnit} from "@/library/units";
 
@@ -95,21 +94,28 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     function applyRestore(payload: BackupPayload, choice: RestoreChoice) {
-        const store = new RecipeDatabase();
-        if (choice.replace) store.deleteAllRecipes();
+        const outcome = library.applyRestore(payload, {replace: choice.replace});
+        // A second press landing before the first repaint. The library ignored
+        // it; the screen says nothing, because nothing happened.
+        if (outcome.status === "busy") return;
+        if (outcome.status === "failed") {
+            notify({
+                tone: "error",
+                message: "The restore could not be completed, so your library was left unchanged."
+            });
+            return;
+        }
 
-        const target = choice.replace ? [] : library.recipes;
-        const {toAdd} = mergeRecipes(target, payload.recipes);
-        for (const recipe of toAdd) store.insertRecipe(recipe);
-
+        // Only after the recipes have landed: the settings are a preference, and
+        // changing them for a restore that then failed would be the worst of
+        // both outcomes.
         if (choice.includeSettings) applySettings(payload.settings);
 
-        library.refresh();
         notify({
             tone: "success",
-            message: toAdd.length === 1
+            message: outcome.added === 1
                 ? "1 recipe restored"
-                : `${toAdd.length} recipes restored`
+                : `${outcome.added} recipes restored`
         });
     }
 
@@ -119,9 +125,7 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     function onDeleteAll() {
-        const deleted = library.recipes.length;
-        new RecipeDatabase().deleteAllRecipes();
-        library.refresh();
+        const deleted = library.deleteAll();
         setConfirmingDeleteAll(false);
         notify({
             tone: "success",

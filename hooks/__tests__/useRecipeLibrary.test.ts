@@ -1,6 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
+import type {BackupPayload} from "@/library/backup";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
@@ -9,7 +10,10 @@ function stubDb(recipes: Recipe[]) {
     return {
         retrieveAllRecipes: jest.fn(() => recipes),
         deleteRecipe:       jest.fn(),
-        cloneRecipe:        jest.fn()
+        cloneRecipe:        jest.fn(),
+        deleteAllRecipes:   jest.fn(),
+        insertRecipes:      jest.fn(),
+        replaceAllRecipes:  jest.fn()
     };
 }
 
@@ -17,6 +21,10 @@ function named(name: string): Recipe {
     const r = new Recipe();
     r.name = name;
     return r;
+}
+
+function payloadOf(recipes: Recipe[]): BackupPayload {
+    return {recipes, settings: {}, skipped: 0, appVersion: "2.6.0", exportedAt: ""};
 }
 
 describe("useRecipeLibrary", () => {
@@ -62,6 +70,87 @@ describe("useRecipeLibrary", () => {
         await act(async () => result.current.refresh());
 
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+    });
+
+    it("deletes the whole library and reports how many went", async () => {
+        const db = stubDb([named("Ethiopia"), named("Kenya")]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        let removed = 0;
+        await act(async () => {
+            removed = result.current.deleteAll();
+        });
+
+        expect(removed).toBe(2);
+        expect(db.deleteAllRecipes).toHaveBeenCalledTimes(1);
+    });
+
+    it("merges a restore through insertRecipes, skipping what is already present", async () => {
+        const present = named("Ethiopia");
+        const db = stubDb([present]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        const incoming = named("Kenya");
+        let outcome;
+        await act(async () => {
+            outcome = result.current.applyRestore(
+                payloadOf([present, incoming]), {replace: false}
+            );
+        });
+
+        expect(outcome).toEqual({status: "restored", added: 1});
+        expect(db.insertRecipes).toHaveBeenCalledTimes(1);
+        expect(db.insertRecipes.mock.calls[0][0].map((r: Recipe) => r.name)).toEqual(["Kenya"]);
+        expect(db.replaceAllRecipes).not.toHaveBeenCalled();
+    });
+
+    it("replaces a restore through the transactional replaceAllRecipes", async () => {
+        const db = stubDb([named("Ethiopia")]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        const incoming = named("Kenya");
+        await act(async () => {
+            result.current.applyRestore(payloadOf([incoming]), {replace: true});
+        });
+
+        expect(db.replaceAllRecipes).toHaveBeenCalledTimes(1);
+        expect(db.replaceAllRecipes.mock.calls[0][0].map((r: Recipe) => r.name)).toEqual(["Kenya"]);
+        expect(db.insertRecipes).not.toHaveBeenCalled();
+    });
+
+    it("reports a failed restore rather than throwing when the store rejects", async () => {
+        const db = stubDb([]);
+        db.insertRecipes.mockImplementation(() => {
+            throw new Error("DB: Recipe already exists");
+        });
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        let outcome;
+        await act(async () => {
+            outcome = result.current.applyRestore(payloadOf([named("Kenya")]), {replace: false});
+        });
+
+        expect(outcome).toEqual({status: "failed"});
+    });
+
+    it("ignores a second restore that re-enters before the first has repainted", async () => {
+        // Two taps in one React batch, with no render between them, would both
+        // read the same pre-reload snapshot and insert the same uuids. The
+        // in-flight flag lets only the first through.
+        const db = stubDb([]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        const incoming = named("Kenya");
+        let first;
+        let second;
+        await act(async () => {
+            first = result.current.applyRestore(payloadOf([incoming]), {replace: false});
+            second = result.current.applyRestore(payloadOf([incoming]), {replace: false});
+        });
+
+        expect(first).toEqual({status: "restored", added: 1});
+        expect(second).toEqual({status: "busy"});
+        expect(db.insertRecipes).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -80,6 +80,37 @@ class RecipeDatabase {
         this.db.runSync("DELETE FROM recipes");
     }
 
+    /**
+     * Insert several recipes as one unit, or none of them.
+     *
+     * `insertRecipe` throws by design on a duplicate uuid, and it also consults
+     * the palette before it writes, so a loop of bare inserts can fail partway
+     * and leave the library half-changed. Wrapping the loop in a transaction
+     * means a throw rolls the whole batch back — the restore either happened or
+     * it did not, and the exception still reaches the caller so it can be shown
+     * rather than swallowed.
+     */
+    public insertRecipes(recipes: Recipe[]): void {
+        this.db.withTransactionSync(() => {
+            for (const recipe of recipes) this.insertRecipe(recipe);
+        });
+    }
+
+    /**
+     * Empty the library and repopulate it in a single transaction.
+     *
+     * This is the destructive half of a restore, and the reason it exists as one
+     * method rather than a delete followed by a loop of inserts: if any insert
+     * throws, the delete is rolled back with it, so a failed replace leaves the
+     * original library exactly as it was instead of an emptied, half-filled one.
+     */
+    public replaceAllRecipes(recipes: Recipe[]): void {
+        this.db.withTransactionSync(() => {
+            this.deleteAllRecipes();
+            for (const recipe of recipes) this.insertRecipe(recipe);
+        });
+    }
+
     public getRecipe(uuid: string): Recipe | null {
         let recipeJSON: any = this.db.getFirstSync(
             `SELECT *
