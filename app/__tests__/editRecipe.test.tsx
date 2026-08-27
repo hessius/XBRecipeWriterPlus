@@ -123,6 +123,17 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
     return view;
 }
 
+/** Every background colour painted anywhere inside an element. */
+function fillsWithin(element: unknown): string[] {
+    const node = element as {props?: {style?: unknown}; children?: unknown[]};
+    const style = StyleSheet.flatten(node.props?.style) as {backgroundColor?: string} | undefined;
+    const here = style?.backgroundColor ? [style.backgroundColor] : [];
+    const below = (node.children ?? [])
+        .filter((child) => typeof child === "object" && child !== null)
+        .flatMap(fillsWithin);
+    return [...here, ...below];
+}
+
 describe("the editor", () => {
     it("opens on the recipe, not on a form", async () => {
         await renderEditor();
@@ -136,6 +147,33 @@ describe("the editor", () => {
 
         await renderEditor({cupType: CUP_TYPE.TEA});
         expect(screen.getByTestId("tea-banner-body")).toBeTruthy();
+    });
+
+    it("fills every selected segment with the recipe's accent", async () => {
+        // The accent does two separate jobs in this screen: it marks the
+        // numbers that are terms in the equation the machine enforces, and it
+        // fills the selected option of a choice. Confusing the two is what left
+        // the grinder row with a white selected segment while the cup row
+        // beside it was accented — it was simply never passed the accent, and
+        // fell back to plain text. Asserted over every segment at once rather
+        // than by name, so the next control added cannot repeat it.
+        await renderEditor();
+        // Taken from the target readout rather than recomputed, so the
+        // assertion is "the same accent this screen is already using" rather
+        // than "the accent this test believes it should be using".
+        const target = StyleSheet.flatten(
+            screen.getByTestId("brew-target").props.style
+        ) as {color?: string};
+        const accent = target.color;
+        expect(accent).toBeTruthy();
+        const chosen = screen.getAllByRole("radio", {checked: true});
+        expect(chosen.length).toBeGreaterThan(1);
+        for (const segment of chosen) {
+            // The role sits on the pressable and the fill on the label inside
+            // it, so the colour is one level down from the thing that knows it
+            // is selected.
+            expect(fillsWithin(segment)).toContain(accent);
+        }
     });
 
     it("hides the cup and grinder rows on tea", async () => {

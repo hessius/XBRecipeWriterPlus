@@ -162,9 +162,20 @@ type BrewDeckProps = {
  * Every brew value on one surface.
  *
  * A reader operates nothing — the user's account of a visit is that most often
- * they only look at it — so there is no pager and no disclosure. The two fields
- * the target is computed from, dose and ratio, are drawn in the accent to tie
- * them to the readout above without a rule between them.
+ * they only look at it — so there is no pager and no disclosure.
+ *
+ * The accent does two jobs in the editor, and they are easy to mistake for one
+ * inconsistent job:
+ *
+ * 1. A *number* is drawn in the accent when it is one of the terms in the
+ *    equation the machine actually enforces — dose times ratio must equal the
+ *    sum of the stage volumes. So dose, ratio and each stage volume are
+ *    accented and tie visually to the target readout above; grind size, grind
+ *    speed, temperature, flow rate and pause are not in that equation and stay
+ *    in plain text. Accenting those too would say the target depended on them.
+ * 2. A *choice* is drawn in the accent when it is the selected option, which is
+ *    the ordinary selected-state fill and has nothing to do with the equation.
+ *    Every segmented control and toggle in the editor does this.
  *
  * Module scope, not an inline function: a component defined inside the screen's
  * body is a new type on every render and would remount its whole subtree.
@@ -239,15 +250,16 @@ function BrewDeck({
                 tea besides, since a tea card always writes the default grind.
                 The previous editor hid the pair for the same reasons. */}
             {!isTea && (
-                <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
-                              accent={accent}
-                      showHint={showHint}
+                <SegmentedRow topic="cup" value={String(recipe.cupType)}
+                              options={CUP_OPTIONS} accent={accent}
+                              showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
             )}
 
             {!isTea && (
-                <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
-                      showHint={showHint}
+                <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"}
+                              options={GRINDER_OPTIONS} accent={accent}
+                              showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
