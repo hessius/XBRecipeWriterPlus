@@ -46,10 +46,39 @@ function plural(count: number, one: string, many: string): string {
 export default function RestoreSheet({open, payload, existing, onCancel, onRestore}: Props) {
     const [includeSettings, setIncludeSettings] = useState(false);
     const [confirmingReplace, setConfirmingReplace] = useState(false);
+
+    // The sheet is mounted for the settings screen's whole life so it keeps its
+    // animations, so neither answer is thrown away by an unmount. Both used to
+    // outlive the sheet: the next backup a user picked could open straight onto
+    // "Yes, replace my library" with a decision they had made about a different
+    // file still selected.
+    //
+    // Cleared in the handlers rather than in an effect on `open`, because
+    // dismissing and restoring are the only two ways out -- `onOpenChange`
+    // funnels a swipe or a backdrop tap into `onCancel` -- so there is no close
+    // an event handler does not already see, and an effect would only be
+    // reacting to state this component had just caused.
+    function leaveWith(close: () => void) {
+        return () => {
+            setConfirmingReplace(false);
+            setIncludeSettings(false);
+            close();
+        };
+    }
+
+    const dismiss = leaveWith(onCancel);
     const incoming = payload?.recipes ?? [];
     const {toAdd, alreadyPresent} = mergeRecipes(existing, incoming);
     const skipped = payload?.skipped ?? 0;
-    const canAdd = toAdd.length > 0;
+    // Settings are restorable work in their own right. Judging this on new
+    // recipes alone meant that a backup whose recipes you already had left the
+    // only non-destructive button disabled, so the sole way to take its
+    // settings was to replace the entire library -- destroying recipes in order
+    // to accept a preference.
+    const canAdd = toAdd.length > 0 || includeSettings;
+    const addLabel = toAdd.length === 0 && includeSettings
+        ? "Take the settings"
+        : "Add to my library";
     // The honest figure for the replace confirmation: a replace inserts the
     // deduped recipes, not the raw file count, so a backup with a repeated UUID
     // must not promise more than it will actually put back.
@@ -57,10 +86,7 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
 
     return (
         <XbrwSheet open={open} onOpenChange={(next) => {
-            if (!next) {
-                setConfirmingReplace(false);
-                onCancel();
-            }
+            if (!next) dismiss();
         }} title="Restore" heightPercent={60}>
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                 {confirmingReplace ? (
@@ -78,7 +104,7 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
                             <Button flex={1} accessibilityRole="button"
                                     accessibilityLabel="Yes, replace my library"
                                     backgroundColor={palette.danger}
-                                    onPress={() => onRestore({replace: true, includeSettings})}>
+                                    onPress={leaveWith(() => onRestore({replace: true, includeSettings}))}>
                                 Yes, replace
                             </Button>
                         </XStack>
@@ -116,14 +142,20 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
                             button (see components/ImportTile.tsx). The
                             accessibility state and the withheld handler are set
                             by hand instead. */}
+                        {/* Named for what pressing it will actually do. With
+                            nothing new to add, "Add to my library" describes an
+                            action that is not going to happen, and a screen
+                            reader would announce it as the only enabled control
+                            on a sheet that had just said there was nothing to
+                            add. */}
                         <Button accessibilityRole="button"
-                                accessibilityLabel="Add to my library"
+                                accessibilityLabel={addLabel}
                                 accessibilityState={{disabled: !canAdd}}
                                 opacity={canAdd ? 1 : 0.4}
                                 onPress={canAdd
-                                    ? () => onRestore({replace: false, includeSettings})
+                                    ? leaveWith(() => onRestore({replace: false, includeSettings}))
                                     : undefined}>
-                            Add to my library
+                            {addLabel}
                         </Button>
 
                         {existing.length > 0 && (

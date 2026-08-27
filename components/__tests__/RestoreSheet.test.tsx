@@ -133,6 +133,78 @@ describe("RestoreSheet", () => {
         expect(onRestore).not.toHaveBeenCalled();
     });
 
+    it("still offers the settings when every recipe is already present", async () => {
+        // Two people with the same library, one of whom has tuned their
+        // preferences: the only thing the other wants out of the backup is the
+        // settings. Gating the action on new recipes alone made that restore
+        // impossible, and the sheet was still offering the settings switch that
+        // could no longer be acted on.
+        const onRestore = jest.fn();
+        await renderWithProviders(
+            <RestoreSheet open payload={PAYLOAD}
+                          existing={[recipeNamed("A", "u1"), recipeNamed("B", "u2")]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+
+        // And it is named for what it will do, since it is no longer adding.
+        const take = screen.getByRole("button", {name: /take the settings/i});
+        expect(take.props.accessibilityState.disabled).toBe(false);
+
+        await fireEvent.press(take);
+        expect(onRestore).toHaveBeenCalledWith({replace: false, includeSettings: true});
+    });
+
+    it("forgets the previous restore's choices when it is dismissed", async () => {
+        // The sheet is mounted for the settings screen's whole life, so nothing
+        // unmounts when it closes and no state is thrown away. Without an
+        // explicit clear, a user who ticked the settings and then backed out
+        // would find the next restore silently pre-armed to overwrite their
+        // preferences with a different file's.
+        const onRestore = jest.fn();
+        const view = await renderWithProviders(
+            <RestoreSheet open payload={PAYLOAD} existing={[]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByLabelText("Close"));
+
+        await view.rerender(
+            <RestoreSheet open={false} payload={PAYLOAD} existing={[]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+        await view.rerender(
+            <RestoreSheet open payload={PAYLOAD} existing={[]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+
+        expect(screen.getByLabelText(/settings from this backup/i)
+            .props.accessibilityState.checked).toBe(false);
+    });
+
+    it("forgets them after a restore too, not only after a dismissal", async () => {
+        // The screen closes the sheet itself once a restore is done, which never
+        // reaches `onOpenChange` -- the path that made this bug survive the
+        // obvious fix.
+        const onRestore = jest.fn();
+        await renderWithProviders(
+            <RestoreSheet open payload={PAYLOAD} existing={[]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add.*librar/i}));
+
+        expect(onRestore).toHaveBeenCalledWith({replace: false, includeSettings: true});
+        expect(screen.getByLabelText(/settings from this backup/i)
+            .props.accessibilityState.checked).toBe(false);
+    });
+
     it("promises the deduped count in the replace confirmation, not the raw file count", async () => {
         // A backup with the same UUID twice inserts it once; the confirmation a
         // user judges the replace by must not overstate what it will put back.
