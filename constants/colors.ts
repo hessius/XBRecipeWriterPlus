@@ -48,6 +48,20 @@ export const palette = {
     /** Primary text. */
     text:    "#FFFFFF",
 
+    /**
+     * The mark's magenta, sampled from `assets/images/icon.png`.
+     *
+     * The app icon is a dot-matrix disc with the `++` picked out in this
+     * colour, and until now it was the one place the colour existed — every
+     * screen dropped it, so the app's own identity stopped at the home screen
+     * icon. It is a brand colour rather than a semantic one, so it marks the
+     * app being itself (the mark, the wordmark's `++`) and never a state: a
+     * user cannot learn it means anything, because it does not.
+     *
+     * 5.56:1 on `base`, so it clears AA for body text as well as for graphics.
+     */
+    brand:   "#FF007F",
+
     /** Confirmation, and the "reader ready" state. */
     success: "#5DDC8A",
     /** Destructive actions and validation errors. */
