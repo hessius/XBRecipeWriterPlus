@@ -6,7 +6,7 @@ import type {ReactTestRendererJSON} from "react-test-renderer";
 import SettingsScreen from "@/app/settings";
 import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
-import {Settings, type SettingsStorage} from "@/library/Settings";
+import {DEFAULTS, Settings, type SettingsStorage} from "@/library/Settings";
 import {renderWithProviders} from "@/test-utils/render";
 
 /**
@@ -255,14 +255,43 @@ describe("SettingsScreen", () => {
             {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
 
         expect(mockExportBackup).toHaveBeenCalledWith(
-            mockLibraryRecipes,
-            expect.objectContaining({
-                showCoffeeMarker: expect.any(Boolean),
-                dotMatrixProfile: expect.any(Boolean),
-                temperatureUnit:  expect.any(String)
-            }),
-            expect.any(String)
+            mockLibraryRecipes, expect.any(Object), expect.any(String)
         );
+
+        // Asserted against DEFAULTS rather than a list written out here, because
+        // a hand-kept list is exactly what went wrong: `showHints` was added to
+        // the app and nobody remembered to add it to the snapshot, so it was
+        // silently absent from every backup while the tests stayed green. A
+        // test that names the keys itself would have gone on passing too.
+        const snapshot = mockExportBackup.mock.calls[0][1] as Record<string, unknown>;
+        expect(Object.keys(snapshot).sort()).toEqual(Object.keys(DEFAULTS).sort());
+    });
+
+    it("restores every setting a backup carries, not a subset of them", async () => {
+        // The other half of the same omission: a key can be in the snapshot and
+        // still be dropped on the way back in, which loses the preference at the
+        // one moment the user expects it to be safe.
+        const storage = memoryStorage();
+        const all = Object.fromEntries(
+            Object.entries(DEFAULTS).map(([key, value]) => [
+                key, typeof value === "boolean" ? !value : value
+            ])
+        );
+        mockPickBackup.mockResolvedValue(backupOf([recipeNamed("A", "u1")], all));
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        const restored = new Settings(storage);
+        for (const key of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
+            expect({[key]: restored.get(key)}).toEqual({[key]: all[key]});
+        }
     });
 
     it("reports a backup that could not be shared", async () => {
@@ -350,7 +379,7 @@ describe("SettingsScreen", () => {
         mockLibraryRecipes = [
             recipeNamed("A", "u1"), recipeNamed("B", "u2"), recipeNamed("C", "u3")
         ];
-        mockDeleteAll.mockReturnValue(3);
+        mockDeleteAll.mockReturnValue({status: "deleted", deleted: 3});
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
         await fireEvent.press(screen.getByRole("button",
@@ -367,6 +396,24 @@ describe("SettingsScreen", () => {
         expect(mockDeleteAll).toHaveBeenCalledTimes(1);
         expect(mockNotify).toHaveBeenCalledWith(
             expect.objectContaining({tone: "success", message: "3 recipes deleted"})
+        );
+    });
+
+    it("says nothing was removed when the delete fails", async () => {
+        // The screen used to report success unconditionally, so a delete that
+        // failed left the user believing their library was gone while every
+        // recipe was still in it -- the worst way round for this to be wrong.
+        mockLibraryRecipes = [recipeNamed("A", "u1"), recipeNamed("B", "u2")];
+        mockDeleteAll.mockReturnValue({status: "failed"});
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Delete all recipes, Everything on this phone. There is no undo."}));
+        await settleSheet();
+        await fireEvent.press(screen.getByRole("button", {name: /delete all 2 recipes/i}));
+
+        expect(mockNotify).toHaveBeenCalledWith(
+            expect.objectContaining({tone: "error", message: expect.stringMatching(/nothing was removed/i)})
         );
     });
 

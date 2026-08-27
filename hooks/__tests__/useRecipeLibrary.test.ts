@@ -76,13 +76,34 @@ describe("useRecipeLibrary", () => {
         const db = stubDb([named("Ethiopia"), named("Kenya")]);
         const {result} = await renderHook(() => useRecipeLibrary(db));
 
-        let removed = 0;
+        let outcome;
         await act(async () => {
-            removed = result.current.deleteAll();
+            outcome = result.current.deleteAll();
         });
 
-        expect(removed).toBe(2);
+        expect(outcome).toEqual({status: "deleted", deleted: 2});
         expect(db.deleteAllRecipes).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports a failed delete instead of throwing into the screen", async () => {
+        // The one irreversible action in the app, and the only destructive path
+        // that had no outcome to report. A `runSync` that threw escaped into the
+        // press handler, where nothing caught it and nothing could tell the user
+        // their recipes were still there.
+        const db = stubDb([named("Ethiopia"), named("Kenya")]);
+        db.deleteAllRecipes = jest.fn(() => {
+            throw new Error("database is locked");
+        });
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        let outcome;
+        await act(async () => {
+            expect(() => {
+                outcome = result.current.deleteAll();
+            }).not.toThrow();
+        });
+
+        expect(outcome).toEqual({status: "failed"});
     });
 
     it("merges a restore through insertRecipes, skipping what is already present", async () => {

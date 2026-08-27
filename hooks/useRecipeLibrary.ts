@@ -37,6 +37,17 @@ export type RestoreChoice = {
  * button arriving before the first repaint, which the caller ignores. `failed`
  * is the transaction rolling back, which the caller reports.
  */
+/**
+ * The result of emptying the library.
+ *
+ * `failed` is the delete throwing, which leaves the library as it was and which
+ * the caller reports. There is no `busy`: unlike a restore, a second press has
+ * nothing left to delete and no uuid to collide with.
+ */
+export type DeleteAllOutcome =
+    | {status: "deleted"; deleted: number}
+    | {status: "failed"};
+
 export type RestoreOutcome =
     | {status: "restored"; added: number}
     | {status: "failed"}
@@ -47,7 +58,7 @@ export type RecipeLibrary = {
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
     duplicateRecipe: (recipe: Recipe) => void;
-    deleteAll: () => number;
+    deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
 
@@ -95,11 +106,22 @@ export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
         reload();
     }
 
-    function deleteAll(): number {
+    function deleteAll(): DeleteAllOutcome {
         const removed = recipes.length;
-        store.deleteAllRecipes?.();
+        // The same shape as `applyRestore` below, and for the same reason: a
+        // `runSync` that throws used to escape into the settings screen's press
+        // handler, where there was no outcome to branch on and nothing to catch
+        // it -- so the one irreversible action in the app was the one that
+        // crashed instead of explaining itself. Plain try/catch rather than
+        // try/finally, which makes the compiler bail out of the whole hook.
+        try {
+            store.deleteAllRecipes?.();
+        } catch {
+            reload();
+            return {status: "failed"};
+        }
         reload();
-        return removed;
+        return {status: "deleted", deleted: removed};
     }
 
     function applyRestore(payload: BackupPayload, choice: RestoreChoice): RestoreOutcome {

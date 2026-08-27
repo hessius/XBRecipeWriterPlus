@@ -16,7 +16,7 @@ import {useBackup} from "@/hooks/useBackup";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
-import type {Settings} from "@/library/Settings";
+import type {Settings, SettingKey} from "@/library/Settings";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -50,6 +50,10 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
+    // Not shown as a row on this screen -- the hints switch lives on the editor's
+    // own caret, which is where a user is when they want it. Read here anyway,
+    // because a backup carries every preference and this is one.
+    const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
 
@@ -64,8 +68,12 @@ export default function SettingsScreen({settings}: Props) {
     const [restoreOpen, setRestoreOpen] = useState(false);
     const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
 
-    function settingsSnapshot() {
-        return {showCoffeeMarker, dotMatrixProfile, temperatureUnit};
+    // Every key in `DEFAULTS`, and a compile error when a new one is added
+    // without being thought about here. A backup that says it carries your
+    // settings and then quietly drops one is worse than a backup that carries
+    // none: the user has no way to tell which preference did not survive.
+    function settingsSnapshot(): Record<SettingKey, unknown> {
+        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit};
     }
 
     async function onBackUp() {
@@ -96,6 +104,9 @@ export default function SettingsScreen({settings}: Props) {
         if (typeof incoming.dotMatrixProfile === "boolean") {
             setDotMatrixProfile(incoming.dotMatrixProfile);
         }
+        if (typeof incoming.showHints === "boolean") {
+            setShowHints(incoming.showHints);
+        }
         if (incoming.temperatureUnit === "C" || incoming.temperatureUnit === "F") {
             setTemperatureUnit(incoming.temperatureUnit);
         }
@@ -119,6 +130,13 @@ export default function SettingsScreen({settings}: Props) {
         // both outcomes.
         if (choice.includeSettings) applySettings(payload.settings);
 
+        // A restore that took only the settings did happen, and reporting it as
+        // "0 recipes restored" reads as a failure the app is being coy about.
+        if (outcome.added === 0 && choice.includeSettings) {
+            notify({tone: "success", message: "Settings restored"});
+            return;
+        }
+
         notify({
             tone: "success",
             message: outcome.added === 1
@@ -133,11 +151,20 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     function onDeleteAll() {
-        const deleted = library.deleteAll();
+        const outcome = library.deleteAll();
         setConfirmingDeleteAll(false);
+        if (outcome.status === "failed") {
+            notify({
+                tone: "error",
+                message: "Your recipes could not be deleted, so nothing was removed."
+            });
+            return;
+        }
         notify({
             tone: "success",
-            message: deleted === 1 ? "1 recipe deleted" : `${deleted} recipes deleted`
+            message: outcome.deleted === 1
+                ? "1 recipe deleted"
+                : `${outcome.deleted} recipes deleted`
         });
     }
 
