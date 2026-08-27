@@ -1,18 +1,18 @@
 {
   "expo": {
     "name": "XBRW++",
-    "slug": "XBRecipeWriterPlus",
+    "slug": "xbrwplusplus",
     "owner": "hessius",
-    "version": "2.6.0",
+    "version": "1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "xbrecipewriter",
+    "scheme": ["xbrecipewriter", "xbrw"],
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
     "ios": {
       "supportsTablet": false,
       "userInterfaceStyle": "dark",
-      "bundleIdentifier": "com.hessius.xbrecipewriterplus"
+      "bundleIdentifier": "com.hessius.xbrwplusplus"
     },
     "android": {
       "userInterfaceStyle": "dark",
@@ -23,7 +23,7 @@
       "permissions": [
         "android.permission.NFC"
       ],
-      "package": "com.hessius.xbrecipewriterplus"
+      "package": "com.hessius.xbrwplusplus"
     },
     "web": {
       "bundler": "metro",

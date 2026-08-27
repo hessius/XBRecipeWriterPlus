@@ -1,3 +1,4 @@
+import appConfig from "@/app.json";
 import {redirectSystemPath} from "@/app/+native-intent";
 
 jest.mock("expo-share-intent", () => ({
@@ -45,5 +46,17 @@ describe("redirectSystemPath", () => {
         expect(redirectSystemPath({path, initial: false})).toBe(path);
 
         spy.mockRestore();
+    });
+
+    it("keeps the original scheme first, because the share key is built from it", () => {
+        // `getShareExtensionKey` is `${scheme}ShareKey`, and when the scheme is
+        // an array expo-share-intent takes the first entry (see its utils.js).
+        // The native share extension is built against that key, so reordering
+        // this array renames the handle and the extension goes on delivering
+        // payloads under a name nothing reads any more -- sharing into the app
+        // would simply stop working, with no error anywhere to say why. The
+        // second scheme is a convenience alias and must stay second.
+        expect(appConfig.expo.scheme[0]).toBe("xbrecipewriter");
+        expect(appConfig.expo.scheme).toContain("xbrw");
     });
 });
