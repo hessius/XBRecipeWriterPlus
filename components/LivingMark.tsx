@@ -3,7 +3,7 @@ import {Pressable, View} from "react-native";
 import Animated, {
     Easing, type SharedValue,
     interpolateColor, useAnimatedStyle, useSharedValue, withDelay, withRepeat,
-    withSequence, withSpring, withTiming
+    withSpring, withTiming, withSequence
 } from "react-native-reanimated";
 import {XStack} from "tamagui";
 
@@ -68,7 +68,8 @@ export function nextVariant(random: () => number, previous: number): number {
  * vision and looks like the mark is alive.
  */
 const GLIMMER_MS = 1100;
-const GLIMMER_REST_MS = 5200;
+const GLIMMER_REST_MS = 4400;
+const GLIMMER_CYCLE_MS = GLIMMER_MS + GLIMMER_REST_MS;
 
 /**
  * How wide the bright crest of the glimmer is, as a fraction of the sweep.
@@ -76,24 +77,45 @@ const GLIMMER_REST_MS = 5200;
  * Narrow enough to read as a wave travelling across the disc rather than the
  * whole disc brightening at once.
  */
-const GLIMMER_WIDTH = 0.18;
-
-/**
- * Where the crest waits between sweeps: far enough past the near edge that it
- * lights nothing. Parking at 0 would leave the first diagonal glowing for the
- * whole of the rest.
- */
-const GLIMMER_REST = -GLIMMER_WIDTH;
+const GLIMMER_WIDTH = 0.22;
 
 /**
  * How dim the field sits when no glimmer is passing over it.
  *
  * The whole reason there is a resting value below 1: opacity has no headroom
  * above full, so a wave can only be drawn as brightness returning to a field
- * that was held back. The per-dot texture is scaled up to compensate, so the
- * resting mark is no darker than it was before the glimmer existed.
+ * that was held back. At 0.78 the difference was real and invisible — a fifth
+ * of a stop on a dot four points across, which nobody was ever going to catch
+ * out of the corner of an eye. Half is enough to read as light moving.
  */
-const FIELD_REST = 0.78;
+const FIELD_REST = 0.55;
+
+/**
+ * Maps the cycle's 0..1 progress onto the crest's position across the disc.
+ *
+ * The rest between sweeps is part of the same linear run rather than a separate
+ * step in a sequence: progress climbs steadily, the crest crosses the disc
+ * during the first fifth of it, and spends the rest of the cycle out beyond the
+ * far edge lighting nothing. One `withTiming` that never stops, instead of a
+ * sequence of timings and delays whose zero-duration steps have to land exactly
+ * right to leave the mark at the value it started from.
+ */
+export function crestAt(progress: number): number {
+    "worklet";
+    const span = 1 + GLIMMER_WIDTH * 2;
+    return -GLIMMER_WIDTH + progress * span * (GLIMMER_CYCLE_MS / GLIMMER_MS);
+}
+
+/**
+ * How brightly one diagonal is lit with the crest at `crest`.
+ *
+ * Zero everywhere but the band the crest is currently over, which is what makes
+ * it read as a wave travelling rather than as the whole disc pulsing.
+ */
+export function glowAt(crest: number, position: number): number {
+    "worklet";
+    return Math.max(0, 1 - Math.abs(crest - position) / GLIMMER_WIDTH);
+}
 
 /**
  * The grid the whole mark is laid out on.
@@ -182,7 +204,7 @@ const FIELD: FieldCell[] = (() => {
                 column,
                 // Deterministic, so the texture is the same every render and a
                 // test can count on it.
-                opacity: 0.64 + ((row * 5 + column * 11) % 5) * 0.09
+                opacity: 0.85 + ((row * 5 + column * 11) % 5) * 0.0375
             });
         }
     }
@@ -242,7 +264,7 @@ export default function LivingMark({size, decorative = false}: Props) {
     const breath = useSharedValue(0);
     const scatter = useSharedValue(0);
     const variant = useSharedValue<number>(VARIANTS.scatter);
-    const glimmer = useSharedValue(GLIMMER_REST);
+    const glimmer = useSharedValue(0);
     const dot = size / (COLUMNS + (COLUMNS - 1) * 0.35);
     const gap = dot * 0.35;
 
@@ -262,20 +284,14 @@ export default function LivingMark({size, decorative = false}: Props) {
 
     useEffect(() => {
         if (reduced) {
-            // Parked past the far edge rather than at zero: zero is a position
-            // the crest occupies, so freezing there would leave the top-left of
-            // the disc permanently brighter than the rest of it.
-            glimmer.value = GLIMMER_REST;
+            // Left at zero, which under `crestAt` is the crest still outside
+            // the near edge. Freezing it mid-sweep would leave one diagonal of
+            // the disc permanently brighter than the rest.
+            glimmer.value = 0;
             return;
         }
         glimmer.value = withRepeat(
-            withSequence(
-                withTiming(1 + GLIMMER_WIDTH, {
-                    duration: GLIMMER_MS, easing: Easing.inOut(Easing.quad)
-                }),
-                withTiming(GLIMMER_REST, {duration: 0}),
-                withDelay(GLIMMER_REST_MS, withTiming(GLIMMER_REST, {duration: 0}))
-            ),
+            withTiming(1, {duration: GLIMMER_CYCLE_MS, easing: Easing.linear}),
             -1, false
         );
     }, [reduced, glimmer]);
@@ -328,13 +344,14 @@ function FieldBand({cells, position, dot, gap, glimmer}: {
     glimmer: SharedValue<number>;
 }) {
     const style = useAnimatedStyle(() => {
-        const glow = Math.max(0, 1 - Math.abs(glimmer.value - position) / GLIMMER_WIDTH);
+        const glow = glowAt(crestAt(glimmer.value), position);
         return {opacity: FIELD_REST + glow * (1 - FIELD_REST)};
     });
 
     return (
         <Animated.View testID="living-mark-band" pointerEvents="none"
-                       style={[{position: "absolute", left: 0, top: 0}, style]}>
+                       style={[{position: "absolute", left: 0, top: 0,
+                                right: 0, bottom: 0}, style]}>
             {cells.map((cell) => (
                 <View key={`f${cell.row}-${cell.column}`}
                       testID="living-mark-field-dot" style={{

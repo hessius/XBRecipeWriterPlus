@@ -2,7 +2,7 @@ import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
-import LivingMark, {VARIANTS, nextVariant} from "@/components/LivingMark";
+import LivingMark, {VARIANTS, crestAt, glowAt, nextVariant} from "@/components/LivingMark";
 import {palette} from "@/constants/colors";
 import {useReducedMotion} from "@/constants/motion";
 import {renderWithProviders} from "@/test-utils/render";
@@ -155,5 +155,53 @@ describe("LivingMark", () => {
             }
             expect(reached.size).toBe(Object.keys(VARIANTS).length - 1);
         }
+    });
+
+    it("starts and ends each cycle with the crest off the disc entirely", async () => {
+        // Both ends have to be clear, or the mark rests with one diagonal lit —
+        // which is also the frame Reduce Motion would freeze on.
+        expect(glowAt(crestAt(0), 0)).toBe(0);
+        expect(glowAt(crestAt(1), 1)).toBe(0);
+    });
+
+    it("spends most of each cycle dark, and crosses during the rest", async () => {
+        // The sweep is a fraction of the cycle: a shimmer that runs constantly
+        // is a loading indicator, and the eye stops seeing it within seconds.
+        const lit = [];
+        for (let step = 0; step <= 100; step++) {
+            const crest = crestAt(step / 100);
+            const anywhere = [0, 0.25, 0.5, 0.75, 1]
+                .some((band) => glowAt(crest, band) > 0);
+            if (anywhere) lit.push(step);
+        }
+        expect(lit.length).toBeGreaterThan(0);
+        expect(lit.length).toBeLessThan(40);
+        // And what light there is arrives at the start of the cycle, not partway
+        // through it, so the mark is dark while it waits rather than after.
+        expect(Math.min(...lit)).toBeLessThanOrEqual(2);
+    });
+
+    it("lights one part of the disc at a time, not all of it", async () => {
+        // A crest wide enough to cover the whole disc is not a wave, it is the
+        // mark pulsing.
+        let widest = 0;
+        for (let step = 0; step <= 100; step++) {
+            const crest = crestAt(step / 100);
+            const bands = [];
+            for (let band = 0; band <= 1.0001; band += 0.05) {
+                if (glowAt(crest, band) > 0) bands.push(band);
+            }
+            widest = Math.max(widest, bands.length);
+        }
+        expect(widest).toBeGreaterThan(1);
+        expect(widest).toBeLessThan(21 * 0.6);
+    });
+
+    it("reaches full brightness somewhere, or the wave has no crest", async () => {
+        let brightest = 0;
+        for (let step = 0; step <= 200; step++) {
+            brightest = Math.max(brightest, glowAt(crestAt(step / 200), 0.5));
+        }
+        expect(brightest).toBeGreaterThan(0.9);
     });
 });
