@@ -31,6 +31,10 @@ type Props = {
  * same BREW-deck card's, so a user crossing from the editor to settings meets
  * the same corner.
  */
+function keyOf(row: React.ReactNode, index: number): string {
+    return React.isValidElement(row) && row.key !== null ? row.key : `row-${index}`;
+}
+
 export default function SettingsSection({title, children}: Props) {
     // The divider lives here rather than on each row so that the first row has
     // nothing above it and the last nothing below it — the rounded corners stay
@@ -48,7 +52,11 @@ export default function SettingsSection({title, children}: Props) {
             )}
             <YStack backgroundColor={palette.surface} borderRadius="$5" overflow="hidden">
                 {rows.map((row, index) => (
-                    <React.Fragment key={index}>
+                    // Keyed by the child's own key rather than by index: a row
+                    // that appears or disappears shifts every index below it,
+                    // and React would then match each surviving row against the
+                    // slot of its neighbour and remount it.
+                    <React.Fragment key={keyOf(row, index)}>
                         {index > 0 && (
                             // A full-bleed hairline, the weight and colour of the
                             // borderBottom every FieldRow draws in the editor deck.
