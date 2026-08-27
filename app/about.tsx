@@ -160,8 +160,9 @@ export default function AboutScreen() {
                 <AboutSection title="Third-party licences">
                     <AboutParagraph>
                         This app stands on {LICENCES.length} open-source packages.
-                        Their licences, and the copyright notices those licences
-                        require reproducing, are listed in full.
+                        Where a package ships its licence text, it is reproduced
+                        in full, along with the copyright notice that licence
+                        requires. Where it ships only a name, that is recorded.
                     </AboutParagraph>
                     <AboutLink label="Read the licences" onPress={() => router.push("/licences")}/>
                 </AboutSection>
