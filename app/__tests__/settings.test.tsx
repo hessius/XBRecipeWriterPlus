@@ -2,6 +2,7 @@ import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import SettingsScreen from "@/app/settings";
+import {palette} from "@/constants/colors";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -173,6 +174,25 @@ describe("SettingsScreen", () => {
         expect(mockNotify).toHaveBeenCalledWith(
             expect.objectContaining({tone: "error", message: "That file could not be read."})
         );
+    });
+
+    it("offers to delete everything, in the danger colour", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        const row = screen.getByRole("button",
+            {name: "Delete all recipes, Everything on this phone. There is no undo."});
+        expect(row).toBeTruthy();
+        expect(screen.getByText("Delete all recipes").props.style)
+            .toEqual(expect.objectContaining({color: palette.danger}));
+    });
+
+    it("asks before deleting anything", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Delete all recipes, Everything on this phone. There is no undo."}));
+
+        expect(screen.getByText(/cannot be undone/i)).toBeTruthy();
     });
 
     it("opens About from the top of the screen, not the bottom", async () => {

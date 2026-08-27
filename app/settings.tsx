@@ -3,6 +3,7 @@ import {useRouter} from "expo-router";
 import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
+import DeleteAllSheet from "@/components/DeleteAllSheet";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
@@ -55,6 +56,7 @@ export default function SettingsScreen({settings}: Props) {
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
     const [pending, setPending] = useState<BackupPayload | null>(null);
+    const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
 
     function settingsSnapshot() {
         return {showCoffeeMarker, dotMatrixProfile, temperatureUnit};
@@ -111,6 +113,22 @@ export default function SettingsScreen({settings}: Props) {
         });
     }
 
+    async function onBackUpFirst() {
+        setConfirmingDeleteAll(false);
+        await onBackUp();
+    }
+
+    function onDeleteAll() {
+        const deleted = library.recipes.length;
+        new RecipeDatabase().deleteAllRecipes();
+        library.refresh();
+        setConfirmingDeleteAll(false);
+        notify({
+            tone: "success",
+            message: deleted === 1 ? "1 recipe deleted" : `${deleted} recipes deleted`
+        });
+    }
+
     return (
         <ScrollView backgroundColor={palette.base}
                     contentContainerStyle={{padding: 16, paddingBottom: 48}}>
@@ -155,6 +173,9 @@ export default function SettingsScreen({settings}: Props) {
                     <SettingsActionRow label="Restore from a backup"
                                        detail="Adds anything your library does not already have."
                                        onPress={onRestore}/>
+                    <SettingsActionRow label="Delete all recipes" tone="danger"
+                                       detail="Everything on this phone. There is no undo."
+                                       onPress={() => setConfirmingDeleteAll(true)}/>
                 </SettingsSection>
             </YStack>
 
@@ -166,6 +187,11 @@ export default function SettingsScreen({settings}: Props) {
                                   setPending(null);
                               }}/>
             )}
+
+            <DeleteAllSheet open={confirmingDeleteAll} count={library.recipes.length}
+                            onCancel={() => setConfirmingDeleteAll(false)}
+                            onBackUpFirst={onBackUpFirst}
+                            onDelete={onDeleteAll}/>
         </ScrollView>
     );
 }
