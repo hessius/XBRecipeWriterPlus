@@ -54,7 +54,13 @@ export default function SettingsScreen({settings}: Props) {
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
+    // The sheet is mounted for the screen's whole life and only toggled open,
+    // so it keeps its entrance and exit animations — the pattern DeleteAllSheet
+    // below already follows. `pending` holds the picked backup, and is left in
+    // place while the sheet animates closed so it has something to draw on the
+    // way out; the next pick replaces it.
     const [pending, setPending] = useState<BackupPayload | null>(null);
+    const [restoreOpen, setRestoreOpen] = useState(false);
     const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
 
     function settingsSnapshot() {
@@ -76,6 +82,7 @@ export default function SettingsScreen({settings}: Props) {
             return;
         }
         setPending(outcome.result.payload);
+        setRestoreOpen(true);
     }
 
     function applySettings(incoming: Record<string, unknown>) {
@@ -183,14 +190,12 @@ export default function SettingsScreen({settings}: Props) {
                 </SettingsSection>
             </YStack>
 
-            {pending !== null && (
-                <RestoreSheet open payload={pending} existing={library.recipes}
-                              onCancel={() => setPending(null)}
-                              onRestore={(choice) => {
-                                  applyRestore(pending, choice);
-                                  setPending(null);
-                              }}/>
-            )}
+            <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
+                          onCancel={() => setRestoreOpen(false)}
+                          onRestore={(choice) => {
+                              setRestoreOpen(false);
+                              if (pending !== null) applyRestore(pending, choice);
+                          }}/>
 
             <DeleteAllSheet open={confirmingDeleteAll} count={library.recipes.length}
                             onCancel={() => setConfirmingDeleteAll(false)}

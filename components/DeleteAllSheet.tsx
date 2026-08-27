@@ -22,11 +22,16 @@ type Props = {
  *
  * The safe choice is the one that reads as the plain action: "Keep my recipes",
  * not "Cancel".
+ *
+ * The count is on the destructive button as well as in the sentence, so the
+ * visible label and the accessible name say the same thing — a voice-control
+ * user asking to "tap delete all twelve recipes" hits the control they can see.
  */
 export default function DeleteAllSheet({
     open, count, onCancel, onBackUpFirst, onDelete
 }: Props) {
     const subject = count === 1 ? "1 recipe" : `${count} recipes`;
+    const deleteLabel = `Delete all ${subject}`;
 
     return (
         <XbrwSheet open={open} onOpenChange={(next) => {if (!next) onCancel();}}
@@ -43,9 +48,9 @@ export default function DeleteAllSheet({
                 </Button>
 
                 <Button accessibilityRole="button"
-                        accessibilityLabel={`Delete all ${count} recipes`}
+                        accessibilityLabel={deleteLabel}
                         backgroundColor={palette.danger} onPress={onDelete}>
-                    Delete all recipes
+                    {deleteLabel}
                 </Button>
 
                 <Button accessibilityRole="button" accessibilityLabel="Keep my recipes"

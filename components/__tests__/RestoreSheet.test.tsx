@@ -113,4 +113,51 @@ describe("RestoreSheet", () => {
 
         expect(screen.getByText(/already in your library/i)).toBeTruthy();
     });
+
+    it("makes the add action genuinely unavailable when there is nothing to add", async () => {
+        // Not merely dimmed: Tamagui's `disabled` prop suppresses the press but
+        // leaves the control announcing as an ordinary button, so the disabled
+        // state is set explicitly and the handler withheld. A press must do
+        // nothing, and a screen reader must be told why it is inert.
+        const onRestore = jest.fn();
+        await renderWithProviders(
+            <RestoreSheet open payload={PAYLOAD}
+                          existing={[recipeNamed("A", "u1"), recipeNamed("B", "u2")]}
+                          onCancel={() => {}} onRestore={onRestore}/>
+        );
+
+        const add = screen.getByRole("button", {name: /add.*librar/i});
+        expect(add.props.accessibilityState.disabled).toBe(true);
+
+        await fireEvent.press(add);
+        expect(onRestore).not.toHaveBeenCalled();
+    });
+
+    it("promises the deduped count in the replace confirmation, not the raw file count", async () => {
+        // A backup with the same UUID twice inserts it once; the confirmation a
+        // user judges the replace by must not overstate what it will put back.
+        const withDuplicate = {
+            ...PAYLOAD,
+            recipes: [recipeNamed("A", "u1"), recipeNamed("A again", "u1"), recipeNamed("B", "u2")]
+        };
+        await renderWithProviders(
+            <RestoreSheet open payload={withDuplicate} existing={[recipeNamed("Old", "old")]}
+                          onCancel={() => {}} onRestore={() => {}}/>
+        );
+
+        await fireEvent.press(screen.getByRole("button", {name: /replace my library/i}));
+
+        expect(screen.getByText(/puts 2 recipes in their place/i)).toBeTruthy();
+    });
+
+    it("tolerates being mounted before a backup has been picked", async () => {
+        // The host keeps it mounted and toggles `open`, so it renders closed
+        // with a null payload before the first restore rather than crashing.
+        await renderWithProviders(
+            <RestoreSheet open={false} payload={null} existing={[]}
+                          onCancel={() => {}} onRestore={() => {}}/>
+        );
+
+        expect(screen.queryByRole("button", {name: /add.*librar/i})).toBeNull();
+    });
 });

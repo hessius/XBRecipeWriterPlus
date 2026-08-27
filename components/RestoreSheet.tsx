@@ -14,7 +14,14 @@ export type RestoreChoice = {
 
 type Props = {
     open: boolean;
-    payload: BackupPayload;
+    /**
+     * What was found in the backup, or `null` before one has been picked.
+     *
+     * Nullable so the host can keep the sheet permanently mounted and merely
+     * toggle `open` — the pattern `DeleteAllSheet` already follows — rather than
+     * mounting it already-open and losing the entrance and exit animations.
+     */
+    payload: BackupPayload | null;
     existing: readonly Recipe[];
     onCancel: () => void;
     onRestore: (choice: RestoreChoice) => void;
@@ -39,7 +46,14 @@ function plural(count: number, one: string, many: string): string {
 export default function RestoreSheet({open, payload, existing, onCancel, onRestore}: Props) {
     const [includeSettings, setIncludeSettings] = useState(false);
     const [confirmingReplace, setConfirmingReplace] = useState(false);
-    const {toAdd, alreadyPresent} = mergeRecipes(existing, payload.recipes);
+    const incoming = payload?.recipes ?? [];
+    const {toAdd, alreadyPresent} = mergeRecipes(existing, incoming);
+    const skipped = payload?.skipped ?? 0;
+    const canAdd = toAdd.length > 0;
+    // The honest figure for the replace confirmation: a replace inserts the
+    // deduped recipes, not the raw file count, so a backup with a repeated UUID
+    // must not promise more than it will actually put back.
+    const replaceCount = mergeRecipes([], incoming).toAdd.length;
 
     return (
         <XbrwSheet open={open} onOpenChange={(next) => {
@@ -53,7 +67,7 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
                     <YStack gap="$3">
                         <Text fontSize={15} color={palette.text}>
                             Replacing deletes {plural(existing.length, "recipe", "recipes")} and
-                            puts {plural(payload.recipes.length, "recipe", "recipes")} in their
+                            puts {plural(replaceCount, "recipe", "recipes")} in their
                             place. This cannot be undone.
                         </Text>
                         <XStack gap="$3">
@@ -82,9 +96,9 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
                                 library and will be left exactly as they are.
                             </Text>
                         )}
-                        {payload.skipped > 0 && (
+                        {skipped > 0 && (
                             <Text fontSize={13} color={palette.danger}>
-                                {plural(payload.skipped, "entry", "entries")} in this file could not
+                                {plural(skipped, "entry", "entries")} in this file could not
                                 be read and will be skipped.
                             </Text>
                         )}
@@ -95,11 +109,20 @@ export default function RestoreSheet({open, payload, existing, onCancel, onResto
                             value={includeSettings}
                             onChange={setIncludeSettings}/>
 
+                        {/* House pattern for an unavailable control: Tamagui's
+                            `disabled` prop suppresses the press but does not
+                            forward a disabled state to the host, so a screen
+                            reader would still announce this as an ordinary
+                            button (see components/ImportTile.tsx). The
+                            accessibility state and the withheld handler are set
+                            by hand instead. */}
                         <Button accessibilityRole="button"
                                 accessibilityLabel="Add to my library"
-                                disabled={toAdd.length === 0}
-                                opacity={toAdd.length === 0 ? 0.4 : 1}
-                                onPress={() => onRestore({replace: false, includeSettings})}>
+                                accessibilityState={{disabled: !canAdd}}
+                                opacity={canAdd ? 1 : 0.4}
+                                onPress={canAdd
+                                    ? () => onRestore({replace: false, includeSettings})
+                                    : undefined}>
                             Add to my library
                         </Button>
 
