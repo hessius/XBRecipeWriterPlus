@@ -71,6 +71,24 @@ describe("a recipe outside the machine's bounds", () => {
 
         expect(cardWriteProblems(recipe).length).toBeGreaterThanOrEqual(2);
     });
+
+    it("reports an out-of-range temperature in Celsius by default", () => {
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 120;
+        expect(cardWriteProblems(recipe)).toContain(
+            "Stage 1 brews at 120 C. The range is 39-99 C."
+        );
+    });
+
+    it("reports an out-of-range temperature in Fahrenheit when that is what is shown", () => {
+        // A user reading the editor in Fahrenheit and told the range is 39-99
+        // has been given a number they cannot act on.
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 120;
+        expect(cardWriteProblems(recipe, "F")).toContain(
+            "Stage 1 brews at 248 F. The range is 102-210 F."
+        );
+    });
 });
 
 describe("a tea recipe", () => {
@@ -176,6 +194,26 @@ describe("fractional byte fields", () => {
         recipe.grindRPM = 90.5;
 
         expect(cardWriteProblems(recipe).some((p) => p.includes("90.5") && p.includes("whole number"))).toBe(true);
+    });
+
+    it("rejects a fractional temperature in Celsius", () => {
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 92.5;
+
+        expect(cardWriteProblems(recipe).some((p) => p.includes("92.5 C") && p.includes("whole number"))).toBe(true);
+    });
+
+    it("reports a fractional stored temperature with its exact Fahrenheit conversion, not the rounded display", () => {
+        // 92.5 C rounds to 199 F on display, which is already whole — so a
+        // message built from the rounded figure would tell the user to fix a
+        // number that looks fine. The unrounded conversion, 198.5 F, is the
+        // one that is actually fractional and therefore actionable.
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 92.5;
+
+        const problems = cardWriteProblems(recipe, "F");
+        expect(problems.some((p) => p.includes("198.5 F") && p.includes("whole number"))).toBe(true);
+        expect(problems.some((p) => p.includes("199 F"))).toBe(false);
     });
 });
 

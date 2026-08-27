@@ -32,6 +32,44 @@ export function stepped(
     return clamp(rounded, min, max);
 }
 
+/**
+ * One step along an explicit list of allowed values.
+ *
+ * For a field whose legal values are not evenly spaced: a temperature shown in
+ * Fahrenheit can settle on 194 or 196 but not 195, because the card stores whole
+ * Celsius. Stepping by one and rounding back would sometimes not move the stored
+ * value at all, and a control that visibly does nothing cannot be told from a
+ * frozen screen.
+ *
+ * A value that is not on the ladder — a recipe imported before the unit was
+ * switched — steps onto the nearest one in the direction asked for, rather than
+ * refusing to move.
+ */
+export function steppedThrough(
+    value: number, values: readonly number[], direction: 1 | -1
+): number {
+    if (values.length === 0) return value;
+
+    const index = values.indexOf(value);
+    if (index !== -1) {
+        const next = index + direction;
+        return next < 0 || next >= values.length ? value : values[next];
+    }
+
+    const candidates = direction === 1
+        ? values.filter((candidate) => candidate > value)
+        : values.filter((candidate) => candidate < value);
+    if (candidates.length === 0) return value;
+    return direction === 1 ? candidates[0] : candidates[candidates.length - 1];
+}
+
+/** The nearest allowed value. For a typed entry. Ties favour the higher value. */
+export function snapThrough(value: number, values: readonly number[]): number {
+    if (values.length === 0) return value;
+    return values.reduce((best, candidate) =>
+        Math.abs(candidate - value) <= Math.abs(best - value) ? candidate : best);
+}
+
 type Props = {
     /** Spoken name of the value. Not rendered — `FieldRow` draws the label. */
     label: string;
@@ -39,6 +77,15 @@ type Props = {
     min: number;
     max: number;
     step: number;
+    /**
+     * The values this field may settle on, when they are not evenly spaced.
+     *
+     * Given, a step moves one entry along the list and a typed value snaps to
+     * the nearest entry; `step` is then only a hint for the keyboard. Omitted —
+     * which is every call site but the temperature field — the stepper works
+     * from `min`, `max` and `step` as before.
+     */
+    values?: readonly number[];
     /** Draw the number in the recipe's accent. For dose and ratio. */
     accent?: string;
     /** Appended to the spoken value, e.g. "g". */
@@ -59,7 +106,7 @@ type Props = {
  * entry is not clamped out from under the cursor. Typing "9" on the way to "95"
  * must not become "9" the moment it is entered.
  */
-export default function Stepper({label, value, min, max, step, accent, unit, onChange}: Props) {
+export default function Stepper({label, value, min, max, step, values, accent, unit, onChange}: Props) {
     // null means the Doto readout is showing; a string means the field is
     // open and holds the in-progress text.
     const [draft, setDraft] = useState<string | null>(null);
@@ -88,7 +135,9 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
     }, []);
 
     function nudge(direction: 1 | -1) {
-        const next = stepped(value, step, direction, min, max);
+        const next = values
+            ? steppedThrough(value, values, direction)
+            : stepped(value, step, direction, min, max);
         if (next !== value) onChange(next);
     }
 
@@ -96,7 +145,9 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
         let delay = REPEAT_START_MS;
         const tick = () => {
             const current = latestValue.current;
-            const next = stepped(current, step, direction, min, max);
+            const next = values
+                ? steppedThrough(current, values, direction)
+                : stepped(current, step, direction, min, max);
             if (next === current) return;
             onChange(next);
             delay = Math.max(REPEAT_MIN_MS, delay * 0.82);
@@ -117,7 +168,9 @@ export default function Stepper({label, value, min, max, step, accent, unit, onC
         const parsed = Number(draft);
         setDraft(null);
         if (draft.trim() === "" || Number.isNaN(parsed)) return;
-        const next = clamp(parsed, min, max);
+        const next = values
+            ? snapThrough(parsed, values)
+            : clamp(parsed, min, max);
         if (next !== value) onChange(next);
     }
 

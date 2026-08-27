@@ -208,6 +208,17 @@ describe("the new persistence fields", () => {
         expect(recipe.name).toBe("");
     });
 
+    it("defaults a record with no XID to an empty one, so the list can render it", () => {
+        // `displayName()` and `hasName()` call `xid.trim()` on every row of the
+        // library. A backup or legacy record without the field used to revive
+        // into a recipe that threw there — after it had been saved, so the
+        // crash repeated on every launch.
+        const recipe = new Recipe(undefined, legacyJson({xid: undefined, title: undefined}));
+        expect(recipe.xid).toBe("");
+        expect(() => recipe.displayName()).not.toThrow();
+        expect(recipe.hasName()).toBe(false);
+    });
+
     it("leaves the xBloom name unknown on a legacy record", () => {
         // A legacy title may have come from a sync or from the user; there is no
         // way to tell, so it is treated as the user's and the cached xBloom name

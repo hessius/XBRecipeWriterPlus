@@ -1,7 +1,7 @@
 import React from "react";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
-import Stepper, {clamp, stepped} from "@/components/Stepper";
+import Stepper, {clamp, snapThrough, stepped, steppedThrough} from "@/components/Stepper";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("clamp", () => {
@@ -289,5 +289,142 @@ describe("the keyboard it asks for", () => {
         // path this control advertises could not enter a stage flow rate of
         // 3.2 at all — and flow rate is the one field that steps by a tenth.
         expect((await openTheField(0.1)).props.inputMode).toBe("decimal");
+    });
+});
+
+describe("Stepper walking an explicit ladder", () => {
+    // The Fahrenheit case: the card stores whole Celsius, so the values a
+    // temperature field can settle on are not one apart.
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("steps to the next value on the ladder, not the next integer", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={194} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("steps back down the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={196} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(194);
+    });
+
+    it("stays put at the top of the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={201} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("snaps a typed value onto the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={194} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Edit Temperature"));
+        await fireEvent.changeText(screen.getByTestId("stepper-input"), "195");
+        await fireEvent(screen.getByTestId("stepper-input"), "submitEditing");
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("steps by one from a value that is not on the ladder", async () => {
+        // A recipe imported before the unit was switched can hold a value the
+        // ladder does not contain. The stepper must still move, and must move
+        // onto the ladder rather than off into the gaps.
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={195} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(196);
+    });
+
+    it("stays put at the bottom of the ladder", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={190} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("steps down onto the ladder from a value that is not on it", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature" value={195} min={190} max={201} step={1}
+                     values={LADDER} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature"));
+
+        expect(onChange).toHaveBeenCalledWith(194);
+    });
+});
+
+describe("steppedThrough", () => {
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("clamps at both ends rather than wrapping or falling off", () => {
+        expect(steppedThrough(201, LADDER, 1)).toBe(201);
+        expect(steppedThrough(190, LADDER, -1)).toBe(190);
+    });
+
+    it("moves in the direction asked for from off the ladder", () => {
+        expect(steppedThrough(195, LADDER, 1)).toBe(196);
+        expect(steppedThrough(195, LADDER, -1)).toBe(194);
+    });
+
+    it("refuses to move past the ends from off the ladder", () => {
+        expect(steppedThrough(300, LADDER, 1)).toBe(300);
+        expect(steppedThrough(100, LADDER, -1)).toBe(100);
+    });
+
+    it("leaves a value alone when there is no ladder to walk", () => {
+        expect(steppedThrough(195, [], 1)).toBe(195);
+    });
+});
+
+describe("snapThrough", () => {
+    const LADDER = [190, 192, 194, 196, 198, 199, 201];
+
+    it("takes the nearest value", () => {
+        expect(snapThrough(193.4, LADDER)).toBe(194);
+        expect(snapThrough(196.9, LADDER)).toBe(196);
+    });
+
+    it("breaks an exact tie towards the higher value", () => {
+        // Arbitrary, but it has to be one of them and it has to be the same
+        // rule `library/units` uses, or a typed value and a tapped one disagree.
+        expect(snapThrough(195, LADDER)).toBe(196);
+    });
+
+    it("leaves a value alone when there is no ladder to snap to", () => {
+        expect(snapThrough(195, [])).toBe(195);
     });
 });

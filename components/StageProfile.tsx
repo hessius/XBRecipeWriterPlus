@@ -1,6 +1,6 @@
-import React, {useId} from "react";
+import React from "react";
 import {Pressable, View} from "react-native";
-import Svg, {Defs, Line, Path, Pattern, Rect} from "react-native-svg";
+import Svg, {Line, Path, Rect} from "react-native-svg";
 
 import {buildProfilePath, PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {palette} from "@/constants/colors";
@@ -33,9 +33,6 @@ export function bandFor(index: number, count: number, width: number) {
     const span = width / count;
     return {x: index * span, width: span};
 }
-
-/** Diagonal spacing of the shortfall hatch. */
-const HATCH_CELL = 6;
 
 type Props = {
     pours: Pour[];
@@ -79,10 +76,6 @@ export default function StageProfile({
     // `Stepper` loses the chained timer behind hold-to-repeat after one step —
     // on a stage volume that ranges to 240 ml, that is the whole feature.
 
-    // SVG ids resolve document-wide, so two profiles on one screen would share
-    // a pattern. useId returns punctuation that url() will not take.
-    const hatchId = `hatch${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-
     const pourTotal = pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
     const drawn = curveHeight(pourTotal, target, height);
     const line = targetY(pourTotal, target, height);
@@ -119,24 +112,10 @@ export default function StageProfile({
     const svg = (
         <Svg testID={testID} width={width + stroke} height={height + stroke}
              viewBox={`${-bleed} ${-bleed} ${width + stroke} ${height + stroke}`}>
-            <Defs>
-                <Pattern id={hatchId} width={HATCH_CELL} height={HATCH_CELL}
-                         patternUnits="userSpaceOnUse">
-                    <Path d={`M0 ${HATCH_CELL} L${HATCH_CELL} 0`}
-                          stroke={palette.danger} strokeWidth={1} opacity={0.5}/>
-                </Pattern>
-            </Defs>
-
             {band && (
                 <Rect testID="stage-profile-band" x={band.x} y={0}
                       width={band.width} height={height}
                       fill={palette.text} opacity={0.07}/>
-            )}
-
-            {short && (
-                <Rect testID="stage-profile-shortfall" x={0} y={line}
-                      width={width} height={height - drawn - line}
-                      fill={`url(#${hatchId})`}/>
             )}
 
             {/* Translated to the bottom of the box: buildProfilePath draws from
@@ -147,6 +126,14 @@ export default function StageProfile({
                   strokeLinejoin="round" strokeLinecap="round"
                   transform={`translate(0 ${height - drawn})`}/>
 
+            {/* Red is the whole of the shortfall signal here. There used to be
+                a diagonal hatch over the gap as well, which read as the dashes
+                of the line itself having somehow rotated -- two marks changing
+                at once, and the eye blames the one it was already looking at.
+                Nothing is lost by dropping it: the line's position above the
+                curve is itself a signal that owes nothing to colour, and the
+                banner directly beneath states the mismatch in prose and gives
+                both numbers. */}
             <Line testID="stage-profile-target" x1={0} y1={line} x2={width} y2={line}
                   stroke={short ? palette.danger : palette.dim}
                   strokeWidth={1} strokeDasharray="4 3"/>

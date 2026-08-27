@@ -28,6 +28,7 @@ import {resolveAccent} from "@/library/accent";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -161,9 +162,20 @@ type BrewDeckProps = {
  * Every brew value on one surface.
  *
  * A reader operates nothing — the user's account of a visit is that most often
- * they only look at it — so there is no pager and no disclosure. The two fields
- * the target is computed from, dose and ratio, are drawn in the accent to tie
- * them to the readout above without a rule between them.
+ * they only look at it — so there is no pager and no disclosure.
+ *
+ * The accent does two jobs in the editor, and they are easy to mistake for one
+ * inconsistent job:
+ *
+ * 1. A *number* is drawn in the accent when it is one of the terms in the
+ *    equation the machine actually enforces — dose times ratio must equal the
+ *    sum of the stage volumes. So dose, ratio and each stage volume are
+ *    accented and tie visually to the target readout above; grind size, grind
+ *    speed, temperature, flow rate and pause are not in that equation and stay
+ *    in plain text. Accenting those too would say the target depended on them.
+ * 2. A *choice* is drawn in the accent when it is the selected option, which is
+ *    the ordinary selected-state fill and has nothing to do with the equation.
+ *    Every segmented control and toggle in the editor does this.
  *
  * Module scope, not an inline function: a component defined inside the screen's
  * body is a new type on every render and would remount its whole subtree.
@@ -238,15 +250,16 @@ function BrewDeck({
                 tea besides, since a tea card always writes the default grind.
                 The previous editor hid the pair for the same reasons. */}
             {!isTea && (
-                <SegmentedRow topic="cup" value={String(recipe.cupType)} options={CUP_OPTIONS}
-                              accent={accent}
-                      showHint={showHint}
+                <SegmentedRow topic="cup" value={String(recipe.cupType)}
+                              options={CUP_OPTIONS} accent={accent}
+                              showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
             )}
 
             {!isTea && (
-                <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"} options={GRINDER_OPTIONS}
-                      showHint={showHint}
+                <SegmentedRow topic="grinder" value={recipe.grinder ? "1" : "0"}
+                              options={GRINDER_OPTIONS} accent={accent}
+                              showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
@@ -295,6 +308,7 @@ type StagesDeckProps = {
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
+    temperatureUnit: TemperatureUnit;
 };
 
 type StageProfileCardProps = {
@@ -376,7 +390,7 @@ function StageProfileCard({
  */
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
-    editStage, addPour, deletePour, autoAdjustPourVolumes,
+    editStage, addPour, deletePour, autoAdjustPourVolumes, temperatureUnit,
 }: StagesDeckProps) {
     "use no memo";
 
@@ -426,6 +440,7 @@ function StagesDeck({
                 <StageTile pour={pour} index={index}
                            count={recipe.pours.length}
                            open={openStage === index} accent={accent} isTea={isTea}
+                           temperatureUnit={temperatureUnit}
                            // From the current value, not from the one this
                            // render closed over. The curve above also sets it,
                            // so two taps in quick succession -- or a tap
@@ -573,6 +588,8 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
+    const [rawTemperatureUnit] = useSetting("temperatureUnit");
+    const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<number | null>(null);
@@ -626,6 +643,7 @@ export default function EditRecipe() {
         setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
+        temperatureUnit,
         onSaved:    () => navigation.goBack()
     });
 
@@ -795,7 +813,8 @@ export default function EditRecipe() {
                                     stageOffsets.current[index] = y;
                                 }}
                                 addPour={addPour} deletePour={deletePour}
-                                autoAdjustPourVolumes={autoAdjustPourVolumes}/>
+                                autoAdjustPourVolumes={autoAdjustPourVolumes}
+                                temperatureUnit={temperatureUnit}/>
                     </View>
                 )}
             </ScrollView>

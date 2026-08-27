@@ -82,9 +82,16 @@ describe("palette inks on the base background", () => {
         ["success", palette.success],
         ["danger", palette.danger],
         ["warn", palette.warn],
-        ["info", palette.info]
+        ["info", palette.info],
+        ["brand", palette.brand]
     ])("keeps %s readable", (_name, colour) => {
         expect(contrast(colour, palette.base)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("keeps the brand magenta readable on a raised card too", () => {
+        // It is used for the wordmark's `++` and for section headings, both of
+        // which sit on `raised` as often as on `base`.
+        expect(contrast(palette.brand, palette.raised)).toBeGreaterThanOrEqual(4.5);
     });
 
     it("keeps the line colour below text contrast, as a divider not an ink", () => {

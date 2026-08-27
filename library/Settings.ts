@@ -29,7 +29,21 @@ export const DEFAULTS = {
      * to edit are what gets pushed off the bottom. The long form is in the help
      * sheet either way.
      */
-    showHints: false
+    showHints: false,
+    /**
+     * The unit temperatures are shown and entered in.
+     *
+     * Celsius by default, and Celsius canonically: the card stores one byte of
+     * whole Celsius and every value behind `library/units.ts` is in it. This
+     * setting changes what is drawn on a field and what a stepper walks, and
+     * nothing else.
+     *
+     * Only temperature converts. The dose is in grams — which is how coffee is
+     * weighed everywhere it is taken seriously, the United States included —
+     * and the ratio is dimensionless, so a volume shown in fluid ounces would
+     * make the ratio beside it correspond to nothing on screen.
+     */
+    temperatureUnit: "C" as "C" | "F"
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

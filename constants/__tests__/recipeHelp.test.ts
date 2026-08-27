@@ -1,4 +1,5 @@
 import {DETAILED_TOPICS, RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
+import {CELSIUS_RANGE, displayRange} from "@/library/units";
 
 describe("the editor's help copy", () => {
     const topics = Object.keys(RECIPE_HELP) as HelpTopic[];
@@ -35,6 +36,18 @@ describe("the editor's help copy", () => {
 
     it("requires the workaround recipe to have its grinder enabled", () => {
         expect(RECIPE_HELP.grinder.detail).toContain("with the grinder enabled");
+    });
+
+    it("gives the temperature range in both units", () => {
+        // Tied to the ranges themselves, not hard-coded literals, so a change
+        // to the card's storable range would leave this failing rather than
+        // leave the help copy silently describing a range the card no longer
+        // has.
+        const fahrenheit = displayRange("F");
+        expect(RECIPE_HELP.temperature.hint).toContain(String(CELSIUS_RANGE.min));
+        expect(RECIPE_HELP.temperature.hint).toContain(String(CELSIUS_RANGE.max));
+        expect(RECIPE_HELP.temperature.hint).toContain(String(fahrenheit.min));
+        expect(RECIPE_HELP.temperature.hint).toContain(String(fahrenheit.max));
     });
 
     it("offers changing the dose or ratio as an alternative to rescaling stage volumes", () => {

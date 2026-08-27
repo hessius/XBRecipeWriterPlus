@@ -1,0 +1,80 @@
+# NOTICE
+
+## The short version
+
+**This repository is not, at present, fully open source, and you should not
+treat it as though it were.** Parts of it are offered under the MIT licence in
+`LICENSE`. Other parts carry no licence at all, and nobody involved in this fork
+is in a position to grant you rights over them. Until that changes, the safe
+assumption is that you may read this code and fork it on GitHub, and that you
+may not redistribute it or ship it anywhere else.
+
+## Why
+
+XBRW++ is the third link in a chain of forks:
+
+1. **[terminaldisclaimer/XBRecipeWriter](https://github.com/terminaldisclaimer/XBRecipeWriter)**
+   — the original. It worked out the xBloom card byte format, the 32-byte
+   signature, the CRC, and the dosage-times-ratio constraint the machine
+   enforces. Substantial parts of `library/` still descend directly from it.
+2. **[CrazyCoder/XBRecipeWriterPlus](https://github.com/CrazyCoder/XBRecipeWriterPlus)**
+   — by Serge Baranov. A fork of the original, and the code this repository was
+   forked from.
+3. **[hessius/XBRecipeWriterPlus](https://github.com/hessius/XBRecipeWriterPlus)**
+   — this repository, XBRW++, by Jesper Hessius.
+
+Neither of the two upstream repositories carries a licence: no `LICENSE` file,
+no `license` field in `package.json`, no grant in the README. Under the default
+rules of copyright, each author therefore retains all rights to their own
+contributions. GitHub's Terms of Service permit viewing and forking within
+GitHub itself, but they do not grant permission to redistribute a work or to
+ship a derivative of it outside GitHub.
+
+That is why `LICENSE` is scoped rather than whole-repository. A fork cannot
+license code it does not own, and asserting MIT over the entire tree would be
+claiming to grant rights that are not this fork's to give away — which would be
+worse than saying nothing, because it would mislead anyone relying on it.
+
+## What is being done about it
+
+Both upstream authors have been asked, politely and with the offer of a
+ready-made pull request, to add a licence:
+
+- terminaldisclaimer/XBRecipeWriter#4
+- CrazyCoder/XBRecipeWriterPlus#1
+
+MIT was proposed in both cases, to match the licence of essentially every
+dependency this project ships. If both agree, this notice will be replaced by a
+single ordinary `LICENSE` naming all three authors, and the scope note at the
+top of `LICENSE` will go away.
+
+## What you may rely on today
+
+- **Jesper Hessius's contributions** to this repository are MIT-licensed, on the
+  terms in `LICENSE`. In practice that is most of what is not in `library/`:
+  the user interface, the navigation, the design system, the settings, backup
+  and restore, and the test suite.
+- **Everything descending from the two upstream repositories** — chiefly the
+  card format handling in `library/` — is unlicensed. All rights are reserved by
+  their respective authors.
+- Because the two are interwoven in a single working application, **the
+  application as a whole cannot currently be redistributed** under any licence.
+
+If you want to use part of this work and are unsure which side of that line it
+falls on, open an issue and ask. A specific question about a specific file can
+be answered; a general assumption cannot.
+
+## Third-party dependencies
+
+The open-source packages this app ships are listed in full, with their licences
+and the copyright notices those licences require reproducing, on the app's own
+Licences screen (Settings → About → Read the licences). The list is generated
+from the dependency tree by `scripts/generate-licences.sh`; entries whose
+licence had to be inferred rather than read say so, and say why.
+
+## Trademarks
+
+xBloom and its logos are the trademarks of their owner. This project is not
+affiliated with, endorsed by or supported by xBloom, and uses those marks only
+to identify the machine and the cards it works with. Nothing in `LICENSE` grants
+any right in anyone's trademarks.

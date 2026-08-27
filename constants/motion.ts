@@ -24,7 +24,19 @@ export const EASING = {
     /** Leaving. */
     in:    Easing.bezier(0.7, 0, 0.85, 0.15),
     /** Continuous or looping motion. */
-    inOut: Easing.bezier(0.45, 0, 0.25, 1)
+    inOut: Easing.bezier(0.45, 0, 0.25, 1),
+    /**
+     * Constant speed, for motion with no beginning or end.
+     *
+     * The three curves above all shape a transition between two resting states,
+     * which is what almost everything here is. A marquee and a sweeping
+     * highlight are not transitions: they pass through the screen rather than
+     * settling on it, and easing one makes it appear to slow down in the middle
+     * for no reason the viewer can see. Kept here rather than reached for
+     * directly from `react-native-reanimated` so that this module remains the
+     * whole answer to "what curves does this app use".
+     */
+    linear: Easing.linear
 } as const;
 
 /**
@@ -38,6 +50,54 @@ export const EASING = {
 export const STAGGER = {
     /** Between consecutive dots of a `DotIcon` lighting up. */
     dot: 12
+} as const;
+
+/**
+ * The About screen's attract mode.
+ *
+ * An order of magnitude longer than everything above, and deliberately so: this
+ * is idle decoration that rewards a user for lingering, not feedback on
+ * something they did. It lives here anyway, for the same reason `STAGGER` does
+ * — this module is the single source of motion timing, and a value that is not
+ * in it cannot participate when the app's motion is retuned.
+ */
+export const ATTRACT = {
+    /**
+     * How long the About screen must sit untouched before the ticker starts.
+     *
+     * Long enough that somebody who came to read a version number and leave
+     * never meets it.
+     */
+    tickerDelay: 8000,
+    /**
+     * Marquee speed, in points per second.
+     *
+     * A speed rather than a duration, because the phrases differ in length and
+     * timing them all the same would run a long one late for its own gap.
+     */
+    tickerSpeed: 46,
+    /**
+     * The empty band between one phrase leaving and the next arriving.
+     *
+     * The pause is what makes each line land as a separate thought. Without it
+     * the band is a wall of moving text and none of it gets read.
+     */
+    tickerGap: 1400,
+    /** One full rise and fall of the mark's breath. */
+    breath: 2400,
+    /** How long the glimmer takes to cross the mark. */
+    glimmer: 1100,
+    /**
+     * How long the mark rests between glimmers.
+     *
+     * Several times the sweep itself. A shimmer that runs continuously is a
+     * loading indicator and the eye stops seeing it; one that arrives now and
+     * then is caught in peripheral vision and reads as alive.
+     */
+    glimmerRest: 4400,
+    /** The mark coming apart under a tap, and settling back. */
+    tap: 220,
+    tapHold: 120
 } as const;
 
 /** Spring configs, for anything a finger drives. */export const SPRING = {

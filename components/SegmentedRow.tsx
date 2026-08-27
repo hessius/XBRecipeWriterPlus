@@ -1,15 +1,10 @@
 import React from "react";
-import {Pressable} from "react-native";
-import {Text, XStack} from "tamagui";
 
 import FieldRow from "@/components/FieldRow";
-import {palette} from "@/constants/colors";
+import SegmentedControl, {type SegmentOption} from "@/components/SegmentedControl";
 import type {HelpTopic} from "@/constants/recipeHelp";
 
-export type SegmentOption = {
-    value: string;
-    label: string;
-};
+export type {SegmentOption};
 
 type Props = {
     topic: HelpTopic;
@@ -27,26 +22,8 @@ export default function SegmentedRow({
 }: Props) {
     return (
         <FieldRow topic={topic} showHint={showHint}>
-            <XStack accessibilityRole="radiogroup" backgroundColor={palette.raised}
-                    borderRadius="$3" padding={2} gap={2}>
-                {options.map((option) => {
-                    const selected = option.value === value;
-                    return (
-                        <Pressable key={option.value} accessibilityRole="radio"
-                                   accessibilityLabel={option.label}
-                                   accessibilityState={{checked: selected}}
-                                   onPress={() => onChange(option.value)}>
-                            <Text fontSize={11} fontWeight="600"
-                                  paddingHorizontal="$2.5" paddingVertical="$1.5"
-                                  borderRadius="$2"
-                                  backgroundColor={selected ? (accent ?? palette.text) : undefined}
-                                  color={selected ? palette.base : palette.dim}>
-                                {option.label}
-                            </Text>
-                        </Pressable>
-                    );
-                })}
-            </XStack>
+            <SegmentedControl value={value} options={options} onChange={onChange}
+                              accent={accent}/>
         </FieldRow>
     );
 }

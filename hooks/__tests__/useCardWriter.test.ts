@@ -110,6 +110,7 @@ describe("useCardWriter", () => {
         const {result} = await renderHook(() => {
             const editor = useRecipeEditor({
                 recipeJSON:           invalidJSON,
+                temperatureUnit:      "C",
                 onSaved:              jest.fn()
             });
             const writer = useCardWriter(editor.setVolumeError);

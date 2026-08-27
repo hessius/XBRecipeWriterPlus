@@ -1,5 +1,6 @@
 import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
+import {displayRange, toDisplay, type TemperatureUnit} from "./units";
 
 /**
  * Whether a recipe can be written to a card, and why not.
@@ -22,7 +23,8 @@ type Range = {min: number; max: number};
 const RATIO: Range = {min: 5, max: 100};
 const GRIND_SIZE: Range = {min: 40, max: 80};
 const GRIND_RPM: Range = {min: 60, max: 120};
-const TEMPERATURE: Range = {min: 39, max: 99};
+/** Exported for the test that keeps `library/units` in step with the card. */
+export const TEMPERATURE: Range = {min: 39, max: 99};
 /** Tenths of a millilitre per second: the byte 30 means 3.0 ml/s. */
 const FLOW_RATE: Range = {min: 30, max: 35};
 /** Derived from POUR_PATTERN enum: CENTERED=0, CIRCULAR=1, SPIRAL=2. */
@@ -59,7 +61,10 @@ function checkInteger(value: number, rangeMessage: string, problems: string[]): 
     }
 }
 
-export function cardWriteProblems(recipe: Recipe): string[] {
+export function cardWriteProblems(
+    recipe: Recipe,
+    temperatureUnit: TemperatureUnit = "C"
+): string[] {
     const problems: string[] = [];
     const tea = recipe.isTea();
 
@@ -112,13 +117,32 @@ export function cardWriteProblems(recipe: Recipe): string[] {
             checkInteger(pour.volume, volMsg, problems);
         }
 
+        // Said in the unit the user is reading the editor in. A message that
+        // reports a Fahrenheit field as out of a Celsius range gives them a
+        // number they cannot act on.
+        const shownTemp = toDisplay(pour.temperature, temperatureUnit);
+        const tempRange = displayRange(temperatureUnit);
         const tempMsg =
-            `Stage ${stage} brews at ${pour.temperature} C. ` +
-            `The range is ${TEMPERATURE.min}-${TEMPERATURE.max} C.`;
+            `Stage ${stage} brews at ${shownTemp} ${temperatureUnit}. ` +
+            `The range is ${tempRange.min}-${tempRange.max} ${temperatureUnit}.`;
         if (outside(pour.temperature, TEMPERATURE)) {
             problems.push(tempMsg);
-        } else {
-            checkInteger(pour.temperature, tempMsg, problems);
+        } else if (!Number.isInteger(pour.temperature)) {
+            // `shownTemp` is rounded by `toDisplay`, so a fractional stored
+            // Celsius value (from an import or restore, never a stepper) can
+            // convert to something that already looks whole in Fahrenheit —
+            // 92.5 C rounds to 199 F, and "It has to be a whole number" next
+            // to a number that already is one is not actionable. Report the
+            // exact, unrounded conversion instead, so the figure the user
+            // reads is the one that is actually fractional.
+            const exactTemp = temperatureUnit === "C"
+                ? pour.temperature
+                : pour.temperature * 9 / 5 + 32;
+            problems.push(
+                `Stage ${stage} brews at ${exactTemp} ${temperatureUnit}. ` +
+                `The range is ${tempRange.min}-${tempRange.max} ${temperatureUnit}. ` +
+                `It has to be a whole number.`
+            );
         }
 
         const flowMsg =

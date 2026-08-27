@@ -30,8 +30,16 @@ jest.mock("@/hooks/useSetting", () => ({
         // this hook and the deck reads back through it, so a setter that threw
         // the value away would leave that wiring untested.
         const [, bump] = mockReact.useState(0);
+        // Falls back to the real `DEFAULTS`, the way `Settings.get` does, rather
+        // than handing back `undefined` for an unset key. `mockSettings = {}`
+        // is meant to model "nothing written yet", and the real store never
+        // returns `undefined` for that — so a bare lookup here would let a
+        // caller that dropped a value on the floor and read `undefined` back
+        // pass by accident, wearing the default it was never actually given.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const {DEFAULTS: mockDefaults} = require("@/library/Settings");
         return [
-            mockSettings[key],
+            mockSettings[key] ?? mockDefaults[key],
             (value: unknown) => {
                 mockSettings = {...mockSettings, [key]: value};
                 bump((n: number) => n + 1);
@@ -115,6 +123,17 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
     return view;
 }
 
+/** Every background colour painted anywhere inside an element. */
+function fillsWithin(element: unknown): string[] {
+    const node = element as {props?: {style?: unknown}; children?: unknown[]};
+    const style = StyleSheet.flatten(node.props?.style) as {backgroundColor?: string} | undefined;
+    const here = style?.backgroundColor ? [style.backgroundColor] : [];
+    const below = (node.children ?? [])
+        .filter((child) => typeof child === "object" && child !== null)
+        .flatMap(fillsWithin);
+    return [...here, ...below];
+}
+
 describe("the editor", () => {
     it("opens on the recipe, not on a form", async () => {
         await renderEditor();
@@ -128,6 +147,33 @@ describe("the editor", () => {
 
         await renderEditor({cupType: CUP_TYPE.TEA});
         expect(screen.getByTestId("tea-banner-body")).toBeTruthy();
+    });
+
+    it("fills every selected segment with the recipe's accent", async () => {
+        // The accent does two separate jobs in this screen: it marks the
+        // numbers that are terms in the equation the machine enforces, and it
+        // fills the selected option of a choice. Confusing the two is what left
+        // the grinder row with a white selected segment while the cup row
+        // beside it was accented — it was simply never passed the accent, and
+        // fell back to plain text. Asserted over every segment at once rather
+        // than by name, so the next control added cannot repeat it.
+        await renderEditor();
+        // Taken from the target readout rather than recomputed, so the
+        // assertion is "the same accent this screen is already using" rather
+        // than "the accent this test believes it should be using".
+        const target = StyleSheet.flatten(
+            screen.getByTestId("brew-target").props.style
+        ) as {color?: string};
+        const accent = target.color;
+        expect(accent).toBeTruthy();
+        const chosen = screen.getAllByRole("radio", {checked: true});
+        expect(chosen.length).toBeGreaterThan(1);
+        for (const segment of chosen) {
+            // The role sits on the pressable and the fill on the label inside
+            // it, so the colour is one level down from the thing that knows it
+            // is selected.
+            expect(fillsWithin(segment)).toContain(accent);
+        }
     });
 
     it("hides the cup and grinder rows on tea", async () => {
@@ -562,6 +608,22 @@ describe("the stages deck", () => {
 
         expect(screen.getByLabelText("Stage 4 of 4")).toBeTruthy();
         expect(screen.getByLabelText("Stages, 4")).toBeTruthy();
+    });
+
+    it("draws stage temperatures in the unit the user chose", async () => {
+        mockSettings = {temperatureUnit: "F"};
+
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+
+        // The fixture's stages are all 39 C, which the collapsed header shows
+        // as a bare number beside the suffix. 39 C is 102 F: asserting only the
+        // suffix would pass for an implementation that swapped the label and
+        // left the number in Celsius, so this checks both sides of the
+        // conversion actually reached the tile.
+        expect(screen.getAllByText("°F").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("102").length).toBeGreaterThan(0);
+        expect(screen.queryByText("39")).toBeNull();
     });
 });
 

@@ -10,6 +10,10 @@
  * so the copy can be read as prose when it is being edited.
  */
 
+import {CELSIUS_RANGE, displayRange} from "@/library/units";
+
+const FAHRENHEIT_RANGE = displayRange("F");
+
 export type HelpEntry = {
     /** The field's own label. */
     title: string;
@@ -107,7 +111,8 @@ const ENTRIES = {
     },
     temperature: {
         title: "Temperature",
-        hint:  "39 to 99 °C."
+        hint:  `${CELSIUS_RANGE.min} to ${CELSIUS_RANGE.max} °C, or ` +
+               `${FAHRENHEIT_RANGE.min} to ${FAHRENHEIT_RANGE.max} °F.`
     },
     flowRate: {
         title: "Flow rate",

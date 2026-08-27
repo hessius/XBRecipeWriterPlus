@@ -33,6 +33,16 @@ type Props = {
     /** Rendered as a small superscript. Hidden when absent or zero. */
     count?: number;
     fontSize?: number;
+    /**
+     * Announces the title as a heading.
+     *
+     * Opt-in rather than always on, because it collapses the title and its
+     * count into a single accessibility element -- right for a screen that
+     * replaces the platform's navigation bar and would otherwise have no
+     * heading at all for the rotor to find, wrong for the home header, where
+     * the count is a separate fact a reader may want on its own.
+     */
+    heading?: boolean;
 };
 
 /**
@@ -46,7 +56,8 @@ type Props = {
  * it: Doto has an 11 px legibility floor, and a superscript that shrank with
  * the title would go straight through it.
  */
-export default function ScreenTitle({title, count, fontSize = TITLE_FONT_SIZE}: Props) {
+export default function ScreenTitle({title, count, fontSize = TITLE_FONT_SIZE,
+                                     heading = false}: Props) {
     const showCount = typeof count === "number" && count > 0;
     const reduced = useReducedMotion();
 
@@ -62,7 +73,11 @@ export default function ScreenTitle({title, count, fontSize = TITLE_FONT_SIZE}: 
     const countStyle = useAnimatedStyle(() => ({marginTop: countLift(size.value)}));
 
     return (
-        <XStack alignItems="flex-start" gap="$1">
+        <XStack alignItems="flex-start" gap="$1"
+                // React Native will not promote a View to an accessibility
+                // element on its own, so the role below is inert without this.
+                accessible={heading || undefined}
+                accessibilityRole={heading ? "header" : undefined}>
             {/* Without flexShrink a long title keeps its full measured width
                 and pushes the count off the edge of the screen. */}
             <Animated.Text
