@@ -148,6 +148,76 @@ describe("parseBackup refuses, with a reason", () => {
         expect(result.payload.skipped).toBe(2);
     });
 
+    it("skips a recipe whose fields are the wrong type", () => {
+        // `new Recipe(...)` used to be the validator, and it is written to be
+        // forgiving of anything it can repair -- so it kept a numeric name and
+        // a string volume, minted a uuid, and the presence of that uuid was
+        // then read as proof the entry was sound. Each of these survived that
+        // check and would have been inserted into the library.
+        const good = JSON.parse(buildBackup([recipeNamed("A", "u1")], {})).recipes[0];
+        const corrupt = [
+            {...good, uuid: "u2", name: 5},
+            {...good, uuid: "u3", ratio: "sixteen"},
+            {...good, uuid: "u4", grinder: "yes"},
+            {...good, uuid: "u5", pours: [{...good.pours[0], volume: "lots"}]},
+            {...good, uuid: "u6", pours: [{}]},
+            {...good, uuid: "u7", pours: "x"},
+            {...good, uuid: "u8", dosage: null},
+            {...good, uuid: "u9", uid: [1, "2", 3]}
+        ];
+
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION,
+            recipes: [good, ...corrupt]
+        }));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes).toHaveLength(1);
+        expect(result.payload.skipped).toBe(corrupt.length);
+    });
+
+    it("still takes a recipe that merely leaves fields out", () => {
+        // The other half of the same guard, and the more important half. The
+        // model repairs a long tail of legacy omissions on purpose, and this
+        // feature exists so a user does not lose recipes -- so validation
+        // checks the type of a field that is there, never that it is there.
+        const good = JSON.parse(buildBackup([recipeNamed("A", "u1")], {})).recipes[0];
+        const legacy = {
+            pours: good.pours,
+            title: "An old name",
+            ratio: 16,
+            grindSize: 60
+        };
+
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION,
+            recipes: [legacy]
+        }));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.skipped).toBe(0);
+        expect(result.payload.recipes[0].name).toBe("An old name");
+        expect(result.payload.recipes[0].uuid).toBeTruthy();
+    });
+
+    it("still takes pours that were stored as JSON strings", () => {
+        // A form an older version wrote and the constructor still reads. A
+        // validator that only understood objects would reject every recipe in
+        // an old library, which is exactly the loss this feature prevents.
+        const good = JSON.parse(buildBackup([recipeNamed("A", "u1")], {})).recipes[0];
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION,
+            recipes: [{...good, pours: good.pours.map((p: unknown) => JSON.stringify(p))}]
+        }));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.skipped).toBe(0);
+        expect(result.payload.recipes[0].pours).toHaveLength(good.pours.length);
+    });
+
     it("refuses another app's file even when its recipes look plausible", () => {
         // The obvious test — a bare {hello:"world"} — is refused by the missing
         // recipes array, so it passes with the format check deleted. This is

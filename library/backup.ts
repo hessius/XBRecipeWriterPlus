@@ -166,8 +166,109 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** A number the model can do arithmetic with. Rejects NaN, Infinity and null. */
+function isNumber(value: unknown): boolean {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNumberArray(value: unknown): boolean {
+    return Array.isArray(value) && value.every(isNumber);
+}
+
+/**
+ * The type each field must have *if it is present at all*.
+ *
+ * Presence is deliberately not required. The `Recipe` constructor supports a
+ * long tail of legacy omissions on purpose — a missing uuid is minted, a
+ * pre-rename `title` becomes the local `name`, three obsolete cup-type
+ * encodings are migrated — and this feature exists so that a user does not lose
+ * recipes. Rejecting a record for a field the model can regenerate would throw
+ * away the very thing the backup was made to protect.
+ *
+ * What is checked is that a field which *is* there holds the kind of value the
+ * rest of the app will assume it holds.
+ */
+const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
+    uuid:        (v) => typeof v === "string",
+    name:        (v) => typeof v === "string",
+    title:       (v) => typeof v === "string",
+    xbloomName:  (v) => typeof v === "string",
+    xid:         (v) => typeof v === "string",
+    source:      (v) => typeof v === "string",
+    shareId:     (v) => typeof v === "string",
+    grinder:     (v) => typeof v === "boolean",
+    dosage:      isNumber,
+    ratio:       isNumber,
+    grindSize:   isNumber,
+    grindRPM:    isNumber,
+    cupType:     isNumber,
+    defaultCups: isNumber,
+    accentIndex: isNumber,
+    createdAt:   isNumber,
+    checksum:    isNumber,
+    backup:         isNumberArray,
+    offline_backup: isNumberArray,
+    uid:            isNumberArray
+};
+
+/**
+ * The six fields every serialised pour carries.
+ *
+ * Required, unlike the recipe's own fields, because `Pour` holds all six as
+ * plain properties and `JSON.stringify` therefore writes all six for any pour
+ * this app has ever exported. A pour missing one did not come from here.
+ *
+ * The `Recipe` constructor would accept it regardless and hand `Pour` an
+ * `undefined`, which becomes a stored `-1`. That is the shape of the real
+ * hazard: not a crash, but a recipe that looks ordinary in the library, opens
+ * in the editor, and is written to a genuine card as nonsense. A bad write to a
+ * real card is not trivially recoverable, so the door is the place to stop it.
+ */
+const POUR_FIELDS = ["volume", "temperature", "flowRate", "agitation",
+                     "pourPattern", "pauseTime"] as const;
+
+/**
+ * Whether an entry is shaped like a recipe.
+ *
+ * `new Recipe(...)` cannot be used as the validator, which is what this replaces.
+ * It is written to be forgiving of anything it can repair, so it accepts
+ * `{"name": 5, "pours": []}` and keeps the number, and accepts
+ * `{"pours": [{"volume": "lots"}]}` and keeps the string — then mints a uuid,
+ * at which point the old presence-of-a-uuid check declared the result valid. An
+ * untrusted file was being reported as readable and its contents inserted.
+ */
+function looksLikeRecipe(entry: Record<string, unknown>): boolean {
+    for (const [field, ok] of Object.entries(RECIPE_FIELDS)) {
+        if (entry[field] !== undefined && !ok(entry[field])) return false;
+    }
+
+    if (!Array.isArray(entry.pours)) return false;
+
+    for (const raw of entry.pours) {
+        // Pours were stored as JSON strings by an older version, and the
+        // constructor still parses that form, so it has to be unwrapped here
+        // too rather than rejected as "not an object".
+        let pour: unknown = raw;
+        if (typeof raw === "string") {
+            try {
+                pour = JSON.parse(raw);
+            } catch {
+                return false;
+            }
+        }
+        if (!isPlainObject(pour)) return false;
+        if (pour.pourNumber !== undefined && !isNumber(pour.pourNumber)) return false;
+        for (const field of POUR_FIELDS) {
+            if (!isNumber(pour[field])) return false;
+        }
+    }
+
+    return true;
+}
+
 function reviveRecipe(entry: unknown): Recipe | null {
     if (!isPlainObject(entry)) return null;
+    if (!looksLikeRecipe(entry)) return null;
     try {
         // The constructor's `json` parameter is a string, not the parsed
         // object the envelope already gives us — re-stringifying here is
@@ -177,7 +278,9 @@ function reviveRecipe(entry: unknown): Recipe | null {
         // constructor mints one, and this whole feature exists so a user does
         // not lose recipes. A duplicate on a second restore is an annoyance
         // they can delete; a recipe dropped for a field the model can
-        // regenerate is gone.
+        // regenerate is gone. The shape has already been checked above, so
+        // what survives this call is a recipe rather than merely an object
+        // that did not make the constructor throw.
         const recipe = new Recipe(undefined, JSON.stringify(entry));
         return typeof recipe.uuid === "string" && recipe.uuid !== "" ? recipe : null;
     } catch {
