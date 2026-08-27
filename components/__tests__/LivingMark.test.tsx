@@ -2,6 +2,7 @@ import React from "react";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import LivingMark from "@/components/LivingMark";
+import {palette} from "@/constants/colors";
 import {useReducedMotion} from "@/constants/motion";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -60,5 +61,37 @@ describe("LivingMark", () => {
             return merged.opacity;
         }));
         expect(opacities).toEqual(new Set([0.72]));
+    });
+
+    it("draws the disc the mark is punched out of", async () => {
+        // The mark is the app icon, not a bare `++`: without the surrounding
+        // field of dots it is a different logo from the one on the home screen.
+        await renderWithProviders(<LivingMark size={120}/>);
+        expect(screen.getAllByTestId("living-mark-field-dot").length)
+            .toBeGreaterThan(DOT_COUNT * 5);
+    });
+
+    it("keeps the disc clear of the `++`, so no dot is drawn twice", async () => {
+        // Two dots stacked in one cell read as a brighter dot, which would show
+        // as a blemish on the field at exactly the mark's corners.
+        await renderWithProviders(<LivingMark size={120}/>);
+        const field = screen.getAllByTestId("living-mark-field-dot");
+        const marks = screen.getAllByTestId("living-mark-dot");
+        const position = (node: {props: Record<string, unknown>}) => {
+            const merged = Object.assign({}, ...[node.props.style].flat(Infinity));
+            return `${merged.left}-${merged.top}`;
+        };
+        const taken = new Set(marks.map(position));
+        expect(field.some((dot) => taken.has(position(dot)))).toBe(false);
+    });
+
+    it("picks the `++` out in the brand colour, as the icon does", async () => {
+        // The one place the app's own colour appears. Drawn in `text` it is a
+        // white-on-white mark and the icon's identity is gone.
+        await renderWithProviders(<LivingMark size={120}/>);
+        const merged = Object.assign(
+            {}, ...[screen.getAllByTestId("living-mark-dot")[0].props.style].flat(Infinity)
+        );
+        expect(merged.backgroundColor).toBe(palette.brand);
     });
 });

@@ -1,5 +1,5 @@
 import React, {useEffect} from "react";
-import {Pressable} from "react-native";
+import {Pressable, View} from "react-native";
 import Animated, {
     type SharedValue,
     useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
@@ -24,6 +24,27 @@ type Cell = {
 const BREATH_MS = 2400;
 
 /**
+ * The grid the whole mark is laid out on.
+ *
+ * Two 9x9 plus glyphs side by side with a column between them span 19 columns,
+ * and the disc is drawn square on that, so the mark is 19x19 with the `++`
+ * centred in it. Both numbers are derived rather than written down, so a change
+ * to the glyph bitmap cannot leave the disc the wrong size around it.
+ */
+const COLUMNS = DOT_ICON_GRID * 2 + 1;
+const MARK_ROW_OFFSET = Math.floor((COLUMNS - DOT_ICON_GRID) / 2);
+
+/**
+ * How far out the disc reaches, in cells from the centre.
+ *
+ * Just under half the grid: at exactly half, the four cells at the compass
+ * points sit on the boundary and the circle reads as a square with the corners
+ * filed off. This is the radius at which the silhouette in `icon.png` is
+ * reproduced.
+ */
+const DISC_RADIUS = COLUMNS / 2 - 0.2;
+
+/**
  * The lit cells of both plus signs, laid out side by side, resolved once.
  *
  * At module scope because the layout is a constant: it depends on the glyph
@@ -39,7 +60,7 @@ const CELLS: Cell[] = (() => {
     const cells: Cell[] = [];
     for (const mark of [0, 1]) {
         for (const cell of lit) {
-            const row = cell.y;
+            const row = cell.y + MARK_ROW_OFFSET;
             const column = cell.x + mark * (DOT_ICON_GRID + 1);
             // Deterministic pseudo-random: the same cell always flies the same
             // way, and no random number generator has to be seeded for a test.
@@ -57,22 +78,65 @@ const CELLS: Cell[] = (() => {
     return cells;
 })();
 
-const COLUMNS = DOT_ICON_GRID * 2 + 1;
+type FieldCell = {row: number; column: number; opacity: number};
+
+/**
+ * The disc of unlit dots the `++` is punched out of.
+ *
+ * These do not breathe and do not scatter. They are the field the mark sits in,
+ * and 250-odd animated views to make a background shimmer would cost more than
+ * the effect is worth — so they are plain views, varied once by position into a
+ * faint texture rather than a flat wash.
+ */
+const FIELD: FieldCell[] = (() => {
+    const lit = new Set(CELLS.map((cell) => `${cell.row}-${cell.column}`));
+    const centre = (COLUMNS - 1) / 2;
+    const cells: FieldCell[] = [];
+    for (let row = 0; row < COLUMNS; row++) {
+        for (let column = 0; column < COLUMNS; column++) {
+            const dx = column - centre;
+            const dy = row - centre;
+            if (Math.sqrt(dx * dx + dy * dy) > DISC_RADIUS) continue;
+            if (lit.has(`${row}-${column}`)) continue;
+            cells.push({
+                row,
+                column,
+                // Deterministic, so the texture is the same every render and a
+                // test can count on it.
+                opacity: 0.5 + ((row * 5 + column * 11) % 5) * 0.075
+            });
+        }
+    }
+    return cells;
+})();
 
 type Props = {
     /** Width of the whole mark, in points. */
     size: number;
+    /**
+     * Hides the mark from assistive technology.
+     *
+     * For when the app's name is already given in readable type right beside
+     * it. Announcing "XBRW++, image" and then "XBRW++, heading" is the same
+     * fact twice, and the second one is the one a reader can act on.
+     */
+    decorative?: boolean;
 };
 
 /**
- * The `++` of XBRW++, drawn as dots that breathe and scatter.
+ * The app's icon, drawn live.
  *
- * The app's one moment of personality, and deliberately built out of the dot
- * machinery the icons already use rather than a second animation system. Under
- * Reduce Motion it renders as a static mark: the screen must be complete
+ * This is the same mark as `assets/images/icon.png` — a disc of dots with the
+ * `++` of XBRW++ picked out in the brand magenta — rather than a picture of it.
+ * Drawing it means it can breathe, and can come apart when tapped, which a PNG
+ * cannot; it also means the mark is built from the dot machinery the icons
+ * already use rather than a second source of truth that would drift from the
+ * icon on the home screen.
+ *
+ * Under Reduce Motion it renders as a static mark: the screen must be complete
  * without the movement, so the movement is the only thing that goes.
  */
-export default function LivingMark({size}: Props) {
+export default function LivingMark({size, decorative = false}: Props) {
     const reduced = useReducedMotion();
     const breath = useSharedValue(0);
     const scatter = useSharedValue(0);
@@ -102,9 +166,16 @@ export default function LivingMark({size}: Props) {
     }
 
     return (
-        <Pressable accessibilityRole="image" accessibilityLabel="XBRW++"
+        <Pressable accessibilityRole={decorative ? "none" : "image"}
+                   accessibilityLabel={decorative ? undefined : "XBRW++"}
+                   accessibilityElementsHidden={decorative}
+                   importantForAccessibility={decorative ? "no-hide-descendants" : "auto"}
                    onPress={onPress}>
-            <XStack width={size} height={dot * DOT_ICON_GRID + gap * (DOT_ICON_GRID - 1)}>
+            <XStack width={size} height={dot * COLUMNS + gap * (COLUMNS - 1)}>
+                {FIELD.map((cell) => (
+                    <FieldDot key={`f${cell.row}-${cell.column}`} cell={cell}
+                              dot={dot} gap={gap}/>
+                ))}
                 {CELLS.map((cell) => (
                     <MarkDot key={`${cell.row}-${cell.column}`} cell={cell}
                              dot={dot} gap={gap} breath={breath} scatter={scatter}
@@ -112,6 +183,22 @@ export default function LivingMark({size}: Props) {
                 ))}
             </XStack>
         </Pressable>
+    );
+}
+
+/** One dot of the surrounding disc. Inert, and at module scope like the rest. */
+function FieldDot({cell, dot, gap}: {cell: FieldCell; dot: number; gap: number}) {
+    return (
+        <View testID="living-mark-field-dot" style={{
+            position: "absolute",
+            left: cell.column * (dot + gap),
+            top: cell.row * (dot + gap),
+            width: dot,
+            height: dot,
+            borderRadius: dot / 2,
+            backgroundColor: palette.text,
+            opacity: cell.opacity
+        }}/>
     );
 }
 
@@ -161,7 +248,7 @@ function MarkDot({cell, dot, gap, breath, scatter, reduced}: DotProps) {
                 width: dot,
                 height: dot,
                 borderRadius: dot / 2,
-                backgroundColor: palette.text
+                backgroundColor: palette.brand
             },
             style
         ]}/>
