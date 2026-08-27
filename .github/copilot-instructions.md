@@ -1,4 +1,4 @@
-# XBRecipeWriter+ — Copilot instructions
+# XBRW++ — Copilot instructions
 
 Expo (SDK 57) / React Native app that reads and writes xBloom coffee recipe NFC cards (ISO 15693 / NfcV), stores recipes locally in SQLite, and imports recipes from xBloom share links.
 
@@ -38,12 +38,17 @@ Three layers, strictly separated:
   - `Recipe.ts` — the central model. Owns byte-level (de)serialization (`parseData` / `getData`), CRC-8/MAXIM-DOW checksum via a precomputed `POLY_TABLE`, and volume math (`autoFixPourVolumes`, `fixRatio`, `getTotalVolume`). Also orchestrates `readCard`/`writeCard` against an `NFC` instance.
   - `Pour.ts` — one pour/steep; `POUR_PATTERN` and `AGITATION` constants.
   - `NFC.ts` — transport only. Branches on `Platform.OS`: iOS uses `NfcManager.iso15693HandlerIOS`, Android uses raw `nfcVHandler.transceive` commands (`0x23` read-multiple with a `0x20` single-block fallback, `0x21` write-single). Writes 4-byte blocks.
-  - `RecipeDatabase.ts` — expo-sqlite (`xbrecipewriter.db`, sync API). Recipes are stored as a whole JSON blob in `recipes(uuid, recipeJSON)`, not normalized columns.
+  - `RecipeDatabase.ts` — expo-sqlite (`xbrecipewriter.db`, sync API). Recipes are stored as a whole JSON blob in `recipes(uuid, recipeJSON)`, not normalized columns. The filename keeps the old app name on purpose: renaming it would orphan every recipe already on a phone.
+  - `Settings.ts` — the same database, a `settings` key/value table. `DEFAULTS` is the list of every setting; anything reading or writing settings should derive from it rather than naming keys, which is how `showHints` once went missing from backups.
+  - `backup.ts` — `buildBackup` / `parseBackup` / `mergeRecipes`, and the validation an untrusted backup file must pass. Treat this as a trust boundary: the `Recipe` constructor is deliberately forgiving so it can migrate its own old shapes, which makes it useless as a validator, and a bad recipe's next stop is a genuine card.
+  - `duplicates.ts`, `units.ts`, `cardLimits.ts`, `importInput.ts`, `notify.ts`, `accent.ts` — dedup on open, temperature conversion (mass and volume deliberately do not convert), per-field limits, the one parser that knows what an xBloom link or pod code looks like, the toast queue, and accent assignment.
   - `XBloomRecipe.ts` — fetches from the undocumented `client-api.xbloom.com` endpoints and maps xBloom's `recipeVo` JSON onto a `Recipe`. Two endpoints: by share id, or by XID (`id.length <= 7`).
-- **`app/`** — expo-router file routes (`index` = recipe list, `editRecipe` = editor). Typed routes are enabled. Screens should stay close to layout only.
-- **`hooks/`** — the stateful logic the screens used to inline. `useRecipeEditor` owns the recipe and every mutation on it; `useCardWriter` owns the NFC write path. Put new screen logic here rather than growing a route file back to 800 lines.
+- **`app/`** — expo-router file routes: `index` (library), `editRecipe`, `settings`, `about`, `licences`, plus `+native-intent` (share-extension URL handling) and `[...unmatched]`. Typed routes are enabled. Screens should stay close to layout only.
+- **`hooks/`** — the stateful logic the screens used to inline. `useRecipeEditor` owns the recipe and every mutation on it; `useCardWriter` owns the NFC write path; `useRecipeLibrary` owns the library and restore; `useBackup` owns export/import of backup files; `useSetting` binds one setting to state; `useRecipeImport` owns the import lookup state machine; `useCollapsibleHeader` the home screen's header. Put new screen logic here rather than growing a route file back to 800 lines.
 - **`components/`** — Tamagui presentational/dialog components. Declare them at module scope: a component defined inside another component's body is a new type on every render, so React remounts it and throws away its state. That bug has already been fixed twice here.
 - **`constants/colors.ts`** — every colour in the app. See below.
+- **`constants/motion.ts`** — every duration, easing curve and spring. Same rule as colour: a timing that is not in here cannot take part when the app's motion is retuned. Spatial values (widths, opacities) stay with their component.
+- **`constants/licences.ts`** — **generated**. Run `npm run generate-licences` (`scripts/generate-licences.sh`); never hand-edit it. Bodies are deduplicated with copyright lines lifted out, so all MIT collapses to one entry.
 - **`test-utils/`** — the Tamagui-aware `render` wrapper for component tests.
 
 Import with the `@/` alias (maps to repo root), e.g. `@/library/Recipe`.
@@ -79,21 +84,27 @@ Other domain invariants:
   Add a semantically named entry (`danger`, `surface`, `muted`) rather than a literal one (`red`).
 - **Tamagui** is the component/styling system (`tamagui.config.ts`, providers in `app/_layout.tsx`). Use `XStack`/`YStack`/`Button`/`Dialog` and `$`-prefixed tokens rather than raw RN `StyleSheet`. `@expo/vector-icons` is used for icons (v15 uses kebab-case AntDesign names, e.g. `plus-circle`, not `pluscircle`).
 - Dialogs follow the `Dialog` + `Adapt platform="touch"` + `Sheet` pattern, wrapped once in `XbrwSheet.tsx` so every sheet inherits it rather than re-deriving it (see `ImportSheet.tsx` for a consumer).
-- **Mutate the `Recipe` object in place and bump a `key` counter** (`setKey(prev => prev + 1)`) to re-render, instead of cloning into state. This was a deliberate performance change — don't "fix" it by making `Recipe` immutable or re-serializing on every keystroke. Hot spots use refs + `useImperativeHandle` (`TotalVolumeComponent.forceUpdate`) to repaint a single value.
-- `ValidatedInput` owns numeric entry: min/max/step, slider, long-press repeat, and it reports validity upward via `setErrorFunction` — the save button is gated on that.
-- Screen headers are configured with `navigation.setOptions` inside `useEffect`, not via static route options.
+- **Mutate the `Recipe` object in place and bump a `key` counter** (`setKey(prev => prev + 1)`) to re-render, instead of cloning into state. This was a deliberate performance change — don't "fix" it by making `Recipe` immutable or re-serializing on every keystroke.
+- `Stepper.tsx` owns numeric entry: min/max/step, long-press repeat, and per-field limits from `library/cardLimits.ts`.
+- **Screen headers are the app's own**, drawn by `ScreenHeader.tsx`. The native header is switched off per route in `app/_layout.tsx` (`headerShown: false`); `app/index.tsx` does it in an effect because it renders its own collapsing header. Don't reach for react-navigation header options.
+- Two accent rules in the editor, which look inconsistent but are not (documented on `BrewDeck` in `app/editRecipe.tsx`): a **number** is accented only if it is a term in `dose × ratio = Σ stage volumes`, and in a **choice** control the accent is simply the selected-option fill.
 - The **React Compiler is enabled**, so do not hand-write `useMemo`/`useCallback` for new code and
   do not read whole `props` inside a hook — destructure first, or the compiler bails out of
   optimising the entire component. `try`/`finally` also causes a bailout; that one is a compiler
-  limitation and is accepted in `useRecipeEditor` and `RestoreDialog`.
+  limitation and is accepted in `useRecipeEditor` and `useRecipeLibrary`.
+- Prefer resetting state in the event handler over an effect on a prop. `react-hooks/set-state-in-effect`
+  is an error, and a sheet that is kept mounted still sees every close through its own handlers.
 - `react-hooks/exhaustive-deps` is set to **warn**, not error, because the compiler owns
   memoisation. The remaining warnings are deliberate. The other hook rules are errors.
 - Import has three doors — the header glyph, `ImportTile.tsx`, and an `expo-share-intent` share — that all open the one `ImportSheet.tsx`; `app/index.tsx` wires them together. `library/importInput.ts` (`parseImportInput`) is the single place that knows what an xBloom link or pod code looks like, so the field and the share intent cannot drift apart; `hooks/useRecipeImport.ts` owns the lookup state machine (debounce, paste-vs-type, de-duplication, atomic-vs-deliberate navigation) and `ImportResult.tsx` draws a found recipe.
 
 ## Platform notes
 
-- Android needs an explicit NFC dialog (`AndroidNFCDialog`) because it has no system NFC sheet; iOS shows its own. NFC code paths check `nfc.getIsClosed()` before surfacing errors, since a user-cancelled Android scan throws.
-- Version lives in `app.json` (`expo.version`); `runtimeVersion.policy` is `appVersion`, so a native-affecting change needs a version bump. EAS build profiles: `development`, `preview`, `production`.
+- `NfcOverlay.tsx` is the scanning ceremony for both platforms. On iOS it sits above the system NFC sheet; on Android, where there is no system sheet at all, it *is* the entire experience. (It replaced the old Android-only `AndroidNFCDialog`.) NFC code paths check `nfc.getIsClosed()` before surfacing errors, since a user-cancelled Android scan throws.
+- Version lives in `app.json` (`expo.version`, currently `1.0`); `runtimeVersion.policy` is `appVersion`, so a native-affecting change needs a version bump. EAS build profiles: `development`, `preview`, `production`. Note `eas.json` sets `appVersionSource: "remote"`, so EAS holds the build number server-side.
+- Spelled `1.0`, not `1.0.0`, because the share extension carries no version keys and inherits `1.0` from the build settings — Apple rejects a bundle whose extension and host app disagree.
+- **`app.json` `scheme` is an array and the order matters.** `expo-share-intent` builds the share extension's handoff key from the *first* entry, and the native extension is compiled against it, so reordering silently breaks sharing. `xbrecipewriter` stays first; `xbrw` is an alias. A test in `app/__tests__/native-intent.test.ts` fails if anyone reorders it.
+- Licensing: all three repos in the fork chain are unlicensed upstream, so `LICENSE` grants MIT over *this* repo's contributions only, and `NOTICE` draws that line. Don't relabel the tree as plain MIT.
 
 ## SDK 57 notes
 
