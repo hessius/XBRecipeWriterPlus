@@ -1,8 +1,8 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import LicencesScreen from "@/app/licences";
-import {LICENCES} from "@/constants/licences";
+import {LICENCES, LICENCE_TEXTS} from "@/constants/licences";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("LicencesScreen", () => {
@@ -57,5 +57,32 @@ describe("LicencesScreen", () => {
         // in a document whose whole job is answering it.
         const unresolved = LICENCES.filter((entry) => entry.licence === "See package");
         expect(unresolved.map((entry) => entry.name)).toEqual([]);
+    });
+
+    it("opens the full body when a licence row is tapped", async () => {
+        // The row promises the licence is reproduced in full; tapping it has to
+        // actually put the permission notice on screen, not just name the
+        // licence again. A known MIT package stands in for the obligation.
+        const mit = LICENCES.find(
+            (entry) => entry.licence === "MIT" && entry.text !== undefined
+        )!;
+        const body = LICENCE_TEXTS[mit.text!];
+
+        await renderWithProviders(<LicencesScreen entries={[mit]}/>);
+        expect(screen.queryByText(new RegExp("Permission is hereby granted"))).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText(`Read the ${mit.name} licence`));
+
+        expect(screen.getByText(body)).toBeTruthy();
+    });
+
+    it("does not make a package without a body tappable", async () => {
+        // A row with no recorded licence file has nothing to show, so it must
+        // not present itself as a button that opens an empty sheet.
+        const noBody = LICENCES.find((entry) => entry.text === undefined)!;
+
+        await renderWithProviders(<LicencesScreen entries={[noBody]}/>);
+
+        expect(screen.queryByLabelText(`Read the ${noBody.name} licence`)).toBeNull();
     });
 });

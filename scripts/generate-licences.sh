@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 python3 - <<'PYTHON'
-import json, pathlib, re
+import hashlib, json, pathlib, re
 
 root = pathlib.Path(".")
 
@@ -90,6 +90,58 @@ def copyright_from_text(text):
     return re.sub(r"\s+", " ", line)
 
 
+# A licence file's body is its text with the copyright lines lifted out. The
+# copyright is what differs between two packages under the same licence — every
+# MIT file names a different holder and year — so deduplicating on whole texts
+# barely dedupes at all, while deduplicating on the body collapses all of MIT
+# onto one entry. The permission notice, the BSD conditions and the warranty
+# disclaimer all live in the body and are what the licence actually obliges us
+# to reproduce; the copyright is kept per package, alongside it, in `copyright`.
+_COPYRIGHT_LINE_RE = re.compile(r"^\s*copyright\b", re.IGNORECASE)
+
+
+def _strip_copyright_lines(text):
+    return [line for line in text.splitlines() if not _COPYRIGHT_LINE_RE.match(line)]
+
+
+def body_display(text):
+    """The body as it will be shown: copyright removed, edges and runs of blank
+    lines tidied, but paragraphs otherwise left as the package wrote them."""
+    lines = [line.rstrip() for line in _strip_copyright_lines(text)]
+    tidied = []
+    for line in lines:
+        if not line and (not tidied or not tidied[-1]):
+            continue  # collapse the gap the copyright left, and any other run
+        tidied.append(line)
+    while tidied and not tidied[0]:
+        tidied.pop(0)
+    while tidied and not tidied[-1]:
+        tidied.pop()
+    return "\n".join(tidied)
+
+
+def body_key(text):
+    """What two bodies must share to be treated as the same licence: the body
+    with all whitespace flattened and case folded, so formatting and line-wrap
+    differences between two copies of one licence do not split them apart."""
+    joined = "\n".join(_strip_copyright_lines(text))
+    return re.sub(r"\s+", " ", joined).strip().lower()
+
+
+def text_id(text):
+    """A short, content-derived id: the licence's own name where one can be told
+    from the body, then six hex of the body's hash. Derived from the body and
+    not the package, so two packages with the same body land on one id, and
+    stable across regenerations, so adding a package does not renumber the rest."""
+    key = body_key(text)
+    if not key:
+        return None
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:6]
+    spdx = licence_from_text(text) or "lic"
+    prefix = re.sub(r"[^a-z0-9]+", "-", spdx.lower()).strip("-") or "lic"
+    return "%s-%s" % (prefix, digest)
+
+
 def find_licence_file(directory):
     for pattern in LICENCE_FILE_GLOBS:
         matches = sorted(directory.glob(pattern))
@@ -117,6 +169,11 @@ def licence_field(data):
 # instance is kept here and merged, rather than the first one seen winning
 # and the rest going unattributed.
 by_name = {}
+# id -> licence body, deduplicated. One entry per distinct body across the whole
+# tree, so the hundreds of MIT packages contribute a single MIT body here and
+# each merely points at it by id, rather than the file shipping the same text
+# hundreds of times over.
+licence_texts = {}
 # Scopes whose monorepo carries one licence at its root that some of its
 # published packages forget to declare individually.
 #
@@ -174,10 +231,17 @@ for path_str in sorted(lock.get("packages", {})):
 
     copyright_notice = copyright_from_text(licence_text) if licence_text else None
 
+    text_key = None
+    if licence_text:
+        text_key = text_id(licence_text)
+        if text_key is not None and text_key not in licence_texts:
+            licence_texts[text_key] = body_display(licence_text)
+
     by_name.setdefault(name, []).append({
         "version": info.get("version") or data.get("version") or "unknown",
         "licence": licence,
         "copyright": copyright_notice,
+        "text": text_key,
         "note": None
     })
 
@@ -218,6 +282,20 @@ lines = [
     " * Regenerate with `npm run generate-licences` after changing dependencies.",
     " */",
     "",
+    "/**",
+    " * The licence bodies, deduplicated and keyed by a content-derived id. A",
+    " * `Licence.text` is a key into this table; the body is the licence with its",
+    " * copyright lines lifted out (those are per package, in `copyright`), which is",
+    " * what lets every MIT package share one entry here instead of shipping the",
+    " * same paragraph hundreds of times.",
+    " */",
+    "export const LICENCE_TEXTS: Readonly<Record<string, string>> = {"
+]
+for text_key in sorted(licence_texts):
+    lines.append("    %s: %s," % (json.dumps(text_key), json.dumps(licence_texts[text_key])))
+lines.append("};")
+lines.append("")
+lines.extend([
     "export type Licence = {",
     "    name: string;",
     "    version: string;",
@@ -229,10 +307,15 @@ lines = [
     "     * itself did not say. Present only where the answer was inferred.",
     "     */",
     "    note?: string;",
+    "    /**",
+    "     * Key into `LICENCE_TEXTS` for the full body. Absent when the package",
+    "     * shipped no licence file to reproduce.",
+    "     */",
+    "    text?: string;",
     "};",
     "",
     "export const LICENCES: readonly Licence[] = ["
-]
+])
 for name in sorted(by_name):
     instances = by_name[name]
     # Multiple installed versions of one package are merged into a single row
@@ -243,12 +326,18 @@ for name in sorted(by_name):
     copyrights = sorted({
         instance["copyright"] for instance in instances if instance["copyright"]
     })
+    # One body per row: where merged instances point at different bodies (a rare
+    # licence change between two installed versions) the first by id wins, which
+    # is deterministic and, since they are overwhelmingly the same licence, the
+    # same text anyway.
+    texts = sorted({instance["text"] for instance in instances if instance.get("text")})
 
     entry_version = ", ".join(versions)
     entry_licence = " / ".join(licences)
     entry_copyright = "; ".join(copyrights) if copyrights else None
     notes = sorted({instance["note"] for instance in instances if instance.get("note")})
     entry_note = "; ".join(notes) if notes else None
+    entry_text = texts[0] if texts else None
 
     fields = [
         "name: %s" % json.dumps(name),
@@ -259,10 +348,13 @@ for name in sorted(by_name):
         fields.append("copyright: %s" % json.dumps(entry_copyright))
     if entry_note:
         fields.append("note: %s" % json.dumps(entry_note))
+    if entry_text:
+        fields.append("text: %s" % json.dumps(entry_text))
     lines.append("    {%s}," % ", ".join(fields))
 lines.append("];")
 lines.append("")
 
 pathlib.Path("constants/licences.ts").write_text("\n".join(lines))
-print("Wrote constants/licences.ts with %d packages." % len(by_name))
+print("Wrote constants/licences.ts with %d packages and %d distinct licence bodies."
+      % (len(by_name), len(licence_texts)))
 PYTHON
