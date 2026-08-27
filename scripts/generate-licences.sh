@@ -78,16 +78,32 @@ def licence_from_text(text):
     return None
 
 
-_COPYRIGHT_RE = re.compile(r"copyright\s*(?:\([cC]\)|©)?\s*[0-9][0-9, \-\u2013]*\s+.{0,120}", re.IGNORECASE)
+# A notice line: one that opens with the word "copyright" *and* carries what a
+# notice carries — a (c), a © or a year. The year/(c) test is not decoration.
+# Licence prose wraps, and a wrapped line can begin with the word: GPL-2.0 §1
+# breaks as "...keep intact all the\ncopyright notice and disclaimer of
+# warranty...". Matching on the word alone deleted that line from the body,
+# which is how "reproduced in full" quietly stopped being true.
+_COPYRIGHT_LINE_RE = re.compile(
+    r"^\s*copyright\b[^\n]*?(?:\([cC]\)|©|\b(?:19|20)[0-9]{2}\b)", re.IGNORECASE)
 
 
 def copyright_from_text(text):
-    """The first copyright line, for the notice MIT and BSD both require."""
-    match = _COPYRIGHT_RE.search(text)
-    if not match:
+    """Every notice in the file, for the attribution MIT and BSD both require.
+
+    All of them, not the first: the body has all of them lifted out of it (see
+    below), so a file naming two holders and keeping one would drop the other
+    from the screen entirely. Derived from the same predicate that does the
+    lifting, so the two cannot disagree about what a notice is."""
+    notices = []
+    for line in text.splitlines():
+        if _COPYRIGHT_LINE_RE.match(line):
+            notice = re.sub(r"\s+", " ", line.strip())
+            if notice not in notices:
+                notices.append(notice)
+    if not notices:
         return None
-    line = match.group(0).splitlines()[0].strip()
-    return re.sub(r"\s+", " ", line)
+    return "; ".join(notices)
 
 
 # A licence file's body is its text with the copyright lines lifted out. The
@@ -97,9 +113,6 @@ def copyright_from_text(text):
 # onto one entry. The permission notice, the BSD conditions and the warranty
 # disclaimer all live in the body and are what the licence actually obliges us
 # to reproduce; the copyright is kept per package, alongside it, in `copyright`.
-_COPYRIGHT_LINE_RE = re.compile(r"^\s*copyright\b", re.IGNORECASE)
-
-
 def _strip_copyright_lines(text):
     return [line for line in text.splitlines() if not _COPYRIGHT_LINE_RE.match(line)]
 

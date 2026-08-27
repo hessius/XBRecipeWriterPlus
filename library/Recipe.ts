@@ -171,7 +171,11 @@ class Recipe {
             this.createdAt = jsonRecipe.createdAt ?? 0;
             this.source = jsonRecipe.source ?? "manual";
             this.accentIndex = jsonRecipe.accentIndex;
-            this.xid = jsonRecipe.xid;
+            // Defaulted like the other strings above: `displayName()` and
+            // `hasName()` call `xid.trim()` on every row of the library, so a
+            // record without one would crash the list rather than read as
+            // unnamed.
+            this.xid = jsonRecipe.xid ?? "";
             if (jsonRecipe.dosage) {
                 this.dosage = jsonRecipe.dosage;
             }
