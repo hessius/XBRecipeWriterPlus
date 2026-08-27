@@ -97,11 +97,13 @@ export default function AboutScreen() {
                 <AboutSection title="Why only genuine cards work">
                     <AboutParagraph>
                         The first 32 bytes of every recipe card are a signature
-                        derived from that card&apos;s serial number. This app cannot
-                        compute one, so it never writes those bytes at all: it reads
-                        the signature to know the card, then starts writing the
-                        recipe after it, leaving the signature exactly as the
-                        manufacturer left it.
+                        derived from that card&apos;s serial number. This app
+                        cannot compute one, so it never writes those bytes at
+                        all. It reads them because the checksum at the end of a
+                        recipe is calculated over the signature as well as the
+                        recipe, then it begins writing at the byte after them,
+                        leaving the signature exactly as the manufacturer left
+                        it.
                     </AboutParagraph>
                     <AboutParagraph>
                         That is why a recipe can be written to a card that came with
@@ -111,8 +113,8 @@ export default function AboutScreen() {
 
                 <AboutSection title="Made by">
                     <AboutParagraph>
-                        XBRW++ is built by Jesper Hessius. Free, open source, and not
-                        for sale.
+                        XBRW++ is built by Jesper Hessius. Free, not for sale,
+                        and its source is public.
                     </AboutParagraph>
                     <AboutParagraph>
                         It stands on two people&apos;s work. terminaldisclaimer wrote
@@ -197,9 +199,9 @@ function AboutLink({label, url, onPress}: {label: string; url?: string; onPress?
                            }));
                        }
                    }}>
-            {/* Brand magenta rather than an underline. It is the app's own
-                colour and appears nowhere else on the screen, so it reads as
-                "this is a link" without dressing prose up as a hyperlink. */}
+            {/* Brand magenta rather than an underline: the only coloured thing
+                in a block of grey prose reads as "this is a link" without
+                dressing the prose itself up as a hyperlink. */}
             <Text fontSize={14} fontWeight="600" color={palette.brand}>
                 {label}
             </Text>

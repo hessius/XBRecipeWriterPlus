@@ -31,16 +31,12 @@ type Props = {
  * same BREW-deck card's, so a user crossing from the editor to settings meets
  * the same corner.
  */
-function keyOf(row: React.ReactNode, index: number): string {
-    return React.isValidElement(row) && row.key !== null ? row.key : `row-${index}`;
-}
-
 export default function SettingsSection({title, children}: Props) {
     // The divider lives here rather than on each row so that the first row has
     // nothing above it and the last nothing below it — the rounded corners stay
     // clean. `toArray` drops the `false`/`null` a conditional row leaves behind,
     // so a hidden row never leaves a doubled hairline.
-    const rows = React.Children.toArray(children).filter(Boolean);
+    const rows = React.Children.toArray(children);
 
     return (
         <YStack gap="$2" paddingTop="$4">
@@ -52,11 +48,12 @@ export default function SettingsSection({title, children}: Props) {
             )}
             <YStack backgroundColor={palette.surface} borderRadius="$5" overflow="hidden">
                 {rows.map((row, index) => (
-                    // Keyed by the child's own key rather than by index: a row
-                    // that appears or disappears shifts every index below it,
-                    // and React would then match each surviving row against the
-                    // slot of its neighbour and remount it.
-                    <React.Fragment key={keyOf(row, index)}>
+                    // Keyed by index, honestly. `toArray` hands out positional
+                    // keys unless a caller supplied one, and none does, so a
+                    // row appearing or disappearing does shift its neighbours.
+                    // Every row here is stateless, so that costs nothing; a row
+                    // that ever holds state must be given a key of its own.
+                    <React.Fragment key={index}>
                         {index > 0 && (
                             // A full-bleed hairline, the weight and colour of the
                             // borderBottom every FieldRow draws in the editor deck.
