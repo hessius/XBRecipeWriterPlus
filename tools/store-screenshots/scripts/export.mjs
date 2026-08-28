@@ -24,7 +24,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, "../out");
 const ORIGIN = process.env.ORIGIN ?? "http://localhost:3000";
 
-const SLIDE_IDS = ["hero", "import", "stages", "read", "privacy", "more"];
+const SLIDE_IDS = ["hero", "import", "stages", "read", "privacy"];
 
 const IPHONE_SIZES = [
     {label: "6.9", w: 1320, h: 2868},

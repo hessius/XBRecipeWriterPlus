@@ -65,7 +65,7 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "import", "stages", "read", "hero", "about"] as const;
+const SHOTS = ["home", "import", "stages", "read", "hero"] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -335,7 +335,7 @@ const slideHero: SlideDef = {
                         <br />
                         that came with
                         <br />
-                        your <span style={{color: C.brand}}>coffee</span>.
+                        <span style={{color: C.brand}}>your</span> coffee.
                     </>
                 }
             />
@@ -354,7 +354,9 @@ const slideHero: SlideDef = {
     )
 };
 
-/** 2 - Import. Phone pushed right and tilted, with a link chip floating in. */
+/** 2 - Import. A four-step spine down the left, phone entering from the right. */
+const IMPORT_STEPS = ["Paste a link.", "Write the card.", "Tap it.", "Brew it."];
+
 const slideImport: SlideDef = {
     id: "import",
     component: ({cW, cH}) => (
@@ -369,29 +371,92 @@ const slideImport: SlideDef = {
                 eyebrowColour={ACCENT.sky}
                 headline={
                     <>
-                        Paste a link.
+                        Link in.
                         <br />
-                        <span style={{color: ACCENT.sky}}>Brew it.</span>
+                        <span style={{color: ACCENT.sky}}>Coffee out.</span>
                     </>
                 }
             />
             <div
                 style={{
                     position: "absolute",
-                    top: cH * 0.3,
+                    top: cH * 0.235,
                     left: cW * 0.075,
                     zIndex: 6,
                     background: C.raised,
                     border: `${cW * 0.0022}px solid ${C.line}`,
                     borderRadius: cW * 0.028,
-                    padding: `${cW * 0.026}px ${cW * 0.036}px`,
+                    padding: `${cW * 0.022}px ${cW * 0.032}px`,
                     fontFamily: "var(--font-mono)",
-                    fontSize: cW * 0.029,
+                    fontSize: cW * 0.026,
                     color: C.dim,
                     transform: "rotate(-3deg)",
                     boxShadow: `0 ${cW * 0.02}px ${cW * 0.06}px rgba(0,0,0,0.7)`
                 }}>
                 xbloom.com/share/<span style={{color: ACCENT.sky}}>a1f9c2</span>
+            </div>
+            <div
+                style={{
+                    position: "absolute",
+                    top: cH * 0.345,
+                    left: cW * 0.085,
+                    width: cW * 0.44,
+                    zIndex: 6,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: cH * 0.028
+                }}>
+                {IMPORT_STEPS.map((step, i) => (
+                    <div key={step} style={{display: "flex", alignItems: "center", gap: cW * 0.035}}>
+                        <div
+                            style={{
+                                position: "relative",
+                                flexShrink: 0,
+                                width: cW * 0.072,
+                                height: cW * 0.072,
+                                borderRadius: cW * 0.018,
+                                background: i === IMPORT_STEPS.length - 1 ? ACCENT.sky : "transparent",
+                                border: `${cW * 0.004}px solid ${ACCENT.sky}`,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontFamily: "var(--font-mono)",
+                                fontWeight: 700,
+                                fontSize: cW * 0.032,
+                                color: i === IMPORT_STEPS.length - 1 ? C.ink : ACCENT.sky
+                            }}>
+                            {i + 1}
+                            {/* Dotted spine joining the markers, in the same dot
+                                language as the background screen and the icon. */}
+                            {i < IMPORT_STEPS.length - 1 && (
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: "100%",
+                                        left: "50%",
+                                        width: cW * 0.006,
+                                        height: cH * 0.028,
+                                        transform: "translateX(-50%)",
+                                        backgroundImage: `radial-gradient(${ACCENT.sky} 45%, transparent 46%)`,
+                                        backgroundSize: `${cW * 0.006}px ${cW * 0.014}px`,
+                                        opacity: 0.55
+                                    }}
+                                />
+                            )}
+                        </div>
+                        <div
+                            style={{
+                                fontFamily: "var(--font-inter)",
+                                fontWeight: 700,
+                                fontSize: cW * 0.042,
+                                letterSpacing: `-${cW * 0.0008}px`,
+                                color: i === IMPORT_STEPS.length - 1 ? C.text : C.dim,
+                                whiteSpace: "nowrap"
+                            }}>
+                            {step}
+                        </div>
+                    </div>
+                ))}
             </div>
             <Phone
                 src={img(shot("import"))}
@@ -399,9 +464,9 @@ const slideImport: SlideDef = {
                 style={{
                     position: "absolute",
                     bottom: 0,
-                    width: "78%",
-                    right: "-8%",
-                    transform: "translateY(6%) rotate(3deg)"
+                    width: "60%",
+                    right: "-14%",
+                    transform: "translateY(2%) rotate(3deg)"
                 }}
             />
         </div>
@@ -581,76 +646,7 @@ const slidePrivacy: SlideDef = {
     )
 };
 
-const PILLS = [
-    "Tea mode",
-    "Pour profiles",
-    "Backup & restore",
-    "Twelve card accents",
-    "Overflow protection",
-    "Share-sheet import",
-    "Open source",
-    "No ads, ever"
-];
-
-/** 6 - Trust and the long tail. */
-const slideMore: SlideDef = {
-    id: "more",
-    component: ({cW, cH}) => (
-        <div style={{...frame, background: C.surface}}>
-            <Glow cW={cW} colour={C.brand} x="50%" y="112%" size={1.6} opacity={0.4} />
-            <Glow cW={cW} colour={ACCENT.lilac} x="85%" y="8%" size={0.8} opacity={0.16} />
-            <DotScreen cW={cW} colour="rgba(255,255,255,0.08)" />
-            <div style={{position: "absolute", top: cW * 0.12, left: cW * 0.085, right: cW * 0.085, zIndex: 5}}>
-                <img
-                    src={img("/app-icon.png")}
-                    alt=""
-                    style={{
-                        width: cW * 0.16,
-                        height: cW * 0.16,
-                        borderRadius: cW * 0.036,
-                        marginBottom: cW * 0.05
-                    }}
-                    draggable={false}
-                />
-                <Headline cW={cW}>
-                    Free. Open.
-                    <br />
-                    <span style={{color: C.brand}}>Obsessive.</span>
-                </Headline>
-                <div style={{display: "flex", flexWrap: "wrap", gap: cW * 0.026, marginTop: cH * 0.04}}>
-                    {PILLS.map((p) => (
-                        <div
-                            key={p}
-                            style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: cW * 0.031,
-                                color: C.text,
-                                background: C.raised,
-                                border: `${cW * 0.002}px solid ${C.line}`,
-                                borderRadius: cW * 0.1,
-                                padding: `${cW * 0.021}px ${cW * 0.038}px`
-                            }}>
-                            {p}
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <Phone
-                src={img(shot("about"))}
-                alt="About XBRW++"
-                style={{
-                    position: "absolute",
-                    bottom: 0,
-                    width: "72%",
-                    left: "50%",
-                    transform: "translateX(-50%) translateY(48%)"
-                }}
-            />
-        </div>
-    )
-};
-
-const SLIDES: SlideDef[] = [slideHero, slideImport, slideStages, slideRead, slidePrivacy, slideMore];
+const SLIDES: SlideDef[] = [slideHero, slideImport, slideStages, slideRead, slidePrivacy];
 
 /* -------------------------------------------------------------- promo image */
 
@@ -711,7 +707,7 @@ const promoSlide: SlideDef = {
                         }}>
                         Rewrite the card that
                         <br />
-                        came with your <span style={{color: C.brand}}>coffee</span>.
+                        came with <span style={{color: C.brand}}>your</span> coffee.
                     </div>
                     <div
                         style={{

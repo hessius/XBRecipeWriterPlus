@@ -38,7 +38,7 @@ the dev server running, and it uses the Chrome already installed on the machine
 
 ## Screenshots
 
-Real device captures go in `public/screenshots/en/` as these six files:
+Real device captures go in `public/screenshots/en/` as these five files:
 
 | File | What to capture |
 | --- | --- |
@@ -47,7 +47,6 @@ Real device captures go in `public/screenshots/en/` as these six files:
 | `stages.png` | the stages deck with the pour profile visible |
 | `read.png` | the NFC scan overlay with the bloom part-filled - needs a real card |
 | `hero.png` | the top of the editor: dose, ratio, grind |
-| `about.png` | the About screen |
 
 Capture full-frame on a real device (status bar included, no cropping) at
 1206x2622 or larger. Do not crop: the `Phone` frame positions the screen with
@@ -59,15 +58,15 @@ real files.
 
 ## Slides
 
-Six slides, one idea each, in a deliberate arc:
+Five slides, one idea each, in a deliberate arc:
 
 1. **hero** - centred phone. The main promise.
-2. **import** - single phone offset right, URL chip overlapping it.
+2. **import** - a numbered four-step spine down the left, phone entering from the
+   right. The only slide that explains a sequence rather than a single idea.
 3. **stages** - two layered phones. Depth, and the only slide with a second device.
 4. **read** - centred phone behind contactless arcs. The NFC money shot.
 5. **privacy** - the contrast slide: inverted to magenta, no device, all type, set
    in Doto. The headline is lifted from the app's own About ticker.
-6. **more** - feature pills above a phone entering from the bottom.
 
 The dot screen running through every slide is the same motif as the app icon,
 the `Doto` face, the pour-profile fill and the splash.
