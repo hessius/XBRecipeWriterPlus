@@ -19,6 +19,10 @@ const extraEsmPackages = [
 module.exports = {
     preset: "jest-expo",
     testMatch: ["**/*.test.ts", "**/*.test.tsx"],
+    // `tools/` holds the store-screenshot generator, a separate Next.js app.
+    // Nothing in it is part of the phone app, and its dependency tree should
+    // never be resolved by this project's test run.
+    modulePathIgnorePatterns: ["<rootDir>/tools/"],
     setupFiles: [
         "react-native-gesture-handler/jestSetup",
         "<rootDir>/jest.setup.js"

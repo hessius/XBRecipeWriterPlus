@@ -45,6 +45,12 @@ module.exports = defineConfig([
             "android/*",
             ".expo/*",
             ".agents/*",
+            // The store-screenshot generator is a separate Next.js app with its
+            // own toolchain. It is also, by nature, made almost entirely of
+            // colour literals, so the palette rule below would reject every
+            // line of it for breaking a convention that only governs the phone
+            // app's own surfaces.
+            "tools/*",
             "expo-env.d.ts"
         ]
     },
