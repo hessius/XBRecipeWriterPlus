@@ -354,15 +354,22 @@ const slideHero: SlideDef = {
     )
 };
 
-/** 2 - Import. A four-step spine down the left, phone entering from the right. */
-const IMPORT_STEPS = ["Paste a link.", "Write the card.", "Tap it.", "Brew it."];
+/**
+ * 2 - Import. The four-step card flow, then the phone.
+ *
+ * The steps run horizontally rather than down a column so the phone can keep
+ * its full width: the interesting half of this capture is the middle band, and
+ * cropping horizontally to make room for a text column was eating into it. The
+ * phone bleeds off the bottom instead, which costs only the button rail.
+ */
+const IMPORT_STEPS = ["Paste a link", "Write the card", "Tap it", "Brew it"];
 
 const slideImport: SlideDef = {
     id: "import",
     component: ({cW, cH}) => (
         <div style={frame}>
-            <Glow cW={cW} colour={ACCENT.sky} x="80%" y="30%" size={1.3} opacity={0.3} />
-            <Glow cW={cW} colour={C.brand} x="5%" y="88%" size={1.0} opacity={0.28} />
+            <Glow cW={cW} colour={ACCENT.sky} x="78%" y="18%" size={1.2} opacity={0.28} />
+            <Glow cW={cW} colour={C.brand} x="5%" y="80%" size={1.0} opacity={0.26} />
             <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
             <Caption
                 cW={cW}
@@ -380,93 +387,67 @@ const slideImport: SlideDef = {
             <div
                 style={{
                     position: "absolute",
-                    top: cH * 0.235,
+                    top: cH * 0.205,
                     left: cW * 0.075,
-                    zIndex: 6,
-                    background: C.raised,
-                    border: `${cW * 0.0022}px solid ${C.line}`,
-                    borderRadius: cW * 0.028,
-                    padding: `${cW * 0.022}px ${cW * 0.032}px`,
-                    fontFamily: "var(--font-mono)",
-                    fontSize: cW * 0.026,
-                    color: C.dim,
-                    transform: "rotate(-3deg)",
-                    boxShadow: `0 ${cW * 0.02}px ${cW * 0.06}px rgba(0,0,0,0.7)`
-                }}>
-                xbloom.com/share/<span style={{color: ACCENT.sky}}>a1f9c2</span>
-            </div>
-            <div
-                style={{
-                    position: "absolute",
-                    top: cH * 0.345,
-                    left: cW * 0.085,
-                    width: cW * 0.44,
+                    right: cW * 0.075,
                     zIndex: 6,
                     display: "flex",
-                    flexDirection: "column",
-                    gap: cH * 0.028
+                    alignItems: "flex-start"
                 }}>
-                {IMPORT_STEPS.map((step, i) => (
-                    <div key={step} style={{display: "flex", alignItems: "center", gap: cW * 0.035}}>
+                {IMPORT_STEPS.map((step, i) => {
+                    const last = i === IMPORT_STEPS.length - 1;
+                    return (
                         <div
+                            key={step}
                             style={{
-                                position: "relative",
-                                flexShrink: 0,
-                                width: cW * 0.072,
-                                height: cW * 0.072,
-                                borderRadius: cW * 0.018,
-                                background: i === IMPORT_STEPS.length - 1 ? ACCENT.sky : "transparent",
-                                border: `${cW * 0.004}px solid ${ACCENT.sky}`,
+                                flex: 1,
                                 display: "flex",
+                                flexDirection: "column",
                                 alignItems: "center",
-                                justifyContent: "center",
-                                fontFamily: "var(--font-mono)",
-                                fontWeight: 700,
-                                fontSize: cW * 0.032,
-                                color: i === IMPORT_STEPS.length - 1 ? C.ink : ACCENT.sky
+                                gap: cW * 0.022
                             }}>
-                            {i + 1}
-                            {/* Dotted spine joining the markers, in the same dot
-                                language as the background screen and the icon. */}
-                            {i < IMPORT_STEPS.length - 1 && (
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        top: "100%",
-                                        left: "50%",
-                                        width: cW * 0.006,
-                                        height: cH * 0.028,
-                                        transform: "translateX(-50%)",
-                                        backgroundImage: `radial-gradient(${ACCENT.sky} 45%, transparent 46%)`,
-                                        backgroundSize: `${cW * 0.006}px ${cW * 0.014}px`,
-                                        opacity: 0.55
-                                    }}
-                                />
-                            )}
+                            <div
+                                style={{
+                                    width: cW * 0.066,
+                                    height: cW * 0.066,
+                                    borderRadius: cW * 0.017,
+                                    background: last ? ACCENT.sky : "transparent",
+                                    border: `${cW * 0.0038}px solid ${ACCENT.sky}`,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontFamily: "var(--font-mono)",
+                                    fontWeight: 700,
+                                    fontSize: cW * 0.03,
+                                    color: last ? C.ink : ACCENT.sky
+                                }}>
+                                {i + 1}
+                            </div>
+                            <div
+                                style={{
+                                    fontFamily: "var(--font-inter)",
+                                    fontWeight: 700,
+                                    fontSize: cW * 0.026,
+                                    letterSpacing: `-${cW * 0.0004}px`,
+                                    color: last ? C.text : C.dim,
+                                    textAlign: "center",
+                                    whiteSpace: "nowrap"
+                                }}>
+                                {step}
+                            </div>
                         </div>
-                        <div
-                            style={{
-                                fontFamily: "var(--font-inter)",
-                                fontWeight: 700,
-                                fontSize: cW * 0.042,
-                                letterSpacing: `-${cW * 0.0008}px`,
-                                color: i === IMPORT_STEPS.length - 1 ? C.text : C.dim,
-                                whiteSpace: "nowrap"
-                            }}>
-                            {step}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
             <Phone
                 src={img(shot("import"))}
                 alt="Import sheet"
                 style={{
                     position: "absolute",
-                    bottom: 0,
-                    width: "60%",
-                    right: "-14%",
-                    transform: "translateY(2%) rotate(3deg)"
+                    top: cH * 0.295,
+                    width: "94%",
+                    left: "50%",
+                    transform: "translateX(-50%)"
                 }}
             />
         </div>
@@ -563,10 +544,16 @@ const slideRead: SlideDef = {
                 alt="Scanning a card"
                 style={{
                     position: "absolute",
-                    bottom: 0,
-                    width: "84%",
+                    // Scaled up and anchored high so iOS's own scan sheet, which
+                    // owns the bottom 47% of that capture, falls off the canvas.
+                    // The app deliberately stages its bloom in the strip above
+                    // that sheet, so this shows the whole of what XBRW++ draws
+                    // without cropping the image or faking a screen that the
+                    // platform never actually renders.
+                    top: cH * 0.4,
+                    width: "128%",
                     left: "50%",
-                    transform: "translateX(-50%) translateY(8%)"
+                    transform: "translateX(-50%)"
                 }}
             />
         </div>
@@ -660,7 +647,7 @@ const promoSlide: SlideDef = {
     component: ({cW, cH}) => {
         const fan: {name: Shot; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
             {name: "stages", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
-            {name: "read", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
+            {name: "hero", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
             {name: "home", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
         ];
         const base = cH * 0.88 * MK_RATIO;
@@ -724,8 +711,9 @@ const promoSlide: SlideDef = {
                     <div
                         style={{
                             display: "flex",
-                            alignItems: "center",
-                            gap: cW * 0.016,
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            gap: cW * 0.012,
                             marginTop: cW * 0.03
                         }}>
                         <span
