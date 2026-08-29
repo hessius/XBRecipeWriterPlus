@@ -63,6 +63,28 @@ The working rule for this research:
   certainly omitted a licence by accident rather than intent, and asking is
   cheap.
 
+## Known disagreements between sources
+
+Found by cross-checking the files against each other. Listed here because a
+number that appears in three places with three values is the most likely way
+this research gets someone into trouble.
+
+**Grind size.** Our editor validates **40–80** (`library/cardLimits.ts`), since
+the card stores the value with a `GRIND_SIZE_OFFSET` of 40 and reserves 41 as
+the grinder-off sentinel. The cloud API documents **1–80** for the same field.
+One surveyed project cites **40–120**, which looks like a confusion with grinder
+RPM (60–120). **Build against our own range, not against a number lifted from
+this research.**
+
+**Command 40518.** Documented as both "start / confirm" and "coffee pause", and
+the sources disagree on which. `ble-protocol.md` records this deliberately
+rather than resolving it — the behaviour appears to depend on machine state, and
+it is the single most dangerous unknown in the protocol.
+
+**Weight and temperature unit commands.** The payload values are directly
+contradicted between two sources. Unresolved, and about a minute's work to
+settle on hardware.
+
 ## The files
 
 Start with `opportunities.md` — it is the synthesis, and the other files are its
