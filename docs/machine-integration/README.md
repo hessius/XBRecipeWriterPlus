@@ -69,12 +69,21 @@ Found by cross-checking the files against each other. Listed here because a
 number that appears in three places with three values is the most likely way
 this research gets someone into trouble.
 
-**Grind size.** Our editor validates **40–80** (`library/cardLimits.ts`), since
-the card stores the value with a `GRIND_SIZE_OFFSET` of 40 and reserves 41 as
-the grinder-off sentinel. The cloud API documents **1–80** for the same field.
-One surveyed project cites **40–120**, which looks like a confusion with grinder
-RPM (60–120). **Build against our own range, not against a number lifted from
-this research.**
+**Grind size — unresolved, and it may be a live bug.** Our editor validates
+**40–80** (`library/cardLimits.ts`); the official app offers **1–80**, with
+1–15 espresso, 16–30 Aeropress, 31–55 pourover, 56–80 french press and cold
+brew. We cannot express the finer half at all, because the card byte is written
+as `grindSize - 40` and would go negative below 40.
+
+That leaves two readings of the card format — an offset of 40 with `41` meaning
+grinder-off, or a raw 1–80 byte with **81** meaning grinder-off. Both are
+internally consistent, they disagree about what genuine cards contain, and our
+own round-trip tests cannot tell them apart because `cardFixtures.ts` shares the
+assumption. **Do not widen the range before settling it — see issue #68**, which
+sets out a cheap discriminating experiment.
+
+Note the user-facing grinder-off value is **81** (`GRIND_SIZE_OFFSET` 40 +
+`GRINDER_OFF` 41), not 41. 41 is the byte.
 
 **Command 40518.** Documented as both "start / confirm" and "coffee pause", and
 the sources disagree on which. `ble-protocol.md` records this deliberately
