@@ -90,3 +90,133 @@ export function buildType2(cmd: number, payload: Uint8Array): Uint8Array {
 export function ascii(text: string): Uint8Array {
     return Uint8Array.from(text, (c) => c.charCodeAt(0) & 0xFF);
 }
+
+/** The states the machine reports in a `0x57` frame. */
+export const MACHINE_STATE = {
+    IDLE:             0x01,
+    NO_WATER:         0x0C,
+    NO_BEANS:         0x0F,
+    BREWING:          0x10,
+    LOADING:          0x1D,
+    AWAITING_CONFIRM: 0x1E,
+    ARMED:            0x1F,
+    STARTING:         0x22,
+    BREWING_SUB:      0x23,
+    READY:            0x24,
+    BREWING_ALT:      0x3B,
+    COMPLETE:         0x41,
+    SAVING_SLOTS:     0x43,
+    SLOTS_SAVED:      0x25
+} as const;
+
+/** Notification codes the brew state machine reacts to. */
+export const EVENT = {
+    COFFEE_STARTING:  40502,
+    BREWER_START:     40506,
+    GRINDER_STOP:     40507,
+    POUR_START:       40510,
+    BREWER_STOP:      40511,
+    ENJOY:            40512,
+    ENJOY_2:          40513,
+    ERROR_IDLING:     40517,
+    ERROR_NO_WATER:   40522,
+    ERROR_GEAR:       8203,
+    ERROR_DOSE_WATER: 8204,
+    MACHINE_INFO:     40521,
+    HANDSHAKE_ACK:    8100
+} as const;
+
+export type MachineInfo = {
+    kind: "info";
+    serial: string;
+    model: string;
+    firmware: string;
+    waterEnough: boolean;
+    waterFeed: "tank" | "tap";
+    grindSize: number;
+    mode: "PRO" | "EASY";
+};
+
+export type Notification =
+    | {kind: "status"; state: number}
+    | {kind: "event"; code: number; value?: number}
+    | {kind: "waterWeight"; grams: number}
+    | {kind: "cupWeight"; grams: number}
+    | MachineInfo
+    | {kind: "unknown"; raw: Uint8Array};
+
+const NOTIFY_HEADER = [0x58, 0x02, 0x07];
+const PAYLOAD_START = 10;
+
+function text(bytes: Uint8Array, from: number, to: number): string {
+    let out = "";
+    for (let i = from; i <= to && i < bytes.length; i++) {
+        const byte = bytes[i];
+        // 0xFF is the machine's blank filler; a 0 terminates the string.
+        if (byte === 0 || byte === 0xFF) break;
+        out += String.fromCharCode(byte);
+    }
+    return out;
+}
+
+function readInfo(payload: Uint8Array): MachineInfo {
+    const modeHex = text(payload, 51, 58);
+    return {
+        kind: "info",
+        serial:      text(payload, 0, 12),
+        model:       text(payload, 13, 18),
+        firmware:    text(payload, 19, 28),
+        waterEnough: payload[33] === 1,
+        waterFeed:   payload[36] === 1 ? "tap" : "tank",
+        // The raw byte is offset by 30, and the machine never reports below 1.
+        grindSize:   Math.max((payload[37] ?? 30) - 30, 1),
+        mode:        modeHex === "91327856" ? "EASY" : "PRO"
+    };
+}
+
+/**
+ * Read one device→app frame.
+ *
+ * Anything unrecognised comes back as `unknown` with its bytes intact rather
+ * than throwing. The console renders those verbatim, and a frame we cannot
+ * read on somebody else's firmware is the single most useful thing they can
+ * send us — so it must survive the parser, not die in it.
+ */
+export function parseNotification(bytes: Uint8Array): Notification {
+    const unknown = {kind: "unknown", raw: bytes} as const;
+
+    if (bytes.length < 12) return unknown;
+    if (NOTIFY_HEADER.some((b, i) => bytes[i] !== b)) return unknown;
+
+    const crc = crc16Kermit(bytes.subarray(0, bytes.length - 2));
+    const carried = bytes[bytes.length - 2] | (bytes[bytes.length - 1] << 8);
+    if (crc !== carried) return unknown;
+
+    const type = bytes[3];
+    const sub = bytes[4];
+    const payload = bytes.subarray(PAYLOAD_START, bytes.length - 2);
+
+    if (type === 0x57) {
+        return {kind: "status", state: payload[0] ?? 0};
+    }
+
+    if (type === 0x4B || type === 0x15) {
+        if (payload.length < 4) return unknown;
+        const view = new DataView(payload.buffer, payload.byteOffset, 4);
+        const value = view.getFloat32(0, true);
+        // The water stream is milligrams; the cup stream is already grams.
+        return type === 0x4B
+            ? {kind: "waterWeight", grams: value / 1000}
+            : {kind: "cupWeight", grams: value};
+    }
+
+    const code = type | (sub << 8);
+
+    if (code === EVENT.MACHINE_INFO && payload.length >= 42) {
+        return readInfo(payload);
+    }
+
+    return payload.length > 0
+        ? {kind: "event", code, value: payload[0]}
+        : {kind: "event", code};
+}

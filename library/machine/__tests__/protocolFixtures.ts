@@ -61,3 +61,40 @@ export function type2(cmd: number, payload: number[]): number[] {
 export function hex(bytes: ArrayLike<number>): string {
     return Array.from(bytes, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join("");
 }
+
+/**
+ * A device→app frame: `58 02 07 [type] [sub] [len u32 LE] C1 [payload] [crc]`.
+ *
+ * Built here rather than borrowed from the parser, for the same reason as the
+ * command frames: a test that builds its input with the code under test is a
+ * test of nothing.
+ */
+export function notification(type: number, sub: number, payload: number[]): number[] {
+    const length = 12 + payload.length;
+    const head = [
+        0x58, 0x02, 0x07,
+        type & 0xFF, sub & 0xFF,
+        ...littleEndian32(length),
+        0xC1,
+        ...payload
+    ];
+    const crc = kermit(head);
+    return [...head, crc & 0xFF, (crc >> 8) & 0xFF];
+}
+
+/** A status frame carrying one machine state byte. */
+export function status(state: number): number[] {
+    return notification(0x57, 0x00, [state]);
+}
+
+/** An event frame: the type/sub pair is the command code, little-endian. */
+export function event(code: number): number[] {
+    return notification(code & 0xFF, (code >> 8) & 0xFF, []);
+}
+
+/** A float32 little-endian, as four bytes. */
+export function float32(value: number): number[] {
+    const buffer = new ArrayBuffer(4);
+    new DataView(buffer).setFloat32(0, value, true);
+    return Array.from(new Uint8Array(buffer));
+}
