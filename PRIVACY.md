@@ -59,6 +59,15 @@ device, at the moment you ask for a read or a write. Card contents are handled
 on device. NFC is never used for location, presence, or any background
 activity.
 
+**Bluetooth.** Used only to talk to an xBloom machine in the room with you, at
+the moment you ask for a brew or open the machine console. The link goes to the
+machine and nowhere else: no brew, no recipe and no machine identifier is sent
+over the network, and nothing about a brew is recorded off your device. The
+machine's identifier is stored on your device so a later session can reconnect
+without scanning, and "Forget this machine" in Settings deletes it. XBRW++
+declares no Bluetooth background mode, so the link is dropped when the app
+leaves the foreground.
+
 **Clipboard.** Read only in direct response to a paste action you take, in
 order to pick up an xBloom link. The app does not read the clipboard in the
 background or on launch.

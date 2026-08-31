@@ -258,12 +258,14 @@ brAzzi64: 4-byte LE length at offset 5. Janczykkkko/HomoLand: 2-byte LE length a
 - **HomoLand:** Calls the field `COFFEE_CUP_GEOMETRY_COMPAT` with constant `(110.0, 90.0)` for ALL coffee recipes, explicitly stating "do not change without a controlled hardware A/B." The comment notes "APK 2.2.2 calls this APP_SET_CUP and treats both floats as cup geometry."
 - **saya6k brewing.py:** Uses `(80.0–90.0, 40.0)` for coffee brews (grind), `(80.0–90.0, 0.0)` for no-grind.
 - **Assessment:** The three implementations send materially different values. The machine reportedly brews correctly regardless (brAzzi64). The field's exact semantics — cup geometry, weight range, or something else — remain unverified. **Do not trust any single value set blindly.**
+- **XBRW++ (M3, 2026-09-01):** omits 8104 entirely. Three implementations, three value sets, unknown semantics, and the machine reportedly brews without it. Sending a value we cannot reason about, to a field we cannot name, is worse than sending nothing. Reachable from the machine console for anyone who wants to settle it.
 
 ### C4 — Command 40518 (0x9E46): Start vs Pause `single-source conflict`
 - **brAzzi64 / Janczykkkko:** Treat this as the post-commit "start" frame (`build_start()`), sent ONLY when the machine stalls in awaiting-confirm. Janczykkkko warns: "sending it into a running brew aborts it back to armed — verified on hardware."
 - **saya6k brewing.py (comment):** "Third-party notes (HomoLand/Janczykkkko) claim 40518 acts as 'start' from awaiting-confirm on their unit; tried live on this machine 2026-07-19 and it bounced the state back to `recipe_loaded` instead of starting." saya6k therefore does NOT send 40518 at all and instead waits for the machine to auto-start or prompts the user.
 - **HomoLand protocol.py:** Names 40518 as `CMD_COFFEE_PAUSE` but also documents it as `START_OPCODE = 0x46`.
 - **Assessment: HIGH-RISK CONTRADICTION.** The same command code may behave differently across units/firmware. On one machine it starts the brew; on another it sends the brew back to armed. **Do not send 40518 unconditionally after commit.** Safe strategy: observe state, send only if machine is in awaiting_confirm AND has been confirmed stable there for several seconds.
+- **XBRW++ (M3, 2026-09-01):** the brew path never sends 40518 under any condition. When the machine parks in awaiting-confirm the app asks the user to press the button on the machine, which is a thing they are standing next to anyway. A regression test asserts the frame is absent and has been red-green verified against the guard. The command remains reachable from the machine console behind a confirmation that shows this disagreement verbatim — deliberately, because settling it needs somebody to send it on purpose and watch.
 
 ### C5 — Command 8005 (Weight Unit) Payload Values
 - **brAzzi64 PROTOCOL.md:** `0=g, 1=oz, 2=ml`
@@ -304,6 +306,7 @@ Janczykkkko uses `round(total/dose*10)`. saya6k uses `math.ceil(ratio * 10)`, cl
 - **HomoLand (tea.py):** Pause bytes split as `((-remainder)&0xFF, (minutes*32)&0xFF)`.
 - **saya6k (brewing.py):** Uses a soak byte in position [1] (positive, scaled by 0.6 = firmware runs it at ~1.67×). Byte [0] = 0 (no inter-pour wait). States the 0.6 scale is "approximate."
 - **Assessment:** Fundamentally different encodings. Neither is hardware-confirmed for multi-steep tea. Tea protocol is the least-verified area.
+- **XBRW++ (M3, 2026-09-01):** ships **both**, selected by the `teaSteepEncoding` setting. HomoLand's is the default on provenance; saya6k's own note calls its 0.6 scale "approximate". The console offers the switch. One stopwatched sixty-second steep on real hardware settles this, and the wrong choice produces no error at all — the tea simply steeps for the wrong length, which is why the app could not just pick one and hope.
 
 ---
 

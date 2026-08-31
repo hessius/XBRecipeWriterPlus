@@ -125,6 +125,14 @@ export default function AboutScreen() {
                         leave both alone and XBRW++ sends nothing anywhere.
                         A backup goes only where you send it.
                     </AboutParagraph>
+                    <AboutParagraph>
+                        Brewing uses Bluetooth to reach the machine in the room
+                        with you, and it goes no further than that. Nothing
+                        about a brew is sent over the network or recorded off
+                        this phone. The machine&apos;s identifier is kept here so
+                        the next brew reconnects without scanning, and Forget
+                        this machine deletes it.
+                    </AboutParagraph>
                 </AboutSection>
 
                 <AboutSection title="Why only genuine cards work">
