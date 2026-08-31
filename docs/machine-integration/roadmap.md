@@ -99,8 +99,8 @@ both the guidance and that edge case.
 | Issue | |
 |---|---|
 | #57 | Mint an xBloom share link for a recipe |
-| *new* | Service-account function: abuse control and graceful degradation |
-| *new* | Privacy amendment (see Trust) |
+| #69 | Service-account function: abuse control and graceful degradation |
+| #70 | Amend the privacy claim for sharing |
 
 The low-hanging fruit, and the first thing that makes XBRW++ useful to someone
 who does not own it yet. There is no anonymous mint API: creating a share link
@@ -135,7 +135,7 @@ cloud-side, which is why #62 is a small feature rather than a library one.
 | Issue | |
 |---|---|
 | #63 | Live brew telemetry over BLE |
-| *new* | iOS Live Activity for an in-progress brew |
+| #71 | iOS Live Activity for an in-progress brew |
 
 Depends on M3. The Live Activity is something the official app does not do: your
 brew's progress on the lock screen, and a notification when it finishes.
@@ -149,8 +149,8 @@ treats that gap as a stall will report a failure that did not happen.
 | Issue | |
 |---|---|
 | #55 | Post-brew notes and rating *(moved out of deferred)* |
-| *new* | Tags, filtering and search |
-| *new* | Browse the community recipe hub |
+| #72 | Library management: tags, filtering and search |
+| #73 | Browse the community recipe hub |
 
 All local, all offline, all available to someone who never logs in. This is the
 milestone that improves on the official app rather than catching up to it —
@@ -170,11 +170,11 @@ doing it once rather than twice.
 
 | Issue | |
 |---|---|
+| #74 | Spike: what does xBloom actually consider "your library"? |
+| #75 | Keychain-backed xBloom authentication |
 | #58 | Import your xBloom cloud library |
 | #59 | Push edited recipes back to the xBloom cloud library |
-| *new* | Keychain-backed xBloom authentication |
-| *new* | Spike: what does xBloom actually consider "your library"? |
-| *new* | "What leaves this device" screen |
+| #76 | "What leaves this device" screen |
 
 Resolves the user-credential half of #56.
 
