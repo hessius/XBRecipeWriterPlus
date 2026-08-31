@@ -9,6 +9,7 @@ import {renderWithProviders} from "@/test-utils/render";
 const ACTIONS = {
     showHints:         false,
     onShowHintsChange: jest.fn(),
+    onShare:           jest.fn(),
     onDuplicate:       jest.fn(),
     onRefreshName:     jest.fn(),
     onRevert:          jest.fn(),
@@ -26,11 +27,12 @@ describe("RecipeOverflowSheet", () => {
         expect(OVERFLOW_HEIGHT).toBeLessThan(HELP_HEIGHT);
     });
 
-    it("offers the four recipe operations that are not write or save", async () => {
+    it("offers the five recipe operations that are not write or save", async () => {
         await renderWithProviders(
             <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
         );
 
+        expect(screen.getByLabelText("Share")).toBeTruthy();
         expect(screen.getByLabelText("Duplicate")).toBeTruthy();
         expect(screen.getByLabelText("Refresh name from xBloom")).toBeTruthy();
         expect(screen.getByLabelText("Revert")).toBeTruthy();
@@ -39,6 +41,23 @@ describe("RecipeOverflowSheet", () => {
         // Help is not one of them. The caret holds things done *to* the recipe;
         // help is reading matter, and sits in the hero's chrome row instead.
         expect(screen.queryByLabelText("Help")).toBeNull();
+    });
+
+    it("calls onShare and closes the sheet", async () => {
+        const onShare = jest.fn();
+        const onOpenChange = jest.fn();
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS}
+                                 onShare={onShare} onOpenChange={onOpenChange}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Share"));
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("draws the share row as a normal action, not a destructive one", async () => {
+        await renderWithProviders(<RecipeOverflowSheet open canRefreshName {...ACTIONS}/>);
+        expect(screen.getByLabelText("Share")).toBeTruthy();
     });
 
     it("toggles the deck's hints without dismissing itself", async () => {

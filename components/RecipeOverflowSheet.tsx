@@ -11,11 +11,11 @@ import type {DotIconName} from "@/constants/dotIcons";
 /**
  * How much of the screen the more menu takes.
  *
- * It holds one switch and four rows and nothing that scrolls, so it is sized
- * to them. At the house default it stood most of the way up the screen with
- * two thirds of it empty, which read as a sheet that had failed to load.
+ * It holds one switch and five rows and nothing that scrolls, so it is sized to
+ * them. At the house default it stood most of the way up the screen with two
+ * thirds of it empty, which read as a sheet that had failed to load.
  */
-export const OVERFLOW_HEIGHT = 42;
+export const OVERFLOW_HEIGHT = 48;
 
 type Props = {
     open: boolean;
@@ -25,6 +25,7 @@ type Props = {
     /** Whether the deck draws its one-line hints. */
     showHints: boolean;
     onShowHintsChange: (show: boolean) => void;
+    onShare?: () => void;
     onDuplicate: () => void;
     onRefreshName: () => void;
     onRevert: () => void;
@@ -40,7 +41,7 @@ type Props = {
  */
 export default function RecipeOverflowSheet({
     open, canRefreshName, onOpenChange, showHints, onShowHintsChange,
-    onDuplicate, onRefreshName, onRevert, onDelete
+    onShare = noop, onDuplicate, onRefreshName, onRevert, onDelete
 }: Props) {
     function pick(action: () => void) {
         onOpenChange(false);
@@ -109,6 +110,9 @@ export default function RecipeOverflowSheet({
                 <YStack marginTop="$1" paddingTop="$2"
                         borderTopWidth={1} borderTopColor={palette.line}/>
 
+                {row("Share", "share", onShare, {
+                    hint: "Creates a link that opens this recipe in the xBloom app."
+                })}
                 {row("Duplicate", "duplicate", onDuplicate)}
                 {/* Spoken in full, but captioned short: the other four rows are
                     one-word captions, and a sentence set in uppercase Doto
@@ -132,3 +136,5 @@ export default function RecipeOverflowSheet({
         </XbrwSheet>
     );
 }
+
+function noop() {}
