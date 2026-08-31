@@ -1,4 +1,5 @@
 import {DETAILED_TOPICS, RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
+import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import {CELSIUS_RANGE, displayRange} from "@/library/units";
 
 describe("the editor's help copy", () => {
@@ -48,6 +49,20 @@ describe("the editor's help copy", () => {
         expect(RECIPE_HELP.temperature.hint).toContain(String(CELSIUS_RANGE.max));
         expect(RECIPE_HELP.temperature.hint).toContain(String(fahrenheit.min));
         expect(RECIPE_HELP.temperature.hint).toContain(String(fahrenheit.max));
+    });
+
+    it("describes the grind bands the lookup actually returns", () => {
+        // The prose names 55/56 as the pourover-to-French-press boundary, which
+        // `grindBands` also decides. Two places holding the same number is how
+        // the row label and the help sheet come to disagree while every other
+        // test still passes.
+        const detail = RECIPE_HELP.grindSize.detail ?? "";
+
+        expect(grindBand(55)?.label).toBe("Pourover");
+        expect(grindBand(56)?.label).toBe("French press");
+        expect(detail).toContain(`${CARD_GRIND_MIN} to 55`);
+        expect(detail).toContain("56 to 80");
+        expect(detail).toContain(String(CARD_GRIND_MIN));
     });
 
     it("offers changing the dose or ratio as an alternative to rescaling stage volumes", () => {

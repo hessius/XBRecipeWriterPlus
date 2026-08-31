@@ -50,6 +50,16 @@ const GRINDER_OPTIONS = [
     {value: "0", label: "OFF"}
 ] as const;
 
+/**
+ * The touch target for a banner's action.
+ *
+ * Both banner actions are a single line of dot-matrix text, roughly eleven
+ * points tall, which is well under the 44 the HIG asks for. The height is
+ * padding rather than `hitSlop` for the reason `HomeHeader` records — and here
+ * it costs nothing, because both banners are already taller than 44.
+ */
+const BANNER_ACTION = {minHeight: 44, justifyContent: "center"} as const;
+
 type TextFieldRowProps = {
     topic: HelpTopic;
     label: string;
@@ -252,6 +262,7 @@ function BrewDeck({
                     </YStack>
                     <Pressable accessibilityRole="button"
                                accessibilityLabel={`Set grind size to ${CARD_GRIND_MIN}`}
+                               style={BANNER_ACTION}
                                onPress={coarsenGrindToMinimum}>
                         <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                        color={accent}>
@@ -267,8 +278,25 @@ function BrewDeck({
                 <FieldRow topic="grindSize"
                       note={grindBand(recipe.grindSize)?.label}
                       showHint={showHint}>
+                    {/* `unit` is spoken, not drawn (see #77) -- which is exactly
+                        what is wanted here. The band is already on the label
+                        visually, but a screen reader adjusting the stepper hears
+                        only the number, so the meaning changing from Pourover to
+                        French press at 56 would pass silently. Anyone fixing #77
+                        by *drawing* units must skip this row, or it will read
+                        "GRIND SIZE · POUROVER" beside "55 Pourover". */}
                     <Stepper label="Grind size" value={recipe.grindSize}
-                             min={40} max={80} step={1}
+                             unit={grindBand(recipe.grindSize)?.label}
+                             // The floor is the card's, except for a recipe that
+                             // already sits below it. With a fixed floor of 40 an
+                             // imported espresso grind of 12 made "decrease"
+                             // *raise* the value to 40 -- the control clamped
+                             // upward and silently changed a number nobody asked
+                             // it to change, and announced a value below its own
+                             // advertised minimum. Below the floor the value is
+                             // its own minimum, so decrease does nothing and the
+                             // banner's SET TO 40 stays the only way up.
+                             min={Math.min(CARD_GRIND_MIN, recipe.grindSize)} max={80} step={1}
                              onChange={(value) => dispatch(RECIPE_LABELS.GRIND_SIZE, String(value))}/>
                 </FieldRow>
             )}
@@ -464,6 +492,7 @@ function StagesDeck({
                         </Text>
                     </YStack>
                     <Pressable accessibilityRole="button" accessibilityLabel="Auto fix"
+                               style={BANNER_ACTION}
                                onPress={autoAdjustPourVolumes}>
                         <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                        color={accent}>

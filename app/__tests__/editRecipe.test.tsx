@@ -255,7 +255,7 @@ describe("the editor", () => {
         await fireEvent.press(screen.getByLabelText("Increase Grind size"));
 
         expect(screen.getByLabelText(/^Grind size, /).props.accessibilityLabel)
-            .toBe("Grind size, 62");
+            .toBe("Grind size, 62 French press");
     });
 
     it("puts the rest behind the caret", async () => {
@@ -742,7 +742,7 @@ describe("grind-too-fine banner", () => {
 
         expect(screen.queryByTestId("grind-too-fine")).toBeNull();
         // The stepper should now reflect the raised value.
-        expect(screen.getByLabelText(/^Grind size, 40$/)).toBeTruthy();
+        expect(screen.getByLabelText(/^Grind size, 40 /)).toBeTruthy();
     });
 
     it("shows no banner for a normal in-range grind", async () => {
@@ -758,5 +758,25 @@ describe("grind-too-fine banner", () => {
         await renderEditor({grindSize: 81, grinder: false});
 
         expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+    });
+
+    it("does not let the stepper raise a below-minimum grind through Decrease", async () => {
+        // With a fixed floor of 40, `stepped()` clamped 11 *up* to 40, so the
+        // control announced as Decrease raised the value -- and the stepper
+        // advertised a minimum of 40 while reporting 12.
+        await renderEditor({grindSize: 12});
+
+        await fireEvent.press(screen.getByLabelText("Decrease Grind size"));
+
+        expect(screen.getByLabelText(/^Grind size, 12/)).toBeTruthy();
+        expect(screen.getByTestId("grind-too-fine")).toBeTruthy();
+    });
+
+    it("speaks the band with the value, because the label is only visual", async () => {
+        // A screen reader adjusting the stepper hears the number and nothing
+        // else, so the meaning changing at 56 would otherwise pass silently.
+        await renderEditor({grindSize: 60});
+
+        expect(screen.getByLabelText("Grind size, 60 French press")).toBeTruthy();
     });
 });

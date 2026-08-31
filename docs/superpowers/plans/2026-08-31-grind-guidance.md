@@ -682,9 +682,9 @@ $(printf 'Stating the range does not tell someone how an imported recipe came\nt
 
 - [ ] **Step 1: Run the whole gate**
 
-Run: `npm run typecheck && npm run lint && npm test`
+Run: `npm run typecheck && npm run lint && npm test && npx expo-doctor`
 
-Expected: all three green. This is what CI runs on the PR.
+Expected: all four green. This is what CI runs on the PR — `.github/workflows/ci.yml` treats Expo Doctor as a hard failure, so leaving it out here would let the plan pass locally and fail on the PR.
 
 - [ ] **Step 2: Fix anything that fell out**
 
