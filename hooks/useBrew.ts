@@ -39,12 +39,8 @@ export function useBrew(injected?: Machine): Brewer {
     // `library/` never has to reach up into `hooks/` to read a preference.
     useEffect(() => {
         // `useSetting` widens the stored union to `string`, so it is narrowed
-        // back to the encoding the machine expects on the way in. The machine is
-        // a long-lived singleton whose field is deliberately set from the
-        // preference; the compiler's immutability rule cannot see that the value
-        // is owned rather than returned, so it is silenced here on purpose.
-        // eslint-disable-next-line react-hooks/immutability
-        machine.teaSteepEncoding = teaSteepEncoding as TeaSteepEncoding;
+        // back to the encoding the machine expects on the way in.
+        machine.setTeaSteepEncoding(teaSteepEncoding as TeaSteepEncoding);
     }, [machine, teaSteepEncoding]);
 
     async function brew(recipe: Recipe): Promise<void> {

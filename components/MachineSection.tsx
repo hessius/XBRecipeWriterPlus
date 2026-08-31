@@ -6,7 +6,7 @@ import {Text, XStack, YStack} from "tamagui";
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsSection from "@/components/SettingsSection";
 import {palette} from "@/constants/colors";
-import useMachine from "@/hooks/useMachine";
+import {useMachine} from "@/hooks/useMachine";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;

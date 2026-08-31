@@ -81,7 +81,21 @@ export default class Machine {
      * dependency: `library/` does not reach up into `hooks/`. `useBrew` sets it
      * from the console's switch.
      */
-    public teaSteepEncoding: TeaSteepEncoding = "homoland";
+    private steepEncoding: TeaSteepEncoding = "homoland";
+
+    get teaSteepEncoding(): TeaSteepEncoding {
+        return this.steepEncoding;
+    }
+
+    /**
+     * A method rather than a settable field so that callers in `hooks/` are
+     * telling the machine something rather than mutating a value the React
+     * Compiler believes it owns.
+     */
+    setTeaSteepEncoding(encoding: TeaSteepEncoding): void {
+        this.steepEncoding = encoding;
+    }
+
     private phaseListeners = new Set<(phase: BrewPhase) => void>();
     private pourCount = 0;
     private brewing = false;
