@@ -157,3 +157,26 @@ it("hands the press upward", async () => {
 
     expect(onOpen).toHaveBeenCalledTimes(1);
 });
+
+describe("ImportResult grind notice", () => {
+    it("says nothing when the grind fits on a card", async () => {
+        const found = preview();
+        found.recipe.grindSize = 50;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
+
+    it("names the band and frames it as a card limit, not a bad recipe", async () => {
+        // The cloud keeps grind on the grinder's 1-80 scale, so this is a
+        // value a real import can carry.
+        const found = preview();
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.getByTestId("import-grind-notice")).toBeTruthy();
+        expect(screen.getByText(/Aeropress/)).toBeTruthy();
+    });
+});
