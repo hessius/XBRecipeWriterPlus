@@ -195,15 +195,113 @@ There is **no separate "mint share link" API call** — the link is constructed 
 
 ### ID format
 
-The share link `?id=` parameter is `btoa(String(tableId))` where `tableId` is a plain integer returned by the create/list APIs. Examples:
+**⚠️ Superseded — see "Verified by live spike" below. The `btoa(String(tableId))` claim is WRONG.**
+
+The community sources claim the share link `?id=` parameter is `btoa(String(tableId))` where
+`tableId` is a plain integer returned by the create/list APIs. Examples:
 - `tableId = 12345` → `btoa("12345")` = `"MTIzNDU="` → `?id=MTIzNDU%3D`
 
 `observed-in-code`: pourpilot `client.ts`, denull0 `index.ts`. Cross-referenced with XBRW++ `XBloomRecipe.ts` which parses this format on import.
+
+A live test against the API disproved this. The parameter is an opaque 16-byte token, not a
+base64 integer. Constructing the link from `tableId` yields
+`{"info":"The selected recipe does not exist","result":"fail"}`.
 
 ### Tea recipes
 
 Tea recipes use the **same** `tuRecipeAdd.tuhtml` endpoint but with `cupType: 4`, `isSetGrinderSize: 2` (grinder off), `grinderSize: 50`, `rpm: 60`. Pour objects use `pausing` as the steep duration (up to 360s).  
 `observed-in-code`: denull0 `index.ts:createTeaRecipe()`.
+
+---
+
+## C-bis. Verified by live spike, 2026-08-31
+
+Everything in this subsection is `verified` — it comes from real authenticated calls made
+against `client-api.xbloom.com` from the XBRW++ service account (`XBRW++`, member id 159810),
+not from reading someone else's client. Where it contradicts section C above, **this wins**.
+
+### The mint sequence actually needs three calls, not two
+
+1. `POST tMemberLogin.thtml` — **plain JSON**, unencrypted. Confirmed. Response:
+
+   ```json
+   {"result":"success","info":"操作成功",
+    "member":{"tableId":159810,"theName":"XBRW++","email":"…"},
+    "token":"IYJB8HdLhdo%2FYDuPJpd0gg…","projectToken":"…","projectRefreshToken":"…"}
+   ```
+
+   The token contains percent-escapes (`%2F`, `%2B`) as literal characters of the string. It is
+   **not** URL-encoded on the wire — do not decode it. Send it back verbatim.
+
+2. `POST tuRecipeAdd.tuhtml` — RSA-encrypted body as described above. Confirmed working on the
+   first attempt. Response:
+
+   ```json
+   {"result":"success","info":"Opération réussie","tableId":1353046,"theVersion":1788181612471}
+   ```
+
+   **The response does not contain the share link.** This is the reason for step 3.
+
+3. `POST tuMyTeaRecipeCreated.tuhtml` (encrypted, `pageNumber: 1`, `countPerPage: N`,
+   `adaptedModel: 1`) — list the account's recipes newest-first, find the record whose `tableId`
+   equals the one from step 2, and read its `shareRecipeLink` field verbatim:
+
+   ```
+   "shareRecipeLink":"https://share-h5.xbloom.com/?id=hmFKjxldtOFbZ2Kve%2BlxKw%3D%3D"
+   ```
+
+   The `?id=` value is an **opaque 16-byte token, base64'd and percent-encoded** — almost
+   certainly the row id under a server-side block cipher. It is not derivable client-side. Use
+   the server's string as-is; do not re-encode it.
+
+Round trip verified: feeding that id back to the public, unauthenticated `RecipeDetail.html`
+as `tableIdOfRSA` returns the recipe with every field intact — `dose 18`, `grandWater 16`,
+`grinderSize 55`, `rpm 90`, `cupType 1`, and both pours at 50 ml / 238 ml with the patterns,
+pausing and flow rates as sent.
+
+### Attribution
+
+`RecipeDetail.html` returns, alongside `recipeVo`:
+
+```json
+"shareMemberName":"XBRW++","shareMemberHead":"https://xbloom-source.s3.amazonaws.com/…jpg"
+```
+
+So a recipient sees the recipe attributed to the **service account**, by its display name and
+avatar — not to the XBRW++ user who pressed Share. This is the intended framing ("shared from
+XBRW++"), and it is worth keeping the account's display name and avatar deliberately chosen,
+because they are user-visible.
+
+### The three open questions from section C, settled
+
+| Question | Answer | Evidence |
+|---|---|---|
+| `adaptedModel` `1` or `2`? | **`1`** | Both are accepted, but the value **partitions the library**: `tuMyTeaRecipeCreated` with `adaptedModel: 1` returned 3 of the 4 test recipes and `totalCount: 3`; with `adaptedModel: 2` it returned only the fourth. A mismatch between mint and lookup makes the new recipe invisible to step 3. `1` matches pourpilot, denull0, and XBRW++'s own `XBloomRecipe.fetchRecipeDetail`. |
+| `bypassVolume` `0.0` or `5.0`? | **`0.0`** | Both accepted and stored verbatim (`0.00` / `5.00`). Neither is rejected, so this is a cosmetic default. `0.0` is the honest value when `isEnableBypassWater: 2`. |
+| Is `pourCount` required? | **No, but send it** | A mint omitting `pourCount` entirely still came back with `pourCount: 2` — the server derives it from `pourDataJSONStr`. But XBRW++'s own importer reads `recipeVo.pourCount` and loops on it, so sending it explicitly costs nothing and removes a dependency on server-side derivation. |
+
+### Other behaviours observed
+
+- `theSubsetId: 0` is accepted; the server assigns a real subset id (`332001`) in the response
+  record. Do not try to guess it.
+- `isShortcuts` is echoed back as `1` even when `2` is sent. Harmless.
+- Numeric fields come back as fixed-point decimals (`dose: 18.00`, `grinderSize: 55.00`). The
+  importer already tolerates this.
+- The server assigns `capacity` (288 here — the pour total) itself. Do not send it.
+- `tuRecipeDelete.tuhtml` works and removes the recipe from the account's library — but **the
+  share link keeps resolving afterwards**. A deleted recipe still returns `result: "success"`
+  with the full `recipeVo` from `RecipeDetail.html`. Deletion is therefore *not* a takedown
+  lever; it only tidies the service account's library. Any abuse response has to happen before
+  the mint, not after.
+- No rate limiting was encountered: four mints plus several list and detail calls in under two
+  seconds, all `200`. This is not proof that no limit exists, only that the limit is above that.
+
+### Still unverified
+
+- Whether a recipient's official app renders an `adaptedModel: 1` link correctly on a Studio Pro.
+  The share page reads through `RecipeDetail.html`, which ignores `adaptedModel`, so this
+  probably does not matter — but it has not been tested on a device.
+- Whether xBloom throttles or suspends an account that mints at volume.
 
 ---
 

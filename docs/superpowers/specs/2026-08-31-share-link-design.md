@@ -159,7 +159,17 @@ Deployed to Vercel from this repo. A `vercel.json` declares no framework and
 builds only `api/`, or Vercel will try to build the Expo app.
 
 Sequence: validate shape and limits → check rate limits → ensure a live session
-→ build and RSA-encrypt → POST `tuRecipeAdd.tuhtml` → return `{tableId, url}`.
+→ build and RSA-encrypt → POST `tuRecipeAdd.tuhtml` → look the new row up in
+`tuMyTeaRecipeCreated.tuhtml` to read its `shareRecipeLink` → return
+`{tableId, url}`.
+
+> **Amended 2026-08-31 by the live spike.** The design originally said the URL
+> is built client-side as `btoa(String(tableId))`, following the community
+> sources. That is wrong: the `?id=` value is an opaque server-issued token, so
+> the link must be read back from the list endpoint. See
+> `docs/machine-integration/cloud-api.md` § C-bis. The spike also settled
+> `adaptedModel: 1`, `bypassVolume: 0.0`, and confirmed a recipient sees the
+> recipe attributed to the service account as `XBRW++`.
 
 - **Secrets:** `XBLOOM_EMAIL` / `XBLOOM_PASSWORD` as Vercel environment
   variables, marked Sensitive. Read from the environment only — never a default,
@@ -177,10 +187,23 @@ Sequence: validate shape and limits → check rate limits → ensure a live sess
 The state machine — idle → minting → done/failed — the re-mint decision, and
 error mapping. Screens stay layout.
 
-### `Recipe` — two persisted fields
+### `Recipe` — three persisted fields
 
-- `shareId?: number` — the `tableId` the mint returned
+- `sharedTableId?: number` — the `tableId` the mint returned
+- `shareUrl?: string` — the share link the server issued for it
 - `shareSnapshot?: string` — the canonical payload that produced it
+
+> **Amended 2026-08-31.** Two changes, both forced by the spike.
+>
+> The first field was originally called `shareId`. `Recipe.shareId` already
+> exists and holds the *imported* base64 share id; reusing it would make a mint
+> look like an import origin. Renamed to `sharedTableId`.
+>
+> A third field, `shareUrl`, was added. The design assumed the URL could be
+> rebuilt from `sharedTableId` at any time, so there was nothing to store. The
+> `?id=` token turns out to be server-issued and not derivable, so the URL
+> itself has to be persisted or the memoisation would not survive an app
+> restart — every share after a relaunch would mint a duplicate.
 
 Persistence-only, like `backup` and `uid`. **`getData` and `parseData` are
 untouched**: no card byte changes. They must survive the legacy-migration path
