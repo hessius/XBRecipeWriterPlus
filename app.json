@@ -3,7 +3,7 @@
     "name": "XBRW++",
     "slug": "xbrwplusplus",
     "owner": "hessius",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": [
@@ -52,6 +52,14 @@
         }
       ],
       "expo-router",
+      [
+        "react-native-ble-manager",
+        {
+          "neverForLocation": true,
+          "modes": [],
+          "bluetoothAlwaysPermission": "XBRW++ uses Bluetooth to connect to your xBloom Studio coffee machine so it can send a recipe and start a brew."
+        }
+      ],
       [
         "react-native-nfc-manager",
         {
