@@ -38,6 +38,9 @@ export type GrindBand = {
     onCard: boolean;
 };
 
+// Must stay sorted by `max` ascending: the lookup stops at the first entry
+// whose max is >= the value, so an out-of-order slot silently mis-labels
+// everything between the two misplaced entries.
 const BANDS: readonly {max: number; band: GrindBand}[] = [
     {max: 15, band: {label: "Espresso",     longLabel: "espresso",                  onCard: false}},
     {max: 30, band: {label: "Aeropress",    longLabel: "Aeropress",                 onCard: false}},
@@ -52,6 +55,13 @@ const BANDS: readonly {max: number; band: GrindBand}[] = [
  * grinder-off sentinel, and anything off the ends of the grinder's scale.
  */
 export function grindBand(value: number): GrindBand | undefined {
+    // Belt-and-braces: GRINDER_OFF_VALUE (81) currently falls outside the 1-80
+    // range check below, so this guard never fires in practice. It is kept
+    // deliberately, because it names the hazard: if the card-format constants
+    // GRIND_SIZE_OFFSET or GRINDER_OFF are ever changed so that their sum lands
+    // inside the scale, this guard becomes the only thing stopping "off" from
+    // being drawn as a coarseness band. The test for this invariant lives in
+    // grindBands.test.ts.
     if (value === GRINDER_OFF_VALUE) return undefined;
     if (!Number.isFinite(value) || value < 1 || value > 80) return undefined;
 
