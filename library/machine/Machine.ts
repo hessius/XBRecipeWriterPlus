@@ -1,10 +1,12 @@
-import {HANDSHAKE_WINDOW_MS} from "@/constants/machine";
+import {HANDSHAKE_WINDOW_MS, RECIPE_ACK_MS} from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 import {
+    ascii,
     buildType1,
     buildType1Bytes,
+    buildType2,
     encodeCoffeeBlob,
     encodeTeaBlob,
     EVENT,
@@ -83,6 +85,8 @@ export default class Machine {
     private phaseListeners = new Set<(phase: BrewPhase) => void>();
     private pourCount = 0;
     private brewing = false;
+    private ackTimer: ReturnType<typeof setTimeout> | null = null;
+    private retriedInPro = false;
 
     constructor(transport: MachineTransport) {
         this.transport = transport;
@@ -172,6 +176,11 @@ export default class Machine {
     }
 
     private setPhase(phase: BrewPhase): void {
+        // The acknowledgement timer only asks one question — did the recipe
+        // reach the machine? — and any phase other than `sending` has already
+        // answered it. A stale timer left running would fire a "rejected"
+        // failure into the middle of a working pour.
+        if (phase.name !== "sending") this.clearAckTimer();
         this.phase = phase;
         this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
             .includes(phase.name);
@@ -206,6 +215,14 @@ export default class Machine {
      * over — the brew's progress arrives as phases.
      */
     async brew(recipe: Recipe): Promise<void> {
+        // A fresh attempt: the PRO-mode offer is per-brew, and this was not
+        // reached through `switchToProAndRetry`, so the machine may be asked
+        // about its mode again if this send also goes nowhere.
+        this.retriedInPro = false;
+        await this.brewOnce(recipe);
+    }
+
+    private async brewOnce(recipe: Recipe): Promise<void> {
         const blocked = this.brewBlockReason(recipe);
         if (blocked !== null) throw new Error(blocked);
 
@@ -226,6 +243,51 @@ export default class Machine {
             await this.send(buildType1Bytes(opcode, encodeCoffeeBlob(recipe)));
             await this.send(buildType1(8002));
         }
+
+        // Not a grinding timeout — there is deliberately none of those, because
+        // the machine goes silent for twenty seconds while it grinds. This is a
+        // much earlier question: did the recipe reach the machine at all?
+        this.armAckTimer();
+    }
+
+    /**
+     * Whether offering a mode switch would be a reasonable thing to do.
+     *
+     * Only after a send has gone nowhere, only on a machine that says it is in
+     * EASY, and only once. The app never changes the mode of a machine across
+     * the room without asking, and never asks twice about the same brew.
+     */
+    canOfferProMode(): boolean {
+        return this.phase.name === "failed"
+            && this.phase.reason === "rejected"
+            && this.info?.mode === "EASY"
+            && !this.retriedInPro;
+    }
+
+    /** Switch the machine to PRO, then send the recipe again. Once. */
+    async switchToProAndRetry(recipe: Recipe): Promise<void> {
+        this.retriedInPro = true;
+        // Byte-exact, confirmed on hardware: "00000000" is PRO, "91327856" EASY.
+        await this.send(buildType2(11511, ascii("00000000")));
+        await this.brewOnce(recipe);
+    }
+
+    private armAckTimer(): void {
+        this.clearAckTimer();
+        this.ackTimer = setTimeout(() => {
+            if (this.phase.name === "sending") {
+                this.setPhase({name: "failed", reason: "rejected"});
+            }
+        }, RECIPE_ACK_MS);
+        // This timer only waits to see whether the machine answers; it must not
+        // by itself keep the process alive (and hold a test runner open) if
+        // nothing else is pending.
+        this.ackTimer.unref?.();
+    }
+
+    private clearAckTimer(): void {
+        if (this.ackTimer !== null) clearTimeout(this.ackTimer);
+        this.ackTimer = null;
     }
 
     /** Stop a brew and put the machine back on its home screen. */
@@ -299,6 +361,10 @@ export default class Machine {
     private forget(): void {
         this.unsubscribe.forEach((off) => off());
         this.unsubscribe = [];
+        // The acknowledgement timer must not outlive the link it was asking
+        // about: a fired timer after a disconnect would report a phantom
+        // failure about a machine we are no longer talking to.
+        this.clearAckTimer();
         if (this.brewing) {
             // The machine executes a committed recipe itself, so a dropped
             // link is very probably not a failed brew. Saying "failed" would

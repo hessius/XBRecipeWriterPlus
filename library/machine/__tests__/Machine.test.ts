@@ -1,6 +1,7 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {RECIPE_ACK_MS} from "@/constants/machine";
 
 import {FakeTransport} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -285,5 +286,71 @@ describe("brewing", () => {
         transport.drop();
 
         expect(machine.phase.name).toBe("lostContact");
+    });
+
+    it("does not gate on the mode, because the official app does not either", async () => {
+        // Only slot writes are known to need PRO. Refusing to try would be
+        // inventing a restriction from a fact about a different feature.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport);
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame({mode: "91327856"})); // EASY
+        transport.emit(status(0x01));
+        transport.written = [];
+
+        await machine.brew(brewable());
+
+        expect(transport.sent).toEqual([8102, 8001, 8002]);
+    });
+
+    it("offers a mode switch only when a send goes nowhere on an EASY machine", async () => {
+        jest.useFakeTimers();
+        const transport = new FakeTransport();
+        const machine = new Machine(transport);
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame({mode: "91327856"}));
+        transport.emit(status(0x01));
+        transport.written = [];
+
+        await machine.brew(brewable());
+        // No 0x1D, no 0x1F: the machine simply never answered.
+        jest.advanceTimersByTime(RECIPE_ACK_MS + 100);
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "rejected"});
+        expect(machine.canOfferProMode()).toBe(true);
+        // Never switched behind the user's back.
+        expect(transport.sent).not.toContain(11511);
+        jest.useRealTimers();
+    });
+
+    it("does not offer a mode switch to a machine already in PRO", async () => {
+        jest.useFakeTimers();
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        jest.advanceTimersByTime(RECIPE_ACK_MS + 100);
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "rejected"});
+        expect(machine.canOfferProMode()).toBe(false);
+        void transport;
+        jest.useRealTimers();
+    });
+
+    it("switches to PRO and retries once when asked to", async () => {
+        jest.useFakeTimers();
+        const transport = new FakeTransport();
+        const machine = new Machine(transport);
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame({mode: "91327856"}));
+        transport.emit(status(0x01));
+        transport.written = [];
+        await machine.brew(brewable());
+        jest.advanceTimersByTime(RECIPE_ACK_MS + 100);
+        transport.written = [];
+
+        jest.useRealTimers();
+        await machine.switchToProAndRetry(brewable());
+
+        // The mode switch, then the whole send again.
+        expect(transport.sent).toEqual([11511, 8102, 8001, 8002]);
     });
 });
