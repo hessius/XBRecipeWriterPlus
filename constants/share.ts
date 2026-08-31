@@ -6,7 +6,7 @@
  * the bundle; nothing secret goes through here, only a URL.
  */
 export const SHARE_API_URL =
-    process.env.EXPO_PUBLIC_SHARE_API_URL ?? "https://xbrw-share.vercel.app/api/share";
+    process.env.EXPO_PUBLIC_SHARE_API_URL ?? "https://xbrwplusplus.vercel.app/api/share";
 
 /** How long to wait before giving up on a mint, in ms. */
 export const SHARE_TIMEOUT_MS = 20_000;

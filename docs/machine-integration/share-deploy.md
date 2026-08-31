@@ -66,8 +66,27 @@ Expect `{"tableId":…,"url":"https://share-h5.xbloom.com/?id=…"}`. Open the U
 Deleting it through the API removes it from the account's library but the link
 keeps resolving. Use one check, not ten.
 
+## The handler shape, which cost an afternoon
+
+Vercel's Node runtime here invokes the default export as `(req, res)`, the
+classic Node signature. A web-standard `export default (request: Request) =>
+Response` **deploys without any complaint at all** and is then handed arguments
+it does not understand: it builds a `Response`, returns it, and nothing ever
+ends the socket. Every request hangs until the gateway gives up with a 504.
+
+That failure is indistinguishable from a broken function, and no unit test
+catches it, because the tests call the logic directly. `api/share.ts` therefore
+keeps its logic written against `Request`/`Response` and exports a thin
+`(req, res)` adapter as the default, with tests of its own.
+
+If you ever add a second function here, give it the same shape. If you are
+unsure which shape a given Vercel project uses, deploy two three-line probes —
+one of each — and see which one answers.
+
 ## Troubleshooting
 
+- **`/api/share` hangs and then 504s.** The handler is using the web-standard
+  signature. See the section above.
 - **`/api/share` 404s.** Vercel did not pick the function up. Move `api/` and
   `vercel.json` into a `server/` subdirectory and set the project's Root
   Directory to `server`, so nothing else in the repo is in scope.
