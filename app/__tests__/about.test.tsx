@@ -29,7 +29,7 @@ describe("AboutScreen", () => {
         // and has never said so anywhere.
         await renderWithProviders(<AboutScreen/>);
         expect(screen.getByText(/not affiliated with/i)).toBeTruthy();
-        expect(screen.getByText(/xBloom/)).toBeTruthy();
+        expect(screen.getAllByText(/xBloom/).length).toBeGreaterThan(0);
     });
 
     it("says what leaves the phone", async () => {

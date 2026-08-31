@@ -113,13 +113,17 @@ export default function AboutScreen() {
 
                 <AboutSection title="What leaves your phone">
                     <AboutParagraph>
-                        Your recipes stay on this phone. There is no account, no sync
-                        and no analytics.
+                        Your recipes stay on this phone unless you ask to import
+                        or share one. There is no personal account, no sync and no
+                        analytics.
                     </AboutParagraph>
                     <AboutParagraph>
                         Importing a shared recipe sends that recipe&apos;s ID to the
-                        manufacturer&apos;s service in order to fetch it. Nothing
-                        else is sent anywhere. A backup goes only where you send it.
+                        manufacturer&apos;s service in order to fetch it. Sharing sends
+                        the recipe to the XBRW++ share service to create an xBloom
+                        link. Those two are the only things that use the network;
+                        leave both alone and XBRW++ sends nothing anywhere.
+                        A backup goes only where you send it.
                     </AboutParagraph>
                 </AboutSection>
 

@@ -31,7 +31,9 @@ expo-env.d.ts
 # @end expo-cli
 
 
-.env.local
+# Every local env file, not just .env.local: .env.production.local is one typo
+# away from being committed, and it would carry the service account's password.
+.env*
 credentials.json
 /.idea/
 

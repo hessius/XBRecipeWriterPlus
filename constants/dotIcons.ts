@@ -48,6 +48,18 @@ export const DOT_ICONS = {
         ".#######.",
         "........."
     ],
+    /** An arrow out of a tray: the inverse of `import`, which is an arrow into one. */
+    share: [
+        ".........",
+        "....#....",
+        "...###...",
+        "..#.#.#..",
+        "....#....",
+        "....#....",
+        "....#....",
+        ".#######.",
+        "........."
+    ],
     /** Two faders. See the note above on why this is not a gear. */
     settings: [
         ".........",
