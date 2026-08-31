@@ -42,11 +42,7 @@ export default function MachineSection() {
         setTaps(next);
         if (next >= CONSOLE_TAPS) {
             setTaps(0);
-            // The console screen is Task 14 (`app/machineConsole.tsx`) and does
-            // not exist yet; the plan and its test both name this route
-            // `/machine`, which typedRoutes cannot resolve, hence `as never`.
-            // Task 14 should replace this with the real, typed route.
-            router.push("/machine" as never);
+            router.push("/machine");
         }
     }
 
