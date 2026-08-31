@@ -42,19 +42,24 @@ function dayWindow(at: number): string {
  * `node:crypto` out of a file that is otherwise pure arithmetic and therefore
  * testable under jest-expo without a Node environment.
  *
- * Both counters are incremented even when the request is refused. A client that
- * keeps hammering keeps its own window pinned open; that is the intent.
+ * The per-IP window is checked first, and a request refused there never touches
+ * the global counter. The other order looks equivalent and is not: it lets one
+ * client spend all 500 daily mints on 490 rejections, taking sharing down for
+ * everybody — exactly what the per-IP limit exists to prevent.
+ *
+ * The IP's own counter is still incremented on a refusal, so a client that
+ * keeps hammering keeps its own window pinned open. That part is the intent.
  */
 export async function checkLimits(
     counter: Counter, hashedIp: string, at: number = Date.now()
 ): Promise<LimitBreach | null> {
-    const global = await counter.bump(`share:global:${dayWindow(at)}`, DAY_SECONDS);
-    if (global > GLOBAL_PER_DAY) {
-        return "global";
-    }
     const perIp = await counter.bump(`share:ip:${hashedIp}:${hourWindow(at)}`, HOUR_SECONDS);
     if (perIp > PER_IP_PER_HOUR) {
         return "ip";
+    }
+    const global = await counter.bump(`share:global:${dayWindow(at)}`, DAY_SECONDS);
+    if (global > GLOBAL_PER_DAY) {
+        return "global";
     }
     return null;
 }

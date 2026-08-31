@@ -111,7 +111,8 @@ export default function RecipeOverflowSheet({
                         borderTopWidth={1} borderTopColor={palette.line}/>
 
                 {row("Share", "share", onShare, {
-                    hint: "Creates a link that opens this recipe in the xBloom app."
+                    testID: "overflow-share-label",
+                    hint:   "Creates a link that opens this recipe in the xBloom app."
                 })}
                 {row("Duplicate", "duplicate", onDuplicate)}
                 {/* Spoken in full, but captioned short: the other four rows are

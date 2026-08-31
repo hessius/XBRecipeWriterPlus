@@ -344,6 +344,40 @@ describe("the editor", () => {
         jest.useRealTimers();
     });
 
+    it("saves before minting, not only after", async () => {
+        // Saving is what assigns an accent index to a recipe that has never
+        // been in the database, and the accent is part of the share payload.
+        // Snapshotting first would store a snapshot the recipe no longer
+        // matches, so the next press would mint a second permanent copy in a
+        // real xBloom account, which cannot be withdrawn.
+        jest.useFakeTimers();
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+        const saved = () => RecipeDatabase.mock.instances
+            .reduce((n: number, i: {updateRecipe: {mock: {calls: unknown[]}}}) =>
+                n + i.updateRecipe.mock.calls.length, 0);
+
+        let savesBeforeMint = -1;
+        mockShareRecipe.mockImplementation(async () => {
+            savesBeforeMint = saved();
+            return "https://share-h5.xbloom.com/?id=abc";
+        });
+        const shareSheet = jest.spyOn(Share, "share")
+            .mockResolvedValue({action: Share.sharedAction});
+
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Share"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(savesBeforeMint).toBe(1);
+        expect(saved()).toBe(2);
+
+        shareSheet.mockRestore();
+        jest.useRealTimers();
+    });
+
     it("reports share failures as toasts", async () => {
         mockShareState = {status: "failed", reason: "network"};
 

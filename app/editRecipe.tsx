@@ -803,12 +803,17 @@ export default function EditRecipe() {
         // The same reason Refresh flushes first: a just-typed value has to be
         // committed or the link is minted from the previous one.
         await flushDrafts();
+        // Persist *before* minting, not only after. Saving assigns an accent
+        // index to a recipe that does not have one yet, and the accent is part
+        // of the payload — so snapshotting first would store a snapshot the
+        // recipe no longer matches, and the next press would mint a second
+        // permanent copy of the same recipe.
+        persistRecipe();
         const url = await shareRecipe(currentRecipe);
         if (!url) {
             return;
         }
-        // Persist the ids the mint returned, so pressing Share again reuses the
-        // link instead of minting a second copy in the shared account.
+        // And again, to keep the ids the mint returned.
         persistRecipe();
         try {
             await Share.share({message: url});

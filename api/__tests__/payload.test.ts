@@ -33,6 +33,34 @@ describe("validateSharePayload", () => {
         expect(validateSharePayload(valid())).toBeNull();
     });
 
+    // Three shapes the app can legitimately produce that an earlier, tighter
+    // set of ranges refused. Each one failed with a 400, which the app renders
+    // as "check the pour volumes and dose" -- sending the user to look at the
+    // one thing that was not wrong, with no way to fix it.
+    it("accepts a three-steep tea, whose ratio is 54", () => {
+        expect(validateSharePayload({...valid(), dose: 5, grandWater: 54, cupType: 4,
+                                     isSetGrinderSize: 2, grinderSize: 50})).toBeNull();
+    });
+
+    it("accepts the grinder-off sentinel", () => {
+        // 81 is what a card with the grinder disabled carries, and the importer
+        // reads it back as "grinder disabled". It is a value, not an overflow.
+        expect(validateSharePayload({...valid(), grinderSize: 81,
+                                     isSetGrinderSize: 2})).toBeNull();
+    });
+
+    it("accepts the most pours a card can hold", () => {
+        // 31, because the card writes the count as `length << 3` in one byte.
+        const pours = Array.from({length: 31}, (_, i) => ({
+            theName: i === 0 ? "Bloom" : `Pour ${i + 1}`, volume: 10, temperature: 93,
+            flowRate: 3.5, pattern: 1, pausing: 0,
+            isEnableVibrationBefore: 2, isEnableVibrationAfter: 2
+        }));
+        expect(validateSharePayload({
+            ...valid(), pourCount: 31, pourDataJSONStr: JSON.stringify(pours)
+        })).toBeNull();
+    });
+
     it("rejects a non-object", () => {
         expect(validateSharePayload(null)).toBe("payload must be an object");
         expect(validateSharePayload("nope")).toBe("payload must be an object");
@@ -67,9 +95,9 @@ describe("validateSharePayload", () => {
 
     it("rejects pour data that is not a JSON array", () => {
         expect(validateSharePayload({...valid(), pourDataJSONStr: "{}"}))
-            .toBe("pourDataJSONStr must encode an array of 1 to 9 pours");
+            .toBe("pourDataJSONStr must encode an array of 1 to 31 pours");
         expect(validateSharePayload({...valid(), pourDataJSONStr: "not json"}))
-            .toBe("pourDataJSONStr must encode an array of 1 to 9 pours");
+            .toBe("pourDataJSONStr must encode an array of 1 to 31 pours");
     });
 
     it("rejects a pour whose volume is out of range", () => {

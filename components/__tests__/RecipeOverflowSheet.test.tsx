@@ -56,8 +56,14 @@ describe("RecipeOverflowSheet", () => {
     });
 
     it("draws the share row as a normal action, not a destructive one", async () => {
+        // Delete is the only red row. Sharing creates something permanent in a
+        // shared account, which is worth a moment's thought, but it is not a
+        // destruction and must not borrow the warning that means one.
         await renderWithProviders(<RecipeOverflowSheet open canRefreshName {...ACTIONS}/>);
-        expect(screen.getByLabelText("Share")).toBeTruthy();
+        expect(screen.getByTestId("overflow-share-label").props.style)
+            .toEqual(expect.arrayContaining([
+                expect.objectContaining({color: palette.text})
+            ]));
     });
 
     it("toggles the deck's hints without dismissing itself", async () => {

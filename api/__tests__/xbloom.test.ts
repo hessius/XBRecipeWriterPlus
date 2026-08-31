@@ -1,4 +1,5 @@
-import {constants, createPrivateKey, generateKeyPairSync, privateDecrypt} from "node:crypto";
+import {constants, createPrivateKey, createPublicKey, generateKeyPairSync, privateDecrypt}
+    from "node:crypto";
 
 import {encryptForXbloom, mintRecipe, XBLOOM_PUBLIC_KEY} from "../_lib/xbloom";
 
@@ -25,7 +26,11 @@ describe("encryptForXbloom", () => {
     });
 
     it("uses a 1024-bit key, which is what the 117-byte chunk size assumes", () => {
-        expect(XBLOOM_PUBLIC_KEY).toContain("BEGIN PUBLIC KEY");
+        // The chunk size is 128 - 11. A key of any other size would still
+        // encrypt without complaint here and decrypt to garbage upstream, so
+        // asserting the modulus is the only check that would notice.
+        const key = createPublicKey(XBLOOM_PUBLIC_KEY);
+        expect(key.asymmetricKeyDetails?.modulusLength).toBe(1024);
     });
 });
 

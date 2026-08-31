@@ -18,6 +18,22 @@ describe("checkLimits", () => {
         expect(await checkLimits(c, "hashedip", at)).toBe("ip");
     });
 
+    it("does not spend the global budget on requests it has already refused", async () => {
+        // The whole point of the per-IP limit: one client hammering must not be
+        // able to take sharing down for everybody until UTC midnight.
+        const c = memoryCounter();
+        const at = Date.parse("2026-08-31T10:00:00Z");
+        for (let i = 0; i < PER_IP_PER_HOUR + 200; i++) {
+            await checkLimits(c, "loud", at);
+        }
+        // A different address, hours later, same day: the global budget has
+        // only PER_IP_PER_HOUR spent against it, not 210.
+        for (let i = 0; i < GLOBAL_PER_DAY - PER_IP_PER_HOUR; i++) {
+            expect(await checkLimits(c, `quiet${i}`, at + 5 * HOUR)).toBeNull();
+        }
+        expect(await checkLimits(c, "another", at + 5 * HOUR)).toBe("global");
+    });
+
     it("forgets the per-IP count in the next hour window", async () => {
         const c = memoryCounter();
         const at = Date.parse("2026-08-31T10:00:00Z");

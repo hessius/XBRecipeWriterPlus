@@ -13,13 +13,27 @@
  * fails here never reaches xBloom's servers under our account's name.
  */
 
-/** Above this, refuse. A legitimate nine-pour recipe is well under 4 kB. */
+/** Above this, refuse. Even a 31-pour recipe is well under 8 kB. */
 const MAX_BYTES = 8_192;
+
+/**
+ * The card writes the pour count as `length << 3` in a single byte, so 31 is
+ * the last count that fits, and the app allows every one of them. See
+ * `library/cardLimits.ts` — the two numbers have to agree or a recipe this app
+ * can write to a card is a recipe it cannot share.
+ */
+const MAX_POURS = 31;
 
 const NUMBER_RANGES: Record<string, [number, number]> = {
     dose:                [1, 100],
-    grandWater:          [1, 30],
-    grinderSize:         [0, 80],
+    // The ratio, not a volume, and the bounds are the app's own RATIO limits
+    // (library/cardLimits.ts). Anything tighter rejects tea: three 90 ml
+    // steeps against a 5 g dose is a ratio of 54.
+    grandWater:          [5, 100],
+    // 81 is the grinder-off sentinel and a legitimate wire value: the importer
+    // reads it back as "grinder disabled". Excluding it makes every
+    // grinder-off recipe unshareable.
+    grinderSize:         [0, 81],
     isSetGrinderSize:    [1, 2],
     rpm:                 [60, 120],
     cupType:             [1, 4],
@@ -30,7 +44,9 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
     isShortcuts:         [1, 2],
     isEnableBypassWater: [1, 2],
     adaptedModel:        [1, 2],
-    pourCount:           [1, 9]
+    // 31, because the card writes the count as `length << 3` in one byte and
+    // the app therefore allows that many. See library/cardLimits.ts.
+    pourCount:           [1, 31]
 };
 
 const POUR_RANGES: Record<string, [number, number]> = {
@@ -85,16 +101,16 @@ export function validateSharePayload(payload: unknown): string | null {
     }
 
     if (typeof p.pourDataJSONStr !== "string") {
-        return "pourDataJSONStr must encode an array of 1 to 9 pours";
+        return "pourDataJSONStr must encode an array of 1 to " + MAX_POURS + " pours";
     }
     let pours: unknown;
     try {
         pours = JSON.parse(p.pourDataJSONStr);
     } catch {
-        return "pourDataJSONStr must encode an array of 1 to 9 pours";
+        return "pourDataJSONStr must encode an array of 1 to " + MAX_POURS + " pours";
     }
-    if (!Array.isArray(pours) || pours.length < 1 || pours.length > 9) {
-        return "pourDataJSONStr must encode an array of 1 to 9 pours";
+    if (!Array.isArray(pours) || pours.length < 1 || pours.length > MAX_POURS) {
+        return "pourDataJSONStr must encode an array of 1 to " + MAX_POURS + " pours";
     }
     if (pours.length !== p.pourCount) {
         return "pourCount must match the number of pours";
