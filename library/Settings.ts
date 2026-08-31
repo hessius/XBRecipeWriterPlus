@@ -63,7 +63,33 @@ export const DEFAULTS = {
      * offer BREW at all: an empty string means nobody here owns a J15, and a
      * dead button on every recipe would be worse than no button.
      */
-    machineDeviceId: ""
+    machineDeviceId: "",
+    /**
+     * Whether a brew has ever run from this phone.
+     *
+     * The cup-and-pod reminder is said once and then never again. None of it is
+     * detectable — the machine cannot tell us whether a cup is under the spout
+     * — so it is stated rather than checked, and stating it every time would
+     * train people to stop reading it.
+     */
+    firstBrewDone: false,
+    /**
+     * Whether the machine console's warning has been read and accepted.
+     *
+     * The console sends unverified commands to a hot, motorised appliance. The
+     * acknowledgement is stored so it is asked once rather than nagged, and it
+     * is a separate key from the per-command confirmations below because they
+     * answer different questions: may I be here at all, and may I send this.
+     */
+    machineConsoleAcknowledged: false,
+    /**
+     * Whether the console still asks before each command that moves hardware.
+     *
+     * On by default and deliberately awkward to turn off. Somebody deep in a
+     * debugging session will want it gone; somebody who opened the console once
+     * by accident should not be one tap from spinning a burr.
+     */
+    machineConsoleConfirmations: true
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

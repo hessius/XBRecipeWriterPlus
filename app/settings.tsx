@@ -61,6 +61,11 @@ export default function SettingsScreen({settings}: Props) {
     // console and the editor's BREW button. Read here anyway, because a backup
     // carries every preference and this is one.
     const [machineDeviceId] = useSetting("machineDeviceId", settings);
+    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
+    const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
+        useSetting("machineConsoleAcknowledged", settings);
+    const [machineConsoleConfirmations, setMachineConsoleConfirmations] =
+        useSetting("machineConsoleConfirmations", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -78,7 +83,10 @@ export default function SettingsScreen({settings}: Props) {
     // settings and then quietly drops one is worse than a backup that carries
     // none: the user has no way to tell which preference did not survive.
     function settingsSnapshot(): Record<SettingKey, unknown> {
-        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding, machineDeviceId};
+        return {
+            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
+            machineDeviceId, firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations
+        };
     }
 
     async function onBackUp() {
@@ -114,6 +122,15 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (incoming.temperatureUnit === "C" || incoming.temperatureUnit === "F") {
             setTemperatureUnit(incoming.temperatureUnit);
+        }
+        if (typeof incoming.firstBrewDone === "boolean") {
+            setFirstBrewDone(incoming.firstBrewDone);
+        }
+        if (typeof incoming.machineConsoleAcknowledged === "boolean") {
+            setMachineConsoleAcknowledged(incoming.machineConsoleAcknowledged);
+        }
+        if (typeof incoming.machineConsoleConfirmations === "boolean") {
+            setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
         }
     }
 
