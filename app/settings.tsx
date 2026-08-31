@@ -56,6 +56,7 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
+    const [teaSteepEncoding] = useSetting("teaSteepEncoding", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -73,7 +74,7 @@ export default function SettingsScreen({settings}: Props) {
     // settings and then quietly drops one is worse than a backup that carries
     // none: the user has no way to tell which preference did not survive.
     function settingsSnapshot(): Record<SettingKey, unknown> {
-        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit};
+        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding};
     }
 
     async function onBackUp() {

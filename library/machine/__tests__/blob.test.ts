@@ -1,6 +1,6 @@
-import {encodeCoffeeBlob, ratioByte} from "@/library/machine/protocol";
+import {encodeCoffeeBlob, encodeTeaBlob, ratioByte} from "@/library/machine/protocol";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 
 import {coffeeBlob} from "./protocolFixtures";
 
@@ -85,5 +85,55 @@ describe("the coffee blob", () => {
         const blob = Array.from(encodeCoffeeBlob(recipeOf([60, 60])));
         expect(blob[0]).toBe(16);
         expect(blob.length).toBe(1 + 16 + 2);
+    });
+});
+
+function teaRecipe(steeps: {volume: number; pause: number}[]): Recipe {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.TEA;
+    recipe.dosage = 5;
+    recipe.grinder = false;
+    recipe.pours = steeps.map((steep, index) => new Pour(
+        index + 1, steep.volume, 90, 30, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, steep.pause
+    ));
+    return recipe;
+}
+
+describe("the tea blob", () => {
+    it("splits the steep into minutes and seconds, HomoLand's way", () => {
+        // 90 s → 1 minute, 30 s remaining. Byte 4 is (-30) & 0xFF = 226;
+        // byte 5 is 1 * 32 = 32.
+        const blob = Array.from(encodeTeaBlob(teaRecipe([{volume: 80, pause: 90}]), "homoland"));
+        expect(blob[5]).toBe(226);
+        expect(blob[6]).toBe(32);
+    });
+
+    it("puts a scaled soak byte where the minutes go, saya6k's way", () => {
+        // 90 s → round(90 * 0.6) = 54, and no inter-pour wait at all.
+        const blob = Array.from(encodeTeaBlob(teaRecipe([{volume: 80, pause: 90}]), "saya6k"));
+        expect(blob[5]).toBe(0);
+        expect(blob[6]).toBe(54);
+    });
+
+    it("never sends a soak byte of zero under saya6k's scheme", () => {
+        // round(1 * 0.6) is 1, but round(0.5 * 0.6) would floor to 0, and a
+        // zero soak is a steep that does not happen.
+        const blob = Array.from(encodeTeaBlob(teaRecipe([{volume: 80, pause: 1}]), "saya6k"));
+        expect(blob[6]).toBeGreaterThanOrEqual(1);
+    });
+
+    it("always turns the grinder off", () => {
+        // Tea has no beans to grind, and 0x00 would grind at the finest
+        // setting rather than not grinding.
+        const blob = Array.from(encodeTeaBlob(teaRecipe([{volume: 80, pause: 60}]), "homoland"));
+        expect(blob[blob.length - 2]).toBe(0xFE);
+    });
+
+    it("carries every steep", () => {
+        const blob = Array.from(encodeTeaBlob(
+            teaRecipe([{volume: 80, pause: 60}, {volume: 80, pause: 60}, {volume: 80, pause: 60}]),
+            "homoland"
+        ));
+        expect(blob[0]).toBe(24);
     });
 });
