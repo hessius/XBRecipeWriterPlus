@@ -2,36 +2,55 @@
 
 **XBRW++**
 
-Last updated: 2026-08-28
+Last updated: 2026-08-31
 
 ## The short version
 
-XBRW++ collects nothing. There are no accounts, no analytics, no advertising,
-no tracking, and no crash reporting. Nothing you do in the app is sent to its
-developer, because there is no server to send it to.
+XBRW++ has no accounts, no analytics, no advertising, no tracking, and no crash
+reporting. If you never import or share a recipe, nothing you do in the app is
+sent anywhere. Sharing is optional; when you use it, the recipe fields listed
+below leave your device to create an xBloom link.
 
 ## What stays on your device
 
-Your recipes are stored in a database on your device and nowhere else. That
-includes recipe names, doses, ratios, grind sizes, pour stages, and the raw
-card data kept for the restore feature. Deleting the app deletes all of it.
-There is no backup to any service operated by the developer, and no way for
-the developer to see any of it.
+Recipes you do not share are stored in a database on your device and nowhere
+else. That includes recipe names, doses, ratios, grind sizes, pour stages, and
+the raw card data kept for the restore feature. Deleting the app deletes all of
+it. There is no backup to any service operated by the developer, and no way for
+the developer to see any of it unless you choose to share a recipe.
 
-## When the app talks to the network
+## When XBRW++ uses the network
 
-There is exactly one case. When you import a recipe from an xBloom share link,
-the app sends the recipe identifier from that link to xBloom's servers
-(`client-api.xbloom.com`) in order to fetch the recipe, and may load the pod
-image that the response points to.
+Two cases, both of which only happen because you asked for them.
 
-This request carries only what is needed to retrieve the recipe. The app adds
-no identifier of you or your device to it. XBRW++ is not affiliated with
-xBloom; those servers are operated by xBloom, and their handling of the request
-is governed by xBloom's own privacy policy.
+**Importing a recipe.** When you paste an xBloom link or ID, the app fetches that
+recipe from xBloom's public servers. Nothing about you is sent.
 
-If you never import from a share link, the app makes no network requests at
-all, and it works fully offline.
+**Sharing a recipe.** When you tap Share, the recipe is sent to a small service
+run by XBRW++, which adds it to an xBloom account belonging to XBRW++ and
+returns a link. Concretely, what leaves your device is: the recipe's name, dose,
+ratio, grind size, grinder RPM, cup type, accent colour, and every pour's volume,
+temperature, flow rate, pattern, pause and agitation. Nothing else — no device
+identifier, no account, no location, no usage data.
+
+That service keeps a count of how many links have been created recently, against
+a salted hash of your IP address, so that it cannot be abused. It stores no
+address, no recipe, and no log of what you shared.
+
+Two things about a shared link are worth knowing before you tap it:
+
+- The recipe is stored in **xBloom's** cloud, not ours, and it stays there. We
+  cannot delete it, and neither can you. A link you have shared cannot be taken
+  back.
+- Anyone who opens the link sees the recipe attributed to the XBRW++ account,
+  not to you.
+
+**If you never share, XBRW++ still sends nothing anywhere.** Every other feature
+— reading cards, writing cards, editing, backup and restore — works with the
+network off.
+
+These xBloom endpoints are unofficial and undocumented. They can change or stop
+working without notice.
 
 ## Device capabilities the app uses
 
@@ -49,8 +68,9 @@ that link is handled on your device to extract the recipe identifier.
 
 ## Children
 
-The app is a tool for operating a coffee brewer. It collects no data from
-anyone, including children.
+The app is a tool for operating a coffee brewer. It has no accounts, analytics,
+ads, tracking or crash reporting. If anyone shares a recipe, the same network
+section above applies.
 
 ## Changes
 
