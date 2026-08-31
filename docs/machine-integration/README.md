@@ -100,12 +100,13 @@ settle on hardware.
 
 ## The files
 
-Start with `opportunities.md` — it is the synthesis, and the other files are its
-evidence.
+Start with `roadmap.md` — it is what we decided to do. `opportunities.md` is the
+synthesis it came from, and the other files are the evidence underneath that.
 
 | File | What it covers |
 |---|---|
-| `opportunities.md` | **Start here.** What the research changed, the opportunity list, dependency map, and my read on each |
+| `roadmap.md` | **Start here.** The decisions taken, the six milestones, and the order and reasoning behind them |
+| `opportunities.md` | What the research changed, the opportunity list, dependency map, and my read on each |
 | `identity-and-privacy.md` | The account models, and what each would cost our no-account promise |
 | `recipe-overlap.md` | How much of XBRW++'s existing card encoder is already a BLE encoder |
 | `ble-protocol.md` | BLE capability inventory, command tables, and where sources contradict each other |
