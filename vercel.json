@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo skipping install: the mint function has no dependencies",
+  "buildCommand": "echo skipping build: only api/ is deployed",
+  "outputDirectory": "public"
+}
