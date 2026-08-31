@@ -44,14 +44,17 @@ export default async function handler(request: Request): Promise<Response> {
     try {
         body = await request.json();
     } catch {
-        return json({error: "payload"}, 400);
+        return json({error: "invalid", reason: "body must be JSON"}, 400);
     }
 
     const payload = (body as {payload?: unknown} | null)?.payload;
     const reason = validateSharePayload(payload);
     if (reason) {
         console.warn(`share: rejected payload (${reason})`);
-        return json({error: "payload"}, 400);
+        // The reason is our own validator's words, never the upstream's, so it
+        // is safe to hand back and it is the only thing that makes a 400
+        // diagnosable from a phone.
+        return json({error: "invalid", reason}, 400);
     }
 
     let breach: "ip" | "global" | null;

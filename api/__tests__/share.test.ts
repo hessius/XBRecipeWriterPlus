@@ -73,7 +73,7 @@ describe("share handler", () => {
             {payload: {...validPayload(), dose: 9999}}, {"x-forwarded-for": "1.2.3.5"}
         ));
         expect(res.status).toBe(400);
-        await expect(res.json()).resolves.toEqual({error: "payload"});
+        await expect(res.json()).resolves.toMatchObject({error: "invalid"});
     });
 
     it("rejects a body that is not JSON", async () => {
@@ -81,7 +81,7 @@ describe("share handler", () => {
             method: "POST", headers: {"content-type": "application/json"}, body: "{{{"
         }));
         expect(res.status).toBe(400);
-        await expect(res.json()).resolves.toEqual({error: "payload"});
+        await expect(res.json()).resolves.toMatchObject({error: "invalid"});
     });
 
     it("returns 503 when the credentials are not configured", async () => {
