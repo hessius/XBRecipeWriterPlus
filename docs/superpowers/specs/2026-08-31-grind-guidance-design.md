@@ -51,14 +51,15 @@ Every consumer below reads from this one module. The four-way grind encoding
 mess documented in `docs/machine-integration/roadmap.md` is a standing argument
 against letting this knowledge spread to call sites.
 
-### In the editor: annotate the value
+### In the editor: annotate the label
 
-The band is drawn beside the number, in the slot `Stepper` already has for a
-unit. Grind size is one of the few fields with no unit, so the space is there
-and empty. It reads `47 · Pourover` and flips to the coarse band at 56 as you
-step.
+The band is appended to the row's own label: `GRIND SIZE · POUROVER`, flipping
+to the coarse band at 56 as you step. No new line, no added height, and it
+leaves `Stepper` alone — that component's layout is tuned around a 54px value
+column, two 32px buttons and hold-to-repeat, and is not somewhere to add text
+casually.
 
-Two rejected placements, recorded so they are not re-proposed:
+Three rejected placements, recorded so they are not re-proposed:
 
 - **A new always-on line under the label.** `FieldRow`'s hints are opt-in by
   deliberate design — nine of them turned the deck into prose once already.
@@ -66,12 +67,16 @@ Two rejected placements, recorded so they are not re-proposed:
 - **Inside the hint.** Respects the rule, but hints are off by default, so the
   guidance would be invisible to most users and #52 would land almost entirely
   in the help sheet — which is not "at the point of choosing it".
+- **Beside the value, in the stepper's unit slot.** There is no such slot.
+  `Stepper` takes a `unit` prop but uses it only in the accessibility label
+  (`components/Stepper.tsx:182`); units are spoken, never drawn. Building one is
+  #77, and it is not this issue's job.
 
-Annotating the value sidesteps the rule rather than bending it, because it is
-not a hint: it is a unit-like annotation on the number itself.
+The label placement is neither a hint nor a restatement: it names what the
+current value *means*, and it moves as the value moves.
 
-The coarse band's name must fit beside a number, so it is shortened for this
-placement. The full wording lives in the help sheet.
+The coarse band's name must fit on a label line beside the field name, so it is
+shortened for this placement. The full wording lives in the help sheet.
 
 ### In the editor: when the grind is out of card range
 
@@ -118,7 +123,7 @@ only in the editor banner.
 
 - `library/__tests__` — band boundaries at 15/16, 30/31, 39/40, 55/56, 80, and
   the 81 sentinel. Pure functions, so this is where the real coverage is.
-- `components/__tests__` — the value annotation, the out-of-range banner and its
+- `components/__tests__` — the label annotation, the out-of-range banner and its
   action, and the import notice. Via `renderWithProviders`; `render` and
   `fireEvent` are async in v14 and a missing `await` passes for the wrong
   reason.
@@ -131,3 +136,5 @@ only in the editor banner.
   `grinder` help entry already documents that workaround.
 - A visual band strip. Considered; it would be the only chart-like element in an
   editor built from rows, and two bands do not earn it.
+- Drawing units on steppers. A real gap, found while designing this, but its own
+  problem: #77.
