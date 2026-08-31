@@ -6,6 +6,16 @@ import {RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
 
 type Props = {
     topic: HelpTopic;
+    /**
+     * A live annotation on the field's own name, e.g. what the current value
+     * means.
+     *
+     * Deliberately not a hint. Hints are opt-in and off by default, so a note
+     * routed through `showHint` would be invisible to most users. It also
+     * costs no height, which is what keeps it from re-creating the problem
+     * that made hints opt-in in the first place.
+     */
+    note?: string;
     /** Draw the one-line hint under the label. Off by default. */
     showHint?: boolean;
     /** A validation reason to show under the row. Prose, so it stays in Inter. */
@@ -30,7 +40,7 @@ type Props = {
  * be drawn, which is the point — a field nobody wrote a note for is a field
  * nobody explained.
  */
-export default function FieldRow({topic, showHint, error, children}: Props) {
+export default function FieldRow({topic, note, showHint, error, children}: Props) {
     const entry = RECIPE_HELP[topic];
 
     return (
@@ -40,7 +50,7 @@ export default function FieldRow({topic, showHint, error, children}: Props) {
                 <YStack flex={1} gap="$1">
                     <Text fontSize={11} letterSpacing={1.5}
                           textTransform="uppercase" color={palette.muted}>
-                        {entry.title}
+                        {note === undefined ? entry.title : `${entry.title} · ${note}`}
                     </Text>
                     {showHint && entry.hint !== undefined && (
                         <Text fontSize={11} color={palette.dim}>{entry.hint}</Text>
