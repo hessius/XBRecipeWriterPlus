@@ -220,3 +220,88 @@ export function parseNotification(bytes: Uint8Array): Notification {
         ? {kind: "event", code, value: payload[0]}
         : {kind: "event", code};
 }
+
+/** What the encoder needs of a recipe, without depending on `Recipe` itself. */
+export type BlobPour = {
+    volume: number;
+    temperature: number;
+    pourPattern: number;
+    agitation: number;
+    pauseTime: number;
+    flowRate: number;
+};
+
+export type BlobRecipe = {
+    dosage: number;
+    grindSize: number;
+    grindRPM: number;
+    grinder: boolean;
+    pours: BlobPour[];
+};
+
+/** The wire value that turns the grinder off. Not `0x00`: that is *finest*. */
+export const GRINDER_OFF_WIRE = 0xFE;
+/** The largest volume one segment can carry before it has to be chunked. */
+const MAX_SEGMENT_VOLUME = 127;
+
+/**
+ * The tail byte: the ratio, times ten, **rounded up**.
+ *
+ * saya6k found on hardware that 18 g / 250 ml truncated to 138 and the machine
+ * never ground at all — no error, no complaint, just cold water over dry beans.
+ * 139 grinds. A small overshoot is tolerated; any undershoot is fatal and
+ * silent, which is why this is a ceiling and not a round.
+ */
+export function ratioByte(totalWaterMl: number, doseG: number): number {
+    if (!(doseG > 0)) return 0;
+    return Math.min(Math.ceil((totalWaterMl / doseG) * 10), 255);
+}
+
+function segmentsFor(recipe: BlobRecipe): number[] {
+    const out: number[] = [];
+    recipe.pours.forEach((pour, index) => {
+        let left = Math.round(pour.volume);
+        // Lead chunks for anything the trailing segment's single volume byte
+        // cannot hold. `cardLimits` allows 240 ml, so this runs in practice.
+        while (left > MAX_SEGMENT_VOLUME) {
+            out.push(MAX_SEGMENT_VOLUME, pour.temperature, pour.pourPattern, pour.agitation);
+            left -= MAX_SEGMENT_VOLUME;
+        }
+        const pause = Math.round(pour.pauseTime);
+        out.push(
+            left,
+            Math.round(pour.temperature),
+            pour.pourPattern,
+            pour.agitation,
+            // The post-pour wait, stored as its two's complement — the same
+            // convention the card format uses.
+            pause === 0 ? 0 : (256 - pause) & 0xFF,
+            0x00,
+            // Only the first pour carries the grind speed. Repeating it in
+            // later segments is not merely redundant; no source has ever seen
+            // the machine sent one.
+            index === 0 ? Math.round(recipe.grindRPM) : 0,
+            Math.round(pour.flowRate)
+        );
+    });
+    return out;
+}
+
+/**
+ * The coffee recipe blob, for commands 8001 (grind) and 8004 (no grind).
+ *
+ * Deliberately **not** built on `Recipe.getData()`. The two layouts rhyme but
+ * differ, and `getData()` is the NFC card format: fixed, and unrecoverable if a
+ * malformed frame reaches a genuine card. This is a protocol that varies
+ * between firmware revisions. They must be free to move independently.
+ */
+export function encodeCoffeeBlob(recipe: BlobRecipe): Uint8Array {
+    const segments = segmentsFor(recipe);
+    const total = recipe.pours.reduce((sum, pour) => sum + pour.volume, 0);
+    return Uint8Array.from([
+        segments.length,
+        ...segments,
+        recipe.grinder ? Math.round(recipe.grindSize) : GRINDER_OFF_WIRE,
+        ratioByte(total, recipe.dosage)
+    ]);
+}

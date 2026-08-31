@@ -98,3 +98,41 @@ export function float32(value: number): number[] {
     new DataView(buffer).setFloat32(0, value, true);
     return Array.from(new Uint8Array(buffer));
 }
+
+/**
+ * An independent encoding of the recipe blob, written from the protocol
+ * document. Deliberately laid out differently from `protocol.ts` — it builds
+ * the segment list by concatenation rather than by writing into a sized array —
+ * so that the two agreeing means something.
+ */
+export function coffeeBlob(input: {
+    dose: number;
+    grindSize: number | null;
+    rpm: number;
+    pours: {volume: number; temperature: number; pattern: number; agitation: number; pause: number; flowRate: number}[];
+}): number[] {
+    const segments: number[] = [];
+
+    input.pours.forEach((pour, index) => {
+        let left = pour.volume;
+        while (left > 127) {
+            segments.push(127, pour.temperature, pour.pattern, pour.agitation);
+            left -= 127;
+        }
+        segments.push(
+            left,
+            pour.temperature,
+            pour.pattern,
+            pour.agitation,
+            pour.pause === 0 ? 0 : (256 - pour.pause) & 0xFF,
+            0x00,
+            index === 0 ? input.rpm : 0,
+            Math.round(pour.flowRate)
+        );
+    });
+
+    const total = input.pours.reduce((sum, p) => sum + p.volume, 0);
+    const ratio = Math.min(Math.ceil((total / input.dose) * 10), 255);
+
+    return [segments.length, ...segments, input.grindSize ?? 0xFE, ratio];
+}
