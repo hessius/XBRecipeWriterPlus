@@ -179,4 +179,27 @@ describe("ImportResult grind notice", () => {
         expect(screen.getByTestId("import-grind-notice")).toBeTruthy();
         expect(screen.getByText(/Aeropress/)).toBeTruthy();
     });
+
+    it("says nothing when the grinder is off", async () => {
+        // `XBloomRecipe` turns the grinder off on `isSetGrinderSize === 2` but
+        // still copies whatever `grinderSize` the cloud sent, so a grinder-off
+        // import really can hold a value below 40. Nothing will grind to it.
+        const found = preview();
+        found.recipe.grinder = false;
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
+
+    it("says nothing for tea, which always writes the default grind", async () => {
+        const found = preview();
+        found.recipe.cupType = CUP_TYPE.TEA;
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
 });

@@ -7,6 +7,7 @@ import PourProfile, {PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {palette} from "@/constants/colors";
 import type {ImportPreview} from "@/hooks/useRecipeImport";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
+import {CUP_TYPE} from "@/library/Recipe";
 
 /** The pod mark's diameter. Two lines of text tall, so nothing below it moves. */
 const POD_SIZE = 44;
@@ -63,7 +64,14 @@ export default function ImportResult({preview, onOpen}: Props) {
     // imported unchanged -- an espresso grind raised to 40 would be a different
     // drink, not a corrected recipe -- so the panel says so instead, here,
     // rather than letting the user find out at the card reader.
-    const fineBand = recipe.grindSize < CARD_GRIND_MIN
+    //
+    // Guarded on the grinder the same way the editor's grind row is. An import
+    // whose `isSetGrinderSize` is 2 still carries whatever `grinderSize` the
+    // cloud happened to send, so a grinder-off recipe can hold a value below 40
+    // that nothing will ever grind to; and a tea card always writes the default
+    // grind regardless. Neither has a coarseness worth naming.
+    const grinds = recipe.grinder && recipe.cupType !== CUP_TYPE.TEA;
+    const fineBand = grinds && recipe.grindSize < CARD_GRIND_MIN
         ? grindBand(recipe.grindSize)
         : undefined;
 
