@@ -344,3 +344,46 @@ describe("mergeRecipes", () => {
         expect(result.toAdd.length + result.alreadyPresent).toBe(2);
     });
 });
+
+describe("a share URL out of a backup file", () => {
+    function accepts(url: unknown): boolean {
+        const doc = JSON.parse(buildBackup([recipeNamed("A", "u1")], {}));
+        doc.recipes[0].shareUrl = url;
+        return parseBackup(JSON.stringify(doc)).ok;
+    }
+
+    it("keeps a genuine xBloom share link", () => {
+        expect(accepts("https://share-h5.xbloom.com/?id=abc")).toBe(true);
+    });
+
+    it("keeps an empty one, which is a recipe never shared", () => {
+        expect(accepts("")).toBe(true);
+    });
+
+    it("rejects a link to somewhere else", () => {
+        // `useShareRecipe` hands a stored URL straight to the share sheet when
+        // the snapshot still matches, so this would have the app distribute an
+        // attacker's link as though it were an xBloom recipe.
+        expect(accepts("https://evil.example/?id=abc")).toBe(false);
+    });
+
+    it("rejects a lookalike host", () => {
+        expect(accepts("https://share-h5.xbloom.com.evil.example/?id=abc")).toBe(false);
+    });
+
+    it("rejects plain HTTP", () => {
+        expect(accepts("http://share-h5.xbloom.com/?id=abc")).toBe(false);
+    });
+
+    it("rejects the right host with no id", () => {
+        expect(accepts("https://share-h5.xbloom.com/")).toBe(false);
+    });
+
+    it("rejects something that is not a URL at all", () => {
+        expect(accepts("javascript:alert(1)")).toBe(false);
+    });
+
+    it("rejects a non-string", () => {
+        expect(accepts(42)).toBe(false);
+    });
+});

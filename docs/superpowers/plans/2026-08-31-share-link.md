@@ -1607,6 +1607,21 @@ git add api/ && git commit -F /tmp/msg
 
 ### Task 8: `api/share.ts` — the handler, and the deploy config
 
+> **SUPERSEDED — do not execute as written.** This task specifies a
+> web-standard `export default async function (request: Request): Promise<Response>`.
+> On Vercel's Node runtime that deploys without complaint and then **hangs every
+> request until a 504** — the handler is invoked as `(req, res)`, so a returned
+> `Response` never ends the socket, and nothing logs a failure.
+>
+> The shipped implementation instead exports `respond(request: Request)` holding
+> all the logic (which is what the tests call), a `toRequest()` adapter, and a
+> `(req, res)` default export that writes the status, headers and body onto the
+> `ServerResponse`. Read `api/share.ts` and the "handler shape" section of
+> `docs/machine-integration/share-deploy.md` before touching this path. The
+> validation, error contract and rate-limit ordering below all still stand; only
+> the handler signature and its tests changed.
+
+
 **Files:**
 - Create: `api/share.ts`
 - Create: `vercel.json`
@@ -2425,8 +2440,14 @@ map to four sentences:
     }, [shareState]);
 ```
 
-Per #69 this is a toast and never a blocking dialog. Sharing failing changes nothing about the
-recipe and must not interrupt anything.
+Per #69 this is a toast and never a blocking dialog, and it must not interrupt anything.
+
+One correction to how this reads: a failed share does not leave the recipe *untouched*. Sharing
+saves the recipe first, because saving is what assigns the accent index that goes into the minted
+payload — snapshot before saving and the snapshot never matches again, which mints a duplicate on
+the next press. So a share that fails on the network leaves a saved recipe behind. That is
+deliberate and harmless: the user pressed Share on a recipe they wanted. What must *not* happen is
+saving on the way to an immediate refusal, so the block reason is evaluated before the save.
 
 - [ ] **Step 5: Pass it to the sheet**
 

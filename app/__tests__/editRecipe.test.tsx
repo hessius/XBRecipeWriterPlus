@@ -378,6 +378,31 @@ describe("the editor", () => {
         jest.useRealTimers();
     });
 
+    it("does not save a recipe it is about to refuse to share", async () => {
+        // Saving a recipe that has never been in the database inserts it into
+        // the library and assigns it an accent. Pressing Share on a recipe the
+        // machine would reject must not add it to the library on the way to
+        // being told no.
+        jest.useFakeTimers();
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+        const saved = () => RecipeDatabase.mock.instances
+            .reduce((n: number, i: {updateRecipe: {mock: {calls: unknown[]}}}) =>
+                n + i.updateRecipe.mock.calls.length, 0);
+
+        // The fixture's pours are balanced for an 18 g dose. Raising the dose
+        // without rebalancing them is exactly the `volumeMismatch` the machine
+        // rejects, so `shareBlockReason` refuses this recipe.
+        await renderEditor({dosage: 30});
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Share"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(saved()).toBe(0);
+        jest.useRealTimers();
+    });
+
     it("reports share failures as toasts", async () => {
         mockShareState = {status: "failed", reason: "network"};
 

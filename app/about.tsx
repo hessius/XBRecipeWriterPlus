@@ -121,7 +121,8 @@ export default function AboutScreen() {
                         Importing a shared recipe sends that recipe&apos;s ID to the
                         manufacturer&apos;s service in order to fetch it. Sharing sends
                         the recipe to the XBRW++ share service to create an xBloom
-                        link. If you never share, XBRW++ still sends nothing anywhere.
+                        link. Those two are the only things that use the network;
+                        leave both alone and XBRW++ sends nothing anywhere.
                         A backup goes only where you send it.
                     </AboutParagraph>
                 </AboutSection>

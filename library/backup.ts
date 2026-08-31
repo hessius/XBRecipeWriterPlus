@@ -1,4 +1,5 @@
 import Recipe from "./Recipe";
+import {XBLOOM_SHARE_HOST} from "./shareLink";
 
 /**
  * The backup file, and the only door it comes back in through.
@@ -188,6 +189,31 @@ function isNumberArray(value: unknown): boolean {
  * What is checked is that a field which *is* there holds the kind of value the
  * rest of the app will assume it holds.
  */
+/**
+ * A share URL from a backup file, which is untrusted input.
+ *
+ * Any string used to be accepted here, and `useShareRecipe` hands a stored URL
+ * straight back to the system share sheet when the snapshot still matches. A
+ * crafted backup could therefore make the Share button distribute an arbitrary
+ * link — one the app never contacted the mint service to obtain, and which the
+ * user would reasonably read as an xBloom recipe. So the host is pinned, the
+ * scheme must be HTTPS, and the `id` the importer reads must actually be there.
+ */
+function isShareUrl(value: unknown): boolean {
+    if (typeof value !== "string") return false;
+    // Empty is legitimate: a recipe that has never been shared.
+    if (value === "") return true;
+    let url: URL;
+    try {
+        url = new URL(value);
+    } catch {
+        return false;
+    }
+    return url.protocol === "https:"
+        && url.hostname === XBLOOM_SHARE_HOST
+        && (url.searchParams.get("id") ?? "") !== "";
+}
+
 const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     uuid:        (v) => typeof v === "string",
     name:        (v) => typeof v === "string",
@@ -196,7 +222,7 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     xid:         (v) => typeof v === "string",
     source:      (v) => typeof v === "string",
     shareId:     (v) => typeof v === "string",
-    shareUrl:    (v) => typeof v === "string",
+    shareUrl:    isShareUrl,
     shareSnapshot: (v) => typeof v === "string",
     sharedTableId: isNumber,
     grinder:     (v) => typeof v === "boolean",

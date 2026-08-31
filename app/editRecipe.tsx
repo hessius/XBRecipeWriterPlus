@@ -30,6 +30,7 @@ import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {shareBlockReason} from "@/library/shareLink";
 import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
@@ -727,7 +728,8 @@ export default function EditRecipe() {
             network:     "Could not reach the sharing service. Check your connection.",
             limited:     "Sharing is busy right now. Try again in a few minutes.",
             unavailable: "Sharing is temporarily unavailable. Everything else still works.",
-            unusable:    "This recipe cannot be shared yet — check the pour volumes and dose."
+            unusable:    "This recipe cannot be shared yet — check the pour volumes and dose.",
+            pending:     "This recipe's link is still being created. Try again in a moment."
         }[shareState.reason];
         notify({tone: "error", message});
     }, [shareState]);
@@ -803,6 +805,16 @@ export default function EditRecipe() {
         // The same reason Refresh flushes first: a just-typed value has to be
         // committed or the link is minted from the previous one.
         await flushDrafts();
+        // Ask first whether this recipe can be shared at all, because the
+        // persist below is not free: saving a new recipe inserts it into the
+        // library and assigns it an accent. Pressing Share on a half-finished
+        // recipe must not quietly add it to the library on the way to being
+        // refused. `share` performs the same check and owns the message, so
+        // this call mints nothing, persists nothing, and only reports.
+        if (shareBlockReason(currentRecipe) !== null) {
+            await shareRecipe(currentRecipe);
+            return;
+        }
         // Persist *before* minting, not only after. Saving assigns an accent
         // index to a recipe that does not have one yet, and the accent is part
         // of the payload — so snapshotting first would store a snapshot the

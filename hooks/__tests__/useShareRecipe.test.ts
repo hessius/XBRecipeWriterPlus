@@ -137,3 +137,43 @@ describe("useShareRecipe", () => {
             expect(result.current.state).toEqual({status: "failed", reason: "unusable"}));
     });
 });
+
+describe("useShareRecipe idempotency", () => {
+    it("sends an idempotency key", async () => {
+        const fetchMock = respond({tableId: 42, url: "https://share-h5.xbloom.com/?id=ok"});
+        global.fetch = fetchMock;
+        const {result} = await renderHook(() => useShareRecipe());
+
+        await act(async () => { await result.current.share(drip()); });
+
+        const init = (fetchMock as unknown as jest.Mock).mock.calls[0][1];
+        expect(init.headers["idempotency-key"]).toMatch(/^[A-Za-z0-9._:-]+$/);
+    });
+
+    it("retries an unchanged recipe under the same key", async () => {
+        // The abort on timeout does not reach the server, so a retry that
+        // arrives under a fresh key mints a second permanent copy.
+        const fetchMock = jest.fn(async () => { throw new Error("aborted"); }) as never;
+        global.fetch = fetchMock;
+        const recipe = drip();
+        const {result} = await renderHook(() => useShareRecipe());
+
+        await act(async () => { await result.current.share(recipe); });
+        await act(async () => { await result.current.share(recipe); });
+
+        const calls = (fetchMock as unknown as jest.Mock).mock.calls;
+        expect(calls).toHaveLength(2);
+        expect(calls[0][1].headers["idempotency-key"])
+            .toBe(calls[1][1].headers["idempotency-key"]);
+    });
+
+    it("reports a mint that is still running as pending", async () => {
+        global.fetch = respond({error: "inflight"}, 409);
+        const {result} = await renderHook(() => useShareRecipe());
+
+        await act(async () => { await result.current.share(drip()); });
+
+        await waitFor(() =>
+            expect(result.current.state).toEqual({status: "failed", reason: "pending"}));
+    });
+});

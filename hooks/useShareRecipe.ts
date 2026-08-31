@@ -11,7 +11,27 @@ import {buildSharePayload, canonicalSnapshot, shareBlockReason} from "@/library/
  * fail in the same ways and a user should not have to learn two vocabularies
  * for one idea.
  */
-export type ShareErrorReason = "network" | "limited" | "unavailable" | "unusable";
+export type ShareErrorReason =
+    | "network"
+    | "limited"
+    | "unavailable"
+    | "unusable"
+    /** A mint for this exact recipe is already running on the server. */
+    | "pending";
+
+/**
+ * An opaque per-snapshot idempotency key.
+ *
+ * Random rather than derived from the payload: a hash of the snapshot would be
+ * the same string for two people who built the same recipe, and the server
+ * caches a *minted link* against this key. A collision would hand one user the
+ * other's share URL. Randomness makes that impossible; reuse across retries is
+ * what `keys` below provides.
+ */
+function newIdempotencyKey(): string {
+    const rand = () => Math.random().toString(36).slice(2, 10);
+    return `${Date.now().toString(36)}-${rand()}-${rand()}`;
+}
 
 export type ShareState =
     | {status: "idle"}
@@ -32,6 +52,10 @@ export function useShareRecipe() {
     // A ref, not state: it guards against a double tap within one render pass,
     // which a state flag would not see in time.
     const inFlight = useRef(false);
+    // Snapshot → idempotency key. The timeout below aborts our fetch but cannot
+    // abort the server's already-started mint, so a retry has to arrive under
+    // the *same* key or it mints a second permanent copy of the same recipe.
+    const keys = useRef(new Map<string, string>());
 
     async function share(recipe: Recipe): Promise<string | null> {
         if (inFlight.current) {
@@ -53,18 +77,31 @@ export function useShareRecipe() {
         inFlight.current = true;
         setState({status: "sharing"});
 
+        let key = keys.current.get(snapshot);
+        if (key === undefined) {
+            key = newIdempotencyKey();
+            keys.current.set(snapshot, key);
+        }
+
         const abort = new AbortController();
         const timer = setTimeout(() => abort.abort(), SHARE_TIMEOUT_MS);
         try {
             const res = await fetch(SHARE_API_URL, {
                 method:  "POST",
-                headers: {"content-type": "application/json"},
+                headers: {"content-type": "application/json", "idempotency-key": key},
                 body:    JSON.stringify({payload}),
                 signal:  abort.signal
             });
 
             if (res.status === 429) {
                 setState({status: "failed", reason: "limited"});
+                return null;
+            }
+            if (res.status === 409) {
+                // The mint we started before the last timeout is still running.
+                // Retrying under the same key will return its result once it
+                // lands, so this is worth waiting out rather than giving up on.
+                setState({status: "failed", reason: "pending"});
                 return null;
             }
             if (res.status === 400) {
@@ -87,6 +124,9 @@ export function useShareRecipe() {
             recipe.sharedTableId = body.tableId;
             recipe.shareUrl = body.url;
             recipe.shareSnapshot = snapshot;
+            // The link is on the recipe now, so the key has nothing left to
+            // protect and the map does not grow for the life of the screen.
+            keys.current.delete(snapshot);
 
             setState({status: "idle"});
             return body.url;

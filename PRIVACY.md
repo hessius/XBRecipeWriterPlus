@@ -45,9 +45,9 @@ Two things about a shared link are worth knowing before you tap it:
 - Anyone who opens the link sees the recipe attributed to the XBRW++ account,
   not to you.
 
-**If you never share, XBRW++ still sends nothing anywhere.** Every other feature
-— reading cards, writing cards, editing, backup and restore — works with the
-network off.
+**Importing and sharing are the only two things that use the network.** Leave
+both alone and XBRW++ sends nothing anywhere: reading cards, writing cards,
+editing, backup and restore all work with the network off.
 
 These xBloom endpoints are unofficial and undocumented. They can change or stop
 working without notice.

@@ -35,6 +35,18 @@ export type SharePayload = {
     pourDataJSONStr: string;
 };
 
+/**
+ * The host xBloom serves share links from.
+ *
+ * The minted URL is `https://share-h5.xbloom.com/?id=<opaque token>`. Pinned
+ * because a stored share URL is handed to the system share sheet verbatim, so
+ * an untrusted one is a link the app would vouch for without ever having asked
+ * the mint service for it. The *importer* deliberately accepts any host, which
+ * is a different question: there it only ever extracts the id and calls
+ * xBloom's own API with it.
+ */
+export const XBLOOM_SHARE_HOST = "share-h5.xbloom.com";
+
 /** Why a recipe cannot be shared. Empty when it can. */
 export type ShareBlockReason = "noPours" | "volumeMismatch" | "incomplete";
 
