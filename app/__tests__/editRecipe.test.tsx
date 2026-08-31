@@ -192,7 +192,7 @@ describe("the editor", () => {
         // The titles as `RECIPE_HELP` holds them. `FieldRow` uppercases with
         // `textTransform`, which is a style — the text content is unchanged,
         // so a query for "RATIO" would find nothing.
-        for (const label of ["Dose", "Ratio", "Grind size", "Grind speed",
+        for (const label of ["Dose", "Ratio", "Grind size · French press", "Grind speed",
                              "Cup", "Grinder", "Recipe ID", "Name"]) {
             expect(screen.getByText(label)).toBeTruthy();
         }

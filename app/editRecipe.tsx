@@ -25,6 +25,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
+import {grindBand} from "@/library/grindBands";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -226,7 +227,10 @@ function BrewDeck({
             </FieldRow>
 
             {showGrind && (
+                // grindBand returns undefined for the grinder-off sentinel and for
+                // anything off the scale; the row then just shows its own name.
                 <FieldRow topic="grindSize"
+                      note={grindBand(recipe.grindSize)?.label}
                       showHint={showHint}>
                     <Stepper label="Grind size" value={recipe.grindSize}
                              min={40} max={80} step={1}
