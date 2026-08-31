@@ -54,7 +54,16 @@ export const DEFAULTS = {
      * length. HomoLand's wins on provenance and is the default; the other is
      * reachable from the machine console so a stopwatch can settle it.
      */
-    teaSteepEncoding: "homoland" as "homoland" | "saya6k"
+    teaSteepEncoding: "homoland" as "homoland" | "saya6k",
+    /**
+     * The last machine that connected, so later sessions reconnect directly
+     * rather than scanning. Empty until one has.
+     *
+     * This is also what the editor's action bar reads to decide whether to
+     * offer BREW at all: an empty string means nobody here owns a J15, and a
+     * dead button on every recipe would be worse than no button.
+     */
+    machineDeviceId: ""
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

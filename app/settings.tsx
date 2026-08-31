@@ -57,6 +57,10 @@ export default function SettingsScreen({settings}: Props) {
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
     const [teaSteepEncoding] = useSetting("teaSteepEncoding", settings);
+    // Not shown as a row on this screen -- the machine link is managed from the
+    // console and the editor's BREW button. Read here anyway, because a backup
+    // carries every preference and this is one.
+    const [machineDeviceId] = useSetting("machineDeviceId", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -74,7 +78,7 @@ export default function SettingsScreen({settings}: Props) {
     // settings and then quietly drops one is worse than a backup that carries
     // none: the user has no way to tell which preference did not survive.
     function settingsSnapshot(): Record<SettingKey, unknown> {
-        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding};
+        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding, machineDeviceId};
     }
 
     async function onBackUp() {
