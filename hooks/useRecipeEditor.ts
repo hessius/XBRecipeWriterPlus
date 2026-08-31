@@ -440,15 +440,19 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
  * so the React Compiler's immutability check sees the mutation happen behind a
  * function boundary rather than directly on a value derived from state.
  */
-/** Raise the grind to the card minimum. Kept at module scope so the React Compiler sees the mutation behind a function boundary. */
-function applyGrindMinimum(recipe: Recipe, min: number) {
-    recipe.grindSize = min;
-}
-
 function applyStageField(pour: Pour, field: StageField, value: number) {
     if (field === "agitationBefore") pour.setAgitationBefore(value === 1);
     else if (field === "agitationAfter") pour.setAgitationAfter(value === 1);
     else pour[field] = value;
+}
+
+/**
+ * Raise the grind to the card minimum. At module scope for the same reason as
+ * `applyStageField`: the React Compiler's immutability check rejects a direct
+ * assignment to a value derived from state, even inside a narrowing guard.
+ */
+function applyGrindMinimum(recipe: Recipe, min: number) {
+    recipe.grindSize = min;
 }
 
 /** Whether a recipe has the material a given revert source needs. */
