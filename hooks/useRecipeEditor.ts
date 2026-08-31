@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
 import {cardWriteProblems} from "@/library/cardLimits";
+import {CARD_GRIND_MIN} from "@/library/grindBands";
 import Recipe from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -174,6 +175,21 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         if (recipe) {
             recipe.autoFixPourVolumes();
             setVolumeError(null);
+            setKey((prev) => prev + 1);
+        }
+    }
+
+    /**
+     * Raise a too-fine grind to the finest a card can store.
+     *
+     * Only ever offered, never applied on the user's behalf: an imported
+     * espresso recipe raised to 40 is not a corrected recipe, it is a different
+     * drink. The import keeps its original value and this is the button that
+     * changes it.
+     */
+    function coarsenGrindToMinimum() {
+        if (recipe && recipe.grindSize < CARD_GRIND_MIN) {
+            applyGrindMinimum(recipe, CARD_GRIND_MIN);
             setKey((prev) => prev + 1);
         }
     }
@@ -407,6 +423,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         addPour,
         deletePour,
         autoAdjustPourVolumes,
+        coarsenGrindToMinimum,
         editStage,
         saveRecipe,
         editInputComplete,
@@ -423,6 +440,11 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
  * so the React Compiler's immutability check sees the mutation happen behind a
  * function boundary rather than directly on a value derived from state.
  */
+/** Raise the grind to the card minimum. Kept at module scope so the React Compiler sees the mutation behind a function boundary. */
+function applyGrindMinimum(recipe: Recipe, min: number) {
+    recipe.grindSize = min;
+}
+
 function applyStageField(pour: Pour, field: StageField, value: number) {
     if (field === "agitationBefore") pour.setAgitationBefore(value === 1);
     else if (field === "agitationAfter") pour.setAgitationAfter(value === 1);
