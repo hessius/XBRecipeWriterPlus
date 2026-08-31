@@ -1,4 +1,5 @@
 import {grindBand, CARD_GRIND_MIN} from "@/library/grindBands";
+import {GRIND_SIZE} from "@/library/cardLimits";
 import {GRIND_SIZE_OFFSET, GRINDER_OFF} from "@/library/Recipe";
 
 describe("grindBand", () => {
@@ -43,6 +44,16 @@ describe("grindBand", () => {
 
     it("exposes the card floor so the UI does not re-type it", () => {
         expect(CARD_GRIND_MIN).toBe(40);
+    });
+
+    it("keeps the card floor in step with the one the write actually enforces", () => {
+        // Two independent 40s: this module decides when to *offer* the fix,
+        // cardLimits decides when to *refuse* the write. If they drift, the app
+        // either offers a fix for a grind the card would have taken, or stays
+        // silent about one it will not. The floor itself is hardware-verified
+        // and must never move downward -- the encoder would emit a negative
+        // byte.
+        expect(CARD_GRIND_MIN).toBe(GRIND_SIZE.min);
     });
 
     it("every integer 1-80 maps to a band, and labels change only at the four expected boundaries", () => {

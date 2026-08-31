@@ -21,7 +21,8 @@ import {displayRange, toDisplay, type TemperatureUnit} from "./units";
 type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
-const GRIND_SIZE: Range = {min: 40, max: 80};
+/** Exported for the test that keeps `library/grindBands` in step with the card. */
+export const GRIND_SIZE: Range = {min: 40, max: 80};
 const GRIND_RPM: Range = {min: 60, max: 120};
 /** Exported for the test that keeps `library/units` in step with the card. */
 export const TEMPERATURE: Range = {min: 39, max: 99};
