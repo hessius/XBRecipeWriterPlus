@@ -68,6 +68,23 @@ jest.mock("@/hooks/useRecipeLibrary", () => ({
     })
 }));
 
+// The machine section (added by the BLE brew work) pulls in `useMachine`, which
+// transitively imports the BLE transport — a native module that throws at load
+// under Jest. This screen only needs the section to render in its unpaired
+// state, so the hook is stubbed here the same way the library and backup hooks
+// above are, keeping the settings screen off the radio entirely.
+jest.mock("@/hooks/useMachine", () => {
+    const link = {
+        machine:    {info: null},
+        status:     "disconnected",
+        error:      null,
+        remembered: "",
+        connect:    jest.fn(),
+        forget:     jest.fn()
+    };
+    return {__esModule: true, default: () => link, useMachine: () => link};
+});
+
 function recipeNamed(name: string, uuid: string): Recipe {
     const recipe = new Recipe();
     recipe.name = name;

@@ -4,6 +4,7 @@ import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
+import MachineSection from "@/components/MachineSection";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import ScreenHeader from "@/components/ScreenHeader";
 import SettingsActionRow from "@/components/SettingsActionRow";
@@ -227,6 +228,8 @@ export default function SettingsScreen({settings}: Props) {
                         options={TEMPERATURE_OPTIONS}
                         onChange={(value) => setTemperatureUnit(asTemperatureUnit(value))}/>
                 </SettingsSection>
+
+                <MachineSection/>
 
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"
