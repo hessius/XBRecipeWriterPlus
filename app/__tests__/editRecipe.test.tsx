@@ -192,7 +192,7 @@ describe("the editor", () => {
         // The titles as `RECIPE_HELP` holds them. `FieldRow` uppercases with
         // `textTransform`, which is a style — the text content is unchanged,
         // so a query for "RATIO" would find nothing.
-        for (const label of ["Dose", "Ratio", "Grind size", "Grind speed",
+        for (const label of ["Dose", "Ratio", "Grind size · French press", "Grind speed",
                              "Cup", "Grinder", "Recipe ID", "Name"]) {
             expect(screen.getByText(label)).toBeTruthy();
         }
@@ -255,7 +255,7 @@ describe("the editor", () => {
         await fireEvent.press(screen.getByLabelText("Increase Grind size"));
 
         expect(screen.getByLabelText(/^Grind size, /).props.accessibilityLabel)
-            .toBe("Grind size, 62");
+            .toBe("Grind size, 62 French press");
     });
 
     it("puts the rest behind the caret", async () => {
@@ -720,5 +720,63 @@ describe("flushing an unblurred field before an action", () => {
         const store = RecipeDatabase.mock.instances.at(-1)!;
         expect(store.updateRecipe.mock.calls.at(-1)![1].name).toBe("Original");
         jest.useRealTimers();
+    });
+});
+
+describe("grind-too-fine banner", () => {
+    it("shows the banner with the band name for a grind below the card minimum", async () => {
+        // grindSize 12 is espresso — below the card-minimum of 40.
+        await renderEditor({grindSize: 12});
+
+        expect(screen.getByTestId("grind-too-fine")).toBeTruthy();
+        // "espresso" is the longLabel for the 1-15 band; it should appear in
+        // the explanatory sentence within the banner.
+        expect(screen.getByText(/Ground for espresso/i)).toBeTruthy();
+        expect(screen.getByLabelText("Set grind size to 40")).toBeTruthy();
+    });
+
+    it("fixes the grind and hides the banner when SET TO 40 is pressed", async () => {
+        await renderEditor({grindSize: 12});
+
+        await fireEvent.press(screen.getByLabelText("Set grind size to 40"));
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+        // The stepper should now reflect the raised value.
+        expect(screen.getByLabelText(/^Grind size, 40 /)).toBeTruthy();
+    });
+
+    it("shows no banner for a normal in-range grind", async () => {
+        // fixture() has grindSize = 60, which is within the card range.
+        await renderEditor();
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+    });
+
+    it("shows no banner when the grinder is off", async () => {
+        // grindSize 81 is the grinder-off sentinel (GRIND_SIZE_OFFSET + GRINDER_OFF).
+        // It is not below 40, so no banner should appear.
+        await renderEditor({grindSize: 81, grinder: false});
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+    });
+
+    it("does not let the stepper raise a below-minimum grind through Decrease", async () => {
+        // With a fixed floor of 40, `stepped()` clamped 11 *up* to 40, so the
+        // control announced as Decrease raised the value -- and the stepper
+        // advertised a minimum of 40 while reporting 12.
+        await renderEditor({grindSize: 12});
+
+        await fireEvent.press(screen.getByLabelText("Decrease Grind size"));
+
+        expect(screen.getByLabelText(/^Grind size, 12/)).toBeTruthy();
+        expect(screen.getByTestId("grind-too-fine")).toBeTruthy();
+    });
+
+    it("speaks the band with the value, because the label is only visual", async () => {
+        // A screen reader adjusting the stepper hears the number and nothing
+        // else, so the meaning changing at 56 would otherwise pass silently.
+        await renderEditor({grindSize: 60});
+
+        expect(screen.getByLabelText("Grind size, 60 French press")).toBeTruthy();
     });
 });

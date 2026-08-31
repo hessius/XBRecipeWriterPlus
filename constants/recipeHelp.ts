@@ -54,7 +54,16 @@ const ENTRIES = {
     },
     grindSize: {
         title: "Grind size",
-        hint:  "40 to 80. Lower is finer."
+        hint:  "40 to 80. Lower is finer.",
+        question: "What do the grind numbers mean?",
+        detail: "40 to 55 is the pourover range, and 56 to 80 suits a French " +
+                "press or cold brew. Lower is finer. The xBloom app shows a " +
+                "1 to 80 scale, which is the grinder's own range and includes " +
+                "espresso and Aeropress grinds; a recipe card stores the grind " +
+                "as an offset from 40, so it cannot carry anything finer than " +
+                "that. Those finer bands are the ones you would grind for and " +
+                "then brew somewhere else. An imported recipe can hold one, and " +
+                "the editor will offer to coarsen it."
     },
     grindSpeed: {
         title: "Grind speed",

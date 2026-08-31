@@ -36,6 +36,28 @@ describe("FieldRow", () => {
             .toBeTruthy();
     });
 
+    it("appends a note to the label", async () => {
+        await renderWithProviders(
+            <FieldRow topic="grindSize" note="Pourover"><Text>47</Text></FieldRow>
+        );
+
+        expect(screen.getByText("Grind size · Pourover")).toBeTruthy();
+    });
+
+    it("draws the note whether or not the hint is asked for", async () => {
+        // The note is not a hint. Hints are opt-in and off by default, so
+        // gating the note behind them would hide it from most users, which is
+        // the whole point of drawing it.
+        await renderWithProviders(
+            <FieldRow topic="grindSize" showHint note="French press">
+                <Text>60</Text>
+            </FieldRow>
+        );
+
+        expect(screen.getByText("Grind size · French press")).toBeTruthy();
+        expect(screen.getByText("40 to 80. Lower is finer.")).toBeTruthy();
+    });
+
     it("carries no help affordance of its own", async () => {
         // The markers were tried and removed: fifteen small unanswered
         // questions dotted over a screen someone was trying to work on. The

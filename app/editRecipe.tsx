@@ -25,6 +25,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
+import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -48,6 +49,16 @@ const GRINDER_OPTIONS = [
     {value: "1", label: "ON"},
     {value: "0", label: "OFF"}
 ] as const;
+
+/**
+ * The touch target for a banner's action.
+ *
+ * Both banner actions are a single line of dot-matrix text, roughly eleven
+ * points tall, which is well under the 44 the HIG asks for. The height is
+ * padding rather than `hitSlop` for the reason `HomeHeader` records — and here
+ * it costs nothing, because both banners are already taller than 44.
+ */
+const BANNER_ACTION = {minHeight: 44, justifyContent: "center"} as const;
 
 type TextFieldRowProps = {
     topic: HelpTopic;
@@ -156,6 +167,8 @@ type BrewDeckProps = {
     onDraft: (label: string, value: string) => void;
     /** Reports the recipe-ID field's validity into the screen's write/save gate. */
     onInputErrorChange: (invalid: boolean) => void;
+    /** Raises a too-fine imported grind to the card minimum. */
+    coarsenGrindToMinimum: () => void;
 };
 
 /**
@@ -182,7 +195,7 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange
+    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum
 }: BrewDeckProps) {
     "use no memo";
 
@@ -197,6 +210,12 @@ function BrewDeck({
     // Grind size and speed are meaningless with the grinder off, and a tea card
     // always writes the default grind — so those two rows hide in both cases.
     const showGrind = recipe.grinder && !isTea;
+    // An imported recipe can carry a grind finer than a card can store: the
+    // cloud keeps grind on the grinder's own 1-80 scale and the importer copies
+    // it through unchanged. The write is already refused; this is the offer to
+    // fix it that the stage mismatch has always had.
+    const tooFine = showGrind && recipe.grindSize < CARD_GRIND_MIN;
+    const fineBand = tooFine ? grindBand(recipe.grindSize) : undefined;
 
     return (
         <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
@@ -225,11 +244,59 @@ function BrewDeck({
                          onChange={(value) => dispatch(RECIPE_LABELS.RATIO, String(value))}/>
             </FieldRow>
 
+            {tooFine && (
+                <XStack testID="grind-too-fine" alignItems="center" gap="$2.5"
+                        marginHorizontal="$4" marginTop="$3" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.danger}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.danger}>
+                            {`GRIND ${recipe.grindSize}`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            {fineBand === undefined
+                                ? `A card cannot store a grind below ${CARD_GRIND_MIN}.`
+                                : `Ground for ${fineBand.longLabel}. A card cannot store a grind below ${CARD_GRIND_MIN}.`}
+                        </Text>
+                    </YStack>
+                    <Pressable accessibilityRole="button"
+                               accessibilityLabel={`Set grind size to ${CARD_GRIND_MIN}`}
+                               style={BANNER_ACTION}
+                               onPress={coarsenGrindToMinimum}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={accent}>
+                            {`SET TO ${CARD_GRIND_MIN}`}
+                        </DotMatrixText>
+                    </Pressable>
+                </XStack>
+            )}
+
             {showGrind && (
+                // grindBand returns undefined for the grinder-off sentinel and for
+                // anything off the scale; the row then just shows its own name.
                 <FieldRow topic="grindSize"
+                      note={grindBand(recipe.grindSize)?.label}
                       showHint={showHint}>
+                    {/* `unit` is spoken, not drawn (see #77) -- which is exactly
+                        what is wanted here. The band is already on the label
+                        visually, but a screen reader adjusting the stepper hears
+                        only the number, so the meaning changing from Pourover to
+                        French press at 56 would pass silently. Anyone fixing #77
+                        by *drawing* units must skip this row, or it will read
+                        "GRIND SIZE · POUROVER" beside "55 Pourover". */}
                     <Stepper label="Grind size" value={recipe.grindSize}
-                             min={40} max={80} step={1}
+                             unit={grindBand(recipe.grindSize)?.label}
+                             // The floor is the card's, except for a recipe that
+                             // already sits below it. With a fixed floor of 40 an
+                             // imported espresso grind of 12 made "decrease"
+                             // *raise* the value to 40 -- the control clamped
+                             // upward and silently changed a number nobody asked
+                             // it to change, and announced a value below its own
+                             // advertised minimum. Below the floor the value is
+                             // its own minimum, so decrease does nothing and the
+                             // banner's SET TO 40 stays the only way up.
+                             min={Math.min(CARD_GRIND_MIN, recipe.grindSize)} max={80} step={1}
                              onChange={(value) => dispatch(RECIPE_LABELS.GRIND_SIZE, String(value))}/>
                 </FieldRow>
             )}
@@ -425,6 +492,7 @@ function StagesDeck({
                         </Text>
                     </YStack>
                     <Pressable accessibilityRole="button" accessibilityLabel="Auto fix"
+                               style={BANNER_ACTION}
                                onPress={autoAdjustPourVolumes}>
                         <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                        color={accent}>
@@ -640,7 +708,7 @@ export default function EditRecipe() {
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
-        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes
+        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes, coarsenGrindToMinimum
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -800,6 +868,7 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
+                              coarsenGrindToMinimum={coarsenGrindToMinimum}
                               onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (

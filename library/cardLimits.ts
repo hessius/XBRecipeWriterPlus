@@ -21,7 +21,8 @@ import {displayRange, toDisplay, type TemperatureUnit} from "./units";
 type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
-const GRIND_SIZE: Range = {min: 40, max: 80};
+/** Exported for the test that keeps `library/grindBands` in step with the card. */
+export const GRIND_SIZE: Range = {min: 40, max: 80};
 const GRIND_RPM: Range = {min: 60, max: 120};
 /** Exported for the test that keeps `library/units` in step with the card. */
 export const TEMPERATURE: Range = {min: 39, max: 99};
@@ -83,7 +84,12 @@ export function cardWriteProblems(
     // Only when the grinder is on, and never on tea: a tea card always writes
     // the default grind size regardless of what the model holds.
     if (recipe.grinder && !tea) {
-        const grindSizeMsg = `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`;
+        // Below the minimum is worth distinguishing: it is what an imported
+        // recipe carries when it was ground for espresso, and "the range is
+        // 40-80" alone does not explain how it got that way.
+        const grindSizeMsg = recipe.grindSize < GRIND_SIZE.min
+            ? `The grind size is ${recipe.grindSize}. A card cannot store a grind below ${GRIND_SIZE.min}.`
+            : `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`;
         if (outside(recipe.grindSize, GRIND_SIZE)) {
             problems.push(grindSizeMsg);
         } else {

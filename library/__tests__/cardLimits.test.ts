@@ -189,6 +189,23 @@ describe("fractional byte fields", () => {
         expect(cardWriteProblems(recipe).some((p) => p.includes("50.5") && p.includes("whole number"))).toBe(true);
     });
 
+    it("explains a grind below the minimum rather than only quoting the range", () => {
+        // What an import carries when the recipe was ground for espresso. The
+        // range alone does not tell anyone how it came to be outside it.
+        const recipe = validRecipe();
+        recipe.grindSize = 12;
+
+        const problems = cardWriteProblems(recipe);
+        expect(problems.some((p) => p.includes("cannot store a grind below 40"))).toBe(true);
+    });
+
+    it("still quotes the range for a grind above the maximum", () => {
+        const recipe = validRecipe();
+        recipe.grindSize = 90;
+
+        expect(cardWriteProblems(recipe).some((p) => p.includes("The range is 40-80"))).toBe(true);
+    });
+
     it("rejects a fractional grind RPM", () => {
         const recipe = validRecipe();
         recipe.grindRPM = 90.5;

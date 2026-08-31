@@ -157,3 +157,49 @@ it("hands the press upward", async () => {
 
     expect(onOpen).toHaveBeenCalledTimes(1);
 });
+
+describe("ImportResult grind notice", () => {
+    it("says nothing when the grind fits on a card", async () => {
+        const found = preview();
+        found.recipe.grindSize = 50;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
+
+    it("names the band and frames it as a card limit, not a bad recipe", async () => {
+        // The cloud keeps grind on the grinder's 1-80 scale, so this is a
+        // value a real import can carry.
+        const found = preview();
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.getByTestId("import-grind-notice")).toBeTruthy();
+        expect(screen.getByText(/Aeropress/)).toBeTruthy();
+    });
+
+    it("says nothing when the grinder is off", async () => {
+        // `XBloomRecipe` turns the grinder off on `isSetGrinderSize === 2` but
+        // still copies whatever `grinderSize` the cloud sent, so a grinder-off
+        // import really can hold a value below 40. Nothing will grind to it.
+        const found = preview();
+        found.recipe.grinder = false;
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
+
+    it("says nothing for tea, which always writes the default grind", async () => {
+        const found = preview();
+        found.recipe.cupType = CUP_TYPE.TEA;
+        found.recipe.grindSize = 25;
+
+        await renderWithProviders(<ImportResult preview={found} onOpen={() => {}}/>);
+
+        expect(screen.queryByTestId("import-grind-notice")).toBeNull();
+    });
+});

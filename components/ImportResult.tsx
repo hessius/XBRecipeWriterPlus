@@ -6,6 +6,8 @@ import DotMatrixText from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {palette} from "@/constants/colors";
 import type {ImportPreview} from "@/hooks/useRecipeImport";
+import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
+import {CUP_TYPE} from "@/library/Recipe";
 
 /** The pod mark's diameter. Two lines of text tall, so nothing below it moves. */
 const POD_SIZE = 44;
@@ -56,6 +58,22 @@ export default function ImportResult({preview, onOpen}: Props) {
     // title, which is already the heading above. Repeating the heading says
     // nothing, so the row is drawn only when a custom name genuinely exists.
     const customName = recipe.name.trim();
+
+    // The cloud stores grind on the grinder's own 1-80 scale, so an imported
+    // recipe can legitimately hold a value finer than a card can carry. It is
+    // imported unchanged -- an espresso grind raised to 40 would be a different
+    // drink, not a corrected recipe -- so the panel says so instead, here,
+    // rather than letting the user find out at the card reader.
+    //
+    // Guarded on the grinder the same way the editor's grind row is. An import
+    // whose `isSetGrinderSize` is 2 still carries whatever `grinderSize` the
+    // cloud happened to send, so a grinder-off recipe can hold a value below 40
+    // that nothing will ever grind to; and a tea card always writes the default
+    // grind regardless. Neither has a coarseness worth naming.
+    const grinds = recipe.grinder && recipe.cupType !== CUP_TYPE.TEA;
+    const fineBand = grinds && recipe.grindSize < CARD_GRIND_MIN
+        ? grindBand(recipe.grindSize)
+        : undefined;
 
     return (
         <YStack gap="$3" paddingTop="$2">
@@ -136,6 +154,12 @@ export default function ImportResult({preview, onOpen}: Props) {
                         Already in your library
                     </Text>
                 )
+            )}
+
+            {fineBand !== undefined && (
+                <Text testID="import-grind-notice" color={palette.info} fontSize={13}>
+                    {`Ground for ${fineBand.longLabel}. You will need to coarsen it to write a card.`}
+                </Text>
             )}
 
             <XStack
