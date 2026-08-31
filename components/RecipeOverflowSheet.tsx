@@ -25,7 +25,7 @@ type Props = {
     /** Whether the deck draws its one-line hints. */
     showHints: boolean;
     onShowHintsChange: (show: boolean) => void;
-    onShare?: () => void;
+    onShare: () => void;
     onDuplicate: () => void;
     onRefreshName: () => void;
     onRevert: () => void;
@@ -41,7 +41,7 @@ type Props = {
  */
 export default function RecipeOverflowSheet({
     open, canRefreshName, onOpenChange, showHints, onShowHintsChange,
-    onShare = noop, onDuplicate, onRefreshName, onRevert, onDelete
+    onShare, onDuplicate, onRefreshName, onRevert, onDelete
 }: Props) {
     function pick(action: () => void) {
         onOpenChange(false);
@@ -136,5 +136,3 @@ export default function RecipeOverflowSheet({
         </XbrwSheet>
     );
 }
-
-function noop() {}

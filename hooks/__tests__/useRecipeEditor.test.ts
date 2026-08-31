@@ -108,6 +108,24 @@ describe("the two gates", () => {
         expect(onSaved).toHaveBeenCalled();
     });
 
+    it("persists a recipe without treating it as a save", async () => {
+        const onSaved = jest.fn();
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+        const {result} = await renderEditor({onSaved});
+
+        await act(async () => {
+            result.current.persistRecipe();
+        });
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe).toHaveBeenCalledWith(
+            result.current.recipe!.uuid,
+            result.current.recipe
+        );
+        expect(onSaved).not.toHaveBeenCalled();
+    });
+
     it("refuses to write one that does not", async () => {
         const {result} = await renderEditor();
 

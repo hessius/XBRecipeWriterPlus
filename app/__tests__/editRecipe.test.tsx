@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet, TextInput} from "react-native";
+import {Share, StyleSheet, TextInput} from "react-native";
 import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
@@ -18,6 +18,23 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/library/RecipeDatabase");
+
+const mockNotify = jest.fn();
+jest.mock("@/components/XbrwToast", () => ({
+    ...jest.requireActual("@/components/XbrwToast"),
+    notify: (...args: unknown[]) => mockNotify(...args)
+}));
+
+let mockShareState: {status: "idle"} | {status: "sharing"} |
+    {status: "failed"; reason: "network" | "limited" | "unavailable" | "unusable"} = {status: "idle"};
+const mockShareRecipe = jest.fn();
+jest.mock("@/hooks/useShareRecipe", () => ({
+    useShareRecipe: () => ({
+        state:        mockShareState,
+        share:        mockShareRecipe,
+        dismissError: jest.fn()
+    })
+}));
 
 // `useSetting` reaches for the shared SQLite-backed settings store, which
 // cannot open under jest. Held in a `mock`-prefixed `let` — Babel rejects any
@@ -97,6 +114,9 @@ beforeEach(() => {
     mockSettings = {};
     mockParams = null;
     mockGoBack.mockClear();
+    mockNotify.mockClear();
+    mockShareState = {status: "idle"};
+    mockShareRecipe.mockReset();
 });
 
 /**
@@ -292,6 +312,47 @@ describe("the editor", () => {
         expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
         jest.useRealTimers();
+    });
+
+    it("shares the flushed recipe and stays on the editor", async () => {
+        jest.useFakeTimers();
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.mockClear();
+        const url = "https://share-h5.xbloom.com/?id=abc";
+        mockShareRecipe.mockImplementation(async (shared: Recipe) => {
+            shared.sharedTableId = 123;
+            shared.shareUrl = url;
+            return url;
+        });
+        const shareSheet = jest.spyOn(Share, "share")
+            .mockResolvedValue({action: Share.sharedAction});
+
+        await renderEditor();
+        await fireEvent.changeText(screen.getByLabelText("Name"), "Shared name");
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Share"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(mockShareRecipe.mock.calls[0][0].name).toBe("Shared name");
+        expect(shareSheet).toHaveBeenCalledWith({message: url});
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls.at(-1)![1].shareUrl).toBe(url);
+        expect(mockGoBack).not.toHaveBeenCalled();
+
+        shareSheet.mockRestore();
+        jest.useRealTimers();
+    });
+
+    it("reports share failures as toasts", async () => {
+        mockShareState = {status: "failed", reason: "network"};
+
+        await renderEditor();
+
+        expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: "Could not reach the sharing service. Check your connection."
+        });
     });
 
     it("keeps the long form off the deck entirely", async () => {

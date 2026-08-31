@@ -1,6 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, ScrollView, TextInput, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
@@ -23,6 +23,7 @@ import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
+import {useShareRecipe} from "@/hooks/useShareRecipe";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
@@ -707,7 +708,7 @@ export default function EditRecipe() {
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
         setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes, coarsenGrindToMinimum
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
@@ -716,6 +717,20 @@ export default function EditRecipe() {
     });
 
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
+    const {state: shareState, share: shareRecipe} = useShareRecipe();
+
+    useEffect(() => {
+        if (shareState.status !== "failed") {
+            return;
+        }
+        const message = {
+            network:     "Could not reach the sharing service. Check your connection.",
+            limited:     "Sharing is busy right now. Try again in a few minutes.",
+            unavailable: "Sharing is temporarily unavailable. Everything else still works.",
+            unusable:    "This recipe cannot be shared yet — check the pour volumes and dose."
+        }[shareState.reason];
+        notify({tone: "error", message});
+    }, [shareState]);
 
     // Computed before the header effect, not after the `recipe` guard below, so
     // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
@@ -780,6 +795,27 @@ export default function EditRecipe() {
             return;
         }
         navigation.goBack();
+    }
+
+    async function onSharePress() {
+        const currentRecipe = recipe;
+        if (!currentRecipe) return;
+        // The same reason Refresh flushes first: a just-typed value has to be
+        // committed or the link is minted from the previous one.
+        await flushDrafts();
+        const url = await shareRecipe(currentRecipe);
+        if (!url) {
+            return;
+        }
+        // Persist the ids the mint returned, so pressing Share again reuses the
+        // link instead of minting a second copy in the shared account.
+        persistRecipe();
+        try {
+            await Share.share({message: url});
+        } catch {
+            // The user dismissing the system sheet throws on some platforms.
+            // Nothing failed; there is nothing to say.
+        }
     }
 
     async function deleteRecipe() {
@@ -908,6 +944,7 @@ export default function EditRecipe() {
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  onOpenChange={setOverflowOpen}
                                  showHints={showHint} onShowHintsChange={setShowHint}
+                                 onShare={onSharePress}
                                  onDuplicate={duplicateRecipe}
                                  onRefreshName={async () => {
                                      // Refresh fetches against the recipe ID, so

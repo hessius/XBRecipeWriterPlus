@@ -287,12 +287,18 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         }));
     }
 
-    function saveRecipe() {
+    /** Write the recipe to the database without leaving the screen. */
+    function persistRecipe() {
         if (!recipe) return;
         // Saves whether or not the volumes add up. Refusing to save a
         // half-finished recipe loses work to enforce a rule that only matters
         // at the moment of writing a card.
         new RecipeDatabase().updateRecipe(recipe.uuid, recipe);
+    }
+
+    function saveRecipe() {
+        if (!recipe) return;
+        persistRecipe();
         onSaved();
     }
 
@@ -425,6 +431,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         autoAdjustPourVolumes,
         coarsenGrindToMinimum,
         editStage,
+        persistRecipe,
         saveRecipe,
         editInputComplete,
         volumeError,
