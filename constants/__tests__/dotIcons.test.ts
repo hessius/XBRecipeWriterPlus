@@ -7,7 +7,7 @@ describe("DOT_ICONS", () => {
         expect(names.sort()).toEqual(
             ["back", "delete", "duplicate", "edit", "error", "help", "import",
              "info", "minus", "more", "overflow", "plus", "revert", "scan",
-             "settings", "success"]
+             "settings", "share", "success"]
         );
     });
 
