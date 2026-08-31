@@ -25,7 +25,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
-import {grindBand} from "@/library/grindBands";
+import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -157,6 +157,8 @@ type BrewDeckProps = {
     onDraft: (label: string, value: string) => void;
     /** Reports the recipe-ID field's validity into the screen's write/save gate. */
     onInputErrorChange: (invalid: boolean) => void;
+    /** Raises a too-fine imported grind to the card minimum. */
+    coarsenGrindToMinimum: () => void;
 };
 
 /**
@@ -183,7 +185,7 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange
+    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum
 }: BrewDeckProps) {
     "use no memo";
 
@@ -198,6 +200,12 @@ function BrewDeck({
     // Grind size and speed are meaningless with the grinder off, and a tea card
     // always writes the default grind — so those two rows hide in both cases.
     const showGrind = recipe.grinder && !isTea;
+    // An imported recipe can carry a grind finer than a card can store: the
+    // cloud keeps grind on the grinder's own 1-80 scale and the importer copies
+    // it through unchanged. The write is already refused; this is the offer to
+    // fix it that the stage mismatch has always had.
+    const tooFine = showGrind && recipe.grindSize < CARD_GRIND_MIN;
+    const fineBand = tooFine ? grindBand(recipe.grindSize) : undefined;
 
     return (
         <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
@@ -225,6 +233,33 @@ function BrewDeck({
                          min={5} max={100} step={1} accent={accent}
                          onChange={(value) => dispatch(RECIPE_LABELS.RATIO, String(value))}/>
             </FieldRow>
+
+            {tooFine && (
+                <XStack testID="grind-too-fine" alignItems="center" gap="$2.5"
+                        marginHorizontal="$4" marginTop="$3" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.danger}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.danger}>
+                            {`GRIND ${recipe.grindSize}`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            {fineBand === undefined
+                                ? `A card cannot store a grind below ${CARD_GRIND_MIN}.`
+                                : `Ground for ${fineBand.longLabel}. A card cannot store a grind below ${CARD_GRIND_MIN}.`}
+                        </Text>
+                    </YStack>
+                    <Pressable accessibilityRole="button"
+                               accessibilityLabel={`Set grind size to ${CARD_GRIND_MIN}`}
+                               onPress={coarsenGrindToMinimum}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={accent}>
+                            {`SET TO ${CARD_GRIND_MIN}`}
+                        </DotMatrixText>
+                    </Pressable>
+                </XStack>
+            )}
 
             {showGrind && (
                 // grindBand returns undefined for the grinder-off sentinel and for
@@ -644,7 +679,7 @@ export default function EditRecipe() {
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, saveRecipe, editInputComplete, setVolumeError,
-        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes
+        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes, coarsenGrindToMinimum
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -804,6 +839,7 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
+                              coarsenGrindToMinimum={coarsenGrindToMinimum}
                               onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (

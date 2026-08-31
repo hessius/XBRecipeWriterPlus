@@ -722,3 +722,41 @@ describe("flushing an unblurred field before an action", () => {
         jest.useRealTimers();
     });
 });
+
+describe("grind-too-fine banner", () => {
+    it("shows the banner with the band name for a grind below the card minimum", async () => {
+        // grindSize 12 is espresso — below the card-minimum of 40.
+        await renderEditor({grindSize: 12});
+
+        expect(screen.getByTestId("grind-too-fine")).toBeTruthy();
+        // "espresso" is the longLabel for the 1-15 band; it should appear in
+        // the explanatory sentence within the banner.
+        expect(screen.getByText(/Ground for espresso/i)).toBeTruthy();
+        expect(screen.getByLabelText("Set grind size to 40")).toBeTruthy();
+    });
+
+    it("fixes the grind and hides the banner when SET TO 40 is pressed", async () => {
+        await renderEditor({grindSize: 12});
+
+        await fireEvent.press(screen.getByLabelText("Set grind size to 40"));
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+        // The stepper should now reflect the raised value.
+        expect(screen.getByLabelText(/^Grind size, 40$/)).toBeTruthy();
+    });
+
+    it("shows no banner for a normal in-range grind", async () => {
+        // fixture() has grindSize = 60, which is within the card range.
+        await renderEditor();
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+    });
+
+    it("shows no banner when the grinder is off", async () => {
+        // grindSize 81 is the grinder-off sentinel (GRIND_SIZE_OFFSET + GRINDER_OFF).
+        // It is not below 40, so no banner should appear.
+        await renderEditor({grindSize: 81, grinder: false});
+
+        expect(screen.queryByTestId("grind-too-fine")).toBeNull();
+    });
+});
