@@ -105,6 +105,28 @@ class Recipe {
      * `library/accent.ts`.
      */
     public accentIndex?: number;
+    /**
+     * The xBloom row id a share link was minted from, and the link itself.
+     *
+     * Deliberately not `shareId`, which is already taken and means the opposite
+     * direction of travel: `shareId` is the id a recipe was *imported* from.
+     * Reusing it would make a minted link look like an import origin, and the
+     * editor's "refresh name from xBloom" would start fetching our own copy.
+     *
+     * The URL is stored rather than derived because the `?id=` token is issued
+     * by the server and is not reconstructible from `sharedTableId`.
+     */
+    public sharedTableId?: number;
+    public shareUrl?: string;
+    /**
+     * The canonical payload that produced `shareUrl`.
+     *
+     * Compared against a freshly built payload to decide whether the existing
+     * link still describes this recipe. Stored verbatim rather than hashed:
+     * there is no collision question, it is readable when someone asks why a
+     * link changed, and M6 can diff it. A few hundred bytes per shared recipe.
+     */
+    public shareSnapshot?: string;
 
     constructor(data?: number[], json?: string, hasSignature: boolean = true) {
         this.uuid = (uuid.v4() as string);
@@ -181,6 +203,12 @@ class Recipe {
             }
             this.checksum = jsonRecipe.checksum;
             this.shareId = jsonRecipe.shareId ?? "";
+            // No `?? 0` / `?? ""` defaults: absent must stay absent, because
+            // "never shared" and "shared, link unknown" are different states
+            // and only the first one is safe to re-mint from silently.
+            this.sharedTableId = jsonRecipe.sharedTableId;
+            this.shareUrl = jsonRecipe.shareUrl;
+            this.shareSnapshot = jsonRecipe.shareSnapshot;
         }
 
     }

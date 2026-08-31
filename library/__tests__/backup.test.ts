@@ -280,6 +280,27 @@ describe("parseBackup refuses, with a reason", () => {
     });
 });
 
+describe("the share fields survive a backup", () => {
+    it("carries them through the round trip", () => {
+        const recipe = recipeNamed("Shared", "u1");
+        recipe.sharedTableId = 1353046;
+        recipe.shareUrl = "https://share-h5.xbloom.com/?id=abc";
+        recipe.shareSnapshot = "{}";
+        const result = parseBackup(buildBackup([recipe], {}));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].sharedTableId).toBe(1353046);
+        expect(result.payload.recipes[0].shareUrl).toBe("https://share-h5.xbloom.com/?id=abc");
+    });
+
+    it("refuses a recipe whose sharedTableId is not a number", () => {
+        const doc = JSON.parse(buildBackup([recipeNamed("A", "u1")], {}));
+        doc.recipes[0].sharedTableId = "1353046";
+        const result = parseBackup(JSON.stringify(doc));
+        expect(result.ok).toBe(false);
+    });
+});
+
 describe("mergeRecipes", () => {
     it("adds everything into an empty library", () => {
         const incoming = [recipeNamed("A", "u1"), recipeNamed("B", "u2")];

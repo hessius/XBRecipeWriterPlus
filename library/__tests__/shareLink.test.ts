@@ -245,3 +245,36 @@ describe("the round trip through the importer", () => {
         expect(back.pours.reduce((n, p) => n + p.volume, 0)).toBe(300);
     });
 });
+
+describe("share fields survive serialisation", () => {
+    it("round-trips through the JSON constructor", () => {
+        const r = drip();
+        r.sharedTableId = 1353046;
+        r.shareUrl = "https://share-h5.xbloom.com/?id=hmFKjxldtOFbZ2Kve%2BlxKw%3D%3D";
+        r.shareSnapshot = canonicalSnapshot(buildSharePayload(r));
+        const back = new Recipe(undefined, JSON.stringify(r));
+        expect(back.sharedTableId).toBe(1353046);
+        expect(back.shareUrl).toBe(r.shareUrl);
+        expect(back.shareSnapshot).toBe(r.shareSnapshot);
+    });
+
+    it("leaves them undefined on a record saved before they existed", () => {
+        const legacy = JSON.parse(JSON.stringify(drip()));
+        delete legacy.sharedTableId;
+        delete legacy.shareUrl;
+        delete legacy.shareSnapshot;
+        const back = new Recipe(undefined, JSON.stringify(legacy));
+        expect(back.sharedTableId).toBeUndefined();
+        expect(back.shareUrl).toBeUndefined();
+        expect(back.shareSnapshot).toBeUndefined();
+    });
+
+    it("does not disturb the imported shareId, which is a different thing", () => {
+        const r = drip();
+        r.shareId = "hmFKjxldtOFbZ2Kve+lxKw==";
+        r.sharedTableId = 1353046;
+        const back = new Recipe(undefined, JSON.stringify(r));
+        expect(back.shareId).toBe("hmFKjxldtOFbZ2Kve+lxKw==");
+        expect(back.sharedTableId).toBe(1353046);
+    });
+});
