@@ -93,6 +93,23 @@ describe("validateSharePayload", () => {
         expect(validateSharePayload({...valid(), cupType: 7})).toBe("cupType is out of range");
     });
 
+    it("rejects any adaptedModel except the partition used for lookup", () => {
+        expect(validateSharePayload({...valid(), adaptedModel: 2}))
+            .toBe("adaptedModel must be 1");
+    });
+
+    it("rejects unknown top-level fields before they can reach xBloom", () => {
+        expect(validateSharePayload({...valid(), memberId: 999}))
+            .toBe("unknown field: memberId");
+    });
+
+    it("rejects unknown per-pour fields before they can reach xBloom", () => {
+        const pours = JSON.parse(valid().pourDataJSONStr);
+        pours[0].token = "caller";
+        expect(validateSharePayload({...valid(), pourDataJSONStr: JSON.stringify(pours)}))
+            .toBe("pour 1: unknown field: token");
+    });
+
     it("rejects pour data that is not a JSON array", () => {
         expect(validateSharePayload({...valid(), pourDataJSONStr: "{}"}))
             .toBe("pourDataJSONStr must encode an array of 1 to 31 pours");

@@ -1,10 +1,10 @@
 import {createHash} from "node:crypto";
 import type {IncomingMessage, ServerResponse} from "node:http";
 
-import {validateSharePayload} from "./_lib/payload";
+import {parseSharePayload} from "./_lib/payload";
 import {checkLimits} from "./_lib/rateLimit";
-import {counterFromEnv} from "./_lib/store";
-import {mintRecipe} from "./_lib/xbloom";
+import {counterFromEnv, memoryCounter, type Store} from "./_lib/store";
+import {mintRecipe, type MintResult} from "./_lib/xbloom";
 
 /**
  * The XBRW++ share mint.
@@ -20,7 +20,20 @@ import {mintRecipe} from "./_lib/xbloom";
  * It never logs recipes, credentials, tokens, or raw IP addresses, and it only
  * returns short machine-readable error codes to clients.
  */
-const counter = counterFromEnv(process.env);
+const store = counterFromEnv(process.env);
+// The in-memory fallback is necessarily per warm instance; in the current
+// production deployment, where Upstash is not configured, that is also the
+// scope of idempotency deduplication.
+const fallbackStore = memoryCounter();
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{1,200}$/;
+const IN_FLIGHT_SECONDS = 60;
+const COMPLETED_SECONDS = 86_400;
+let primaryStoreUnavailable = false;
+
+type IdempotencyEntry =
+    {state: "inflight"} |
+    {state: "complete"; result: MintResult};
 
 function json(body: unknown, status: number): Response {
     return new Response(JSON.stringify(body), {
@@ -29,11 +42,64 @@ function json(body: unknown, status: number): Response {
     });
 }
 
-function clientKey(request: Request): string {
+function clientKey(request: Request, salt: string): string {
     const forwarded = request.headers.get("x-forwarded-for") ?? "";
     const ip = forwarded.split(",")[0]?.trim() || "unknown";
-    const salt = process.env.SHARE_IP_SALT ?? "xbrw-share";
     return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32);
+}
+
+async function checkLimitsWithFallback(hashedIp: string): Promise<"ip" | "global" | null> {
+    if (primaryStoreUnavailable) {
+        return checkLimits(fallbackStore, hashedIp);
+    }
+    try {
+        return await checkLimits(store, hashedIp);
+    } catch (e) {
+        primaryStoreUnavailable = true;
+        console.error("share: rate limit store unavailable", (e as Error).message);
+        return checkLimits(fallbackStore, hashedIp);
+    }
+}
+
+async function cacheGet(key: string): Promise<IdempotencyEntry | null> {
+    if (primaryStoreUnavailable) {
+        return fallbackStore.get(key) as Promise<IdempotencyEntry | null>;
+    }
+    try {
+        return await store.get(key) as IdempotencyEntry | null;
+    } catch (e) {
+        primaryStoreUnavailable = true;
+        console.error("share: idempotency store unavailable", (e as Error).message);
+        return fallbackStore.get(key) as Promise<IdempotencyEntry | null>;
+    }
+}
+
+async function cacheClaim(key: string): Promise<Store | null> {
+    if (primaryStoreUnavailable) {
+        return await fallbackStore.setIfMissing(key, {state: "inflight"}, IN_FLIGHT_SECONDS)
+            ? fallbackStore
+            : null;
+    }
+    try {
+        return await store.setIfMissing(key, {state: "inflight"}, IN_FLIGHT_SECONDS)
+            ? store
+            : null;
+    } catch (e) {
+        primaryStoreUnavailable = true;
+        console.error("share: idempotency store unavailable", (e as Error).message);
+        return await fallbackStore.setIfMissing(key, {state: "inflight"}, IN_FLIGHT_SECONDS)
+            ? fallbackStore
+            : null;
+    }
+}
+
+async function cacheDelete(usedStore: Store, key: string): Promise<void> {
+    try {
+        await usedStore.del(key);
+    } catch (e) {
+        console.error("share: idempotency store unavailable", (e as Error).message);
+        await fallbackStore.del(key);
+    }
 }
 
 export async function respond(request: Request): Promise<Response> {
@@ -43,8 +109,9 @@ export async function respond(request: Request): Promise<Response> {
 
     const email = process.env.XBLOOM_EMAIL;
     const password = process.env.XBLOOM_PASSWORD;
-    if (!email || !password) {
-        console.error("share: credentials are not configured");
+    const salt = process.env.SHARE_IP_SALT;
+    if (!email || !password || !salt) {
+        console.error("share: server configuration is incomplete");
         return json({error: "unavailable"}, 503);
     }
 
@@ -56,31 +123,55 @@ export async function respond(request: Request): Promise<Response> {
     }
 
     const payload = (body as {payload?: unknown} | null)?.payload;
-    const reason = validateSharePayload(payload);
-    if (reason) {
-        console.warn(`share: rejected payload (${reason})`);
+    const parsed = parseSharePayload(payload);
+    if (parsed.payload === null) {
+        console.warn(`share: rejected payload (${parsed.reason})`);
         // The reason is our own validator's words, never the upstream's, so it
         // is safe to hand back and it is the only thing that makes a 400
         // diagnosable from a phone.
-        return json({error: "invalid", reason}, 400);
+        return json({error: "invalid", reason: parsed.reason}, 400);
     }
 
-    let breach: "ip" | "global" | null;
-    try {
-        breach = await checkLimits(counter, clientKey(request));
-    } catch (e) {
-        console.error("share: rate limit store unavailable", (e as Error).message);
-        breach = null;
+    const idempotencyKey = request.headers.get("Idempotency-Key");
+    if (idempotencyKey !== null && !IDEMPOTENCY_KEY.test(idempotencyKey)) {
+        return json({error: "invalid", reason: "Idempotency-Key is malformed"}, 400);
     }
+
+    const hashedIp = clientKey(request, salt);
+    const cacheKey = idempotencyKey === null ? null : `share:idem:${hashedIp}:${idempotencyKey}`;
+    if (cacheKey) {
+        const cached = await cacheGet(cacheKey);
+        if (cached?.state === "complete") {
+            return json(cached.result, 200);
+        }
+        if (cached?.state === "inflight") {
+            return json({error: "inflight"}, 409);
+        }
+    }
+
+    const breach = await checkLimitsWithFallback(hashedIp);
     if (breach) {
         return json({error: "limited", scope: breach}, 429);
     }
 
+    let usedCacheStore: Store | null = null;
     try {
-        const result = await mintRecipe(payload as Record<string, unknown>, {email, password});
-        console.log(`share: minted ${result.tableId}`);
+        if (cacheKey) {
+            usedCacheStore = await cacheClaim(cacheKey);
+            if (!usedCacheStore) {
+                return json({error: "inflight"}, 409);
+            }
+        }
+        const result = await mintRecipe(parsed.payload as unknown as Record<string, unknown>, {email, password});
+        if (cacheKey) {
+            await usedCacheStore?.set(cacheKey, {state: "complete", result}, COMPLETED_SECONDS);
+        }
+        console.log("share: minted");
         return json(result, 200);
     } catch {
+        if (cacheKey && usedCacheStore) {
+            await cacheDelete(usedCacheStore, cacheKey);
+        }
         console.error("share: upstream failed");
         return json({error: "upstream"}, 502);
     }

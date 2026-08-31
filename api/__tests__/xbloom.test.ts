@@ -111,6 +111,30 @@ describe("mintRecipe", () => {
             .rejects.toThrow("share link not found");
     });
 
+    it("searches bounded later library pages for the row it just minted", async () => {
+        const page = Array.from({length: 20}, (_, i) => ({
+            tableId: 100 + i, shareRecipeLink: `https://x/?id=${i}`
+        }));
+        const {fn, calls} = mockFetch([
+            {result: "success", member: {tableId: 1}, token: "tok"},
+            {result: "success", tableId: 250},
+            {result: "success", list: page},
+            {result: "success", list: page},
+            {result: "success", list: [
+                {tableId: 250, shareRecipeLink: "https://share-h5.xbloom.com/?id=later"}
+            ]}
+        ]);
+        global.fetch = fn as never;
+
+        await expect(mintRecipe(payload, {email: "e", password: "p"}))
+            .resolves.toEqual({tableId: 250, url: "https://share-h5.xbloom.com/?id=later"});
+        expect(calls.filter((c) => c.url.endsWith("tuMyTeaRecipeCreated.tuhtml"))).toHaveLength(3);
+    });
+
+    it("does not spread caller-supplied payload fields over authentication fields", () => {
+        expect(mintRecipe.toString()).not.toContain("...payload");
+    });
+
     it("never puts the password in an error message", async () => {
         const {fn} = mockFetch([{result: "fail"}]);
         global.fetch = fn as never;

@@ -43,6 +43,9 @@ const HEADERS = {
 export type XbloomCredentials = {email: string; password: string};
 export type MintResult = {tableId: number; url: string};
 
+const LIST_PAGE_SIZE = 20;
+const MAX_LIST_PAGES = 5;
+
 /** RSA-PKCS1v1.5 over 117-byte blocks, concatenated, base64'd. */
 export function encryptForXbloom(plaintext: string, pem: string = XBLOOM_PUBLIC_KEY): string {
     const key = createPublicKey(pem);
@@ -90,6 +93,29 @@ function authFields(memberId: number, token: string) {
     };
 }
 
+function recipeFields(payload: Record<string, unknown>) {
+    return {
+        theName:             payload.theName,
+        theColor:            payload.theColor,
+        dose:                payload.dose,
+        grandWater:          payload.grandWater,
+        grinderSize:         payload.grinderSize,
+        isSetGrinderSize:    payload.isSetGrinderSize,
+        rpm:                 payload.rpm,
+        cupType:             payload.cupType,
+        bypassTemp:          payload.bypassTemp,
+        bypassVolume:        payload.bypassVolume,
+        subSetType:          payload.subSetType,
+        theSubsetId:         payload.theSubsetId,
+        appPlace:            payload.appPlace,
+        isShortcuts:         payload.isShortcuts,
+        isEnableBypassWater: payload.isEnableBypassWater,
+        adaptedModel:        1,
+        pourCount:           payload.pourCount,
+        pourDataJSONStr:     payload.pourDataJSONStr
+    };
+}
+
 /**
  * Mint a share link for a payload.
  *
@@ -121,7 +147,7 @@ export async function mintRecipe(
 
     const created = await post("tuRecipeAdd.tuhtml", {
         ...authFields(memberId, token),
-        ...payload,
+        ...recipeFields(payload),
         // Added here rather than in the app's payload so it never lands in the
         // snapshot. If it did, the snapshot would differ on every press and
         // every share would mint a duplicate.
@@ -135,18 +161,24 @@ export async function mintRecipe(
 
     // The create response has no share link. Find the row we just made and read
     // the server's own link off it — the ?id= is an opaque server-issued token.
-    const list = await post("tuMyTeaRecipeCreated.tuhtml", {
-        ...authFields(memberId, token),
-        pageNumber:   1,
-        countPerPage: 20,
-        adaptedModel: 1
-    }, true) as {list?: {tableId?: number; shareRecipeLink?: unknown}[]};
+    for (let pageNumber = 1; pageNumber <= MAX_LIST_PAGES; pageNumber++) {
+        const list = await post("tuMyTeaRecipeCreated.tuhtml", {
+            ...authFields(memberId, token),
+            pageNumber,
+            countPerPage: LIST_PAGE_SIZE,
+            adaptedModel: 1
+        }, true) as {list?: {tableId?: number; shareRecipeLink?: unknown}[]};
 
-    const row = (list?.list ?? []).find((r) => r?.tableId === tableId);
-    const url = row?.shareRecipeLink;
-    if (typeof url !== "string" || url.length === 0) {
-        throw new Error("share link not found");
+        const rows = list?.list ?? [];
+        const row = rows.find((r) => r?.tableId === tableId);
+        const url = row?.shareRecipeLink;
+        if (typeof url === "string" && url.length > 0) {
+            return {tableId, url};
+        }
+        if (rows.length < LIST_PAGE_SIZE) {
+            break;
+        }
     }
 
-    return {tableId, url};
+    throw new Error("share link not found");
 }

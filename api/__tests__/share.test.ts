@@ -91,6 +91,13 @@ describe("share handler", () => {
         await expect(res.json()).resolves.toEqual({error: "unavailable"});
     });
 
+    it("returns 503 when the IP salt is not configured", async () => {
+        delete process.env.SHARE_IP_SALT;
+        const res = await respond(request({payload: validPayload()}, {"x-forwarded-for": "1.2.3.60"}));
+        expect(res.status).toBe(503);
+        await expect(res.json()).resolves.toEqual({error: "unavailable"});
+    });
+
     it("returns 429 once an IP is over its allowance", async () => {
         global.fetch = okFetch() as never;
         const ip = {"x-forwarded-for": "9.9.9.9"};
@@ -131,6 +138,129 @@ describe("share handler", () => {
         for (const spy of [console.log, console.warn, console.error] as jest.MockedFunction<typeof console.log>[]) {
             expect(spy.mock.calls.flat().join(" ")).not.toContain(rawIp);
         }
+    });
+
+    it("rejects a malformed idempotency key", async () => {
+        global.fetch = okFetch() as never;
+        const res = await respond(request(
+            {payload: validPayload()},
+            {"x-forwarded-for": "1.2.3.61", "Idempotency-Key": "has space"}
+        ));
+        expect(res.status).toBe(400);
+        await expect(res.json()).resolves
+            .toEqual({error: "invalid", reason: "Idempotency-Key is malformed"});
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("returns a cached idempotent result without minting again", async () => {
+        const fetch = okFetch();
+        global.fetch = fetch as never;
+        const headers = {"x-forwarded-for": "1.2.3.62", "Idempotency-Key": "recipe:abc.1"};
+
+        const first = await respond(request({payload: validPayload()}, headers));
+        const second = await respond(request({payload: validPayload()}, headers));
+
+        expect(first.status).toBe(200);
+        expect(second.status).toBe(200);
+        await expect(second.json()).resolves
+            .toEqual({tableId: 42, url: "https://share-h5.xbloom.com/?id=ok"});
+        expect(fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("returns 409 while an idempotent mint is already in flight", async () => {
+        let releaseLogin!: () => void;
+        let firstLogin = true;
+        const loginStarted = new Promise<void>((resolve) => {
+            global.fetch = jest.fn(async (url: string) => {
+                if (url.endsWith("tMemberLogin.thtml")) {
+                    if (firstLogin) {
+                        firstLogin = false;
+                        resolve();
+                        await new Promise<void>((release) => { releaseLogin = release; });
+                    }
+                    return {ok: true, status: 200, json: async () => (
+                        {result: "success", member: {tableId: 1}, token: "tok"}
+                    )};
+                }
+                if (url.endsWith("tuRecipeAdd.tuhtml")) {
+                    return {ok: true, status: 200, json: async () => (
+                        {result: "success", tableId: 42}
+                    )};
+                }
+                return {ok: true, status: 200, json: async () => (
+                    {result: "success", list: [
+                        {tableId: 42, shareRecipeLink: "https://share-h5.xbloom.com/?id=ok"}
+                    ]}
+                )};
+            }) as never;
+        });
+        const headers = {"x-forwarded-for": "1.2.3.63", "Idempotency-Key": "recipe:inflight"};
+        const first = respond(request({payload: validPayload()}, headers));
+        await loginStarted;
+
+        const second = await respond(request({payload: validPayload()}, headers));
+        releaseLogin();
+        await first;
+
+        expect(second.status).toBe(409);
+        await expect(second.json()).resolves.toEqual({error: "inflight"});
+    });
+
+    it("clears an idempotency marker when the upstream mint fails", async () => {
+        const fetch = jest.fn()
+            .mockResolvedValueOnce({ok: true, status: 200, json: async () => ({result: "fail"})})
+            .mockImplementation(okFetch());
+        global.fetch = fetch as never;
+        const headers = {"x-forwarded-for": "1.2.3.64", "Idempotency-Key": "recipe:retry"};
+
+        expect((await respond(request({payload: validPayload()}, headers))).status).toBe(502);
+        expect((await respond(request({payload: validPayload()}, headers))).status).toBe(200);
+        expect(fetch).toHaveBeenCalledTimes(4);
+    });
+});
+
+describe("share handler with a failing configured store", () => {
+    beforeEach(() => {
+        jest.resetModules();
+        process.env.XBLOOM_EMAIL = "e";
+        process.env.XBLOOM_PASSWORD = "hunter2";
+        process.env.SHARE_IP_SALT = "salt";
+        process.env.UPSTASH_REDIS_REST_URL = "https://redis.example";
+        process.env.UPSTASH_REDIS_REST_TOKEN = "token";
+        jest.spyOn(console, "error").mockImplementation(() => undefined);
+        jest.spyOn(console, "log").mockImplementation(() => undefined);
+        jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.dontMock("../_lib/store");
+    });
+
+    it("falls back to the in-memory limit rather than proceeding unlimited", async () => {
+        jest.doMock("../_lib/store", () => {
+            const actual = jest.requireActual("../_lib/store");
+            return {
+                ...actual,
+                counterFromEnv: () => ({
+                    bump: jest.fn()
+                        .mockRejectedValueOnce(new Error("upstash down"))
+                        .mockImplementation(actual.memoryCounter().bump)
+                })
+            };
+        });
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const {respond: isolatedRespond} = require("../share");
+        global.fetch = okFetch() as never;
+        const ip = {"x-forwarded-for": "9.9.9.10"};
+
+        for (let i = 0; i < 10; i++) {
+            expect((await isolatedRespond(request({payload: validPayload()}, ip))).status).toBe(200);
+        }
+        const res = await isolatedRespond(request({payload: validPayload()}, ip));
+
+        expect(res.status).toBe(429);
+        await expect(res.json()).resolves.toEqual({error: "limited", scope: "ip"});
     });
 });
 
