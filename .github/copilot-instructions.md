@@ -63,7 +63,7 @@ Byte layout (see `Recipe.parseData` / `Recipe.getData`, and `Data Format.png`):
 - 40: pour count `<< 3`
 - 41 + 8·n: per-pour records — volume, temperature, pattern, agitation, pause (stored as `256 − seconds`), a combined byte (bits 0–4 = dose, bits 5–7 = pause minutes — **dose and RPM only live in pour 1**), RPM, flow rate
 - then: grind size (stored with `GRIND_SIZE_OFFSET` = 40; byte `GRINDER_OFF` = 41 disables the grinder, which is the user-facing value **81**), ratio, CRC-8 checksum
-  - **This offset is an open question, not settled fact.** The official app offers grind 1–80 while we can only express 40–80, and 81 sitting exactly one past 80 would also be explained by a raw byte with an 81 sentinel. `cardFixtures.ts` shares the assumption, so the round-trip tests cannot discriminate. See issue #68 before changing anything here or widening `GRIND_SIZE` in `cardLimits.ts` — below 40 the current encoder emits a negative byte.
+  - The offset is **hardware-verified** (#68): grind sizes written by the app appear as intended on the machine. **Do not widen `GRIND_SIZE` in `cardLimits.ts` below 40** — the encoder would emit a negative byte. The official app's 1–80 scale belongs to the grinder itself (including standalone grinding); a card carries 40–80, which is the machine's whole brewing band.
 
 Other domain invariants:
 

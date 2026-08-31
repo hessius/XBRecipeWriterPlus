@@ -4,7 +4,8 @@ XBRW++ reads and rewrites xBloom recipe cards. It does not talk to the machine.
 This folder is a desk study of whether it should, what that would take, and what
 becomes possible if it does.
 
-**Researched 2026-08-29. Nothing here is hardware-verified.**
+**Researched 2026-08-29. Nothing here is hardware-verified except the grind
+size offset**, which was confirmed on a real machine on 2026-08-31 (#68).
 
 ## Read this first
 
@@ -36,7 +37,7 @@ decide whether to build on a statement or go and verify it first.
 | `corroborated` | Two or more independent projects agree |
 | `single-source` | Exactly one project claims it |
 | `inferred` | Deduced from reading code, not stated anywhere |
-| `verified` | We have personally observed it. **Currently applies to nothing.** |
+| `verified` | We have personally observed it on hardware. **Applies to exactly one claim: the grind size offset (#68).** |
 
 An issue derived from an `inferred` claim must say so on its face, so that
 whoever picks it up knows the first task is confirmation rather than
@@ -69,21 +70,24 @@ Found by cross-checking the files against each other. Listed here because a
 number that appears in three places with three values is the most likely way
 this research gets someone into trouble.
 
-**Grind size — unresolved, and it may be a live bug.** Our editor validates
-**40–80** (`library/cardLimits.ts`); the official app offers **1–80**, with
-1–15 espresso, 16–30 Aeropress, 31–55 pourover, 56–80 french press and cold
-brew. We cannot express the finer half at all, because the card byte is written
-as `grindSize - 40` and would go negative below 40.
+**Grind size — resolved, and it was two scales rather than a bug.** The
+**grinder** takes **1–80**; the standalone grind command is documented as
+`build_grinder_start(grind size 1–80, RPM 60–120)` (`ble-protocol.md`, `spec`).
+A **recipe card** stores grind as `value - 40`, so it carries **40–80**, which is
+what `library/cardLimits.ts` enforces.
 
-That leaves two readings of the card format — an offset of 40 with `41` meaning
-grinder-off, or a raw 1–80 byte with **81** meaning grinder-off. Both are
-internally consistent, they disagree about what genuine cards contain, and our
-own round-trip tests cannot tell them apart because `cardFixtures.ts` shares the
-assumption. **Do not widen the range before settling it — see issue #68**, which
-sets out a cheap discriminating experiment.
+Both are right; they describe different things. The bands a card cannot reach
+(espresso, Aeropress) are the ones you would grind for and brew elsewhere, which
+is what standalone grind mode is for. Our range covers the machine's whole
+brewing band.
 
-Note the user-facing grinder-off value is **81** (`GRIND_SIZE_OFFSET` 40 +
-`GRINDER_OFF` 41), not 41. 41 is the byte.
+The offset was **confirmed on hardware** — grind sizes written by XBRW++ appear
+as intended on the machine (issue #68, closed). `verified` — the only claim in
+this folder that carries that tag.
+
+**Do not widen `GRIND_SIZE` below 40:** the encoder would emit a negative byte.
+Note also that the grinder-off value a user sees is **81** (`GRIND_SIZE_OFFSET`
+40 + the `GRINDER_OFF` byte 41), not 41.
 
 **Command 40518.** Documented as both "start / confirm" and "coffee pause", and
 the sources disagree on which. `ble-protocol.md` records this deliberately

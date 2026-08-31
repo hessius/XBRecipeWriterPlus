@@ -41,7 +41,7 @@ entirely inside the app we already ship.
 | # | Opportunity | Note |
 |---|---|---|
 | A1 | **Per-recipe share and import** in our own format | We already serialise `Recipe` to JSON for backups and already have a file-share path in `useBackup.ts`. Deep link or file. |
-| A2 | **Grind-size guidance in the editor** | Our editor's range is 40–80 (`cardLimits.ts`), and a bare number in it means nothing to a new user. A brew-method reference scale is factual coffee knowledge, not anyone's IP. |
+| A2 | **Grind-size guidance in the editor** | A card carries 40–80 (`cardLimits.ts`, hardware-verified) and a bare number in that range means nothing to a new user. The official bands are 31–55 pourover and 56–80 french press / cold brew; finer bands belong to standalone grinding, not to cards. |
 | A3 | **Tea recipe templates** | The card format already supports tea and we already special-case it. Templates are content, not capability. |
 | A4 | **Iced / cold-brew template** | Same. The invariant is `total beverage = brew water + ice`, derived independently. |
 | A5 | **Post-brew notes and rating** | Purely local. Turns the app from a writer into something you come back to. No protocol involvement at all. |
