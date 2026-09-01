@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import Console from "@/app/machine";
 import {sharedSettings} from "@/hooks/useSetting";
@@ -7,15 +7,26 @@ import {renderWithProviders} from "@/test-utils/render";
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 const mockSend = jest.fn();
+let frameListener: ((direction: "sent" | "received", frame: Uint8Array, parsed: unknown) => void) | null = null;
 const mockMachine = {
     info: null,
     isConnected: () => true,
     send: mockSend,
-    onFrame: () => () => {},
+    onFrame: (listener: typeof frameListener) => {
+        frameListener = listener;
+        return () => {
+            frameListener = null;
+        };
+    },
     scan: jest.fn(),
     connect: jest.fn()
 };
 const send = mockSend;
+
+function emitFrame(direction: "sent" | "received", parsed: unknown, frame = Uint8Array.from([0x58])) {
+    if (frameListener === null) throw new Error("No frame listener registered");
+    frameListener(direction, frame, parsed);
+}
 
 jest.mock("@/hooks/useMachine", () => ({
     __esModule: true,
@@ -61,8 +72,13 @@ jest.mock("expo-router", () => ({
 describe("the machine console", () => {
     beforeEach(() => {
         send.mockClear();
+        frameListener = null;
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     it("makes you read the warning once before it will do anything", async () => {
@@ -172,5 +188,74 @@ describe("the machine console", () => {
         await renderWithProviders(<Console/>);
 
         expect(screen.getByLabelText(/tea steep encoding/i)).toBeTruthy();
+    });
+
+    it("summarises weight telemetry instead of appending log entries while telemetry is hidden", async () => {
+        jest.useFakeTimers();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await act(async () => {
+            emitFrame("received", {kind: "waterWeight", grams: 1.2});
+            emitFrame("received", {kind: "cupWeight", grams: 3.4});
+            emitFrame("received", {kind: "cupWeight", grams: 3.5});
+            jest.advanceTimersByTime(250);
+        });
+
+        expect(screen.getByLabelText("Telemetry summary").props.children).toEqual(
+            expect.stringContaining("suppressed 3")
+        );
+        expect(screen.getByLabelText("Telemetry summary").props.children).toEqual(
+            expect.stringContaining("water 1.2 g")
+        );
+        expect(screen.getByLabelText("Telemetry summary").props.children).toEqual(
+            expect.stringContaining("cup 3.5 g")
+        );
+        expect(screen.queryByLabelText("Frame log")).toBeNull();
+    });
+
+    it("keeps status frames and sent commands in the log while telemetry is hidden", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await act(async () => {
+            emitFrame("received", {kind: "cupWeight", grams: 9.1}, Uint8Array.from([0x15]));
+            emitFrame("received", {kind: "status", state: 0x1F}, Uint8Array.from([0x57, 0x1F]));
+            emitFrame("sent", {kind: "unknown", raw: Uint8Array.from([])}, Uint8Array.from([0x58, 0x01]));
+        });
+
+        const value = screen.getByLabelText("Frame log").props.value;
+        expect(value).toContain("←  57 1F  state 0x1f armed");
+        expect(value).toContain("→  58 01");
+        expect(value).not.toContain("cup 9.1 g");
+    });
+
+    it("shows no machine state until a status frame arrives, then decodes the state name", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        expect(screen.getByLabelText("Machine state").props.children).toEqual(
+            expect.stringContaining("none yet")
+        );
+
+        await act(async () => {
+            emitFrame("received", {kind: "status", state: 0x24}, Uint8Array.from([0x57, 0x24]));
+        });
+
+        expect(screen.getByLabelText("Machine state").props.children).toEqual(
+            expect.stringContaining("0x24 ready")
+        );
+    });
+
+    it("logs telemetry frames after the telemetry toggle is turned on", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Show telemetry"));
+        await act(async () => {
+            emitFrame("received", {kind: "cupWeight", grams: 7.8}, Uint8Array.from([0x15]));
+        });
+
+        expect(screen.getByLabelText("Frame log").props.value).toContain("cup 7.8 g");
     });
 });

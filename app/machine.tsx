@@ -1,5 +1,5 @@
 import {router} from "expo-router";
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {ScrollView, TextInput} from "react-native";
 import * as Clipboard from "expo-clipboard";
 import {Button, Input, Text, XStack, YStack} from "tamagui";
@@ -10,11 +10,12 @@ import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import XbrwSheet from "@/components/XbrwSheet";
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
-import {type Notification} from "@/library/machine/protocol";
+import {MACHINE_STATE, type MachineInfo, type Notification} from "@/library/machine/protocol";
 
 /**
  * The warning gate.
@@ -43,10 +44,39 @@ const TIER_LABEL: Record<Tier, string> = {
     unresolved: "UNRESOLVED"
 };
 
-/** Newest last. Capped, so a long session cannot exhaust memory. */
+/** Newest last. Telemetry is summarized, so 500 meaningful frames fits safely. */
 const LOG_LIMIT = 500;
+const TELEMETRY_FLUSH_MS = 250;
+const WATER_VOLUME_CODE = 40523;
 
 type LogEntry = {at: string; direction: "→" | "←"; hex: string; reading: string};
+type MachineStateReading = {value: number; changed: boolean; at: string};
+type TelemetrySnapshot = {
+    suppressed: number;
+    waterWeight?: number;
+    cupWeight?: number;
+    waterVolume?: number;
+    info?: MachineInfo;
+};
+
+const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0};
+
+const STATE_NAMES = new Map<number, string>([
+    [MACHINE_STATE.IDLE, "idle"],
+    [MACHINE_STATE.NO_WATER, "no_water"],
+    [MACHINE_STATE.NO_BEANS, "no_beans"],
+    [MACHINE_STATE.BREWING, "brewing"],
+    [MACHINE_STATE.LOADING, "loading"],
+    [MACHINE_STATE.AWAITING_CONFIRM, "awaiting_confirm"],
+    [MACHINE_STATE.ARMED, "armed"],
+    [MACHINE_STATE.STARTING, "starting"],
+    [MACHINE_STATE.BREWING_SUB, "brewing (sub)"],
+    [MACHINE_STATE.READY, "ready"],
+    [MACHINE_STATE.BREWING_ALT, "brewing"],
+    [MACHINE_STATE.COMPLETE, "complete (Easy idle)"],
+    [MACHINE_STATE.SAVING_SLOTS, "saving_slots"],
+    [MACHINE_STATE.SLOTS_SAVED, "slots_saved"]
+]);
 
 /**
  * Parse a pasted frame, or null if it is not one.
@@ -68,7 +98,7 @@ export function parseRawFrame(input: string): Uint8Array | null {
 
 function readingOf(parsed: Notification): string {
     switch (parsed.kind) {
-        case "status":      return `state 0x${parsed.state.toString(16).padStart(2, "0")}`;
+        case "status":      return `state 0x${parsed.state.toString(16).padStart(2, "0")} ${stateName(parsed.state)}`;
         case "event":       return `event ${parsed.code}` +
                                    (parsed.value === undefined ? "" : ` (${parsed.value})`);
         case "waterWeight": return `water ${parsed.grams.toFixed(1)} g`;
@@ -78,8 +108,120 @@ function readingOf(parsed: Notification): string {
     }
 }
 
+function stateName(state: number): string {
+    return STATE_NAMES.get(state) ?? "unknown";
+}
+
 function toHex(frame: Uint8Array): string {
     return Array.from(frame, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function isTelemetry(parsed: Notification): boolean {
+    return parsed.kind === "waterWeight"
+        || parsed.kind === "cupWeight"
+        || parsed.kind === "info"
+        || (parsed.kind === "event" && parsed.code === WATER_VOLUME_CODE);
+}
+
+function waterVolumeOf(frame: Uint8Array): number | undefined {
+    const payload = frame.subarray(10, Math.max(10, frame.length - 2));
+    if (payload.length < 4) return undefined;
+    return new DataView(payload.buffer, payload.byteOffset, 4).getFloat32(0, true);
+}
+
+function telemetryText(snapshot: TelemetrySnapshot): string {
+    const parts = [`suppressed ${snapshot.suppressed}`];
+    parts.push(`water ${snapshot.waterWeight === undefined ? "—" : `${snapshot.waterWeight.toFixed(1)} g`}`);
+    parts.push(`cup ${snapshot.cupWeight === undefined ? "—" : `${snapshot.cupWeight.toFixed(1)} g`}`);
+    parts.push(`tank ${snapshot.waterVolume === undefined ? "—" : `${snapshot.waterVolume.toFixed(1)} ml`}`);
+    parts.push(`info ${snapshot.info === undefined ? "—" : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`}`);
+    return parts.join(" · ");
+}
+
+function stateText(state: MachineStateReading | null): string {
+    if (state === null) return "Machine state: none yet";
+    const hex = `0x${state.value.toString(16).padStart(2, "0")}`;
+    return `Machine state: ${hex} ${stateName(state.value)} · ${state.changed ? "changed" : "repeated"} ${state.at}`;
+}
+
+function appendLog(
+    setLog: React.Dispatch<React.SetStateAction<LogEntry[]>>,
+    direction: "→" | "←",
+    frame: Uint8Array,
+    reading: string
+) {
+    const at = new Date().toISOString().slice(11, 23);
+    setLog((prev) => {
+        const next = [...prev, {at, direction, hex: toHex(frame), reading}];
+        return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
+    });
+}
+
+function flushTelemetry(
+    telemetryRef: {current: TelemetrySnapshot},
+    telemetryTimerRef: {current: ReturnType<typeof setTimeout> | null},
+    setTelemetry: React.Dispatch<React.SetStateAction<TelemetrySnapshot>>
+) {
+    telemetryTimerRef.current = null;
+    setTelemetry({...telemetryRef.current});
+}
+
+function scheduleTelemetryFlush(
+    telemetryRef: {current: TelemetrySnapshot},
+    telemetryTimerRef: {current: ReturnType<typeof setTimeout> | null},
+    setTelemetry: React.Dispatch<React.SetStateAction<TelemetrySnapshot>>
+) {
+    if (telemetryTimerRef.current !== null) return;
+    telemetryTimerRef.current = setTimeout(
+        () => flushTelemetry(telemetryRef, telemetryTimerRef, setTelemetry),
+        TELEMETRY_FLUSH_MS
+    );
+}
+
+function recordTelemetry(
+    parsed: Notification,
+    frame: Uint8Array,
+    telemetryRef: {current: TelemetrySnapshot},
+    telemetryTimerRef: {current: ReturnType<typeof setTimeout> | null},
+    setTelemetry: React.Dispatch<React.SetStateAction<TelemetrySnapshot>>
+) {
+    const next = {...telemetryRef.current, suppressed: telemetryRef.current.suppressed + 1};
+    switch (parsed.kind) {
+        case "waterWeight":
+            next.waterWeight = parsed.grams;
+            break;
+        case "cupWeight":
+            next.cupWeight = parsed.grams;
+            break;
+        case "info":
+            next.info = parsed;
+            break;
+        case "event":
+            if (parsed.code === WATER_VOLUME_CODE) next.waterVolume = waterVolumeOf(frame);
+            break;
+        default:
+            break;
+    }
+    telemetryRef.current = next;
+    scheduleTelemetryFlush(telemetryRef, telemetryTimerRef, setTelemetry);
+}
+
+function recordMachineState(
+    parsed: Notification,
+    lastStateRef: {current: number | null},
+    setMachineState: React.Dispatch<React.SetStateAction<MachineStateReading | null>>
+) {
+    if (parsed.kind !== "status") return;
+    const at = new Date().toISOString().slice(11, 23);
+    const changed = lastStateRef.current !== parsed.state;
+    lastStateRef.current = parsed.state;
+    setMachineState({value: parsed.state, changed, at});
+}
+
+function clearTelemetryTimer(telemetryTimerRef: {current: ReturnType<typeof setTimeout> | null}) {
+    if (telemetryTimerRef.current === null) return;
+    clearTimeout(telemetryTimerRef.current);
+    telemetryTimerRef.current = null;
 }
 
 /** The tea steep encoding is a two-way disagreement a single stopwatch settles. */
@@ -163,27 +305,37 @@ export default function MachineConsole() {
     const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding");
 
     const [log, setLog] = useState<LogEntry[]>([]);
+    const [telemetry, setTelemetry] = useState<TelemetrySnapshot>(INITIAL_TELEMETRY);
+    const telemetryRef = useRef<TelemetrySnapshot>(INITIAL_TELEMETRY);
+    const telemetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [showTelemetry, setShowTelemetry] = useState(false);
+    const showTelemetryRef = useRef(showTelemetry);
+    const [machineState, setMachineState] = useState<MachineStateReading | null>(null);
+    const lastStateRef = useRef<number | null>(null);
     const [rawText, setRawText] = useState("");
     const [pending, setPending] = useState<{command: Command; values: number[]} | null>(null);
 
-    // Both directions land in the same log, and the machine reports which is
-    // which. Appending here as well as in the subscription is what made every
-    // sent frame appear twice, the second copy labelled as a reply.
-    function append(direction: "→" | "←", frame: Uint8Array, reading: string) {
-        const at = new Date().toISOString().slice(11, 23);
-        setLog((prev) => {
-            const next = [...prev, {at, direction, hex: toHex(frame), reading}];
-            return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
+    useEffect(() => {
+        return machine.onFrame((direction, frame, parsed) => {
+            if (direction === "received") recordMachineState(parsed, lastStateRef, setMachineState);
+            if (direction === "received" && isTelemetry(parsed) && !showTelemetryRef.current) {
+                recordTelemetry(parsed, frame, telemetryRef, telemetryTimerRef, setTelemetry);
+                return;
+            }
+            appendLog(
+                setLog,
+                direction === "sent" ? "→" : "←",
+                frame,
+                direction === "sent" ? "" : readingOf(parsed)
+            );
         });
-    }
+    }, [machine]);
 
     useEffect(() => {
-        return machine.onFrame((direction, frame, parsed) => append(
-            direction === "sent" ? "→" : "←",
-            frame,
-            direction === "sent" ? "" : readingOf(parsed)
-        ));
-    }, [machine]);
+        return () => {
+            clearTelemetryTimer(telemetryTimerRef);
+        };
+    }, []);
 
     async function dispatch(frame: Uint8Array) {
         // No `append` here: `machine.send` announces the frame to every
@@ -193,7 +345,7 @@ export default function MachineConsole() {
         try {
             await machine.send(frame);
         } catch (e) {
-            append("→", frame, `not sent — ${(e as Error).message}`);
+            appendLog(setLog, "→", frame, `not sent — ${(e as Error).message}`);
         }
     }
 
@@ -223,11 +375,19 @@ export default function MachineConsole() {
         void dispatch(frame);
     }
 
+    function changeShowTelemetry(next: boolean) {
+        showTelemetryRef.current = next;
+        setShowTelemetry(next);
+    }
+
     function copyLog() {
         const block = log
             .map((entry) => `${entry.at}  ${entry.direction}  ${entry.hex}  ${entry.reading}`)
             .join("\n");
-        void Clipboard.setStringAsync(block);
+        void Clipboard.setStringAsync(block).then(() => notify({
+            tone:    "success",
+            message: "Log copied"
+        }));
     }
 
     if (!acknowledged) {
@@ -251,12 +411,29 @@ export default function MachineConsole() {
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="Machine console" onBack={() => router.back()}/>
             <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 48}}>
+                <YStack gap="$2" padding="$4" borderRadius="$5"
+                        borderColor={machineState === null ? palette.warn : palette.success}
+                        borderWidth={1} backgroundColor={palette.surface}>
+                    <Text accessibilityLabel="Machine state" fontSize={18} fontWeight="700"
+                          color={machineState === null ? palette.warn : palette.text}>
+                        {stateText(machineState)}
+                    </Text>
+                    <Text accessibilityLabel="Telemetry summary" fontSize={12} color={palette.dim}>
+                        {telemetryText(telemetry)}
+                    </Text>
+                </YStack>
+
                 <SettingsSection title="Session">
                     <SettingsToggleRow
                         label="Confirm before sending"
                         description="For the one session spent working through the hardware checklist, where confirming forty sends is its own hazard."
                         value={confirmations}
                         onChange={setConfirmations}/>
+                    <SettingsToggleRow
+                        label="Show telemetry"
+                        description="Log the continuous weight, tank-volume and info heartbeat streams instead of summarising them in place."
+                        value={showTelemetry}
+                        onChange={changeShowTelemetry}/>
                     <SettingsChoiceRow
                         label="Tea steep encoding"
                         description="The two sources disagree; a single stopwatched sixty-second steep settles which is right."
