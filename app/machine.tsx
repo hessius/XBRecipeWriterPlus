@@ -57,9 +57,14 @@ type TelemetrySnapshot = {
     cupWeight?: number;
     waterVolume?: number;
     info?: MachineInfo;
+    // Counted, not just kept. Whether the machine volunteers these or only
+    // answers when asked is an open question, and a reading on its own cannot
+    // tell the two apart — a count that stops at one can.
+    tankSeen: number;
+    infoSeen: number;
 };
 
-const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0};
+const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, tankSeen: 0, infoSeen: 0};
 
 const STATE_NAMES = new Map<number, string>([
     [MACHINE_STATE.IDLE, "idle"],
@@ -133,8 +138,12 @@ function telemetryText(snapshot: TelemetrySnapshot): string {
     const parts = [`suppressed ${snapshot.suppressed}`];
     parts.push(`water ${snapshot.waterWeight === undefined ? "—" : `${snapshot.waterWeight.toFixed(1)} g`}`);
     parts.push(`cup ${snapshot.cupWeight === undefined ? "—" : `${snapshot.cupWeight.toFixed(1)} g`}`);
-    parts.push(`tank ${snapshot.waterVolume === undefined ? "—" : `${snapshot.waterVolume.toFixed(1)} ml`}`);
-    parts.push(`info ${snapshot.info === undefined ? "—" : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`}`);
+    parts.push(`tank ${snapshot.waterVolume === undefined ? "—" : `${snapshot.waterVolume.toFixed(1)} ml`}`
+        + ` ×${snapshot.tankSeen}`);
+    parts.push(`info ${snapshot.info === undefined
+        ? "—"
+        : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`
+          + ` water ${snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
     return parts.join(" · ");
 }
 
@@ -195,9 +204,13 @@ function recordTelemetry(
             break;
         case "info":
             next.info = parsed;
+            next.infoSeen += 1;
             break;
         case "event":
-            if (parsed.code === WATER_VOLUME_CODE) next.waterVolume = waterVolumeOf(frame);
+            if (parsed.code === WATER_VOLUME_CODE) {
+                next.waterVolume = waterVolumeOf(frame);
+                next.tankSeen += 1;
+            }
             break;
         default:
             break;

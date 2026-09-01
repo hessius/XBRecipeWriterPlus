@@ -29,6 +29,19 @@ function emitFrame(direction: "sent" | "received", parsed: unknown, frame = Uint
     frameListener(direction, frame, parsed);
 }
 
+/** A 40523 frame carrying a tank reading where `waterVolumeOf` looks for it. */
+function tankFrame(ml: number): Uint8Array<ArrayBuffer> {
+    const buffer = new ArrayBuffer(16);
+    new DataView(buffer).setFloat32(10, ml, true);
+    return new Uint8Array(buffer);
+}
+
+const someInfo = {
+    kind: "info" as const, serial: "J15ABC123456", model: "J15",
+    firmware: "V12.0D.500", waterEnough: true, waterFeed: "tank" as const,
+    grindSize: 60, mode: "PRO" as const
+};
+
 jest.mock("@/hooks/useMachine", () => ({
     __esModule: true,
     default: () => ({machine: mockMachine, status: "connected", error: null, remembered: "AA:BB",
@@ -227,6 +240,28 @@ describe("the machine console", () => {
             expect.stringContaining("cup 3.5 g")
         );
         expect(screen.queryByLabelText("Frame log")).toBeNull();
+    });
+
+    it("counts the tank and info frames, to show whether either arrives unasked", async () => {
+        // The open question is whether the machine volunteers its tank level
+        // and its info blob, or only answers when asked. A count that stays at
+        // one while the summary is on screen settles it either way, and a
+        // reading with no count behind it cannot.
+        jest.useFakeTimers();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await act(async () => {
+            emitFrame("received", {kind: "event", code: 40523}, tankFrame(742));
+            emitFrame("received", {kind: "event", code: 40523}, tankFrame(510));
+            emitFrame("received", {...someInfo, waterEnough: false});
+            jest.advanceTimersByTime(250);
+        });
+
+        const summary = screen.getByLabelText("Telemetry summary").props.children;
+        expect(summary).toEqual(expect.stringContaining("tank 510.0 ml ×2"));
+        expect(summary).toEqual(expect.stringContaining("×1"));
+        expect(summary).toEqual(expect.stringContaining("water low"));
     });
 
     it("keeps status frames and sent commands in the log while telemetry is hidden", async () => {
