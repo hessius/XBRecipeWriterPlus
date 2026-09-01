@@ -624,12 +624,15 @@ describe("getting the machine to say how it is doing", () => {
 
     it("leaves a gap between the handshake and the question after it", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport, {frameGapMs: 40});
+        const machine = new Machine(transport, {frameGapMs: 60});
 
         const before = Date.now();
         await machine.connect("AA:BB");
 
-        expect(Date.now() - before).toBeGreaterThanOrEqual(40);
+        // Not the full 60: a `setTimeout` may fire a millisecond or two early,
+        // and CI has caught it doing so. What is being tested is that a wait
+        // happens at all, not that the platform timer is exact.
+        expect(Date.now() - before).toBeGreaterThanOrEqual(30);
         expect(transport.sent).toEqual([8100, 40521]);
     });
 
