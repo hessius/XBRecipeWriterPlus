@@ -11,6 +11,11 @@ export type Brewer = {
     phase: BrewPhase;
     error: string | null;
     brew: (recipe: Recipe) => Promise<void>;
+    /**
+     * Commit a recipe that was uploaded but held back, because the user has
+     * auto-start off. Only meaningful in the `readyToStart` phase.
+     */
+    startBrew: () => Promise<void>;
     cancelBrew: () => Promise<void>;
     /**
      * Whether offering a switch to PRO mode would be a reasonable thing to do.
@@ -31,6 +36,7 @@ export type Brewer = {
 export function useBrew(injected?: Machine): Brewer {
     const {machine, connect} = useMachine(injected);
     const [teaSteepEncoding] = useSetting("teaSteepEncoding");
+    const [autoStart] = useSetting("machineAutoStart");
     const [phase, setPhase] = useState<BrewPhase>(machine.phase);
     const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +48,9 @@ export function useBrew(injected?: Machine): Brewer {
         // back to the encoding the machine expects on the way in.
         machine.setTeaSteepEncoding(teaSteepEncoding as TeaSteepEncoding);
     }, [machine, teaSteepEncoding]);
+    useEffect(() => {
+        machine.setAutoStart(autoStart);
+    }, [machine, autoStart]);
 
     async function brew(recipe: Recipe): Promise<void> {
         setError(null);
@@ -50,6 +59,16 @@ export function useBrew(injected?: Machine): Brewer {
             // reached for the machine, and it is the beep they are expecting.
             if (!machine.isConnected()) await connect();
             await machine.brew(recipe);
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }
+
+    /** Commit a recipe that was uploaded and held back. See `machineAutoStart`. */
+    async function startBrew(): Promise<void> {
+        setError(null);
+        try {
+            await machine.startBrew();
         } catch (e) {
             setError((e as Error).message);
         }
@@ -79,7 +98,7 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
-    return {phase, error, brew, cancelBrew, canOfferProMode, switchToProAndRetry};
+    return {phase, error, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry};
 }
 
 export default useBrew;

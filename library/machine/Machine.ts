@@ -46,6 +46,8 @@ export type BrewFailure =
 export type BrewPhase =
     | {name: "idle"}
     | {name: "sending"}
+    /** Uploaded and waiting for the user to press START in the app. */
+    | {name: "readyToStart"}
     | {name: "armed"}
     /** Parked in `awaiting_confirm`. The user presses the button, not the app. */
     | {name: "pressPlay"}
@@ -109,11 +111,35 @@ export default class Machine {
         this.steepEncoding = encoding;
     }
 
+    /**
+     * Whether a brew commits itself, or waits to be started.
+     *
+     * `true` here is the protocol's own shape — upload and commit in one
+     * sequence — and is what every test that is not about this feature wants.
+     * The app's preference defaults the other way: the machine starts grinding
+     * the instant it is committed to, and a user who tapped BREW to see what
+     * would happen deserves one more press before that. `useBrew` pushes the
+     * setting down, exactly as it does the steep encoding.
+     */
+    private autoStart = true;
+
+    setAutoStart(autoStart: boolean): void {
+        this.autoStart = autoStart;
+    }
+
     private phaseListeners = new Set<(phase: BrewPhase) => void>();
     private pourCount = 0;
     private brewing = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
     private retriedInPro = false;
+    /**
+     * The commit frame of an uploaded recipe that has not been started yet.
+     *
+     * Held rather than rebuilt so that START commits the recipe that is
+     * actually on the machine, and cleared everywhere a brew ends so it can
+     * never commit one the user has already walked away from.
+     */
+    private pendingCommit: Uint8Array | null = null;
 
     private frameGapMs: number;
 
@@ -288,6 +314,10 @@ export default class Machine {
         this.phase = phase;
         this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
             .includes(phase.name);
+        // A brew that has ended takes its uncommitted recipe with it. Left
+        // behind, START on a later screen would commit a recipe the user has
+        // already cancelled or watched fail.
+        if (!this.brewing) this.pendingCommit = null;
         this.phaseListeners.forEach((listener) => listener(phase));
     }
 
@@ -339,6 +369,8 @@ export default class Machine {
         this.setPhase({name: "sending"});
 
         const tea = recipe.isTea();
+        const commit = tea ? buildType1(4512) : buildType1(8002);
+        this.pendingCommit = null;
 
         try {
             // This whole sequence, gaps and all, mirrors `run_brew` in the
@@ -355,15 +387,16 @@ export default class Machine {
                 // zero are the same four zero bytes an integer would give.
                 buildType1(8102, [0, 0, Math.round(recipe.dosage)]),
                 ...(tea ? [
-                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding)),
-                    buildType1(4512)
+                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
                 ] : [
                     setCupFrame(),
                     buildType1Bytes(
                         recipe.grinder ? 8001 : 8004, encodeCoffeeBlob(recipe)
-                    ),
-                    buildType1(8002)
-                ])
+                    )
+                ]),
+                // The commit is the frame that sets a burr spinning, so it is
+                // the one the user may want to keep for themselves.
+                ...(this.autoStart ? [commit] : [])
             ]);
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
@@ -376,9 +409,41 @@ export default class Machine {
             throw error;
         }
 
+        if (!this.autoStart) {
+            // Uploaded, not committed. Nothing is timed from here: the machine
+            // is holding a recipe quite happily, and the only thing outstanding
+            // is a person.
+            this.pendingCommit = commit;
+            this.setPhase({name: "readyToStart"});
+            return;
+        }
+
         // Not a grinding timeout — there is deliberately none of those, because
         // the machine goes silent for twenty seconds while it grinds. This is a
         // much earlier question: did the recipe reach the machine at all?
+        this.armAckTimer();
+    }
+
+    /**
+     * Commit a recipe that was uploaded but held back. See `setAutoStart`.
+     *
+     * From here on a started brew is indistinguishable from an auto-started
+     * one: same phase, same acknowledgement question.
+     */
+    async startBrew(): Promise<void> {
+        const commit = this.pendingCommit;
+        if (commit === null) throw new Error("There is no recipe waiting to be started.");
+        this.pendingCommit = null;
+        this.setPhase({name: "sending"});
+        try {
+            await this.send(commit);
+        } catch (error) {
+            this.setPhase({
+                name: "failed", reason: "rejected",
+                detail: error instanceof Error ? error.message : undefined
+            });
+            throw error;
+        }
         this.armAckTimer();
     }
 
@@ -434,6 +499,10 @@ export default class Machine {
         switch (state) {
             case MACHINE_STATE.ARMED:
             case MACHINE_STATE.LOADING:
+                // Not while a recipe is waiting to be started: this is the
+                // machine acknowledging the upload, and letting it replace the
+                // phase would take away the only control that can commit it.
+                if (this.pendingCommit !== null) break;
                 this.setPhase({name: "armed"});
                 break;
             case MACHINE_STATE.AWAITING_CONFIRM:

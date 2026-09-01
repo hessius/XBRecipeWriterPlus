@@ -400,3 +400,89 @@ describe("brewing", () => {
         expect(transport.sent).toEqual([11511, 8100, 8102, 8104, 8001, 8002]);
     });
 });
+
+describe("waiting for the user to start the brew", () => {
+    it("uploads the recipe but holds the commit back", async () => {
+        const {transport, machine} = await readyMachine();
+        machine.setAutoStart(false);
+
+        await machine.brew(brewable());
+
+        // Everything but the one frame that sets a burr spinning.
+        expect(transport.sent).toEqual([8100, 8102, 8104, 8001]);
+        expect(machine.phase.name).toBe("readyToStart");
+    });
+
+    it("commits when the user says so", async () => {
+        const {transport, machine} = await readyMachine();
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+        transport.written = [];
+
+        await machine.startBrew();
+
+        expect(transport.sent).toEqual([8002]);
+        expect(machine.phase.name).toBe("sending");
+    });
+
+    it("holds the tea commit back too", async () => {
+        const {transport, machine} = await readyMachine();
+        machine.setAutoStart(false);
+        const tea = brewable([80]);
+        tea.cupType = CUP_TYPE.TEA;
+        tea.dosage = 5;
+        tea.grinder = false;
+        tea.pours[0].pauseTime = 60;
+
+        await machine.brew(tea);
+        expect(transport.sent).toEqual([8100, 8102, 4513]);
+
+        transport.written = [];
+        await machine.startBrew();
+        expect(transport.sent).toEqual([4512]);
+    });
+
+    it("keeps the start button up while the machine reports the recipe loaded", async () => {
+        // The machine acknowledges the upload by moving to loading and then
+        // armed. Letting that overwrite the phase would replace the only
+        // control that can start the brew with a progress line that never
+        // moves, and the recipe would sit there for ever.
+        const {machine, transport} = await readyMachine();
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+
+        transport.emit(status(0x1D));
+        transport.emit(status(0x1F));
+
+        expect(machine.phase.name).toBe("readyToStart");
+    });
+
+    it("still reports a machine that cannot brew while it waits to be started", async () => {
+        const {machine, transport} = await readyMachine();
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+
+        transport.emit(status(0x0F)); // no beans
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noBeans"});
+    });
+
+    it("refuses to start a brew that was never uploaded", async () => {
+        const {machine} = await readyMachine();
+
+        await expect(machine.startBrew()).rejects.toThrow(/no recipe/i);
+    });
+
+    it("does not leave the old commit lying around after a cancel", async () => {
+        // Otherwise START on a later screen would commit the recipe the user
+        // has already stopped.
+        const {machine, transport} = await readyMachine();
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+
+        await machine.cancelBrew();
+        transport.written = [];
+
+        await expect(machine.startBrew()).rejects.toThrow(/no recipe/i);
+    });
+});

@@ -5,8 +5,11 @@ import {Text, XStack, YStack} from "tamagui";
 
 import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsSection from "@/components/SettingsSection";
+import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
+import {useSetting} from "@/hooks/useSetting";
+import type {Settings} from "@/library/Settings";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;
@@ -32,8 +35,9 @@ function Vital({label, value}: {label: string; value: string}) {
  *
  * The firmware row is the console's hidden entry: seven taps.
  */
-export default function MachineSection() {
+export default function MachineSection({settings}: {settings?: Settings}) {
     const {machine, status, error, remembered, connect, forget} = useMachine();
+    const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
 
@@ -84,6 +88,12 @@ export default function MachineSection() {
                     <Vital label="Mode" value={info.mode}/>
                 </YStack>
             )}
+
+            <SettingsToggleRow
+                label="Start brewing automatically"
+                description="Off, BREW loads the recipe onto the machine and waits for you to press START. On, it starts grinding the moment the recipe lands."
+                value={autoStart}
+                onChange={setAutoStart}/>
 
             {remembered !== "" && (
                 <SettingsActionRow label="Forget this machine" tone="danger"

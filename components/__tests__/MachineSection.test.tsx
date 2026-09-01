@@ -26,6 +26,16 @@ jest.mock("@/hooks/useMachine", () => ({
     useMachine: () => mockLink
 }));
 
+// The section now carries a preference row, and the shared settings store opens
+// SQLite, which cannot run under Jest. A per-hook in-memory value at the real
+// default is all these tests need — the same stand-in `brew.test.tsx` uses.
+jest.mock("@/hooks/useSetting", () => {
+    const React = require("react");
+    const {DEFAULTS} = require("@/library/Settings");
+    const useSetting = (key: string) => React.useState(DEFAULTS[key]);
+    return {__esModule: true, default: useSetting, useSetting};
+});
+
 describe("the machine section", () => {
     beforeEach(() => {
         mockPush.mockClear();
@@ -83,5 +93,17 @@ describe("the machine section", () => {
         await renderWithProviders(<MachineSection/>);
 
         expect(screen.getByLabelText(/forget/i)).toBeTruthy();
+    });
+
+    it("offers auto-start, off, because committing is what starts a grinder", async () => {
+        // The machine goes from committed to grinding with nothing in between
+        // and no confirmation of its own, so the default has to be the one
+        // where a curious first press does not leave somebody standing over a
+        // running burr.
+        await renderWithProviders(<MachineSection/>);
+
+        const toggle = screen.getByLabelText(/start brewing automatically/i);
+        expect(toggle).toBeTruthy();
+        expect(toggle.props.accessibilityState?.checked ?? toggle.props.value).toBe(false);
     });
 });

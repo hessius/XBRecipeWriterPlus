@@ -15,6 +15,7 @@ const PHASE_COPY: Record<string, string> = {
     // Deliberately slow: the frames are spaced two seconds apart, because the
     // machine drops a burst. Saying so stops this reading as a hang.
     sending:     "Sending the recipe… this takes a few seconds.",
+    readyToStart: "Recipe loaded. Ready when you are.",
     armed:       "Recipe loaded.",
     // The app never sends 40518, so this is where a parked machine ends up.
     // The user is standing in front of it; one press costs them a second.
@@ -50,12 +51,14 @@ const PRO_MODE_PROMPT =
     "Your machine is in Easy mode. Switch it to Pro and try again?";
 
 /** The phases during which stopping the machine is still a meaningful thing. */
-const RUNNING = new Set(["sending", "armed", "pressPlay", "grinding", "pouring"]);
+const RUNNING = new Set([
+    "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
+]);
 
 export default function Brew() {
     const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
     const navigation = useNavigation();
-    const {phase, error, brew, cancelBrew, canOfferProMode, switchToProAndRetry} = useBrew();
+    const {phase, error, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry} = useBrew();
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
     const [recipe] = useState(() => new Recipe(undefined, recipeJSON));
 
@@ -112,16 +115,33 @@ export default function Brew() {
             <YStack flex={1}/>
 
             {running ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Cancel"
-                           onPress={() => void cancelBrew()}>
-                    <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                            borderWidth={1} borderColor={palette.danger}>
-                        <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                       color={palette.danger}>
-                            CANCEL
-                        </DotMatrixText>
-                    </YStack>
-                </Pressable>
+                <YStack gap="$3">
+                    {phase.name === "readyToStart" && (
+                        // The frame this sends is the one that sets a burr
+                        // spinning, so it is a press of its own rather than
+                        // something BREW did on the user's behalf.
+                        <Pressable accessibilityRole="button" accessibilityLabel="Start brewing"
+                                   onPress={() => void startBrew()}>
+                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                                    borderWidth={1} borderColor={palette.success}>
+                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                               color={palette.success}>
+                                    START BREWING
+                                </DotMatrixText>
+                            </YStack>
+                        </Pressable>
+                    )}
+                    <Pressable accessibilityRole="button" accessibilityLabel="Cancel"
+                               onPress={() => void cancelBrew()}>
+                        <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                                borderWidth={1} borderColor={palette.danger}>
+                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                           color={palette.danger}>
+                                CANCEL
+                            </DotMatrixText>
+                        </YStack>
+                    </Pressable>
+                </YStack>
             ) : (
                 <YStack gap="$3">
                     {offerPro && (

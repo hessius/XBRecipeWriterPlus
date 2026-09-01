@@ -89,7 +89,18 @@ export const DEFAULTS = {
      * debugging session will want it gone; somebody who opened the console once
      * by accident should not be one tap from spinning a burr.
      */
-    machineConsoleConfirmations: true
+    machineConsoleConfirmations: true,
+    /**
+     * Whether BREW commits the recipe itself, or waits for one more press.
+     *
+     * Off by default. Committing is the frame that starts a burr spinning, and
+     * on hardware the machine goes from committed to grinding with nothing in
+     * between and no confirmation of its own — so somebody who tapped BREW to
+     * see what the screen looked like would be standing over a running
+     * grinder. With this off the recipe is uploaded and the brew route offers
+     * START; the machine holds the recipe quite happily until then.
+     */
+    machineAutoStart: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

@@ -9,6 +9,7 @@ import type {BrewPhase} from "@/library/machine/Machine";
 let mockPhase: BrewPhase = {name: "idle"};
 let mockCanOfferPro = false;
 const mockBrew = jest.fn();
+const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
 const mockSwitchToProAndRetry = jest.fn();
 
@@ -16,6 +17,7 @@ jest.mock("@/hooks/useBrew", () => {
     const value = () => ({
         phase: mockPhase,
         brew: mockBrew,
+        startBrew: mockStartBrew,
         cancelBrew: mockCancelBrew,
         switchToProAndRetry: mockSwitchToProAndRetry,
         canOfferProMode: () => mockCanOfferPro,
@@ -51,6 +53,7 @@ jest.mock("expo-router", () => ({
 describe("the brew screen", () => {
     beforeEach(() => {
         mockBrew.mockClear();
+        mockStartBrew.mockClear();
         mockCancelBrew.mockClear();
         mockSwitchToProAndRetry.mockClear();
         mockPhase = {name: "idle"};
@@ -70,8 +73,33 @@ describe("the brew screen", () => {
         expect(screen.getByText(/press .* on the machine/i)).toBeTruthy();
     });
 
-    it("counts the pours", async () => {
-        mockPhase = {name: "pouring", pour: 2, pours: 3};
+    it("offers START when the recipe is loaded but not committed", async () => {
+        // Auto-start off. The frame this button sends is the one that sets a
+        // burr spinning, so it is the user's press and not the app's.
+        mockPhase = {name: "readyToStart"};
+        await renderWithProviders(<Brew/>);
+
+        await fireEvent.press(screen.getByLabelText("Start brewing"));
+
+        expect(mockStartBrew).toHaveBeenCalled();
+    });
+
+    it("can still stop a recipe it has loaded but not started", async () => {
+        mockPhase = {name: "readyToStart"};
+        await renderWithProviders(<Brew/>);
+
+        await fireEvent.press(screen.getByLabelText("Cancel"));
+
+        expect(mockCancelBrew).toHaveBeenCalled();
+    });
+
+    it("does not offer START once the brew is running", async () => {
+        mockPhase = {name: "grinding"};
+        await renderWithProviders(<Brew/>);
+        expect(screen.queryByLabelText("Start brewing")).toBeNull();
+    });
+
+    it("counts the pours", async () => {        mockPhase = {name: "pouring", pour: 2, pours: 3};
         await renderWithProviders(<Brew/>);
         expect(screen.getByText(/pour 2 of 3/i)).toBeTruthy();
     });

@@ -67,6 +67,9 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("machineConsoleAcknowledged", settings);
     const [machineConsoleConfirmations, setMachineConsoleConfirmations] =
         useSetting("machineConsoleConfirmations", settings);
+    // Shown as a row inside MachineSection, not here. Read anyway, because a
+    // backup carries every preference and this is one.
+    const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -86,7 +89,8 @@ export default function SettingsScreen({settings}: Props) {
     function settingsSnapshot(): Record<SettingKey, unknown> {
         return {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
-            machineDeviceId, firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations
+            machineDeviceId, firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
+            machineAutoStart
         };
     }
 
@@ -132,6 +136,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.machineConsoleConfirmations === "boolean") {
             setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
+        }
+        if (typeof incoming.machineAutoStart === "boolean") {
+            setMachineAutoStart(incoming.machineAutoStart);
         }
         if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
             setTeaSteepEncoding(incoming.teaSteepEncoding);
@@ -232,7 +239,7 @@ export default function SettingsScreen({settings}: Props) {
                         onChange={(value) => setTemperatureUnit(asTemperatureUnit(value))}/>
                 </SettingsSection>
 
-                <MachineSection/>
+                <MachineSection settings={settings}/>
 
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"

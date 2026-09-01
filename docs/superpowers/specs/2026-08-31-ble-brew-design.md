@@ -50,6 +50,13 @@ to `recipe_loaded`; Janczykkkko separately verified that sending it into a
 `COFFEE_PAUSE`. The research calls this the most operationally dangerous
 unknown in the protocol.
 
+**Observed on hardware, 2026-09-01:** commit auto-proceeds. The machine went
+straight from `8002` to grinding with no confirmation of its own — in both EASY
+and PRO. So `8002` is the frame that starts a grinder, which is why it is the
+one the `machineAutoStart` preference holds back. With auto-start off the app
+uploads the recipe and offers START on the brew route; the machine holds an
+uncommitted recipe indefinitely.
+
 **We do not send it.** If the machine parks in `0x1E`, the app says
 `PRESS ▶ ON THE MACHINE`. This is the only choice that cannot misfire, the
 fallback costs the user one second because they are standing in front of the
