@@ -3,22 +3,8 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {RECIPE_ACK_MS} from "@/constants/machine";
 
-import {FakeTransport} from "./FakeTransport";
+import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
-
-function machineInfoFrame(overrides: {mode?: string; waterEnough?: number} = {}): number[] {
-    const payload = new Array(63).fill(0);
-    const put = (at: number, textValue: string) => {
-        for (let i = 0; i < textValue.length; i++) payload[at + i] = textValue.charCodeAt(i);
-    };
-    put(0, "J15ABC123456");
-    put(13, "J15");
-    put(19, "V12.0D.500");
-    payload[33] = overrides.waterEnough ?? 1;
-    payload[37] = 30 + 62;
-    put(51, overrides.mode ?? "00000000");
-    return notification(0x49, 0x9E, payload);
-}
 
 /** A pour-start event carrying the machine's own one-based pour index. */
 function Uint8ArrayPourEvent(index: number): number[] {
@@ -135,6 +121,35 @@ describe("brewing", () => {
 
         await expect(machine.brew(brewable())).rejects.toThrow(/water/i);
         expect(transport.sent).toEqual([]);
+    });
+
+    it("refuses to send to a machine that has not said how it is doing", async () => {
+        // "We never heard" is not "the tank is fine". The info frame is the
+        // only report of the water level there is, so treating its absence as
+        // permission is how a recipe gets committed to an empty machine.
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport);
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        transport.written = [];
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
+        expect(transport.sent).toEqual([]);
+    });
+
+    it("ends the brew when the radio refuses a frame, instead of waiting for ever", async () => {
+        // Leaving the phase at `sending` with no timer armed means nothing can
+        // ever move it: the brew screen spins until the app is killed.
+        const {transport, machine} = await readyMachine();
+        const phases: string[] = [];
+        machine.onPhase((phase) => phases.push(phase.name));
+        transport.failNextWrite = "the radio is busy";
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/radio is busy/i);
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "rejected"});
+        expect(phases).toContain("failed");
     });
 
     it("refuses a recipe the card limits would reject", async () => {

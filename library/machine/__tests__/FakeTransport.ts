@@ -1,5 +1,30 @@
 import type {FoundMachine, MachineTransport} from "@/library/machine/Transport";
 
+import {notification} from "./protocolFixtures";
+
+/**
+ * The frame a machine sends to describe itself.
+ *
+ * Shared because a great deal now depends on it having arrived: connecting is
+ * not finished until it has, and no recipe may be sent before it, since it is
+ * the only report of the water level.
+ */
+export function machineInfoFrame(
+    overrides: {mode?: string; waterEnough?: number} = {}
+): number[] {
+    const payload = new Array(63).fill(0);
+    const put = (at: number, textValue: string) => {
+        for (let i = 0; i < textValue.length; i++) payload[at + i] = textValue.charCodeAt(i);
+    };
+    put(0, "J15ABC123456");
+    put(13, "J15");
+    put(19, "V12.0D.500");
+    payload[33] = overrides.waterEnough ?? 1;
+    payload[37] = 30 + 62;
+    put(51, overrides.mode ?? "00000000");
+    return notification(0x49, 0x9E, payload);
+}
+
 /**
  * A radio that does exactly what a test tells it to.
  *
@@ -14,6 +39,18 @@ export class FakeTransport implements MachineTransport {
     public devices: FoundMachine[] = [{id: "AA:BB", name: "XBLOOM TEST"}];
     /** Set to make `connect` reject, for the taken-link case. */
     public refuseConnection = false;
+    /** Identifiers this radio refuses, for the stale-remembered-id case. */
+    public refuseIds: string[] = [];
+    /** Set to make the next `write` reject, for the failed-send case. */
+    public failNextWrite: string | null = null;
+    /**
+     * What the machine answers the info request with.
+     *
+     * A real one always answers — that is confirmed on hardware — so the fake
+     * does too by default. Set to null to play a machine that stays silent,
+     * which is the case the brew preflight has to refuse.
+     */
+    public infoReply: number[] | null = machineInfoFrame();
 
     private frameListeners = new Set<(frame: Uint8Array) => void>();
     private disconnectListeners = new Set<() => void>();
@@ -28,7 +65,9 @@ export class FakeTransport implements MachineTransport {
     }
 
     async connect(id: string): Promise<void> {
-        if (this.refuseConnection) throw new Error("connection failed");
+        if (this.refuseConnection || this.refuseIds.includes(id)) {
+            throw new Error("connection failed");
+        }
         this.connectedTo = id;
     }
 
@@ -38,7 +77,14 @@ export class FakeTransport implements MachineTransport {
 
     async write(frame: Uint8Array): Promise<void> {
         if (this.connectedTo === null) throw new Error("not connected");
+        if (this.failNextWrite !== null) {
+            const reason = this.failNextWrite;
+            this.failNextWrite = null;
+            throw new Error(reason);
+        }
         this.written.push(frame);
+        const code = frame[3] | (frame[4] << 8);
+        if (code === 40521 && this.infoReply !== null) this.emit(this.infoReply);
     }
 
     onFrame(listener: (frame: Uint8Array) => void): () => void {

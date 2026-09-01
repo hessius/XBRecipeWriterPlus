@@ -212,7 +212,11 @@ export function parseNotification(bytes: Uint8Array): Notification {
 
     const code = type | (sub << 8);
 
-    if (code === EVENT.MACHINE_INFO && payload.length >= 42) {
+    // 59, not 42: `readInfo` reads the mode string through index 58, and a
+    // payload that stops short of it decodes as an empty mode — which is then
+    // reported as PRO. A truncated frame claiming the machine is in PRO is
+    // worse than no frame, because the PRO-mode fallback trusts it.
+    if (code === EVENT.MACHINE_INFO && payload.length >= INFO_PAYLOAD_BYTES) {
         return readInfo(payload);
     }
 
@@ -220,6 +224,9 @@ export function parseNotification(bytes: Uint8Array): Notification {
         ? {kind: "event", code, value: payload[0]}
         : {kind: "event", code};
 }
+
+/** The mode string ends at index 58, so a shorter payload is not an info frame. */
+const INFO_PAYLOAD_BYTES = 59;
 
 /** What the encoder needs of a recipe, without depending on `Recipe` itself. */
 export type BlobPour = {

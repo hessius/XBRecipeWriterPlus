@@ -57,7 +57,7 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
-    const [teaSteepEncoding] = useSetting("teaSteepEncoding", settings);
+    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
     // Not shown as a row on this screen -- the machine link is managed from the
     // console and the editor's BREW button. Read here anyway, because a backup
     // carries every preference and this is one.
@@ -132,6 +132,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.machineConsoleConfirmations === "boolean") {
             setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
+        }
+        if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
+            setTeaSteepEncoding(incoming.teaSteepEncoding);
         }
     }
 

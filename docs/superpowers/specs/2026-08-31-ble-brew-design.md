@@ -185,7 +185,8 @@ connect  →  handshake 8100 within ~200 ms  →  settle ~2 s
 gate     :  refuse unless idle and tank OK
 send     :  8102 [0, 0, dose]
 send     :  8001 (grind) | 8004 (no grind) | 4513 (tea)
-commit   :  8002 [1]  |  4512 (tea)
+commit   :  8002      |  4512 (tea)   <- no arguments; the 01 in a
+                                            capture is the frame marker
 observe  :  0x1D loading  →  0x1F armed
               ├─ auto-proceeds → 0x22 starting → GRINDING
               └─ parks at 0x1E → "PRESS ▶ ON THE MACHINE"

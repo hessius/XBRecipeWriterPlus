@@ -1,4 +1,4 @@
-import {router, useNavigation} from "expo-router";
+import {router} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {ScrollView, TextInput} from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -167,7 +167,6 @@ function CommandRow({command, onSend}: CommandRowProps) {
  * so the session can be pasted into a bug report.
  */
 export default function MachineConsole() {
-    const navigation = useNavigation();
     const {machine} = useMachine();
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
@@ -177,12 +176,9 @@ export default function MachineConsole() {
     const [rawText, setRawText] = useState("");
     const [pending, setPending] = useState<{command: Command; values: number[]} | null>(null);
 
-    useEffect(() => {
-        navigation.setOptions({headerShown: false});
-    }, [navigation]);
-
-    // Both directions land in the same log. Outgoing frames are recorded when
-    // sent; incoming frames arrive through the machine's frame subscription.
+    // Both directions land in the same log, and the machine reports which is
+    // which. Appending here as well as in the subscription is what made every
+    // sent frame appear twice, the second copy labelled as a reply.
     function append(direction: "→" | "←", frame: Uint8Array, reading: string) {
         const at = new Date().toISOString().slice(11, 23);
         setLog((prev) => {
@@ -192,33 +188,49 @@ export default function MachineConsole() {
     }
 
     useEffect(() => {
-        return machine.onFrame((frame, parsed) => append("←", frame, readingOf(parsed)));
+        return machine.onFrame((direction, frame, parsed) => append(
+            direction === "sent" ? "→" : "←",
+            frame,
+            direction === "sent" ? "" : readingOf(parsed)
+        ));
     }, [machine]);
 
-    function dispatch(frame: Uint8Array) {
-        append("→", frame, "");
-        void machine.send(frame);
+    async function dispatch(frame: Uint8Array) {
+        // No `append` here: `machine.send` announces the frame to every
+        // subscriber, including the one above. A failed send is logged, because
+        // this log is the evidence a protocol report is built from and it must
+        // not show a command as sent when the radio refused it.
+        try {
+            await machine.send(frame);
+        } catch (e) {
+            append("→", frame, `not sent — ${(e as Error).message}`);
+        }
     }
 
     function onSend(command: Command, values: number[]) {
-        const needsConfirm = confirmations && command.tier !== "inert";
+        // An unresolved command always confirms. The toggle is there to stop
+        // the console nagging about commands whose effect is known; it is not
+        // a way to switch off the warning that the sources disagree about what
+        // this one does, which is the only warning that can cost anything.
+        const needsConfirm = command.tier === "unresolved"
+            || (confirmations && command.tier !== "inert");
         if (needsConfirm) {
             setPending({command, values});
             return;
         }
-        dispatch(frameFor(command, values));
+        void dispatch(frameFor(command, values));
     }
 
     function confirmPending() {
         if (pending === null) return;
-        dispatch(frameFor(pending.command, pending.values));
+        void dispatch(frameFor(pending.command, pending.values));
         setPending(null);
     }
 
     function sendRaw() {
         const frame = parseRawFrame(rawText);
         if (frame === null) return;
-        dispatch(frame);
+        void dispatch(frame);
     }
 
     function copyLog() {

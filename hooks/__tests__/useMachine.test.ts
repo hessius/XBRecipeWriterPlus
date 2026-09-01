@@ -15,15 +15,21 @@ jest.mock("react-native-ble-manager", () => ({__esModule: true, default: {}}));
 // but `useMachine` takes no store to inject, so the store is mocked here instead
 // with a per-hook in-memory value that starts at the real default. Same spirit
 // as the `jest.mock("@/library/RecipeDatabase")` the other hook tests use.
+const mockSeed: Record<string, unknown> = {};
+
 jest.mock("@/hooks/useSetting", () => {
     const React = require("react");
     const {DEFAULTS} = require("@/library/Settings");
-    const useSetting = (key: string) => React.useState(DEFAULTS[key]);
+    const useSetting = (key: string) =>
+        React.useState(key in mockSeed ? mockSeed[key] : DEFAULTS[key]);
     return {__esModule: true, default: useSetting, useSetting};
 });
 
 describe("the machine link", () => {
-    beforeEach(() => __resetSharedMachine());
+    beforeEach(() => {
+        __resetSharedMachine();
+        for (const key of Object.keys(mockSeed)) delete mockSeed[key];
+    });
 
     it("does not touch the radio until something asks it to", async () => {
         const transport = new FakeTransport();
@@ -54,7 +60,11 @@ describe("the machine link", () => {
         const machine = new Machine(transport);
         const {result} = await renderHook(() => useMachine(machine));
 
-        await act(async () => { await result.current.connect(); });
+        // Thrown as well as recorded: the brew path needs the reason, because
+        // one line later it would only be able to say "not connected".
+        await act(async () => {
+            await expect(result.current.connect()).rejects.toThrow(/another app/i);
+        });
 
         expect(result.current.status).toBe("failed");
         expect(result.current.error).toMatch(/another app/i);
@@ -66,7 +76,9 @@ describe("the machine link", () => {
         const machine = new Machine(transport);
         const {result} = await renderHook(() => useMachine(machine));
 
-        await act(async () => { await result.current.connect(); });
+        await act(async () => {
+            await expect(result.current.connect()).rejects.toThrow(/could not find/i);
+        });
 
         expect(result.current.status).toBe("failed");
         expect(result.current.error).toMatch(/could not find/i);
@@ -83,5 +95,38 @@ describe("the machine link", () => {
         expect(result.current.status).toBe("disconnected");
         expect(result.current.remembered).toBe("");
         expect(transport.connectedTo).toBeNull();
+    });
+
+    it("notices the link dropping, rather than going on saying connected", async () => {
+        // The case that matters most produces no frame at all, so a hook
+        // watching frames would sit there claiming the machine is connected.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport);
+        const {result} = await renderHook(() => useMachine(machine));
+        await act(async () => { await result.current.connect(); });
+        expect(result.current.status).toBe("connected");
+
+        await act(async () => { transport.drop(); });
+
+        expect(result.current.status).toBe("disconnected");
+    });
+
+    it("scans again when the remembered machine is not there any more", async () => {
+        // A restored backup can carry an identifier from another phone. Without
+        // this the only way out is the "forget this machine" button, which
+        // nobody would think to look for.
+        const transport = new FakeTransport();
+        transport.devices = [{id: "NEW:ID", name: "XBLOOM TEST"}];
+        transport.refuseIds = ["OLD:ID"];
+        const machine = new Machine(transport);
+
+        mockSeed.machineDeviceId = "OLD:ID";
+        const {result} = await renderHook(() => useMachine(machine));
+
+        await act(async () => { await result.current.connect(); });
+
+        expect(result.current.status).toBe("connected");
+        expect(transport.connectedTo).toBe("NEW:ID");
+        expect(result.current.remembered).toBe("NEW:ID");
     });
 });

@@ -64,7 +64,11 @@ export default function MachineSection() {
                 detail={status === "connected"
                     ? "The link is held while XBRW++ is open."
                     : "Your xBloom Studio has to be switched on and nearby."}
-                onPress={() => { if (status !== "connected") void connect(); }}/>
+                onPress={() => {
+                    // The throw is for the brew path, which needs the reason.
+                    // Here the reason is already on screen, in `error`.
+                    if (status !== "connected") connect().catch(() => {});
+                }}/>
 
             {info !== null && (
                 <YStack paddingVertical="$1">

@@ -30,8 +30,16 @@ export const SCAN_SECONDS = 10;
  */
 export const HANDSHAKE_WINDOW_MS = 200;
 
-/** How long to let the machine settle after the handshake before sending. */
-export const SETTLE_MS = 2000;
+/**
+ * How long to wait, after the handshake, for the machine to describe itself.
+ *
+ * Nothing may be brewed until it has: the info frame is the only place the
+ * water level is reported, and sending a recipe to a machine whose tank state
+ * is unknown is how water ends up on the counter. Connecting still succeeds if
+ * this elapses — the console is useful on a machine that will not introduce
+ * itself, and the brew path refuses on its own.
+ */
+export const INFO_WAIT_MS = 2000;
 
 /** How long to wait for a sent recipe to reach `loading` or `armed`. */
 export const RECIPE_ACK_MS = 8000;

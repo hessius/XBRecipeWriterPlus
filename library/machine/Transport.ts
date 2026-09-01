@@ -163,15 +163,20 @@ export class BleTransport implements MachineTransport {
 /**
  * Ask for whatever this platform needs before the radio is usable.
  *
- * Android 12 and up wants BLUETOOTH_SCAN and BLUETOOTH_CONNECT at runtime; iOS
- * asks for itself, on first use, using the purpose string in `app.json`.
+ * iOS asks for itself, on first use, using the purpose string in `app.json`.
+ *
+ * Android split this in two. From API 31 the radio has its own permissions,
+ * BLUETOOTH_SCAN and BLUETOOTH_CONNECT. Before that, scanning was treated as a
+ * way of working out where you are, and so required ACCESS_FINE_LOCATION —
+ * asking only for the newer pair on Android 11 grants nothing at all, and the
+ * scan comes back empty with no explanation.
  */
 export async function ensureBluetoothPermission(): Promise<boolean> {
     if (Platform.OS !== "android") return true;
     const {PermissionsAndroid} = await import("react-native");
-    const granted = await PermissionsAndroid.requestMultiple([
-        "android.permission.BLUETOOTH_SCAN" as never,
-        "android.permission.BLUETOOTH_CONNECT" as never
-    ]);
+    const needed = Number(Platform.Version) >= 31
+        ? ["android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"]
+        : ["android.permission.ACCESS_FINE_LOCATION"];
+    const granted = await PermissionsAndroid.requestMultiple(needed as never[]);
     return Object.values(granted).every((result) => result === "granted");
 }

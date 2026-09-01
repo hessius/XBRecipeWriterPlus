@@ -1,4 +1,4 @@
-import {HANDSHAKE_WINDOW_MS, RECIPE_ACK_MS} from "@/constants/machine";
+import {HANDSHAKE_WINDOW_MS, INFO_WAIT_MS, RECIPE_ACK_MS} from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
@@ -18,8 +18,18 @@ import {
 } from "./protocol";
 import type {FoundMachine, MachineTransport} from "./Transport";
 
-/** A subscriber to everything the machine says, decoded. The console uses it. */
-export type FrameListener = (frame: Uint8Array, parsed: Notification) => void;
+/**
+ * A subscriber to every frame in either direction, decoded. The console uses it.
+ *
+ * The direction is part of the event because the console's log is evidence —
+ * it is what users are asked to attach to a protocol report — and a log that
+ * cannot tell what the app said from what the machine answered is worse than
+ * no log at all.
+ */
+export type FrameDirection = "sent" | "received";
+export type FrameListener = (
+    direction: FrameDirection, frame: Uint8Array, parsed: Notification
+) => void;
 
 /** Why a brew ended badly. Each has its own copy on the brew route. */
 export type BrewFailure =
@@ -71,6 +81,7 @@ export default class Machine {
     private transport: MachineTransport;
     private frameListeners = new Set<FrameListener>();
     private notificationListeners = new Set<(parsed: Notification) => void>();
+    private linkListeners = new Set<() => void>();
     private unsubscribe: (() => void)[] = [];
 
     public phase: BrewPhase = {name: "idle"};
@@ -129,7 +140,36 @@ export default class Machine {
         // First write, before anything else is queued: the machine ignores
         // every command that follows if the handshake misses its window.
         await this.transport.write(buildType1(8100, [185, 1]));
+        this.announceLink();
         await this.requestInfo();
+        // Connecting is not finished until the machine has said who it is and
+        // how much water it has. Waiting here rather than at the brew means a
+        // recipe is never sent into the gap, and the settings screen shows
+        // vitals rather than blanks the moment it says "connected".
+        await this.waitForInfo();
+    }
+
+    /**
+     * Resolve once an info frame has arrived, or when the window closes.
+     *
+     * Does not reject: a machine that never introduces itself is still worth
+     * being connected to from the console, and `brewBlockReason` is where the
+     * consequence belongs.
+     */
+    private waitForInfo(): Promise<void> {
+        if (this.info !== null) return Promise.resolve();
+        return new Promise((resolve) => {
+            const finish = (): void => {
+                clearTimeout(timer);
+                off();
+                resolve();
+            };
+            const off = this.onNotification((parsed) => {
+                if (parsed.kind === "info") finish();
+            });
+            const timer = setTimeout(finish, INFO_WAIT_MS);
+            timer.unref?.();
+        });
     }
 
     /**
@@ -156,7 +196,7 @@ export default class Machine {
     /** Send an already-built frame. The brew path and the console both use it. */
     send(frame: Uint8Array): Promise<void> {
         this.frameListeners.forEach((listener) =>
-            listener(frame, {kind: "unknown", raw: frame}));
+            listener("sent", frame, {kind: "unknown", raw: frame}));
         return this.transport.write(frame);
     }
 
@@ -164,6 +204,22 @@ export default class Machine {
     onFrame(listener: FrameListener): () => void {
         this.frameListeners.add(listener);
         return () => this.frameListeners.delete(listener);
+    }
+
+    /**
+     * The link came up or went down, or the machine told us something new
+     * about itself.
+     *
+     * Views cannot learn this from `onFrame`, because the interesting case —
+     * the link dropping — produces no frame at all.
+     */
+    onLink(listener: () => void): () => void {
+        this.linkListeners.add(listener);
+        return () => this.linkListeners.delete(listener);
+    }
+
+    private announceLink(): void {
+        this.linkListeners.forEach((listener) => listener());
     }
 
     /** Decoded notifications only. The brew state machine uses this. */
@@ -178,9 +234,12 @@ export default class Machine {
             this.state = parsed.state;
             this.onState(parsed.state);
         }
-        if (parsed.kind === "info") this.info = parsed;
+        if (parsed.kind === "info") {
+            this.info = parsed;
+            this.announceLink();
+        }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
-        this.frameListeners.forEach((listener) => listener(frame, parsed));
+        this.frameListeners.forEach((listener) => listener("received", frame, parsed));
         this.notificationListeners.forEach((listener) => listener(parsed));
     }
 
@@ -211,9 +270,14 @@ export default class Machine {
      */
     brewBlockReason(recipe: Recipe): string | null {
         if (!this.isConnected()) return "The machine is not connected.";
-        if (this.info !== null && !this.info.waterEnough) {
-            return "The machine's water tank is low.";
+        if (this.info === null) {
+            // Not a pedantic check. The water level is reported nowhere else,
+            // and "we never heard" is not the same as "the tank is fine" —
+            // treating it as such is how a recipe gets committed to a machine
+            // with an empty tank.
+            return "The machine has not said how it is doing yet. Reconnect and try again.";
         }
+        if (!this.info.waterEnough) return "The machine's water tank is low.";
         if (this.state !== null && !STARTABLE.has(this.state)) {
             return "The machine is busy. Wait for it to finish.";
         }
@@ -245,17 +309,30 @@ export default class Machine {
 
         const tea = recipe.isTea();
 
-        // Bypass off, but the dose still has to travel: the machine needs it to
-        // grind correctly, and skipping this makes the grind drift.
-        await this.send(buildType1(8102, [0, 0, Math.round(recipe.dosage)]));
+        try {
+            // Bypass off, but the dose still has to travel: the machine needs
+            // it to grind correctly, and skipping this makes the grind drift.
+            await this.send(buildType1(8102, [0, 0, Math.round(recipe.dosage)]));
 
-        if (tea) {
-            await this.send(buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding)));
-            await this.send(buildType1(4512));
-        } else {
-            const opcode = recipe.grinder ? 8001 : 8004;
-            await this.send(buildType1Bytes(opcode, encodeCoffeeBlob(recipe)));
-            await this.send(buildType1(8002));
+            if (tea) {
+                await this.send(
+                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
+                );
+                await this.send(buildType1(4512));
+            } else {
+                const opcode = recipe.grinder ? 8001 : 8004;
+                await this.send(buildType1Bytes(opcode, encodeCoffeeBlob(recipe)));
+                await this.send(buildType1(8002));
+            }
+        } catch (error) {
+            // Without this the brew is left in `sending` with no timer armed —
+            // the phase is only ever left by an acknowledgement that can no
+            // longer come, so the brew screen would spin for good.
+            this.setPhase({
+                name: "failed", reason: "rejected",
+                detail: error instanceof Error ? error.message : undefined
+            });
+            throw error;
         }
 
         // Not a grinding timeout — there is deliberately none of those, because
@@ -390,6 +467,9 @@ export default class Machine {
         // talking to.
         this.info = null;
         this.state = null;
+        // Last, so a listener reading `isConnected()` or `info` sees the link
+        // as gone rather than half torn down.
+        this.announceLink();
     }
 }
 
