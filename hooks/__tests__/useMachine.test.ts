@@ -1,6 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {useMachine, __resetSharedMachine} from "@/hooks/useMachine";
+import {holdLinkAcrossAppState, useMachine, __resetSharedMachine} from "@/hooks/useMachine";
+import {RECONNECT_DELAYS_MS} from "@/constants/machine";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine from "@/library/machine/Machine";
 
@@ -128,5 +129,134 @@ describe("the machine link", () => {
         expect(result.current.status).toBe("connected");
         expect(transport.connectedTo).toBe("NEW:ID");
         expect(result.current.remembered).toBe("NEW:ID");
+    });
+});
+
+describe("holding the link across the app going away", () => {
+    /** An AppState a test can drive, in place of the platform's. */
+    function fakeAppState() {
+        const handlers: ((state: string) => void)[] = [];
+        return {
+            addEventListener(_type: "change", handler: (state: string) => void) {
+                handlers.push(handler);
+                return {remove() {}};
+            },
+            /** Move the app to a state and let the handlers finish. */
+            async go(state: string) {
+                for (const handler of handlers) handler(state);
+                // The handlers are async inside; let their chains settle.
+                for (let i = 0; i < 20; i++) await Promise.resolve();
+            }
+        };
+    }
+
+    async function held() {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const appState = fakeAppState();
+        const reconnect = jest.fn(async () => { await machine.connect("AA:BB"); });
+        holdLinkAcrossAppState(machine, reconnect, {
+            appState, wait: async () => {}
+        });
+        return {transport, machine, appState, reconnect};
+    }
+
+    it("keeps the link through a transient interruption", async () => {
+        // iOS fires `inactive` for notification centre, the app switcher and
+        // every system alert. Dropping the link for those is why the machine
+        // kept going away for no reason the user could see.
+        const {transport, machine, appState} = await held();
+        await machine.connect("AA:BB");
+
+        await appState.go("inactive");
+
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("gives the slot back when the app really goes away", async () => {
+        // The machine permits one link, and an app iOS has suspended is not
+        // using the one it holds.
+        const {transport, machine, appState} = await held();
+        await machine.connect("AA:BB");
+
+        await appState.go("background");
+
+        expect(transport.connectedTo).toBeNull();
+    });
+
+    it("takes the link back when the app comes to the front again", async () => {
+        const {transport, machine, appState} = await held();
+        await machine.connect("AA:BB");
+
+        await appState.go("background");
+        await appState.go("active");
+
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("does not reach for a link the user never asked for", async () => {
+        // A beep at launch, for somebody who opened the app to edit a recipe,
+        // is the machine shouting about something nobody asked for. Coming back
+        // to the front is not a request.
+        const {transport, appState, reconnect} = await held();
+
+        await appState.go("background");
+        await appState.go("active");
+
+        expect(reconnect).not.toHaveBeenCalled();
+        expect(transport.connectedTo).toBeNull();
+    });
+
+    it("keeps trying for a moment, because the radio does not let go at once", async () => {
+        // A single immediate attempt failed often enough that forgetting the
+        // machine and force-quitting the app was the only way back.
+        const {transport, machine, appState, reconnect} = await held();
+        await machine.connect("AA:BB");
+        await appState.go("background");
+        transport.refuseNextConnections = 2;
+
+        await appState.go("active");
+
+        expect(reconnect).toHaveBeenCalledTimes(3);
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("stops asking rather than retrying for ever", async () => {
+        const {transport, machine, appState, reconnect} = await held();
+        await machine.connect("AA:BB");
+        await appState.go("background");
+        transport.refuseConnection = true;
+
+        await appState.go("active");
+
+        expect(reconnect).toHaveBeenCalledTimes(RECONNECT_DELAYS_MS.length);
+        expect(transport.connectedTo).toBeNull();
+    });
+
+    it("tries again next time the app comes back, having failed this time", async () => {
+        const {transport, machine, appState, reconnect} = await held();
+        await machine.connect("AA:BB");
+        await appState.go("background");
+        transport.refuseConnection = true;
+        await appState.go("active");
+        reconnect.mockClear();
+
+        transport.refuseConnection = false;
+        await appState.go("inactive");
+        await appState.go("active");
+
+        expect(reconnect).toHaveBeenCalled();
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("does not run two reconnections at once", async () => {
+        const {machine, appState, reconnect} = await held();
+        await machine.connect("AA:BB");
+        await appState.go("background");
+
+        // Two `active` events in a row, as the platform will happily deliver.
+        await Promise.all([appState.go("active"), appState.go("active")]);
+
+        expect(reconnect).toHaveBeenCalledTimes(1);
     });
 });

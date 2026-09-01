@@ -380,10 +380,17 @@ export default function MachineConsole() {
         setShowTelemetry(next);
     }
 
+    /** The link history, as lines. Oldest first, same clock as the frame log. */
+    const connectionLines = machine.linkHistory.map(
+        (event) => `${new Date(event.at).toISOString().slice(11, 23)}  ${event.text}`
+    );
+
     function copyLog() {
-        const block = log
-            .map((entry) => `${entry.at}  ${entry.direction}  ${entry.hex}  ${entry.reading}`)
-            .join("\n");
+        const block = [
+            ...connectionLines.map((line) => `${line}`),
+            "",
+            ...log.map((entry) => `${entry.at}  ${entry.direction}  ${entry.hex}  ${entry.reading}`)
+        ].join("\n");
         void Clipboard.setStringAsync(block).then(() => notify({
             tone:    "success",
             message: "Log copied"
@@ -468,6 +475,22 @@ export default function MachineConsole() {
                     {COMMANDS.map((command) => (
                         <CommandRow key={`${command.code}-${command.name}`} command={command} onSend={onSend}/>
                     ))}
+                </SettingsSection>
+
+                <SettingsSection title="Connection">
+                    <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
+                        {connectionLines.length === 0 ? (
+                            <Text fontSize={12} color={palette.dim}>
+                                Nothing yet. This records every attempt at a link, including
+                                the ones that fail before a single frame is exchanged.
+                            </Text>
+                        ) : (
+                            <TextInput multiline editable={false}
+                                       accessibilityLabel="Connection log"
+                                       style={{color: palette.text, fontFamily: "monospace", fontSize: 11}}
+                                       value={connectionLines.join("\n")}/>
+                        )}
+                    </YStack>
                 </SettingsSection>
 
                 <SettingsSection title="Log">

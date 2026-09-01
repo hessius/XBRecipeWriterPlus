@@ -33,7 +33,10 @@ function Vital({label, value}: {label: string; value: string}) {
  * BREW button on every recipe, for the users who will never own a J15, is the
  * worse trade.
  *
- * The firmware row is the console's hidden entry: seven taps.
+ * The console's hidden entry is seven taps: on the firmware row when a machine
+ * is connected, on the status line when it is not. Both, because the console is
+ * the only place a failed connection can be read about, and the firmware row is
+ * not rendered when there is no connection to report the firmware of.
  */
 export default function MachineSection({settings}: {settings?: Settings}) {
     const {machine, status, error, remembered, connect, forget} = useMachine();
@@ -41,7 +44,7 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const [taps, setTaps] = useState(0);
     const info = machine.info;
 
-    function onFirmwarePress() {
+    function onSecretPress() {
         const next = taps + 1;
         setTaps(next);
         if (next >= CONSOLE_TAPS) {
@@ -53,14 +56,18 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     return (
         <SettingsSection title="Machine">
             {status !== "connected" && (
-                <YStack paddingVertical="$3" paddingHorizontal="$4">
-                    <Text color={palette.dim} fontSize={13}>
-                        {status === "connecting" ? "Connecting…" : "Not connected"}
-                    </Text>
-                    {error !== null && (
-                        <Text color={palette.danger} fontSize={13} marginTop="$1">{error}</Text>
-                    )}
-                </YStack>
+                <Pressable accessibilityRole="text"
+                           accessibilityLabel={status === "connecting" ? "Connecting" : "Not connected"}
+                           onPress={onSecretPress}>
+                    <YStack paddingVertical="$3" paddingHorizontal="$4">
+                        <Text color={palette.dim} fontSize={13}>
+                            {status === "connecting" ? "Connecting…" : "Not connected"}
+                        </Text>
+                        {error !== null && (
+                            <Text color={palette.danger} fontSize={13} marginTop="$1">{error}</Text>
+                        )}
+                    </YStack>
+                </Pressable>
             )}
 
             <SettingsActionRow
@@ -80,7 +87,7 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                     <Vital label="Model" value={info.model}/>
                     <Pressable accessibilityRole="button"
                                accessibilityLabel={`Firmware, ${info.firmware}`}
-                               onPress={onFirmwarePress}>
+                               onPress={onSecretPress}>
                         <Vital label="Firmware" value={info.firmware}/>
                     </Pressable>
                     <Vital label="Water" value={info.waterEnough ? "OK" : "Low"}/>

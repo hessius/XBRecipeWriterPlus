@@ -39,6 +39,13 @@ export class FakeTransport implements MachineTransport {
     public devices: FoundMachine[] = [{id: "AA:BB", name: "XBLOOM TEST"}];
     /** Set to make `connect` reject, for the taken-link case. */
     public refuseConnection = false;
+    /**
+     * How many of the next connections to refuse.
+     *
+     * A radio that lets go a moment after it is asked to, which is what iOS
+     * does when the app returns to the front.
+     */
+    public refuseNextConnections = 0;
     /** Identifiers this radio refuses, for the stale-remembered-id case. */
     public refuseIds: string[] = [];
     /** Set to make the next `write` reject, for the failed-send case. */
@@ -65,6 +72,10 @@ export class FakeTransport implements MachineTransport {
     }
 
     async connect(id: string): Promise<void> {
+        if (this.refuseNextConnections > 0) {
+            this.refuseNextConnections--;
+            throw new Error("connection failed");
+        }
         if (this.refuseConnection || this.refuseIds.includes(id)) {
             throw new Error("connection failed");
         }

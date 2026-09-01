@@ -526,3 +526,70 @@ describe("a notification carrying more than one frame", () => {
         ]);
     });
 });
+
+describe("the record of what the link did", () => {
+    // The console's frame log is component state, filled from `onFrame` once
+    // the screen is open. It therefore holds nothing about the thing hardest to
+    // diagnose — a connection that never came up — because there is no screen
+    // to log it and no frame to log. This history lives on the machine, so the
+    // console can be opened afterwards and still say what happened.
+
+    it("records a connection coming up", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await machine.connect("AA:BB");
+
+        expect(machine.linkHistory.map((e) => e.text).join(" ")).toMatch(/connected/i);
+    });
+
+    it("records a connection that was refused", async () => {
+        const transport = new FakeTransport();
+        transport.refuseConnection = true;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow();
+
+        expect(machine.linkHistory.map((e) => e.text).join(" ")).toMatch(/refused|failed/i);
+    });
+
+    it("records the link dropping on its own", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        transport.drop();
+
+        expect(machine.linkHistory.map((e) => e.text).join(" ")).toMatch(/dropped/i);
+    });
+
+    it("takes a note from outside, so the reconnect can explain itself", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        machine.note("app came to the front");
+
+        expect(machine.linkHistory.map((e) => e.text)).toContain("app came to the front");
+    });
+
+    it("keeps the history bounded, since it lives as long as the app", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        for (let i = 0; i < 300; i++) machine.note(`note ${i}`);
+
+        expect(machine.linkHistory.length).toBeLessThanOrEqual(200);
+        expect(machine.linkHistory[machine.linkHistory.length - 1].text).toBe("note 299");
+    });
+
+    it("tells views about a note, so an open console repaints", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const saw = jest.fn();
+        machine.onLink(saw);
+
+        machine.note("something happened");
+
+        expect(saw).toHaveBeenCalled();
+    });
+});

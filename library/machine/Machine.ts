@@ -73,6 +73,17 @@ const STARTABLE = new Set<number>([
 ]);
 
 /**
+ * One thing that happened to the link.
+ *
+ * `at` is a wall clock, not a monotonic count, because the only consumer is a
+ * human reading a log next to a machine that beeped at a particular moment.
+ */
+export type LinkEvent = {at: number; text: string};
+
+/** How many link events to keep. The machine lives as long as the app does. */
+const LINK_HISTORY_LIMIT = 200;
+
+/**
  * One machine, one session.
  *
  * Takes a transport by constructor injection so the whole of this file can be
@@ -82,6 +93,17 @@ const STARTABLE = new Set<number>([
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
+
+    /**
+     * What the link has been doing, oldest first.
+     *
+     * The console's frame log is component state filled from `onFrame`, so it
+     * holds nothing about the case hardest to diagnose: a connection that never
+     * came up. There is no screen open to log it and no frame to log. This
+     * lives on the machine instead, so the console can be opened afterwards and
+     * still say what happened.
+     */
+    public readonly linkHistory: LinkEvent[] = [];
 
     private transport: MachineTransport;
     private frameListeners = new Set<FrameListener>();
@@ -180,19 +202,24 @@ export default class Machine {
     }
 
     async connect(id: string): Promise<void> {
+        this.note(`connecting to ${id}`);
         try {
             await this.transport.connect(id);
-        } catch {
+        } catch (e) {
+            this.note(`refused — ${(e as Error).message}`);
             // The machine permits one link at a time and does not reject a
             // second one so much as ignore it, so a failure here is almost
             // always the official app holding the slot. Say that, rather than
             // implying the hardware is at fault.
             throw new Error("The machine is already in use by another app.");
         }
-
+        this.note("connected");
         this.unsubscribe.push(
             this.transport.onFrame((frame) => this.receive(frame)),
-            this.transport.onDisconnect(() => this.forget())
+            this.transport.onDisconnect(() => {
+                this.note("link dropped by the radio");
+                this.forget();
+            })
         );
 
         // First write, before anything else is queued: the machine ignores
@@ -243,8 +270,22 @@ export default class Machine {
     }
 
     async disconnect(): Promise<void> {
+        this.note("disconnected by the app");
         await this.transport.disconnect();
         this.forget();
+    }
+
+    /**
+     * Add a line to the link history.
+     *
+     * Public because the interesting events happen outside this class: the app
+     * going to the back, coming to the front, and each attempt at taking the
+     * link again.
+     */
+    note(text: string): void {
+        this.linkHistory.push({at: Date.now(), text});
+        if (this.linkHistory.length > LINK_HISTORY_LIMIT) this.linkHistory.shift();
+        this.announceLink();
     }
 
     isConnected(): boolean {

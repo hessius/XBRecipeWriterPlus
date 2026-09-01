@@ -41,7 +41,24 @@ type Props = {
  * Layout only. Loading and mutating recipes belong to `useRecipeLibrary`, the
  * scroll collapse to `useCollapsibleHeader`, and every message to `notify`.
  */
-let navigatingToEditor = false;
+/**
+ * How long one push to the editor refuses a second.
+ *
+ * The refusal exists to stop an impatient double tap, or a share intent
+ * delivered twice, stacking two editors on one intention -- and a push takes
+ * milliseconds, so a second or two covers it many times over.
+ *
+ * Time-bounded rather than cleared by an event. The refusal used to be lifted
+ * in exactly one place, this screen regaining focus, which meant a push that
+ * opened nothing left it set for ever: focus was never lost, so it was never
+ * regained, and every later scan returned silently having looked like it
+ * worked. A guard whose only release is an event that may never arrive is a
+ * wedge waiting to happen.
+ */
+export const EDITOR_PUSH_GUARD_MS = 2000;
+
+/** When the editor was last pushed, so a second push in that window is refused. */
+let lastEditorPushAt = 0;
 
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
@@ -163,7 +180,7 @@ export default function HomeScreen({db, settings}: Props) {
             library.refresh();
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
-            navigatingToEditor = false;
+            lastEditorPushAt = 0;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -302,10 +319,10 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function openRecipe(recipe: Recipe): boolean {
-        if (navigatingToEditor) {
+        if (Date.now() - lastEditorPushAt < EDITOR_PUSH_GUARD_MS) {
             return false;
         }
-        navigatingToEditor = true;
+        lastEditorPushAt = Date.now();
         router.push({
             pathname: "/editRecipe",
             params:   {recipeJSON: JSON.stringify(recipe)}

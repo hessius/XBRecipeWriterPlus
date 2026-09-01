@@ -1,7 +1,8 @@
 import {useEffect, useState} from "react";
 import {AppState} from "react-native";
 
-import {useSetting} from "@/hooks/useSetting";
+import {RECONNECT_DELAYS_MS} from "@/constants/machine";
+import {sharedSettings, useSetting} from "@/hooks/useSetting";
 import Machine from "@/library/machine/Machine";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
@@ -18,30 +19,153 @@ let shared: Machine | undefined;
 
 export function sharedMachine(): Machine {
     if (shared === undefined) {
-        shared = new Machine(new BleTransport());
-        releaseOnBackground(shared);
+        const machine = new Machine(new BleTransport());
+        shared = machine;
+        holdLinkAcrossAppState(machine, () => openLink(machine, settingsStore()));
     }
     return shared;
 }
 
+/** The remembered-machine half of the settings store, as the link needs it. */
+function settingsStore(): LinkStore {
+    return {
+        rememberedId: () => sharedSettings().get("machineDeviceId"),
+        rememberId: (id) => sharedSettings().set("machineDeviceId", id)
+    };
+}
+
+/** Where the remembered machine is kept. Injected, so the algorithm is testable. */
+export type LinkStore = {
+    rememberedId: () => string;
+    rememberId: (id: string) => void;
+};
+
+/** The part of `AppState` this file uses, so a test can supply its own. */
+export type AppStateLike = {
+    addEventListener: (
+        type: "change", handler: (state: string) => void
+    ) => {remove: () => void};
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Give the machine's single connection slot back when the app leaves the front.
+ * Hold the link across the app leaving the front and coming back.
  *
- * Registered against the machine rather than from a hook, because the link
- * outlives every screen: connecting in Settings and then navigating to the
- * recipe list used to unmount the only listener, leaving the slot held by an
- * app that iOS had suspended anyway. Nothing is unsubscribed — this lives as
- * long as the machine does, which is as long as the app.
+ * Two halves, and the app only ever had the first. Going away releases the
+ * machine's single connection slot, because an app iOS has suspended is not
+ * using the link it holds. **Coming back takes it again** — without that, every
+ * trip to another app left the user looking at a machine that said it was not
+ * connected, with no way back but Connect, and often not even that.
+ *
+ * `background` only, never `inactive`. iOS fires `inactive` for notification
+ * centre, the app switcher and every system alert, and releasing the link for
+ * those made the connection look random.
+ *
+ * A link is only restored if this function is the one that gave it up. Coming
+ * to the front is not a request to connect: a beep at launch, for somebody who
+ * opened the app to edit a recipe, is the machine shouting about something
+ * nobody asked for.
  */
-function releaseOnBackground(machine: Machine): void {
-    AppState.addEventListener("change", (next) => {
-        if (next !== "active" && machine.isConnected()) void machine.disconnect();
+export function holdLinkAcrossAppState(
+    machine: Machine,
+    reconnect: () => Promise<void>,
+    options: {
+        appState?: AppStateLike;
+        delays?: number[];
+        wait?: (ms: number) => Promise<void>;
+    } = {}
+): () => void {
+    const appState = options.appState ?? (AppState as unknown as AppStateLike);
+    const delays = options.delays ?? RECONNECT_DELAYS_MS;
+    const wait = options.wait ?? sleep;
+
+    // Whether the link now missing is one this function took away. Held until a
+    // reconnection succeeds, so a foreground that could not reach the machine
+    // is tried again the next time the app comes forward rather than written
+    // off for the rest of the session.
+    let released = false;
+    let reconnecting = false;
+
+    const subscription = appState.addEventListener("change", (next) => {
+        if (next === "background") {
+            released = machine.isConnected();
+            if (released) {
+                machine.note("app went to the back — giving the link back");
+                void machine.disconnect();
+            }
+            return;
+        }
+        if (next !== "active") return;
+        if (!released || machine.isConnected() || reconnecting) return;
+
+        reconnecting = true;
+        machine.note("app came to the front — taking the link back");
+        void (async () => {
+            for (const delay of delays) {
+                if (delay > 0) await wait(delay);
+                try {
+                    await reconnect();
+                    released = false;
+                    break;
+                } catch (e) {
+                    // Bounded on purpose. A machine that has been switched off
+                    // should stop being asked about, and Connect is still there.
+                    machine.note(`could not take it back — ${(e as Error).message}`);
+                }
+            }
+            reconnecting = false;
+        })();
     });
+
+    return () => subscription.remove();
 }
 
 /** Tests only. */
 export function __resetSharedMachine(): void {
     shared = undefined;
+}
+
+/**
+ * Connect to the remembered machine, or find one and remember it.
+ *
+ * A plain function rather than part of the hook, because the link has to be
+ * restorable from the app-state handler, which runs nowhere near React.
+ */
+export async function openLink(
+    machine: Machine,
+    store: LinkStore,
+    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission
+): Promise<void> {
+    if (machine.isConnected()) return;
+    if (!await ensurePermission()) {
+        throw new Error("XBRW++ needs permission to use Bluetooth.");
+    }
+
+    const scanForMachine = async (): Promise<string> => {
+        const found = await machine.scan();
+        if (found.length === 0) {
+            throw new Error("Could not find a machine. Check it is switched on and nearby.");
+        }
+        return found[0].id;
+    };
+
+    const remembered = store.rememberedId();
+    // The remembered id first, so a returning user pays for no scan.
+    let id = remembered === "" ? await scanForMachine() : remembered;
+    try {
+        await machine.connect(id);
+    } catch (e) {
+        // A remembered id can go stale — settings restored onto another phone,
+        // or a machine that changed its identifier. Falling back to a scan
+        // means the user is never stuck retrying a dead id with "forget this
+        // machine" as their only way out.
+        if (id !== remembered) throw e;
+        id = await scanForMachine();
+        if (id === remembered) throw e;
+        await machine.connect(id);
+    }
+    if (id !== remembered) store.rememberId(id);
 }
 
 export type MachineLink = {
@@ -90,14 +214,6 @@ export function useMachine(injected?: Machine): MachineLink {
         });
     }, [machine]);
 
-    async function scanForMachine(): Promise<string> {
-        const found = await machine.scan();
-        if (found.length === 0) {
-            throw new Error("Could not find a machine. Check it is switched on and nearby.");
-        }
-        return found[0].id;
-    }
-
     async function connect(): Promise<void> {
         if (machine.isConnected()) {
             setStatus("connected");
@@ -106,24 +222,10 @@ export function useMachine(injected?: Machine): MachineLink {
         setStatus("connecting");
         setError(null);
         try {
-            if (!await ensureBluetoothPermission()) {
-                throw new Error("XBRW++ needs permission to use Bluetooth.");
-            }
-            // The remembered id first, so a returning user pays for no scan.
-            let id = remembered === "" ? await scanForMachine() : remembered;
-            try {
-                await machine.connect(id);
-            } catch (e) {
-                // A remembered id can go stale — settings restored onto another
-                // phone, or a machine that changed its identifier. Falling back
-                // to a scan means the user is never stuck retrying a dead id
-                // with "forget this machine" as their only way out.
-                if (id !== remembered) throw e;
-                id = await scanForMachine();
-                if (id === remembered) throw e;
-                await machine.connect(id);
-            }
-            if (id !== remembered) setRemembered(id);
+            await openLink(machine, {
+                rememberedId: () => remembered,
+                rememberId: setRemembered
+            });
             setStatus("connected");
         } catch (e) {
             setError((e as Error).message);

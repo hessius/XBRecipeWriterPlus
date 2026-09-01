@@ -49,7 +49,7 @@ describe("the machine section", () => {
         // BREW only appears once a machine is remembered.
         await renderWithProviders(<MachineSection/>);
         expect(await screen.findByText(/not connected/i)).toBeTruthy();
-        expect(screen.getByLabelText(/connect/i)).toBeTruthy();
+        expect(screen.getByLabelText(/^Connect to my machine/)).toBeTruthy();
     });
 
     it("shows what the machine says about itself once connected", async () => {
@@ -65,6 +65,19 @@ describe("the machine section", () => {
 
         expect(screen.getByText("J15ABC123456")).toBeTruthy();
         expect(screen.getByText("V12.0D.500")).toBeTruthy();
+    });
+
+    it("opens the console from the status line when there is no connection", async () => {
+        // The console is the only place a failed connection can be read about,
+        // and the firmware row it used to hide behind is not rendered when
+        // there is no firmware to report — so the diagnostic was unreachable in
+        // exactly the situation that needs it.
+        await renderWithProviders(<MachineSection/>);
+        const status = screen.getByLabelText("Not connected");
+
+        for (let i = 0; i < 7; i++) await fireEvent.press(status);
+
+        expect(mockPush).toHaveBeenCalledWith("/machine");
     });
 
     it("opens the console after seven taps on the firmware, and not before", async () => {

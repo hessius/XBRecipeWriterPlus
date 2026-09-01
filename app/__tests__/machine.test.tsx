@@ -19,7 +19,8 @@ const mockMachine = {
         };
     },
     scan: jest.fn(),
-    connect: jest.fn()
+    connect: jest.fn(),
+    linkHistory: [] as {at: number; text: string}[]
 };
 const send = mockSend;
 
@@ -75,10 +76,24 @@ describe("the machine console", () => {
         frameListener = null;
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
+        mockMachine.linkHistory.length = 0;
     });
 
     afterEach(() => {
         jest.useRealTimers();
+    });
+
+    it("shows what the link has been doing, so a failed connection leaves a trace", async () => {
+        // The frame log starts empty every time this screen mounts, so it can
+        // say nothing about a connection that never came up — there is no
+        // screen open to log it and no frame to log.
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        mockMachine.linkHistory.push({at: Date.now(), text: "refused — connection failed"});
+
+        await renderWithProviders(<Console/>);
+
+        expect(screen.getByLabelText("Connection log").props.value)
+            .toMatch(/refused — connection failed/);
     });
 
     it("makes you read the warning once before it will do anything", async () => {

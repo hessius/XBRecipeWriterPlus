@@ -66,3 +66,15 @@ export const RECIPE_ACK_MS = 8000;
  * and nothing else.
  */
 export const GRINDING_TIMEOUT_MS = null;
+
+/**
+ * How long to wait before each attempt at restoring a link the app gave up.
+ *
+ * Three attempts, not one. iOS does not hand the peripheral back the instant
+ * the app returns to the front, and the machine itself needs a moment after a
+ * link closes — a single immediate attempt failed often enough that the only
+ * way back was to forget the machine and force-quit the app. Bounded rather
+ * than open-ended: a machine that has been switched off should stop being asked
+ * about, and the user still has the Connect button.
+ */
+export const RECONNECT_DELAYS_MS = [0, 1200, 3500];
