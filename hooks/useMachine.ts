@@ -1,7 +1,7 @@
 import {useEffect, useState} from "react";
 import {AppState} from "react-native";
 
-import {RECONNECT_DELAYS_MS} from "@/constants/machine";
+import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
 import Machine from "@/library/machine/Machine";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
@@ -40,6 +40,9 @@ export type LinkStore = {
     rememberId: (id: string) => void;
 };
 
+/** How a caller overrides the retrying, which is only ever a test. */
+export type RetryOptions = {delays?: number[]; wait?: (ms: number) => Promise<void>};
+
 /** The part of `AppState` this file uses, so a test can supply its own. */
 export type AppStateLike = {
     addEventListener: (
@@ -70,15 +73,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function holdLinkAcrossAppState(
     machine: Machine,
     reconnect: () => Promise<void>,
-    options: {
-        appState?: AppStateLike;
-        delays?: number[];
-        wait?: (ms: number) => Promise<void>;
-    } = {}
+    options: {appState?: AppStateLike} = {}
 ): () => void {
     const appState = options.appState ?? (AppState as unknown as AppStateLike);
-    const delays = options.delays ?? RECONNECT_DELAYS_MS;
-    const wait = options.wait ?? sleep;
 
     // Whether the link now missing is one this function took away. Held until a
     // reconnection succeeds, so a foreground that could not reach the machine
@@ -102,17 +99,15 @@ export function holdLinkAcrossAppState(
         reconnecting = true;
         machine.note("app came to the front — taking the link back");
         void (async () => {
-            for (const delay of delays) {
-                if (delay > 0) await wait(delay);
-                try {
-                    await reconnect();
-                    released = false;
-                    break;
-                } catch (e) {
-                    // Bounded on purpose. A machine that has been switched off
-                    // should stop being asked about, and Connect is still there.
-                    machine.note(`could not take it back — ${(e as Error).message}`);
-                }
+            try {
+                // `reconnect` does its own retrying: connecting to this machine
+                // is unreliable enough that one attempt is not a fair test.
+                await reconnect();
+                released = false;
+            } catch (e) {
+                // Bounded on purpose. A machine that has been switched off
+                // should stop being asked about, and Connect is still there.
+                machine.note(`could not take it back — ${(e as Error).message}`);
             }
             reconnecting = false;
         })();
@@ -136,11 +131,12 @@ export function holdLinkAcrossAppState(
 export async function connectRememberedMachine(
     machine: Machine,
     store: LinkStore,
-    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission
+    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission,
+    options: RetryOptions = {}
 ): Promise<void> {
     if (store.rememberedId() === "") return;
     try {
-        await openLink(machine, store, ensurePermission);
+        await openLink(machine, store, ensurePermission, options);
     } catch {
         // Deliberately swallowed. See above.
     }
@@ -177,13 +173,42 @@ export function __resetSharedMachine(): void {
 export async function openLink(
     machine: Machine,
     store: LinkStore,
-    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission
+    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission,
+    options: RetryOptions = {}
 ): Promise<void> {
     if (machine.isConnected()) return;
+    // Outside the retrying on purpose. Waiting fourteen seconds to be told the
+    // app needs permission it has already been denied helps nobody.
     if (!await ensurePermission()) {
         throw new Error("XBRW++ needs permission to use Bluetooth.");
     }
 
+    const delays = options.delays ?? CONNECT_DELAYS_MS;
+    const wait = options.wait ?? sleep;
+    const startedWith = store.rememberedId();
+    let lastFailure: Error | null = null;
+    for (const delay of delays) {
+        if (delay > 0) await wait(delay);
+        // The retrying takes the better part of fifteen seconds. Somebody who
+        // gives up on it and presses "forget this machine" has said what they
+        // want, and connecting anyway would be the app arguing with them.
+        if (startedWith !== "" && store.rememberedId() === "") {
+            throw lastFailure ?? new Error("Connecting was cancelled.");
+        }
+        try {
+            await attemptLink(machine, store);
+            return;
+        } catch (e) {
+            lastFailure = e as Error;
+        }
+    }
+    // The reason has to survive the retrying: "the machine is already in use by
+    // another app" is far more use to somebody than "could not connect".
+    throw lastFailure ?? new Error("Could not connect to the machine.");
+}
+
+/** One go at it: remembered identifier first, a scan if that has gone stale. */
+async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
     const scanForMachine = async (): Promise<string> => {
         const found = await machine.scan();
         if (found.length === 0) {
@@ -232,8 +257,9 @@ export type MachineLink = {
  * The link to the machine: lazy to connect, sticky while the app is in front.
  *
  * @param injected Tests pass a `Machine` over a fake transport.
+ * @param options Tests pass a `wait` that does not, so the retrying is instant.
  */
-export function useMachine(injected?: Machine): MachineLink {
+export function useMachine(injected?: Machine, options: RetryOptions = {}): MachineLink {
     const machine = injected ?? sharedMachine();
     const [remembered, setRemembered] = useSetting("machineDeviceId");
     const [status, setStatus] = useState<LinkStatus>(
@@ -267,7 +293,7 @@ export function useMachine(injected?: Machine): MachineLink {
             await openLink(machine, {
                 rememberedId: () => remembered,
                 rememberId: setRemembered
-            });
+            }, ensureBluetoothPermission, options);
             setStatus("connected");
         } catch (e) {
             setError((e as Error).message);

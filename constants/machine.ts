@@ -68,18 +68,6 @@ export const RECIPE_ACK_MS = 8000;
 export const GRINDING_TIMEOUT_MS = null;
 
 /**
- * How long to wait before each attempt at restoring a link the app gave up.
- *
- * Three attempts, not one. iOS does not hand the peripheral back the instant
- * the app returns to the front, and the machine itself needs a moment after a
- * link closes — a single immediate attempt failed often enough that the only
- * way back was to forget the machine and force-quit the app. Bounded rather
- * than open-ended: a machine that has been switched off should stop being asked
- * about, and the user still has the Connect button.
- */
-export const RECONNECT_DELAYS_MS = [0, 1200, 3500];
-
-/**
  * How many times to ask the machine to describe itself before giving up.
  *
  * More than one, because the question can be lost. It is written immediately
@@ -88,3 +76,15 @@ export const RECONNECT_DELAYS_MS = [0, 1200, 3500];
  * "reconnect and try again", which reconnecting did not fix.
  */
 export const INFO_ATTEMPTS = 3;
+
+/**
+ * How long to wait before each attempt at opening a link.
+ *
+ * Five attempts, spread over about fourteen seconds. Connecting to the J15 is
+ * simply unreliable: on hardware it has taken up to five presses of Connect to
+ * get a link, usually three, and pressing a button over and over is not a thing
+ * to ask of somebody standing at a coffee machine. Backing off rather than
+ * hammering, because the failures cluster — a radio that has just refused is
+ * unlikely to accept a millisecond later.
+ */
+export const CONNECT_DELAYS_MS = [0, 1200, 2500, 4000, 6000];

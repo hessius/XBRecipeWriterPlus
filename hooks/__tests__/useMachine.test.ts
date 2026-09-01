@@ -1,9 +1,9 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {
-    connectRememberedMachine, holdLinkAcrossAppState, useMachine, __resetSharedMachine
+    connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine, __resetSharedMachine
 } from "@/hooks/useMachine";
-import {RECONNECT_DELAYS_MS} from "@/constants/machine";
+import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine from "@/library/machine/Machine";
 
@@ -46,7 +46,7 @@ describe("the machine link", () => {
     it("connects on demand and stays connected", async () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         await act(async () => { await result.current.connect(); });
         expect(result.current.status).toBe("connected");
@@ -61,7 +61,7 @@ describe("the machine link", () => {
         const transport = new FakeTransport();
         transport.refuseConnection = true;
         const machine = new Machine(transport, {frameGapMs: 0});
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         // Thrown as well as recorded: the brew path needs the reason, because
         // one line later it would only be able to say "not connected".
@@ -77,7 +77,7 @@ describe("the machine link", () => {
         const transport = new FakeTransport();
         transport.devices = [];
         const machine = new Machine(transport, {frameGapMs: 0});
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         await act(async () => {
             await expect(result.current.connect()).rejects.toThrow(/could not find/i);
@@ -90,7 +90,7 @@ describe("the machine link", () => {
     it("forgets the machine when asked", async () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
         await act(async () => { await result.current.connect(); });
 
         await act(async () => { await result.current.forget(); });
@@ -105,7 +105,7 @@ describe("the machine link", () => {
         // watching frames would sit there claiming the machine is connected.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
         await act(async () => { await result.current.connect(); });
         expect(result.current.status).toBe("connected");
 
@@ -124,7 +124,7 @@ describe("the machine link", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
 
         mockSeed.machineDeviceId = "OLD:ID";
-        const {result} = await renderHook(() => useMachine(machine));
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         await act(async () => { await result.current.connect(); });
 
@@ -157,9 +157,7 @@ describe("holding the link across the app going away", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
         const appState = fakeAppState();
         const reconnect = jest.fn(async () => { await machine.connect("AA:BB"); });
-        holdLinkAcrossAppState(machine, reconnect, {
-            appState, wait: async () => {}
-        });
+        holdLinkAcrossAppState(machine, reconnect, {appState});
         return {transport, machine, appState, reconnect};
     }
 
@@ -206,32 +204,6 @@ describe("holding the link across the app going away", () => {
         await appState.go("active");
 
         expect(reconnect).not.toHaveBeenCalled();
-        expect(transport.connectedTo).toBeNull();
-    });
-
-    it("keeps trying for a moment, because the radio does not let go at once", async () => {
-        // A single immediate attempt failed often enough that forgetting the
-        // machine and force-quitting the app was the only way back.
-        const {transport, machine, appState, reconnect} = await held();
-        await machine.connect("AA:BB");
-        await appState.go("background");
-        transport.refuseNextConnections = 2;
-
-        await appState.go("active");
-
-        expect(reconnect).toHaveBeenCalledTimes(3);
-        expect(transport.connectedTo).toBe("AA:BB");
-    });
-
-    it("stops asking rather than retrying for ever", async () => {
-        const {transport, machine, appState, reconnect} = await held();
-        await machine.connect("AA:BB");
-        await appState.go("background");
-        transport.refuseConnection = true;
-
-        await appState.go("active");
-
-        expect(reconnect).toHaveBeenCalledTimes(RECONNECT_DELAYS_MS.length);
         expect(transport.connectedTo).toBeNull();
     });
 
@@ -300,7 +272,99 @@ describe("connecting to a machine that is already paired", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
         const store = {rememberedId: () => "AA:BB", rememberId: jest.fn()};
 
-        await expect(connectRememberedMachine(machine, store, async () => true))
-            .resolves.toBeUndefined();
+        await expect(connectRememberedMachine(
+            machine, store, async () => true, {wait: async () => {}}
+        )).resolves.toBeUndefined();
+    });
+});
+
+describe("opening a link that does not want to open", () => {
+    const noWait = async () => {};
+    const machine0 = (transport: FakeTransport) => new Machine(transport, {frameGapMs: 0});
+    const store = () => ({rememberedId: () => "AA:BB", rememberId: jest.fn()});
+
+    it("keeps trying, rather than making the user press Connect again", async () => {
+        // On hardware this has taken up to five presses. Pressing a button over
+        // and over is not a thing to ask of somebody stood at a coffee machine.
+        const transport = new FakeTransport();
+        transport.refuseNextConnections = 4;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await openLink(machine, store(), async () => true, {wait: noWait});
+
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("gives up eventually, and says why it could not", async () => {
+        // A machine that is switched off should stop being asked about, and the
+        // reason has to survive the retrying: "the machine is already in use by
+        // another app" is far more use than "could not connect".
+        const transport = new FakeTransport();
+        transport.refuseConnection = true;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(openLink(machine, store(), async () => true, {wait: noWait}))
+            .rejects.toThrow(/another app/i);
+    });
+
+    it("stops the moment it succeeds", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const waited = jest.fn(async () => {});
+
+        await openLink(machine, store(), async () => true, {wait: waited});
+
+        expect(waited).not.toHaveBeenCalled();
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("does not retry a refusal the user has to act on", async () => {
+        // Waiting fourteen seconds to be told the app needs permission it was
+        // already denied helps nobody.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const permission = jest.fn(async () => false);
+
+        await expect(openLink(machine, store(), permission, {wait: noWait}))
+            .rejects.toThrow(/permission/i);
+
+        expect(permission).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps trying at launch too, not only when a button was pressed", async () => {
+        const transport = new FakeTransport();
+        transport.refuseNextConnections = 3;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await connectRememberedMachine(machine, store(), async () => true, {wait: noWait});
+
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("stops when the user forgets the machine while it is still trying", async () => {
+        // The retrying takes about fourteen seconds. Somebody who gives up on
+        // it and presses "forget this machine" has said what they want, and
+        // connecting anyway — to a machine the app has just been told to stop
+        // remembering — is the app arguing with them.
+        const transport = new FakeTransport();
+        transport.refuseNextConnections = 2;
+        let id = "AA:BB";
+        const store = {rememberedId: () => id, rememberId: jest.fn()};
+
+        const opening = openLink(machine0(transport), store, async () => true, {
+            wait: async () => { id = ""; }
+        });
+
+        await expect(opening).rejects.toThrow();
+        expect(transport.connectedTo).toBeNull();
+    });
+
+    it("has as many attempts as the constant says", async () => {
+        const transport = new FakeTransport();
+        transport.refuseNextConnections = CONNECT_DELAYS_MS.length;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(openLink(machine, store(), async () => true, {wait: noWait}))
+            .rejects.toThrow();
     });
 });
