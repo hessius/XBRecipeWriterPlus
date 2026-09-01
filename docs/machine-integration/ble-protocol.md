@@ -313,11 +313,12 @@ Janczykkkko uses `round(total/dose*10)`. saya6k uses `math.ceil(ratio * 10)`, cl
 - **saya6k (observed on hardware 2026-07-19):** Sends 8002, waits for state transition — auto-proceed works. Sending 40518 bounced state backward. Does NOT send 40518.
 - **Assessment:** The machine's behavior after commit is firmware/unit dependent. Implement an observe-then-decide strategy. Do not hardcode a 40518 send.
 
-### C11 — Tea Pause Byte Encoding `single-source conflict`
+### C11 — Tea Pause Byte Encoding `RESOLVED on hardware`
 - **HomoLand (tea.py):** Pause bytes split as `((-remainder)&0xFF, (minutes*32)&0xFF)`.
 - **saya6k (brewing.py):** Uses a soak byte in position [1] (positive, scaled by 0.6 = firmware runs it at ~1.67×). Byte [0] = 0 (no inter-pour wait). States the 0.6 scale is "approximate."
 - **Assessment:** Fundamentally different encodings. Neither is hardware-confirmed for multi-steep tea. Tea protocol is the least-verified area.
 - **XBRW++ (M3, 2026-09-01):** ships **both**, selected by the `teaSteepEncoding` setting. HomoLand's is the default on provenance; saya6k's own note calls its 0.6 scale "approximate". The console offers the switch. One stopwatched sixty-second steep on real hardware settles this, and the wrong choice produces no error at all — the tea simply steeps for the wrong length, which is why the app could not just pick one and hope.
+- **Hardware verdict (2026-09-01, J15 firmware V12.0D.500):** the stopwatch was run. Tea brewed with the default `homoland` encoding and the steep timer was correct. HomoLand's encoding is confirmed; saya6k's remains available behind the setting but is no longer the one to reach for. This was the last open M3 acceptance criterion.
 
 ---
 
@@ -331,8 +332,15 @@ The machine pushes the following data unprompted on FFE2:
 | Coffee/cup weight | ~10×/s | float32 LE, grams | Frame type 0x15. Same timing. |
 | Machine status | Event-driven | State byte after 0xC1 in 0x57 frame | State transitions: idle, loading, armed, awaiting_confirm, starting, brewing, complete, etc. |
 | Machine activity | Periodic + on-event | LE uint32 in 8023 notification | 1=Pro idle, 65=Easy idle, 34=brewing active, 36=brew done. |
-| Machine info | Continuous heartbeat | 61-byte blob in 40521 notification | Contains all persistent machine settings: firmware ver, grinder size, water level, temp unit, weight unit, water source, mode, LED brightness, pour radius, vibration amplitude. Streams periodically while connected. |
+| Machine info | **On request only** (see note) | 61-byte blob in 40521 notification | Contains all persistent machine settings: firmware ver, grinder size, water level, temp unit, weight unit, water source, mode, LED brightness, pour radius, vibration amplitude. |
 | Water volume | ~100ms | float32 LE in 40523 notification | Tank water level. |
+
+> **The info blob is not a heartbeat.** Sources describe 40521 as streaming
+> periodically. On hardware (2026-09-01, V12.0D.500) it does not: a tank
+> refilled after connect still read Low in XBRW++ until the app asked again.
+> XBRW++ therefore sends 40521 before every brew and whenever the settings
+> screen opens, rather than trusting the reading taken at connect.
+
 | Pour events | Event-driven | 40510 per pour | pour_index in payload |
 | Brew lifecycle | Event-driven | 40502, 40507, 40510, 40511, 40512, 40513 | Grinder start, stop, bloom, brewer stop, enjoy |
 | Error events | Event-driven | 40517, 40522, 8203, 8204 | Idling error, no water, gear position, dose/water |
@@ -487,7 +495,7 @@ The following non-obvious implementation approaches are distinctive enough that 
 
 3. **C3 (8104 Set Cup values)** — the field's semantics are unknown. The machine brews without it (tested by brAzzi64). XBRW++ could safely omit this command initially and add it once semantics are understood.
 
-4. **Tea protocol** is the least verified area overall. C11 (pause encoding) is unresolved. Only HomoLand and saya6k have attempted tea, with conflicting findings. No independent hardware verification of multi-steep tea.
+4. **Tea protocol** was the least verified area overall. C11 (pause encoding) is now resolved in HomoLand's favour by a stopwatched steep on hardware (2026-09-01, V12.0D.500). Multi-steep tea beyond a single steep is still unverified.
 
 5. **FFE3 (aux characteristic)** — no source documents what this is used for. All implementations ignore it.
 

@@ -11,8 +11,9 @@ import {renderWithProviders} from "@/test-utils/render";
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({router: {push: (...args: unknown[]) => mockPush(...args)}}));
 
+const mockAsk = jest.fn().mockResolvedValue(true);
 const mockLink = {
-    machine: {info: null},
+    machine: {info: null, askHowItIsDoing: mockAsk},
     status: "disconnected",
     error: null,
     remembered: "",
@@ -39,9 +40,25 @@ jest.mock("@/hooks/useSetting", () => {
 describe("the machine section", () => {
     beforeEach(() => {
         mockPush.mockClear();
+        mockAsk.mockClear();
         mockLink.status = "disconnected";
         mockLink.remembered = "";
-        mockLink.machine = {info: null};
+        mockLink.machine = {info: null, askHowItIsDoing: mockAsk};
+    });
+
+    it("asks the machine how it is doing when the settings screen opens", async () => {
+        // Otherwise the water level on show is whatever it was at connect. Fill
+        // the tank and Settings still says Low until the app is relaunched.
+        mockLink.status = "connected";
+        mockLink.remembered = "AA:BB";
+        await renderWithProviders(<MachineSection/>);
+        expect(mockAsk).toHaveBeenCalled();
+    });
+
+    it("does not ask a machine it has no link to", async () => {
+        // Asking would mean writing to a transport that is not there.
+        await renderWithProviders(<MachineSection/>);
+        expect(mockAsk).not.toHaveBeenCalled();
     });
 
     it("is there before a machine has ever been paired", async () => {
@@ -55,7 +72,7 @@ describe("the machine section", () => {
     it("shows what the machine says about itself once connected", async () => {
         mockLink.status = "connected";
         mockLink.remembered = "AA:BB";
-        mockLink.machine = {info: {
+        mockLink.machine = {askHowItIsDoing: mockAsk, info: {
             kind: "info", serial: "J15ABC123456", model: "J15",
             firmware: "V12.0D.500", waterEnough: true, waterFeed: "tank",
             grindSize: 62, mode: "PRO"
@@ -99,7 +116,7 @@ describe("the machine section", () => {
     it("opens the console after seven taps on the firmware, and not before", async () => {
         mockLink.status = "connected";
         mockLink.remembered = "AA:BB";
-        mockLink.machine = {info: {
+        mockLink.machine = {askHowItIsDoing: mockAsk, info: {
             kind: "info", serial: "J15ABC123456", model: "J15",
             firmware: "V12.0D.500", waterEnough: true, waterFeed: "tank",
             grindSize: 62, mode: "PRO"

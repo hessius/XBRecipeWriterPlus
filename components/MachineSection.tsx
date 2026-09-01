@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, {useEffect, useState} from "react";
 import {Pressable} from "react-native";
 import {router} from "expo-router";
 import {Text, XStack, YStack} from "tamagui";
@@ -48,6 +48,13 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const idleStatus = status === "connecting" ? "Connecting…"
         : remembered === "" ? "No machine paired"
             : `Not connected · ${remembered}`;
+
+    // The vitals are a snapshot taken at connect. Left alone, a tank refilled
+    // since then still reads Low here, and only a relaunch clears it.
+    useEffect(() => {
+        if (status !== "connected") return;
+        machine.askHowItIsDoing().catch(() => {});
+    }, [machine, status]);
 
     function onSecretPress() {
         const next = taps + 1;
