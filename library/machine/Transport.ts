@@ -5,6 +5,7 @@ import BleManager, {
 } from "react-native-ble-manager";
 
 import {
+    MACHINE_MTU,
     MACHINE_NAME_PREFIX,
     MACHINE_NOTIFY_CHARACTERISTIC,
     MACHINE_SERVICE,
@@ -107,6 +108,10 @@ export class BleTransport implements MachineTransport {
         await BleManager.startNotification(
             id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC
         );
+        // Best effort. A stack that refuses still carries every frame short
+        // enough to fit the default, which is why the failure is swallowed
+        // rather than surfaced.
+        await BleManager.requestMTU(id, MACHINE_MTU).catch(() => 0);
         this.deviceId = id;
     }
 
@@ -122,8 +127,17 @@ export class BleTransport implements MachineTransport {
         if (id === null) throw new Error("not connected");
         // Write **Without** Response. With-response is rejected by the machine
         // with CBATTErrorDomain Code=14 — this is not a performance choice.
+        //
+        // `maxByteSize` is passed explicitly because it defaults to 20, and a
+        // frame longer than that is otherwise split into separate ATT writes.
+        // The machine reads each fragment as a whole frame, fails the header
+        // and CRC on all of them, and answers nothing — which is exactly how
+        // this milestone first reached hardware: connecting and reading the
+        // machine's serial worked, because those frames are 20 and 12 bytes,
+        // and every frame in the brew path is bigger.
         await BleManager.writeWithoutResponse(
-            id, MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC, Array.from(frame)
+            id, MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC, Array.from(frame),
+            frame.length
         );
     }
 

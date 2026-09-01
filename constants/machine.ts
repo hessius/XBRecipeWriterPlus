@@ -8,6 +8,19 @@ export const MACHINE_NOTIFY_CHARACTERISTIC = "0000FFE2-0000-1000-8000-00805F9B34
 /** The machine advertises a name beginning with this. */
 export const MACHINE_NAME_PREFIX = "XBLOOM";
 
+/**
+ * The ATT MTU to ask for once connected.
+ *
+ * Android negotiates 23 bytes by default, which leaves **20** for the payload —
+ * and a recipe frame is 23 to 39. Without this the OS cannot carry a frame in
+ * one write at all, whatever the library is told about chunking. iOS negotiates
+ * for itself and ignores the request.
+ *
+ * 247 is the usual ceiling for a single LE Data Length Extension packet; a
+ * machine that refuses it is not a reason to fail the connection.
+ */
+export const MACHINE_MTU = 247;
+
 /** How long to scan before giving up on finding a machine. */
 export const SCAN_SECONDS = 10;
 
