@@ -103,7 +103,22 @@ export class BleTransport implements MachineTransport {
 
     async connect(id: string): Promise<void> {
         await this.start();
-        await BleManager.connect(id);
+        try {
+            await BleManager.connect(id);
+        } catch (error) {
+            // A link the operating system is still holding from a previous run
+            // of the JavaScript — a reload in development, or a crash — is
+            // invisible up here, because `deviceId` was reset and the radio's
+            // was not. The machine allows one link, so that ghost is enough to
+            // lock the user out until they power-cycle the machine, which is
+            // not a thing anybody should have to work out for themselves.
+            await BleManager.disconnect(id).catch(() => {});
+            try {
+                await BleManager.connect(id);
+            } catch {
+                throw error;
+            }
+        }
         await BleManager.retrieveServices(id);
         await BleManager.startNotification(
             id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC

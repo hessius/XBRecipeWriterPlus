@@ -99,3 +99,37 @@ describe("writing a frame", () => {
         expect(transport.isConnected()).toBe(true);
     });
 });
+
+describe("connecting", () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it("clears a link the system is still holding and tries once more", async () => {
+        // After a reload or a crash the radio can still be connected while this
+        // object believes it is not. The machine permits one link, so that
+        // ghost locks the user out entirely — the only way through, before
+        // this, was to power-cycle the machine.
+        (BleManager.connect as jest.Mock)
+            .mockRejectedValueOnce(new Error("already connected"))
+            .mockResolvedValueOnce(undefined);
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(BleManager.disconnect).toHaveBeenCalledWith("AA:BB:CC");
+        expect(BleManager.connect).toHaveBeenCalledTimes(2);
+        expect(transport.isConnected()).toBe(true);
+    });
+
+    it("reports the original failure when the second attempt fails too", async () => {
+        // The first error is the one worth showing: "already in use by another
+        // app" says something, and the error from retrying after a disconnect
+        // that did nothing says nothing at all.
+        (BleManager.connect as jest.Mock)
+            .mockRejectedValueOnce(new Error("in use by another app"))
+            .mockRejectedValueOnce(new Error("unknown peripheral"));
+        const transport = new BleTransport();
+
+        await expect(transport.connect("AA:BB:CC")).rejects.toThrow(/in use by another app/);
+        expect(transport.isConnected()).toBe(false);
+    });
+});
