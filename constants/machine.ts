@@ -78,3 +78,13 @@ export const GRINDING_TIMEOUT_MS = null;
  * about, and the user still has the Connect button.
  */
 export const RECONNECT_DELAYS_MS = [0, 1200, 3500];
+
+/**
+ * How many times to ask the machine to describe itself before giving up.
+ *
+ * More than one, because the question can be lost. It is written immediately
+ * after the handshake, and the radio drops frames sent in a burst — a link that
+ * came up perfectly then reported no vitals at all, and the brew refused with
+ * "reconnect and try again", which reconnecting did not fix.
+ */
+export const INFO_ATTEMPTS = 3;

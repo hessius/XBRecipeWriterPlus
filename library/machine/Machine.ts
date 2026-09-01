@@ -1,5 +1,5 @@
 import {
-    FRAME_GAP_MS, HANDSHAKE_WINDOW_MS, INFO_WAIT_MS, RECIPE_ACK_MS
+    FRAME_GAP_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -165,14 +165,17 @@ export default class Machine {
     private pendingCommit: Uint8Array | null = null;
 
     private frameGapMs: number;
+    private infoWaitMs: number;
 
     /**
      * @param options.frameGapMs How long to leave between the frames of a brew.
+     * @param options.infoWaitMs How long to wait for an answer to the info request.
      *     Tests pass 0; nothing else should.
      */
-    constructor(transport: MachineTransport, options: {frameGapMs?: number} = {}) {
+    constructor(transport: MachineTransport, options: {frameGapMs?: number; infoWaitMs?: number} = {}) {
         this.transport = transport;
         this.frameGapMs = options.frameGapMs ?? FRAME_GAP_MS;
+        this.infoWaitMs = options.infoWaitMs ?? INFO_WAIT_MS;
     }
 
     /** The pause between frames of a sequence. See `FRAME_GAP_MS`. */
@@ -226,12 +229,36 @@ export default class Machine {
         // every command that follows if the handshake misses its window.
         await this.transport.write(buildType1(8100, [185, 1]));
         this.announceLink();
-        await this.requestInfo();
+        // The gap matters as much here as anywhere. Writing the info request
+        // straight after the handshake is a two-frame burst on a channel with
+        // no flow control, and on hardware the question was simply lost: the
+        // link came up, the machine beeped, and no vitals ever arrived.
+        await this.gap();
         // Connecting is not finished until the machine has said who it is and
         // how much water it has. Waiting here rather than at the brew means a
         // recipe is never sent into the gap, and the settings screen shows
         // vitals rather than blanks the moment it says "connected".
-        await this.waitForInfo();
+        await this.ensureInfo();
+    }
+
+    /**
+     * Ask the machine to describe itself until it does, or give up.
+     *
+     * Does not throw: a machine that never introduces itself is still worth
+     * being connected to from the console, and `brewBlockReason` is where the
+     * consequence belongs.
+     *
+     * @returns whether the vitals are now known.
+     */
+    async ensureInfo(): Promise<boolean> {
+        for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
+            if (this.info !== null) return true;
+            if (attempt > 0) await this.gap();
+            await this.requestInfo();
+            await this.waitForInfo();
+        }
+        if (this.info === null) this.note("machine did not say how it is doing");
+        return this.info !== null;
     }
 
     /**
@@ -252,7 +279,7 @@ export default class Machine {
             const off = this.onNotification((parsed) => {
                 if (parsed.kind === "info") finish();
             });
-            const timer = setTimeout(finish, INFO_WAIT_MS);
+            const timer = setTimeout(finish, this.infoWaitMs);
             timer.unref?.();
         });
     }
@@ -407,6 +434,11 @@ export default class Machine {
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
+        // Fetch the vitals if the link never produced them. Telling the user to
+        // reconnect is asking them to do something the app can do for itself —
+        // and on hardware reconnecting did not help, because the question was
+        // being lost rather than refused.
+        if (this.isConnected() && this.info === null) await this.ensureInfo();
         await this.brewOnce(recipe);
     }
 

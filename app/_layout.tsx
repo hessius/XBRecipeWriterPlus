@@ -11,6 +11,7 @@ import {StatusBar} from 'expo-status-bar';
 import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
+import {startMachineLink} from '@/hooks/useMachine';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -52,6 +53,14 @@ export default function RootLayout() {
             SplashScreen.hideAsync();
         }
     }, [loaded]);
+
+    // Having paired a machine, the user expects it to be there. Doing this at
+    // the root rather than from a screen matters: Settings holds the only
+    // `useMachine` on a normal launch path, so a user who never opens it would
+    // never be connected. Silent when nothing has been paired.
+    useEffect(() => {
+        startMachineLink();
+    }, []);
 
     if (!loaded) {
         return null;

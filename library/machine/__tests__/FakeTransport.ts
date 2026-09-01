@@ -58,6 +58,13 @@ export class FakeTransport implements MachineTransport {
      * which is the case the brew preflight has to refuse.
      */
     public infoReply: number[] | null = machineInfoFrame();
+    /**
+     * How many info requests to swallow before answering.
+     *
+     * A machine that misses the question, which is what a burst of unpaced
+     * frames does to it.
+     */
+    public ignoreInfoRequests = 0;
 
     private frameListeners = new Set<(frame: Uint8Array) => void>();
     private disconnectListeners = new Set<() => void>();
@@ -95,7 +102,10 @@ export class FakeTransport implements MachineTransport {
         }
         this.written.push(frame);
         const code = frame[3] | (frame[4] << 8);
-        if (code === 40521 && this.infoReply !== null) this.emit(this.infoReply);
+        if (code === 40521 && this.infoReply !== null) {
+            if (this.ignoreInfoRequests > 0) this.ignoreInfoRequests--;
+            else this.emit(this.infoReply);
+        }
     }
 
     onFrame(listener: (frame: Uint8Array) => void): () => void {

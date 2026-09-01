@@ -1,7 +1,7 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {FRAME_GAP_MS, RECIPE_ACK_MS} from "@/constants/machine";
+import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -134,7 +134,10 @@ describe("brewing", () => {
             const transport = new FakeTransport();
             // The real gap, not the zero every other test uses.
             const machine = new Machine(transport);
-            await machine.connect("AA:BB");
+            const connecting = machine.connect("AA:BB");
+            // Connecting paces its own two frames now, so it needs the clock.
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS + 10);
+            await connecting;
             transport.emit(status(0x01));
             transport.written = [];
 
@@ -160,13 +163,15 @@ describe("brewing", () => {
         // permission is how a recipe gets committed to an empty machine.
         const transport = new FakeTransport();
         transport.infoReply = null;
-        const machine = new Machine(transport, {frameGapMs: 0});
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
         await machine.connect("AA:BB");
         transport.emit(status(0x01));
         transport.written = [];
 
         await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
-        expect(transport.sent).toEqual([]);
+        // Asking again is fine — that is the app trying to answer the question
+        // for itself. Sending the recipe anyway is not.
+        expect(transport.sent.filter((code) => code !== 40521)).toEqual([]);
     });
 
     it("ends the brew when the radio refuses a frame, instead of waiting for ever", async () => {
@@ -591,5 +596,74 @@ describe("the record of what the link did", () => {
         machine.note("something happened");
 
         expect(saw).toHaveBeenCalled();
+    });
+});
+
+describe("getting the machine to say how it is doing", () => {
+    // Reported from hardware: a reconnect that came up cleanly — the machine
+    // beeped, showed its link icon, the app said connected — but no vitals,
+    // and then a brew refused with "the machine has not said how it is doing
+    // yet. Reconnect and try again." Connecting wrote the handshake and the
+    // info request back to back, which is precisely the unpaced burst
+    // `FRAME_GAP_MS` exists to prevent, so the question was simply lost.
+
+    it("leaves a gap between the handshake and the question after it", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 40});
+
+        const before = Date.now();
+        await machine.connect("AA:BB");
+
+        expect(Date.now() - before).toBeGreaterThanOrEqual(40);
+        expect(transport.sent).toEqual([8100, 40521]);
+    });
+
+    it("asks again when the machine does not answer the first time", async () => {
+        const transport = new FakeTransport();
+        transport.ignoreInfoRequests = 2;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await machine.connect("AA:BB");
+
+        expect(machine.info).not.toBeNull();
+    });
+
+    it("gives up rather than asking for ever", async () => {
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+
+        await machine.connect("AA:BB");
+
+        expect(machine.info).toBeNull();
+        expect(transport.sent.filter((code) => code === 40521).length)
+            .toBeLessThanOrEqual(INFO_ATTEMPTS);
+    });
+
+    it("asks for the vitals itself instead of telling the user to reconnect", async () => {
+        // The user cannot do anything with that instruction that the app could
+        // not have done for them, and on hardware reconnecting did not help.
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        expect(machine.info).toBeNull();
+
+        transport.infoReply = machineInfoFrame();
+        await machine.brew(brewable());
+
+        expect(machine.info).not.toBeNull();
+        expect(transport.sent).toContain(8002);
+    });
+
+    it("still refuses when the machine will not say, rather than brewing blind", async () => {
+        // "We never heard" is not "the tank is fine", and that difference is
+        // water on the counter.
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
     });
 });

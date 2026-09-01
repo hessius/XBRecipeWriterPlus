@@ -1,6 +1,8 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {holdLinkAcrossAppState, useMachine, __resetSharedMachine} from "@/hooks/useMachine";
+import {
+    connectRememberedMachine, holdLinkAcrossAppState, useMachine, __resetSharedMachine
+} from "@/hooks/useMachine";
 import {RECONNECT_DELAYS_MS} from "@/constants/machine";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine from "@/library/machine/Machine";
@@ -258,5 +260,47 @@ describe("holding the link across the app going away", () => {
         await Promise.all([appState.go("active"), appState.go("active")]);
 
         expect(reconnect).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("connecting to a machine that is already paired", () => {
+    it("reaches for the machine at launch once one has been paired", async () => {
+        // Asked for directly: having paired a machine, the user expects it to
+        // be there. Making them press Connect every launch is a chore the app
+        // can do for them, and the whole point of remembering the identifier.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const store = {rememberedId: () => "AA:BB", rememberId: jest.fn()};
+
+        await connectRememberedMachine(machine, store, async () => true);
+
+        expect(transport.connectedTo).toBe("AA:BB");
+    });
+
+    it("stays quiet when no machine has ever been paired", async () => {
+        // A beep at launch, for somebody who opened the app to edit a recipe
+        // and will never own a J15, is the machine shouting about something
+        // nobody asked for. It also means no scan, and no Bluetooth prompt.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const permission = jest.fn(async () => true);
+        const store = {rememberedId: () => "", rememberId: jest.fn()};
+
+        await connectRememberedMachine(machine, store, permission);
+
+        expect(transport.connectedTo).toBeNull();
+        expect(permission).not.toHaveBeenCalled();
+    });
+
+    it("says nothing when the machine is switched off", async () => {
+        // Nobody asked for this connection, so nobody should be shown an error
+        // about it failing. The status line in Settings says it well enough.
+        const transport = new FakeTransport();
+        transport.refuseConnection = true;
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const store = {rememberedId: () => "AA:BB", rememberId: jest.fn()};
+
+        await expect(connectRememberedMachine(machine, store, async () => true))
+            .resolves.toBeUndefined();
     });
 });

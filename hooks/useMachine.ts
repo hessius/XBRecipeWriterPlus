@@ -121,6 +121,48 @@ export function holdLinkAcrossAppState(
     return () => subscription.remove();
 }
 
+/**
+ * Connect to the machine the user has already paired, if there is one.
+ *
+ * Called once at launch. Silent about failure on purpose: nobody pressed
+ * anything, so nobody should be shown an error — the status line in Settings
+ * says it well enough, and Connect is still there.
+ *
+ * Does nothing at all when no machine has been paired. A beep at launch, for
+ * somebody who opened the app to edit a recipe and will never own a J15, is the
+ * machine shouting about something nobody asked for; and it must not provoke a
+ * Bluetooth permission prompt either.
+ */
+export async function connectRememberedMachine(
+    machine: Machine,
+    store: LinkStore,
+    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission
+): Promise<void> {
+    if (store.rememberedId() === "") return;
+    try {
+        await openLink(machine, store, ensurePermission);
+    } catch {
+        // Deliberately swallowed. See above.
+    }
+}
+
+/**
+ * Take the link at launch, if a machine has been paired.
+ *
+ * Called from the root layout rather than from a screen, because the settings
+ * screen is where the only `useMachine` on a normal launch path lives and a
+ * user who never opens it would never be connected.
+ */
+export function startMachineLink(): void {
+    const store = settingsStore();
+    // Checked here as well as inside `connectRememberedMachine`, and for a
+    // different reason: building the shared machine builds the BLE manager,
+    // which is enough on its own to put a "turn Bluetooth on" alert in front of
+    // somebody who has never paired anything and never will.
+    if (store.rememberedId() === "") return;
+    void connectRememberedMachine(sharedMachine(), store);
+}
+
 /** Tests only. */
 export function __resetSharedMachine(): void {
     shared = undefined;
