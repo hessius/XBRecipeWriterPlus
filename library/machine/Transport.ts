@@ -34,6 +34,15 @@ export interface MachineTransport {
     /** Fires when the link drops for any reason, including a deliberate one. */
     onDisconnect(listener: () => void): () => void;
     isConnected(): boolean;
+    /**
+     * Every service and characteristic the machine offers, one line each.
+     *
+     * Diagnostic only. We enable notifications on exactly one characteristic,
+     * so a signal on any other would be invisible to the app by construction —
+     * and nothing short of asking the radio can tell "the machine never sends
+     * this" apart from "we never listened".
+     */
+    describeGatt?(): Promise<string[]>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -137,6 +146,19 @@ export class BleTransport implements MachineTransport {
         // rather than surfaced.
         await BleManager.requestMTU(id, MACHINE_MTU).catch(() => 0);
         this.deviceId = id;
+    }
+
+    async describeGatt(): Promise<string[]> {
+        const id = this.deviceId;
+        if (id === null) throw new Error("not connected");
+        const info = await BleManager.retrieveServices(id);
+        return (info.characteristics ?? []).map((entry) => {
+            const properties = entry.properties as Record<string, string> | string[];
+            const names = Array.isArray(properties)
+                ? properties
+                : Object.values(properties);
+            return `${entry.service}/${entry.characteristic} ${names.join(",") || "—"}`;
+        });
     }
 
     async disconnect(): Promise<void> {

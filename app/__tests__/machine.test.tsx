@@ -20,7 +20,8 @@ const mockMachine = {
     },
     scan: jest.fn(),
     connect: jest.fn(),
-    linkHistory: [] as {at: number; text: string}[]
+    linkHistory: [] as {at: number; text: string}[],
+    describeRadio: jest.fn().mockResolvedValue(undefined)
 };
 const send = mockSend;
 
@@ -240,6 +241,15 @@ describe("the machine console", () => {
             expect.stringContaining("cup 3.5 g")
         );
         expect(screen.queryByLabelText("Frame log")).toBeNull();
+    });
+
+    it("can ask the radio what the machine offers, since we listen to one channel", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Describe the radio"));
+
+        expect(mockMachine.describeRadio).toHaveBeenCalled();
     });
 
     it("counts the tank and info frames, to show whether either arrives unasked", async () => {

@@ -58,6 +58,8 @@ export class FakeTransport implements MachineTransport {
      * than the frame the test means.
      */
     public failWriteOf: {code: number; reason: string} | null = null;
+    /** What the radio says it offers. `null` stands for a stack that refuses. */
+    public gatt: string[] | null = [];
     /**
      * What the machine answers the info request with.
      *
@@ -95,6 +97,11 @@ export class FakeTransport implements MachineTransport {
             throw new Error("connection failed");
         }
         this.connectedTo = id;
+    }
+
+    async describeGatt(): Promise<string[]> {
+        if (this.gatt === null) throw new Error("no services");
+        return this.gatt;
     }
 
     async disconnect(): Promise<void> {

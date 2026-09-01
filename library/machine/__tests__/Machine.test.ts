@@ -737,3 +737,38 @@ describe("asking how the machine is doing now", () => {
         expect(brewFrames(transport)).toContain(8002);
     });
 });
+
+describe("what the machine actually offers over the radio", () => {
+    // The console showed the tank level and the info blob arriving zero times.
+    // One explanation is that the machine never volunteers them. Another is
+    // that it does, on a characteristic notifications were never enabled for —
+    // we subscribe to exactly one, and would be deaf to any other by
+    // construction. Nothing in the app could tell those two apart.
+
+    it("writes the radio's own description of itself into the link history", async () => {
+        const transport = new FakeTransport();
+        transport.gatt = ["E0FF/FFE1 write,writeWithoutResponse", "E0FF/FFE2 notify"];
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        await machine.describeRadio();
+
+        const text = machine.linkHistory.map((entry) => entry.text).join("\n");
+        expect(text).toContain("E0FF/FFE2 notify");
+        expect(text).toContain("E0FF/FFE1 write,writeWithoutResponse");
+    });
+
+    it("says so plainly when the radio cannot describe itself", async () => {
+        // A transport that does not implement it, or a stack that refuses. The
+        // console must not silently show nothing, which reads as "no services".
+        const transport = new FakeTransport();
+        transport.gatt = null;
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        await machine.describeRadio();
+
+        const text = machine.linkHistory.map((entry) => entry.text).join("\n");
+        expect(text).toMatch(/could not describe/i);
+    });
+});

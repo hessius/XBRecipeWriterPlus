@@ -352,6 +352,29 @@ export default class Machine {
         return this.transport.isConnected();
     }
 
+    /**
+     * Ask the radio what the machine offers, and write it into the link
+     * history where the console can show it.
+     *
+     * Notifications are enabled on one characteristic. A stream on any other
+     * would never reach the app, and would look exactly like a stream the
+     * machine does not send — which is the question this answers.
+     */
+    async describeRadio(): Promise<void> {
+        const describe = this.transport.describeGatt?.bind(this.transport);
+        if (describe === undefined) {
+            this.note("this radio could not describe itself");
+            return;
+        }
+        try {
+            const lines = await describe();
+            this.note(`radio offers ${lines.length}:`);
+            lines.forEach((line) => this.note(line));
+        } catch (e) {
+            this.note(`could not describe the radio — ${(e as Error).message}`);
+        }
+    }
+
     /** Send an already-built frame. The brew path and the console both use it. */
     send(frame: Uint8Array): Promise<void> {
         this.frameListeners.forEach((listener) =>

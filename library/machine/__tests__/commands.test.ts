@@ -151,3 +151,20 @@ describe("the command catalogue", () => {
         });
     });
 });
+
+describe("reading the machine's own state", () => {
+    // The console could send thirty commands but not ask the one question the
+    // brew gate depends on. Whether the machine volunteers its vitals or only
+    // answers when asked cannot be investigated without a way to ask.
+    it("offers the info request the brew path uses", () => {
+        const command = COMMANDS.find((c) => c.code === 40521);
+        expect(command).toBeDefined();
+        expect(command?.tier).toBe("inert");
+        expect(command?.args).toEqual([]);
+    });
+
+    it("builds the same frame the brew path builds", () => {
+        const command = COMMANDS.find((c) => c.code === 40521)!;
+        expect(Array.from(frameFor(command, []))).toEqual(type1(40521, []));
+    });
+});

@@ -492,6 +492,13 @@ export default function MachineConsole() {
 
                 <SettingsSection title="Connection">
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
+                        <Button size="$3" accessibilityRole="button"
+                                accessibilityLabel="Describe the radio"
+                                borderColor={palette.line} borderWidth={1}
+                                backgroundColor={palette.raised} color={palette.text}
+                                onPress={() => void machine.describeRadio()}>
+                            Describe the radio
+                        </Button>
                         {connectionLines.length === 0 ? (
                             <Text fontSize={12} color={palette.dim}>
                                 Nothing yet. This records every attempt at a link, including

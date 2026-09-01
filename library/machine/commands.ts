@@ -74,6 +74,9 @@ export const COMMANDS: Command[] = [
     {code: 8100, name: "Session handshake", packet: "type1", args: [int("185"), int("1")], tier: "inert",
      note: "Must arrive within about 200 ms of connecting. Until it does, the machine ignores everything else."},
     {code: 8022, name: "Back to home", packet: "type1", args: [], tier: "inert"},
+    {code: 40521, name: "Read machine info", packet: "type1", args: [], tier: "inert",
+     note: "Asks for the 61-byte blob: firmware, grind size, mode, and the water flag the "
+         + "brew gate reads. Sources call this a heartbeat; on hardware it answers only when asked."},
     {code: 8500, name: "Scale tare", packet: "type1", args: [], tier: "inert",
      note: "Zeroes the scale instantly. Confirmed on hardware."},
     {code: 8003, name: "Scale enter", packet: "type1", args: [], tier: "inert"},
