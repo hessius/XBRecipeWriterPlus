@@ -12,7 +12,9 @@ import Recipe from "@/library/Recipe";
 /** What each phase says. The wording is the feature. */
 const PHASE_COPY: Record<string, string> = {
     idle:        "Ready when you are.",
-    sending:     "Sending the recipe…",
+    // Deliberately slow: the frames are spaced two seconds apart, because the
+    // machine drops a burst. Saying so stops this reading as a hang.
+    sending:     "Sending the recipe… this takes a few seconds.",
     armed:       "Recipe loaded.",
     // The app never sends 40518, so this is where a parked machine ends up.
     // The user is standing in front of it; one press costs them a second.

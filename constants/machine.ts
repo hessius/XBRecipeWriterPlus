@@ -41,6 +41,19 @@ export const HANDSHAKE_WINDOW_MS = 200;
  */
 export const INFO_WAIT_MS = 2000;
 
+/**
+ * How long to leave between the frames of a brew sequence.
+ *
+ * Not politeness. These are Write Without Response, so nothing paces them and
+ * the machine drops a burst on the floor: a single command lands reliably, and
+ * five sent back-to-back never arrive. Every working implementation we have
+ * waits between frames, and the one whose brew sequence is known to run on
+ * hardware waits two full seconds.
+ *
+ * Source: `xbloom.py` `run_brew`, which sleeps 2.0 s after every packet.
+ */
+export const FRAME_GAP_MS = 2000;
+
 /** How long to wait for a sent recipe to reach `loading` or `armed`. */
 export const RECIPE_ACK_MS = 8000;
 

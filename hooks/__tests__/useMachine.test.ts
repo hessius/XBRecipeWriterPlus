@@ -33,7 +33,7 @@ describe("the machine link", () => {
 
     it("does not touch the radio until something asks it to", async () => {
         const transport = new FakeTransport();
-        await renderHook(() => useMachine(new Machine(transport)));
+        await renderHook(() => useMachine(new Machine(transport, {frameGapMs: 0})));
 
         // A beep at launch, for a user who opened the app to edit a recipe, is
         // the machine shouting about something nobody asked for.
@@ -42,7 +42,7 @@ describe("the machine link", () => {
 
     it("connects on demand and stays connected", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         const {result} = await renderHook(() => useMachine(machine));
 
         await act(async () => { await result.current.connect(); });
@@ -57,7 +57,7 @@ describe("the machine link", () => {
     it("reports why it could not connect", async () => {
         const transport = new FakeTransport();
         transport.refuseConnection = true;
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         const {result} = await renderHook(() => useMachine(machine));
 
         // Thrown as well as recorded: the brew path needs the reason, because
@@ -73,7 +73,7 @@ describe("the machine link", () => {
     it("says so when there is no machine to be found", async () => {
         const transport = new FakeTransport();
         transport.devices = [];
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         const {result} = await renderHook(() => useMachine(machine));
 
         await act(async () => {
@@ -86,7 +86,7 @@ describe("the machine link", () => {
 
     it("forgets the machine when asked", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         const {result} = await renderHook(() => useMachine(machine));
         await act(async () => { await result.current.connect(); });
 
@@ -101,7 +101,7 @@ describe("the machine link", () => {
         // The case that matters most produces no frame at all, so a hook
         // watching frames would sit there claiming the machine is connected.
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         const {result} = await renderHook(() => useMachine(machine));
         await act(async () => { await result.current.connect(); });
         expect(result.current.status).toBe("connected");
@@ -118,7 +118,7 @@ describe("the machine link", () => {
         const transport = new FakeTransport();
         transport.devices = [{id: "NEW:ID", name: "XBLOOM TEST"}];
         transport.refuseIds = ["OLD:ID"];
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
 
         mockSeed.machineDeviceId = "OLD:ID";
         const {result} = await renderHook(() => useMachine(machine));

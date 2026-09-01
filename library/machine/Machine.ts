@@ -1,4 +1,6 @@
-import {HANDSHAKE_WINDOW_MS, INFO_WAIT_MS, RECIPE_ACK_MS} from "@/constants/machine";
+import {
+    FRAME_GAP_MS, HANDSHAKE_WINDOW_MS, INFO_WAIT_MS, RECIPE_ACK_MS
+} from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
@@ -113,8 +115,37 @@ export default class Machine {
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
     private retriedInPro = false;
 
-    constructor(transport: MachineTransport) {
+    private frameGapMs: number;
+
+    /**
+     * @param options.frameGapMs How long to leave between the frames of a brew.
+     *     Tests pass 0; nothing else should.
+     */
+    constructor(transport: MachineTransport, options: {frameGapMs?: number} = {}) {
         this.transport = transport;
+        this.frameGapMs = options.frameGapMs ?? FRAME_GAP_MS;
+    }
+
+    /** The pause between frames of a sequence. See `FRAME_GAP_MS`. */
+    private gap(): Promise<void> {
+        if (this.frameGapMs === 0) return Promise.resolve();
+        return new Promise((resolve) => {
+            const timer = setTimeout(resolve, this.frameGapMs);
+            timer.unref?.();
+        });
+    }
+
+    /**
+     * Send frames in order, leaving a gap between them.
+     *
+     * The gap is the point. A burst of Write Without Response frames is not
+     * flow-controlled in any way, and the machine simply loses most of it.
+     */
+    private async sendPaced(frames: Uint8Array[]): Promise<void> {
+        for (let index = 0; index < frames.length; index++) {
+            if (index > 0) await this.gap();
+            await this.send(frames[index]);
+        }
     }
 
     scan(): Promise<FoundMachine[]> {
@@ -310,20 +341,30 @@ export default class Machine {
         const tea = recipe.isTea();
 
         try {
-            // Bypass off, but the dose still has to travel: the machine needs
-            // it to grind correctly, and skipping this makes the grind drift.
-            await this.send(buildType1(8102, [0, 0, Math.round(recipe.dosage)]));
-
-            if (tea) {
-                await this.send(
-                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
-                );
-                await this.send(buildType1(4512));
-            } else {
-                const opcode = recipe.grinder ? 8001 : 8004;
-                await this.send(buildType1Bytes(opcode, encodeCoffeeBlob(recipe)));
-                await this.send(buildType1(8002));
-            }
+            // This whole sequence, gaps and all, mirrors `run_brew` in the
+            // reference implementation, which is the only brew sequence we have
+            // that is known to work on real hardware.
+            await this.sendPaced([
+                // The handshake again, immediately before the recipe. The one
+                // sent at connect may be many minutes old by now, and the
+                // reference re-sends it at the start of every brew.
+                buildType1(8100, [185, 1]),
+                // Bypass off, but the dose still has to travel: the machine
+                // needs it to grind correctly, and skipping it makes the grind
+                // drift. The two bypass arguments are float bits, which for
+                // zero are the same four zero bytes an integer would give.
+                buildType1(8102, [0, 0, Math.round(recipe.dosage)]),
+                ...(tea ? [
+                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding)),
+                    buildType1(4512)
+                ] : [
+                    setCupFrame(),
+                    buildType1Bytes(
+                        recipe.grinder ? 8001 : 8004, encodeCoffeeBlob(recipe)
+                    ),
+                    buildType1(8002)
+                ])
+            ]);
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
             // the phase is only ever left by an acknowledgement that can no
@@ -471,6 +512,30 @@ export default class Machine {
         // as gone rather than half torn down.
         this.announceLink();
     }
+}
+
+/**
+ * Command 8104, the cup weight range, as two IEEE-754 floats.
+ *
+ * XBRW++ used to omit this on the grounds that three implementations send
+ * three different value sets and nobody can name the field. That was a
+ * misreading of the evidence: the sources disagree about the *values*, not
+ * about whether the command is sent — all of them send it, and the reference
+ * brew sequence that works on hardware sends it between the dose and the
+ * recipe.
+ *
+ * (200.0, 80.0) is the reference's default and is HCI-confirmed for Free Solo.
+ * It is also the widest range, which is the conservative choice for a field
+ * that appears to govern overflow protection: too wide risks nothing that the
+ * machine's own sensors do not already catch, while too narrow could refuse a
+ * cup that is perfectly fine.
+ */
+function setCupFrame(): Uint8Array {
+    const payload = new Uint8Array(8);
+    const view = new DataView(payload.buffer);
+    view.setFloat32(0, 200.0, true);
+    view.setFloat32(4, 80.0, true);
+    return buildType1Bytes(8104, payload);
 }
 
 /** Exported for the copy that explains the handshake budget. */

@@ -1,7 +1,7 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {RECIPE_ACK_MS} from "@/constants/machine";
+import {FRAME_GAP_MS, RECIPE_ACK_MS} from "@/constants/machine";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -14,7 +14,7 @@ function Uint8ArrayPourEvent(index: number): number[] {
 describe("connecting to a machine", () => {
     it("handshakes immediately, because the machine stops listening after 200 ms", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
 
         await machine.connect("AA:BB");
 
@@ -25,7 +25,7 @@ describe("connecting to a machine", () => {
 
     it("asks the machine what it is", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
 
         transport.emit(machineInfoFrame());
@@ -41,7 +41,7 @@ describe("connecting to a machine", () => {
 
     it("tracks the machine's state as it reports it", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
 
         transport.emit(status(0x01));
@@ -58,14 +58,14 @@ describe("connecting to a machine", () => {
         // than implying the hardware is broken.
         const transport = new FakeTransport();
         transport.refuseConnection = true;
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
 
         await expect(machine.connect("AA:BB")).rejects.toThrow(/another app|in use/i);
     });
 
     it("forgets everything it knew when the link drops", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame());
         expect(machine.info).not.toBeNull();
@@ -94,7 +94,7 @@ function brewable(volumes = [144, 144]): Recipe {
 /** A machine that is connected, idle and has water. */
 async function readyMachine() {
     const transport = new FakeTransport();
-    const machine = new Machine(transport);
+    const machine = new Machine(transport, {frameGapMs: 0});
     await machine.connect("AA:BB");
     transport.emit(machineInfoFrame());
     transport.emit(status(0x01));
@@ -113,7 +113,7 @@ describe("brewing", () => {
 
     it("refuses to send when the tank is low", async () => {
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame({waterEnough: 0}));
         transport.emit(status(0x01));
@@ -123,13 +123,44 @@ describe("brewing", () => {
         expect(transport.sent).toEqual([]);
     });
 
+    it("leaves a gap between the frames of a brew, because a burst is lost", async () => {
+        // The reason brewing did not work on hardware at all. These are Write
+        // Without Response, so nothing anywhere paces them: a single command
+        // lands every time, and a burst of five is dropped. The machine then
+        // says nothing, which arrives here as the acknowledgement timeout and
+        // the message that the recipe was refused.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            // The real gap, not the zero every other test uses.
+            const machine = new Machine(transport);
+            await machine.connect("AA:BB");
+            transport.emit(status(0x01));
+            transport.written = [];
+
+            const brewing = machine.brew(brewable());
+            await Promise.resolve();
+            expect(transport.sent).toEqual([8100]);
+
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS);
+            expect(transport.sent).toEqual([8100, 8102]);
+
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS * 3);
+            expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
+
+            await brewing;
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("refuses to send to a machine that has not said how it is doing", async () => {
         // "We never heard" is not "the tank is fine". The info frame is the
         // only report of the water level there is, so treating its absence as
         // permission is how a recipe gets committed to an empty machine.
         const transport = new FakeTransport();
         transport.infoReply = null;
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(status(0x01));
         transport.written = [];
@@ -163,11 +194,11 @@ describe("brewing", () => {
         expect(transport.sent).toEqual([]);
     });
 
-    it("sends the dose, then the recipe, then the commit, in that order", async () => {
+    it("sends the handshake, dose, cup range, recipe and commit, in that order", async () => {
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
 
-        expect(transport.sent).toEqual([8102, 8001, 8002]);
+        expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
     });
 
     it("uses the no-grind opcode for a recipe that does not grind", async () => {
@@ -189,7 +220,7 @@ describe("brewing", () => {
         tea.pours[0].pauseTime = 60;
         await machine.brew(tea);
 
-        expect(transport.sent).toEqual([8102, 4513, 4512]);
+        expect(transport.sent).toEqual([8100, 8102, 4513, 4512]);
     });
 
     it("walks the happy path to ENJOY", async () => {
@@ -307,7 +338,7 @@ describe("brewing", () => {
         // Only slot writes are known to need PRO. Refusing to try would be
         // inventing a restriction from a fact about a different feature.
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame({mode: "91327856"})); // EASY
         transport.emit(status(0x01));
@@ -315,13 +346,13 @@ describe("brewing", () => {
 
         await machine.brew(brewable());
 
-        expect(transport.sent).toEqual([8102, 8001, 8002]);
+        expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
     });
 
     it("offers a mode switch only when a send goes nowhere on an EASY machine", async () => {
         jest.useFakeTimers();
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame({mode: "91327856"}));
         transport.emit(status(0x01));
@@ -353,7 +384,7 @@ describe("brewing", () => {
     it("switches to PRO and retries once when asked to", async () => {
         jest.useFakeTimers();
         const transport = new FakeTransport();
-        const machine = new Machine(transport);
+        const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame({mode: "91327856"}));
         transport.emit(status(0x01));
@@ -366,6 +397,6 @@ describe("brewing", () => {
         await machine.switchToProAndRetry(brewable());
 
         // The mode switch, then the whole send again.
-        expect(transport.sent).toEqual([11511, 8102, 8001, 8002]);
+        expect(transport.sent).toEqual([11511, 8100, 8102, 8104, 8001, 8002]);
     });
 });
