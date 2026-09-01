@@ -14,6 +14,7 @@ import {
     EVENT,
     MACHINE_STATE,
     parseNotification,
+    splitFrames,
     type MachineInfo,
     type Notification,
     type TeaSteepEncoding
@@ -285,7 +286,14 @@ export default class Machine {
         return () => this.notificationListeners.delete(listener);
     }
 
-    private receive(frame: Uint8Array): void {
+    private receive(packet: Uint8Array): void {
+        // A packet may carry more than one frame: the machine packs an event
+        // and a weight reading together under load, and reading only the first
+        // silently dropped the rest. See `splitFrames`.
+        for (const frame of splitFrames(packet)) this.receiveFrame(frame);
+    }
+
+    private receiveFrame(frame: Uint8Array): void {
         const parsed = parseNotification(frame);
         if (parsed.kind === "status") {
             this.state = parsed.state;

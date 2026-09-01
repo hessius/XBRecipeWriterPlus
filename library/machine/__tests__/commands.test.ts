@@ -14,7 +14,7 @@ function commandNamed(name: string) {
 
 describe("the command catalogue", () => {
     it("knows the commands the brew path sends", () => {
-        for (const code of [8100, 8022, 8102, 8001, 8004, 8002, 40519, 4512, 4513, 8500, 11511]) {
+        for (const code of [8100, 8022, 8102, 8002, 40519, 4512, 8500, 11511]) {
             expect(commandByCode(code)).toBeDefined();
         }
     });
@@ -24,8 +24,6 @@ describe("the command catalogue", () => {
             "Session handshake",
             "Back to home",
             "Bypass and dose",
-            "Recipe send (grind)",
-            "Recipe send (no grind)",
             "Commit",
             "Start / confirm / pause",
             "Cancel",
@@ -60,13 +58,22 @@ describe("the command catalogue", () => {
             "Read vibration amplitude",
             "Write vibration amplitude",
             "Tea recipe execute",
-            "Tea recipe upload",
             "Easy mode begin",
             "CurrentGrinder / back to normal"
         ];
 
         for (const name of documented) {
             expect(commandNamed(name)).toBeDefined();
+        }
+    });
+
+    it("does not offer a recipe upload it has no recipe to put in", () => {
+        // 8001, 8004 and 4513 carry a recipe blob, and there is no way to type
+        // one into a console row. Offered with an empty payload they look like
+        // a working recipe test and are not: a whole round of hardware
+        // debugging was spent on one. The brew route sends these for real.
+        for (const code of [8001, 8004, 4513]) {
+            expect(commandByCode(code)).toBeUndefined();
         }
     });
 

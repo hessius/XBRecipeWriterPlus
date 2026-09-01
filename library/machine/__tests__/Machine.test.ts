@@ -486,3 +486,43 @@ describe("waiting for the user to start the brew", () => {
         await expect(machine.startBrew()).rejects.toThrow(/no recipe/i);
     });
 });
+
+describe("a notification carrying more than one frame", () => {
+    /**
+     * A status frame packed behind a weight frame. Captured shape, real values:
+     * the machine does this under load, and until it was noticed the second
+     * frame was thrown away — which for a status frame means the brew screen
+     * never learns the recipe arrived.
+     */
+    function packed(...frames: number[][]): number[] {
+        return frames.flat();
+    }
+
+    it("acts on the frame behind the first one", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        // Weight first, so the status frame is the one that would have been
+        // dropped.
+        transport.emit(packed(notification(0x4B, 0x9E, [0, 0, 0, 0]), status(0x22)));
+
+        expect(machine.state).toBe(0x22);
+        expect(machine.phase.name).toBe("grinding");
+    });
+
+    it("logs one line per frame, not one per packet", async () => {
+        const {transport, machine} = await readyMachine();
+        const logged: string[] = [];
+        machine.onFrame((direction, frame, parsed) => {
+            if (direction === "received") logged.push(`${parsed.kind}:${frame.length}`);
+        });
+
+        const weight = notification(0x4B, 0x9E, [0, 0, 0, 0]);
+        const state = status(0x22);
+        transport.emit(packed(weight, state));
+
+        expect(logged).toEqual([
+            `waterWeight:${weight.length}`, `status:${state.length}`
+        ]);
+    });
+});

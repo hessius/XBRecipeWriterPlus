@@ -83,15 +83,13 @@ export const COMMANDS: Command[] = [
     {code: 8102, name: "Bypass and dose", packet: "type1",
      args: [float32("bypass volume"), float32("bypass temp x10"), int("dose g")], tier: "inert",
      note: "Carries the dose even with bypass off. Skipping it makes the grind drift."},
-    {code: 8001, name: "Recipe send (grind)", packet: "type1Bytes", args: [], tier: "moves"},
-    {code: 8004, name: "Recipe send (no grind)", packet: "type1Bytes", args: [], tier: "moves"},
     {code: 8002, name: "Commit", packet: "type1", args: [], tier: "moves",
-     note: "Arms the machine. It then either proceeds by itself or parks waiting for the button."},
+     note: "Starts the brew. On hardware it goes straight to grinding rather than waiting for the button. Only useful once a recipe has been uploaded from a recipe screen."},
     {code: 40519, name: "Cancel", packet: "type1", args: [int("1")], tier: "moves"},
     {code: 40524, name: "Coffee resume", packet: "type1", args: [int("1")], tier: "moves",
      note: "Resume after a pause. Single-source from HomoLand."},
-    {code: 4513, name: "Tea recipe upload", packet: "type1Bytes", args: [], tier: "moves"},
-    {code: 4512, name: "Tea recipe execute", packet: "type1", args: [], tier: "moves"},
+    {code: 4512, name: "Tea recipe execute", packet: "type1", args: [], tier: "moves",
+     note: "Only useful once a tea recipe has been uploaded from a recipe screen."},
 
     // — Grinder and brewer, standalone —————————————————————————————
     {code: 3500, name: "Grinder start", packet: "type1", args: [int("1000"), int("grind size"), int("speed")], tier: "moves",

@@ -175,6 +175,61 @@ function readInfo(payload: Uint8Array): MachineInfo {
 }
 
 /**
+ * Read every device→app frame in one notification.
+ *
+ * The machine packs frames: a J15 under load delivers an event and a weight
+ * reading in a single notification, and reading only the first threw the rest
+ * away. That went unnoticed for as long as it did because it is load-dependent
+ * — telemetry arrives about thirty times a second and gets denser around a
+ * recipe send, so the frames most likely to be lost are the ones that matter.
+ *
+ * Walks by the length field at offset 5, which is the *total* frame length —
+ * confirmed against both frames of the capture in the tests. Anything that
+ * cannot be walked comes back as a single `unknown` carrying the whole packet,
+ * so an unfamiliar firmware still reaches the console verbatim.
+ */
+export function parseNotifications(bytes: Uint8Array): Notification[] {
+    return splitFrames(bytes).map(parseNotification);
+}
+
+/**
+ * Cut a notification into the frames it contains.
+ *
+ * Separate from parsing because the console logs raw bytes beside the decode,
+ * and a packet carrying two frames should read as two lines rather than one
+ * line whose second half is invisible.
+ *
+ * Never returns an empty list: a packet that cannot be walked comes back whole,
+ * so it still reaches the console verbatim rather than vanishing.
+ */
+export function splitFrames(bytes: Uint8Array): Uint8Array[] {
+    const frames: Uint8Array[] = [];
+    let offset = 0;
+
+    while (offset < bytes.length) {
+        const remaining = bytes.length - offset;
+        // A frame is header, length, marker, and two CRC bytes at minimum.
+        if (remaining < 12) break;
+        if (NOTIFY_HEADER.some((b, i) => bytes[offset + i] !== b)) break;
+
+        const length = bytes[offset + 5]
+            | (bytes[offset + 6] << 8)
+            | (bytes[offset + 7] << 16)
+            | (bytes[offset + 8] << 24);
+        if (length < 12 || length > remaining) break;
+
+        frames.push(bytes.subarray(offset, offset + length));
+        offset += length;
+    }
+
+    if (frames.length === 0) return [bytes];
+    // A tail that did not walk is still bytes we could not account for, and
+    // the reader is entitled to see them.
+    if (offset < bytes.length) frames.push(bytes.subarray(offset));
+    return frames;
+}
+
+/**
  * Read one device→app frame.
  *
  * Anything unrecognised comes back as `unknown` with its bytes intact rather

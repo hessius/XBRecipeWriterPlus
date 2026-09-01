@@ -1,4 +1,4 @@
-import {buildType1, buildType1Bytes, buildType2, crc16Kermit, parseNotification} from "@/library/machine/protocol";
+import {buildType1, buildType1Bytes, buildType2, crc16Kermit, parseNotification, parseNotifications} from "@/library/machine/protocol";
 
 import {event, float32, hex, kermit, notification, status, type1, type1Bytes, type2} from "./protocolFixtures";
 
@@ -111,5 +111,55 @@ describe("reading what the machine says", () => {
         const frame = status(0x1F);
         frame[frame.length - 1] ^= 0xFF;
         expect(parseNotification(Uint8Array.from(frame)).kind).toBe("unknown");
+    });
+});
+
+describe("more than one frame in a packet", () => {
+    /**
+     * Captured from a J15 on 2026-09-01, verbatim: an event frame and a water
+     * weight frame delivered as one notification. The machine does this under
+     * load — telemetry arrives about thirty times a second, and it gets denser
+     * around a recipe send, which is precisely when a dropped status frame
+     * costs the most.
+     */
+    const CAPTURED = [
+        0x58, 0x02, 0x07, 0xFE, 0x2C, 0x10, 0x00, 0x00, 0x00, 0xC1,
+        0x91, 0x32, 0x78, 0x56, 0x67, 0x74,
+        0x58, 0x02, 0x07, 0x4B, 0x9E, 0x10, 0x00, 0x00, 0x00, 0xC1,
+        0x00, 0x00, 0x00, 0x00, 0xFD, 0x32
+    ];
+
+    it("reads both frames, rather than the first and none of the rest", () => {
+        const parsed = parseNotifications(Uint8Array.from(CAPTURED));
+
+        expect(parsed).toHaveLength(2);
+        expect(parsed[0]).toMatchObject({kind: "event", code: 0x2CFE});
+        expect(parsed[1]).toMatchObject({kind: "waterWeight", grams: 0});
+    });
+
+    it("reads a lone frame exactly as before", () => {
+        expect(parseNotifications(Uint8Array.from(status(0x1F))))
+            .toEqual([{kind: "status", state: 0x1F}]);
+    });
+
+    it("hands back a packet it cannot walk, rather than nothing at all", () => {
+        // A length field that would run past the end, or a header we do not
+        // recognise: the whole packet comes back as one unknown, because the
+        // console rendering the bytes is what makes an unfamiliar firmware
+        // debuggable.
+        const junk = Uint8Array.from([0x58, 0x02, 0x07, 0x11, 0x22, 0xFF, 0xFF, 0, 0, 0xC1, 1, 2]);
+        expect(parseNotifications(junk)).toEqual([{kind: "unknown", raw: junk}]);
+    });
+
+    it("keeps the frames it did read when the tail is truncated", () => {
+        const truncated = Uint8Array.from([...CAPTURED.slice(0, 16), 0x58, 0x02, 0x07]);
+        const parsed = parseNotifications(truncated);
+        expect(parsed).toHaveLength(2);
+        expect(parsed[0]).toMatchObject({kind: "event", code: 0x2CFE});
+        expect(parsed[1].kind).toBe("unknown");
+    });
+
+    it("never returns an empty list, so a caller cannot silently drop a packet", () => {
+        expect(parseNotifications(Uint8Array.from([]))).toEqual([{kind: "unknown", raw: expect.anything()}]);
     });
 });

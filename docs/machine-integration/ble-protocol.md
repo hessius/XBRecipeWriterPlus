@@ -181,6 +181,9 @@
 | Byte | State Name | Meaning |
 |------|-----------|---------|
 | 0x01 | idle | Pro-mode home / ready |
+| 0x02 | scale/grinder busy? | Observed after 8006 (grinder enter). Undocumented. `observed 2026-09-01, V12.0D.500` |
+| 0x03 | brewer busy? | Observed after event 9001. Undocumented. `observed 2026-09-01, V12.0D.500` |
+| 0x04, 0x05 | scale sub-states | Observed cycling around scale enter/tare/exit. Undocumented. `observed 2026-09-01, V12.0D.500` |
 | 0x0C | no_water | No water (checked after commit) |
 | 0x0F | no_beans | Waiting for beans |
 | 0x10 | brewing | Live pour in progress |
@@ -196,6 +199,14 @@
 | 0x25 | slots_saved | Slots stored OK (then → idle) |
 
 `corroborated` for core states (0x01, 0x1F, 0x1E, 0x22, 0x24); `single-source` (Janczykkkko) for 0x23, 0x24 distinction.
+
+> **Observed on hardware 2026-09-01 (V12.0D.500):** commit (`8002`) **auto-proceeds**. The machine went from commit straight to grinding, in both EASY and PRO, without ever passing through `0x1E`. `0x1E` is corroborated by three sources, so it is kept as a fallback path — but on this unit it is not the normal route.
+
+> **Observed on hardware 2026-09-01:** a single BLE notification may carry **more than one frame**, back to back. Captured verbatim: `58 02 07 FE 2C 10 00 00 00 C1 91 32 78 56 67 74` immediately followed by `58 02 07 4B 9E 10 00 00 00 C1 00 00 00 00 FD 32` — event 11518 and a water-volume reading in one packet. The length field at offset 5 is the **total frame length**, so a reader must walk the packet by it rather than parsing the first frame and discarding the tail.
+
+> **Observed on hardware 2026-09-01:** every command is acknowledged by an **event notification carrying the same code** — `→ 8003` is answered by `← event 8003`, likewise 8500, 8014, 8006, 8012. XBRW++ does not exploit this yet; it would turn a blind acknowledgement timeout into a precise "frame N never arrived".
+
+> **Contradiction, unresolved:** the EASY-mode token appears in notification 11518 as the raw bytes `91 32 78 56`, not as the ASCII `"91327856"` (`39 31 33 32 37 38 35 36`) that command 11511's payload is documented as taking, "byte-exact, confirmed on hardware". These are a notification and a command respectively, so they need not agree — but nobody has tested the raw-byte form of 11511.
 
 > ⚠️ The machine grinds SILENTLY after commit — it emits NO 0x57 status frames for ~20s during grinding before reporting 0x10. A client must not treat this gap as a stall. `single-source` (Janczykkkko, observed on hardware)
 
