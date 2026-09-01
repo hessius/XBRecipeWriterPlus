@@ -74,6 +74,14 @@ export class BleTransport implements MachineTransport {
     async scan(seconds = SCAN_SECONDS): Promise<FoundMachine[]> {
         await this.start();
         const found = new Map<string, FoundMachine>();
+        // Resolved by whichever comes first: a machine, or the window closing.
+        // A machine that is switched on and next to the phone advertises within
+        // a second or two, and sitting out the remaining eight while the user
+        // watches a spinner is most of why this felt so much slower than the
+        // official app. There is only ever one machine to find.
+        let stop: () => void = () => {};
+        const finished = new Promise<void>((resolve) => { stop = resolve; });
+
         const subscription = BleManager.onDiscoverPeripheral(
             (peripheral: BleDiscoverPeripheralEvent) => {
                 const name = peripheral.name ?? peripheral.advertising?.localName ?? "";
@@ -85,6 +93,7 @@ export class BleTransport implements MachineTransport {
                 );
                 if (matchesService || name.toUpperCase().startsWith(MACHINE_NAME_PREFIX)) {
                     found.set(peripheral.id, {id: peripheral.id, name});
+                    stop();
                 }
             }
         );
@@ -93,7 +102,7 @@ export class BleTransport implements MachineTransport {
             // service UUID would be invisible to a filtered scan. The name and
             // service checks above are what narrow it back down.
             await BleManager.scan({seconds, allowDuplicates: false});
-            await sleep(seconds * 1000);
+            await Promise.race([finished, sleep(seconds * 1000)]);
         } finally {
             subscription.remove();
             await BleManager.stopScan().catch(() => {});

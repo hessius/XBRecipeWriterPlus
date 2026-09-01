@@ -44,6 +44,11 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const [taps, setTaps] = useState(0);
     const info = machine.info;
 
+    /** What the section says when there is no live link. */
+    const idleStatus = status === "connecting" ? "Connecting…"
+        : remembered === "" ? "No machine paired"
+            : `Not connected · ${remembered}`;
+
     function onSecretPress() {
         const next = taps + 1;
         setTaps(next);
@@ -57,11 +62,11 @@ export default function MachineSection({settings}: {settings?: Settings}) {
         <SettingsSection title="Machine">
             {status !== "connected" && (
                 <Pressable accessibilityRole="text"
-                           accessibilityLabel={status === "connecting" ? "Connecting" : "Not connected"}
+                           accessibilityLabel={idleStatus}
                            onPress={onSecretPress}>
                     <YStack paddingVertical="$3" paddingHorizontal="$4">
                         <Text color={palette.dim} fontSize={13}>
-                            {status === "connecting" ? "Connecting…" : "Not connected"}
+                            {idleStatus}
                         </Text>
                         {error !== null && (
                             <Text color={palette.danger} fontSize={13} marginTop="$1">{error}</Text>

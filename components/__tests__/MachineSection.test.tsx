@@ -48,7 +48,7 @@ describe("the machine section", () => {
         // Otherwise nothing in the app tells a new owner that pairing exists:
         // BREW only appears once a machine is remembered.
         await renderWithProviders(<MachineSection/>);
-        expect(await screen.findByText(/not connected/i)).toBeTruthy();
+        expect(await screen.findByText(/no machine paired/i)).toBeTruthy();
         expect(screen.getByLabelText(/^Connect to my machine/)).toBeTruthy();
     });
 
@@ -67,13 +67,29 @@ describe("the machine section", () => {
         expect(screen.getByText("V12.0D.500")).toBeTruthy();
     });
 
+    it("says whether a machine is paired at all, not only whether it is connected", async () => {
+        // "Not connected" was true of both a phone that has never seen a
+        // machine and one that has paired with a machine and lost it, and the
+        // difference decides everything: whether the app connects at launch,
+        // and whether it pays for a scan. The only way to tell them apart was
+        // whether a "forget this machine" button happened to be on screen.
+        mockLink.status = "disconnected";
+        mockLink.remembered = "";
+        await renderWithProviders(<MachineSection/>);
+        expect(await screen.findByText(/no machine paired/i)).toBeTruthy();
+
+        mockLink.remembered = "AA:BB1122";
+        await renderWithProviders(<MachineSection/>);
+        expect(await screen.findByText(/AA:BB1122/)).toBeTruthy();
+    });
+
     it("opens the console from the status line when there is no connection", async () => {
         // The console is the only place a failed connection can be read about,
         // and the firmware row it used to hide behind is not rendered when
         // there is no firmware to report — so the diagnostic was unreachable in
         // exactly the situation that needs it.
         await renderWithProviders(<MachineSection/>);
-        const status = screen.getByLabelText("Not connected");
+        const status = screen.getByLabelText("No machine paired");
 
         for (let i = 0; i < 7; i++) await fireEvent.press(status);
 

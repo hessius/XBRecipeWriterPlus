@@ -4,6 +4,7 @@ import {AppState} from "react-native";
 import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
 import Machine from "@/library/machine/Machine";
+import type {Settings} from "@/library/Settings";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
 export type LinkStatus = "disconnected" | "connecting" | "connected" | "failed";
@@ -42,6 +43,9 @@ export type LinkStore = {
 
 /** How a caller overrides the retrying, which is only ever a test. */
 export type RetryOptions = {delays?: number[]; wait?: (ms: number) => Promise<void>};
+
+/** What `useMachine` lets a test replace. */
+export type MachineOptions = RetryOptions & {settings?: Settings};
 
 /** The part of `AppState` this file uses, so a test can supply its own. */
 export type AppStateLike = {
@@ -135,6 +139,7 @@ export async function connectRememberedMachine(
     options: RetryOptions = {}
 ): Promise<void> {
     if (store.rememberedId() === "") return;
+    machine.note("launch — connecting to the remembered machine");
     try {
         await openLink(machine, store, ensurePermission, options);
     } catch {
@@ -218,6 +223,9 @@ async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
     };
 
     const remembered = store.rememberedId();
+    machine.note(remembered === ""
+        ? "no machine remembered — scanning"
+        : `using the remembered machine ${remembered}`);
     // The remembered id first, so a returning user pays for no scan.
     let id = remembered === "" ? await scanForMachine() : remembered;
     try {
@@ -232,7 +240,14 @@ async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
         if (id === remembered) throw e;
         await machine.connect(id);
     }
-    if (id !== remembered) store.rememberId(id);
+    if (id !== remembered) {
+        store.rememberId(id);
+        // Written to the history because the consequence of it not happening is
+        // invisible until much later: a ten-second scan on every connect, and
+        // no connection at launch at all, because the launch path has nothing
+        // to reach for.
+        machine.note(`remembering ${id}`);
+    }
 }
 
 export type MachineLink = {
@@ -259,9 +274,9 @@ export type MachineLink = {
  * @param injected Tests pass a `Machine` over a fake transport.
  * @param options Tests pass a `wait` that does not, so the retrying is instant.
  */
-export function useMachine(injected?: Machine, options: RetryOptions = {}): MachineLink {
+export function useMachine(injected?: Machine, options: MachineOptions = {}): MachineLink {
     const machine = injected ?? sharedMachine();
-    const [remembered, setRemembered] = useSetting("machineDeviceId");
+    const [remembered, setRemembered] = useSetting("machineDeviceId", options.settings);
     const [status, setStatus] = useState<LinkStatus>(
         machine.isConnected() ? "connected" : "disconnected"
     );
