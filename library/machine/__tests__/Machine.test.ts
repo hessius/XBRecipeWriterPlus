@@ -772,3 +772,51 @@ describe("what the machine actually offers over the radio", () => {
         expect(text).toMatch(/could not describe/i);
     });
 });
+
+describe("the handshake the machine wants before it will answer", () => {
+    // Settled on hardware (2026-09-01, V12.0D.500). A 40521 sent six minutes
+    // into a live link produced no reply at all; the identical frame is
+    // answered at connect, where a handshake precedes it by one gap. Sending
+    // 8100 first, then the same 40521, produced the answer. The session goes
+    // stale, and asking without renewing it is asking into a void.
+
+    it("renews the session before asking, on a link that has been sitting idle", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, handshakeFreshMs: 0});
+        await machine.connect("AA:BB");
+        transport.written = [];
+
+        await machine.askHowItIsDoing();
+
+        expect(transport.sent).toEqual([8100, 40521]);
+    });
+
+    it("does not renew a session that was renewed a moment ago", async () => {
+        // The handshake makes the machine beep. Beeping every time anything
+        // wants a reading would be its own bug — and connecting has just done
+        // one, so the very next question does not need another.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, handshakeFreshMs: 60_000});
+        await machine.connect("AA:BB");
+        transport.written = [];
+
+        await machine.askHowItIsDoing();
+
+        expect(transport.sent).toEqual([40521]);
+    });
+
+    it("counts the brew's own handshake as a renewal", async () => {
+        // `brewOnce` opens with 8100 for exactly this reason. A brew must not
+        // make the machine beep twice.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, handshakeFreshMs: 60_000});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        await machine.brew(brewable());
+        transport.written = [];
+
+        await machine.askHowItIsDoing();
+
+        expect(transport.sent).toEqual([40521]);
+    });
+});

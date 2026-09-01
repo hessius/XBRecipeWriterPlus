@@ -1,5 +1,6 @@
 import {
-    FRAME_GAP_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS
+    FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
+    RECIPE_ACK_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -166,16 +167,24 @@ export default class Machine {
 
     private frameGapMs: number;
     private infoWaitMs: number;
+    private handshakeFreshMs: number;
+    /** When the session was last renewed, so it is not renewed needlessly. */
+    private lastHandshakeAt = 0;
 
     /**
      * @param options.frameGapMs How long to leave between the frames of a brew.
      * @param options.infoWaitMs How long to wait for an answer to the info request.
+     * @param options.handshakeFreshMs How long a session handshake stays good for.
      *     Tests pass 0; nothing else should.
      */
-    constructor(transport: MachineTransport, options: {frameGapMs?: number; infoWaitMs?: number} = {}) {
+    constructor(
+        transport: MachineTransport,
+        options: {frameGapMs?: number; infoWaitMs?: number; handshakeFreshMs?: number} = {}
+    ) {
         this.transport = transport;
         this.frameGapMs = options.frameGapMs ?? FRAME_GAP_MS;
         this.infoWaitMs = options.infoWaitMs ?? INFO_WAIT_MS;
+        this.handshakeFreshMs = options.handshakeFreshMs ?? HANDSHAKE_FRESH_MS;
     }
 
     /** The pause between frames of a sequence. See `FRAME_GAP_MS`. */
@@ -227,7 +236,7 @@ export default class Machine {
 
         // First write, before anything else is queued: the machine ignores
         // every command that follows if the handshake misses its window.
-        await this.transport.write(buildType1(8100, [185, 1]));
+        await this.shakeHands();
         this.announceLink();
         // The gap matters as much here as anywhere. Writing the info request
         // straight after the handshake is a two-frame burst on a channel with
@@ -294,7 +303,31 @@ export default class Machine {
      *
      * @returns whether the machine answered.
      */
+    /**
+     * Send the session handshake, and remember when.
+     *
+     * The machine beeps at this, so it is not sent for its own sake.
+     */
+    private async shakeHands(): Promise<void> {
+        await this.transport.write(buildType1(8100, [185, 1]));
+        this.lastHandshakeAt = Date.now();
+    }
+
+    /** Whether the machine still counts us as being in a session. */
+    private sessionIsFresh(): boolean {
+        return Date.now() - this.lastHandshakeAt < this.handshakeFreshMs;
+    }
+
     async askHowItIsDoing(): Promise<boolean> {
+        // The machine will not answer a question asked outside a session, and
+        // the session goes stale on its own — settled on hardware, where a
+        // 40521 six minutes into a live link was ignored and the same frame
+        // after an 8100 was answered at once. Renewing costs a beep, so it is
+        // skipped when something else has renewed it recently.
+        if (!this.sessionIsFresh()) {
+            await this.shakeHands();
+            await this.gap();
+        }
         for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
             if (attempt > 0) await this.gap();
             // Listening before asking, not after. The answer can arrive inside
@@ -536,6 +569,9 @@ export default class Machine {
                 // the one the user may want to keep for themselves.
                 ...(this.autoStart ? [commit] : [])
             ]);
+            // The first frame of that burst was a handshake, so the session is
+            // good again and the next question does not need to beep for one.
+            this.lastHandshakeAt = Date.now();
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
             // the phase is only ever left by an acknowledgement that can no

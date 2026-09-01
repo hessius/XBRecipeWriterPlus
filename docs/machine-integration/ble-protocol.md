@@ -343,6 +343,19 @@ The machine pushes the following data unprompted on FFE2:
 > machine sends on `ffe3` was invisible to the app and indistinguishable from
 > something it never sends at all. What travels on it is still unknown.
 
+> **The session goes stale, and a stale session is answered with silence.**
+> Settled on hardware (2026-09-01, V12.0D.500). A well-formed 40521 sent six
+> minutes into a live, connected link produced no reply of any kind. The
+> identical frame is answered at connect, where an 8100 precedes it by one
+> gap. Sending 8100, waiting a gap, then the same 40521 produced the answer
+> immediately. So 8100 is not only a connect-time greeting with a 200 ms
+> window — it opens a session that expires, and the machine ignores commands
+> sent outside one. No source says this. How long the session lasts is not
+> known; somewhere between one gap and six minutes.
+>
+> The handshake makes the machine **beep**, which rules out sending it
+> speculatively or on a timer.
+
 > **The info blob is not a heartbeat.** Sources describe 40521 as streaming
 > periodically. On hardware (2026-09-01, V12.0D.500) it does not: a tank
 > refilled after connect still read Low in XBRW++ until the app asked again.

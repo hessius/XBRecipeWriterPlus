@@ -31,6 +31,19 @@ export const SCAN_SECONDS = 10;
 export const HANDSHAKE_WINDOW_MS = 200;
 
 /**
+ * How long a session handshake is treated as still good for.
+ *
+ * Settled on hardware (2026-09-01, V12.0D.500): a 40521 sent six minutes into
+ * a live link was ignored outright, and the identical frame answered at once
+ * when an 8100 preceded it. The machine forgets the session; how quickly is
+ * not known, so this is deliberately short.
+ *
+ * It is not zero because the handshake makes the machine beep, and beeping
+ * every time anything wants a reading is its own bug.
+ */
+export const HANDSHAKE_FRESH_MS = 20_000;
+
+/**
  * How long to wait, after the handshake, for the machine to describe itself.
  *
  * Nothing may be brewed until it has: the info frame is the only place the
