@@ -1,6 +1,8 @@
 import {COMMANDS, commandByCode, frameFor} from "@/library/machine/commands";
 
-function hex(frame: Uint8Array): string {
+import {float32, type1, type1Bytes} from "./protocolFixtures";
+
+function hex(frame: ArrayLike<number>): string {
     return Array.from(frame, (byte) => byte.toString(16).padStart(2, "0").toUpperCase()).join("");
 }
 
@@ -50,10 +52,8 @@ describe("the command catalogue", () => {
             "Temperature unit",
             "Water source",
             "Display brightness",
-            "Easy recipe send",
             "Switch to PRO",
             "Switch to EASY",
-            "Recipe order",
             "Send recipe count",
             "Read pour radius",
             "Write pour radius",
@@ -68,6 +68,11 @@ describe("the command catalogue", () => {
         for (const name of documented) {
             expect(commandNamed(name)).toBeDefined();
         }
+    });
+
+    it("does not expose single-frame Easy slot writes as false controls", () => {
+        expect(commandByCode(11510)).toBeUndefined();
+        expect(commandByCode(11512)).toBeUndefined();
     });
 
     it("tiers the commands that move hardware above the inert ones", () => {
@@ -92,10 +97,26 @@ describe("the command catalogue", () => {
         }
     });
 
-    it("declares an argument shape for every command", () => {
+    it("declares an encoded argument shape for every command", () => {
         for (const command of COMMANDS) {
             expect(Array.isArray(command.args)).toBe(true);
+            for (const arg of command.args) {
+                expect(arg).toEqual({
+                    label: expect.any(String),
+                    kind: expect.stringMatching(/^(int|float32)$/)
+                });
+            }
         }
+    });
+
+    it("encodes type 1 floatbits as IEEE-754 little-endian bytes", () => {
+        const frame = frameFor(commandNamed("Bypass and dose"), [92, 930, 18]);
+        const payload = [...float32(92), ...float32(930), ...type1(0, [18]).slice(10, 14)];
+
+        expect(hex(frame)).toBe(hex(type1Bytes(8102, payload)));
+        expect(Array.from(frame.slice(10, 14))).toEqual(float32(92));
+        expect(Array.from(frame.slice(14, 18))).toEqual(float32(930));
+        expect(Array.from(frame.slice(18, 22))).toEqual([0x12, 0x00, 0x00, 0x00]);
     });
 
     it("encodes fixed mode-switch payloads byte-for-byte", () => {
@@ -109,7 +130,7 @@ describe("the command catalogue", () => {
         expect(hex(frameFor(commandNamed("Coffee resume"), [1])))
             .toBe("5801014C9E100000000101000000EDCC");
         expect(hex(frameFor(commandNamed("Brewer start"), [1, 2, 3, 4, 5])))
-            .toBe("5801019A1120000000010100000002000000030000000400000005000000E3E3");
+            .toBe(hex(type1Bytes(4506, [...float32(1), ...float32(2), ...float32(3), 4, 0, 0, 0, 5, 0, 0, 0])));
     });
 
     it("keeps mechanical calibration writes unresolved with their real warning", () => {

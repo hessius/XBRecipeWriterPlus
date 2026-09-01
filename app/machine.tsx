@@ -127,11 +127,12 @@ function CommandRow({command, onSend}: CommandRowProps) {
                 <Text fontSize={12} color={palette.dim}>{command.note}</Text>
             )}
 
-            {command.args.map((label, index) => (
-                <Input key={label} size="$3" backgroundColor={palette.raised}
+            {command.args.map((arg, index) => (
+                <Input key={`${arg.label}-${index}`} size="$3" backgroundColor={palette.raised}
                        color={palette.text} placeholderTextColor={palette.muted as ColorTokens}
-                       keyboardType="numeric" placeholder={label}
-                       accessibilityLabel={`${command.name} — ${label}`}
+                       keyboardType={arg.kind === "float32" ? "decimal-pad" : "numeric"}
+                       placeholder={arg.label}
+                       accessibilityLabel={`${command.name} — ${arg.label}`}
                        value={values[index]}
                        onChangeText={(text) => setArg(index, text)}/>
             ))}

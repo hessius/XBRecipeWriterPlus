@@ -134,6 +134,16 @@ describe("the machine console", () => {
         );
     });
 
+    it("accepts decimal entry for float arguments", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        expect(screen.getByLabelText("Bypass and dose — bypass volume").props.keyboardType)
+            .toBe("decimal-pad");
+        expect(screen.getByLabelText("Bypass and dose — dose g").props.keyboardType)
+            .toBe("numeric");
+    });
+
     it("takes a raw frame, because an undocumented code is a paste away", async () => {
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
