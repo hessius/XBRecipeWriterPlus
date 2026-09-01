@@ -251,37 +251,70 @@ export default class Machine {
      * @returns whether the vitals are now known.
      */
     async ensureInfo(): Promise<boolean> {
-        for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
-            if (this.info !== null) return true;
-            if (attempt > 0) await this.gap();
-            await this.requestInfo();
-            await this.waitForInfo();
-        }
+        if (this.info !== null) return true;
+        await this.askHowItIsDoing();
         if (this.info === null) this.note("machine did not say how it is doing");
         return this.info !== null;
     }
 
     /**
-     * Resolve once an info frame has arrived, or when the window closes.
+     * Wait for the next info frame.
      *
-     * Does not reject: a machine that never introduces itself is still worth
-     * being connected to from the console, and `brewBlockReason` is where the
-     * consequence belongs.
+     * The *next* one, not "one at some point": a caller asking how the machine
+     * is doing now must not be handed the answer to a question asked when the
+     * link came up. Does not reject — a machine that stays quiet is still worth
+     * being connected to, and `brewBlockReason` is where the consequence
+     * belongs.
+     *
+     * @returns whether the machine answered before the window closed.
      */
-    private waitForInfo(): Promise<void> {
-        if (this.info !== null) return Promise.resolve();
+    private waitForInfo(): Promise<boolean> {
         return new Promise((resolve) => {
-            const finish = (): void => {
+            const finish = (answered: boolean): void => {
                 clearTimeout(timer);
                 off();
-                resolve();
+                resolve(answered);
             };
             const off = this.onNotification((parsed) => {
-                if (parsed.kind === "info") finish();
+                if (parsed.kind === "info") finish(true);
             });
-            const timer = setTimeout(finish, this.infoWaitMs);
+            const timer = setTimeout(() => finish(false), this.infoWaitMs);
             timer.unref?.();
         });
+    }
+
+    /**
+     * Ask the machine how it is doing, and wait for the answer.
+     *
+     * Asked again before every decision that depends on it, rather than once at
+     * connect. The water level is the reason: somebody who connects, sees the
+     * tank is low, fills it and comes back was told the tank was still low,
+     * because the app was answering from a reading taken minutes earlier while
+     * the machine had long since stopped complaining.
+     *
+     * @returns whether the machine answered.
+     */
+    async askHowItIsDoing(): Promise<boolean> {
+        for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
+            if (attempt > 0) await this.gap();
+            // Listening before asking, not after. The answer can arrive inside
+            // the write — the radio delivers on its own thread — and a listener
+            // attached afterwards would miss it and wait out the whole window
+            // for a reply that had already come.
+            const answered = this.waitForInfo();
+            try {
+                await this.requestInfo();
+            } catch {
+                // A question the radio would not carry is not a reason to
+                // abandon what the caller was actually doing. The brew decides
+                // on the last thing it heard, and fails on its own first frame
+                // if the radio is really gone — with a phase, which this has no
+                // business setting.
+                return false;
+            }
+            if (await answered) return true;
+        }
+        return false;
     }
 
     /**
@@ -434,11 +467,12 @@ export default class Machine {
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
-        // Fetch the vitals if the link never produced them. Telling the user to
-        // reconnect is asking them to do something the app can do for itself —
-        // and on hardware reconnecting did not help, because the question was
-        // being lost rather than refused.
-        if (this.isConnected() && this.info === null) await this.ensureInfo();
+        // Ask how it is doing *now*, every time. Not only when the vitals are
+        // missing: they go stale, and the tank is the whole point of asking.
+        // Telling the user to reconnect is also asking them to do something the
+        // app can do for itself — and on hardware reconnecting did not help,
+        // because the question was being lost rather than refused.
+        if (this.isConnected()) await this.askHowItIsDoing();
         await this.brewOnce(recipe);
     }
 

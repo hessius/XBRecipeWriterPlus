@@ -91,6 +91,16 @@ function brewable(volumes = [144, 144]): Recipe {
     return recipe;
 }
 
+/**
+ * The frames of the brew itself.
+ *
+ * Every brew now opens by asking the machine how it is doing, because the
+ * water level goes stale. That question is not part of the sequence these
+ * tests are about, so it is filtered out rather than written into each one.
+ */
+const brewFrames = (transport: FakeTransport): number[] =>
+    transport.sent.filter((code) => code !== 40521);
+
 /** A machine that is connected, idle and has water. */
 async function readyMachine() {
     const transport = new FakeTransport();
@@ -108,19 +118,21 @@ describe("brewing", () => {
         transport.emit(status(0x10)); // brewing
 
         await expect(machine.brew(brewable())).rejects.toThrow(/busy|already brewing/i);
-        expect(transport.sent).toEqual([]);
+        expect(brewFrames(transport)).toEqual([]);
     });
 
     it("refuses to send when the tank is low", async () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
+        // On the reply too, not only emitted once: the brew asks again, so a
+        // machine still answering "tank fine" would overwrite this.
+        transport.infoReply = machineInfoFrame({waterEnough: 0});
         await machine.connect("AA:BB");
-        transport.emit(machineInfoFrame({waterEnough: 0}));
         transport.emit(status(0x01));
         transport.written = [];
 
         await expect(machine.brew(brewable())).rejects.toThrow(/water/i);
-        expect(transport.sent).toEqual([]);
+        expect(brewFrames(transport)).toEqual([]);
     });
 
     it("leaves a gap between the frames of a brew, because a burst is lost", async () => {
@@ -142,14 +154,15 @@ describe("brewing", () => {
             transport.written = [];
 
             const brewing = machine.brew(brewable());
-            await Promise.resolve();
-            expect(transport.sent).toEqual([8100]);
+            // Let the "how are you doing" question every brew opens with settle.
+            await jest.advanceTimersByTimeAsync(0);
+            expect(brewFrames(transport)).toEqual([8100]);
 
             await jest.advanceTimersByTimeAsync(FRAME_GAP_MS);
-            expect(transport.sent).toEqual([8100, 8102]);
+            expect(brewFrames(transport)).toEqual([8100, 8102]);
 
             await jest.advanceTimersByTimeAsync(FRAME_GAP_MS * 3);
-            expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
+            expect(brewFrames(transport)).toEqual([8100, 8102, 8104, 8001, 8002]);
 
             await brewing;
         } finally {
@@ -180,7 +193,7 @@ describe("brewing", () => {
         const {transport, machine} = await readyMachine();
         const phases: string[] = [];
         machine.onPhase((phase) => phases.push(phase.name));
-        transport.failNextWrite = "the radio is busy";
+        transport.failWriteOf = {code: 8100, reason: "the radio is busy"};
 
         await expect(machine.brew(brewable())).rejects.toThrow(/radio is busy/i);
 
@@ -196,14 +209,14 @@ describe("brewing", () => {
         broken.ratio = 900;
 
         await expect(machine.brew(broken)).rejects.toThrow();
-        expect(transport.sent).toEqual([]);
+        expect(brewFrames(transport)).toEqual([]);
     });
 
     it("sends the handshake, dose, cup range, recipe and commit, in that order", async () => {
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
 
-        expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
+        expect(brewFrames(transport)).toEqual([8100, 8102, 8104, 8001, 8002]);
     });
 
     it("uses the no-grind opcode for a recipe that does not grind", async () => {
@@ -212,8 +225,8 @@ describe("brewing", () => {
         recipe.grinder = false;
         await machine.brew(recipe);
 
-        expect(transport.sent).toContain(8004);
-        expect(transport.sent).not.toContain(8001);
+        expect(brewFrames(transport)).toContain(8004);
+        expect(brewFrames(transport)).not.toContain(8001);
     });
 
     it("uses the tea commands for a tea recipe", async () => {
@@ -225,7 +238,7 @@ describe("brewing", () => {
         tea.pours[0].pauseTime = 60;
         await machine.brew(tea);
 
-        expect(transport.sent).toEqual([8100, 8102, 4513, 4512]);
+        expect(brewFrames(transport)).toEqual([8100, 8102, 4513, 4512]);
     });
 
     it("walks the happy path to ENJOY", async () => {
@@ -272,7 +285,7 @@ describe("brewing", () => {
         transport.emit(status(0x1E)); // awaiting_confirm
 
         expect(machine.phase.name).toBe("pressPlay");
-        expect(transport.sent).not.toContain(40518);
+        expect(brewFrames(transport)).not.toContain(40518);
     });
 
     it("does not give up during the twenty seconds the machine grinds in silence", async () => {
@@ -322,7 +335,7 @@ describe("brewing", () => {
 
         await machine.cancelBrew();
 
-        expect(transport.sent).toEqual([40519, 8022]);
+        expect(brewFrames(transport)).toEqual([40519, 8022]);
         expect(machine.phase.name).toBe("cancelled");
     });
 
@@ -351,15 +364,17 @@ describe("brewing", () => {
 
         await machine.brew(brewable());
 
-        expect(transport.sent).toEqual([8100, 8102, 8104, 8001, 8002]);
+        expect(brewFrames(transport)).toEqual([8100, 8102, 8104, 8001, 8002]);
     });
 
     it("offers a mode switch only when a send goes nowhere on an EASY machine", async () => {
         jest.useFakeTimers();
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
+        // On the reply too: the brew asks again, and a machine still answering
+        // with the default mode would overwrite this.
+        transport.infoReply = machineInfoFrame({mode: "91327856"});
         await machine.connect("AA:BB");
-        transport.emit(machineInfoFrame({mode: "91327856"}));
         transport.emit(status(0x01));
         transport.written = [];
 
@@ -370,7 +385,7 @@ describe("brewing", () => {
         expect(machine.phase).toMatchObject({name: "failed", reason: "rejected"});
         expect(machine.canOfferProMode()).toBe(true);
         // Never switched behind the user's back.
-        expect(transport.sent).not.toContain(11511);
+        expect(brewFrames(transport)).not.toContain(11511);
         jest.useRealTimers();
     });
 
@@ -402,7 +417,7 @@ describe("brewing", () => {
         await machine.switchToProAndRetry(brewable());
 
         // The mode switch, then the whole send again.
-        expect(transport.sent).toEqual([11511, 8100, 8102, 8104, 8001, 8002]);
+        expect(brewFrames(transport)).toEqual([11511, 8100, 8102, 8104, 8001, 8002]);
     });
 });
 
@@ -414,7 +429,7 @@ describe("waiting for the user to start the brew", () => {
         await machine.brew(brewable());
 
         // Everything but the one frame that sets a burr spinning.
-        expect(transport.sent).toEqual([8100, 8102, 8104, 8001]);
+        expect(brewFrames(transport)).toEqual([8100, 8102, 8104, 8001]);
         expect(machine.phase.name).toBe("readyToStart");
     });
 
@@ -426,7 +441,7 @@ describe("waiting for the user to start the brew", () => {
 
         await machine.startBrew();
 
-        expect(transport.sent).toEqual([8002]);
+        expect(brewFrames(transport)).toEqual([8002]);
         expect(machine.phase.name).toBe("sending");
     });
 
@@ -440,11 +455,11 @@ describe("waiting for the user to start the brew", () => {
         tea.pours[0].pauseTime = 60;
 
         await machine.brew(tea);
-        expect(transport.sent).toEqual([8100, 8102, 4513]);
+        expect(brewFrames(transport)).toEqual([8100, 8102, 4513]);
 
         transport.written = [];
         await machine.startBrew();
-        expect(transport.sent).toEqual([4512]);
+        expect(brewFrames(transport)).toEqual([4512]);
     });
 
     it("keeps the start button up while the machine reports the recipe loaded", async () => {
@@ -653,7 +668,7 @@ describe("getting the machine to say how it is doing", () => {
         await machine.brew(brewable());
 
         expect(machine.info).not.toBeNull();
-        expect(transport.sent).toContain(8002);
+        expect(brewFrames(transport)).toContain(8002);
     });
 
     it("still refuses when the machine will not say, rather than brewing blind", async () => {
@@ -665,5 +680,57 @@ describe("getting the machine to say how it is doing", () => {
         await machine.connect("AA:BB");
 
         await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
+    });
+});
+
+describe("asking how the machine is doing now", () => {
+    // Reported from hardware: connected with the tank low, refilled it, and the
+    // brew still refused — the machine had stopped warning, the app had not.
+    // The vitals were read once at connect and never again, so every later
+    // decision was made against whatever happened to be true minutes ago.
+
+    it("notices the tank was filled after the link came up", async () => {
+        const transport = new FakeTransport();
+        transport.infoReply = machineInfoFrame({waterEnough: 0});
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        expect(machine.brewBlockReason(brewable())).toMatch(/water/i);
+
+        transport.infoReply = machineInfoFrame({waterEnough: 1});
+        await machine.brew(brewable());
+
+        expect(brewFrames(transport)).toContain(8002);
+    });
+
+    it("notices the tank emptied after the link came up", async () => {
+        // The same freshness in the direction that matters more. Trusting a
+        // reading from twenty minutes ago is how a recipe gets committed to a
+        // machine with nothing to brew it with.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+
+        transport.infoReply = machineInfoFrame({waterEnough: 0});
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/water/i);
+        expect(brewFrames(transport)).not.toContain(8002);
+    });
+
+    it("goes on the last thing it heard when the machine will not answer", async () => {
+        // Not a reason to refuse on its own: the machine says nothing when it
+        // is asked too soon after something else, and a brew that fails because
+        // one question went unanswered is worse than one decided on a reading a
+        // minute old.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+
+        transport.infoReply = null;
+        await machine.brew(brewable());
+
+        expect(brewFrames(transport)).toContain(8002);
     });
 });

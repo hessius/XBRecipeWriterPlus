@@ -51,6 +51,14 @@ export class FakeTransport implements MachineTransport {
     /** Set to make the next `write` reject, for the failed-send case. */
     public failNextWrite: string | null = null;
     /**
+     * Set to make the write of one particular command reject.
+     *
+     * `failNextWrite` is no use for a brew any more: every brew opens by asking
+     * the machine how it is doing, so "the next write" is that question rather
+     * than the frame the test means.
+     */
+    public failWriteOf: {code: number; reason: string} | null = null;
+    /**
      * What the machine answers the info request with.
      *
      * A real one always answers — that is confirmed on hardware — so the fake
@@ -95,6 +103,10 @@ export class FakeTransport implements MachineTransport {
 
     async write(frame: Uint8Array): Promise<void> {
         if (this.connectedTo === null) throw new Error("not connected");
+        const outgoing = frame[3] | (frame[4] << 8);
+        if (this.failWriteOf !== null && this.failWriteOf.code === outgoing) {
+            throw new Error(this.failWriteOf.reason);
+        }
         if (this.failNextWrite !== null) {
             const reason = this.failNextWrite;
             this.failNextWrite = null;
