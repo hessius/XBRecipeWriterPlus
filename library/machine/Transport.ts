@@ -48,6 +48,28 @@ export interface MachineTransport {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Whether two UUIDs name the same thing.
+ *
+ * A radio may report `ffe2`, `0000ffe2`, or the full 128-bit form for one
+ * characteristic, depending on the platform and on whether it is a standard
+ * short UUID. Comparing the strings directly makes the app deaf to its own
+ * channel on whichever platform disagrees with the constant.
+ */
+function sameUuid(a: string, b: string): boolean {
+    const trim = (uuid: string) => uuid.toLowerCase().replace(/^0+/, "").replace(/-.*$/, "");
+    return trim(a) === trim(b);
+}
+
+/** Property names, whichever shape the platform reports them in. */
+function propertyNames(properties: unknown): string[] {
+    if (Array.isArray(properties)) return properties.map(String);
+    if (properties !== null && typeof properties === "object") {
+        return Object.values(properties as Record<string, unknown>).map(String);
+    }
+    return [];
+}
+
+/**
  * The real radio.
  *
  * Wraps `react-native-ble-manager` and nothing else: it emits `Uint8Array`s
@@ -137,10 +159,8 @@ export class BleTransport implements MachineTransport {
                 throw error;
             }
         }
-        await BleManager.retrieveServices(id);
-        await BleManager.startNotification(
-            id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC
-        );
+        const services = await BleManager.retrieveServices(id);
+        await this.listenToEverythingThatTalks(id, services);
         // Best effort. A stack that refuses still carries every frame short
         // enough to fit the default, which is why the failure is swallowed
         // rather than surfaced.
@@ -148,17 +168,46 @@ export class BleTransport implements MachineTransport {
         this.deviceId = id;
     }
 
+    /**
+     * Enable notifications on every characteristic that offers them.
+     *
+     * Not only `ffe2`. Hardware reports `ffe3` on the same service carrying
+     * Notify too, and a channel nobody subscribed to is indistinguishable from
+     * a channel the machine never uses — which is how the tank level and the
+     * info blob both came to look like things the machine simply does not send.
+     *
+     * `ffe2` is subscribed to whatever the radio lists, because the app has
+     * always worked over it and a stack that describes itself poorly must not
+     * leave us deaf. The extra channels are a discovery, so one refusing is not
+     * worth the connection.
+     */
+    private async listenToEverythingThatTalks(
+        id: string, services: {characteristics?: unknown[]} | undefined
+    ): Promise<void> {
+        await BleManager.startNotification(id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC);
+
+        const listed = (services?.characteristics ?? []) as {
+            service?: string; characteristic?: string; properties?: unknown;
+        }[];
+        for (const entry of listed) {
+            const characteristic = entry.characteristic ?? "";
+            if (!sameUuid(entry.service ?? "", MACHINE_SERVICE)) continue;
+            if (sameUuid(characteristic, MACHINE_NOTIFY_CHARACTERISTIC)) continue;
+            if (!propertyNames(entry.properties).some((name) => /notify|indicate/i.test(name))) {
+                continue;
+            }
+            await BleManager.startNotification(id, entry.service ?? MACHINE_SERVICE, characteristic)
+                .catch(() => undefined);
+        }
+    }
+
     async describeGatt(): Promise<string[]> {
         const id = this.deviceId;
         if (id === null) throw new Error("not connected");
         const info = await BleManager.retrieveServices(id);
-        return (info.characteristics ?? []).map((entry) => {
-            const properties = entry.properties as Record<string, string> | string[];
-            const names = Array.isArray(properties)
-                ? properties
-                : Object.values(properties);
-            return `${entry.service}/${entry.characteristic} ${names.join(",") || "—"}`;
-        });
+        return (info.characteristics ?? []).map((entry) =>
+            `${entry.service}/${entry.characteristic} `
+            + `${propertyNames(entry.properties).join(",") || "—"}`);
     }
 
     async disconnect(): Promise<void> {

@@ -133,3 +133,63 @@ describe("connecting", () => {
         expect(transport.isConnected()).toBe(false);
     });
 });
+
+describe("which channels the app listens to", () => {
+    // Reported from hardware: the machine offers three characteristics on its
+    // service, and `ffe3` carries Notify as well as `ffe2`. Subscribing to one
+    // of them means anything sent on the other never reaches the app — and
+    // looks exactly like a machine that sends nothing. The tank level and the
+    // info blob both showed zero arrivals while this was true.
+    const notify = BleManager.startNotification as jest.Mock;
+    const retrieve = BleManager.retrieveServices as jest.Mock;
+
+    beforeEach(() => {
+        notify.mockClear();
+        notify.mockResolvedValue(undefined);
+    });
+
+    it("subscribes to every notifying characteristic the machine offers", async () => {
+        retrieve.mockResolvedValueOnce({characteristics: [
+            {service: MACHINE_SERVICE, characteristic: "ffe1",
+             properties: ["Write", "WriteWithoutResponse"]},
+            {service: MACHINE_SERVICE, characteristic: "ffe2", properties: ["Notify"]},
+            {service: MACHINE_SERVICE, characteristic: "ffe3",
+             properties: ["WriteWithoutResponse", "Notify", "Write", "Read"]}
+        ]});
+
+        await new BleTransport().connect("AA:BB:CC");
+
+        // A short name or the full 128-bit form, depending on what the radio
+        // reported it as. Either is the same channel.
+        const subscribed = notify.mock.calls.map((call) => call[2].toLowerCase());
+        expect(subscribed.some((uuid) => uuid.includes("ffe2"))).toBe(true);
+        expect(subscribed.some((uuid) => uuid.includes("ffe3"))).toBe(true);
+        expect(subscribed.some((uuid) => uuid.includes("ffe1"))).toBe(false);
+    });
+
+    it("still subscribes to the known channel when the radio lists nothing", async () => {
+        // A stack that returns no characteristic list must not leave the app
+        // deaf altogether. The one channel we have always used is the floor.
+        retrieve.mockResolvedValueOnce({});
+
+        await new BleTransport().connect("AA:BB:CC");
+
+        const subscribed = notify.mock.calls.map((call) => call[2].toLowerCase());
+        expect(subscribed.some((uuid) => uuid.includes("ffe2"))).toBe(true);
+    });
+
+    it("keeps the link when one of the extra channels refuses", async () => {
+        // `ffe3` is a discovery, not a requirement. A stack that will not
+        // subscribe to it must not cost us the connection.
+        retrieve.mockResolvedValueOnce({characteristics: [
+            {service: MACHINE_SERVICE, characteristic: "ffe2", properties: ["Notify"]},
+            {service: MACHINE_SERVICE, characteristic: "ffe3", properties: ["Notify"]}
+        ]});
+        notify.mockImplementation((_id: string, _service: string, char: string) =>
+            char.toLowerCase() === "ffe3"
+                ? Promise.reject(new Error("refused"))
+                : Promise.resolve(undefined));
+
+        await expect(new BleTransport().connect("AA:BB:CC")).resolves.toBeUndefined();
+    });
+});

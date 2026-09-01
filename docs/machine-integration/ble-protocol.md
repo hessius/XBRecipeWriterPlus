@@ -335,6 +335,14 @@ The machine pushes the following data unprompted on FFE2:
 | Machine info | **On request only** (see note) | 61-byte blob in 40521 notification | Contains all persistent machine settings: firmware ver, grinder size, water level, temp unit, weight unit, water source, mode, LED brightness, pour radius, vibration amplitude. |
 | Water volume | ~100ms | float32 LE in 40523 notification | Tank water level. |
 
+> **The machine offers a third characteristic, `ffe3`.** Read off hardware
+> (2026-09-01, V12.0D.500) with the console's radio dump: the service carries
+> `ffe1 Write,WriteWithoutResponse`, `ffe2 Notify`, and
+> `ffe3 WriteWithoutResponse,Notify,Write,Read`. No source mentions `ffe3`.
+> XBRW++ subscribed only to `ffe2` until this was found, so anything the
+> machine sends on `ffe3` was invisible to the app and indistinguishable from
+> something it never sends at all. What travels on it is still unknown.
+
 > **The info blob is not a heartbeat.** Sources describe 40521 as streaming
 > periodically. On hardware (2026-09-01, V12.0D.500) it does not: a tank
 > refilled after connect still read Low in XBRW++ until the app asked again.
