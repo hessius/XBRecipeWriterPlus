@@ -12,6 +12,8 @@
  * Source: `docs/machine-integration/ble-protocol.md`.
  */
 
+import {ascii, buildType1, buildType1Bytes, buildType2} from "@/library/machine/protocol";
+
 export type PacketType = "type1" | "type1Bytes" | "type2";
 
 /**
@@ -33,10 +35,21 @@ export type Command = {
     /** One label per integer argument. Empty for a command that takes none. */
     args: string[];
     tier: Tier;
+    /** Fixed raw payload for commands whose documented payload is not numeric. */
+    payload?: Uint8Array;
     note?: string;
     /** Required when `tier` is `unresolved`. Shown at the point of sending. */
     contradiction?: string;
 };
+
+export function frameFor(command: Command, values: number[]): Uint8Array {
+    const payload = command.payload ?? Uint8Array.from(values);
+    switch (command.packet) {
+        case "type1":      return buildType1(command.code, values);
+        case "type1Bytes": return buildType1Bytes(command.code, payload);
+        case "type2":      return buildType2(command.code, payload);
+    }
+}
 
 export const COMMANDS: Command[] = [
     // — Session ————————————————————————————————————————————————————
@@ -56,6 +69,8 @@ export const COMMANDS: Command[] = [
     {code: 8002, name: "Commit", packet: "type1", args: [], tier: "moves",
      note: "Arms the machine. It then either proceeds by itself or parks waiting for the button."},
     {code: 40519, name: "Cancel", packet: "type1", args: ["1"], tier: "moves"},
+    {code: 40524, name: "Coffee resume", packet: "type1", args: ["1"], tier: "moves",
+     note: "Resume after a pause. Single-source from HomoLand."},
     {code: 4513, name: "Tea recipe upload", packet: "type1Bytes", args: [], tier: "moves"},
     {code: 4512, name: "Tea recipe execute", packet: "type1", args: [], tier: "moves"},
 
@@ -65,16 +80,48 @@ export const COMMANDS: Command[] = [
     {code: 3505, name: "Grinder stop", packet: "type1", args: [], tier: "moves"},
     {code: 8006, name: "Grinder enter", packet: "type1", args: ["grind size", "speed"], tier: "inert"},
     {code: 8012, name: "Grinder quit", packet: "type1", args: [], tier: "inert"},
+    {code: 8018, name: "Grinder pause", packet: "type1", args: [], tier: "moves"},
+    {code: 8020, name: "Grinder resume", packet: "type1", args: [], tier: "moves"},
+    {code: 8007, name: "Brewer enter", packet: "type1", args: ["pattern byte", "temp x10 floatbits"], tier: "inert",
+     note: "Navigate to the FreeSolo brewer screen."},
+    {code: 4506, name: "Brewer start", packet: "type1",
+     args: ["flow x10 floatbits", "volume x10 floatbits", "temp x10 floatbits", "water feed", "pattern"],
+     tier: "moves", note: "FreeSolo water dispense."},
     {code: 4507, name: "Brewer stop", packet: "type1", args: [], tier: "moves"},
     {code: 8019, name: "Brewer pause", packet: "type1", args: [], tier: "moves"},
     {code: 8021, name: "Brewer resume", packet: "type1", args: [], tier: "moves"},
     {code: 8013, name: "Brewer quit", packet: "type1", args: [], tier: "moves"},
+    {code: 8017, name: "Recipe start quit", packet: "type1", args: [], tier: "inert",
+     note: "Exit the pre-start recipe screen."},
+    {code: 8016, name: "Brewer set pattern", packet: "type1", args: ["pattern byte"], tier: "moves",
+     note: "Change the pattern during a brew."},
+    {code: 4510, name: "Brewer set temperature", packet: "type1", args: ["temp C x10"], tier: "moves",
+     note: "Change the temperature during a pour; plain integer x10, not float bits."},
 
     // — Machine settings ———————————————————————————————————————————
-    {code: 11511, name: "Mode switch", packet: "type2", args: [], tier: "moves",
-     note: "Payload is the text 00000000 for PRO or 91327856 for EASY. Byte-exact, confirmed on hardware."},
+    {code: 11510, name: "Easy recipe send", packet: "type2",
+     args: ["slot index", "flags", "recipe blob bytes"], tier: "moves",
+     note: "Slot writes are persistent, and all three slots must be written in one batch."},
+    // The console's argument fields are numeric. These payloads are not; they
+    // are two byte-exact hardware tokens, so the honest UI is two zero-arg rows.
+    {code: 11511, name: "Switch to PRO", packet: "type2", args: [], tier: "moves",
+     payload: ascii("00000000"), note: "Byte-exact, confirmed on hardware."},
+    {code: 11511, name: "Switch to EASY", packet: "type2", args: [], tier: "moves",
+     payload: ascii("91327856"), note: "Byte-exact, confirmed on hardware."},
+    {code: 11512, name: "Recipe order", packet: "type2", args: ["hex payload bytes"], tier: "moves",
+     note: "APK decompile confirms this is BleCodeFactory.easyModeRecipesOrder."},
+    {code: 40525, name: "Send recipe count", packet: "type1", args: ["count"], tier: "moves",
+     note: "Sends the count of recipes being synced."},
+    {code: 11506, name: "Read pour radius", packet: "type2", args: [], tier: "inert",
+     note: "Read current mechanical pour radius. Response format is not documented."},
+    {code: 11508, name: "Read vibration amplitude", packet: "type2", args: [], tier: "inert",
+     note: "Read current vibration amplitude setting. Response format is not documented."},
     {code: 8103, name: "Display brightness", packet: "type1", args: ["1, 8 or 15"], tier: "moves"},
     {code: 4508, name: "Water source", packet: "type1", args: ["0 tank, 1 tap"], tier: "moves"},
+    {code: 8111, name: "Easy mode begin", packet: "type1", args: [], tier: "inert",
+     note: "Initiate Auto Mode recipe display."},
+    {code: 40526, name: "CurrentGrinder / back to normal", packet: "type1", args: [], tier: "inert",
+     note: "Return from grinder to normal state."},
 
     // — Unresolved —————————————————————————————————————————————————
     {code: 40518, name: "Start / confirm / pause", packet: "type1", args: ["1"], tier: "unresolved",
@@ -95,11 +142,11 @@ export const COMMANDS: Command[] = [
      contradiction:
         "brAzzi64 reads the values as 0 Celsius, 1 Fahrenheit. HomoLand reads them the other way round. " +
         "Unverified either way."},
-    {code: 11507, name: "Write pour radius", packet: "type2", args: [], tier: "unresolved",
+    {code: 11507, name: "Write pour radius", packet: "type2", args: ["value"], tier: "unresolved",
      contradiction:
         "Mechanical calibration, single-source (HomoLand), range 400-1000 in steps of 80. " +
         "Nobody has confirmed what a wrong value does to the arm."},
-    {code: 11509, name: "Write vibration amplitude", packet: "type2", args: [], tier: "unresolved",
+    {code: 11509, name: "Write vibration amplitude", packet: "type2", args: ["value"], tier: "unresolved",
      contradiction:
         "Mechanical calibration, single-source (HomoLand), range 1000-1500 in steps of 100. Unverified."}
 ];

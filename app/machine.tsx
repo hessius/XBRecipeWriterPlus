@@ -13,10 +13,8 @@ import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
-import {COMMANDS, type Command, type Tier} from "@/library/machine/commands";
-import {
-    buildType1, buildType1Bytes, buildType2, type Notification
-} from "@/library/machine/protocol";
+import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
+import {type Notification} from "@/library/machine/protocol";
 
 /**
  * The warning gate.
@@ -89,15 +87,6 @@ const TEA_STEEP_OPTIONS = [
     {value: "homoland", label: "HomoLand"},
     {value: "saya6k",   label: "saya6k"}
 ] as const;
-
-/** Build the wire frame for a catalogue command and its filled-in arguments. */
-function frameFor(command: Command, values: number[]): Uint8Array {
-    switch (command.packet) {
-        case "type1":      return buildType1(command.code, values);
-        case "type1Bytes": return buildType1Bytes(command.code, Uint8Array.from(values));
-        case "type2":      return buildType2(command.code, Uint8Array.from(values));
-    }
-}
 
 type CommandRowProps = {
     command: Command;
@@ -299,7 +288,7 @@ export default function MachineConsole() {
 
                 <SettingsSection title="Commands">
                     {COMMANDS.map((command) => (
-                        <CommandRow key={command.code} command={command} onSend={onSend}/>
+                        <CommandRow key={`${command.code}-${command.name}`} command={command} onSend={onSend}/>
                     ))}
                 </SettingsSection>
 

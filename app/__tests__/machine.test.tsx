@@ -103,6 +103,37 @@ describe("the machine console", () => {
         expect(send).not.toHaveBeenCalled();
     });
 
+    it("still confirms an unresolved command when routine confirmations are off", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        sharedSettings().set("machineConsoleConfirmations", false);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Send Start / confirm / pause"));
+
+        expect(screen.getByText(/Nobody agrees what this does/i)).toBeTruthy();
+        expect(send).not.toHaveBeenCalled();
+    });
+
+    it("sends the confirmed PRO and EASY mode strings as fixed payloads", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        sharedSettings().set("machineConsoleConfirmations", false);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Send Switch to PRO"));
+        await fireEvent.press(screen.getByLabelText("Send Switch to EASY"));
+
+        expect(send).toHaveBeenNthCalledWith(
+            1,
+            Uint8Array.from([0x58, 0x01, 0x02, 0xF7, 0x2C, 0x14, 0x00, 0x00, 0x00, 0x01,
+                0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x8E, 0xA9])
+        );
+        expect(send).toHaveBeenNthCalledWith(
+            2,
+            Uint8Array.from([0x58, 0x01, 0x02, 0xF7, 0x2C, 0x14, 0x00, 0x00, 0x00, 0x01,
+                0x39, 0x31, 0x33, 0x32, 0x37, 0x38, 0x35, 0x36, 0xC0, 0x0A])
+        );
+    });
+
     it("takes a raw frame, because an undocumented code is a paste away", async () => {
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
