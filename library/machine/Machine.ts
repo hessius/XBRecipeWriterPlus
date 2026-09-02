@@ -261,7 +261,18 @@ export default class Machine {
 
         // First write, before anything else is queued: the machine ignores
         // every command that follows if the handshake misses its window.
-        await this.shakeHands();
+        //
+        // A failure here used to pass straight through `connect`, leaving the
+        // transport linked -- so the app said "Connected" while the machine
+        // had not beeped, no vitals ever arrived, and the connection log had
+        // nothing to say about any of it. The handshake is the one frame that
+        // has to land, so its failure is worth a line of its own.
+        try {
+            await this.shakeHands();
+        } catch (e) {
+            this.note(`handshake not sent — ${(e as Error).message}`);
+            throw e;
+        }
         this.announceLink();
         // The gap matters as much here as anywhere. Writing the info request
         // straight after the handshake is a two-frame burst on a channel with

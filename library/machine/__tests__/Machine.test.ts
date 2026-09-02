@@ -128,6 +128,22 @@ describe("connecting", () => {
         await expect(machine.connect("AA:BB")).rejects.toThrow("Bluetooth is switched off.");
     });
 
+    it("says so when the opening handshake never reached the machine", async () => {
+        // Seen on hardware: the app said "Connected", the machine did not
+        // beep, no vitals ever arrived, and the connection log said nothing at
+        // all. A handshake whose write fails left the link up and useless with
+        // no account of why -- and the handshake is the one frame that has to
+        // land, because the machine ignores everything that follows it.
+        const transport = new FakeTransport();
+        transport.failNextWrite = "radio not ready";
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await machine.connect("AA:BB").catch(() => {});
+
+        expect(machine.linkHistory.map((e) => e.text).join(" "))
+            .toMatch(/handshake.*radio not ready/i);
+    });
+
     it("still guesses at the machine when the failure says nothing", async () => {
         const transport = new FakeTransport();
         transport.failConnect = new Error("");
