@@ -145,3 +145,63 @@ describe("RecipeDatabase", () => {
         });
     });
 });
+
+describe("duplicating a recipe", () => {
+    /** An imported recipe: no name of its own, xBloom's name on the side. */
+    function imported(): Recipe {
+        const recipe = new Recipe();
+        recipe.xbloomName = "Kenya Sakami";
+        recipe.xid = "NLC001";
+        recipe.source = "import";
+        return recipe;
+    }
+
+    it("gives the copy a name that tells it apart from the original", () => {
+        // The bug behind a library that filled up with what looked like the
+        // same recipe six times. An imported recipe has an empty `name` --
+        // xBloom's name lives in `xbloomName`, and `displayName()` falls
+        // through to it. The copy was named from `name`, so it was named from
+        // an empty string, stayed empty, and fell through to exactly the same
+        // `xbloomName` as the original. Two rows, same title, nothing to tell
+        // them apart -- so the user pressed duplicate again, and again.
+        const database = new RecipeDatabase();
+        const original = imported();
+        database.insertRecipe(original);
+
+        database.duplicateRecipe(original);
+
+        const names = (database.retrieveAllRecipes() ?? []).map((r) => r.displayName());
+        expect(names).toContain("Kenya Sakami");
+        expect(names).toContain("Kenya Sakami (Copy)");
+    });
+
+    it("numbers further copies instead of repeating one name", () => {
+        const database = new RecipeDatabase();
+        const original = imported();
+        database.insertRecipe(original);
+
+        database.duplicateRecipe(original);
+        database.duplicateRecipe(original);
+        database.duplicateRecipe(original);
+
+        const names = (database.retrieveAllRecipes() ?? []).map((r) => r.displayName());
+        expect(new Set(names).size).toBe(names.length);
+    });
+
+    it("leaves a nameless recipe to its placeholder rather than inventing one", () => {
+        // A card read with no name and no XID is shown as "Read 3 Sep", drawn
+        // muted because it is a generated label and not a name anyone chose.
+        // Copying it must not bake that label into the name field as though
+        // the user had typed it.
+        const database = new RecipeDatabase();
+        const nameless = new Recipe();
+        nameless.source = "read";
+        database.insertRecipe(nameless);
+
+        database.duplicateRecipe(nameless);
+
+        const copy = (database.retrieveAllRecipes() ?? []).find((r) => r.source === "duplicate");
+        expect(copy?.name).toBe("");
+        expect(copy?.hasName()).toBe(false);
+    });
+});

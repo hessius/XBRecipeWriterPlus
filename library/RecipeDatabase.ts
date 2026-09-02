@@ -140,9 +140,20 @@ class RecipeDatabase {
      */
     public duplicateRecipe(source: Recipe): void {
         const copy = new Recipe(undefined, JSON.stringify(source));
-        const names = (this.retrieveAllRecipes() ?? []).map((r) => r.name);
+        // Named from what the user actually sees, not from `name`. An imported
+        // recipe has an empty `name` -- xBloom's name lives in `xbloomName`
+        // and `displayName()` falls through to it -- so naming the copy from
+        // `name` named it from an empty string. It stayed empty, fell through
+        // to the same `xbloomName`, and the library showed two rows with the
+        // same title and nothing to tell them apart. A user who cannot see
+        // that anything happened presses the button again.
+        //
+        // A recipe with no name from any source keeps none: its label is a
+        // generated placeholder drawn muted, and copying it must not bake that
+        // placeholder into the name field as though someone had typed it.
+        const names = (this.retrieveAllRecipes() ?? []).map((r) => r.displayName());
         copy.generateNewUUID();
-        copy.name = copyName(copy.name, names);
+        if (source.hasName()) copy.name = copyName(source.displayName(), names);
         copy.source = "duplicate";
         copy.createdAt = Date.now();
         // Cleared so the copy is assigned its own colour on insert rather
