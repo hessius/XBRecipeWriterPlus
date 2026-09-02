@@ -148,7 +148,8 @@ export const COMMANDS: Command[] = [
      contradiction:
         "Three implementations send three materially different value sets — (200, 80), (110, 90), (80-90, 40) — " +
         "the machine reportedly brews correctly regardless, and nobody knows what the field means. " +
-        "XBRW++ omits it."},
+        "They disagree about the values, not about whether to send it, so XBRW++ sends it on every " +
+        "coffee brew with the reference's own (200, 80) — the widest of the three."},
     {code: 8005, name: "Weight unit", packet: "type1", args: [int("unit")], tier: "unresolved",
      contradiction:
         "brAzzi64 reads the values as 0 g, 1 oz, 2 ml. HomoLand reads them as 0 ml, 1 g, 2 oz. " +

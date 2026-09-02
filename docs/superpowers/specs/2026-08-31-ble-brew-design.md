@@ -66,12 +66,20 @@ requires no dangerous hardware spike to ship.
 
 The console can send it deliberately (§5), which is how we settle it for M4.
 
-### 2.2 We never send command 8104 (Set Cup)
+### 2.2 We do send command 8104 (Set Cup), with the reference's own values
 
-Three implementations send three materially different value sets — `(200, 80)`,
-`(110, 90)`, `(80–90, 40)` — the machine reportedly brews correctly regardless,
-and nobody knows what the field means. The research recommends omitting it
-initially. We omit it, and record that we did.
+This section originally said the opposite, on the grounds that three
+implementations send three materially different value sets — `(200, 80)`,
+`(110, 90)`, `(80–90, 40)` — and nobody can name the field. That was a
+misreading: the sources disagree about the *values*, not about whether the
+command is sent. All of them send it, and the reference brew sequence that is
+known to work on hardware sends it between the dose and the recipe.
+
+We send `(200.0, 80.0)`: the reference's default, HCI-confirmed for Free Solo,
+and the widest of the three. For a field that appears to govern overflow
+protection, wide is the conservative direction — too wide risks nothing the
+machine's own sensors do not already catch, while too narrow could refuse a cup
+that is perfectly fine.
 
 ### 2.3 We do send command 8102 (bypass + dose), with bypass zeroed
 
@@ -489,8 +497,9 @@ firmware and shrugging at them.
 
 - **C4 (40518)** — sidestepped, not answered. Answering it is what would let M4
   offer a remote start.
-- **C3 (8104 Set Cup)** — omitted. If a brew ever behaves oddly with an unusual
-  cup, this is the first suspect.
+- **C3 (8104 Set Cup)** — sent, with `(200.0, 80.0)`. What the field means is
+  still unknown, so if a brew ever behaves oddly with an unusual cup this is
+  the first suspect.
 - **C5/C6 (unit orderings)** — untouched; the app does not set units. One console
   round trip resolves both.
 - **Whether a dropped link aborts a brew** — item 8.

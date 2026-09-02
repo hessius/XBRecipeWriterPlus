@@ -49,6 +49,9 @@ export class FakeTransport implements MachineTransport {
     /** Identifiers this radio refuses, for the stale-remembered-id case. */
     public refuseIds: string[] = [];
     /** Set to make the next `write` reject, for the failed-send case. */
+    /** Wide by default: the narrow link is the case a test opts into. */
+    public frameBudget = 244;
+
     public failNextWrite: string | null = null;
     /**
      * Set to make the write of one particular command reject.

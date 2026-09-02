@@ -153,6 +153,13 @@ export default class Machine {
 
     private phaseListeners = new Set<(phase: BrewPhase) => void>();
     private pourCount = 0;
+    /**
+     * Which paced sequence owns the radio.
+     *
+     * Bumped by every `sendPaced`. A sequence that finds the number has moved
+     * on while it slept in a gap has been overtaken, and stops.
+     */
+    private sequence = 0;
     private brewing = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
     private retriedInPro = false;
@@ -203,8 +210,15 @@ export default class Machine {
      * flow-controlled in any way, and the machine simply loses most of it.
      */
     private async sendPaced(frames: Uint8Array[]): Promise<void> {
+        const mine = ++this.sequence;
         for (let index = 0; index < frames.length; index++) {
             if (index > 0) await this.gap();
+            // A sequence spends most of its life asleep in `gap`, and a cancel
+            // arriving in one of those gaps used to change the phase and leave
+            // the loop walking: the stop went out, and then the rest of the
+            // recipe followed it. Whoever started a sequence more recently owns
+            // the radio, so an overtaken sequence stops here.
+            if (this.sequence !== mine) return;
             await this.send(frames[index]);
         }
     }
@@ -413,10 +427,26 @@ export default class Machine {
     }
 
     /** Send an already-built frame. The brew path and the console both use it. */
-    send(frame: Uint8Array): Promise<void> {
+    async send(frame: Uint8Array): Promise<void> {
+        // The MTU the radio actually granted, which on Android may be the
+        // 20-byte floor. A recipe blob does not fit in that, and a write that
+        // is quietly truncated arrives as a brew that never starts and a
+        // machine that says nothing about why.
+        const budget = this.transport.frameBudget;
+        if (budget !== undefined && frame.length > budget) {
+            throw new Error(
+                `This connection is too narrow for the recipe: the radio agreed to carry ` +
+                `${budget} bytes a message and this one is ${frame.length}. ` +
+                `Reconnecting sometimes settles on a wider link.`
+            );
+        }
+        // Announced after the write resolves, not before. The log is the only
+        // account we have of what actually reached the machine, and a line
+        // written before the radio has accepted the frame says a frame was
+        // sent when the write is about to throw.
+        await this.transport.write(frame);
         this.frameListeners.forEach((listener) =>
             listener("sent", frame, {kind: "unknown", raw: frame}));
-        return this.transport.write(frame);
     }
 
     /** Every frame in either direction, for the console's log. */
@@ -644,6 +674,10 @@ export default class Machine {
         this.retriedInPro = true;
         // Byte-exact, confirmed on hardware: "00000000" is PRO, "91327856" EASY.
         await this.send(buildType2(11511, ascii("00000000")));
+        // The brew opens with a handshake, and without this pause that
+        // handshake would tread on the mode frame -- the one unpaced seam in
+        // the whole sequence, at the position where a lost frame costs most.
+        await this.gap();
         await this.brewOnce(recipe);
     }
 
@@ -667,8 +701,11 @@ export default class Machine {
 
     /** Stop a brew and put the machine back on its home screen. */
     async cancelBrew(): Promise<void> {
-        await this.send(buildType1(40519, [1]));
-        await this.send(buildType1(8022));
+        // Paced, and through `sendPaced` rather than two bare writes: the
+        // pacing is what a burst of Write Without Response needs to survive at
+        // all, and going through it is also what takes the radio away from a
+        // brew sequence that may still be mid-flight.
+        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
         this.setPhase({name: "cancelled"});
     }
 

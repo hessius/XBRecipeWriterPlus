@@ -48,12 +48,19 @@ const someInfo = {
     grindSize: 60, mode: "PRO" as const
 };
 
+// The console is written for a link that is already up, but the link is
+// exactly what fails in the sessions the console exists for -- so its own
+// state is a test fixture, not a constant.
+let mockStatus = "connected";
+const mockConnect = jest.fn();
+const machineLink = () => ({
+    machine: mockMachine, status: mockStatus, error: null, remembered: "AA:BB",
+    connect: mockConnect, forget: jest.fn()
+});
 jest.mock("@/hooks/useMachine", () => ({
     __esModule: true,
-    default: () => ({machine: mockMachine, status: "connected", error: null, remembered: "AA:BB",
-                     connect: jest.fn(), forget: jest.fn()}),
-    useMachine: () => ({machine: mockMachine, status: "connected", error: null, remembered: "AA:BB",
-                        connect: jest.fn(), forget: jest.fn()})
+    default: () => machineLink(),
+    useMachine: () => machineLink()
 }));
 
 // `useSetting` reaches for the shared SQLite-backed store, which cannot open
@@ -96,6 +103,29 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
         mockMachine.linkHistory.length = 0;
+        mockStatus = "connected";
+        mockConnect.mockClear();
+    });
+
+    it("offers to connect when the link is down", async () => {
+        // The console is the screen a user is sent to when the link is the
+        // problem, and it had no way to make one: every other screen owned a
+        // connect control and this one assumed the link was already up, so a
+        // disconnected user could read a log and send nothing.
+        mockStatus = "disconnected";
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByRole("button", {name: /connect/i}));
+
+        expect(mockConnect).toHaveBeenCalled();
+    });
+
+    it("does not offer to connect when the link is already up", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        expect(screen.queryByRole("button", {name: /^connect/i})).toBeNull();
     });
 
     afterEach(() => {

@@ -89,6 +89,31 @@ describe("writing a frame", () => {
         expect(mtu).toBeGreaterThanOrEqual(64);
     });
 
+    it("records what the MTU negotiation actually produced", async () => {
+        // It was swallowed entirely: a stack that refused looked exactly like a
+        // stack that granted 247, and the one symptom -- long frames silently
+        // not arriving -- is the hardest kind of failure to reason about after
+        // the fact. The link log is where this has to show up.
+        (BleManager.requestMTU as jest.Mock).mockResolvedValueOnce(185);
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(transport.channels.join(" ")).toContain("185");
+        expect(transport.frameBudget).toBe(182);
+    });
+
+    it("says so in the link log when the MTU request is refused", async () => {
+        (BleManager.requestMTU as jest.Mock).mockRejectedValueOnce(new Error("nope"));
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(transport.channels.join(" ")).toMatch(/MTU refused/i);
+        // The default every LE stack must carry, minus the ATT header.
+        expect(transport.frameBudget).toBe(20);
+    });
+
     it("connects even when the machine refuses a bigger MTU", async () => {
         // Not every stack supports the request, and a refusal is not a reason
         // to fail the connection — most frames fit in 20 bytes regardless.

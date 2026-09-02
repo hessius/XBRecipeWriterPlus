@@ -21,6 +21,12 @@ export const MACHINE_NAME_PREFIX = "XBLOOM";
  */
 export const MACHINE_MTU = 247;
 
+/** The MTU every Bluetooth LE stack must support, and so the floor. */
+export const DEFAULT_MTU = 23;
+
+/** The ATT header a write carries, which does not count towards the payload. */
+export const ATT_HEADER_BYTES = 3;
+
 /** How long to scan before giving up on finding a machine. */
 export const SCAN_SECONDS = 10;
 

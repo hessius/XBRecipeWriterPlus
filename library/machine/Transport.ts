@@ -5,6 +5,8 @@ import BleManager, {
 } from "react-native-ble-manager";
 
 import {
+    ATT_HEADER_BYTES,
+    DEFAULT_MTU,
     MACHINE_MTU,
     MACHINE_NAME_PREFIX,
     MACHINE_NOTIFY_CHARACTERISTIC,
@@ -42,6 +44,8 @@ export interface MachineTransport {
     isConnected(): boolean;
     /** What happened to each notify subscription at the last connect. */
     channels?: string[];
+    /** The longest frame the link will carry, if the transport knows. */
+    frameBudget?: number;
     /**
      * Every service and characteristic the machine offers, one line each.
      *
@@ -105,6 +109,14 @@ export class BleTransport implements MachineTransport {
      * channel the machine simply never uses.
      */
     public channels: string[] = [];
+
+    /**
+     * The longest frame the link will carry, once the MTU is settled.
+     *
+     * Assume the floor until a negotiation says otherwise, so a frame is never
+     * judged against a budget we have not actually been granted.
+     */
+    public frameBudget = DEFAULT_MTU - ATT_HEADER_BYTES;
 
     private async start(): Promise<void> {
         if (this.started) return;
@@ -184,11 +196,34 @@ export class BleTransport implements MachineTransport {
         }
         const services = await BleManager.retrieveServices(id);
         await this.listenToEverythingThatTalks(id, services);
-        // Best effort. A stack that refuses still carries every frame short
-        // enough to fit the default, which is why the failure is swallowed
-        // rather than surfaced.
-        await BleManager.requestMTU(id, MACHINE_MTU).catch(() => 0);
+        // Best effort: a stack that refuses still carries every frame short
+        // enough to fit the default, so this is not a reason to fail the
+        // connection. It is a reason to say what happened. Swallowed entirely,
+        // a refusal looked exactly like a grant, and the only symptom would
+        // have been long frames quietly not arriving.
+        await this.negotiateMtu(id);
         this.deviceId = id;
+    }
+
+    /**
+     * Ask for a bigger MTU, and record what came back.
+     *
+     * The budget is the MTU minus the three-byte ATT header. 23 is the MTU
+     * every LE stack must support, so 20 is what a refusal leaves us with --
+     * enough for a command, not enough for a recipe blob.
+     */
+    private async negotiateMtu(id: string): Promise<void> {
+        try {
+            const granted = await BleManager.requestMTU(id, MACHINE_MTU);
+            const mtu = typeof granted === "number" && granted > 0 ? granted : DEFAULT_MTU;
+            this.frameBudget = mtu - ATT_HEADER_BYTES;
+            this.channels.push(`MTU ${mtu}, so ${this.frameBudget} bytes a frame`);
+        } catch (e) {
+            this.frameBudget = DEFAULT_MTU - ATT_HEADER_BYTES;
+            this.channels.push(
+                `MTU refused (${(e as Error).message}) — ${this.frameBudget} bytes a frame`
+            );
+        }
     }
 
     /**

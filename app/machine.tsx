@@ -312,7 +312,7 @@ function CommandRow({command, onSend}: CommandRowProps) {
  * so the session can be pasted into a bug report.
  */
 export default function MachineConsole() {
-    const {machine} = useMachine();
+    const {machine, status, connect} = useMachine();
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
     const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding");
@@ -442,6 +442,21 @@ export default function MachineConsole() {
                     <Text accessibilityLabel="Telemetry summary" fontSize={12} color={palette.dim}>
                         {telemetryText(telemetry)}
                     </Text>
+                    {status !== "connected" && (
+                        // The console is where a user is sent when the link is
+                        // the problem, so it is the last screen that should
+                        // assume the link is already up.
+                        <Button size="$3" marginTop="$2" accessibilityRole="button"
+                                accessibilityLabel={status === "connecting"
+                                    ? "Connecting to the machine"
+                                    : "Connect to the machine"}
+                                disabled={status === "connecting"}
+                                borderColor={palette.line} borderWidth={1}
+                                backgroundColor={palette.raised} color={palette.text}
+                                onPress={() => void connect()}>
+                            {status === "connecting" ? "Connecting…" : "Connect"}
+                        </Button>
+                    )}
                 </YStack>
 
                 <SettingsSection title="Session">
@@ -452,7 +467,7 @@ export default function MachineConsole() {
                         onChange={setConfirmations}/>
                     <SettingsToggleRow
                         label="Show telemetry"
-                        description="Log the continuous weight, tank-volume and info heartbeat streams instead of summarising them in place."
+                        description="Log the weight and tank-volume streams, and the info blob, instead of summarising them in place. The info blob is not a stream: it answers when asked, inside a fresh session."
                         value={showTelemetry}
                         onChange={changeShowTelemetry}/>
                     <SettingsChoiceRow

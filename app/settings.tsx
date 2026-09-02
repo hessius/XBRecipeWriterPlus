@@ -17,7 +17,7 @@ import {useBackup} from "@/hooks/useBackup";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
-import type {Settings, SettingKey} from "@/library/Settings";
+import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -58,10 +58,6 @@ export default function SettingsScreen({settings}: Props) {
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
     const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
-    // Not shown as a row on this screen -- the machine link is managed from the
-    // console and the editor's BREW button. Read here anyway, because a backup
-    // carries every preference and this is one.
-    const [machineDeviceId] = useSetting("machineDeviceId", settings);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
     const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
         useSetting("machineConsoleAcknowledged", settings);
@@ -86,10 +82,13 @@ export default function SettingsScreen({settings}: Props) {
     // without being thought about here. A backup that says it carries your
     // settings and then quietly drops one is worse than a backup that carries
     // none: the user has no way to tell which preference did not survive.
-    function settingsSnapshot(): Record<SettingKey, unknown> {
+    // `NOT_IN_BACKUP` is subtracted from the key type rather than just left out
+    // of the object, so a key excluded on purpose still cannot be confused with
+    // a key someone forgot.
+    function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
         return {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
-            machineDeviceId, firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
+            firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart
         };
     }

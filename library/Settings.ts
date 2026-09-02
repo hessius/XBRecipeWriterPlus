@@ -106,6 +106,24 @@ export const DEFAULTS = {
 export type SettingKey = keyof typeof DEFAULTS;
 
 /**
+ * Preferences a backup deliberately does not carry.
+ *
+ * `machineDeviceId` is a Bluetooth peripheral identifier, and on iOS the
+ * operating system mints a different one for every phone that has ever seen
+ * the machine. It is not a fact about the machine, it is a fact about this
+ * phone's relationship with it. Restored onto a second phone it names nothing
+ * that phone's radio has ever issued, so the app would sit reaching for a
+ * machine that, as far as it is concerned, does not exist -- and it would have
+ * displaced whatever pairing that phone had made for itself.
+ *
+ * Named here rather than simply omitted from the snapshot so that the
+ * exhaustiveness test still holds every other key to account: a key is either
+ * in a backup or on this list, never quietly missing from both.
+ */
+export type BackupExcluded = "machineDeviceId";
+export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId"];
+
+/**
  * Widen a literal type (as produced by `DEFAULTS`'s `as const`) back to its
  * base primitive type, so `set()` accepts any `boolean`/`number`/`string`
  * rather than only the exact literal default value.

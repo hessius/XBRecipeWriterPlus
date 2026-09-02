@@ -2,6 +2,7 @@ import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
+import {buildType1} from "@/library/machine/protocol";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -168,6 +169,117 @@ describe("brewing", () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+
+    it("abandons the rest of a brew sequence when the brew is cancelled", async () => {
+        // A cancel arriving mid-sequence used to change the phase and nothing
+        // else: the loop that was walking the brew frames kept walking, so the
+        // stop went out and then the recipe and the commit followed it. The
+        // machine would be told to go home and then told to grind.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport);
+            const connecting = machine.connect("AA:BB");
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS + 10);
+            await connecting;
+            transport.emit(status(0x01));
+            transport.written = [];
+
+            const brewing = machine.brew(brewable());
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS);
+            expect(brewFrames(transport)).toEqual([8100, 8102]);
+
+            const cancelling = machine.cancelBrew();
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS * 4);
+            await cancelling;
+            await brewing;
+
+            // The stop and the home frame, and nothing of the recipe after them.
+            expect(brewFrames(transport)).toEqual([8100, 8102, 40519, 8022]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("leaves a gap between the two frames of a cancel", async () => {
+        // Unpaced they are exactly the burst that the brew sequence had to be
+        // paced to survive -- and this is the pair whose job is to stop a
+        // spinning burr.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport);
+            const connecting = machine.connect("AA:BB");
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS + 10);
+            await connecting;
+            transport.written = [];
+
+            const cancelling = machine.cancelBrew();
+            await jest.advanceTimersByTimeAsync(0);
+            expect(brewFrames(transport)).toEqual([40519]);
+
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS);
+            expect(brewFrames(transport)).toEqual([40519, 8022]);
+            await cancelling;
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("leaves a gap between the mode switch and the brew that follows it", async () => {
+        // The retry in PRO sends the mode frame and then went straight into the
+        // brew's own opening handshake with no pause at all -- the one place
+        // the whole sequence stopped being paced, and the first frame of a
+        // sequence is the one that must not be lost.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport);
+            const connecting = machine.connect("AA:BB");
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS + 10);
+            await connecting;
+            transport.emit(status(0x01));
+            transport.written = [];
+
+            const retrying = machine.switchToProAndRetry(brewable());
+            await jest.advanceTimersByTimeAsync(0);
+            expect(brewFrames(transport)).toEqual([11511]);
+
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS);
+            expect(brewFrames(transport)).toEqual([11511, 8100]);
+
+            await jest.advanceTimersByTimeAsync(FRAME_GAP_MS * 4);
+            await retrying;
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("refuses a frame the negotiated link is too narrow to carry", async () => {
+        // The Android case behind the swallowed MTU request. At the 23-byte
+        // floor a recipe blob does not fit, and a write that is silently
+        // truncated arrives as a brew that never starts and a machine that
+        // says nothing. Better to fail where the reason is still legible.
+        const {transport, machine} = await readyMachine();
+        transport.frameBudget = 20;
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/too long|narrow|MTU/i);
+    });
+
+    it("does not log a frame as sent when the radio refused to carry it", async () => {
+        // The log is the only account of what reached the machine. A line that
+        // says a frame went out when the write threw turns the one instrument
+        // we have into a source of false evidence.
+        const {transport, machine} = await readyMachine();
+        const sent: number[] = [];
+        machine.onFrame((direction, _frame, decoded) => {
+            if (direction === "sent") sent.push((decoded as {code?: number}).code ?? -1);
+        });
+        transport.failWriteOf = {code: 8022, reason: "radio busy"};
+
+        await expect(machine.send(buildType1(8022))).rejects.toThrow("radio busy");
+        expect(sent).toEqual([]);
     });
 
     it("refuses to send to a machine that has not said how it is doing", async () => {
