@@ -190,3 +190,26 @@ describe("the brew screen", () => {
         expect(screen.queryByLabelText("Switch to PRO mode and try again")).toBeNull();
     });
 });
+
+describe("a brew that was refused before it started", () => {
+    beforeEach(() => {
+        mockBrew.mockClear();
+        mockPhase = {name: "failed", reason: "blocked", detail: "The machine is busy. Wait for it to finish."};
+        mockCanOfferPro = false;
+    });
+
+    it("says what the machine said, rather than a phrase with no copy behind it", async () => {
+        await renderWithProviders(<Brew/>);
+
+        expect(screen.getByText("The machine is busy. Wait for it to finish.")).toBeTruthy();
+    });
+
+    it("offers another go", async () => {
+        await renderWithProviders(<Brew/>);
+        mockBrew.mockClear();
+
+        await fireEvent.press(screen.getByLabelText("Try again"));
+
+        expect(mockBrew).toHaveBeenCalled();
+    });
+});

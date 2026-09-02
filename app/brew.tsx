@@ -78,8 +78,11 @@ export default function Brew() {
     }, [phase.name, firstBrewDone, setFirstBrewDone]);
 
     const running = RUNNING.has(phase.name);
+    // A failure the machine reported has copy of its own; one the app decided
+    // on arrives as a sentence in `detail`, and falling back to it is what
+    // stops a refused brew from displaying nothing at all.
     const headline = phase.name === "failed"
-        ? FAILURE_COPY[phase.reason]
+        ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
         : PHASE_COPY[phase.name];
     const offerPro = phase.name === "failed"
         && phase.reason === "rejected"

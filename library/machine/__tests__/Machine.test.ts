@@ -144,6 +144,30 @@ describe("connecting", () => {
             .toMatch(/handshake.*radio not ready/i);
     });
 
+    it("repeats a refusal that came with an explanation", async () => {
+        // The guess below is for silence. When the radio has actually said
+        // what went wrong, replacing that with a guess throws away the only
+        // true thing anyone knows about the failure.
+        const transport = new FakeTransport();
+        transport.failConnect = new Error("Connection was cancelled by the peripheral.");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects
+            .toThrow("Connection was cancelled by the peripheral.");
+    });
+
+    it("treats a failure with no message at all as silence", async () => {
+        // What the phone actually produced: an error whose `message` was not a
+        // string, which the log dutifully rendered as the word "undefined".
+        const transport = new FakeTransport();
+        transport.failConnect = {} as Error;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow(/already in use/i);
+        expect(machine.linkHistory.map((e) => e.text).join(" "))
+            .toContain("refused — no reason given");
+    });
+
     it("still guesses at the machine when the failure says nothing", async () => {
         const transport = new FakeTransport();
         transport.failConnect = new Error("");
@@ -160,6 +184,21 @@ describe("brewing", () => {
 
         await expect(machine.brew(brewable())).rejects.toThrow(/busy|already brewing/i);
         expect(brewFrames(transport)).toEqual([]);
+    });
+
+    it("does not leave the screen saying everything is fine", async () => {
+        // Seen on hardware: the machine beeped, the recipe never went, and the
+        // brew screen sat on "Ready when you are." with nothing to press. A
+        // refusal that happens before the first frame used to throw without
+        // touching the phase, so the one place the user is looking never heard
+        // that anything had gone wrong.
+        const {transport, machine} = await readyMachine();
+        transport.emit(status(0x10)); // brewing
+
+        await machine.brew(brewable()).catch(() => {});
+
+        expect(machine.phase.name).toBe("failed");
+        expect(machine.phase).toMatchObject({detail: expect.stringMatching(/busy/i)});
     });
 
     it("refuses to send when the tank is low", async () => {

@@ -39,7 +39,13 @@ export type FrameListener = (
 
 /** Why a brew ended badly. Each has its own copy on the brew route. */
 export type BrewFailure =
-    | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected";
+    | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected"
+    /**
+     * Refused before a single frame went out — a low tank, a busy machine, a
+     * recipe the card format will not carry. The reason is in `detail`, because
+     * it is already a sentence and there is no fixed set of them.
+     */
+    | "blocked";
 
 /**
  * Where a brew has got to.
@@ -234,14 +240,22 @@ export default class Machine {
         try {
             await this.transport.connect(id);
         } catch (e) {
-            const message = (e as Error).message;
-            this.note(`refused — ${message === "" ? "no reason given" : message}`);
+            // Not every failure arrives as an Error: the one that prompted
+            // this had no `message` at all, which the log rendered as the word
+            // "undefined". Anything that is not a real sentence is silence.
+            const said = (e as Error | undefined)?.message;
+            const reason = typeof said === "string" ? said.trim() : "";
+            this.note(`refused — ${reason === "" ? "no reason given" : reason}`);
             // A radio that is off, unauthorised or still coming up is a fact
             // about the phone, and saying anything else sends the user to the
             // machine to fix something that is not there.
             if (e instanceof RadioUnavailableError) throw e;
-            // Otherwise: the machine permits one link at a time and does not
-            // reject a second one so much as ignore it, so a failure with
+            // When the radio has said what went wrong, that is the only true
+            // thing anyone knows about the failure; do not trade it for a
+            // guess.
+            if (reason !== "") throw e instanceof Error ? e : new Error(reason);
+            // Silence, then. The machine permits one link at a time and does
+            // not reject a second one so much as ignore it, so a failure with
             // nothing to say is almost always the official app holding the
             // slot. Guess that, rather than implying the hardware is at fault.
             throw new Error("The machine is already in use by another app.");
@@ -586,7 +600,14 @@ export default class Machine {
 
     private async brewOnce(recipe: Recipe): Promise<void> {
         const blocked = this.brewBlockReason(recipe);
-        if (blocked !== null) throw new Error(blocked);
+        if (blocked !== null) {
+            // The phase as well as the throw. The caller gets an exception to
+            // handle, but the brew screen watches the phase, and a refusal that
+            // left the phase at `idle` sat there saying "Ready when you are."
+            // with nothing to press.
+            this.setPhase({name: "failed", reason: "blocked", detail: blocked});
+            throw new Error(blocked);
+        }
 
         this.pourCount = recipe.pours.length;
         this.setPhase({name: "sending"});

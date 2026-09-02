@@ -328,6 +328,17 @@ describe("waiting for the radio", () => {
         expect(BleManager.connect).toHaveBeenCalledWith("AA:BB:CC");
     });
 
+    it("does not wait out an adapter that is on its way off", async () => {
+        // Waiting can only help a radio that is coming up. One going down will
+        // never reach "on", so waiting five seconds to say so is five seconds
+        // of the user watching nothing happen before an unhelpful answer.
+        (BleManager.checkState as jest.Mock).mockResolvedValue("turning_off");
+        const transport = new BleTransport();
+
+        await expect(transport.connect("AA:BB:CC")).rejects.toThrow(/switched off/i);
+        expect(BleManager.connect).not.toHaveBeenCalled();
+    });
+
     it("connects straight away when the adapter is already on", async () => {
         // The common case, and it must not pay for the fix above.
         (BleManager.checkState as jest.Mock).mockResolvedValue("on");

@@ -76,7 +76,6 @@ function sameUuid(a: string, b: string): boolean {
     return trim(a) === trim(b);
 }
 
-/** The recognisable part of a UUID, for a log line a person has to read. */
 /**
  * Throw, with the truth, for a radio that will not become usable by waiting.
  *
@@ -86,7 +85,9 @@ function sameUuid(a: string, b: string): boolean {
  * on the phone.
  */
 function refuseUnusableRadio(state: BleState): void {
-    if (state === BleState.Off) {
+    // TurningOff is on its way to Off and will never reach On, so waiting for
+    // it is waiting for something that is not coming.
+    if (state === BleState.Off || state === BleState.TurningOff) {
         throw new RadioUnavailableError("Bluetooth is switched off. Turn it on and try again.");
     }
     if (state === BleState.Unauthorized) {
@@ -99,6 +100,7 @@ function refuseUnusableRadio(state: BleState): void {
     }
 }
 
+/** The recognisable part of a UUID, for a log line a person has to read. */
 function shortUuid(uuid: string): string {
     const match = /^0000([0-9a-f]{4})-/i.exec(uuid);
     return (match === null ? uuid : match[1]).toLowerCase();

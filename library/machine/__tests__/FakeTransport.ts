@@ -32,6 +32,17 @@ export function machineInfoFrame(
  * `transport.sent` as a list of command codes rather than as hex. Replays
  * frames on demand, so a test can script the machine's side of a brew.
  */
+/**
+ * A refusal as the radio actually delivers one.
+ *
+ * The machine does not reject a second link so much as ignore it, so the
+ * failure arrives with nothing to say. A fake that invents a message hides the
+ * only case the copy in `Machine.connect` exists for.
+ */
+function refusal(): Error {
+    return new Error("");
+}
+
 export class FakeTransport implements MachineTransport {
     /** Every frame written, as raw bytes. */
     public written: Uint8Array[] = [];
@@ -100,10 +111,10 @@ export class FakeTransport implements MachineTransport {
         if (this.failConnect !== null) throw this.failConnect;
         if (this.refuseNextConnections > 0) {
             this.refuseNextConnections--;
-            throw new Error("connection failed");
+            throw refusal();
         }
         if (this.refuseConnection || this.refuseIds.includes(id)) {
-            throw new Error("connection failed");
+            throw refusal();
         }
         this.connectedTo = id;
     }
