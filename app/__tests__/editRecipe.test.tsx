@@ -900,3 +900,43 @@ describe("grind-too-fine banner", () => {
         expect(screen.getByLabelText("Grind size, 60 French press")).toBeTruthy();
     });
 });
+
+/**
+ * Pretend a machine has been paired.
+ *
+ * The plan's sketch reaches for `sharedSettings()`, but this file mocks
+ * `@/hooks/useSetting` wholesale — the store the editor reads is `mockSettings`
+ * — so the honest helper writes there instead. `beforeEach` already resets it,
+ * which leaves `machineDeviceId` unset and falling back to its `""` default,
+ * so no separate clear is needed.
+ */
+function rememberMachine(id: string) {
+    mockSettings = {...mockSettings, machineDeviceId: id};
+}
+
+describe("the action bar", () => {
+    it("offers no brew action until a machine has been remembered", async () => {
+        // Today that is every user. A dead button on every recipe, for a
+        // machine nobody in the room owns, is worse than no button.
+        await renderEditor();
+        expect(screen.queryByLabelText("Brew")).toBeNull();
+        expect(screen.getByLabelText("Write card")).toBeTruthy();
+    });
+
+    it("offers brew once a machine has been remembered", async () => {
+        rememberMachine("AA:BB");
+        await renderEditor();
+        expect(screen.getByLabelText("Brew")).toBeTruthy();
+        expect(screen.getByLabelText("Write card")).toBeTruthy();
+    });
+
+    it("refuses to brew a recipe the machine would reject", async () => {
+        rememberMachine("AA:BB");
+        // The fixture's pours are balanced for an 18 g dose; raising the dose
+        // without rebalancing them is the mismatch the machine rejects.
+        await renderEditor({dosage: 30});
+
+        const brew = screen.getByLabelText("Brew");
+        expect(brew.props.accessibilityState.disabled).toBe(true);
+    });
+});

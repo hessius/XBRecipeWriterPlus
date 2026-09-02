@@ -1,4 +1,4 @@
-import {useLocalSearchParams, useNavigation} from "expo-router";
+import {router, useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -565,6 +565,10 @@ export function stageScrollTarget(deckY: number, tileY: number, stickyHeight: nu
 
 type ActionBarProps = {
     accent: string;
+    /** Only true once a machine has been remembered. */
+    canBrewAtAll: boolean;
+    canBrew: boolean;
+    onBrew: () => void;
     canWrite: boolean;
     canSave: boolean;
     onWrite: () => void;
@@ -585,7 +589,7 @@ type ActionBarProps = {
 /** How far the bar sits into the home indicator's inset. */
 const ACTION_BAR_SINK = 5;
 
-function ActionBar({accent, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
+function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
     return (
@@ -602,18 +606,34 @@ function ActionBar({accent, canWrite, canSave, onWrite, onSave, onHeight}: Actio
                 paddingBottom={Math.max(insets.bottom - ACTION_BAR_SINK, 0)}
                 backgroundColor={palette.base}
                 onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
+            {canBrewAtAll && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Brew"
+                           accessibilityState={{disabled: !canBrew}}
+                           onPress={() => canBrew && onBrew()}
+                           style={{flex: 2}}>
+                    <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                            backgroundColor={canBrew ? accent : palette.raised}>
+                        <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                       color={canBrew ? palette.base : palette.dim}>
+                            BREW
+                        </DotMatrixText>
+                    </YStack>
+                </Pressable>
+            )}
             <Pressable accessibilityRole="button" accessibilityLabel="Write card"
                        accessibilityState={{disabled: !canWrite}}
                        onPress={() => canWrite && onWrite()}
-                       style={{flex: 2}}>
+                       style={{flex: canBrewAtAll ? 1 : 2}}>
                 {/* Disabled by swapping the fill, not by dropping the group's
                     opacity: opacity multiplies with whatever is beneath and
                     takes the label down with it. A flat raised tile keeps the
                     word legible while plainly not being the live accent. */}
                 <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                        backgroundColor={canWrite ? accent : palette.raised}>
+                        backgroundColor={canWrite && !canBrewAtAll ? accent : palette.raised}
+                        borderWidth={canBrewAtAll ? 1 : 0}
+                        borderColor={palette.line}>
                     <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={canWrite ? palette.base : palette.dim}>
+                                   color={canWrite && !canBrewAtAll ? palette.base : palette.text}>
                         WRITE
                     </DotMatrixText>
                 </YStack>
@@ -658,6 +678,7 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
+    const [rememberedMachine] = useSetting("machineDeviceId");
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
@@ -797,6 +818,20 @@ export default function EditRecipe() {
             return;
         }
         navigation.goBack();
+    }
+
+    async function onBrewPress() {
+        const currentRecipe = recipe;
+        if (!currentRecipe) return;
+        // The same persist-then-act shape as WRITE and Share: commit anything
+        // typed but not blurred, save the recipe so the brew screen reads a
+        // stored row rather than a half-typed one, then hand it the snapshot.
+        await flushDrafts();
+        persistRecipe();
+        router.push({
+            pathname: "/brew",
+            params:   {recipeJSON: JSON.stringify(currentRecipe)}
+        });
     }
 
     async function onSharePress() {
@@ -942,6 +977,9 @@ export default function EditRecipe() {
             </ScrollView>
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
+                       canBrewAtAll={rememberedMachine !== ""}
+                       canBrew={canWrite}
+                       onBrew={onBrewPress}
                        onWrite={async () => { await flushDrafts(); await writeCard(recipe); }}
                        onSave={async () => {
                            await flushDrafts();

@@ -26,19 +26,19 @@
     "@tamagui/shorthands": "^2.7.7",
     "@tamagui/themes": "^2.7.7",
     "buffer": "^6.0.3",
-    "expo": "~57.0.18",
+    "expo": "~57.0.19",
     "expo-application": "~57.0.2",
-    "expo-build-properties": "~57.0.15",
+    "expo-build-properties": "~57.0.16",
     "expo-clipboard": "~57.0.1",
-    "expo-constants": "~57.0.16",
-    "expo-dev-client": "~57.0.16",
+    "expo-constants": "~57.0.17",
+    "expo-dev-client": "~57.0.18",
     "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.6",
-    "expo-font": "~57.0.2",
-    "expo-linking": "~57.0.8",
-    "expo-router": "~57.0.17",
+    "expo-font": "~57.0.3",
+    "expo-linking": "~57.0.9",
+    "expo-router": "~57.0.18",
     "expo-share-intent": "^8.0.1",
-    "expo-sharing": "~57.0.16",
+    "expo-sharing": "~57.0.17",
     "expo-splash-screen": "~57.0.8",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
@@ -48,6 +48,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
+    "react-native-ble-manager": "^12.5.1",
     "react-native-nfc-manager": "^3.17.2",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
@@ -79,7 +80,8 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "react-native-nfc-manager"
+          "react-native-nfc-manager",
+          "react-native-ble-manager"
         ],
         "listUnknownPackages": false
       }

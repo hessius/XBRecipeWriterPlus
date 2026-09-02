@@ -4,6 +4,7 @@ import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
+import MachineSection from "@/components/MachineSection";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import ScreenHeader from "@/components/ScreenHeader";
 import SettingsActionRow from "@/components/SettingsActionRow";
@@ -16,7 +17,7 @@ import {useBackup} from "@/hooks/useBackup";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
-import type {Settings, SettingKey} from "@/library/Settings";
+import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -56,6 +57,15 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
+    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
+    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
+    const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
+        useSetting("machineConsoleAcknowledged", settings);
+    const [machineConsoleConfirmations, setMachineConsoleConfirmations] =
+        useSetting("machineConsoleConfirmations", settings);
+    // Shown as a row inside MachineSection, not here. Read anyway, because a
+    // backup carries every preference and this is one.
+    const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -72,8 +82,15 @@ export default function SettingsScreen({settings}: Props) {
     // without being thought about here. A backup that says it carries your
     // settings and then quietly drops one is worse than a backup that carries
     // none: the user has no way to tell which preference did not survive.
-    function settingsSnapshot(): Record<SettingKey, unknown> {
-        return {showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit};
+    // `NOT_IN_BACKUP` is subtracted from the key type rather than just left out
+    // of the object, so a key excluded on purpose still cannot be confused with
+    // a key someone forgot.
+    function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
+        return {
+            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
+            firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
+            machineAutoStart
+        };
     }
 
     async function onBackUp() {
@@ -109,6 +126,21 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (incoming.temperatureUnit === "C" || incoming.temperatureUnit === "F") {
             setTemperatureUnit(incoming.temperatureUnit);
+        }
+        if (typeof incoming.firstBrewDone === "boolean") {
+            setFirstBrewDone(incoming.firstBrewDone);
+        }
+        if (typeof incoming.machineConsoleAcknowledged === "boolean") {
+            setMachineConsoleAcknowledged(incoming.machineConsoleAcknowledged);
+        }
+        if (typeof incoming.machineConsoleConfirmations === "boolean") {
+            setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
+        }
+        if (typeof incoming.machineAutoStart === "boolean") {
+            setMachineAutoStart(incoming.machineAutoStart);
+        }
+        if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
+            setTeaSteepEncoding(incoming.teaSteepEncoding);
         }
     }
 
@@ -205,6 +237,8 @@ export default function SettingsScreen({settings}: Props) {
                         options={TEMPERATURE_OPTIONS}
                         onChange={(value) => setTemperatureUnit(asTemperatureUnit(value))}/>
                 </SettingsSection>
+
+                <MachineSection settings={settings}/>
 
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"

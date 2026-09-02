@@ -6,7 +6,7 @@ import type {ReactTestRendererJSON} from "react-test-renderer";
 import SettingsScreen from "@/app/settings";
 import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
-import {DEFAULTS, Settings, type SettingsStorage} from "@/library/Settings";
+import {DEFAULTS, NOT_IN_BACKUP, Settings, type SettingKey, type SettingsStorage} from "@/library/Settings";
 import {renderWithProviders} from "@/test-utils/render";
 
 /**
@@ -67,6 +67,23 @@ jest.mock("@/hooks/useRecipeLibrary", () => ({
         applyRestore:    mockApplyRestore
     })
 }));
+
+// The machine section (added by the BLE brew work) pulls in `useMachine`, which
+// transitively imports the BLE transport — a native module that throws at load
+// under Jest. This screen only needs the section to render in its unpaired
+// state, so the hook is stubbed here the same way the library and backup hooks
+// above are, keeping the settings screen off the radio entirely.
+jest.mock("@/hooks/useMachine", () => {
+    const link = {
+        machine:    {info: null},
+        status:     "disconnected",
+        error:      null,
+        remembered: "",
+        connect:    jest.fn(),
+        forget:     jest.fn()
+    };
+    return {__esModule: true, default: () => link, useMachine: () => link};
+});
 
 function recipeNamed(name: string, uuid: string): Recipe {
     const recipe = new Recipe();
@@ -264,7 +281,51 @@ describe("SettingsScreen", () => {
         // silently absent from every backup while the tests stayed green. A
         // test that names the keys itself would have gone on passing too.
         const snapshot = mockExportBackup.mock.calls[0][1] as Record<string, unknown>;
-        expect(Object.keys(snapshot).sort()).toEqual(Object.keys(DEFAULTS).sort());
+        expect(Object.keys(snapshot).sort()).toEqual(
+            Object.keys(DEFAULTS).filter(key => !NOT_IN_BACKUP.includes(key as SettingKey)).sort()
+        );
+    });
+
+    it("leaves the paired machine out of a backup rather than carrying it to another phone", async () => {
+        // A BLE peripheral identifier is minted by the operating system for one
+        // phone. Carried to a second phone it does not name anything, and the
+        // second phone would sit trying to reach a machine by an identifier its
+        // own radio has never issued. So this key is excluded on purpose, and
+        // named in NOT_IN_BACKUP so the exhaustiveness test above still holds
+        // every other key to account.
+        mockLibraryRecipes = [recipeNamed("Ethiopia", "u1")];
+        mockExportBackup.mockResolvedValue({ok: true});
+        const storage = memoryStorage();
+        const settings = new Settings(storage);
+        settings.set("machineDeviceId", "a-peripheral-on-this-phone-only");
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
+
+        const snapshot = mockExportBackup.mock.calls[0][1] as Record<string, unknown>;
+        expect(snapshot).not.toHaveProperty("machineDeviceId");
+    });
+
+    it("ignores a machine identifier a backup carries anyway", async () => {
+        // Older backups, or a hand-edited file. The pairing on this phone is
+        // what the radio actually knows about, and a stranger's identifier
+        // must not displace it.
+        const storage = memoryStorage();
+        const settings = new Settings(storage);
+        settings.set("machineDeviceId", "mine");
+        mockPickBackup.mockResolvedValue(backupOf([recipeNamed("A", "u1")], {machineDeviceId: "theirs"}));
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(new Settings(storage).get("machineDeviceId")).toBe("mine");
     });
 
     it("restores every setting a backup carries, not a subset of them", async () => {
@@ -273,9 +334,9 @@ describe("SettingsScreen", () => {
         // one moment the user expects it to be safe.
         const storage = memoryStorage();
         const all = Object.fromEntries(
-            Object.entries(DEFAULTS).map(([key, value]) => [
-                key, typeof value === "boolean" ? !value : value
-            ])
+            Object.entries(DEFAULTS)
+                .filter(([key]) => !NOT_IN_BACKUP.includes(key as SettingKey))
+                .map(([key, value]) => [key, typeof value === "boolean" ? !value : value])
         );
         mockPickBackup.mockResolvedValue(backupOf([recipeNamed("A", "u1")], all));
         mockApplyRestore.mockReturnValue({status: "restored", added: 1});
@@ -289,7 +350,8 @@ describe("SettingsScreen", () => {
         await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
 
         const restored = new Settings(storage);
-        for (const key of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
+        for (const key of Object.keys(DEFAULTS) as SettingKey[]) {
+            if (NOT_IN_BACKUP.includes(key)) continue;
             expect({[key]: restored.get(key)}).toEqual({[key]: all[key]});
         }
     });

@@ -3,7 +3,7 @@ import {AccessibilityInfo} from "react-native";
 import {act, screen, fireEvent, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
-import HomeScreen from "@/app/index";
+import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
 import Recipe from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -792,6 +792,32 @@ describe("HomeScreen, opening one editor at a time", () => {
         });
 
         expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops refusing on its own, so a push that never lands cannot wedge the library", async () => {
+        // The refusal used to be cleared in exactly one place: this screen
+        // regaining focus. If the push never opened anything -- the reported
+        // symptom, a scan that looked like it worked and showed nothing --
+        // focus was never lost, so it was never regained, so the flag stayed
+        // set and every later scan returned silently. A refusal whose only
+        // release is an event that may never arrive is a wedge waiting to
+        // happen, whatever set it.
+        jest.useFakeTimers();
+        try {
+            await renderHome({recipes: [named("Ethiopia")]});
+            const card = (await screen.findAllByTestId("recipe-card"))[0];
+
+            await act(async () => { fireEvent.press(card); });
+            expect(mockPush).toHaveBeenCalledTimes(1);
+
+            // No focus event: the editor never appeared.
+            await act(async () => { jest.advanceTimersByTime(EDITOR_PUSH_GUARD_MS + 100); });
+            await act(async () => { fireEvent.press(card); });
+
+            expect(mockPush).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it("opens the editor again once the user has come back from it", async () => {

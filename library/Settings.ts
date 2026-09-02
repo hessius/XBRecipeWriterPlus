@@ -43,10 +43,85 @@ export const DEFAULTS = {
      * and the ratio is dimensionless, so a volume shown in fluid ounces would
      * make the ratio beside it correspond to nothing on screen.
      */
-    temperatureUnit: "C" as "C" | "F"
+    temperatureUnit: "C" as "C" | "F",
+    /**
+     * Which of the two candidate tea steep encodings to send.
+     *
+     * The protocol's least-settled corner: HomoLand derives the encoding from
+     * the official app's own transform, saya6k derives it from two stopwatch
+     * readings and says so. They are not variants of one scheme, and a wrong
+     * choice produces no error at all — the tea simply steeps for the wrong
+     * length. HomoLand's wins on provenance and is the default; the other is
+     * reachable from the machine console so a stopwatch can settle it.
+     */
+    teaSteepEncoding: "homoland" as "homoland" | "saya6k",
+    /**
+     * The last machine that connected, so later sessions reconnect directly
+     * rather than scanning. Empty until one has.
+     *
+     * This is also what the editor's action bar reads to decide whether to
+     * offer BREW at all: an empty string means nobody here owns a J15, and a
+     * dead button on every recipe would be worse than no button.
+     */
+    machineDeviceId: "",
+    /**
+     * Whether a brew has ever run from this phone.
+     *
+     * The cup-and-pod reminder is said once and then never again. None of it is
+     * detectable — the machine cannot tell us whether a cup is under the spout
+     * — so it is stated rather than checked, and stating it every time would
+     * train people to stop reading it.
+     */
+    firstBrewDone: false,
+    /**
+     * Whether the machine console's warning has been read and accepted.
+     *
+     * The console sends unverified commands to a hot, motorised appliance. The
+     * acknowledgement is stored so it is asked once rather than nagged, and it
+     * is a separate key from the per-command confirmations below because they
+     * answer different questions: may I be here at all, and may I send this.
+     */
+    machineConsoleAcknowledged: false,
+    /**
+     * Whether the console still asks before each command that moves hardware.
+     *
+     * On by default and deliberately awkward to turn off. Somebody deep in a
+     * debugging session will want it gone; somebody who opened the console once
+     * by accident should not be one tap from spinning a burr.
+     */
+    machineConsoleConfirmations: true,
+    /**
+     * Whether BREW commits the recipe itself, or waits for one more press.
+     *
+     * Off by default. Committing is the frame that starts a burr spinning, and
+     * on hardware the machine goes from committed to grinding with nothing in
+     * between and no confirmation of its own — so somebody who tapped BREW to
+     * see what the screen looked like would be standing over a running
+     * grinder. With this off the recipe is uploaded and the brew route offers
+     * START; the machine holds the recipe quite happily until then.
+     */
+    machineAutoStart: false
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
+
+/**
+ * Preferences a backup deliberately does not carry.
+ *
+ * `machineDeviceId` is a Bluetooth peripheral identifier, and on iOS the
+ * operating system mints a different one for every phone that has ever seen
+ * the machine. It is not a fact about the machine, it is a fact about this
+ * phone's relationship with it. Restored onto a second phone it names nothing
+ * that phone's radio has ever issued, so the app would sit reaching for a
+ * machine that, as far as it is concerned, does not exist -- and it would have
+ * displaced whatever pairing that phone had made for itself.
+ *
+ * Named here rather than simply omitted from the snapshot so that the
+ * exhaustiveness test still holds every other key to account: a key is either
+ * in a backup or on this list, never quietly missing from both.
+ */
+export type BackupExcluded = "machineDeviceId";
+export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId"];
 
 /**
  * Widen a literal type (as produced by `DEFAULTS`'s `as const`) back to its
