@@ -52,6 +52,9 @@ export class FakeTransport implements MachineTransport {
     /** Wide by default: the narrow link is the case a test opts into. */
     public frameBudget = 244;
 
+    /** Thrown by `connect`, for the failure paths a real radio has. */
+    public failConnect: Error | null = null;
+
     public failNextWrite: string | null = null;
     /**
      * Set to make the write of one particular command reject.
@@ -94,6 +97,7 @@ export class FakeTransport implements MachineTransport {
     }
 
     async connect(id: string): Promise<void> {
+        if (this.failConnect !== null) throw this.failConnect;
         if (this.refuseNextConnections > 0) {
             this.refuseNextConnections--;
             throw new Error("connection failed");

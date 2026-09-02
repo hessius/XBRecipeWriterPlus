@@ -1,11 +1,15 @@
 import {EventSubscription, Platform} from "react-native";
+
+import {RadioUnavailableError} from "./errors";
 import BleManager, {
     BleDiscoverPeripheralEvent,
-    BleManagerDidUpdateValueForCharacteristicEvent
+    BleManagerDidUpdateValueForCharacteristicEvent,
+    BleState
 } from "react-native-ble-manager";
 
 import {
     ATT_HEADER_BYTES,
+    RADIO_READY_MS,
     DEFAULT_MTU,
     MACHINE_MTU,
     MACHINE_NAME_PREFIX,
@@ -73,6 +77,28 @@ function sameUuid(a: string, b: string): boolean {
 }
 
 /** The recognisable part of a UUID, for a log line a person has to read. */
+/**
+ * Throw, with the truth, for a radio that will not become usable by waiting.
+ *
+ * Every connection failure used to arrive as "the machine is already in use by
+ * another app". For a radio that is switched off that is not merely unhelpful,
+ * it is false, and it sends the user to the machine to fix something that is
+ * on the phone.
+ */
+function refuseUnusableRadio(state: BleState): void {
+    if (state === BleState.Off) {
+        throw new RadioUnavailableError("Bluetooth is switched off. Turn it on and try again.");
+    }
+    if (state === BleState.Unauthorized) {
+        throw new RadioUnavailableError(
+            "XBRW++ does not have permission to use Bluetooth. Allow it in Settings and try again."
+        );
+    }
+    if (state === BleState.Unsupported) {
+        throw new RadioUnavailableError("This device cannot use Bluetooth Low Energy.");
+    }
+}
+
 function shortUuid(uuid: string): string {
     const match = /^0000([0-9a-f]{4})-/i.exec(uuid);
     return (match === null ? uuid : match[1]).toLowerCase();
@@ -141,8 +167,58 @@ export class BleTransport implements MachineTransport {
         this.started = true;
     }
 
+    /**
+     * Hold until the Bluetooth adapter is actually usable.
+     *
+     * `BleManager.start()` resolves as soon as the native module is loaded,
+     * not when the radio is ready. On iOS `CBCentralManager` takes a moment
+     * more to reach `poweredOn`, and a connect issued before that fails almost
+     * instantly with an error carrying no message -- which is exactly what the
+     * launch reconnect did on every single launch, six milliseconds in, before
+     * a manual attempt seconds later worked.
+     *
+     * Checked on every connect and scan rather than once at start-up: a radio
+     * that was on when the app launched can be switched off later.
+     */
+    private async waitForRadio(): Promise<void> {
+        const state = await BleManager.checkState();
+        if (state === BleState.On) return;
+        refuseUnusableRadio(state);
+
+        // `unknown`, `resetting` or `turning_on`: still settling, so wait for
+        // it rather than counting the wait as a refusal.
+        return new Promise<void>((resolve, reject) => {
+            let timer: ReturnType<typeof setTimeout>;
+            const subscription = BleManager.onDidUpdateState(({state: next}) => {
+                if (next === BleState.On) {
+                    finish();
+                    resolve();
+                    return;
+                }
+                try {
+                    refuseUnusableRadio(next);
+                } catch (e) {
+                    finish();
+                    reject(e);
+                }
+            });
+            timer = setTimeout(() => {
+                finish();
+                reject(new RadioUnavailableError(
+                    "Bluetooth did not come up. Check that it is switched on, and try again."
+                ));
+            }, RADIO_READY_MS);
+            timer.unref?.();
+            function finish(): void {
+                clearTimeout(timer);
+                subscription.remove();
+            }
+        });
+    }
+
     async scan(seconds = SCAN_SECONDS): Promise<FoundMachine[]> {
         await this.start();
+        await this.waitForRadio();
         const found = new Map<string, FoundMachine>();
         // Resolved by whichever comes first: a machine, or the window closing.
         // A machine that is switched on and next to the phone advertises within
@@ -182,6 +258,7 @@ export class BleTransport implements MachineTransport {
 
     async connect(id: string): Promise<void> {
         await this.start();
+        await this.waitForRadio();
         try {
             await BleManager.connect(id);
         } catch (error) {

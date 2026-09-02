@@ -5,6 +5,8 @@ import {
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
+import {RadioUnavailableError} from "./errors";
+
 import {
     ascii,
     buildType1,
@@ -232,11 +234,16 @@ export default class Machine {
         try {
             await this.transport.connect(id);
         } catch (e) {
-            this.note(`refused — ${(e as Error).message}`);
-            // The machine permits one link at a time and does not reject a
-            // second one so much as ignore it, so a failure here is almost
-            // always the official app holding the slot. Say that, rather than
-            // implying the hardware is at fault.
+            const message = (e as Error).message;
+            this.note(`refused — ${message === "" ? "no reason given" : message}`);
+            // A radio that is off, unauthorised or still coming up is a fact
+            // about the phone, and saying anything else sends the user to the
+            // machine to fix something that is not there.
+            if (e instanceof RadioUnavailableError) throw e;
+            // Otherwise: the machine permits one link at a time and does not
+            // reject a second one so much as ignore it, so a failure with
+            // nothing to say is almost always the official app holding the
+            // slot. Guess that, rather than implying the hardware is at fault.
             throw new Error("The machine is already in use by another app.");
         }
         this.note("connected");

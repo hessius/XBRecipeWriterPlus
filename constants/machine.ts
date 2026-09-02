@@ -27,6 +27,17 @@ export const DEFAULT_MTU = 23;
 /** The ATT header a write carries, which does not count towards the payload. */
 export const ATT_HEADER_BYTES = 3;
 
+/**
+ * How long to wait for the Bluetooth adapter to finish powering on.
+ *
+ * `BleManager.start()` resolves before the adapter is usable, and a connect
+ * issued in that window fails in a few milliseconds with no message at all --
+ * which on a real phone was every single app launch. Five seconds is far
+ * longer than a healthy radio needs and short enough that a radio which is
+ * never coming up still says so while the user is watching.
+ */
+export const RADIO_READY_MS = 5000;
+
 /** How long to scan before giving up on finding a machine. */
 export const SCAN_SECONDS = 10;
 

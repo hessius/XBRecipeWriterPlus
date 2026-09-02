@@ -3,6 +3,7 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
 import {buildType1} from "@/library/machine/protocol";
+import {RadioUnavailableError} from "@/library/machine/errors";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -112,6 +113,29 @@ async function readyMachine() {
     transport.written = [];
     return {transport, machine};
 }
+
+describe("connecting", () => {
+    it("passes on what the radio said, instead of blaming the machine", async () => {
+        // Every failure used to be reported as "the machine is already in use
+        // by another app". That guess is reasonable for a silent refusal --
+        // the machine permits one link and ignores a second rather than
+        // rejecting it -- but it is false for a radio that is switched off,
+        // and it sends the user to the machine to fix something on the phone.
+        const transport = new FakeTransport();
+        transport.failConnect = new RadioUnavailableError("Bluetooth is switched off.");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow("Bluetooth is switched off.");
+    });
+
+    it("still guesses at the machine when the failure says nothing", async () => {
+        const transport = new FakeTransport();
+        transport.failConnect = new Error("");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow(/already in use/i);
+    });
+});
 
 describe("brewing", () => {
     it("refuses to send while the machine is busy", async () => {
