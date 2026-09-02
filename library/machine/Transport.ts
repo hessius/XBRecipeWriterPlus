@@ -111,12 +111,16 @@ export class BleTransport implements MachineTransport {
     public channels: string[] = [];
 
     /**
-     * The longest frame the link will carry, once the MTU is settled.
+     * The longest frame the link will carry, where that is knowable.
      *
-     * Assume the floor until a negotiation says otherwise, so a frame is never
-     * judged against a budget we have not actually been granted.
+     * Undefined means unknown, and unknown must not be read as small. Only
+     * Android tells us anything: `requestMTU` is an Android call, and on iOS
+     * CoreBluetooth negotiates for itself and reports nothing back. Treating
+     * iOS's rejection as the 20-byte floor invented a limit the link does not
+     * have, and with a budget enforced on top of it no iPhone could have
+     * brewed at all.
      */
-    public frameBudget = DEFAULT_MTU - ATT_HEADER_BYTES;
+    public frameBudget: number | undefined = undefined;
 
     private async start(): Promise<void> {
         if (this.started) return;
@@ -213,6 +217,12 @@ export class BleTransport implements MachineTransport {
      * enough for a command, not enough for a recipe blob.
      */
     private async negotiateMtu(id: string): Promise<void> {
+        if (Platform.OS !== "android") {
+            // Not a failure, and not a budget. Say so, so the log does not read
+            // like something went wrong.
+            this.channels.push("MTU negotiated by iOS itself, and not reported");
+            return;
+        }
         try {
             const granted = await BleManager.requestMTU(id, MACHINE_MTU);
             const mtu = typeof granted === "number" && granted > 0 ? granted : DEFAULT_MTU;

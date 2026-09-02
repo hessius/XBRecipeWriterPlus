@@ -7,6 +7,7 @@
  * getting it wrong shipped a milestone that connected, read the machine's info
  * correctly, and then could not brew.
  */
+import {Platform} from "react-native";
 import BleManager from "react-native-ble-manager";
 
 import {MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC} from "@/constants/machine";
@@ -40,6 +41,9 @@ async function connected(): Promise<BleTransport> {
 
 describe("writing a frame", () => {
     beforeEach(() => jest.clearAllMocks());
+    // The platform is a fixture in this file, so it is reset rather than left
+    // wherever the previous test put it.
+    afterEach(() => { Platform.OS = "ios"; });
 
     it("never lets a frame be split across writes", async () => {
         // `writeWithoutResponse`'s `maxByteSize` defaults to **20**, and a frame
@@ -82,6 +86,7 @@ describe("writing a frame", () => {
         // Android negotiates 23 bytes by default, which leaves 20 for the
         // payload however politely we ask the library not to chunk. iOS
         // negotiates for itself and ignores this.
+        Platform.OS = "android";
         await connected();
 
         expect(BleManager.requestMTU).toHaveBeenCalledWith("AA:BB:CC", expect.any(Number));
@@ -89,7 +94,25 @@ describe("writing a frame", () => {
         expect(mtu).toBeGreaterThanOrEqual(64);
     });
 
+    it("does not hold iOS to a budget it was never given", async () => {
+        // Caught on a real iPhone. `requestMTU` is an Android call and rejects
+        // on iOS, where CoreBluetooth negotiates for itself and tells us
+        // nothing -- so reading that rejection as "20 bytes a frame" invents a
+        // limit the link does not have. With a budget enforced on top of it,
+        // every recipe frame would be refused and no iOS device could brew.
+        Platform.OS = "ios";
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        // Not asked at all, rather than asked and its rejection misread.
+        expect(BleManager.requestMTU).not.toHaveBeenCalled();
+        expect(transport.frameBudget).toBeUndefined();
+        expect(transport.channels.join(" ")).toMatch(/iOS/i);
+    });
+
     it("records what the MTU negotiation actually produced", async () => {
+        Platform.OS = "android";
         // It was swallowed entirely: a stack that refused looked exactly like a
         // stack that granted 247, and the one symptom -- long frames silently
         // not arriving -- is the hardest kind of failure to reason about after
@@ -103,7 +126,10 @@ describe("writing a frame", () => {
         expect(transport.frameBudget).toBe(182);
     });
 
-    it("says so in the link log when the MTU request is refused", async () => {
+    it("says so in the link log when Android refuses the MTU request", async () => {
+        // Android is where the number means something: the stack really does
+        // fall back to 23, and a recipe blob does not fit in what is left.
+        Platform.OS = "android";
         (BleManager.requestMTU as jest.Mock).mockRejectedValueOnce(new Error("nope"));
         const transport = new BleTransport();
 
