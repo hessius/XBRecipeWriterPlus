@@ -49,7 +49,7 @@ const LOG_LIMIT = 500;
 const TELEMETRY_FLUSH_MS = 250;
 const WATER_VOLUME_CODE = 40523;
 
-type LogEntry = {at: string; direction: "→" | "←"; hex: string; reading: string};
+type LogEntry = {at: string; direction: string; hex: string; reading: string};
 type MachineStateReading = {value: number; changed: boolean; at: string};
 type TelemetrySnapshot = {
     suppressed: number;
@@ -155,7 +155,7 @@ function stateText(state: MachineStateReading | null): string {
 
 function appendLog(
     setLog: React.Dispatch<React.SetStateAction<LogEntry[]>>,
-    direction: "→" | "←",
+    direction: string,
     frame: Uint8Array,
     reading: string
 ) {
@@ -329,18 +329,19 @@ export default function MachineConsole() {
     const [pending, setPending] = useState<{command: Command; values: number[]} | null>(null);
 
     useEffect(() => {
-        return machine.onFrame((direction, frame, parsed) => {
+        return machine.onFrame((direction, frame, parsed, source) => {
             if (direction === "received") recordMachineState(parsed, lastStateRef, setMachineState);
             if (direction === "received" && isTelemetry(parsed) && !showTelemetryRef.current) {
                 recordTelemetry(parsed, frame, telemetryRef, telemetryTimerRef, setTelemetry);
                 return;
             }
-            appendLog(
-                setLog,
-                direction === "sent" ? "→" : "←",
-                frame,
-                direction === "sent" ? "" : readingOf(parsed)
-            );
+            // The channel is named on the arrow rather than in the reading,
+            // so a frame from `ffe3` is obvious at a glance in a log that is
+            // otherwise all `ffe2`.
+            const arrow = direction === "sent"
+                ? "→"
+                : source === undefined ? "←" : `←${source}`;
+            appendLog(setLog, arrow, frame, direction === "sent" ? "" : readingOf(parsed));
         });
     }, [machine]);
 

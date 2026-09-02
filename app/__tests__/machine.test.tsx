@@ -7,7 +7,9 @@ import {renderWithProviders} from "@/test-utils/render";
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 const mockSend = jest.fn();
-let frameListener: ((direction: "sent" | "received", frame: Uint8Array, parsed: unknown) => void) | null = null;
+let frameListener: ((
+    direction: "sent" | "received", frame: Uint8Array, parsed: unknown, source?: string
+) => void) | null = null;
 const mockMachine = {
     info: null,
     isConnected: () => true,
@@ -25,9 +27,12 @@ const mockMachine = {
 };
 const send = mockSend;
 
-function emitFrame(direction: "sent" | "received", parsed: unknown, frame = Uint8Array.from([0x58])) {
+function emitFrame(
+    direction: "sent" | "received", parsed: unknown,
+    frame = Uint8Array.from([0x58]), source?: string
+) {
     if (frameListener === null) throw new Error("No frame listener registered");
-    frameListener(direction, frame, parsed);
+    frameListener(direction, frame, parsed, source);
 }
 
 /** A 40523 frame carrying a tank reading where `waterVolumeOf` looks for it. */
@@ -241,6 +246,20 @@ describe("the machine console", () => {
             expect.stringContaining("cup 3.5 g")
         );
         expect(screen.queryByLabelText("Frame log")).toBeNull();
+    });
+
+    it("says which channel a frame arrived on, when the radio names one", async () => {
+        // The machine notifies on two characteristics. A log that does not say
+        // which one a frame came in on cannot answer whether the second is
+        // ever used, which is the open question about `ffe3`.
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await act(async () => {
+            emitFrame("received", {kind: "status", state: 1}, Uint8Array.from([0x58]), "ffe3");
+        });
+
+        expect(screen.getByLabelText("Frame log").props.value).toContain("ffe3");
     });
 
     it("can ask the radio what the machine offers, since we listen to one channel", async () => {

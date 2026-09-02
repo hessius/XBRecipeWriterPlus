@@ -820,3 +820,39 @@ describe("the handshake the machine wants before it will answer", () => {
         expect(transport.sent).toEqual([40521]);
     });
 });
+
+describe("which channels the link opened", () => {
+    it("writes them into the link history at connect", async () => {
+        // A channel that refused and a channel that is simply quiet look the
+        // same from the app. The console has to be able to tell them apart,
+        // because one is our bug and the other is a fact about the machine.
+        const transport = new FakeTransport();
+        transport.channels = ["ffe2 listening", "ffe3 refused — no"];
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await machine.connect("AA:BB");
+
+        const text = machine.linkHistory.map((entry) => entry.text).join("\n");
+        expect(text).toContain("ffe2 listening");
+        expect(text).toContain("ffe3 refused");
+    });
+});
+
+describe("where a frame arrived from", () => {
+    it("tells the log which channel each frame came in on", async () => {
+        // `ffe3` notifies, and nothing has been seen on it. Whether that is
+        // because the machine never uses it cannot be read off a log that does
+        // not say which channel anything arrived on.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        const sources: (string | undefined)[] = [];
+        machine.onFrame((direction, _frame, _parsed, source) => {
+            if (direction === "received") sources.push(source);
+        });
+
+        transport.emit(status(0x01), "ffe3");
+
+        expect(sources).toEqual(["ffe3"]);
+    });
+});

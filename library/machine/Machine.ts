@@ -32,7 +32,7 @@ import type {FoundMachine, MachineTransport} from "./Transport";
  */
 export type FrameDirection = "sent" | "received";
 export type FrameListener = (
-    direction: FrameDirection, frame: Uint8Array, parsed: Notification
+    direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
 ) => void;
 
 /** Why a brew ended badly. Each has its own copy on the brew route. */
@@ -226,8 +226,12 @@ export default class Machine {
             throw new Error("The machine is already in use by another app.");
         }
         this.note("connected");
+        // Which notification channels actually opened. A channel that refused
+        // and a channel the machine never uses are indistinguishable from up
+        // here, and only one of them is our fault.
+        (this.transport.channels ?? []).forEach((channel) => this.note(channel));
         this.unsubscribe.push(
-            this.transport.onFrame((frame) => this.receive(frame)),
+            this.transport.onFrame((frame, source) => this.receive(frame, source)),
             this.transport.onDisconnect(() => {
                 this.note("link dropped by the radio");
                 this.forget();
@@ -443,14 +447,14 @@ export default class Machine {
         return () => this.notificationListeners.delete(listener);
     }
 
-    private receive(packet: Uint8Array): void {
+    private receive(packet: Uint8Array, source?: string): void {
         // A packet may carry more than one frame: the machine packs an event
         // and a weight reading together under load, and reading only the first
         // silently dropped the rest. See `splitFrames`.
-        for (const frame of splitFrames(packet)) this.receiveFrame(frame);
+        for (const frame of splitFrames(packet)) this.receiveFrame(frame, source);
     }
 
-    private receiveFrame(frame: Uint8Array): void {
+    private receiveFrame(frame: Uint8Array, source?: string): void {
         const parsed = parseNotification(frame);
         if (parsed.kind === "status") {
             this.state = parsed.state;
@@ -461,7 +465,7 @@ export default class Machine {
             this.announceLink();
         }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
-        this.frameListeners.forEach((listener) => listener("received", frame, parsed));
+        this.frameListeners.forEach((listener) => listener("received", frame, parsed, source));
         this.notificationListeners.forEach((listener) => listener(parsed));
     }
 

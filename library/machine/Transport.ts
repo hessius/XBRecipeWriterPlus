@@ -29,11 +29,19 @@ export interface MachineTransport {
     disconnect(): Promise<void>;
     /** Raw frame, already built. */
     write(frame: Uint8Array): Promise<void>;
-    /** Every notification frame, uninterpreted. Returns an unsubscribe. */
-    onFrame(listener: (frame: Uint8Array) => void): () => void;
+    /**
+     * Every notification frame, uninterpreted. Returns an unsubscribe.
+     *
+     * `source` names the characteristic it arrived on. The machine notifies on
+     * more than one, and a log that does not say which cannot answer whether a
+     * given channel is ever used.
+     */
+    onFrame(listener: (frame: Uint8Array, source?: string) => void): () => void;
     /** Fires when the link drops for any reason, including a deliberate one. */
     onDisconnect(listener: () => void): () => void;
     isConnected(): boolean;
+    /** What happened to each notify subscription at the last connect. */
+    channels?: string[];
     /**
      * Every service and characteristic the machine offers, one line each.
      *
@@ -60,6 +68,12 @@ function sameUuid(a: string, b: string): boolean {
     return trim(a) === trim(b);
 }
 
+/** The recognisable part of a UUID, for a log line a person has to read. */
+function shortUuid(uuid: string): string {
+    const match = /^0000([0-9a-f]{4})-/i.exec(uuid);
+    return (match === null ? uuid : match[1]).toLowerCase();
+}
+
 /** Property names, whichever shape the platform reports them in. */
 function propertyNames(properties: unknown): string[] {
     if (Array.isArray(properties)) return properties.map(String);
@@ -80,18 +94,27 @@ function propertyNames(properties: unknown): string[] {
 export class BleTransport implements MachineTransport {
     private deviceId: string | null = null;
     private started = false;
-    private frameListeners = new Set<(frame: Uint8Array) => void>();
+    private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
     private disconnectListeners = new Set<() => void>();
     private subscriptions: EventSubscription[] = [];
+    /**
+     * What happened to each notify subscription at the last connect.
+     *
+     * A channel that refuses does not cost the connection, which means the
+     * refusal has to be recorded somewhere or it is indistinguishable from a
+     * channel the machine simply never uses.
+     */
+    public channels: string[] = [];
 
     private async start(): Promise<void> {
         if (this.started) return;
         await BleManager.start({showAlert: false});
         this.subscriptions.push(
             BleManager.onDidUpdateValueForCharacteristic(
-                ({value}: BleManagerDidUpdateValueForCharacteristicEvent) => {
+                ({value, characteristic}: BleManagerDidUpdateValueForCharacteristicEvent) => {
                     const frame = Uint8Array.from(value);
-                    this.frameListeners.forEach((listener) => listener(frame));
+                    const source = shortUuid(characteristic ?? "");
+                    this.frameListeners.forEach((listener) => listener(frame, source));
                 }
             ),
             BleManager.onDisconnectPeripheral(() => {
@@ -184,7 +207,8 @@ export class BleTransport implements MachineTransport {
     private async listenToEverythingThatTalks(
         id: string, services: {characteristics?: unknown[]} | undefined
     ): Promise<void> {
-        await BleManager.startNotification(id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC);
+        this.channels = [];
+        await this.listen(id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC);
 
         const listed = (services?.characteristics ?? []) as {
             service?: string; characteristic?: string; properties?: unknown;
@@ -196,8 +220,18 @@ export class BleTransport implements MachineTransport {
             if (!propertyNames(entry.properties).some((name) => /notify|indicate/i.test(name))) {
                 continue;
             }
-            await BleManager.startNotification(id, entry.service ?? MACHINE_SERVICE, characteristic)
-                .catch(() => undefined);
+            await this.listen(id, entry.service ?? MACHINE_SERVICE, characteristic);
+        }
+    }
+
+    /** Subscribe, and record what came of it. Never throws. */
+    private async listen(id: string, service: string, characteristic: string): Promise<void> {
+        const name = shortUuid(characteristic);
+        try {
+            await BleManager.startNotification(id, service, characteristic);
+            this.channels.push(`${name} listening`);
+        } catch (e) {
+            this.channels.push(`${name} refused — ${(e as Error).message}`);
         }
     }
 
@@ -236,7 +270,7 @@ export class BleTransport implements MachineTransport {
         );
     }
 
-    onFrame(listener: (frame: Uint8Array) => void): () => void {
+    onFrame(listener: (frame: Uint8Array, source?: string) => void): () => void {
         this.frameListeners.add(listener);
         return () => {
             this.frameListeners.delete(listener);

@@ -193,3 +193,44 @@ describe("which channels the app listens to", () => {
         await expect(new BleTransport().connect("AA:BB:CC")).resolves.toBeUndefined();
     });
 });
+
+describe("saying which channels were opened", () => {
+    // `ffe3` was subscribed to and nothing arrived on it. That has two very
+    // different explanations — the machine sends nothing there, or the
+    // subscription was refused — and swallowing the refusal made them look
+    // identical from the app. Whichever it is has to be readable.
+    const notify = BleManager.startNotification as jest.Mock;
+    const retrieve = BleManager.retrieveServices as jest.Mock;
+
+    beforeEach(() => {
+        notify.mockClear();
+        notify.mockResolvedValue(undefined);
+    });
+
+    it("reports each channel it opened", async () => {
+        retrieve.mockResolvedValueOnce({characteristics: [
+            {service: MACHINE_SERVICE, characteristic: "ffe2", properties: ["Notify"]},
+            {service: MACHINE_SERVICE, characteristic: "ffe3", properties: ["Notify"]}
+        ]});
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(transport.channels.join(" ")).toContain("ffe3 listening");
+    });
+
+    it("reports a channel that refused, rather than swallowing it", async () => {
+        retrieve.mockResolvedValueOnce({characteristics: [
+            {service: MACHINE_SERVICE, characteristic: "ffe3", properties: ["Notify"]}
+        ]});
+        notify.mockImplementation((_id: string, _service: string, char: string) =>
+            char.toLowerCase().includes("ffe3")
+                ? Promise.reject(new Error("refused"))
+                : Promise.resolve(undefined));
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(transport.channels.join(" ")).toContain("ffe3 refused");
+    });
+});

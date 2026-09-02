@@ -144,6 +144,23 @@ export default function Brew() {
                 </YStack>
             ) : (
                 <YStack gap="$3">
+                    {phase.name === "failed" && (
+                        // The machine will not answer a question outside a
+                        // fresh session, and opening one makes it beep — so
+                        // noticing a refilled tank cannot be done quietly on a
+                        // timer. A press asks again, and only when somebody is
+                        // there to have done something about the reason.
+                        <Pressable accessibilityRole="button" accessibilityLabel="Try again"
+                                   onPress={() => void brew(recipe)}>
+                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                                    borderWidth={1} borderColor={palette.text}>
+                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                               color={palette.text}>
+                                    TRY AGAIN
+                                </DotMatrixText>
+                            </YStack>
+                        </Pressable>
+                    )}
                     {offerPro && (
                         <Pressable accessibilityRole="button"
                                    accessibilityLabel="Switch to PRO mode and try again"

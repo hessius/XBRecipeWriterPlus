@@ -152,6 +152,36 @@ describe("the brew screen", () => {
         expect(mockSwitchToProAndRetry).toHaveBeenCalled();
     });
 
+    it("offers another go when a brew was refused", async () => {
+        // Reported from hardware: refused for a low tank, refilled the tank,
+        // and the screen was a dead end with nothing on it but DONE. The
+        // machine only answers a question inside a fresh session and beeps at
+        // one, so it cannot be re-asked quietly on a timer — a press is both
+        // the cheapest way to ask again and the only one that does not beep at
+        // somebody who is not there.
+        mockPhase = {name: "failed", reason: "noWater"} as BrewPhase;
+        await renderWithProviders(<Brew/>);
+        mockBrew.mockClear();
+
+        await fireEvent.press(screen.getByLabelText("Try again"));
+
+        expect(mockBrew).toHaveBeenCalled();
+    });
+
+    it("does not offer another go while the brew is still going", async () => {
+        mockPhase = {name: "pouring", pour: 1, pours: 3} as BrewPhase;
+        await renderWithProviders(<Brew/>);
+        expect(screen.queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("does not offer another go after a brew that finished", async () => {
+        // Nothing failed. Offering to run it again next to DONE invites a
+        // second brew into a full cup.
+        mockPhase = {name: "done"};
+        await renderWithProviders(<Brew/>);
+        expect(screen.queryByLabelText("Try again")).toBeNull();
+    });
+
     it("does not offer PRO mode when the machine cannot take it", async () => {
         mockPhase = {name: "failed", reason: "rejected"};
         mockCanOfferPro = false;

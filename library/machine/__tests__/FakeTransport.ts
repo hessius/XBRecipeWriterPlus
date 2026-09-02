@@ -60,6 +60,8 @@ export class FakeTransport implements MachineTransport {
     public failWriteOf: {code: number; reason: string} | null = null;
     /** What the radio says it offers. `null` stands for a stack that refuses. */
     public gatt: string[] | null = [];
+    /** What became of each notify subscription, as the real transport reports. */
+    public channels: string[] = [];
     /**
      * What the machine answers the info request with.
      *
@@ -76,7 +78,7 @@ export class FakeTransport implements MachineTransport {
      */
     public ignoreInfoRequests = 0;
 
-    private frameListeners = new Set<(frame: Uint8Array) => void>();
+    private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
     private disconnectListeners = new Set<() => void>();
 
     /** The command code of each frame written, in order. */
@@ -127,7 +129,7 @@ export class FakeTransport implements MachineTransport {
         }
     }
 
-    onFrame(listener: (frame: Uint8Array) => void): () => void {
+    onFrame(listener: (frame: Uint8Array, source?: string) => void): () => void {
         this.frameListeners.add(listener);
         return () => this.frameListeners.delete(listener);
     }
@@ -141,9 +143,9 @@ export class FakeTransport implements MachineTransport {
         return this.connectedTo !== null;
     }
 
-    /** Play a frame from the machine. */
-    emit(frame: number[]): void {
-        this.frameListeners.forEach((listener) => listener(Uint8Array.from(frame)));
+    /** Play a frame from the machine, optionally naming the channel it came on. */
+    emit(frame: number[], source?: string): void {
+        this.frameListeners.forEach((listener) => listener(Uint8Array.from(frame), source));
     }
 
     /** Drop the link, as the radio would. */
