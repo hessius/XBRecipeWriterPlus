@@ -1,5 +1,5 @@
 import {
-    FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
+    BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
     RECIPE_ACK_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
@@ -55,6 +55,8 @@ export type BrewFailure =
  */
 export type BrewPhase =
     | {name: "idle"}
+    /** Asking a machine that has not answered yet, and asking again. */
+    | {name: "waking"}
     | {name: "sending"}
     /** Uploaded and waiting for the user to press START in the app. */
     | {name: "readyToStart"}
@@ -397,6 +399,13 @@ export default class Machine {
             }
             if (await answered) return true;
         }
+        // Silence is evidence, and it outranks the clock. The session is
+        // renewed on a timer because renewing beeps -- but a machine that has
+        // ignored a whole round of questions is not in a session with us,
+        // whatever the timer says. Leaving the timer alone meant every later
+        // attempt asked into the same dead session and got the same silence,
+        // until twenty seconds had passed and the clock happened to agree.
+        this.lastHandshakeAt = 0;
         return false;
     }
 
@@ -594,7 +603,25 @@ export default class Machine {
         // Telling the user to reconnect is also asking them to do something the
         // app can do for itself — and on hardware reconnecting did not help,
         // because the question was being lost rather than refused.
-        if (this.isConnected()) await this.askHowItIsDoing();
+        // Asked until it answers, not once. The machine loses the question
+        // rather than refusing it, and there is nothing a user's second press
+        // does that this cannot do for them -- so the presses happen here.
+        // Each round opens a fresh session, which beeps; that is the price of
+        // the answer, and the phase says what the beeping is for.
+        for (let round = 0; this.isConnected(); round++) {
+            if (round > 0) {
+                this.setPhase({name: "waking"});
+                await this.gap();
+            }
+            const answered = await this.askHowItIsDoing();
+            // A machine that has introduced itself before is asked once and no
+            // more: the ask is for the water level, which goes stale, and it
+            // is not worth another round of beeping to refresh what we already
+            // roughly know. Only a machine we have never heard from at all is
+            // worth pestering, because without it the brew cannot start.
+            if (answered || this.info !== null) break;
+            if (round + 1 >= BREW_INFO_ROUNDS) break;
+        }
         await this.brewOnce(recipe);
     }
 

@@ -177,6 +177,62 @@ describe("connecting", () => {
     });
 });
 
+describe("a machine that will not say how it is doing", () => {
+    it("stops believing the session is live when the machine goes quiet", async () => {
+        // The root cause of a brew that would not start. The session is
+        // renewed on a clock, and renewing beeps, so a renewal inside the
+        // freshness window is skipped. But an unanswered question is itself
+        // evidence that the session is not live -- and skipping the renewal on
+        // the strength of a clock meant every later attempt asked into the
+        // same dead session and got the same silence, until twenty seconds had
+        // passed and the clock happened to agree.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.ignoreInfoRequests = INFO_ATTEMPTS;
+
+        expect(await machine.askHowItIsDoing()).toBe(false);
+        transport.written = [];
+        await machine.askHowItIsDoing();
+
+        expect(transport.sent).toContain(8100);
+    });
+
+    it("asks again by itself, rather than handing the user a refusal", async () => {
+        // What the user had to do by hand: press BREW, watch nothing happen,
+        // press it again, and again. Nothing was actually wrong with the
+        // machine -- the question was being lost -- so there was nothing for
+        // the user's third press to do that the app could not have done.
+        const transport = new FakeTransport();
+        transport.infoReply = null; // silent through the connect
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        // Answers only once a whole round of asking has gone unanswered.
+        transport.infoReply = machineInfoFrame();
+        transport.ignoreInfoRequests = INFO_ATTEMPTS;
+        transport.written = [];
+
+        await machine.brew(brewable());
+
+        expect(machine.info).not.toBeNull();
+        expect(brewFrames(transport).length).toBeGreaterThan(0);
+    });
+
+    it("gives up in the end, and says why", async () => {
+        // Not infinite. A machine that is switched off is silent too, and a
+        // brew screen that retries for ever never tells anyone that.
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/how it is doing/i);
+        expect(machine.phase).toMatchObject({name: "failed", reason: "blocked"});
+    });
+});
+
 describe("brewing", () => {
     it("refuses to send while the machine is busy", async () => {
         const {transport, machine} = await readyMachine();
@@ -375,7 +431,9 @@ describe("brewing", () => {
         await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
         // Asking again is fine — that is the app trying to answer the question
         // for itself. Sending the recipe anyway is not.
-        expect(transport.sent.filter((code) => code !== 40521)).toEqual([]);
+        // 8100 as well as 40521: a question can only be asked inside a session,
+        // so opening one is part of asking rather than part of brewing.
+        expect(transport.sent.filter((code) => code !== 40521 && code !== 8100)).toEqual([]);
     });
 
     it("ends the brew when the radio refuses a frame, instead of waiting for ever", async () => {

@@ -108,6 +108,16 @@ export const GRINDING_TIMEOUT_MS = null;
 export const INFO_ATTEMPTS = 3;
 
 /**
+ * How many times a brew opens a fresh session to ask an unanswered machine.
+ *
+ * `INFO_ATTEMPTS` retries the question inside one session; this retries the
+ * session itself, which is what a machine that has stopped listening needs.
+ * Bounded because a machine that is switched off is silent in exactly the same
+ * way, and somebody has to be told.
+ */
+export const BREW_INFO_ROUNDS = 3;
+
+/**
  * How long to wait before each attempt at opening a link.
  *
  * Five attempts, spread over about fourteen seconds. Connecting to the J15 is

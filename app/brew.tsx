@@ -12,6 +12,9 @@ import Recipe from "@/library/Recipe";
 /** What each phase says. The wording is the feature. */
 const PHASE_COPY: Record<string, string> = {
     idle:        "Ready when you are.",
+    // The machine loses the question rather than refusing it, and each retry
+    // opens a fresh session, which beeps. Saying so explains the beeping.
+    waking:      "Waiting for the machine to answer…",
     // Deliberately slow: the frames are spaced two seconds apart, because the
     // machine drops a burst. Saying so stops this reading as a hang.
     sending:     "Sending the recipe… this takes a few seconds.",
@@ -52,7 +55,7 @@ const PRO_MODE_PROMPT =
 
 /** The phases during which stopping the machine is still a meaningful thing. */
 const RUNNING = new Set([
-    "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
+    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
 ]);
 
 export default function Brew() {
