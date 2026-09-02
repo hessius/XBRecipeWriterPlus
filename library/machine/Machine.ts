@@ -1,9 +1,11 @@
 import {
-    FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
+    BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
     RECIPE_ACK_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
+
+import {RadioUnavailableError} from "./errors";
 
 import {
     ascii,
@@ -37,7 +39,13 @@ export type FrameListener = (
 
 /** Why a brew ended badly. Each has its own copy on the brew route. */
 export type BrewFailure =
-    | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected";
+    | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected"
+    /**
+     * Refused before a single frame went out — a low tank, a busy machine, a
+     * recipe the card format will not carry. The reason is in `detail`, because
+     * it is already a sentence and there is no fixed set of them.
+     */
+    | "blocked";
 
 /**
  * Where a brew has got to.
@@ -47,6 +55,8 @@ export type BrewFailure =
  */
 export type BrewPhase =
     | {name: "idle"}
+    /** Asking a machine that has not answered yet, and asking again. */
+    | {name: "waking"}
     | {name: "sending"}
     /** Uploaded and waiting for the user to press START in the app. */
     | {name: "readyToStart"}
@@ -232,11 +242,24 @@ export default class Machine {
         try {
             await this.transport.connect(id);
         } catch (e) {
-            this.note(`refused — ${(e as Error).message}`);
-            // The machine permits one link at a time and does not reject a
-            // second one so much as ignore it, so a failure here is almost
-            // always the official app holding the slot. Say that, rather than
-            // implying the hardware is at fault.
+            // Not every failure arrives as an Error: the one that prompted
+            // this had no `message` at all, which the log rendered as the word
+            // "undefined". Anything that is not a real sentence is silence.
+            const said = (e as Error | undefined)?.message;
+            const reason = typeof said === "string" ? said.trim() : "";
+            this.note(`refused — ${reason === "" ? "no reason given" : reason}`);
+            // A radio that is off, unauthorised or still coming up is a fact
+            // about the phone, and saying anything else sends the user to the
+            // machine to fix something that is not there.
+            if (e instanceof RadioUnavailableError) throw e;
+            // When the radio has said what went wrong, that is the only true
+            // thing anyone knows about the failure; do not trade it for a
+            // guess.
+            if (reason !== "") throw e instanceof Error ? e : new Error(reason);
+            // Silence, then. The machine permits one link at a time and does
+            // not reject a second one so much as ignore it, so a failure with
+            // nothing to say is almost always the official app holding the
+            // slot. Guess that, rather than implying the hardware is at fault.
             throw new Error("The machine is already in use by another app.");
         }
         this.note("connected");
@@ -254,7 +277,18 @@ export default class Machine {
 
         // First write, before anything else is queued: the machine ignores
         // every command that follows if the handshake misses its window.
-        await this.shakeHands();
+        //
+        // A failure here used to pass straight through `connect`, leaving the
+        // transport linked -- so the app said "Connected" while the machine
+        // had not beeped, no vitals ever arrived, and the connection log had
+        // nothing to say about any of it. The handshake is the one frame that
+        // has to land, so its failure is worth a line of its own.
+        try {
+            await this.shakeHands();
+        } catch (e) {
+            this.note(`handshake not sent — ${(e as Error).message}`);
+            throw e;
+        }
         this.announceLink();
         // The gap matters as much here as anywhere. Writing the info request
         // straight after the handshake is a two-frame burst on a channel with
@@ -365,6 +399,13 @@ export default class Machine {
             }
             if (await answered) return true;
         }
+        // Silence is evidence, and it outranks the clock. The session is
+        // renewed on a timer because renewing beeps -- but a machine that has
+        // ignored a whole round of questions is not in a session with us,
+        // whatever the timer says. Leaving the timer alone meant every later
+        // attempt asked into the same dead session and got the same silence,
+        // until twenty seconds had passed and the clock happened to agree.
+        this.lastHandshakeAt = 0;
         return false;
     }
 
@@ -562,13 +603,38 @@ export default class Machine {
         // Telling the user to reconnect is also asking them to do something the
         // app can do for itself — and on hardware reconnecting did not help,
         // because the question was being lost rather than refused.
-        if (this.isConnected()) await this.askHowItIsDoing();
+        // Asked until it answers, not once. The machine loses the question
+        // rather than refusing it, and there is nothing a user's second press
+        // does that this cannot do for them -- so the presses happen here.
+        // Each round opens a fresh session, which beeps; that is the price of
+        // the answer, and the phase says what the beeping is for.
+        for (let round = 0; this.isConnected(); round++) {
+            if (round > 0) {
+                this.setPhase({name: "waking"});
+                await this.gap();
+            }
+            const answered = await this.askHowItIsDoing();
+            // A machine that has introduced itself before is asked once and no
+            // more: the ask is for the water level, which goes stale, and it
+            // is not worth another round of beeping to refresh what we already
+            // roughly know. Only a machine we have never heard from at all is
+            // worth pestering, because without it the brew cannot start.
+            if (answered || this.info !== null) break;
+            if (round + 1 >= BREW_INFO_ROUNDS) break;
+        }
         await this.brewOnce(recipe);
     }
 
     private async brewOnce(recipe: Recipe): Promise<void> {
         const blocked = this.brewBlockReason(recipe);
-        if (blocked !== null) throw new Error(blocked);
+        if (blocked !== null) {
+            // The phase as well as the throw. The caller gets an exception to
+            // handle, but the brew screen watches the phase, and a refusal that
+            // left the phase at `idle` sat there saying "Ready when you are."
+            // with nothing to press.
+            this.setPhase({name: "failed", reason: "blocked", detail: blocked});
+            throw new Error(blocked);
+        }
 
         this.pourCount = recipe.pours.length;
         this.setPhase({name: "sending"});

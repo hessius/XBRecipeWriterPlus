@@ -10,12 +10,21 @@
 import {Platform} from "react-native";
 import BleManager from "react-native-ble-manager";
 
-import {MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC} from "@/constants/machine";
+import {MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC, RADIO_READY_MS} from "@/constants/machine";
 import {buildType1, buildType1Bytes} from "@/library/machine/protocol";
+import {RadioUnavailableError} from "@/library/machine/errors";
 import {BleTransport} from "@/library/machine/Transport";
 
 jest.mock("react-native-ble-manager", () => ({
     __esModule: true,
+    // The real module exports this enum as a value, not only a type, and the
+    // transport compares against it. A mock that omits it would leave every
+    // comparison reading a property of `undefined`.
+    BleState: {
+        Unknown: "unknown", Resetting: "resetting", Unsupported: "unsupported",
+        Unauthorized: "unauthorized", On: "on", Off: "off",
+        TurningOn: "turning_on", TurningOff: "turning_off"
+    },
     default: {
         start: jest.fn().mockResolvedValue(undefined),
         connect: jest.fn().mockResolvedValue(undefined),
@@ -26,7 +35,9 @@ jest.mock("react-native-ble-manager", () => ({
         disconnect: jest.fn().mockResolvedValue(undefined),
         onDidUpdateValueForCharacteristic: jest.fn(() => ({remove: jest.fn()})),
         onDisconnectPeripheral: jest.fn(() => ({remove: jest.fn()})),
-        onDiscoverPeripheral: jest.fn(() => ({remove: jest.fn()}))
+        onDiscoverPeripheral: jest.fn(() => ({remove: jest.fn()})),
+        checkState: jest.fn().mockResolvedValue("on"),
+        onDidUpdateState: jest.fn(() => ({remove: jest.fn()}))
     }
 }));
 
@@ -283,5 +294,96 @@ describe("saying which channels were opened", () => {
         await transport.connect("AA:BB:CC");
 
         expect(transport.channels.join(" ")).toContain("ffe3 refused");
+    });
+});
+
+describe("waiting for the radio", () => {
+    beforeEach(() => jest.clearAllMocks());
+    afterEach(() => { Platform.OS = "ios"; });
+
+    /** Hand the transport a state event, as the native module would. */
+    function announceState(state: string): void {
+        const calls = (BleManager.onDidUpdateState as jest.Mock).mock.calls;
+        calls.forEach(([listener]) => listener({state}));
+    }
+
+    it("does not reach for the machine before the adapter is on", async () => {
+        // The bug this exists for. `BleManager.start()` resolves before
+        // CoreBluetooth has finished powering on, and a connect issued in that
+        // window fails in about six milliseconds with an error carrying no
+        // message at all. On a real phone that was every single launch: the
+        // remembered machine was reached for, refused instantly, and only a
+        // manual attempt a few seconds later worked.
+        (BleManager.checkState as jest.Mock).mockResolvedValue("unknown");
+        const transport = new BleTransport();
+
+        const connecting = transport.connect("AA:BB:CC");
+        // Everything queued so far, so the transport has reached its wait.
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(BleManager.connect).not.toHaveBeenCalled();
+        expect(BleManager.onDidUpdateState).toHaveBeenCalled();
+
+        announceState("on");
+        await connecting;
+        expect(BleManager.connect).toHaveBeenCalledWith("AA:BB:CC");
+    });
+
+    it("does not wait out an adapter that is on its way off", async () => {
+        // Waiting can only help a radio that is coming up. One going down will
+        // never reach "on", so waiting five seconds to say so is five seconds
+        // of the user watching nothing happen before an unhelpful answer.
+        (BleManager.checkState as jest.Mock).mockResolvedValue("turning_off");
+        const transport = new BleTransport();
+
+        await expect(transport.connect("AA:BB:CC")).rejects.toThrow(/switched off/i);
+        expect(BleManager.connect).not.toHaveBeenCalled();
+    });
+
+    it("connects straight away when the adapter is already on", async () => {
+        // The common case, and it must not pay for the fix above.
+        (BleManager.checkState as jest.Mock).mockResolvedValue("on");
+        const transport = new BleTransport();
+
+        await transport.connect("AA:BB:CC");
+
+        expect(BleManager.connect).toHaveBeenCalledWith("AA:BB:CC");
+        expect(BleManager.onDidUpdateState).not.toHaveBeenCalled();
+    });
+
+    it("says Bluetooth is off rather than blaming the machine", async () => {
+        // Every connection failure used to be reported as "the machine is
+        // already in use by another app", which for a switched-off radio is
+        // not merely unhelpful but false, and sends the user to the machine to
+        // fix a problem that is on the phone.
+        (BleManager.checkState as jest.Mock).mockResolvedValue("off");
+        const transport = new BleTransport();
+
+        await expect(transport.connect("AA:BB:CC")).rejects.toThrow(RadioUnavailableError);
+        expect(BleManager.connect).not.toHaveBeenCalled();
+    });
+
+    it("says so when Bluetooth permission was refused", async () => {
+        (BleManager.checkState as jest.Mock).mockResolvedValue("unauthorized");
+        const transport = new BleTransport();
+
+        await expect(transport.connect("AA:BB:CC")).rejects.toThrow(/permission|allow/i);
+        expect(BleManager.connect).not.toHaveBeenCalled();
+    });
+
+    it("gives up waiting rather than hanging on a radio that never comes up", async () => {
+        jest.useFakeTimers();
+        try {
+            (BleManager.checkState as jest.Mock).mockResolvedValue("unknown");
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC");
+            const settled = connecting.catch((e: Error) => e.message);
+            await jest.advanceTimersByTimeAsync(RADIO_READY_MS + 100);
+
+            expect(await settled).toMatch(/bluetooth/i);
+            expect(BleManager.connect).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

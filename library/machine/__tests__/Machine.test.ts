@@ -3,6 +3,7 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
 import {buildType1} from "@/library/machine/protocol";
+import {RadioUnavailableError} from "@/library/machine/errors";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
@@ -113,6 +114,125 @@ async function readyMachine() {
     return {transport, machine};
 }
 
+describe("connecting", () => {
+    it("passes on what the radio said, instead of blaming the machine", async () => {
+        // Every failure used to be reported as "the machine is already in use
+        // by another app". That guess is reasonable for a silent refusal --
+        // the machine permits one link and ignores a second rather than
+        // rejecting it -- but it is false for a radio that is switched off,
+        // and it sends the user to the machine to fix something on the phone.
+        const transport = new FakeTransport();
+        transport.failConnect = new RadioUnavailableError("Bluetooth is switched off.");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow("Bluetooth is switched off.");
+    });
+
+    it("says so when the opening handshake never reached the machine", async () => {
+        // Seen on hardware: the app said "Connected", the machine did not
+        // beep, no vitals ever arrived, and the connection log said nothing at
+        // all. A handshake whose write fails left the link up and useless with
+        // no account of why -- and the handshake is the one frame that has to
+        // land, because the machine ignores everything that follows it.
+        const transport = new FakeTransport();
+        transport.failNextWrite = "radio not ready";
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await machine.connect("AA:BB").catch(() => {});
+
+        expect(machine.linkHistory.map((e) => e.text).join(" "))
+            .toMatch(/handshake.*radio not ready/i);
+    });
+
+    it("repeats a refusal that came with an explanation", async () => {
+        // The guess below is for silence. When the radio has actually said
+        // what went wrong, replacing that with a guess throws away the only
+        // true thing anyone knows about the failure.
+        const transport = new FakeTransport();
+        transport.failConnect = new Error("Connection was cancelled by the peripheral.");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects
+            .toThrow("Connection was cancelled by the peripheral.");
+    });
+
+    it("treats a failure with no message at all as silence", async () => {
+        // What the phone actually produced: an error whose `message` was not a
+        // string, which the log dutifully rendered as the word "undefined".
+        const transport = new FakeTransport();
+        transport.failConnect = {} as Error;
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow(/already in use/i);
+        expect(machine.linkHistory.map((e) => e.text).join(" "))
+            .toContain("refused — no reason given");
+    });
+
+    it("still guesses at the machine when the failure says nothing", async () => {
+        const transport = new FakeTransport();
+        transport.failConnect = new Error("");
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(machine.connect("AA:BB")).rejects.toThrow(/already in use/i);
+    });
+});
+
+describe("a machine that will not say how it is doing", () => {
+    it("stops believing the session is live when the machine goes quiet", async () => {
+        // The root cause of a brew that would not start. The session is
+        // renewed on a clock, and renewing beeps, so a renewal inside the
+        // freshness window is skipped. But an unanswered question is itself
+        // evidence that the session is not live -- and skipping the renewal on
+        // the strength of a clock meant every later attempt asked into the
+        // same dead session and got the same silence, until twenty seconds had
+        // passed and the clock happened to agree.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.ignoreInfoRequests = INFO_ATTEMPTS;
+
+        expect(await machine.askHowItIsDoing()).toBe(false);
+        transport.written = [];
+        await machine.askHowItIsDoing();
+
+        expect(transport.sent).toContain(8100);
+    });
+
+    it("asks again by itself, rather than handing the user a refusal", async () => {
+        // What the user had to do by hand: press BREW, watch nothing happen,
+        // press it again, and again. Nothing was actually wrong with the
+        // machine -- the question was being lost -- so there was nothing for
+        // the user's third press to do that the app could not have done.
+        const transport = new FakeTransport();
+        transport.infoReply = null; // silent through the connect
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        // Answers only once a whole round of asking has gone unanswered.
+        transport.infoReply = machineInfoFrame();
+        transport.ignoreInfoRequests = INFO_ATTEMPTS;
+        transport.written = [];
+
+        await machine.brew(brewable());
+
+        expect(machine.info).not.toBeNull();
+        expect(brewFrames(transport).length).toBeGreaterThan(0);
+    });
+
+    it("gives up in the end, and says why", async () => {
+        // Not infinite. A machine that is switched off is silent too, and a
+        // brew screen that retries for ever never tells anyone that.
+        const transport = new FakeTransport();
+        transport.infoReply = null;
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+
+        await expect(machine.brew(brewable())).rejects.toThrow(/how it is doing/i);
+        expect(machine.phase).toMatchObject({name: "failed", reason: "blocked"});
+    });
+});
+
 describe("brewing", () => {
     it("refuses to send while the machine is busy", async () => {
         const {transport, machine} = await readyMachine();
@@ -120,6 +240,21 @@ describe("brewing", () => {
 
         await expect(machine.brew(brewable())).rejects.toThrow(/busy|already brewing/i);
         expect(brewFrames(transport)).toEqual([]);
+    });
+
+    it("does not leave the screen saying everything is fine", async () => {
+        // Seen on hardware: the machine beeped, the recipe never went, and the
+        // brew screen sat on "Ready when you are." with nothing to press. A
+        // refusal that happens before the first frame used to throw without
+        // touching the phase, so the one place the user is looking never heard
+        // that anything had gone wrong.
+        const {transport, machine} = await readyMachine();
+        transport.emit(status(0x10)); // brewing
+
+        await machine.brew(brewable()).catch(() => {});
+
+        expect(machine.phase.name).toBe("failed");
+        expect(machine.phase).toMatchObject({detail: expect.stringMatching(/busy/i)});
     });
 
     it("refuses to send when the tank is low", async () => {
@@ -296,7 +431,9 @@ describe("brewing", () => {
         await expect(machine.brew(brewable())).rejects.toThrow(/has not said/i);
         // Asking again is fine — that is the app trying to answer the question
         // for itself. Sending the recipe anyway is not.
-        expect(transport.sent.filter((code) => code !== 40521)).toEqual([]);
+        // 8100 as well as 40521: a question can only be asked inside a session,
+        // so opening one is part of asking rather than part of brewing.
+        expect(transport.sent.filter((code) => code !== 40521 && code !== 8100)).toEqual([]);
     });
 
     it("ends the brew when the radio refuses a frame, instead of waiting for ever", async () => {
