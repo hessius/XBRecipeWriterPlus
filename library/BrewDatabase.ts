@@ -129,7 +129,12 @@ class BrewDatabase {
     }
 
     public clear(): void {
-        this.all().forEach((brew) => this.remove(brew.id));
+        // One transaction, not a loop over remove(): a half-cleared history
+        // (some brews gone, some still there) is worse than a failed clear.
+        this.db.withTransactionSync(() => {
+            this.db.runSync("DELETE FROM brew_samples");
+            this.db.runSync("DELETE FROM brews");
+        });
     }
 
     /**

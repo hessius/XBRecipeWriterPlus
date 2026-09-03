@@ -44,13 +44,17 @@ jest.mock("expo-sqlite", () => ({
                 } else if (/^\s*UPDATE brews SET hasStream/i.test(source)) {
                     const row = brews.find((b) => b.id === params[0]);
                     if (row) row.hasStream = 0;
-                } else if (/^\s*DELETE FROM brew_samples/i.test(source)) {
+                } else if (/^\s*DELETE FROM brew_samples WHERE brewId/i.test(source)) {
                     for (let i = samples.length - 1; i >= 0; i -= 1) {
                         if (samples[i].brewId === params[0]) samples.splice(i, 1);
                     }
-                } else if (/^\s*DELETE FROM brews/i.test(source)) {
+                } else if (/^\s*DELETE FROM brew_samples\s*$/i.test(source)) {
+                    samples.length = 0;
+                } else if (/^\s*DELETE FROM brews WHERE id/i.test(source)) {
                     const index = brews.findIndex((b) => b.id === params[0]);
                     if (index >= 0) brews.splice(index, 1);
+                } else if (/^\s*DELETE FROM brews\s*$/i.test(source)) {
+                    brews.length = 0;
                 }
             },
             getAllSync: (source: string, params: (string | number)[] = []) => {
@@ -173,5 +177,6 @@ describe("BrewDatabase", () => {
         db.clear();
         expect(db.all()).toEqual([]);
         expect(db.samples("a")).toEqual([]);
+        expect(db.samples("b")).toEqual([]);
     });
 });
