@@ -997,6 +997,7 @@ export default function EditRecipe() {
             </YStack>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
+                                 recipeUuid={recipe.uuid}
                                  onOpenChange={setOverflowOpen}
                                  showHints={showHint} onShowHintsChange={setShowHint}
                                  onShare={onSharePress}

@@ -260,6 +260,9 @@ export default function SettingsScreen({settings}: Props) {
                 <MachineSection settings={settings}/>
 
                 <SettingsSection title="Library">
+                    <SettingsActionRow label="Brew history"
+                                       detail="Every brew you have recorded."
+                                       onPress={() => router.push("/brewHistory")}/>
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
                                        onPress={onBackUp}/>
