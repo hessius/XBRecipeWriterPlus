@@ -2,8 +2,11 @@
 import React from "react";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
+import {accents} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+const TEST_ACCENT = accents.coffee[1];
 
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
@@ -14,7 +17,7 @@ async function draw(props: Partial<React.ComponentProps<typeof BrewStageLadder>>
     return renderWithProviders(
         <BrewStageLadder
             pours={pours(5)}
-            accent="#C86A3B"
+            accent={TEST_ACCENT}
             activeIndex={1}
             stageElapsed={0}
             {...props}
@@ -35,7 +38,7 @@ describe("BrewStageLadder", () => {
         const order = ladder.props.children.flat().map(
             (child: {props: {testID?: string}}) => child?.props?.testID
         );
-        expect(order.indexOf("stage-card")).toBe(order.indexOf("rung-1") + 1);
+        expect(order.indexOf("stage-card")).toBe(order.indexOf("row-1") + 1);
     });
 
     it("shows the glyph legend in the open card", async () => {
@@ -65,20 +68,20 @@ describe("BrewStageLadder", () => {
         wide[1].pauseTime = 60;
         const {getByTestId} = await draw({pours: wide, activeIndex: null});
         // Stage 2 is 10 s of pour plus 60 s of pause, and fills the lane.
-        expect(getByTestId("ladder").props.laneSeconds).toBeCloseTo(70, 1);
+        expect(parseFloat(getByTestId("ladder").props.accessibilityValue.text)).toBeCloseTo(70, 1);
     });
 
     it("re-scales when the live stage outruns its plan", async () => {
         // Overflow protection: the stage is still running well past its span,
         // so the lane grows rather than pinning at full and saying nothing.
         const {getByTestId} = await draw({activeIndex: 0, stageElapsed: 90});
-        expect(getByTestId("ladder").props.laneSeconds).toBeCloseTo(90, 1);
+        expect(parseFloat(getByTestId("ladder").props.accessibilityValue.text)).toBeCloseTo(90, 1);
     });
 
     it("marks stages before the live one as done and after it as pending", async () => {
         const {getByTestId} = await draw({activeIndex: 2});
-        expect(getByTestId("rung-0").props.style.opacity).toBe(1);
-        expect(getByTestId("rung-4").props.style.opacity).toBeLessThan(1);
+        expect(getByTestId("row-0").props.accessibilityValue.text).toBe("done");
+        expect(getByTestId("row-4").props.accessibilityValue.text).toBe("pending");
     });
 
     it("survives a recipe with no pours", async () => {

@@ -25,8 +25,6 @@ type Props = {
 };
 
 const LANE_WIDTH = 120;
-/** Roughly a rung plus its padding; only used to aim the auto-scroll. */
-const RUNG_HEIGHT = 34;
 
 const GLYPH_WORDS: [GlyphKind, string][] = [
     ["centered", "CENTRED"],
@@ -51,6 +49,8 @@ export default function BrewStageLadder({
     pours, accent, activeIndex, stageElapsed, holding = false
 }: Props) {
     const scroller = useRef<ScrollView>(null);
+    // Maps rung index → measured y-offset relative to the ScrollView content.
+    const rungY = useRef<Record<number, number>>({});
 
     const planned = pours.reduce((widest, pour) => Math.max(widest, stageSeconds(pour)), 0);
     // Raised by the live stage once it outruns its plan, which is how a hold
@@ -58,9 +58,14 @@ export default function BrewStageLadder({
     const laneSeconds = Math.max(planned, stageElapsed);
 
     useEffect(() => {
-        if (activeIndex === null) return;
-        scroller.current?.scrollTo({y: Math.max(0, (activeIndex - 1) * RUNG_HEIGHT), animated: true});
-    }, [activeIndex]);
+        // Sentinels: null = not yet started, pours.length = brew finished.
+        // Only scroll for a genuinely live stage.
+        if (activeIndex === null || activeIndex < 0 || activeIndex >= pours.length) return;
+        const y = rungY.current[activeIndex];
+        if (y === undefined) return;
+        // A small lead keeps the active rung from sitting flush at the top edge.
+        scroller.current?.scrollTo({y: Math.max(0, y - 8), animated: true});
+    }, [activeIndex, pours.length]);
 
     const rows: React.ReactNode[] = [];
     pours.forEach((pour, index) => {
@@ -75,18 +80,24 @@ export default function BrewStageLadder({
             : state === "active" && span > 0 ? stageElapsed / span : 0;
 
         rows.push(
-            <BrewStageRung
-                key={`rung-${index}`}
-                testID={`rung-${index}`}
-                pour={pour}
-                index={index}
-                state={state}
-                accent={accent}
-                laneSeconds={laneSeconds}
-                laneWidth={LANE_WIDTH}
-                progress={progress}
-                holding={holding && state === "active"}
-            />
+            <View
+                key={`row-${index}`}
+                testID={`row-${index}`}
+                accessibilityValue={{text: state}}
+                onLayout={e => { rungY.current[index] = e.nativeEvent.layout.y; }}
+            >
+                <BrewStageRung
+                    testID={`rung-${index}`}
+                    pour={pour}
+                    index={index}
+                    state={state}
+                    accent={accent}
+                    laneSeconds={laneSeconds}
+                    laneWidth={LANE_WIDTH}
+                    progress={progress}
+                    holding={holding && state === "active"}
+                />
+            </View>
         );
 
         if (index === activeIndex) {
@@ -135,7 +146,7 @@ export default function BrewStageLadder({
 
     return (
         <ScrollView ref={scroller}>
-            <View testID="ladder" {...({laneSeconds} as Record<string, unknown>)}>{rows}</View>
+            <View testID="ladder" accessibilityValue={{text: String(laneSeconds)}}>{rows}</View>
         </ScrollView>
     );
 }
