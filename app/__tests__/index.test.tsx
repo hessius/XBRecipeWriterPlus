@@ -907,6 +907,22 @@ describe("HomeScreen, opening one editor at a time", () => {
         );
     });
 
+    it("opens one brew screen when the capsule is tapped twice in a row", async () => {
+        // Same race as the editor: the push is not instantaneous and a second
+        // tap within the guard window would stack a second brew on top of the
+        // first — one running, one waiting beneath it.
+        mockRemembered = "machine-device-id";
+        await renderHome({recipes: [named("Ethiopia")]});
+        const capsule = await screen.findByLabelText("Brew this recipe");
+
+        await act(async () => {
+            fireEvent.press(capsule);
+            fireEvent.press(capsule);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
     it("shows the machine dot when a machine has been paired", async () => {
         // The dot is hidden until the user has paired a machine (remembered
         // !== ""), so a first-time user sees a clean header.

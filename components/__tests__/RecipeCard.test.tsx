@@ -647,4 +647,23 @@ describe("RecipeCard", () => {
         );
         expect(screen.queryByLabelText("Brew this recipe")).toBeNull();
     });
+
+    it("offers the brew action to a screen reader when the capsule is shown", async () => {
+        // The card collapses its subtree into one accessibility element, so
+        // the capsule's own button is unreachable. A `brew` accessibilityAction
+        // mirrors the swipe path that the capsule provides visually.
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        showBrew onBrew={onBrew}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "brew"}});
+        expect(onBrew).toHaveBeenCalledTimes(1);
+    });
 });

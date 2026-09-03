@@ -14,7 +14,7 @@ type Props = {
 const WIDTH = 21;
 const INSET = 5;
 /** Enough to reach the HIG's 44 px without widening the capsule itself. */
-const SLOP = {top: 8, bottom: 8, left: 12, right: 8};
+const SLOP = {top: 8, bottom: 8, left: 0, right: 8};
 
 /**
  * BREW, on the right edge of a recipe card.

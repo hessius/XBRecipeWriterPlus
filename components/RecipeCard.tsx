@@ -164,7 +164,8 @@ export default function RecipeCard({
         ...(onDuplicate !== undefined
             ? [{name: "duplicate", label: "Duplicate recipe"}]
             : []),
-        ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : [])
+        ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
+        ...(showBrew && onBrew !== undefined ? [{name: "brew", label: "Brew this recipe"}] : [])
     ];
 
     return (
@@ -182,6 +183,8 @@ export default function RecipeCard({
                     onDuplicate?.();
                 } else if (event.nativeEvent.actionName === "delete") {
                     onDelete?.();
+                } else if (event.nativeEvent.actionName === "brew") {
+                    onBrew?.();
                 }
             }}
             onPress={onPress}

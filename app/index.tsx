@@ -77,6 +77,8 @@ export default function HomeScreen({db, settings}: Props) {
         useMachine();
     const showBrew = showBrewRows && remembered !== "";
     const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(null);
+    /** When the brew screen was last pushed, so a second press in that window is refused. */
+    const lastBrewPushRef = useRef(0);
 
     // Repaint vitals whenever the link emits an event (connected, info arrived,
     // disconnected). The info blob is mutated in place on the shared machine, so
@@ -206,6 +208,7 @@ export default function HomeScreen({db, settings}: Props) {
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
             lastEditorPushAt = 0;
+            lastBrewPushRef.current = 0;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -365,6 +368,19 @@ export default function HomeScreen({db, settings}: Props) {
         return true;
     }
 
+    function openBrew(recipe: Recipe): void {
+        // eslint-disable-next-line react-hooks/purity
+        if (Date.now() - lastBrewPushRef.current < EDITOR_PUSH_GUARD_MS) {
+            return;
+        }
+        // eslint-disable-next-line react-hooks/purity
+        lastBrewPushRef.current = Date.now();
+        router.push({
+            pathname: "/brew",
+            params:   {recipeJSON: JSON.stringify(recipe)}
+        });
+    }
+
     // The import sheet covers the screen while it is open, and the NFC ceremony
     // while a scan is running. Both hide the subtree below from the reader.
     const screenCovered = scanning || importOpen;
@@ -442,10 +458,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
                                 showBrew={showBrew}
-                                onBrew={() => router.push({
-                                    pathname: "/brew",
-                                    params:   {recipeJSON: JSON.stringify(item)}
-                                })}
+                                onBrew={() => openBrew(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);

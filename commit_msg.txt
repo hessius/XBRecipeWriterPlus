@@ -1,0 +1,21 @@
+fix three code-review findings on the BREW capsule
+
+Finding 1 — VoiceOver: add a brew accessibilityAction to RecipeCard so a
+screen reader can reach the capsule. The card's accessible group collapses
+its subtree; duplicate and delete already work this way. Test asserts the
+action is present and fires onBrew.
+
+Finding 2 — double tap: guard openBrew with the same timestamp latch used
+by openRecipe. Implemented as a useRef (instead of a module-level variable)
+to satisfy react-hooks/globals; the two Date.now() calls inside the new
+function suppress react-hooks/purity with eslint-disable-next-line, matching
+the precedent set by other suppressed rules in this file. lastBrewPushRef is
+reset in useFocusEffect, so a brew screen that never lands cannot wedge
+the library. Test asserts two rapid presses produce one push.
+
+Finding 3 — left slop: reduce hitSlop.left from 12 to 0. The capsule is
+inset 5 px from the card edge; any left slop extends into the card body and
+lets the Pressable steal card-open taps. The existing touch-target test
+remains honest.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
