@@ -98,8 +98,11 @@ export function useBrewRun(recipe: Recipe, store?: BrewStore) {
     // The stage has run past its own plan, which is what an overflow-protection
     // hold looks like and what a planned pause never does.
     const holding = pouring && stageSpan > 0 && stageElapsed > stageSpan;
+    // Per-stage arithmetic: the over-run on this pour, not elapsed-vs-total.
+    // Using total elapsed here would clamp to 0 for every pour except the last.
+    const heldSeconds = holding ? stageElapsed - stageSpan : 0;
 
-    return {...brewer, samples, elapsed, stageElapsed, activeIndex, holding};
+    return {...brewer, samples, elapsed, stageElapsed, activeIndex, holding, heldSeconds};
 }
 
 export default useBrewRun;

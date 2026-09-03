@@ -11,7 +11,6 @@ import {BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
         FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
         RUNNING} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
-import {useBrewRun} from "@/hooks/useBrewRun";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -40,22 +39,42 @@ export default function Brew() {
     const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
-    const [recipe] = useState(() => new Recipe(undefined, recipeJSON));
-    const runState = useBrewRun(recipe);
-    const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
-           brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry} = runState;
+
+    // A local recipe from the route params. Used for the first render (before
+    // RunOwner in the provider has its first tick) and for `total` below.
+    const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
+
+    const {run, start, brew, startBrew, cancelBrew, canOfferProMode,
+           switchToProAndRetry, error} = useLiveBrew();
+
+    // Tell the provider to start a run for this recipe. `start` is idempotent:
+    // if RunOwner is already mounted it replaces `start` with a no-op, so
+    // re-mounting this screen while a brew is in flight never commands a second
+    // brew (Finding 2).
+    useEffect(() => {
+        start(localRecipe);
+        // localRecipe is stable (useState initialiser).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Read display state from the provider's run. The provider owns the single
+    // recorder and the single DB write; the screen is a pure reader (Finding 1).
+    const phase = run?.phase ?? {name: "grinding"} as const;
+    const samples = run?.samples ?? [];
+    const elapsed = run?.elapsed ?? 0;
+    const stageElapsed = run?.stageElapsed ?? 0;
+    const activeIndex = run?.activeIndex ?? null;
+    const holding = run?.holding ?? false;
+
+    // The recipe the provider is running takes precedence once it is available,
+    // because it is the object the recorder was started with.
+    const recipe = run?.recipe ?? localRecipe;
+
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
         navigation.setOptions({title: ""});
     }, [navigation]);
-
-    // Once, on mount. Re-sending on every render would commit the recipe again
-    // to a machine that is already grinding it.
-    useEffect(() => {
-        void brew(recipe);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     useEffect(() => {
         if (phase.name === "pouring" && !firstBrewDone) setFirstBrewDone(true);
@@ -65,23 +84,12 @@ export default function Brew() {
     const motion = useTraceAnimation(phase.name);
     const running = RUNNING.has(phase.name);
 
-    // Sync into the live-brew provider so the mini-bar on the home screen can
-    // show this run after the user navigates back. The provider freezes the
-    // last snapshot, so done and stopped states persist until dismissed.
-    const {push: pushLiveBrew} = useLiveBrew();
-    const heldSeconds = Math.max(0, elapsed - plannedSeconds(recipe.pours));
-    useEffect(() => {
-        pushLiveBrew({recipe, samples, elapsed, phase, holding, heldSeconds});
-        // recipe is stable (useState initialiser); exhaustive-deps cannot see
-        // that, so we list it explicitly. pushLiveBrew is stable (context setter).
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [samples, elapsed, phase, holding, heldSeconds]);
     // The two water events are not the same thing. `blocked` means nothing was
     // sent and the dose is safe; a failure by name means the machine stopped
     // with the dose already spent.
     const blocked = phase.name === "failed" && phase.reason === "blocked";
     const failed = phase.name === "failed" && !blocked;
-    const total = recipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
+    const total = localRecipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
     const last = samples[samples.length - 1];
 
     const headline = blocked

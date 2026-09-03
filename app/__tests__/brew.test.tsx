@@ -4,6 +4,8 @@ import {fireEvent} from "@testing-library/react-native";
 import Brew from "@/app/brew";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
+import Pour from "@/library/Pour";
+import Recipe from "@/library/Recipe";
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 let mockPhase: BrewPhase = {name: "pouring", pour: 1, pours: 2};
@@ -18,24 +20,42 @@ const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
 const mockSwitchToProAndRetry = jest.fn();
+const mockStart = jest.fn();
 
-jest.mock("@/hooks/useBrewRun", () => {
-    const value = (_recipe: unknown) => ({
-        phase: mockPhase,
-        error: null,
-        samples: mockSamples,
-        elapsed: mockElapsed,
-        stageElapsed: mockStageElapsed,
-        activeIndex: mockActiveIndex,
-        holding: mockHolding,
+// Build a minimal Recipe for the mock run. Two-pour recipe: pour 1 is 40 ml.
+const mockRecipe = (() => {
+    const r = new Recipe();
+    r.name = "Ethiopia Guji";
+    r.pours = [
+        new Pour(1, 40, 93, 40, 0, 0, 20),
+    ];
+    return r;
+})();
+
+// The brew screen now reads its run from useLiveBrew rather than calling
+// useBrewRun itself.  The seam moves here so all 17 assertions are preserved.
+jest.mock("@/hooks/useLiveBrew", () => {
+    const value = () => ({
+        run: {
+            recipe: mockRecipe,
+            phase: mockPhase,
+            samples: mockSamples,
+            elapsed: mockElapsed,
+            stageElapsed: mockStageElapsed,
+            activeIndex: mockActiveIndex,
+            holding: mockHolding,
+            heldSeconds: 0,
+        },
+        start: mockStart,
+        dismiss: jest.fn(),
         brew: mockBrew,
         startBrew: mockStartBrew,
         cancelBrew: mockCancelBrew,
         canOfferProMode: () => mockCanOfferPro,
         switchToProAndRetry: mockSwitchToProAndRetry,
-        machine: {}
+        error: null,
     });
-    return {__esModule: true, default: value, useBrewRun: value};
+    return {__esModule: true, default: value, useLiveBrew: value};
 });
 
 jest.mock("@/hooks/useSetting", () => {
@@ -61,6 +81,7 @@ beforeEach(() => {
     mockStartBrew.mockClear();
     mockCancelBrew.mockClear();
     mockSwitchToProAndRetry.mockClear();
+    mockStart.mockClear();
     mockPhase = {name: "pouring", pour: 1, pours: 2};
     mockSamples = [];
     mockElapsed = 12;

@@ -223,4 +223,20 @@ describe("useBrewRun", () => {
         await act(async () => { rerender(undefined); });
         expect(result.current.activeIndex).toBeNull();
     });
+
+    it("reports heldSeconds from per-stage time, not total elapsed", async () => {
+        // Stage 1 is 10 s pour + 20 s pause = 30 s plan.  The brew has two
+        // stages so the total plan is ~70 s.  Advancing 35 s into stage 1 makes
+        // it hold.  The buggy formula (elapsed − totalPlanned) clamps to 0
+        // because 35 < 70.  The correct formula (stageElapsed − stageSpan)
+        // yields 35 − 30 = 5.  This test would fail with the buggy formula.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await act(async () => { jest.advanceTimersByTime(35_000); });
+        await h.water(40);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(result.current.holding).toBe(true);
+        expect(result.current.heldSeconds).toBeGreaterThan(0);
+    });
 });
