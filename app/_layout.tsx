@@ -1,6 +1,6 @@
 import {useFonts} from 'expo-font';
 import {DarkTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
@@ -13,6 +13,8 @@ import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
 import {startMachineLink} from '@/hooks/useMachine';
 import {LiveBrewProvider} from '@/hooks/useLiveBrew';
+import {sharedBrewDatabase, sweepOnLaunch} from '@/hooks/useBrewHistory';
+import {useSetting} from '@/hooks/useSetting';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -62,6 +64,18 @@ export default function RootLayout() {
     useEffect(() => {
         startMachineLink();
     }, []);
+
+    const [retention] = useSetting("brewTraceRetention");
+
+    // Sweep old brew streams once at launch, not after each brew. A ref guards
+    // against a double-run if `retention` changes before the sweep fires (e.g.,
+    // on a fresh install before the settings table has been read).
+    const sweptRef = useRef(false);
+    useEffect(() => {
+        if (sweptRef.current) return;
+        sweptRef.current = true;
+        sweepOnLaunch(sharedBrewDatabase(), retention);
+    }, [retention]);
 
     if (!loaded) {
         return null;
