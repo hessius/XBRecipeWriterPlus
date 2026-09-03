@@ -44,11 +44,11 @@ jest.mock("react-native-view-shot", () => {
  * uses (the File class and Paths).
  */
 jest.mock("expo-file-system", () => {
-    const MockFile = jest.fn(function MockFile() {
-        this.uri  = "file:///mock-cache/brew.json";
+    const MockFile = jest.fn(function MockFile(_dir, name) {
+        this.uri   = `file:///mock-cache/${String(name)}`;
         this.write = jest.fn();
     });
-    const Paths = {cache: {}};
+    const Paths = {cache: {uri: "file:///mock-cache/"}};
     return {__esModule: true, File: MockFile, Paths};
 });
 

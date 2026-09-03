@@ -103,6 +103,10 @@ export default function BrewRecord({recipeLookup}: Props) {
     // Ref for capturing the trace + figures as a PNG.
     const shotRef = useRef<ViewShotRef>(null);
 
+    // Guards against a second press while an export is already in flight.
+    const isSharingImageRef = useRef(false);
+    const isSharingDataRef  = useRef(false);
+
     const lastPushRef = useRef(0);
 
     function handleAllBrews() {
@@ -118,6 +122,8 @@ export default function BrewRecord({recipeLookup}: Props) {
      */
     async function shareImage() {
         if (!opened) return;
+        if (isSharingImageRef.current) return;
+        isSharingImageRef.current = true;
         try {
             const uri = await shotRef.current?.capture?.();
             if (uri === undefined) return;
@@ -128,6 +134,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             });
         } catch {
             // User cancelled, or the share sheet is unavailable — not an error.
+        } finally {
+            isSharingImageRef.current = false;
         }
     }
 
@@ -136,20 +144,29 @@ export default function BrewRecord({recipeLookup}: Props) {
      * The cache directory is the right place: it is writable, and the system
      * may reclaim it when space is low, which is exactly what we want for a
      * temporary export file.
+     *
+     * Availability is checked before writing so we do not produce a file that
+     * is never read. The temporary file is deleted after sharing: it would
+     * eventually be reclaimed anyway, but removing it immediately avoids
+     * accumulating stale exports in the cache directory.
      */
     async function shareData() {
         if (!opened) return;
+        if (isSharingDataRef.current) return;
+        isSharingDataRef.current = true;
         try {
+            if (!(await Sharing.isAvailableAsync())) return;
             const name = brewFilename(opened.record, "json");
             const file = new FSFile(Paths.cache, name);
             file.write(toExportJson(opened.record, opened.samples));
-            if (!(await Sharing.isAvailableAsync())) return;
             await Sharing.shareAsync(file.uri, {
                 mimeType:    "application/json",
                 dialogTitle: name
             });
         } catch {
             // User cancelled — not an error.
+        } finally {
+            isSharingDataRef.current = false;
         }
     }
 

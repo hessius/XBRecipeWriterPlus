@@ -50,7 +50,7 @@ export function toExportJson(record: StoredBrew, samples: BrewSample[]): string 
             endedAtISO:   new Date(record.endedAt).toISOString()
         },
         samples
-    }, null, 2);
+    });
 }
 
 /**
