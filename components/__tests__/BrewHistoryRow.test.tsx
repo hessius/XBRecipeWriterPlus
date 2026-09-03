@@ -25,6 +25,28 @@ describe("BrewHistoryRow", () => {
         expect(getByText(/244 G/)).toBeTruthy();
     });
 
+    it("shows the local date, not the UTC date", async () => {
+        // The fixture timestamp is 2026-09-04T03:00:00Z — Sep 4 in UTC.
+        // We mock the local accessors to return Sep 3 values so the test is
+        // non-vacuous: if the code calls getUTCDate() instead it bypasses the
+        // spy and uses the real UTC value (4), producing "2026-09-04" instead.
+        const startedAt = Date.UTC(2026, 8, 4, 3, 0); // Sep 4 UTC
+        const spyYear  = jest.spyOn(Date.prototype, "getFullYear").mockReturnValue(2026);
+        const spyMonth = jest.spyOn(Date.prototype, "getMonth").mockReturnValue(8); // Sep
+        const spyDay   = jest.spyOn(Date.prototype, "getDate").mockReturnValue(3);  // local day
+
+        const {getByText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({startedAt})} onPress={jest.fn()} />
+        );
+
+        // getDate() (mocked) → 3 → "2026-09-03"; getUTCDate() (real) → 4 → "2026-09-04"
+        expect(getByText("2026-09-03")).toBeTruthy();
+
+        spyYear.mockRestore();
+        spyMonth.mockRestore();
+        spyDay.mockRestore();
+    });
+
     it("marks a brew that did not finish", async () => {
         const {getByText} = await renderWithProviders(
             <BrewHistoryRow brew={brew({outcome: "failed", failure: "noWater"})}

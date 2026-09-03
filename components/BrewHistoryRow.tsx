@@ -11,12 +11,12 @@ type Props = {
     onPress: () => void;
 };
 
-/** `2026-09-03`. */
+/** `2026-09-03`. Uses local time so a brew made at 11 pm shows that night's date. */
 function formatDate(ms: number): string {
     const d = new Date(ms);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
 }
 

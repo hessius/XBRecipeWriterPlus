@@ -1,4 +1,4 @@
-import {router, useLocalSearchParams, useNavigation} from "expo-router";
+import {router, useFocusEffect, useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef} from "react";
 import {FlatList} from "react-native";
 import {Text, YStack} from "tamagui";
@@ -22,9 +22,18 @@ const PUSH_GUARD_MS = 2000;
 export default function BrewHistory() {
     const navigation = useNavigation();
     const {recipeUuid} = useLocalSearchParams<{recipeUuid?: string}>();
-    const {brews} = useBrewHistory();
+    const {brews, refresh} = useBrewHistory();
 
     const lastPushRef = useRef(0);
+
+    useFocusEffect(
+        // `useFocusEffect` demands a stable callback, which is the one place the
+        // repo hand-writes `React.useCallback` despite the React Compiler owning
+        // memoisation elsewhere — see `components/ImportTile.tsx`. Deps empty on
+        // purpose: this must re-run on focus, not on every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        React.useCallback(() => { refresh(); }, [])
+    );
 
     const filtered = recipeUuid
         ? brews.filter((b) => b.recipeUuid === recipeUuid)

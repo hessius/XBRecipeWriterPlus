@@ -1,43 +1,90 @@
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useEffect, useRef} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
+import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import RecipeDatabase from "@/library/RecipeDatabase";
+import type Recipe from "@/library/Recipe";
 
 const TRACE_HEIGHT = 150;
 const SCREEN_PADDING = 16;
 
+/** Minimal interface for looking up a recipe. Injected by tests. */
+export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
+
+let sharedLookup: RecipeLookup | undefined;
+function getSharedLookup(): RecipeLookup {
+    if (sharedLookup === undefined) sharedLookup = new RecipeDatabase();
+    return sharedLookup;
+}
+
+type Props = {
+    /** Injected by tests to avoid opening the real SQLite database. */
+    recipeLookup?: RecipeLookup;
+};
+
+/** The "All brews" header button. Defined at module scope — see house rules. */
+function AllBrewsButton({onPress}: {onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel="All brews"
+                   onPress={onPress} style={{paddingHorizontal: 12}}>
+            <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
+                           color={palette.dim}>
+                ALL BREWS
+            </DotMatrixText>
+        </Pressable>
+    );
+}
+
 /**
  * A single recorded brew, frozen.
  *
- * The same layout as the live brew screen: trace, figures, held time. The
- * record preserves the accent and recipe name at brew time, so a recipe
- * recoloured or deleted afterwards does not rewrite its own history.
+ * The same layout as the live brew screen: trace, figures, the stage ladder
+ * with every stage done. The record preserves the accent and recipe name at
+ * brew time, so a recipe recoloured or deleted afterwards does not rewrite its
+ * own history. If the recipe has since been deleted the ladder is omitted with
+ * a short note; figures and trace remain.
  */
-export default function BrewRecord() {
-    const {id} = useLocalSearchParams<{id?: string; latest?: string}>();
+export default function BrewRecord({recipeLookup}: Props) {
+    const {id} = useLocalSearchParams<{id?: string}>();
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
     const {open} = useBrewHistory();
-    const opened = id ? open(id) : null;
+
+    // Read the record once at mount (not on every render). `open` runs two
+    // synchronous SELECTs and JSON.parse on the stream, potentially hundreds
+    // of kilobytes — doing it in render causes re-parsing on every rotation.
+    const [opened] = useState(() => id ? open(id) : null);
+
+    // Look up the recipe for the stage ladder. The recipe may have been
+    // deleted since the brew was recorded; that must not crash the screen.
+    const [recipe] = useState<Recipe | null>(() => {
+        if (!opened) return null;
+        const store = recipeLookup ?? getSharedLookup();
+        return store.getRecipe(opened.record.recipeUuid);
+    });
 
     const lastPushRef = useRef(0);
-
-    useEffect(() => {
-        navigation.setOptions({title: ""});
-    }, [navigation]);
 
     function handleAllBrews() {
         if (Date.now() - lastPushRef.current < 2000) return;
         lastPushRef.current = Date.now();
         router.push("/brewHistory");
     }
+
+    useEffect(() => {
+        navigation.setOptions({
+            title: "",
+            headerRight: () => <AllBrewsButton onPress={handleAllBrews} />
+        });
+    }, [navigation]);
 
     if (opened === null) {
         return (
@@ -99,13 +146,18 @@ export default function BrewRecord() {
                 accent={accent}
             />
 
-            <Pressable accessibilityRole="button" accessibilityLabel="All brews"
-                       onPress={handleAllBrews}>
-                <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
-                    ALL BREWS
+            {recipe !== null ? (
+                <BrewStageLadder
+                    pours={recipe.pours}
+                    accent={accent}
+                    activeIndex={recipe.pours.length}
+                    stageElapsed={0}
+                />
+            ) : (
+                <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
+                    Recipe deleted — stages not available.
                 </DotMatrixText>
-            </Pressable>
+            )}
         </YStack>
     );
 }

@@ -1,5 +1,6 @@
 // app/__tests__/brewHistory.test.tsx
 import React from "react";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import BrewHistory from "@/app/brewHistory";
 import {renderWithProviders} from "@/test-utils/render";
@@ -8,15 +9,29 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 const mockPush = jest.fn();
 let mockFilter: string | undefined = undefined;
 let mockBrews: StoredBrew[] = [];
+let mockRefresh: jest.Mock = jest.fn();
+let mockFocusEpoch = 0;
 
-jest.mock("expo-router", () => ({
-    router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
-    useLocalSearchParams: () => ({recipeUuid: mockFilter}),
-    useNavigation: () => ({setOptions: jest.fn()})
-}));
+jest.mock("expo-router", () => {
+    const actualReact = jest.requireActual("react");
+    return {
+        router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
+        useLocalSearchParams: () => ({recipeUuid: mockFilter}),
+        useNavigation: () => ({setOptions: jest.fn()}),
+        useFocusEffect: (cb: () => void) => {
+            const epoch = mockFocusEpoch;
+            actualReact.useEffect(() => { cb(); }, [cb, epoch]);
+        }
+    };
+});
 
 jest.mock("@/hooks/useBrewHistory", () => ({
-    useBrewHistory: () => ({brews: mockBrews, remove: jest.fn(), open: jest.fn()}),
+    useBrewHistory: () => ({
+        brews: mockBrews,
+        remove: jest.fn(),
+        open: jest.fn(),
+        refresh: (...args: unknown[]) => mockRefresh(...args)
+    }),
     sharedBrewDatabase: () => ({})
 }));
 
@@ -38,6 +53,8 @@ describe("brew history", () => {
         mockFilter = undefined;
         mockBrews = makeBrews();
         mockPush.mockReset();
+        mockRefresh = jest.fn();
+        mockFocusEpoch = 0;
     });
 
     it("lists every brew when nothing is filtered", async () => {
@@ -57,5 +74,20 @@ describe("brew history", () => {
         mockBrews = [];
         const {getByText} = await renderWithProviders(<BrewHistory />);
         expect(getByText(/no brews yet/i)).toBeTruthy();
+    });
+
+    it("refreshes the list when the screen gains focus", async () => {
+        await renderWithProviders(<BrewHistory />);
+        // useFocusEffect fires once on mount.
+        expect(mockRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("navigates to the record screen with the id param the record screen reads", async () => {
+        // This pins the URL shape so a rename of the query-param on either
+        // side would produce a test failure rather than a silent 'brew not
+        // found' screen.
+        await renderWithProviders(<BrewHistory />);
+        await fireEvent.press(screen.getByLabelText("Ethiopia Guji"));
+        expect(mockPush).toHaveBeenCalledWith("/brewRecord?id=a");
     });
 });
