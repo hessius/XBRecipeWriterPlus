@@ -76,7 +76,6 @@ export default class BrewRecorder {
     }
 
     private clock(): number {
-
         return (this.options.now ?? Date.now)();
     }
 
