@@ -28,6 +28,10 @@ import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {displayValues, displayRange, fromDisplay, toDisplay, unitSuffix,
         type TemperatureUnit} from "@/library/units";
 
+/** The timing lane's own geometry. One tile, one scale — see below. */
+const LANE_WIDTH = 56;
+const LANE_HEIGHT = 8;
+
 /** Which of a stage's values an edit refers to. */
 export type StageField =
     "volume" | "temperature" | "flowRate" | "pauseTime"
@@ -89,15 +93,17 @@ export default function StageTile({
     // the arithmetic, not the scale.
     const span = pourSeconds(pour) + pauseSeconds(pour);
     const laneSeconds = Math.max(span, 1);
-    const LANE_WIDTH = 56;
-    const LANE_HEIGHT = 8;
     const pourWidth = Math.min((pourSeconds(pour) / laneSeconds) * LANE_WIDTH, LANE_WIDTH);
     const pauseWidth = Math.min(
         (pauseSeconds(pour) / laneSeconds) * LANE_WIDTH,
         LANE_WIDTH - pourWidth
     );
-    const agitationBefore = (pour.agitation & 1) !== 0;
-    const agitationAfter = (pour.agitation & 2) !== 0;
+    // A pour that has never been given an agitation carries -1, and every bit
+    // of -1 is set: masking it directly would mark a fresh stage as agitated
+    // at both ends.
+    const agitation = pour.agitation < 0 ? 0 : pour.agitation;
+    const agitationBefore = (agitation & 1) !== 0;
+    const agitationAfter = (agitation & 2) !== 0;
 
     return (
         <YStack backgroundColor={open ? palette.surface : palette.raised}
@@ -125,14 +131,16 @@ export default function StageTile({
                           style={{width: LANE_WIDTH, height: LANE_HEIGHT,
                                   justifyContent: "center"}}>
                         <XStack height={LANE_HEIGHT} alignItems="center">
-                            <View
-                                style={{
-                                    width: pourWidth,
-                                    height: LANE_HEIGHT,
-                                    borderRadius: LANE_HEIGHT / 2,
-                                    backgroundColor: palette.raised
-                                }}
-                            />
+                            {pourWidth > 0 && (
+                                <View
+                                    style={{
+                                        width: pourWidth,
+                                        height: LANE_HEIGHT,
+                                        borderRadius: LANE_HEIGHT / 2,
+                                        backgroundColor: palette.raised
+                                    }}
+                                />
+                            )}
                             {pauseWidth > 0 && (
                                 <View
                                     style={{
@@ -156,7 +164,10 @@ export default function StageTile({
                         {agitationAfter && (
                             <View testID="stage-agitation-after"
                                   style={{position: "absolute",
-                                          left: pourWidth + pauseWidth - 7}}>
+                                          // Nothing sits left of the lane: on a
+                                          // near-zero bar the mark would else be
+                                          // drawn on top of the one before it.
+                                          left: Math.max(pourWidth + pauseWidth - 7, 0)}}>
                                 <PourGlyph kind="agitation" accent={palette.muted} size={10} />
                             </View>
                         )}

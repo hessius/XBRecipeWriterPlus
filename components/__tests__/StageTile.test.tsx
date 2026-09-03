@@ -266,11 +266,32 @@ describe("StageTile timing lane and glyphs", () => {
     });
 
     it("draws the timing lane to real seconds", async () => {
+        // 96 ml at 3.2 ml/s is 30 s of pouring against a 30 s pause: half the
+        // lane each. A lane that drew nothing would pass a bare existence check.
         const {getByTestId} = await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open={false}
                        accent={accents.coffee[1]} isTea={false} {...NOOP}/>
         );
-        expect(getByTestId("stage-lane")).toBeTruthy();
+        const lane = getByTestId("stage-lane");
+        const widths = lane.children
+            .flatMap((child) => typeof child === "string" ? [] : child.children)
+            .flatMap((bar) => typeof bar === "string" ? [] : [bar.props.style?.width])
+            .filter((w): w is number => typeof w === "number");
+        expect(widths).toHaveLength(2);
+        widths.forEach((w) => expect(w).toBeCloseTo(28, 1));
+    });
+
+    it("leaves a stage that has never been agitated unmarked", async () => {
+        // A fresh Pour carries -1, and every bit of -1 is set: masking it
+        // straight would mark both edges of a stage nobody has touched.
+        const pour = stage();
+        pour.agitation = -1;
+        const {queryByTestId} = await renderWithProviders(
+            <StageTile pour={pour} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        expect(queryByTestId("stage-agitation-before")).toBeNull();
+        expect(queryByTestId("stage-agitation-after")).toBeNull();
     });
 
     it("shows a caret where the brew rung shows progress", async () => {
