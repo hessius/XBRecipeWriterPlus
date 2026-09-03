@@ -1,0 +1,73 @@
+/** What each phase says. The wording is the feature. */
+export const PHASE_COPY: Record<string, string> = {
+    idle:        "Ready when you are.",
+    // The machine loses the question rather than refusing it, and each retry
+    // opens a fresh session, which beeps. Saying so explains the beeping.
+    waking:      "Waiting for the machine to answer…",
+    // Deliberately slow: the frames are spaced two seconds apart, because the
+    // machine drops a burst. Saying so stops this reading as a hang.
+    sending:     "Sending the recipe… this takes a few seconds.",
+    readyToStart: "Recipe loaded. Ready when you are.",
+    armed:       "Recipe loaded.",
+    // The app never sends 40518, so this is where a parked machine ends up.
+    // A notice, not a button: the normal path is START in the app, and this
+    // one used to look pressable while doing nothing.
+    pressPlay:   "PRESS ▶ ON THE MACHINE",
+    grinding:    "Grinding…",
+    done:        "Enjoy.",
+    cancelled:   "Stopped.",
+    lostContact: "Lost contact — the machine is still brewing."
+};
+
+export const FAILURE_COPY: Record<string, string> = {
+    // The machine stopped mid-brew. Rare, and not the same event as a refusal:
+    // this one costs a dose.
+    noWater:      "The machine ran out of water.",
+    noBeans:      "The machine is waiting for beans.",
+    gearPosition: "The grinder could not find its gear position.",
+    doseMismatch: "The machine would not accept that dose and water volume.",
+    idling:       "The machine went idle before the brew started.",
+    rejected:     "The machine would not take the recipe."
+};
+
+/**
+ * The refusal, which is the common one.
+ *
+ * Almost daily, where the machine stopping mid-brew has happened twice. The
+ * volume is the recipe's own total, not a constant, and the last clause is the
+ * point of the whole message: it tells the user their dose is safe.
+ */
+export function blockedWaterCopy(totalMl: number): string {
+    return `The tank will not cover this recipe's ${totalMl} ml. `
+        + "Fill it and try again — nothing has been sent to the machine.";
+}
+
+export const BLOCKED_WATER_HEADLINE = "NOT ENOUGH WATER FOR THIS BREW";
+
+/**
+ * Said once, on a user's first brew, and never again.
+ *
+ * None of it is detectable — the machine cannot tell us whether a cup is under
+ * the spout, whether the pod is loaded, or whether the beans in the hopper are
+ * the ones the recipe was written for. So it is stated rather than checked, and
+ * stating it every time would train people to stop reading it.
+ */
+export const FIRST_BREW_REMINDER =
+    "Check there is a cup under the spout and a pod in the holder.";
+
+/** The offer to escape EASY mode, when a send has gone nowhere because of it. */
+export const PRO_MODE_PROMPT =
+    "Your machine is in Easy mode. Switch it to Pro and try again?";
+
+/** The phases during which stopping the machine is still a meaningful thing. */
+export const RUNNING = new Set([
+    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
+]);
+
+/**
+ * Failures after which TRY AGAIN would be a lie about what one press costs.
+ *
+ * The dose is ground and the water is spent. Offering a retry here would read
+ * as "this one is free".
+ */
+export const NO_RETRY: ReadonlySet<string> = new Set(["noWater"]);

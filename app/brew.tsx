@@ -1,69 +1,48 @@
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable} from "react-native";
+import {Pressable, useWindowDimensions} from "react-native";
 import {Text, YStack} from "tamagui";
 
+import BrewFigures from "@/components/BrewFigures";
+import BrewStageLadder from "@/components/BrewStageLadder";
+import BrewTrace from "@/components/BrewTrace";
 import DotMatrixText from "@/components/DotMatrixText";
+import {BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
+        FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
+        RUNNING} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
-import {useBrew} from "@/hooks/useBrew";
+import {useBrewRun} from "@/hooks/useBrewRun";
 import {useSetting} from "@/hooks/useSetting";
+import {resolveAccent} from "@/library/accent";
+import {plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
 
-/** What each phase says. The wording is the feature. */
-const PHASE_COPY: Record<string, string> = {
-    idle:        "Ready when you are.",
-    // The machine loses the question rather than refusing it, and each retry
-    // opens a fresh session, which beeps. Saying so explains the beeping.
-    waking:      "Waiting for the machine to answer…",
-    // Deliberately slow: the frames are spaced two seconds apart, because the
-    // machine drops a burst. Saying so stops this reading as a hang.
-    sending:     "Sending the recipe… this takes a few seconds.",
-    readyToStart: "Recipe loaded. Ready when you are.",
-    armed:       "Recipe loaded.",
-    // The app never sends 40518, so this is where a parked machine ends up.
-    // The user is standing in front of it; one press costs them a second.
-    pressPlay:   "PRESS ▶ ON THE MACHINE",
-    grinding:    "Grinding…",
-    done:        "Enjoy.",
-    cancelled:   "Stopped.",
-    lostContact: "Lost contact — the machine is still brewing."
-};
+const TRACE_HEIGHT = 150;
+const SCREEN_PADDING = 16;
 
-const FAILURE_COPY: Record<string, string> = {
-    noWater:      "The machine ran out of water.",
-    noBeans:      "The machine is waiting for beans.",
-    gearPosition: "The grinder could not find its gear position.",
-    doseMismatch: "The machine would not accept that dose and water volume.",
-    idling:       "The machine went idle before the brew started.",
-    rejected:     "The machine would not take the recipe."
-};
-
-/**
- * Said once, on a user's first brew, and never again.
- *
- * None of it is detectable — the machine cannot tell us whether a cup is under
- * the spout, whether the pod is loaded, or whether the beans in the hopper are
- * the ones the recipe was written for. So it is stated rather than checked, and
- * stating it every time would train people to stop reading it.
- */
-const FIRST_BREW_REMINDER =
-    "Check there is a cup under the spout and a pod in the holder.";
-
-/** The offer to escape EASY mode, when a send has gone nowhere because of it. */
-const PRO_MODE_PROMPT =
-    "Your machine is in Easy mode. Switch it to Pro and try again?";
-
-/** The phases during which stopping the machine is still a meaningful thing. */
-const RUNNING = new Set([
-    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
-]);
+/** A bordered press. The screen has four of them and they differ only in colour. */
+function Action({label, color, onPress}: {label: string; color: string; onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                    borderWidth={1} borderColor={color}>
+                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={color}>
+                    {label.toUpperCase()}
+                </DotMatrixText>
+            </YStack>
+        </Pressable>
+    );
+}
 
 export default function Brew() {
     const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
     const navigation = useNavigation();
-    const {phase, error, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry} = useBrew();
-    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
+    const {width} = useWindowDimensions();
     const [recipe] = useState(() => new Recipe(undefined, recipeJSON));
+    const runState = useBrewRun(recipe);
+    const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
+           brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry} = runState;
+    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
         navigation.setOptions({title: ""});
@@ -80,45 +59,73 @@ export default function Brew() {
         if (phase.name === "pouring" && !firstBrewDone) setFirstBrewDone(true);
     }, [phase.name, firstBrewDone, setFirstBrewDone]);
 
+    const accent = resolveAccent(recipe);
     const running = RUNNING.has(phase.name);
-    // A failure the machine reported has copy of its own; one the app decided
-    // on arrives as a sentence in `detail`, and falling back to it is what
-    // stops a refused brew from displaying nothing at all.
-    const headline = phase.name === "failed"
-        ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
-        : PHASE_COPY[phase.name];
-    const offerPro = phase.name === "failed"
-        && phase.reason === "rejected"
-        && canOfferProMode();
+    // The two water events are not the same thing. `blocked` means nothing was
+    // sent and the dose is safe; a failure by name means the machine stopped
+    // with the dose already spent.
+    const blocked = phase.name === "failed" && phase.reason === "blocked";
+    const failed = phase.name === "failed" && !blocked;
+    const total = recipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
+    const last = samples[samples.length - 1];
+
+    const headline = blocked
+        ? BLOCKED_WATER_HEADLINE
+        : failed
+            ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
+            : PHASE_COPY[phase.name];
+    const headlineColor = blocked ? palette.warn : failed ? palette.danger : palette.text;
+    const offerPro = failed && phase.reason === "rejected" && canOfferProMode();
+    const offerRetry = blocked || (failed && !NO_RETRY.has(phase.reason));
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$4">
+        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
             <Text color={palette.dim} fontSize={13}>{recipe.displayName()}</Text>
 
-            <DotMatrixText fontSize={16} weight="bold" letterSpacing={2}
-                           color={phase.name === "failed" ? palette.danger : palette.text}>
+            <BrewTrace
+                pours={recipe.pours}
+                samples={samples}
+                accent={accent}
+                width={width - SCREEN_PADDING * 2}
+                height={TRACE_HEIGHT}
+                plannedSeconds={plannedSeconds(recipe.pours)}
+                stage={phase.name === "pouring" ? phase.pour : undefined}
+                stages={phase.name === "pouring" ? phase.pours : undefined}
+                holding={holding}
+            />
+
+            <BrewFigures
+                water={last?.water ?? 0}
+                cup={last?.cup ?? 0}
+                seconds={elapsed}
+                accent={accent}
+            />
+
+            <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.8}
+                           color={headlineColor}>
                 {headline}
             </DotMatrixText>
 
-            {phase.name === "pouring" && (
-                <Text color={palette.dim} fontSize={13}>
-                    {`Pour ${phase.pour} of ${phase.pours}`}
-                </Text>
+            {blocked && (
+                <Text color={palette.warn} fontSize={13}>{blockedWaterCopy(total)}</Text>
             )}
 
             {!firstBrewDone && running && (
                 <Text color={palette.warn} fontSize={13}>{FIRST_BREW_REMINDER}</Text>
             )}
 
-            {offerPro && (
-                <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>
-            )}
+            {offerPro && <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>}
+            {error !== null && <Text color={palette.danger} fontSize={13}>{error}</Text>}
 
-            {error !== null && (
-                <Text color={palette.danger} fontSize={13}>{error}</Text>
-            )}
-
-            <YStack flex={1}/>
+            <YStack flex={1}>
+                <BrewStageLadder
+                    pours={recipe.pours}
+                    accent={accent}
+                    activeIndex={activeIndex}
+                    stageElapsed={stageElapsed}
+                    holding={holding}
+                />
+            </YStack>
 
             {running ? (
                 <YStack gap="$3">
@@ -126,70 +133,32 @@ export default function Brew() {
                         // The frame this sends is the one that sets a burr
                         // spinning, so it is a press of its own rather than
                         // something BREW did on the user's behalf.
-                        <Pressable accessibilityRole="button" accessibilityLabel="Start brewing"
-                                   onPress={() => void startBrew()}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.success}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.success}>
-                                    START BREWING
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        <Action label="Start brewing" color={palette.success}
+                                onPress={() => void startBrew()} />
                     )}
-                    <Pressable accessibilityRole="button" accessibilityLabel="Cancel"
-                               onPress={() => void cancelBrew()}>
-                        <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                borderWidth={1} borderColor={palette.danger}>
-                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                           color={palette.danger}>
-                                CANCEL
-                            </DotMatrixText>
-                        </YStack>
-                    </Pressable>
+                    <Action label="Cancel" color={palette.danger}
+                            onPress={() => void cancelBrew()} />
                 </YStack>
             ) : (
                 <YStack gap="$3">
-                    {phase.name === "failed" && (
+                    {offerRetry && (
                         // The machine will not answer a question outside a
                         // fresh session, and opening one makes it beep — so
                         // noticing a refilled tank cannot be done quietly on a
                         // timer. A press asks again, and only when somebody is
                         // there to have done something about the reason.
-                        <Pressable accessibilityRole="button" accessibilityLabel="Try again"
-                                   onPress={() => void brew(recipe)}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.text}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.text}>
-                                    TRY AGAIN
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        <Action label="Try again" color={palette.text}
+                                onPress={() => void brew(recipe)} />
                     )}
                     {offerPro && (
-                        <Pressable accessibilityRole="button"
-                                   accessibilityLabel="Switch to PRO mode and try again"
-                                   onPress={() => void switchToProAndRetry(recipe)}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.warn}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.warn}>
-                                    SWITCH TO PRO
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        <Action label="Switch to PRO" color={palette.warn}
+                                onPress={() => void switchToProAndRetry(recipe)} />
                     )}
-                    <Pressable accessibilityRole="button" accessibilityLabel="Done"
-                               onPress={() => router.back()}>
-                        <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                borderWidth={1} borderColor={palette.line}>
-                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                           color={palette.text}>
-                                DONE
-                            </DotMatrixText>
-                        </YStack>
-                    </Pressable>
+                    {phase.name === "done" && (
+                        <Action label="Export this brew" color={palette.dim}
+                                onPress={() => router.push("/brewRecord?latest=1")} />
+                    )}
+                    <Action label="Done" color={palette.line} onPress={() => router.back()} />
                 </YStack>
             )}
         </YStack>
