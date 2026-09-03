@@ -2,26 +2,14 @@
 import React from "react";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
-import BrewStageRung from "@/components/BrewStageRung";
 import {accents} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
-/**
- * Walk the fiber tree from a TestInstance's unstable_fiber to collect memoizedProps
- * for every instance of a given component type. This reads the real component props
- * without any test-only backdoor.
- */
-function findRungProps(root: {unstable_fiber?: unknown} | null | undefined, type: unknown): any[] {
-    function walk(fiber: any): any[] {
-        if (!fiber) return [];
-        const mine: any[] = fiber.type === type ? [fiber.memoizedProps] : [];
-        return [...mine, ...walk(fiber.child), ...walk(fiber.sibling)];
-    }
-    return walk((root as any)?.unstable_fiber);
-}
-
 const TEST_ACCENT = accents.coffee[1];
+
+/** Mirrors the ladder's own lane width; the tests read pixel widths back. */
+const LANE_WIDTH = 120;
 
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
@@ -81,26 +69,35 @@ describe("BrewStageLadder", () => {
     it("scales every lane to the widest stage the recipe plans", async () => {
         const wide = pours(2);
         wide[1].pauseTime = 60;
-        const {root} = await draw({pours: wide, activeIndex: null});
-        // Stage 2 is 10 s of pour plus 60 s of pause, and fills the lane.
-        const rungs = findRungProps(root, BrewStageRung);
-        expect(rungs.every(r => r.laneSeconds === rungs[0].laneSeconds)).toBe(true);
-        expect(rungs[0].laneSeconds).toBeCloseTo(70, 1);
+        const {getAllByTestId} = await draw({pours: wide, activeIndex: null});
+        // Stage 2 is 10 s of pour plus 60 s of pause, so it fills the lane
+        // exactly, and stage 1's 10 s of pour is drawn against that same scale.
+        const pourBars = getAllByTestId("rung-pour").map((n) => n.props.style.width);
+        const pauseBars = getAllByTestId("rung-pause").map((n) => n.props.style.width);
+        expect(pourBars[1] + pauseBars[1]).toBeCloseTo(LANE_WIDTH, 1);
+        expect(pourBars[0]).toBeCloseTo(pourBars[1], 5);
     });
 
     it("re-scales when the live stage outruns its plan", async () => {
         // Overflow protection: the stage is still running well past its span,
         // so the lane grows rather than pinning at full and saying nothing.
-        const {root} = await draw({activeIndex: 0, stageElapsed: 90});
-        const rungs = findRungProps(root, BrewStageRung);
-        expect(rungs[0].laneSeconds).toBeCloseTo(90, 1);
+        // Every stage plans 20 s, so at rest a 10 s pour takes half the lane;
+        // at 90 s elapsed it must have shrunk to a ninth of it.
+        const resting = await draw({activeIndex: 0, stageElapsed: 0});
+        expect(resting.getAllByTestId("rung-pour")[0].props.style.width)
+            .toBeCloseTo(LANE_WIDTH / 2, 1);
+
+        const stretched = await draw({activeIndex: 0, stageElapsed: 90});
+        expect(stretched.getAllByTestId("rung-pour")[0].props.style.width)
+            .toBeCloseTo((10 / 90) * LANE_WIDTH, 1);
     });
 
     it("marks stages before the live one as done and after it as pending", async () => {
-        const {root} = await draw({activeIndex: 2});
-        const rungs = findRungProps(root, BrewStageRung);
-        expect(rungs[0].state).toBe("done");
-        expect(rungs[4].state).toBe("pending");
+        const {getByTestId} = await draw({activeIndex: 2});
+        // A pending stage is faded; a finished one is not. The exact opacity is
+        // the rung's business, so assert the relationship, not the number.
+        expect(getByTestId("rung-0").props.style.opacity).toBe(1);
+        expect(getByTestId("rung-4").props.style.opacity).toBeLessThan(1);
     });
 
     it("survives a recipe with no pours", async () => {
