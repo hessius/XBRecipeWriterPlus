@@ -1,6 +1,6 @@
 # Data model and persistence — design
 
-**Sub-project 2 of the [XBRW++ overhaul](2026-08-22-ui-overhaul-roadmap.md).**
+**Sub-project 2 of the [XBRW++ overhaul](2026-08-22-programme-roadmap.md).**
 
 **Goal:** Give a recipe a name it owns, an identity that does not depend on that
 name, and a provenance. Give the app a settings store. Remove the global
