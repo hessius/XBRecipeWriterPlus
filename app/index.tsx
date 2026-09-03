@@ -18,17 +18,20 @@ import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePopover";
+import BrewMiniBar from "@/components/BrewMiniBar";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import type {Settings} from "@/library/Settings";
+import {resolveAccent} from "@/library/accent";
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -77,6 +80,7 @@ export default function HomeScreen({db, settings}: Props) {
         useMachine();
     const showBrew = showBrewRows && remembered !== "";
     const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(null);
+    const {run: liveRun, dismiss: dismissBrew} = useLiveBrew();
     /** When the brew screen was last pushed, so a second press in that window is refused. */
     const lastBrewPushRef = useRef(0);
 
@@ -482,6 +486,23 @@ export default function HomeScreen({db, settings}: Props) {
                         library.refresh();
                     }
                 }}/>
+
+            {liveRun !== null && (
+                <BrewMiniBar
+                    recipeName={liveRun.recipe.displayName()}
+                    dose={liveRun.recipe.dosage}
+                    pours={liveRun.recipe.pours}
+                    samples={liveRun.samples}
+                    accent={resolveAccent(liveRun.recipe)}
+                    phase={liveRun.phase}
+                    elapsed={liveRun.elapsed}
+                    holding={liveRun.holding}
+                    heldSeconds={liveRun.heldSeconds}
+                    onOpen={() => router.push(`/brew?recipeJSON=${
+                        encodeURIComponent(JSON.stringify(liveRun.recipe))}`)}
+                    onDismiss={dismissBrew}
+                />
+            )}
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>

@@ -12,6 +12,7 @@ import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
 import {startMachineLink} from '@/hooks/useMachine';
+import {LiveBrewProvider} from '@/hooks/useLiveBrew';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -83,6 +84,7 @@ export default function RootLayout() {
                                         actually need them, so backgrounds can reach the
                                         edges while their contents do not. */}
                                     <View style={{flex: 1, backgroundColor: palette.base}}>
+                                        <LiveBrewProvider>
                                         <Stack
                                             screenOptions={{
                                                 headerStyle:      {
@@ -118,6 +120,7 @@ export default function RootLayout() {
                                         </Stack>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
+                                        </LiveBrewProvider>
                                     </View>
                                     <SplashOverlay visible={!splashDone}
                                                    onFinished={() => setSplashDone(true)}/>

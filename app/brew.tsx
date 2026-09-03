@@ -14,6 +14,7 @@ import {palette} from "@/constants/colors";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
@@ -63,6 +64,18 @@ export default function Brew() {
     const accent = resolveAccent(recipe);
     const motion = useTraceAnimation(phase.name);
     const running = RUNNING.has(phase.name);
+
+    // Sync into the live-brew provider so the mini-bar on the home screen can
+    // show this run after the user navigates back. The provider freezes the
+    // last snapshot, so done and stopped states persist until dismissed.
+    const {push: pushLiveBrew} = useLiveBrew();
+    const heldSeconds = Math.max(0, elapsed - plannedSeconds(recipe.pours));
+    useEffect(() => {
+        pushLiveBrew({recipe, samples, elapsed, phase, holding, heldSeconds});
+        // recipe is stable (useState initialiser); exhaustive-deps cannot see
+        // that, so we list it explicitly. pushLiveBrew is stable (context setter).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [samples, elapsed, phase, holding, heldSeconds]);
     // The two water events are not the same thing. `blocked` means nothing was
     // sent and the dose is safe; a failure by name means the machine stopped
     // with the dose already spent.
