@@ -97,6 +97,36 @@ describe("LiveBrewProvider", () => {
     });
 
     /**
+     * A finished bar is only a record. Brewing a second recipe while it is
+     * still on screen must start a new run rather than silently reopening the
+     * old one.
+     */
+    it("lets a new recipe replace a run that is over", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        const first = recipe();
+        await act(async () => { result.current.start(first); });
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+
+        const second = recipe();
+        second.name = "Kenya Nyeri";
+        await act(async () => { result.current.start(second); });
+
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(2);
+        expect(result.current.run?.recipe.name).toBe("Kenya Nyeri");
+        // A new run starts from nothing: the old run's samples must not carry.
+        expect(result.current.run?.samples).toHaveLength(0);
+    });
+
+    /**
      * Finding 1: after the brew screen unmounts the run must continue, samples
      * must keep arriving, and the DB record must be written exactly once when
      * the machine reaches a terminal phase.

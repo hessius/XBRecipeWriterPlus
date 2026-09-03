@@ -64,6 +64,11 @@ export const RUNNING = new Set([
     "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
 ]);
 
+/** The phases a brew can end in: nothing more will arrive from the machine. */
+export const OVER: ReadonlySet<string> = new Set([
+    "done", "cancelled", "failed", "lostContact"
+]);
+
 /**
  * Failures after which TRY AGAIN would be a lie about what one press costs.
  *

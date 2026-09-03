@@ -5,6 +5,7 @@ import {XStack, YStack} from "tamagui";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {plannedSeconds} from "@/library/brew/brewShape";
@@ -93,7 +94,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
 export default function BrewMiniBar(props: Props) {
     const {pours, samples, phase, holding, onOpen, onDismiss} = props;
     const {title, detail, line} = say(props);
-    const over = ["done", "cancelled", "failed", "lostContact"].includes(phase.name);
+    const over = OVER.has(phase.name);
 
     return (
         <XStack

@@ -1,5 +1,6 @@
 import React, {createContext, useContext, useRef, useState} from "react";
 
+import {OVER} from "@/constants/brewCopy";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -70,11 +71,17 @@ export function LiveBrewProvider({children, store}: {
     children: React.ReactNode;
     store?: BrewStore;
 }) {
-    const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
+    // `runId` is bumped for every run so a second brew remounts RunOwner and
+    // starts from nothing rather than inheriting the last run's samples.
+    const [current, setCurrent] = useState<{recipe: Recipe; runId: number} | null>(null);
 
-    if (currentRecipe === null) {
+    function begin(recipe: Recipe): void {
+        setCurrent((was) => ({recipe, runId: (was?.runId ?? 0) + 1}));
+    }
+
+    if (current === null) {
         return (
-            <Context.Provider value={{...defaultValue, start: setCurrentRecipe}}>
+            <Context.Provider value={{...defaultValue, start: begin}}>
                 {children}
             </Context.Provider>
         );
@@ -82,9 +89,11 @@ export function LiveBrewProvider({children, store}: {
 
     return (
         <RunOwner
-            recipe={currentRecipe}
+            key={current.runId}
+            recipe={current.recipe}
             store={store}
-            onDismiss={() => setCurrentRecipe(null)}
+            onStart={begin}
+            onDismiss={() => setCurrent(null)}
         >
             {children}
         </RunOwner>
@@ -98,9 +107,10 @@ export function LiveBrewProvider({children, store}: {
  * the provider would have to call `useBrewRun` with a null recipe (and every
  * line of it would need a null check) or skip the hook entirely (illegal).
  */
-function RunOwner({recipe, store, onDismiss, children}: {
+function RunOwner({recipe, store, onStart, onDismiss, children}: {
     recipe: Recipe;
     store?: BrewStore;
+    onStart: (recipe: Recipe) => void;
     onDismiss: () => void;
     children: React.ReactNode;
 }) {
@@ -131,9 +141,12 @@ function RunOwner({recipe, store, onDismiss, children}: {
     return (
         <Context.Provider value={{
             run: snapshot,
-            // Already running: start is a no-op so re-attaching the brew screen
-            // does not attempt a second brew command (Finding 2).
-            start: () => {},
+            // While the machine is still working, a second start is refused:
+            // there is one machine and it is busy. Once the run is over the
+            // bar is only a record, so a new recipe replaces it.
+            start: (next: Recipe) => {
+                if (OVER.has(phase.name) && next !== recipe) onStart(next);
+            },
             dismiss: onDismiss,
             brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry, error,
         }}>
