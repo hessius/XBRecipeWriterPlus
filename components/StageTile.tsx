@@ -98,12 +98,10 @@ export default function StageTile({
         (pauseSeconds(pour) / laneSeconds) * LANE_WIDTH,
         LANE_WIDTH - pourWidth
     );
-    // A pour that has never been given an agitation carries -1, and every bit
-    // of -1 is set: masking it directly would mark a fresh stage as agitated
-    // at both ends.
-    const agitation = pour.agitation < 0 ? 0 : pour.agitation;
-    const agitationBefore = (agitation & 1) !== 0;
-    const agitationAfter = (agitation & 2) !== 0;
+    // `Pour` normalises its "never set" sentinel, so these agree with the
+    // share link and the card writer about what an untouched stage means.
+    const agitationBefore = pour.getAgitationBefore();
+    const agitationAfter = pour.getAgitationAfter();
 
     return (
         <YStack backgroundColor={open ? palette.surface : palette.raised}

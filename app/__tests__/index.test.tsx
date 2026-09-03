@@ -121,6 +121,30 @@ jest.mock("@/hooks/useMachine", () => ({
     })
 }));
 
+// The provider that owns a running brew lives above the navigator, so a screen
+// test never mounts it. Stubbed here so a test can put a brew in flight and
+// check what the BREW capsule does while the machine is occupied.
+let mockLiveRun: Record<string, unknown> | null = null;
+
+/** A run snapshot complete enough for the mini bar to draw. */
+function liveRun(recipe: Recipe, phase: string): Record<string, unknown> {
+    return {
+        recipe, phase: {name: phase}, samples: [], elapsed: 0, stageElapsed: 0,
+        activeIndex: 0, holding: false, heldSeconds: 0
+    };
+}
+
+jest.mock("@/hooks/useLiveBrew", () => ({
+    __esModule:  true,
+    useLiveBrew: () => ({
+        run:     mockLiveRun,
+        start:   jest.fn(),
+        dismiss: jest.fn(),
+        brew:    jest.fn(),
+        error:   null
+    })
+}));
+
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
 // (which still evaluates the real module to learn its shape) is not enough.
@@ -170,6 +194,7 @@ beforeEach(() => {
     mockFocusEpoch = 0;
     mockRemembered = "";
     mockMachineStatus = "disconnected";
+    mockLiveRun = null;
     mockOnLink.mockClear();
     mockAskHowItIsDoing.mockClear();
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
@@ -918,6 +943,55 @@ describe("HomeScreen, opening one editor at a time", () => {
         await act(async () => {
             fireEvent.press(capsule);
             fireEvent.press(capsule);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses a second recipe while the machine is still brewing", async () => {
+        // There is one machine. Pushing the brew screen anyway would show the
+        // recipe that is *already* brewing, which reads as the app having
+        // started the wrong one.
+        mockRemembered = "machine-device-id";
+        const brewing = named("Ethiopia");
+        const other = named("Colombia");
+        mockLiveRun = liveRun(brewing, "pouring");
+        await renderHome({recipes: [other]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+        });
+
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "info",
+            message: "The machine is busy brewing Ethiopia."
+        });
+    });
+
+    it("reopens the brew it is already running when that recipe is tapped", async () => {
+        // Tapping BREW on the recipe in the machine is not a second brew, it
+        // is asking to watch the one in progress.
+        mockRemembered = "machine-device-id";
+        const brewing = named("Ethiopia");
+        mockLiveRun = liveRun(brewing, "pouring");
+        await renderHome({recipes: [brewing]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it("lets a new recipe be brewed once the last brew is over", async () => {
+        mockRemembered = "machine-device-id";
+        mockLiveRun = liveRun(named("Ethiopia"), "done");
+        await renderHome({recipes: [named("Colombia")]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
         });
 
         expect(mockPush).toHaveBeenCalledTimes(1);

@@ -19,6 +19,7 @@ import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePopover";
 import BrewMiniBar from "@/components/BrewMiniBar";
+import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useMachine} from "@/hooks/useMachine";
@@ -373,6 +374,19 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function openBrew(recipe: Recipe): void {
+        // There is one machine, and `LiveBrewProvider.start` refuses a second
+        // run while the first is still going. Without this the tap would push
+        // a brew screen that quietly showed the *other* recipe brewing, which
+        // reads as the app having started the wrong thing.
+        if (liveRun !== null
+            && !OVER.has(liveRun.phase.name)
+            && liveRun.recipe.uuid !== recipe.uuid) {
+            notify({
+                tone:    "info",
+                message: `The machine is busy brewing ${liveRun.recipe.displayName()}.`
+            });
+            return;
+        }
         // eslint-disable-next-line react-hooks/purity
         if (Date.now() - lastBrewPushRef.current < EDITOR_PUSH_GUARD_MS) {
             return;
