@@ -2,9 +2,24 @@
 import React from "react";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
+import BrewStageRung from "@/components/BrewStageRung";
 import {accents} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+/**
+ * Walk the fiber tree from a TestInstance's unstable_fiber to collect memoizedProps
+ * for every instance of a given component type. This reads the real component props
+ * without any test-only backdoor.
+ */
+function findRungProps(root: {unstable_fiber?: unknown} | null | undefined, type: unknown): any[] {
+    function walk(fiber: any): any[] {
+        if (!fiber) return [];
+        const mine: any[] = fiber.type === type ? [fiber.memoizedProps] : [];
+        return [...mine, ...walk(fiber.child), ...walk(fiber.sibling)];
+    }
+    return walk((root as any)?.unstable_fiber);
+}
 
 const TEST_ACCENT = accents.coffee[1];
 
@@ -66,22 +81,26 @@ describe("BrewStageLadder", () => {
     it("scales every lane to the widest stage the recipe plans", async () => {
         const wide = pours(2);
         wide[1].pauseTime = 60;
-        const {getByTestId} = await draw({pours: wide, activeIndex: null});
+        const {root} = await draw({pours: wide, activeIndex: null});
         // Stage 2 is 10 s of pour plus 60 s of pause, and fills the lane.
-        expect(parseFloat(getByTestId("ladder").props.accessibilityValue.text)).toBeCloseTo(70, 1);
+        const rungs = findRungProps(root, BrewStageRung);
+        expect(rungs.every(r => r.laneSeconds === rungs[0].laneSeconds)).toBe(true);
+        expect(rungs[0].laneSeconds).toBeCloseTo(70, 1);
     });
 
     it("re-scales when the live stage outruns its plan", async () => {
         // Overflow protection: the stage is still running well past its span,
         // so the lane grows rather than pinning at full and saying nothing.
-        const {getByTestId} = await draw({activeIndex: 0, stageElapsed: 90});
-        expect(parseFloat(getByTestId("ladder").props.accessibilityValue.text)).toBeCloseTo(90, 1);
+        const {root} = await draw({activeIndex: 0, stageElapsed: 90});
+        const rungs = findRungProps(root, BrewStageRung);
+        expect(rungs[0].laneSeconds).toBeCloseTo(90, 1);
     });
 
     it("marks stages before the live one as done and after it as pending", async () => {
-        const {getByTestId} = await draw({activeIndex: 2});
-        expect(getByTestId("row-0").props.accessibilityValue.text).toBe("done");
-        expect(getByTestId("row-4").props.accessibilityValue.text).toBe("pending");
+        const {root} = await draw({activeIndex: 2});
+        const rungs = findRungProps(root, BrewStageRung);
+        expect(rungs[0].state).toBe("done");
+        expect(rungs[4].state).toBe("pending");
     });
 
     it("survives a recipe with no pours", async () => {

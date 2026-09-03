@@ -83,7 +83,6 @@ export default function BrewStageLadder({
             <View
                 key={`row-${index}`}
                 testID={`row-${index}`}
-                accessibilityValue={{text: state}}
                 onLayout={e => { rungY.current[index] = e.nativeEvent.layout.y; }}
             >
                 <BrewStageRung
@@ -146,7 +145,7 @@ export default function BrewStageLadder({
 
     return (
         <ScrollView ref={scroller}>
-            <View testID="ladder" accessibilityValue={{text: String(laneSeconds)}}>{rows}</View>
+            <View testID="ladder">{rows}</View>
         </ScrollView>
     );
 }
