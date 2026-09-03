@@ -26,8 +26,8 @@ function recipe(): Recipe {
 
 /** A brewer and a machine the test drives by hand. */
 function harness() {
-    let notify: (n: Notification) => void = () => {};
-    let phase: (p: BrewPhase) => void = () => {};
+    const notifyListeners: ((n: Notification) => void)[] = [];
+    const phaseListeners: ((p: BrewPhase) => void)[] = [];
     const written: {record: BrewRecord; samples: BrewSample[]}[] = [];
     global.__brewer = {
         phase: {name: "idle"} as BrewPhase,
@@ -38,17 +38,31 @@ function harness() {
         canOfferProMode: () => false,
         switchToProAndRetry: jest.fn(async () => {}),
         machine: {
-            onNotification: (l: typeof notify) => { notify = l; return () => {}; },
-            onPhase: (l: typeof phase) => { phase = l; return () => {}; }
+            onNotification: (l: (n: Notification) => void) => {
+                notifyListeners.push(l);
+                return () => {
+                    const i = notifyListeners.indexOf(l);
+                    if (i !== -1) notifyListeners.splice(i, 1);
+                };
+            },
+            onPhase: (l: (p: BrewPhase) => void) => {
+                phaseListeners.push(l);
+                return () => {
+                    const i = phaseListeners.indexOf(l);
+                    if (i !== -1) phaseListeners.splice(i, 1);
+                };
+            }
         }
     };
     return {
         written,
-        water: (grams: number) => act(async () => notify({kind: "waterWeight", grams})),
-        cup: (grams: number) => act(async () => notify({kind: "cupWeight", grams})),
+        water: (grams: number) => act(async () =>
+            [...notifyListeners].forEach((l) => l({kind: "waterWeight", grams}))),
+        cup: (grams: number) => act(async () =>
+            [...notifyListeners].forEach((l) => l({kind: "cupWeight", grams}))),
         setPhase: (p: BrewPhase) => act(async () => {
             global.__brewer.phase = p;
-            phase(p);
+            [...phaseListeners].forEach((l) => l(p));
         }),
         store: {insert: (record: BrewRecord, samples: BrewSample[]) =>
             written.push({record, samples})}
@@ -155,5 +169,37 @@ describe("useBrewRun", () => {
         const stopped = result.current.elapsed;
         await act(async () => { jest.advanceTimersByTime(10_000); });
         expect(result.current.elapsed).toBe(stopped);
+    });
+
+    it("uses the current recipe even if it changed before the brew started", async () => {
+        // Guards against the stale-ref bug: without a ref-update effect,
+        // recipeRef.current stays at the hook's initial value. A recipe change
+        // followed by a machine reconnect (which restarts the recorder) would
+        // make the recorder use a stale recipe and name the wrong brew.
+        const h = harness();
+        const first = recipe();
+        first.name = "Old Recipe";
+        const {rerender} = await renderHook(
+            ({r}: {r: Recipe}) => useBrewRun(r, h.store),
+            {initialProps: {r: first}}
+        );
+
+        // Recipe changes before any brew has started.
+        const second = recipe();
+        second.name = "New Recipe";
+        await act(async () => { rerender({r: second}); });
+
+        // Machine reconnects: calling harness() replaces global.__brewer with a
+        // new machine object. On rerender, the hook sees a new machine identity
+        // and restarts the recorder. The recorder must use the updated recipe.
+        // (The store stays bound to h.store set on initial render.)
+        const h2 = harness();
+        await act(async () => { rerender({r: second}); });
+
+        await h2.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h2.water(40);
+        await h2.setPhase({name: "done"});
+        expect(h.written).toHaveLength(1);
+        expect(h.written[0].record.recipeName).toBe("New Recipe");
     });
 });

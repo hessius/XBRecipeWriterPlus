@@ -76,6 +76,7 @@ export default class BrewRecorder {
     }
 
     private clock(): number {
+
         return (this.options.now ?? Date.now)();
     }
 
@@ -98,18 +99,6 @@ export default class BrewRecorder {
             cup: this.cup,
             pour: this.pour
         });
-    }
-
-    /**
-     * Forward a phase change observed externally.
-     *
-     * `useBrewRun` subscribes to `machine.onPhase` itself (so it can update
-     * React state and restart its interval) and drives the recorder through
-     * this method rather than relying on the recorder's own subscription, which
-     * would be overwritten by the hook's later registration on the same channel.
-     */
-    observePhase(phase: BrewPhase): void {
-        this.observe(phase);
     }
 
     private observe(phase: BrewPhase): void {

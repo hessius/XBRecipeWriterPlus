@@ -19,20 +19,26 @@ export function useBrewRun(recipe: Recipe, store?: BrewStore) {
     const {machine, phase: initialPhase} = brewer;
     const [samples, setSamples] = useState<BrewSample[]>([]);
     const [elapsed, setElapsed] = useState(0);
-    // Track phase locally so React re-renders when it changes, without relying
-    // on the `useBrew` mock having `useState` in tests.
+    // Track phase locally so React re-renders when it changes.
     const [phase, setPhase] = useState<BrewPhase>(initialPhase);
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
-    // A brew's recipe does not change once it starts — keep a ref so effects
-    // do not restart on every render (the hook is passed a new Recipe object
-    // each render in tests and potentially in production too).
+    // A brew's recipe is fixed at start. Hold the latest value in a ref so
+    // the start effect (keyed on machine) sees the right recipe without being
+    // re-triggered by a new Recipe object on every render.
     const recipeRef = useRef(recipe);
 
     // Opened once and lazily: constructing a BrewDatabase at module scope would
     // open SQLite in every test that imports this file, whether or not it
     // brews.
     if (database.current === null) database.current = store ?? new BrewDatabase();
+
+    // Keep the ref current so a recipe change before the brew starts is not
+    // lost. Declared before the start effect so that on the initial render
+    // the ref is set before the recorder reads it.
+    useEffect(() => {
+        recipeRef.current = recipe;
+    }, [recipe]);
 
     useEffect(() => {
         const active = new BrewRecorder({
@@ -47,15 +53,11 @@ export function useBrewRun(recipe: Recipe, store?: BrewStore) {
         // of the object should not restart the recorder on every render.
     }, [machine]);
 
-    // Subscribe to machine.onPhase AFTER the recorder's start() so that this
-    // registration wins in the harness (which stores only one listener). The
-    // combined callback updates React state AND forwards to the recorder, so
-    // both see every phase change.
+    // Subscribe to machine.onPhase so React re-renders when the phase changes.
+    // The recorder has its own subscription (registered inside start()); the
+    // real Machine keeps listeners in a Set so both are called independently.
     useEffect(() => {
-        return machine.onPhase((p) => {
-            setPhase(p);
-            recorder.current?.observePhase(p);
-        });
+        return machine.onPhase((p) => { setPhase(p); });
     }, [machine]);
 
     const pouring = phase.name === "pouring";
