@@ -4,8 +4,11 @@ import {processColor} from "react-native";
 import BrewTrace from "@/components/BrewTrace";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
-import {palette} from "@/constants/colors";
+import {accents, palette} from "@/constants/colors";
+
 import {renderWithProviders} from "@/test-utils/render";
+
+const TEST_ACCENT = accents.coffee[1];
 
 const pours = [new Pour(1, 40, 93, 40, 0, 0, 20), new Pour(2, 160, 92, 40, 0, 0, 0)];
 
@@ -18,7 +21,7 @@ async function draw(props: Partial<React.ComponentProps<typeof BrewTrace>> = {})
         <BrewTrace
             pours={pours}
             samples={[]}
-            accent="#C86A3B"
+            accent={TEST_ACCENT}
             width={300}
             height={140}
             plannedSeconds={70}
@@ -44,7 +47,7 @@ describe("BrewTrace", () => {
     it("draws the water line in the accent", async () => {
         const {getByTestId} = await draw({samples: samples([0, 0, 0], [5000, 20, 12])});
         expect(getByTestId("trace-water").props.stroke).toEqual(
-            expect.objectContaining({payload: processColor("#C86A3B")})
+            expect.objectContaining({payload: processColor(TEST_ACCENT)})
         );
     });
 

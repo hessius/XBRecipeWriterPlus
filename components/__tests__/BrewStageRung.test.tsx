@@ -1,10 +1,13 @@
 // components/__tests__/BrewStageRung.test.tsx
 import React from "react";
 
-import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
-import {palette} from "@/constants/colors";
+import BrewStageRung from "@/components/BrewStageRung";
+import {accents, palette} from "@/constants/colors";
+
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+const TEST_ACCENT = accents.coffee[1];
 
 function pour(overrides: Partial<Pour> = {}): Pour {
     const p = new Pour(1, 45, 94, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20);
@@ -18,7 +21,7 @@ async function draw(props: Partial<React.ComponentProps<typeof BrewStageRung>> =
             pour={pour()}
             index={5}
             state="pending"
-            accent="#C86A3B"
+            accent={TEST_ACCENT}
             laneSeconds={60}
             laneWidth={120}
             progress={0}

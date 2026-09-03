@@ -81,14 +81,13 @@ describe("PourGlyph", () => {
     });
 
     it("takes its colour from the accent it is given", async () => {
-        const testAccent = "#C86A3B";
         const {getByTestId} = await renderWithProviders(
-            <PourGlyph kind="circular" accent={testAccent} testID="glyph" />
+            <PourGlyph kind="circular" accent={accent} testID="glyph" />
         );
         // react-native-svg normalises colour strings to {type, payload} objects.
         // Round-trip through processColor to get the expected payload value.
         expect(getByTestId("glyph-ring").props.stroke).toEqual(
-            expect.objectContaining({payload: processColor(testAccent)})
+            expect.objectContaining({payload: processColor(accent)})
         );
     });
 });
