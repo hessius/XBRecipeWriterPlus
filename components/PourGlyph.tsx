@@ -36,6 +36,9 @@ const LABELS: Record<GlyphKind, string> = {
 export function glyphForPattern(pattern: number): GlyphKind {
     if (pattern === POUR_PATTERN.SPIRAL) return "spiral";
     if (pattern === POUR_PATTERN.CIRCULAR) return "circular";
+    if (pattern === POUR_PATTERN.CENTERED) return "centered";
+    // Deliberate fallback: a real card can carry a pattern byte this app has
+    // never seen. Drawing something beats crashing the brew screen.
     return "centered";
 }
 
@@ -63,6 +66,9 @@ function round(value: number): number {
     return Math.round(value * 100) / 100;
 }
 
+// The curve is fixed, so it is computed once at module load rather than per render.
+const SPIRAL_PATH = spiralPath();
+
 /** Unequal and symmetric, because equal heights read as a barcode. */
 const TREMORS = [1.6, 2.8, 3.8, 2.8, 1.6];
 
@@ -83,7 +89,7 @@ export default function PourGlyph({kind, accent, size = 24, faded = false, testI
             {kind === "spiral" && (
                 <Path
                     testID={id("spiral")}
-                    d={spiralPath()}
+                    d={SPIRAL_PATH}
                     stroke={stroke}
                     strokeWidth={0.6}
                     strokeLinecap="round"
