@@ -105,4 +105,35 @@ describe("BrewStageRung", () => {
         const {getByTestId} = await draw({state: "pending", testID: "rung"});
         expect(getByTestId("rung").props.style.opacity).toBeLessThan(1);
     });
+
+    it("the lane never draws wider than its scale", async () => {
+        // 200 ml at 4 ml/s is 50 s pour, plus 120 s pause — far more than the
+        // 60 s scale, so both bars must be clamped to the 120 px lane.
+        const oversize = pour({volume: 200, pauseTime: 120});
+        const {getByTestId} = await draw({pour: oversize});
+        const pourW = getByTestId("rung-pour").props.style.width;
+        const pauseW = getByTestId("rung-pause").props.style.width;
+        expect(pourW).toBeLessThanOrEqual(120);
+        expect(pourW + pauseW).toBeLessThanOrEqual(120);
+    });
+
+    it("a rung says what the pour does, in one sentence", async () => {
+        const p = pour({pourPattern: POUR_PATTERN.SPIRAL, agitation: AGITATION.BEFORE_OFF_AFTER_ON});
+        const {getByLabelText} = await draw({pour: p, index: 5});
+        // Stage number, pattern, temperature, volume, agitation — in one label.
+        const label = getByLabelText(/06/);
+        expect(label).toBeTruthy();
+        const text: string = label.props.accessibilityLabel;
+        expect(text).toContain("spiral");
+        expect(text).toContain("94");
+        expect(text).toContain("45");
+        expect(text).toContain("agitates");
+    });
+
+    it("a stage with no pause does not mention one", async () => {
+        const {getByLabelText} = await draw({pour: pour({pauseTime: 0}), index: 5});
+        const label = getByLabelText(/06/);
+        const text: string = label.props.accessibilityLabel;
+        expect(text).not.toContain("pause");
+    });
 });
