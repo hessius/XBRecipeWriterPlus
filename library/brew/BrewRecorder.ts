@@ -139,6 +139,16 @@ export default class BrewRecorder {
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
             ...summarise(this.collected, plannedSeconds(recipe.pours))
         };
-        this.options.onRecord(record, [...this.collected]);
+        // The machine hands a phase to every listener in turn, and this is one
+        // of them. If the write throws — a full disk is the realistic way —
+        // the throw would walk back out through that loop and the listeners
+        // behind us would never hear that the brew ended, which strands the
+        // screen mid-pour with its sampling timer still running. Losing the
+        // record is bad; losing the end of the brew is worse.
+        try {
+            this.options.onRecord(record, [...this.collected]);
+        } catch (error) {
+            console.warn("Could not keep this brew.", error);
+        }
     }
 }

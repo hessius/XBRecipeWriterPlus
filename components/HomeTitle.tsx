@@ -17,8 +17,12 @@ export const WORDMARK_FADE_DELAY = 10_000;
  * Module scope, so it is set once when the app's JavaScript loads rather than
  * every time the header mounts: the tint is spent for the session, and a user
  * who visits Settings and comes back should not be shown it again.
+ *
+ * Exported so a test can pin its clock to it. The countdown is measured against
+ * real time, so a test that merely installs fake timers inherits however many
+ * seconds the suite spent getting there.
  */
-const SESSION_START = Date.now();
+export const SESSION_START = Date.now();
 
 /**
  * How far the superscript count sits below the top of the title's line.

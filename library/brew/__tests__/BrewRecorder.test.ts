@@ -245,4 +245,21 @@ describe("BrewRecorder", () => {
 
         expect(recorder.samples).toHaveLength(lengthAfterEmit);
     });
+    it("does not let a failed write escape back into the machine's listeners", () => {
+        // The recorder is one of several listeners the machine calls in turn.
+        // A throw here would stop that loop, and the listeners behind it —
+        // the ones that move the screen off "pouring" and clear its sampling
+        // timer — would never hear that the brew had ended.
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+        const {fake} = build({
+            onRecord: () => { throw new Error("database is locked"); }
+        });
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+
+        expect(() => fake.phase({name: "done"})).not.toThrow();
+        expect(warn).toHaveBeenCalled();
+        warn.mockRestore();
+    });
 });

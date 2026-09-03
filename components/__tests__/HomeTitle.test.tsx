@@ -1,7 +1,7 @@
 import React from "react";
 import {act, screen} from "@testing-library/react-native";
 
-import HomeTitle, {WORDMARK_FADE_DELAY} from "@/components/HomeTitle";
+import HomeTitle, {SESSION_START, WORDMARK_FADE_DELAY} from "@/components/HomeTitle";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -21,6 +21,18 @@ function plusColours(includeHidden = false): string[] {
 function tintOpacity(): number {
     return screen.getByTestId("home-title-tint", {includeHiddenElements: true})
         .props.jestAnimatedStyle.value.opacity;
+}
+
+/**
+ * Fake timers, with the clock wound back to the moment the module loaded.
+ *
+ * The countdown is measured against real time from `SESSION_START`, so without
+ * this the test inherits however long the suite took to reach it — on a loaded
+ * machine that is seconds, and the tint has already begun to go.
+ */
+function startTheSessionNow(): void {
+    jest.useFakeTimers();
+    jest.setSystemTime(SESSION_START);
 }
 
 describe("HomeTitle", () => {
@@ -55,7 +67,7 @@ describe("HomeTitle", () => {
     });
 
     it("takes the tint away ten seconds in", async () => {
-        jest.useFakeTimers();
+        startTheSessionNow();
         try {
             await renderWithProviders(<HomeTitle count={7} fontSize={28}/>);
             expect(tintOpacity()).toBe(1);
@@ -74,7 +86,7 @@ describe("HomeTitle", () => {
     });
 
     it("keeps the tint on until the delay is up", async () => {
-        jest.useFakeTimers();
+        startTheSessionNow();
         try {
             await renderWithProviders(<HomeTitle count={7} fontSize={28}/>);
 
