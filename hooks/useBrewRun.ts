@@ -16,11 +16,16 @@ const PUBLISH_MS = 250;
 
 export function useBrewRun(recipe: Recipe, store?: BrewStore) {
     const brewer = useBrew();
-    const {machine, phase: initialPhase} = brewer;
+    const {machine} = brewer;
     const [samples, setSamples] = useState<BrewSample[]>([]);
     const [elapsed, setElapsed] = useState(0);
-    // Track phase locally so React re-renders when it changes.
-    const [phase, setPhase] = useState<BrewPhase>(initialPhase);
+    // Track phase locally so React re-renders when it changes. The machine it
+    // was heard from is remembered alongside it: a reconnect hands us a new
+    // machine with a new recorder, and the phase the old one was left in
+    // describes a brew that is no longer ours. Falling back to the new
+    // machine's own phase is how that stale reading is dropped.
+    const [heard, setHeard] = useState<{from: unknown; phase: BrewPhase} | null>(null);
+    const phase = heard !== null && heard.from === machine ? heard.phase : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
     // A brew's recipe is fixed at start. Hold the latest value in a ref so
@@ -57,7 +62,7 @@ export function useBrewRun(recipe: Recipe, store?: BrewStore) {
     // The recorder has its own subscription (registered inside start()); the
     // real Machine keeps listeners in a Set so both are called independently.
     useEffect(() => {
-        return machine.onPhase((p) => { setPhase(p); });
+        return machine.onPhase((p) => { setHeard({from: machine, phase: p}); });
     }, [machine]);
 
     const pouring = phase.name === "pouring";

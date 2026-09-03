@@ -13,7 +13,8 @@ jest.mock("@/hooks/useBrew", () => ({
 
 declare global {
     var __brewer: Omit<ReturnType<typeof import("@/hooks/useBrew").useBrew>, "machine">
-        & {machine: import("@/library/brew/BrewRecorder").RecorderMachine};
+        & {machine: import("@/library/brew/BrewRecorder").RecorderMachine
+            & {phase: BrewPhase}};
 }
 
 function recipe(): Recipe {
@@ -38,6 +39,7 @@ function harness() {
         canOfferProMode: () => false,
         switchToProAndRetry: jest.fn(async () => {}),
         machine: {
+            phase: {name: "idle"} as BrewPhase,
             onNotification: (l: (n: Notification) => void) => {
                 notifyListeners.push(l);
                 return () => {
@@ -62,6 +64,7 @@ function harness() {
             [...notifyListeners].forEach((l) => l({kind: "cupWeight", grams}))),
         setPhase: (p: BrewPhase) => act(async () => {
             global.__brewer.phase = p;
+            global.__brewer.machine.phase = p;
             [...phaseListeners].forEach((l) => l(p));
         }),
         store: {insert: (record: BrewRecord, samples: BrewSample[]) =>
@@ -149,6 +152,10 @@ describe("useBrewRun", () => {
         await h.setPhase({name: "done"});
         expect(h.written).toHaveLength(1);
         expect(h.written[0].record.recipeName).toBe("Ethiopia Guji");
+        // A record with no samples is a chart with no line: the write has to
+        // carry the brew, not just its name.
+        expect(h.written[0].samples).toHaveLength(1);
+        expect(h.written[0].samples[0].water).toBe(40);
     });
 
     it("writes nothing for a brew that was refused before it began", async () => {
@@ -201,5 +208,19 @@ describe("useBrewRun", () => {
         await h2.setPhase({name: "done"});
         expect(h.written).toHaveLength(1);
         expect(h.written[0].record.recipeName).toBe("New Recipe");
+    });
+    it("forgets the old machine's phase when a new one arrives", async () => {
+        // A reconnect hands us a fresh machine with a fresh recorder. The phase
+        // the previous one was left in describes a brew that is no longer ours,
+        // and taking it at face value would report a live stage against an
+        // empty recorder.
+        const h = harness();
+        const {result, rerender} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 2, pours: 2});
+        expect(result.current.activeIndex).toBe(1);
+
+        harness();
+        await act(async () => { rerender(undefined); });
+        expect(result.current.activeIndex).toBeNull();
     });
 });
