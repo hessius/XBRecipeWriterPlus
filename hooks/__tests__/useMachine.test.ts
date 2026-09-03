@@ -1,7 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {
-    connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine, warmConnect, __resetSharedMachine
+    connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine, __resetSharedMachine
 } from "@/hooks/useMachine";
 import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
@@ -366,32 +366,5 @@ describe("opening a link that does not want to open", () => {
 
         await expect(openLink(machine, store(), async () => true, {wait: noWait}))
             .rejects.toThrow();
-    });
-});
-
-describe("warm connect at launch", () => {
-    it("reaches for a remembered machine at launch", async () => {
-        const connect = jest.fn(async () => {});
-        warmConnect({rememberedId: () => "device-1", rememberId: jest.fn()}, connect);
-        await Promise.resolve();
-        expect(connect).toHaveBeenCalled();
-    });
-
-    it("does not scan when no machine has ever been seen", async () => {
-        // A radio spinning for nobody, and a beep at launch for somebody who
-        // opened the app to edit a recipe.
-        const connect = jest.fn(async () => {});
-        warmConnect({rememberedId: () => "", rememberId: jest.fn()}, connect);
-        await Promise.resolve();
-        expect(connect).not.toHaveBeenCalled();
-    });
-
-    it("swallows a failure to connect at launch", async () => {
-        // The machine being off is the ordinary case, not an error worth
-        // surfacing before the user has asked for anything.
-        const connect = jest.fn(async () => { throw new Error("out of range"); });
-        expect(() => warmConnect(
-            {rememberedId: () => "device-1", rememberId: jest.fn()}, connect
-        )).not.toThrow();
     });
 });
