@@ -127,6 +127,15 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         ? (phase as {name: "pouring"; pour: number; pours: number}).pour - 1
         : over ? pours.length : null;
 
+    // Where this stage was *planned* to begin, not where it actually did.
+    //
+    // Deliberate. An earlier stage that ran long or short drags this with it,
+    // so the current rung's fill can start slightly ahead or clamp briefly at
+    // zero. Measuring from the real transition instead would make the rung
+    // jump whenever a stage came in short, which reads worse than the drift
+    // does — and nothing that is persisted or exported passes through here:
+    // the trace, the figures and the record all use real elapsed time. This
+    // only drives the fill of the live rung and the hold hint.
     const stageStart = pours
         .slice(0, Math.max(0, activeIndex ?? 0))
         .reduce((total, pour) => total + pourSeconds(pour) + pauseSeconds(pour), 0);
