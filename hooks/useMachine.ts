@@ -23,6 +23,7 @@ export function sharedMachine(): Machine {
         const machine = new Machine(new BleTransport());
         shared = machine;
         holdLinkAcrossAppState(machine, () => openLink(machine, settingsStore()));
+        warmConnect(settingsStore(), () => openLink(machine, settingsStore()));
     }
     return shared;
 }
@@ -55,6 +56,23 @@ export type AppStateLike = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Reach for a remembered machine as the app starts.
+ *
+ * Presence is most of what the status dot is for, and without this the dot is
+ * grey for the first press of every session even with the machine sitting on
+ * the counter. Only when a machine is remembered: a launch scan on a phone that
+ * has never seen a J15 is a radio spinning for nobody.
+ *
+ * Failures are swallowed on purpose. The machine being off, or in another room,
+ * is the ordinary case — not an error worth showing before the user has asked
+ * for anything.
+ */
+export function warmConnect(store: LinkStore, connect: () => Promise<void>): void {
+    if (store.rememberedId() === "") return;
+    void connect().catch(() => {});
+}
 
 /**
  * Hold the link across the app leaving the front and coming back.
