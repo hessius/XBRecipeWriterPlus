@@ -1,4 +1,18 @@
-import {traceAnimationFor} from "@/hooks/useTraceAnimation";
+import {act, renderHook} from "@testing-library/react-native";
+
+import {traceAnimationFor, useTraceAnimation} from "@/hooks/useTraceAnimation";
+
+let mockMotionOn = true;
+
+// Not `requireActual`: the settings store opens SQLite on import, which a test
+// about a timer has no business doing.
+jest.mock("@/hooks/useSetting", () => ({
+    useSetting: () => [mockMotionOn, jest.fn()]
+}));
+jest.mock("@/constants/motion", () => ({
+    ...jest.requireActual("@/constants/motion"),
+    useReducedMotion: () => false
+}));
 
 describe("traceAnimationFor", () => {
     it("breathes while the machine is waking", () => {
@@ -53,5 +67,61 @@ describe("traceAnimationFor", () => {
     it("leaves the plan alone once the water is running", () => {
         const still = traceAnimationFor("pouring", 1200, true);
         expect(still).toEqual({opacity: 1, warmth: 0, headAt: 1, dashed: true});
+    });
+});
+
+describe("useTraceAnimation", () => {
+    // Counted rather than read off `jest.getTimerCount()`, which also counts
+    // the timers React and the testing library keep for themselves.
+    let started: number[];
+    let stopped: number;
+
+    beforeEach(() => {
+        mockMotionOn = true;
+        started = [];
+        stopped = 0;
+        jest.useFakeTimers();
+        jest.spyOn(global, "setInterval").mockImplementation(((fn: () => void, ms: number) => {
+            started.push(ms);
+            return {fn} as unknown as ReturnType<typeof setInterval>;
+        }) as typeof setInterval);
+        jest.spyOn(global, "clearInterval").mockImplementation(() => { stopped += 1; });
+    });
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
+
+    it("runs no clock through the pour", async () => {
+        // The longest phase of all, drawing the same thing at every
+        // millisecond. A timer through it would repaint several hundred points
+        // twenty times a second, for minutes, to no visible effect.
+        await renderHook(() => useTraceAnimation("pouring"));
+        expect(started).toEqual([]);
+    });
+
+    it("runs no clock when the user has turned the animation off", async () => {
+        mockMotionOn = false;
+        await renderHook(() => useTraceAnimation("waking"));
+        expect(started).toEqual([]);
+    });
+
+    it("stops its clock when the screen goes away", async () => {
+        const {unmount} = await renderHook(() => useTraceAnimation("waking"));
+        expect(started).toEqual([50]);
+        await act(async () => { unmount(); });
+        expect(stopped).toBe(1);
+    });
+
+    it("starts the new phase from nothing, not from where the last one got to", async () => {
+        jest.restoreAllMocks();
+        const {result, rerender} = await renderHook(
+            ({p}: {p: string}) => useTraceAnimation(p), {initialProps: {p: "waking"}});
+        await act(async () => { jest.advanceTimersByTime(2500); });
+
+        await act(async () => { rerender({p: "sending"}); });
+        // A head opening at 0.78 because that is where the breath had got to
+        // is the bug this pins.
+        expect(result.current.headAt).toBe(0);
     });
 });

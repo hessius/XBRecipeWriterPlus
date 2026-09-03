@@ -62,24 +62,35 @@ export function traceAnimationFor(
     return STILL;
 }
 
+/** The only phases whose drawing depends on the clock. */
+const MOVING = new Set(["waking", "sending", "grinding"]);
+
 /** The same, with a clock attached. */
 export function useTraceAnimation(phase: string): TraceAnimation {
     const [animateSetting] = useSetting("animateBrewChart");
     const reduced = useReducedMotion();
     const animate = animateSetting && !reduced;
-    // elapsed is updated exclusively inside the interval callback (not
-    // synchronously in the effect body), which keeps both lint rules happy.
-    const [elapsed, setElapsed] = useState(0);
+    // The phase a reading was taken in is kept with it. A new phase starts its
+    // own clock, and until its first tick arrives the reading from the previous
+    // phase is discarded rather than shown — otherwise the head of a send would
+    // open three-quarters of the way along, wherever the breath had got to.
+    // Derived here rather than reset from the effect, which the compiler
+    // forbids.
+    const [ticked, setTicked] = useState<{phase: string; elapsed: number} | null>(null);
+    const elapsed = ticked !== null && ticked.phase === phase ? ticked.elapsed : 0;
 
     useEffect(() => {
-        if (!animate) return;
-        // Capture the phase-start timestamp inside the effect so the interval
-        // callback can derive elapsed without any ref reads during render.
+        // Only three phases move. `pouring` is the longest of them all and
+        // draws the same thing at every millisecond, so a timer through it
+        // would re-render a chart of several hundred points, twenty times a
+        // second, for minutes, to no visible effect.
+        if (!animate || !MOVING.has(phase)) return;
         const start = Date.now();
-        // 50 ms is twelve steps of the grinder's flicker and eighty of a
+        // 50 ms is eight steps of the grinder's flicker and sixty-eight of a
         // breath, which is smooth for an opacity ramp and a fraction of the
         // work of a per-frame driver for a line that is barely moving.
-        const tick = setInterval(() => setElapsed(Date.now() - start), 50);
+        const tick = setInterval(
+            () => setTicked({phase, elapsed: Date.now() - start}), 50);
         return () => clearInterval(tick);
     }, [phase, animate]);
 
