@@ -80,4 +80,24 @@ describe("Settings", () => {
         // feature and confuses the next person to read the defaults.
         expect(Object.keys(DEFAULTS)).not.toContain("helpStyle");
     });
+
+    it("shows BREW on recipe rows unless told otherwise", () => {
+        expect(new Settings(fakeStorage()).get("showBrewOnRecipeRows")).toBe(true);
+    });
+
+    it("animates the brew chart by default", () => {
+        expect(new Settings(fakeStorage()).get("animateBrewChart")).toBe(true);
+    });
+
+    it("keeps the last fifty streams by default", () => {
+        expect(new Settings(fakeStorage()).get("brewTraceRetention")).toBe(50);
+    });
+
+    it("round-trips a retention of zero rather than falling back to the default", () => {
+        // "Don't keep traces" is a real choice, and `stored || default` would
+        // silently ignore it. The same trap as `false` for a boolean.
+        const storage = fakeStorage();
+        new Settings(storage).set("brewTraceRetention", 0);
+        expect(new Settings(storage).get("brewTraceRetention")).toBe(0);
+    });
 });

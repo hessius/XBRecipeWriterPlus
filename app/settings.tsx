@@ -66,6 +66,11 @@ export default function SettingsScreen({settings}: Props) {
     // Shown as a row inside MachineSection, not here. Read anyway, because a
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
+    const [showBrewOnRecipeRows, setShowBrewOnRecipeRows] =
+        useSetting("showBrewOnRecipeRows", settings);
+    const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [brewTraceRetention, setBrewTraceRetention] =
+        useSetting("brewTraceRetention", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -89,7 +94,7 @@ export default function SettingsScreen({settings}: Props) {
         return {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart
+            machineAutoStart, showBrewOnRecipeRows, animateBrewChart, brewTraceRetention
         };
     }
 
@@ -141,6 +146,15 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
             setTeaSteepEncoding(incoming.teaSteepEncoding);
+        }
+        if (typeof incoming.showBrewOnRecipeRows === "boolean") {
+            setShowBrewOnRecipeRows(incoming.showBrewOnRecipeRows);
+        }
+        if (typeof incoming.animateBrewChart === "boolean") {
+            setAnimateBrewChart(incoming.animateBrewChart);
+        }
+        if (typeof incoming.brewTraceRetention === "number") {
+            setBrewTraceRetention(incoming.brewTraceRetention);
         }
     }
 
@@ -227,6 +241,11 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
+                    <SettingsToggleRow
+                        label="Show BREW on recipe rows"
+                        description="Add a BREW shortcut to every recipe card. Turn it off if you brew rarely and prefer a quieter list."
+                        value={showBrewOnRecipeRows}
+                        onChange={setShowBrewOnRecipeRows}/>
                 </SettingsSection>
 
                 <SettingsSection title="Units">
