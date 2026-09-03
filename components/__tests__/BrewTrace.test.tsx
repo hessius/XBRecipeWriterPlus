@@ -93,4 +93,39 @@ describe("BrewTrace", () => {
         const {queryByTestId} = await draw({pours: [], plannedSeconds: 0});
         expect(queryByTestId("trace-plan")).toBeNull();
     });
+
+    it("compact draws the chart and nothing else", async () => {
+        const {queryByText, getByTestId} = await draw({
+            compact: true,
+            stage: 2,
+            stages: 4,
+            samples: samples([0, 0, 0], [84_000, 200, 190]),
+            plannedSeconds: 70,
+        });
+        // Stage counter and overrun label must not appear in compact mode.
+        expect(queryByText("2/4")).toBeNull();
+        expect(queryByText("+14 S")).toBeNull();
+        // The chart itself must still render.
+        expect(getByTestId("trace-water")).toBeTruthy();
+    });
+
+    it("a plan of no seconds cannot be overrun", async () => {
+        const {queryByText} = await draw({
+            pours: [],
+            plannedSeconds: 0,
+            samples: samples([0, 0, 0], [10_000, 50, 40]),
+        });
+        // Overrun label must not appear when there is no plan.
+        expect(queryByText(/^\+/)).toBeNull();
+    });
+
+    it("the plot fits inside the height it was given", async () => {
+        const knownHeight = 140;
+        // Non-compact: SVG height = height - 32 (two 16-px chrome rows).
+        const {getByLabelText: getLabelA} = await draw({height: knownHeight, compact: false});
+        const {getByLabelText: getLabelB} = await draw({height: knownHeight, compact: true});
+
+        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - 32);
+        expect(getLabelB("Brew trace").props.height).toBe(knownHeight);
+    });
 });
