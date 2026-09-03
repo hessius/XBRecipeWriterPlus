@@ -72,12 +72,26 @@ export function planPoints(pours: Pour[]): Point[] {
     return points;
 }
 
-/** One channel of a sample stream as points. */
+/**
+ * One channel of a sample stream as points.
+ *
+ * Deliberately permissive: samples are drawn in the order they were recorded
+ * and are neither sorted nor de-duplicated. The recorder appends in arrival
+ * order from a single subscription, so the stream is already monotonic; sorting
+ * here would hide a recorder bug behind a tidy-looking curve.
+ */
 export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] {
     return samples.map((sample) => ({t: sample.at / 1000, v: sample[of]}));
 }
 
-/** The rectangle a set of points is drawn into, and the range it spans. */
+/**
+ * The rectangle a set of points is drawn into, and the range it spans.
+ *
+ * `toPath` does not clamp: a point beyond `maxT` or `maxV` maps outside the
+ * box rather than being clipped or wrapped. That is deliberate — a brew that
+ * overruns its plan must look like it overran. Callers size the box to fit the
+ * run rather than to fit the plan.
+ */
 export type Box = {width: number; height: number; maxT: number; maxV: number};
 
 /**
