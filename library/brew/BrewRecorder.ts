@@ -58,6 +58,9 @@ export default class BrewRecorder {
     }
 
     start(): void {
+        // An instance started twice must not end up wired twice. Re-arming is
+        // cheaper to make safe than to forbid, so tear down first.
+        this.stop();
         const {machine} = this.options;
         this.startedAt = this.clock();
         this.unsubscribers = [
@@ -77,6 +80,7 @@ export default class BrewRecorder {
     }
 
     private receive(parsed: Notification): void {
+        if (this.emitted) return;
         if (parsed.kind === "cupWeight") {
             this.cup = parsed.grams;
             return;

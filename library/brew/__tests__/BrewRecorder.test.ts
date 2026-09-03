@@ -165,4 +165,54 @@ describe("BrewRecorder", () => {
         fake.phase({name: "done"});
         expect(records[0].record.heldSeconds).toBe(14);
     });
+
+    it("starting twice does not wire the recorder twice", () => {
+        // A second start() must tear down the first subscription before
+        // re-registering, or every notification arrives twice.
+        const {fake, recorder} = build();
+        recorder.start(); // second start — should detach first pair first
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(42);
+        expect(recorder.samples).toHaveLength(1);
+    });
+
+    it("ignores telemetry that arrives after the record was emitted", () => {
+        // Capture the notification listener before stop() wipes it, so we can
+        // deliver a late notification directly to the originally-registered
+        // handler even after the recorder has unsubscribed.
+        let capturedNotify: (n: import("@/library/machine/protocol").Notification) => void = () => {};
+        const fake = fakeMachine();
+        const time = clock();
+        const records: {record: BrewRecord; samples: BrewSample[]}[] = [];
+        // Wrap onNotification so we keep the raw listener reference.
+        const wrappedMachine: RecorderMachine = {
+            onNotification: (l) => {
+                capturedNotify = l;
+                return fake.machine.onNotification(l);
+            },
+            onPhase: (l) => fake.machine.onPhase(l)
+        };
+        const recorder = new BrewRecorder({
+            machine: wrappedMachine,
+            recipe: recipe(),
+            now: time.now,
+            newId: () => "brew-2",
+            onRecord: (record, samples) => records.push({record, samples})
+        });
+        recorder.start();
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        // Terminal phase triggers emit + stop.
+        fake.phase({name: "done"});
+
+        const lengthAfterEmit = records[0].samples.length;
+
+        // Deliver a notification directly through the captured listener —
+        // stop() has already detached the machine's reference, so this tests
+        // only the `emitted` guard inside receive().
+        capturedNotify({kind: "waterWeight", grams: 999});
+
+        expect(recorder.samples).toHaveLength(lengthAfterEmit);
+    });
 });
