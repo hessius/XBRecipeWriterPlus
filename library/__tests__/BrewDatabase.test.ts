@@ -79,6 +79,7 @@ function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
         recipeName: "Ethiopia Guji",
         accent: "#C86A3B",
         startedAt: 1_000_000,
+        pouringAt: 1_045_000,
         endedAt: 1_240_000,
         outcome: "done",
         failure: null,
@@ -100,6 +101,15 @@ describe("BrewDatabase", () => {
         const db = new BrewDatabase();
         db.insert(record(), []);
         expect(db.get("brew-1")).toEqual({...record(), hasStream: false});
+    });
+
+    it("restores a brew that never poured with no zero rather than a wrong one", () => {
+        // A refusal or a failure before the first drop has no sample zero. It
+        // must come back as 0 — meaning "fall back to the start" — and never
+        // as the start dressed up as a first drop.
+        const db = new BrewDatabase();
+        db.insert(record({id: "brew-dry", pouringAt: 0}), []);
+        expect(db.get("brew-dry")?.pouringAt).toBe(0);
     });
 
     it("restores null rather than the string 'null' for a clean brew", () => {

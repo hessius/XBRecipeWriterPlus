@@ -39,8 +39,8 @@ function buildLabel(pour: Pour, index: number): string {
     const vol = `${Math.max(pour.volume, 0)} millilitres`;
     const pourSec = Math.round(pourSeconds(pour));
     const pauseSec = Math.round(pauseSeconds(pour));
-    const before = (pour.agitation & 1) !== 0;
-    const after = (pour.agitation & 2) !== 0;
+    const before = pour.getAgitationBefore();
+    const after = pour.getAgitationAfter();
 
     let agitation = "";
     if (before && after) agitation = ", agitates before and after";
@@ -64,9 +64,10 @@ export default function BrewStageRung({
     const remaining = laneWidth - pourWidth;
     const pauseWidth = Math.min((pauseSeconds(pour) / span) * laneWidth, remaining);
     // Bit 0 is agitation before, bit 1 after. Two booleans in one byte on the
-    // card, and they stay two booleans here.
-    const before = (pour.agitation & 1) !== 0;
-    const after = (pour.agitation & 2) !== 0;
+    // card, and they stay two booleans here. Through `Pour`, which is the only
+    // thing that knows its own "never set" sentinel is not both of them.
+    const before = pour.getAgitationBefore();
+    const after = pour.getAgitationAfter();
 
     return (
         <XStack

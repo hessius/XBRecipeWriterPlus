@@ -28,6 +28,15 @@ type LiveBrew = {
      * a second brew.
      */
     start: (recipe: Recipe) => void;
+    /**
+     * Start this recipe again, switching the machine to PRO mode first.
+     *
+     * A retry has to come through here rather than calling `brew` directly.
+     * The recorder emits once and is spent, so a second attempt on the old run
+     * would collect no samples and write no history row: the run must be a new
+     * run, and only `start`/`startInPro` make one.
+     */
+    startInPro: (recipe: Recipe) => void;
     /** Dismiss a finished or stopped bar. Has no effect while actively brewing. */
     dismiss: () => void;
     /** Command the machine to brew this recipe.  Only meaningful after `start`. */
@@ -44,6 +53,7 @@ const noop = async () => {};
 const defaultValue: LiveBrew = {
     run: null,
     start: () => {},
+    startInPro: () => {},
     dismiss: () => {},
     brew: noop,
     startBrew: noop,
@@ -71,29 +81,29 @@ export function LiveBrewProvider({children, store}: {
     children: React.ReactNode;
     store?: BrewStore;
 }) {
-    // `runId` is bumped for every run so a second brew remounts RunOwner and
-    // starts from nothing rather than inheriting the last run's samples.
-    const [current, setCurrent] = useState<{recipe: Recipe; runId: number} | null>(null);
+    // `runId` is bumped for every run so a second brew starts from nothing
+    // rather than inheriting the last one's samples and spent recorder.
+    const [current, setCurrent] = useState<
+        {recipe: Recipe | null; runId: number; pro: boolean}
+    >({recipe: null, runId: 0, pro: false});
 
-    function begin(recipe: Recipe): void {
-        setCurrent((was) => ({recipe, runId: (was?.runId ?? 0) + 1}));
+    function begin(recipe: Recipe, pro: boolean = false): void {
+        setCurrent((was) => ({recipe, runId: was.runId + 1, pro}));
     }
 
-    if (current === null) {
-        return (
-            <Context.Provider value={{...defaultValue, start: begin}}>
-                {children}
-            </Context.Provider>
-        );
-    }
-
+    // One element, always, wrapping `children`. `children` here is the whole
+    // navigator: swapping the component above it — or re-keying it for a new
+    // run, which is what this used to do — unmounts and remounts every screen
+    // in the app, so starting a brew would throw away the navigation stack it
+    // was started from.
     return (
         <RunOwner
-            key={current.runId}
             recipe={current.recipe}
+            runId={current.runId}
+            pro={current.pro}
             store={store}
             onStart={begin}
-            onDismiss={() => setCurrent(null)}
+            onDismiss={() => setCurrent((was) => ({...was, recipe: null}))}
         >
             {children}
         </RunOwner>
@@ -101,20 +111,21 @@ export function LiveBrewProvider({children, store}: {
 }
 
 /**
- * The part that actually holds `useBrewRun`.
+ * The part that actually holds `useBrewRun`, and the only one in the tree.
  *
- * Extracted because hooks cannot be called conditionally: without this split
- * the provider would have to call `useBrewRun` with a null recipe (and every
- * line of it would need a null check) or skip the hook entirely (illegal).
+ * Always mounted, with a null recipe until something is asked for, so the
+ * shape of the tree never depends on whether a brew is running.
  */
-function RunOwner({recipe, store, onStart, onDismiss, children}: {
-    recipe: Recipe;
+function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
+    recipe: Recipe | null;
+    runId: number;
+    pro: boolean;
     store?: BrewStore;
-    onStart: (recipe: Recipe) => void;
+    onStart: (recipe: Recipe, pro?: boolean) => void;
     onDismiss: () => void;
     children: React.ReactNode;
 }) {
-    const result = useBrewRun(recipe, store);
+    const result = useBrewRun(recipe, store, runId);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, brew, startBrew, cancelBrew, canOfferProMode,
            switchToProAndRetry} = result;
@@ -123,17 +134,18 @@ function RunOwner({recipe, store, onStart, onDismiss, children}: {
     // `start` in the Context is replaced with a no-op while RunOwner is
     // rendered, so a re-mount of the brew screen cannot call `start` and reach
     // this effect a second time.
-    const brewFiredRef = useRef(false);
+    // Command the machine once per run. Keyed on `runId` rather than a bare
+    // mount, because this component is never remounted any more.
+    const brewFiredRef = useRef<number | null>(null);
     React.useEffect(() => {
-        if (!brewFiredRef.current) {
-            brewFiredRef.current = true;
-            void brew(recipe);
-        }
-        // recipe and brew are fixed for the lifetime of this RunOwner.
+        if (recipe === null || brewFiredRef.current === runId) return;
+        brewFiredRef.current = runId;
+        void (pro ? switchToProAndRetry(recipe) : brew(recipe));
+        // recipe and pro are fixed for the life of a run; runId is what changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [runId]);
 
-    const snapshot: LiveBrewSnapshot = {
+    const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
         holding, heldSeconds,
     };
@@ -143,9 +155,16 @@ function RunOwner({recipe, store, onStart, onDismiss, children}: {
             run: snapshot,
             // While the machine is still working, a second start is refused:
             // there is one machine and it is busy. Once the run is over the
-            // bar is only a record, so a new recipe replaces it.
+            // bar is only a record, so anything asked for next replaces it.
+            //
+            // Opening a finished brew to look at it must not come through
+            // here — `app/brew.tsx` skips `start` in view mode — or tapping
+            // the bar to see the brew you just made would make it again.
             start: (next: Recipe) => {
-                if (OVER.has(phase.name) && next !== recipe) onStart(next);
+                if (recipe === null || OVER.has(phase.name)) onStart(next);
+            },
+            startInPro: (next: Recipe) => {
+                if (recipe === null || OVER.has(phase.name)) onStart(next, true);
             },
             dismiss: onDismiss,
             brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry, error,

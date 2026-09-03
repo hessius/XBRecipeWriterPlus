@@ -10,6 +10,7 @@ const mockPush = jest.fn();
 let mockFilter: string | undefined = undefined;
 let mockBrews: StoredBrew[] = [];
 let mockRefresh: jest.Mock = jest.fn();
+let mockRemove: jest.Mock = jest.fn();
 let mockFocusEpoch = 0;
 
 jest.mock("expo-router", () => {
@@ -28,12 +29,31 @@ jest.mock("expo-router", () => {
 jest.mock("@/hooks/useBrewHistory", () => ({
     useBrewHistory: () => ({
         brews: mockBrews,
-        remove: jest.fn(),
+        remove: (...args: unknown[]) => mockRemove(...args),
         open: jest.fn(),
         refresh: (...args: unknown[]) => mockRefresh(...args)
     }),
     sharedBrewDatabase: () => ({})
 }));
+
+// react-native-gesture-handler's Swipeable is a native-touch-heavy component.
+// Under Jest, swipe gestures cannot be fired, so the delete tile is exposed
+// directly via its accessible label so tests can reach it without a gesture.
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
+    const actualReact = jest.requireActual("react");
+    return {
+        __esModule: true,
+        default: ({children, renderRightActions}: {
+            children: React.ReactNode;
+            renderRightActions?: () => React.ReactNode;
+        }) => (
+            <actualReact.Fragment>
+                {children}
+                {renderRightActions?.()}
+            </actualReact.Fragment>
+        )
+    };
+});
 
 function makeBrews(): StoredBrew[] {
     return [
@@ -54,6 +74,7 @@ describe("brew history", () => {
         mockBrews = makeBrews();
         mockPush.mockReset();
         mockRefresh = jest.fn();
+        mockRemove = jest.fn();
         mockFocusEpoch = 0;
     });
 
@@ -89,5 +110,43 @@ describe("brew history", () => {
         await renderWithProviders(<BrewHistory />);
         await fireEvent.press(screen.getByLabelText("Ethiopia Guji"));
         expect(mockPush).toHaveBeenCalledWith("/brewRecord?id=a");
+    });
+
+    it("shows a delete tile that opens a confirmation before removing", async () => {
+        // The Swipeable is mocked to render its right actions inline, so the
+        // "Delete brew" tile is always visible in the test tree.
+        await renderWithProviders(<BrewHistory />);
+
+        // There are two delete tiles (one per row); press the first one.
+        const tiles = screen.getAllByLabelText("Delete brew");
+        await fireEvent.press(tiles[0]);
+
+        // The confirmation sheet must appear before anything is removed.
+        expect(mockRemove).not.toHaveBeenCalled();
+        expect(screen.getByText(/cannot be undone/i)).toBeTruthy();
+    });
+
+    it("deletes only after the explicit confirmation", async () => {
+        await renderWithProviders(<BrewHistory />);
+
+        const tiles = screen.getAllByLabelText("Delete brew");
+        await fireEvent.press(tiles[0]);
+
+        // The confirmation button names the brew so there is no ambiguity.
+        const confirmButton = screen.getByLabelText("Delete Ethiopia Guji");
+        await fireEvent.press(confirmButton);
+
+        expect(mockRemove).toHaveBeenCalledWith("a");
+    });
+
+    it("does not delete when the user keeps the brew", async () => {
+        await renderWithProviders(<BrewHistory />);
+
+        const tiles = screen.getAllByLabelText("Delete brew");
+        await fireEvent.press(tiles[0]);
+
+        await fireEvent.press(screen.getByLabelText("Keep this brew"));
+
+        expect(mockRemove).not.toHaveBeenCalled();
     });
 });

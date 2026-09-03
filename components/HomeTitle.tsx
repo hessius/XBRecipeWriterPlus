@@ -6,10 +6,10 @@ import {XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import Wordmark from "@/components/Wordmark";
 import {palette} from "@/constants/colors";
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {ATTRACT, DURATION, EASING, useReducedMotion} from "@/constants/motion";
 
-/** How long the `++` keeps its tint after launch. */
-export const WORDMARK_FADE_DELAY = 10_000;
+/** How long the `++` keeps its tint after launch. Re-exported for tests. */
+export const WORDMARK_FADE_DELAY = ATTRACT.wordmarkFadeDelay;
 
 /**
  * When the current session started counting.

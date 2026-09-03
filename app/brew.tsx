@@ -7,10 +7,10 @@ import BrewFigures from "@/components/BrewFigures";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import DotMatrixText from "@/components/DotMatrixText";
-import {BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
+import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
         FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
         RUNNING} from "@/constants/brewCopy";
-import {palette} from "@/constants/colors";
+import {mix, palette} from "@/constants/colors";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -36,7 +36,12 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
 }
 
 export default function Brew() {
-    const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
+    const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
+    // Opened to look at a run that already exists — from the mini bar — rather
+    // than to start one. Without this, coming back to watch the brew you just
+    // made would make it again: `start` replaces a finished run, and this
+    // screen would hand it a freshly deserialised recipe on every mount.
+    const viewing = view === "1";
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
@@ -44,16 +49,16 @@ export default function Brew() {
     // RunOwner in the provider has its first tick) and for `total` below.
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
 
-    const {run, start, brew, startBrew, cancelBrew, canOfferProMode,
-           switchToProAndRetry, error} = useLiveBrew();
+    const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
+           error} = useLiveBrew();
 
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
     // re-mounting this screen while a brew is in flight never commands a second
     // brew (Finding 2).
     useEffect(() => {
-        start(localRecipe);
-        // localRecipe is stable (useState initialiser).
+        if (!viewing) start(localRecipe);
+        // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -92,14 +97,26 @@ export default function Brew() {
     const total = localRecipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
     const last = samples[samples.length - 1];
 
+    // Only a refusal for water gets the water copy. `block` names which of the
+    // pre-flight checks said no, so a busy machine is no longer told to go and
+    // fill a tank that is already full.
+    const blockKind = phase.name === "failed" ? phase.block : undefined;
+    // Water is the default when the kind is missing, so a phase from before
+    // `block` existed still reads the way it always did.
+    const blockedForWater = blocked && (blockKind ?? "notEnoughWater") === "notEnoughWater";
     const headline = blocked
-        ? BLOCKED_WATER_HEADLINE
+        ? (BLOCKED_HEADLINE[blockKind ?? "notEnoughWater"] ?? BLOCKED_WATER_HEADLINE)
         : failed
             ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
             : PHASE_COPY[phase.name];
     const headlineColor = blocked ? palette.warn : failed ? palette.danger : palette.text;
     const offerPro = failed && phase.reason === "rejected" && canOfferProMode();
     const offerRetry = blocked || (failed && !NO_RETRY.has(phase.reason));
+    // Blended, not thresholded. `warmth` is how far the line has travelled
+    // between the two colours, and grinding beats between 1 and 0.15 — both of
+    // which are "greater than zero", so a threshold drew the two halves of the
+    // beat identically and the flicker never appeared at all.
+    const planColor = mix(palette.muted, accent, motion.warmth);
 
     return (
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
@@ -116,7 +133,7 @@ export default function Brew() {
                 stages={phase.name === "pouring" ? phase.pours : undefined}
                 holding={holding}
                 planOpacity={motion.opacity}
-                planColor={motion.warmth > 0 ? accent : palette.muted}
+                planColor={planColor}
                 planDashed={motion.dashed}
                 planHeadAt={motion.headAt}
             />
@@ -134,7 +151,15 @@ export default function Brew() {
             </DotMatrixText>
 
             {blocked && (
-                <Text color={palette.warn} fontSize={13}>{blockedWaterCopy(total)}</Text>
+                <Text color={palette.warn} fontSize={13}>
+                    {/* The water sentence names the recipe's own volume and
+                        promises the dose is safe. Every other refusal already
+                        arrives as a sentence from the machine. */}
+                    {blockedForWater
+                        ? blockedWaterCopy(total)
+                        : (phase.name === "failed" ? phase.detail : undefined)
+                          ?? "The machine would not take this brew."}
+                </Text>
             )}
 
             {!firstBrewDone && running && (
@@ -174,12 +199,16 @@ export default function Brew() {
                         // noticing a refilled tank cannot be done quietly on a
                         // timer. A press asks again, and only when somebody is
                         // there to have done something about the reason.
+                        // Through `start`, not `brew`: a retry is a new run,
+                        // and only a new run gets a fresh recorder. Retrying
+                        // on the spent one brewed a coffee that no history row
+                        // ever mentioned.
                         <Action label="Try again" color={palette.text}
-                                onPress={() => void brew(recipe)} />
+                                onPress={() => start(recipe)} />
                     )}
                     {offerPro && (
                         <Action label="Switch to PRO" color={palette.warn}
-                                onPress={() => void switchToProAndRetry(recipe)} />
+                                onPress={() => startInPro(recipe)} />
                     )}
                     {phase.name === "done" && (
                         <Action label="Export this brew" color={palette.dim}

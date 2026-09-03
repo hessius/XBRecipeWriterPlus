@@ -74,6 +74,106 @@ describe("LiveBrewProvider", () => {
     afterEach(() => jest.useRealTimers());
 
     /**
+     * The provider sits above the whole navigator. If starting a brew changes
+     * the shape of the tree — a new element type above `children`, or a new
+     * `key` on it — React unmounts and remounts every screen in the app and
+     * the navigation stack the brew was started from is thrown away.
+     */
+    it("does not remount its children when a run starts, or when a second one does", async () => {
+        const h = harness();
+        let mounts = 0;
+        function Child() {
+            React.useEffect(() => { mounts += 1; }, []);
+            return null;
+        }
+
+        let api: ReturnType<typeof useLiveBrew> | null = null;
+        function Reader() {
+            api = useLiveBrew();
+            return null;
+        }
+
+        await render(
+            <LiveBrewProvider store={h.store}>
+                <Reader />
+                <Child />
+            </LiveBrewProvider>
+        );
+        expect(mounts).toBe(1);
+
+        await act(async () => { api!.start(recipe()); });
+        expect(mounts).toBe(1);
+
+        await h.setPhase({name: "done"});
+        await act(async () => { api!.start(recipe()); });
+        expect(mounts).toBe(1);
+    });
+
+    /**
+     * A retry has to be a new run. The recorder emits once and unsubscribes
+     * itself, so a second attempt on the spent run collected no samples and
+     * wrote no history row — a coffee was made that nothing ever recorded.
+     */
+    it("re-arms the recorder when a refused brew is retried", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        const r = recipe();
+        await act(async () => { result.current.start(r); });
+        await h.setPhase({
+            name: "failed", reason: "blocked", block: "notEnoughWater",
+            detail: "The tank is low."
+        } as BrewPhase);
+        expect(h.written).toHaveLength(0);
+
+        await act(async () => { result.current.start(r); });
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(2);
+
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+
+        expect(h.written).toHaveLength(1);
+        expect(h.written[0].samples.length).toBeGreaterThan(0);
+    });
+
+    /**
+     * The PRO retry is a retry too, and went the same way as the plain one.
+     */
+    it("starts a PRO retry as a new run, through the mode switch", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        const r = recipe();
+        await act(async () => { result.current.start(r); });
+        await h.setPhase({name: "failed", reason: "rejected"} as BrewPhase);
+
+        await act(async () => { result.current.startInPro(r); });
+        expect(global.__brewer.switchToProAndRetry).toHaveBeenCalledTimes(1);
+        // Not brewed twice: PRO replaces the plain command, it does not join it.
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+        // Two rows, and that is right: `rejected` is a mid-brew failure, which
+        // is kept. What matters is that the retry was recorded at all.
+        expect(h.written).toHaveLength(2);
+        expect(h.written[1].record.outcome).toBe("done");
+        expect(h.written[1].samples.length).toBeGreaterThan(0);
+    });
+
+    /**
      * Finding 2: a second call to `start` while RunOwner is already mounted
      * must be a no-op — the machine must be commanded exactly once.
      */

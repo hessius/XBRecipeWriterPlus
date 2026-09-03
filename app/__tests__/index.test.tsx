@@ -100,6 +100,7 @@ jest.mock("@/components/XbrwToast", () => ({
 // settings.test.tsx.
 let mockRemembered = "";
 let mockMachineStatus = "disconnected";
+let mockMachineInfo: {waterEnough: boolean; mode: "PRO" | "EASY"; grindSize: number} | null = null;
 
 const mockOnLink = jest.fn((_listener: () => void) => () => undefined);
 const mockAskHowItIsDoing = jest.fn(async () => false);
@@ -108,7 +109,7 @@ jest.mock("@/hooks/useMachine", () => ({
     __esModule:   true,
     useMachine:   () => ({
         machine:    {
-            info:            null,
+            get info()   { return mockMachineInfo; },
             isConnected:     () => false,
             onLink:          (listener: () => void) => mockOnLink(listener),
             askHowItIsDoing: () => mockAskHowItIsDoing()
@@ -194,6 +195,7 @@ beforeEach(() => {
     mockFocusEpoch = 0;
     mockRemembered = "";
     mockMachineStatus = "disconnected";
+    mockMachineInfo = null;
     mockLiveRun = null;
     mockOnLink.mockClear();
     mockAskHowItIsDoing.mockClear();
@@ -1014,5 +1016,49 @@ describe("HomeScreen, opening one editor at a time", () => {
             <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
         );
         expect(screen.queryByLabelText(/machine/i)).toBeNull();
+    });
+
+    it("shows vitals immediately when machine.info is set at mount (task 1 — seeding)", async () => {
+        // Before the fix, machineVitals was initialised to null regardless of
+        // machine.info, so the popover showed "Not in range" even when the
+        // machine was already connected when the screen mounted.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+
+        // Vitals seeded from machine.info, not waiting for an onLink event.
+        expect(screen.getByText("WATER")).toBeTruthy();
+        expect(screen.getByText("PRO")).toBeTruthy();
+        expect(screen.getByText("62")).toBeTruthy();
+    });
+
+    it("keeps the last snapshot after disconnect so 'last seen' is reachable (task 2)", async () => {
+        // Before the fix, the onLink handler called setMachineVitals(null) on
+        // disconnect, making the 'Last seen' branch in MachinePopover
+        // unreachable — a disconnected machine always showed 'Not in range'.
+        //
+        // This test proves the seeded path works: if machine.info is non-null
+        // at mount but status is "disconnected" (stale info surviving a drop),
+        // the popover must show "Last seen" rather than "Not in range".
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "disconnected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine not in range"));
+
+        // Vitals seeded from machine.info; status is disconnected, so the
+        // popover must show "Last seen" rather than "Not in range".
+        expect(screen.getByText(/last seen/i)).toBeTruthy();
+        expect(screen.queryByText(/not in range/i)).toBeNull();
     });
 });

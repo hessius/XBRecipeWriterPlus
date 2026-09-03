@@ -35,7 +35,7 @@ function formatDuration(startMs: number, endMs: number): string {
  * recipe does not rewrite its own history.
  */
 export default function BrewHistoryRow({brew, onPress}: Props) {
-    const stopped = brew.outcome === "failed" || brew.outcome === "cancelled";
+    const stopped = brew.outcome !== "done";
 
     return (
         <Pressable accessibilityRole="button" accessibilityLabel={brew.recipeName}

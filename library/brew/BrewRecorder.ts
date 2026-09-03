@@ -133,6 +133,7 @@ export default class BrewRecorder {
             recipeName: recipe.displayName(),
             accent: resolveAccent(recipe),
             startedAt: this.startedAt,
+            pouringAt: this.pouringAt,
             endedAt: this.clock(),
             outcome: phase.name as BrewOutcome,
             failure,

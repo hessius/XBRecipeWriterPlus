@@ -110,6 +110,29 @@ describe("BrewRecorder", () => {
         expect(records[0].samples).toHaveLength(1);
     });
 
+    it("marks where the samples' zero is, so the record can draw them", () => {
+        const {fake, time, records} = build();
+        // Waking and grinding: real time passes before a drop falls.
+        time.advance(45_000);
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        const firstDrop = time.now();
+        time.advance(200_000);
+        fake.water(250);
+        fake.phase({name: "done"});
+
+        const {record} = records[0];
+        expect(record.pouringAt).toBe(firstDrop);
+        // And it is not the start: measuring the plan from there would carry
+        // the 45 seconds of grinding into an axis the trace knows nothing of.
+        expect(record.startedAt).toBeLessThan(firstDrop);
+    });
+
+    it("leaves the zero at nothing when the brew never poured", () => {
+        const {fake, records} = build();
+        fake.phase({name: "failed", reason: "noBeans"});
+        expect(records[0].record.pouringAt).toBe(0);
+    });
+
     it("keeps the reason on a failed brew", () => {
         const {fake, records} = build();
         fake.phase({name: "pouring", pour: 1, pours: 2});

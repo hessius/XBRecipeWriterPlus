@@ -45,6 +45,22 @@ export function blockedWaterCopy(totalMl: number): string {
 export const BLOCKED_WATER_HEADLINE = "NOT ENOUGH WATER FOR THIS BREW";
 
 /**
+ * The headline for each kind of pre-flight refusal.
+ *
+ * Water is the one that happens almost daily and gets the sentence that names
+ * the recipe's own volume; the rest are rarer but must not borrow its copy,
+ * because "not enough water" is a specific instruction to go and fill the tank
+ * and it is wrong for a machine that is simply busy.
+ */
+export const BLOCKED_HEADLINE: Record<string, string> = {
+    notEnoughWater: BLOCKED_WATER_HEADLINE,
+    notConnected:   "THE MACHINE IS NOT CONNECTED",
+    noVitals:       "THE MACHINE HAS NOT ANSWERED YET",
+    busy:           "THE MACHINE IS BUSY",
+    recipe:         "THIS RECIPE WILL NOT GO ON A CARD"
+};
+
+/**
  * Said once, on a user's first brew, and never again.
  *
  * None of it is detectable — the machine cannot tell us whether a cup is under
@@ -76,3 +92,20 @@ export const OVER: ReadonlySet<string> = new Set([
  * as "this one is free".
  */
 export const NO_RETRY: ReadonlySet<string> = new Set(["noWater"]);
+
+/**
+ * The mid-brew failures in three or four words, for the bar.
+ *
+ * `FAILURE_COPY` above is a sentence, which is right on the brew screen and
+ * too long for a bar that has one line. Every mid-brew reason needs an entry:
+ * without one they all fell through to "lost contact", which named the wrong
+ * event and sent people looking at their Bluetooth.
+ */
+export const MINI_FAILURE_WHY: Record<string, string> = {
+    noWater:      "no water",
+    noBeans:      "no beans",
+    gearPosition: "the grinder jammed",
+    doseMismatch: "the dose was refused",
+    idling:       "it went idle",
+    rejected:     "the recipe was refused"
+};

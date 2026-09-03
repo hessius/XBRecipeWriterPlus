@@ -69,6 +69,23 @@ describe("BrewMiniBar", () => {
         expect(getByText("KEPT IN YOUR BREW HISTORY")).toBeTruthy();
     });
 
+    it("does not call a refusal a stopped brew, or claim it was kept", async () => {
+        // A `blocked` phase is a refusal before anything was sent: no dose was
+        // spent and the recorder deliberately writes no row, so the bar must
+        // not promise a history entry that will not be there.
+        const {getByText, queryByText} = await draw({
+            phase: {name: "failed", reason: "blocked", block: "busy",
+                    detail: "The machine is already brewing."}
+        });
+        expect(getByText("Did not start")).toBeTruthy();
+        expect(queryByText("KEPT IN YOUR BREW HISTORY")).toBeNull();
+    });
+
+    it("names each mid-brew failure rather than calling them all lost contact", async () => {
+        const beans = await draw({phase: {name: "failed", reason: "noBeans"}});
+        expect(beans.getByText("Stopped — no beans")).toBeTruthy();
+    });
+
     it("draws a stopped brew in danger", async () => {
         const {getByTestId} = await draw({
             phase: {name: "failed", reason: "noWater"},

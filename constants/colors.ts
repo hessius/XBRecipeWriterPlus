@@ -160,3 +160,25 @@ export const accents: Readonly<Record<AccentGroup, readonly string[]>> = {
         "#E0AEA6"  // Hibiscus
     ]
 };
+
+/**
+ * Blend two hex colours.
+ *
+ * Here rather than beside the animation that wanted it, for the same reason
+ * every literal is here: a blended colour is still a colour, and one computed
+ * in a component is one the palette cannot be retuned through.
+ *
+ * `amount` is the weight of `to`, clamped to 0-1. Both inputs must be
+ * six-digit `#rrggbb` — every colour in this module is.
+ */
+export function mix(from: string, to: string, amount: number): string {
+    const weight = Math.min(1, Math.max(0, amount));
+    const channel = (hex: string, at: number) => parseInt(hex.slice(at, at + 2), 16);
+    const blended = [1, 3, 5].map((at) => {
+        const value = Math.round(
+            channel(from, at) + (channel(to, at) - channel(from, at)) * weight
+        );
+        return value.toString(16).padStart(2, "0");
+    });
+    return `#${blended.join("")}`;
+}

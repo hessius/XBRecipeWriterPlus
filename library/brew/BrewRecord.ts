@@ -33,6 +33,17 @@ export type BrewRecord = {
     recipeName: string;
     accent: string;
     startedAt: number;
+    /**
+     * Wall clock of the first drop. Absent on rows written before it existed,
+     * and 0 on a brew that was refused or stopped before it poured.
+     *
+     * Kept apart from `startedAt` because the sample stream is zeroed here,
+     * not there. Measuring the plan from `startedAt` folded waking and
+     * grinding into it, which squeezed the trace against a longer axis than
+     * the one it was drawn on and understated the overrun by exactly the time
+     * the grinder took.
+     */
+    pouringAt?: number;
     endedAt: number;
     outcome: BrewOutcome;
     failure: BrewFailure | null;

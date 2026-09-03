@@ -13,7 +13,16 @@ type Props = {
 
 const WIDTH = 21;
 const INSET = 5;
-/** Enough to reach the HIG's 44 px without widening the capsule itself. */
+/**
+ * Slop, not a wider capsule.
+ *
+ * The capsule is 21 px across and runs the height of the card, so vertically
+ * it is already far past the HIG's 44 px; the slop only has to help
+ * horizontally, where it brings the target to 29 px. Not 44: `left` is
+ * deliberately 0, because a left slop here steals presses from the card body
+ * behind it and the card is the bigger, more common target. Reaching 44 px
+ * means widening the capsule, which is a visual decision, not a slop one.
+ */
 const SLOP = {top: 8, bottom: 8, left: 0, right: 8};
 
 /**

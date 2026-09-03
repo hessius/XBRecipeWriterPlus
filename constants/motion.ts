@@ -53,7 +53,7 @@ export const STAGGER = {
 } as const;
 
 /**
- * The About screen's attract mode.
+ * The About screen's attract mode, and any other long-period idle decoration.
  *
  * An order of magnitude longer than everything above, and deliberately so: this
  * is idle decoration that rewards a user for lingering, not feedback on
@@ -97,7 +97,31 @@ export const ATTRACT = {
     glimmerRest: 4400,
     /** The mark coming apart under a tap, and settling back. */
     tap: 220,
-    tapHold: 120
+    tapHold: 120,
+
+    /**
+     * Brew-chart pre-pour animation timings.
+     *
+     * These three drive the waking/sending/grinding phases of the trace
+     * animation. They are a full order of magnitude longer than UI feedback
+     * timings: the chart is passive decoration while the machine is getting
+     * ready, not a response to a tap.
+     */
+    /** One full breath of the waiting trace. Slow enough to read as breathing. */
+    brewBreath: 3400,
+    /** One pass of the travelling send-head across the trace. */
+    brewTravel: 1400,
+    /** The grinder's flicker period. Fast and uneven-feeling, which is what grinding is. */
+    brewFlicker: 420,
+
+    /**
+     * How long the `++` wordmark tint lasts after launch.
+     *
+     * Long enough to be read once; after that the three characters compete
+     * with the recipe list's accents and are better left unsaturated.
+     * Once per session, timed from app load.
+     */
+    wordmarkFadeDelay: 10_000
 } as const;
 
 /** Spring configs, for anything a finger drives. */export const SPRING = {

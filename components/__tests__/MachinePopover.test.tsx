@@ -64,6 +64,22 @@ describe("MachinePopover", () => {
         expect(getByText(/reconnect by itself/i)).toBeTruthy();
     });
 
+    it("shows last-seen age when the machine has gone away but had answered (task 2)", async () => {
+        // This branch was previously unreachable because the disconnect handler
+        // cleared vitals to null — the same code path that made the "last seen"
+        // copy unrenderable.  With vitals preserved on disconnect, the age can
+        // now appear.
+        const {getByText, queryByText} = await draw({
+            status: "disconnected",
+            vitals:  {...vitals, askedAt: 5 * 60 * 1000},
+            now:     10 * 60 * 1000
+        });
+        expect(getByText(/last seen/i)).toBeTruthy();
+        expect(getByText(/5 min ago/i)).toBeTruthy();
+        // The full vitals panel must not appear — the machine is away.
+        expect(queryByText("WATER")).toBeNull();
+    });
+
     it("has no machine settings button", async () => {
         const {queryByLabelText} = await draw();
         expect(queryByLabelText(/machine settings/i)).toBeNull();

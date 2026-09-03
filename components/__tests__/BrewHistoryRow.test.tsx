@@ -59,6 +59,18 @@ describe("BrewHistoryRow", () => {
         );
     });
 
+    it("marks a brew where contact was lost as stopped (task 3 — lostContact)", async () => {
+        // lostContact previously fell through to the same rendering as "done"
+        // because the stopped flag only checked for "failed" and "cancelled".
+        const {getByText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({outcome: "lostContact", failure: null})}
+                            onPress={jest.fn()} />
+        );
+        expect(getByText("STOPPED").props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({color: palette.danger})])
+        );
+    });
+
     it("draws in the accent the recipe had at the time", async () => {
         const {getByTestId} = await renderWithProviders(
             <BrewHistoryRow brew={brew({accent: "#4A7BC8"})} onPress={jest.fn()} />

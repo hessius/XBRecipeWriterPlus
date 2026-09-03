@@ -76,7 +76,13 @@ export type BrewPhase =
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
     | {name: "lostContact"}
-    | {name: "failed"; reason: BrewFailure; detail?: string};
+    /**
+     * `block` is the kind of pre-flight refusal, present only when `reason` is
+     * `"blocked"`. Without it every refusal looks the same to the UI, and a
+     * busy machine or an unwritable recipe was being explained as an empty
+     * water tank.
+     */
+    | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
     40522: "noWater",
@@ -652,7 +658,10 @@ export default class Machine {
             // handle, but the brew screen watches the phase, and a refusal that
             // left the phase at `idle` sat there saying "Ready when you are."
             // with nothing to press.
-            this.setPhase({name: "failed", reason: "blocked", detail: blocked.message});
+            this.setPhase({
+                name: "failed", reason: "blocked",
+                detail: blocked.message, block: blocked.kind
+            });
             throw new Error(blocked.message);
         }
 

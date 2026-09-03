@@ -18,7 +18,6 @@ import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePopover";
-import BrewMiniBar from "@/components/BrewMiniBar";
 import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -32,7 +31,6 @@ import Recipe from "@/library/Recipe";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import type {Settings} from "@/library/Settings";
-import {resolveAccent} from "@/library/accent";
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -80,14 +78,26 @@ export default function HomeScreen({db, settings}: Props) {
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
     const showBrew = showBrewRows && remembered !== "";
-    const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(null);
-    const {run: liveRun, dismiss: dismissBrew} = useLiveBrew();
+    // Seeded from machine.info so a machine that is already connected when the
+    // screen mounts does not show "Not in range" while the header dot says
+    // connected. The useState initialiser runs once; subsequent updates arrive
+    // through onLink below.
+    const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(() => {
+        const info = machine.info;
+        if (info === null) return null;
+        return {waterEnough: info.waterEnough, mode: info.mode,
+                grindSize: info.grindSize, askedAt: Date.now()};
+    });
+    const {run: liveRun} = useLiveBrew();
     /** When the brew screen was last pushed, so a second press in that window is refused. */
     const lastBrewPushRef = useRef(0);
 
     // Repaint vitals whenever the link emits an event (connected, info arrived,
     // disconnected). The info blob is mutated in place on the shared machine, so
     // React cannot see it without this subscription.
+    // On disconnect the last answered snapshot is deliberately kept — MachinePopover
+    // shows "Last seen X min ago" when status is not "connected" but vitals exist,
+    // and that copy is unreachable if we clear here.
     useEffect(() => machine.onLink(() => {
         const info = machine.info;
         if (info !== null) {
@@ -97,8 +107,6 @@ export default function HomeScreen({db, settings}: Props) {
                 grindSize:   info.grindSize,
                 askedAt:     Date.now()
             });
-        } else {
-            setMachineVitals(null);
         }
     }), [machine]);
 
@@ -500,23 +508,6 @@ export default function HomeScreen({db, settings}: Props) {
                         library.refresh();
                     }
                 }}/>
-
-            {liveRun !== null && (
-                <BrewMiniBar
-                    recipeName={liveRun.recipe.displayName()}
-                    dose={liveRun.recipe.dosage}
-                    pours={liveRun.recipe.pours}
-                    samples={liveRun.samples}
-                    accent={resolveAccent(liveRun.recipe)}
-                    phase={liveRun.phase}
-                    elapsed={liveRun.elapsed}
-                    holding={liveRun.holding}
-                    heldSeconds={liveRun.heldSeconds}
-                    onOpen={() => router.push(`/brew?recipeJSON=${
-                        encodeURIComponent(JSON.stringify(liveRun.recipe))}`)}
-                    onDismiss={dismissBrew}
-                />
-            )}
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>

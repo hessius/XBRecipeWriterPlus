@@ -21,6 +21,8 @@ const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
 const mockSwitchToProAndRetry = jest.fn();
 const mockStart = jest.fn();
+const mockStartInPro = jest.fn();
+let mockView: string | undefined = undefined;
 
 // Build a minimal Recipe for the mock run. Two-pour recipe: pour 1 is 40 ml.
 const mockRecipe = (() => {
@@ -47,6 +49,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             heldSeconds: 0,
         },
         start: mockStart,
+        startInPro: mockStartInPro,
         dismiss: jest.fn(),
         brew: mockBrew,
         startBrew: mockStartBrew,
@@ -68,15 +71,21 @@ jest.mock("@/hooks/useSetting", () => {
 
 jest.mock("expo-router", () => ({
     router: {back: jest.fn(), push: jest.fn()},
-    useLocalSearchParams: () => ({recipeJSON: JSON.stringify({
-        name: "Ethiopia Guji",
-        pours: [{pourNumber: 1, volume: 40, temperature: 93,
-                 flowRate: 40, agitation: 0, pourPattern: 0, pauseTime: 20}]
-    })}),
+    useLocalSearchParams: () => ({
+        view: mockView,
+        recipeJSON: JSON.stringify({
+            name: "Ethiopia Guji",
+            pours: [{pourNumber: 1, volume: 40, temperature: 93,
+                     flowRate: 40, agitation: 0, pourPattern: 0, pauseTime: 20}]
+        })
+    }),
     useNavigation: () => ({setOptions: jest.fn()})
 }));
 
 beforeEach(() => {
+    mockView = undefined;
+    mockStart.mockClear();
+    mockStartInPro.mockClear();
     mockBrew.mockClear();
     mockStartBrew.mockClear();
     mockCancelBrew.mockClear();
@@ -111,6 +120,47 @@ describe("brew route", () => {
         expect(getByText("NOT ENOUGH WATER FOR THIS BREW")).toBeTruthy();
         expect(getByText(/this recipe's 40 ml/)).toBeTruthy();
         expect(getByText(/nothing has been sent/)).toBeTruthy();
+    });
+
+    it("asks for a brew when opened normally", async () => {
+        await renderWithProviders(<Brew />);
+        expect(mockStart).toHaveBeenCalled();
+    });
+
+    it("asks for nothing when opened to watch a run that already exists", async () => {
+        // The mini bar opens this screen with view=1. Without the flag, coming
+        // back to look at the brew you just made brewed it a second time.
+        mockView = "1";
+        await renderWithProviders(<Brew />);
+        expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it("names a busy machine instead of blaming the water tank", async () => {
+        mockPhase = {
+            name: "failed", reason: "blocked", block: "busy",
+            detail: "The machine is already brewing."
+        } as BrewPhase;
+        const {getByText, queryByText} = await renderWithProviders(<Brew />);
+        expect(getByText("THE MACHINE IS BUSY")).toBeTruthy();
+        expect(queryByText("NOT ENOUGH WATER FOR THIS BREW")).toBeNull();
+        expect(getByText("The machine is already brewing.")).toBeTruthy();
+    });
+
+    it("still blames the water when the refusal says it is the water", async () => {
+        mockPhase = {
+            name: "failed", reason: "blocked", block: "notEnoughWater",
+            detail: "The tank is low."
+        } as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText("NOT ENOUGH WATER FOR THIS BREW")).toBeTruthy();
+        expect(getByText(/this recipe's 40 ml/)).toBeTruthy();
+    });
+
+    it("retries through the provider so the brew is recorded", async () => {
+        mockPhase = {name: "failed", reason: "blocked", detail: "The tank is low."} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Try again"));
+        expect(mockStart).toHaveBeenCalled();
     });
 
     it("offers TRY AGAIN after a refusal", async () => {
@@ -200,7 +250,9 @@ describe("brew route", () => {
         const {getByText, getByLabelText} = await renderWithProviders(<Brew />);
         expect(getByText(/easy mode.*switch it to pro/i)).toBeTruthy();
         await fireEvent.press(getByLabelText("Switch to PRO"));
-        expect(mockSwitchToProAndRetry).toHaveBeenCalled();
+        // Through the provider, so the retry is a new run with a fresh
+        // recorder rather than a second brew on a spent one.
+        expect(mockStartInPro).toHaveBeenCalled();
     });
 
     it("does not offer PRO mode when the machine cannot take it", async () => {

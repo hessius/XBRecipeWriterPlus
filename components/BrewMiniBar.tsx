@@ -5,7 +5,7 @@ import {XStack, YStack} from "tamagui";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import {OVER} from "@/constants/brewCopy";
+import {MINI_FAILURE_WHY, OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {plannedSeconds} from "@/library/brew/brewShape";
@@ -40,13 +40,24 @@ function say(props: Props): {title: string; detail: string; line: string} {
     const {phase, recipeName, dose, elapsed, holding, heldSeconds, samples} = props;
     const upper = recipeName.toUpperCase();
 
+    // A refusal before anything was sent is not a stopped brew. Nothing went
+    // out, no dose was spent, and the recorder deliberately writes no row — so
+    // this must not say the brew was kept, and it must not be red.
+    if (phase.name === "failed" && phase.reason === "blocked") {
+        return {
+            title: "Did not start",
+            detail: "NOTHING WAS SENT · TAP TO SEE WHY",
+            line: palette.warn
+        };
+    }
+
     if (phase.name === "failed" || phase.name === "cancelled" ||
         phase.name === "lostContact") {
-        const why = phase.name === "failed" && phase.reason === "noWater"
-            ? "no water"
-            : phase.name === "cancelled"
-                ? "you stopped it"
-                : "lost contact";
+        const why = phase.name === "cancelled"
+            ? "you stopped it"
+            : phase.name === "lostContact"
+                ? "lost contact"
+                : (MINI_FAILURE_WHY[phase.reason] ?? "the machine stopped");
         return {
             title: `Stopped — ${why}`,
             detail: "KEPT IN YOUR BREW HISTORY",

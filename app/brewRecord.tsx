@@ -195,8 +195,12 @@ export default function BrewRecord({recipeLookup}: Props) {
     const {record, samples} = opened;
     const accent = record.accent;
 
-    // The duration of this brew in seconds.
-    const durationSeconds = (record.endedAt - record.startedAt) / 1000;
+    // Measured from the first drop, because that is where the sample stream is
+    // zeroed. From `startedAt` the axis would also carry waking and grinding,
+    // against which the trace — which knows nothing of them — would be drawn
+    // short. Older rows have no `pouringAt` and fall back to the old meaning.
+    const zero = (record.pouringAt ?? 0) > 0 ? record.pouringAt! : record.startedAt;
+    const durationSeconds = (record.endedAt - zero) / 1000;
     // Planned seconds is total minus the overrun the record saved.
     const plannedSecs = Math.max(0, durationSeconds - record.heldSeconds);
 

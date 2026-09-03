@@ -12,6 +12,7 @@ import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
 import {startMachineLink} from '@/hooks/useMachine';
+import LiveBrewBar from '@/components/LiveBrewBar';
 import {LiveBrewProvider} from '@/hooks/useLiveBrew';
 import {sharedBrewDatabase, sweepOnLaunch} from '@/hooks/useBrewHistory';
 import {useSetting} from '@/hooks/useSetting';
@@ -132,6 +133,10 @@ export default function RootLayout() {
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
                                         </Stack>
+                                        {/* Beside the navigator, not inside a
+                                            screen: a brew you walked away from
+                                            has to still be there in Settings. */}
+                                        <LiveBrewBar/>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
                                         </LiveBrewProvider>

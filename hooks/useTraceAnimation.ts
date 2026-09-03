@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 
-import {useReducedMotion} from "@/constants/motion";
+import {ATTRACT, useReducedMotion} from "@/constants/motion";
 import {useSetting} from "@/hooks/useSetting";
 
 export type TraceAnimation = {
@@ -15,11 +15,11 @@ export type TraceAnimation = {
 };
 
 /** A full breath. Slow enough to read as breathing rather than as blinking. */
-const BREATH_MS = 3400;
+const BREATH_MS = ATTRACT.brewBreath;
 /** One pass of the travelling head. */
-const TRAVEL_MS = 1400;
+const TRAVEL_MS = ATTRACT.brewTravel;
 /** The grinder's flicker. Fast and uneven-feeling, which is what grinding is. */
-const FLICKER_MS = 420;
+const FLICKER_MS = ATTRACT.brewFlicker;
 
 const STILL: TraceAnimation = {opacity: 1, warmth: 0, headAt: 1, dashed: true};
 
