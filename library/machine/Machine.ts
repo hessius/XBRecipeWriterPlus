@@ -47,6 +47,13 @@ export type BrewFailure =
      */
     | "blocked";
 
+/** Why a brew will not start, in a form the UI can branch on. */
+export type BrewBlock = {
+    kind: "notConnected" | "noVitals" | "notEnoughWater" | "busy" | "recipe";
+    /** The sentence to show. Still the only thing most callers need. */
+    message: string;
+};
+
 /**
  * Where a brew has got to.
  *
@@ -306,7 +313,7 @@ export default class Machine {
      * Ask the machine to describe itself until it does, or give up.
      *
      * Does not throw: a machine that never introduces itself is still worth
-     * being connected to from the console, and `brewBlockReason` is where the
+     * being connected to from the console, and `brewBlock` is where the
      * consequence belongs.
      *
      * @returns whether the vitals are now known.
@@ -324,7 +331,7 @@ export default class Machine {
      * The *next* one, not "one at some point": a caller asking how the machine
      * is doing now must not be handed the answer to a question asked when the
      * link came up. Does not reject — a machine that stays quiet is still worth
-     * being connected to, and `brewBlockReason` is where the consequence
+     * being connected to, and `brewBlock` is where the consequence
      * belongs.
      *
      * @returns whether the machine answered before the window closed.
@@ -568,22 +575,35 @@ export default class Machine {
      * costs water on the counter or a brew interrupted halfway. What it cannot
      * check — whether a cup is under the spout, whether the pod is in, whether
      * the beans match the dose — is stated on the brew route instead.
+     *
+     * Typed rather than prose because the two water failures are not the same
+     * event: refused before anything was sent is amber, recoverable and offers
+     * TRY AGAIN, while the machine stopping mid-brew is red and deliberately
+     * offers nothing, because the dose is already spent.
      */
-    brewBlockReason(recipe: Recipe): string | null {
-        if (!this.isConnected()) return "The machine is not connected.";
+    brewBlock(recipe: Recipe): BrewBlock | null {
+        if (!this.isConnected()) {
+            return {kind: "notConnected", message: "The machine is not connected."};
+        }
         if (this.info === null) {
             // Not a pedantic check. The water level is reported nowhere else,
             // and "we never heard" is not the same as "the tank is fine" —
             // treating it as such is how a recipe gets committed to a machine
             // with an empty tank.
-            return "The machine has not said how it is doing yet. Reconnect and try again.";
+            return {
+                kind: "noVitals",
+                message:
+                    "The machine has not said how it is doing yet. Reconnect and try again."
+            };
         }
-        if (!this.info.waterEnough) return "The machine's water tank is low.";
+        if (!this.info.waterEnough) {
+            return {kind: "notEnoughWater", message: "The machine's water tank is low."};
+        }
         if (this.state !== null && !STARTABLE.has(this.state)) {
-            return "The machine is busy. Wait for it to finish.";
+            return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
         }
         const problems = cardWriteProblems(recipe);
-        if (problems.length > 0) return problems[0];
+        if (problems.length > 0) return {kind: "recipe", message: problems[0]};
         return null;
     }
 
@@ -626,14 +646,14 @@ export default class Machine {
     }
 
     private async brewOnce(recipe: Recipe): Promise<void> {
-        const blocked = this.brewBlockReason(recipe);
+        const blocked = this.brewBlock(recipe);
         if (blocked !== null) {
             // The phase as well as the throw. The caller gets an exception to
             // handle, but the brew screen watches the phase, and a refusal that
             // left the phase at `idle` sat there saying "Ready when you are."
             // with nothing to press.
-            this.setPhase({name: "failed", reason: "blocked", detail: blocked});
-            throw new Error(blocked);
+            this.setPhase({name: "failed", reason: "blocked", detail: blocked.message});
+            throw new Error(blocked.message);
         }
 
         this.pourCount = recipe.pours.length;

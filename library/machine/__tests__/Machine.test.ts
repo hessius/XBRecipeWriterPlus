@@ -947,12 +947,26 @@ describe("asking how the machine is doing now", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(status(0x01));
-        expect(machine.brewBlockReason(brewable())).toMatch(/water/i);
+        // The brew screen draws a refusal amber with the plan untouched and a
+        // mid-brew failure red with the trace frozen. Telling those apart by
+        // matching on the text of a sentence would break the first time the
+        // sentence was improved.
+        expect(machine.brewBlock(brewable())).toEqual({
+            kind: "notEnoughWater",
+            message: "The machine's water tank is low."
+        });
 
         transport.infoReply = machineInfoFrame({waterEnough: 1});
         await machine.brew(brewable());
 
         expect(brewFrames(transport)).toContain(8002);
+    });
+
+    it("names each kind of block", () => {
+        // One case per branch, so a reordering of the checks cannot silently
+        // change which reason a user is given.
+        const disconnected = new Machine(new FakeTransport());
+        expect(disconnected.brewBlock(brewable())?.kind).toBe("notConnected");
     });
 
     it("notices the tank emptied after the link came up", async () => {
