@@ -167,12 +167,42 @@ describe("BrewRecorder", () => {
     });
 
     it("starting twice does not wire the recorder twice", () => {
-        // A second start() must tear down the first subscription before
-        // re-registering, or every notification arrives twice.
-        const {fake, recorder} = build();
-        recorder.start(); // second start — should detach first pair first
-        fake.phase({name: "pouring", pour: 1, pours: 2});
-        fake.water(42);
+        // A fake that replaces its listener on each subscription cannot
+        // reproduce the leak this test exists to catch: the second start()
+        // would silently overwrite the first reference and the double call
+        // would never be detectable. The accumulating fake below mirrors how a
+        // real machine works — every onNotification/onPhase call appends a
+        // listener, and emitting calls all of them.
+        const notifyListeners: ((n: Notification) => void)[] = [];
+        const phaseListeners: ((p: BrewPhase) => void)[] = [];
+        const accumulatingMachine: RecorderMachine = {
+            onNotification: (l) => {
+                notifyListeners.push(l);
+                return () => { const i = notifyListeners.indexOf(l); if (i !== -1) notifyListeners.splice(i, 1); };
+            },
+            onPhase: (l) => {
+                phaseListeners.push(l);
+                return () => { const i = phaseListeners.indexOf(l); if (i !== -1) phaseListeners.splice(i, 1); };
+            }
+        };
+        const emitPhase = (p: BrewPhase) => [...phaseListeners].forEach((l) => l(p));
+        const emitNotify = (n: Notification) => [...notifyListeners].forEach((l) => l(n));
+
+        const time = clock();
+        const recorder = new BrewRecorder({
+            machine: accumulatingMachine,
+            recipe: recipe(),
+            now: time.now,
+            newId: () => "brew-double",
+            onRecord: () => {}
+        });
+
+        recorder.start();
+        recorder.start(); // second start — must detach the first pair first
+
+        emitPhase({name: "pouring", pour: 1, pours: 2});
+        emitNotify({kind: "waterWeight", grams: 42});
+
         expect(recorder.samples).toHaveLength(1);
     });
 
