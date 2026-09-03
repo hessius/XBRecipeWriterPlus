@@ -1,4 +1,5 @@
 import React from "react";
+import {fireEvent} from "@testing-library/react-native";
 
 import Brew from "@/app/brew";
 import {renderWithProviders} from "@/test-utils/render";
@@ -126,8 +127,73 @@ describe("brew route", () => {
     it("offers EXPORT and DONE when the brew is over", async () => {
         mockPhase = {name: "done"} as BrewPhase;
         mockActiveIndex = 1;
-        const {getByLabelText} = await renderWithProviders(<Brew />);
+        const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
         expect(getByLabelText("Export this brew")).toBeTruthy();
         expect(getByLabelText("Done")).toBeTruthy();
+        // A finished brew is not a failed one — retry would invite a second brew
+        // into a full cup, and there is nothing left to cancel.
+        expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("offers START when the recipe is loaded but not committed", async () => {
+        mockPhase = {name: "readyToStart"} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Start brewing"));
+        expect(mockStartBrew).toHaveBeenCalled();
+    });
+
+    it("does not offer START once the brew is running", async () => {
+        mockPhase = {name: "grinding"} as BrewPhase;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Start brewing")).toBeNull();
+    });
+
+    it("can still cancel a recipe that is loaded but not started", async () => {
+        mockPhase = {name: "readyToStart"} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Cancel"));
+        expect(mockCancelBrew).toHaveBeenCalled();
+    });
+
+    it("says the machine is still brewing when contact is lost", async () => {
+        mockPhase = {name: "lostContact"} as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText(/still brewing/i)).toBeTruthy();
+    });
+
+    it("does not offer cancel once the brew is over", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Cancel")).toBeNull();
+    });
+
+    it("does not offer retry while the brew is still going", async () => {
+        // pouring is one of the RUNNING phases
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("offers a switch to PRO mode when a send went nowhere on an EASY machine", async () => {
+        mockPhase = {name: "failed", reason: "rejected"} as BrewPhase;
+        mockCanOfferPro = true;
+        const {getByText, getByLabelText} = await renderWithProviders(<Brew />);
+        expect(getByText(/easy mode.*switch it to pro/i)).toBeTruthy();
+        await fireEvent.press(getByLabelText("Switch to PRO"));
+        expect(mockSwitchToProAndRetry).toHaveBeenCalled();
+    });
+
+    it("does not offer PRO mode when the machine cannot take it", async () => {
+        mockPhase = {name: "failed", reason: "rejected"} as BrewPhase;
+        mockCanOfferPro = false;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Switch to PRO")).toBeNull();
+    });
+
+    it("renders the pour counter as 1/2 during a two-pour brew", async () => {
+        // The brew screen passes phase.pour / phase.pours to BrewTrace which
+        // renders them as the stage counter. The default mockPhase is already
+        // {name: "pouring", pour: 1, pours: 2}, so nothing to set here.
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText("1/2")).toBeTruthy();
     });
 });
