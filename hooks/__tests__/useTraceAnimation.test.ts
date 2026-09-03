@@ -33,9 +33,12 @@ describe("traceAnimationFor", () => {
     it("flickers rather than breathing while grinding", () => {
         // Intense, not pretty. Opacity is untouched; the colour is what moves.
         const a = traceAnimationFor("grinding", 0, true);
-        const b = traceAnimationFor("grinding", 210, true);
+        const b = traceAnimationFor("grinding", 420, true);
         expect(a.opacity).toBe(b.opacity);
         expect(a.warmth).not.toBeCloseTo(b.warmth, 2);
+        // Halfway through a beat is still the same beat. Pinned because the
+        // rate is the design, and a faster flicker is a different animation.
+        expect(traceAnimationFor("grinding", 210, true).warmth).toBeCloseTo(a.warmth, 5);
     });
 
     it("holds an end state when motion is off", () => {

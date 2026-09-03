@@ -19,7 +19,7 @@ const BREATH_MS = 3400;
 /** One pass of the travelling head. */
 const TRAVEL_MS = 1400;
 /** The grinder's flicker. Fast and uneven-feeling, which is what grinding is. */
-const FLICKER_MS = 210;
+const FLICKER_MS = 420;
 
 const STILL: TraceAnimation = {opacity: 1, warmth: 0, headAt: 1, dashed: true};
 

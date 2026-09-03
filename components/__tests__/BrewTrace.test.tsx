@@ -131,4 +131,16 @@ describe("BrewTrace", () => {
         expect(getLabelA("Brew trace").props.height).toBe(knownHeight - 32);
         expect(getLabelB("Brew trace").props.height).toBe(knownHeight);
     });
+
+    it("fuses the dashes when told to", async () => {
+        const {getByTestId} = await draw({planDashed: false});
+        expect(getByTestId("trace-plan").props.strokeDasharray).toBeUndefined();
+    });
+
+    it("draws a travelling head part-way through, and none at the end", async () => {
+        const travelling = await draw({planHeadAt: 0.4});
+        expect(travelling.getByTestId("trace-head")).toBeTruthy();
+        const arrived = await draw({planHeadAt: 1});
+        expect(arrived.queryByTestId("trace-head")).toBeNull();
+    });
 });
