@@ -94,6 +94,33 @@ jest.mock("@/components/XbrwToast", () => ({
     notify: (notice: unknown) => mockNotify(notice)
 }));
 
+// The machine hook transitively imports the BLE transport — a native module
+// that throws at load under Jest. Only the disconnected-or-paired state matters
+// for screen tests, so the hook is stubbed here, the same way it is in
+// settings.test.tsx.
+let mockRemembered = "";
+let mockMachineStatus = "disconnected";
+
+const mockOnLink = jest.fn((_listener: () => void) => () => undefined);
+const mockAskHowItIsDoing = jest.fn(async () => false);
+
+jest.mock("@/hooks/useMachine", () => ({
+    __esModule:   true,
+    useMachine:   () => ({
+        machine:    {
+            info:            null,
+            isConnected:     () => false,
+            onLink:          (listener: () => void) => mockOnLink(listener),
+            askHowItIsDoing: () => mockAskHowItIsDoing()
+        },
+        status:     mockMachineStatus,
+        error:      null,
+        remembered: mockRemembered,
+        connect:    jest.fn(),
+        forget:     jest.fn()
+    })
+}));
+
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
 // (which still evaluates the real module to learn its shape) is not enough.
@@ -141,6 +168,10 @@ beforeEach(() => {
     mockGetRecipe = () => undefined;
     mockNativePasteOnPress = undefined;
     mockFocusEpoch = 0;
+    mockRemembered = "";
+    mockMachineStatus = "disconnected";
+    mockOnLink.mockClear();
+    mockAskHowItIsDoing.mockClear();
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
@@ -874,5 +905,24 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(mockNotify).not.toHaveBeenCalledWith(
             expect.objectContaining({message: "Already in your library"})
         );
+    });
+
+    it("shows the machine dot when a machine has been paired", async () => {
+        // The dot is hidden until the user has paired a machine (remembered
+        // !== ""), so a first-time user sees a clean header.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        expect(screen.getByLabelText("Machine connected")).toBeTruthy();
+    });
+
+    it("hides the machine dot when no machine has been paired", async () => {
+        mockRemembered = "";
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        expect(screen.queryByLabelText(/machine/i)).toBeNull();
     });
 });

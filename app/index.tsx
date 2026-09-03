@@ -17,8 +17,10 @@ import ImportTile from "@/components/ImportTile";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
+import type {MachineVitals} from "@/components/MachinePopover";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
@@ -69,6 +71,27 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+
+    const {machine, status: machineStatus, connect: connectMachine, remembered} =
+        useMachine();
+    const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(null);
+
+    // Repaint vitals whenever the link emits an event (connected, info arrived,
+    // disconnected). The info blob is mutated in place on the shared machine, so
+    // React cannot see it without this subscription.
+    useEffect(() => machine.onLink(() => {
+        const info = machine.info;
+        if (info !== null) {
+            setMachineVitals({
+                waterEnough: info.waterEnough,
+                mode:        info.mode,
+                grindSize:   info.grindSize,
+                askedAt:     Date.now()
+            });
+        } else {
+            setMachineVitals(null);
+        }
+    }), [machine]);
 
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
@@ -318,6 +341,16 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
+    async function refreshWater() {
+        // Asking for the water level opens a BLE session and makes the machine
+        // beep — only do it when the user explicitly asks.
+        const answered = await machine.askHowItIsDoing();
+        if (answered && machine.info !== null) {
+            const {waterEnough, mode, grindSize} = machine.info;
+            setMachineVitals({waterEnough, mode, grindSize, askedAt: Date.now()});
+        }
+    }
+
     function openRecipe(recipe: Recipe): boolean {
         if (Date.now() - lastEditorPushAt < EDITOR_PUSH_GUARD_MS) {
             return false;
@@ -354,6 +387,11 @@ export default function HomeScreen({db, settings}: Props) {
                     editing={editing}
                     showEdit={!isEmpty}
                     canImport
+                    machineStatus={remembered ? machineStatus : undefined}
+                    machineAccent={palette.success}
+                    machineVitals={machineVitals}
+                    onRefreshWater={refreshWater}
+                    onMachineConnect={connectMachine}
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}

@@ -122,6 +122,18 @@ export default function HomeHeader({
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [popoverNow, setPopoverNow] = useState(0);
 
+    // Advance the displayed age while the popover is open.
+    //
+    // Minutes-granularity only, so every 25 s is more than enough. The timer
+    // is created only while open and cleared on close and on unmount. setState
+    // is called only from inside the interval callback — never synchronously
+    // from the effect body — which satisfies react-hooks/set-state-in-effect.
+    useEffect(() => {
+        if (!popoverOpen) return;
+        const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
+        return () => clearInterval(id);
+    }, [popoverOpen]);
+
     // Two values, not one. Under Reduced Motion the glyphs must still fade, so
     // the user sees that the header changed — but they must not travel, so the
     // width is set outright. Driving both from a single progress value would
@@ -202,7 +214,10 @@ export default function HomeHeader({
                             accent={machineAccent}
                             vitals={machineVitals}
                             now={popoverNow}
-                            onRefreshWater={onRefreshWater}
+                            onRefreshWater={() => {
+                                setPopoverNow(Date.now());
+                                onRefreshWater();
+                            }}
                             onConnect={onMachineConnect}
                             onClose={() => setPopoverOpen(false)}
                         />

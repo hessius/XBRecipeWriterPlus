@@ -4,6 +4,7 @@ import {XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import type {LinkStatus} from "@/hooks/useMachine";
 
@@ -49,7 +50,7 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
 }
 
 /**
- * The content of the machine popover.
+ * The machine status popover.
  *
  * Shows only what changes: water level with its age and a refresh shortcut,
  * mode, and grind size. No MACHINE SETTINGS button — the gear is twenty pixels
@@ -59,15 +60,16 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
  * lives on the water row rather than among the buttons, because it acts on one
  * row and should not read as an equally important action.
  *
- * Wrap in the Dialog + Adapt platform="touch" + Sheet pattern from
- * `ImportRecipeComponent.tsx`, driven by `open` and `onClose`, at the call site.
+ * Driven by `open` and `onClose`, presented as a bottom sheet via `XbrwSheet`.
  */
 export default function MachinePopover({
-    status, accent, vitals, now, onRefreshWater, onConnect
+    open, status, accent, vitals, now, onRefreshWater, onConnect, onClose
 }: Props) {
+    let body: React.ReactNode;
+
     if (status === "connected" && vitals !== null) {
-        return (
-            <YStack padding="$3" gap="$1">
+        body = (
+            <YStack gap="$1">
                 <Row label="WATER">
                     <DotMatrixText fontSize={13} weight="bold"
                                    color={vitals.waterEnough ? palette.text : palette.warn}>
@@ -104,37 +106,42 @@ export default function MachinePopover({
                 </Row>
             </YStack>
         );
-    }
-
-    if (status === "connecting") {
-        return (
-            <YStack padding="$3">
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
-                    CONNECTING…
+    } else if (status === "connecting") {
+        body = (
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                           color={palette.dim}>
+                CONNECTING…
+            </DotMatrixText>
+        );
+    } else {
+        body = (
+            <YStack gap="$2">
+                <DotMatrixText fontSize={11} color={palette.dim}>
+                    {vitals === null
+                        ? "Not in range. It will reconnect by itself when it is."
+                        : `Last seen ${age(vitals.askedAt, now)}. `
+                          + "It will reconnect by itself when it is in range."}
                 </DotMatrixText>
+                <Pressable accessibilityRole="button" accessibilityLabel="Try now"
+                           onPress={onConnect}>
+                    <YStack alignItems="center" paddingVertical="$2.5" borderRadius="$4"
+                            borderWidth={1} borderColor={accent}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
+                                       color={accent}>
+                            TRY NOW
+                        </DotMatrixText>
+                    </YStack>
+                </Pressable>
             </YStack>
         );
     }
 
     return (
-        <YStack padding="$3" gap="$2">
-            <DotMatrixText fontSize={11} color={palette.dim}>
-                {vitals === null
-                    ? "Not in range. It will reconnect by itself when it is."
-                    : `Last seen ${age(vitals.askedAt, now)}. `
-                      + "It will reconnect by itself when it is in range."}
-            </DotMatrixText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Try now"
-                       onPress={onConnect}>
-                <YStack alignItems="center" paddingVertical="$2.5" borderRadius="$4"
-                        borderWidth={1} borderColor={accent}>
-                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
-                                   color={accent}>
-                        TRY NOW
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-        </YStack>
+        <XbrwSheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}
+                   title="Machine" showTitle={false} heightPercent={40}>
+            <YStack paddingBottom="$2">
+                {body}
+            </YStack>
+        </XbrwSheet>
     );
 }

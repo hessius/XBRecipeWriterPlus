@@ -69,6 +69,17 @@ describe("MachinePopover", () => {
         expect(queryByLabelText(/machine settings/i)).toBeNull();
     });
 
+    it("shows nothing when closed", async () => {
+        const {queryByText} = await draw({open: false});
+        expect(queryByText("WATER")).toBeNull();
+        expect(queryByText("OK")).toBeNull();
+    });
+
+    it("shows content when open", async () => {
+        const {getByText} = await draw({open: true});
+        expect(getByText("WATER")).toBeTruthy();
+    });
+
     it("shows nothing but the state while connecting", async () => {
         const {queryByText} = await draw({status: "connecting", vitals: null});
         expect(queryByText("WATER")).toBeNull();
