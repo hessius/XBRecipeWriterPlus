@@ -2,6 +2,7 @@ import React from "react";
 import {View} from "react-native";
 import {XStack, YStack, Text} from "tamagui";
 
+import BrewCapsule from "@/components/BrewCapsule";
 import DigitRoll from "@/components/DigitRoll";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
@@ -115,6 +116,10 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Fill the pour profile with a dot screen. Owned by the settings screen. */
     dottedProfile?: boolean;
+    /** Show the BREW capsule. Only when a machine is remembered. */
+    showBrew?: boolean;
+    /** Called when the BREW capsule is pressed. */
+    onBrew?: () => void;
 };
 
 /**
@@ -131,7 +136,9 @@ export default function RecipeCard({
     onDuplicate,
     onDelete,
     showCoffeeMarker = true,
-    dottedProfile = false
+    dottedProfile = false,
+    showBrew = false,
+    onBrew
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -199,6 +206,10 @@ export default function RecipeCard({
                 <PourProfile testID="recipe-card-profile" pours={recipe.pours}
                              width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
             </View>
+
+            {showBrew && onBrew !== undefined && (
+                <BrewCapsule accent={accent} ink={onAccent.text} onPress={onBrew}/>
+            )}
 
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
                 {/* Bounded to the same scale Doto is, so the two halves of the

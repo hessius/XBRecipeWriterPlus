@@ -23,6 +23,10 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
     dottedProfile?: boolean;
+    /** Forwarded to the card. Show the BREW capsule. */
+    showBrew?: boolean;
+    /** Forwarded to the card. Called when the BREW capsule is pressed. */
+    onBrew?: () => void;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -83,7 +87,9 @@ export default function SwipeableRecipeRow({
                                                bounceOnMount = false,
                                                editing = false,
                                                showCoffeeMarker = true,
-                                               dottedProfile = false
+                                               dottedProfile = false,
+                                               showBrew = false,
+                                               onBrew
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -135,6 +141,7 @@ export default function SwipeableRecipeRow({
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
+                            showBrew={showBrew} onBrew={onBrew}
                             onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>

@@ -71,9 +71,11 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+    const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
 
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
+    const showBrew = showBrewRows && remembered !== "";
     const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(null);
 
     // Repaint vitals whenever the link emits an event (connected, info arrived,
@@ -439,6 +441,11 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
+                                showBrew={showBrew}
+                                onBrew={() => router.push({
+                                    pathname: "/brew",
+                                    params:   {recipeJSON: JSON.stringify(item)}
+                                })}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);

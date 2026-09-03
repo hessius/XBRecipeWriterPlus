@@ -631,4 +631,20 @@ describe("RecipeCard", () => {
 
         expect(await screen.findByLabelText("Will not write")).toBeTruthy();
     });
+
+    it("carries the BREW capsule when a machine is remembered", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        showBrew onBrew={jest.fn()} />
+        );
+        expect(screen.getByLabelText("Brew this recipe")).toBeTruthy();
+    });
+
+    it("carries none when there is no machine to brew on", async () => {
+        // A dead button on every card is worse than no button.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} />
+        );
+        expect(screen.queryByLabelText("Brew this recipe")).toBeNull();
+    });
 });
