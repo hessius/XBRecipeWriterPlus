@@ -962,11 +962,33 @@ describe("asking how the machine is doing now", () => {
         expect(brewFrames(transport)).toContain(8002);
     });
 
-    it("names each kind of block", () => {
+    it("names each kind of block", async () => {
         // One case per branch, so a reordering of the checks cannot silently
-        // change which reason a user is given.
+        // change which reason a user is given. The brew screen draws these
+        // differently, so a block reported under the wrong name is a screen
+        // offering the wrong way out.
         const disconnected = new Machine(new FakeTransport());
         expect(disconnected.brewBlock(brewable())?.kind).toBe("notConnected");
+
+        const silent = new FakeTransport();
+        silent.infoReply = null;
+        const unheard = new Machine(silent, {frameGapMs: 0, infoWaitMs: 5});
+        await unheard.connect("AA:BB");
+        expect(unheard.brewBlock(brewable())?.kind).toBe("noVitals");
+
+        const dry = new FakeTransport();
+        dry.infoReply = machineInfoFrame({waterEnough: 0});
+        const thirsty = new Machine(dry, {frameGapMs: 0});
+        await thirsty.connect("AA:BB");
+        dry.emit(status(0x01));
+        expect(thirsty.brewBlock(brewable())?.kind).toBe("notEnoughWater");
+
+        const {transport, machine} = await readyMachine();
+        transport.emit(status(0x10)); // brewing
+        expect(machine.brewBlock(brewable())?.kind).toBe("busy");
+
+        transport.emit(status(0x01));
+        expect(machine.brewBlock(brewable([]))?.kind).toBe("recipe");
     });
 
     it("notices the tank emptied after the link came up", async () => {
