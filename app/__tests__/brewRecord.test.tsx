@@ -98,4 +98,10 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByText(/that brew is no longer here/i)).toBeTruthy();
     });
+
+    it("offers both exports", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(screen.getByLabelText("Save as image")).toBeTruthy();
+        expect(screen.getByLabelText("Export the data")).toBeTruthy();
+    });
 });

@@ -1,7 +1,10 @@
+import {File as FSFile, Paths} from "expo-file-system";
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
+import * as Sharing from "expo-sharing";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
-import {Text, YStack} from "tamagui";
+import ViewShot, {type ViewShotRef} from "react-native-view-shot";
+import {Text, XStack, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
 import BrewStageLadder from "@/components/BrewStageLadder";
@@ -9,6 +12,7 @@ import BrewTrace from "@/components/BrewTrace";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {brewFilename, toExportJson} from "@/library/brew/brewExport";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 
@@ -28,6 +32,22 @@ type Props = {
     /** Injected by tests to avoid opening the real SQLite database. */
     recipeLookup?: RecipeLookup;
 };
+
+/** An export action button. Defined at module scope — see house rules. */
+function ExportButton({label, onPress}: {label: string; onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel={label}
+                   onPress={onPress} style={{flex: 1}}>
+            <YStack alignItems="center" paddingVertical="$3" borderRadius="$4"
+                    borderWidth={1} borderColor={palette.line}>
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    {label.toUpperCase()}
+                </DotMatrixText>
+            </YStack>
+        </Pressable>
+    );
+}
 
 /** The "All brews" header button. Defined at module scope — see house rules. */
 function AllBrewsButton({onPress}: {onPress: () => void}) {
@@ -52,16 +72,25 @@ function AllBrewsButton({onPress}: {onPress: () => void}) {
  * a short note; figures and trace remain.
  */
 export default function BrewRecord({recipeLookup}: Props) {
-    const {id} = useLocalSearchParams<{id?: string}>();
+    const {id, latest} = useLocalSearchParams<{id?: string; latest?: string}>();
     const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
-    const {open} = useBrewHistory();
+    const {open, brews} = useBrewHistory();
 
     // Read the record once at mount (not on every render). `open` runs two
     // synchronous SELECTs and JSON.parse on the stream, potentially hundreds
     // of kilobytes — doing it in render causes re-parsing on every rotation.
-    const [opened] = useState(() => id ? open(id) : null);
+    // When `latest=1` is set (navigated from the brew screen) use the most
+    // recent brew in the history.
+    const [opened] = useState(() => {
+        if (id) return open(id);
+        if (latest === "1") {
+            const first = brews[0];
+            return first ? open(first.id) : null;
+        }
+        return null;
+    });
 
     // Look up the recipe for the stage ladder. The recipe may have been
     // deleted since the brew was recorded; that must not crash the screen.
@@ -71,12 +100,57 @@ export default function BrewRecord({recipeLookup}: Props) {
         return store.getRecipe(opened.record.recipeUuid);
     });
 
+    // Ref for capturing the trace + figures as a PNG.
+    const shotRef = useRef<ViewShotRef>(null);
+
     const lastPushRef = useRef(0);
 
     function handleAllBrews() {
         if (Date.now() - lastPushRef.current < 2000) return;
         lastPushRef.current = Date.now();
         router.push("/brewHistory");
+    }
+
+    /**
+     * Capture the trace + figures as a PNG and hand it to the system share
+     * sheet. Sharing can fail silently (user cancel, simulator, no share
+     * sheet) — none of those is an error worth surfacing.
+     */
+    async function shareImage() {
+        if (!opened) return;
+        try {
+            const uri = await shotRef.current?.capture?.();
+            if (uri === undefined) return;
+            if (!(await Sharing.isAvailableAsync())) return;
+            await Sharing.shareAsync(uri, {
+                mimeType:    "image/png",
+                dialogTitle: brewFilename(opened.record, "png")
+            });
+        } catch {
+            // User cancelled, or the share sheet is unavailable — not an error.
+        }
+    }
+
+    /**
+     * Write the brew as JSON to the cache directory and share the file.
+     * The cache directory is the right place: it is writable, and the system
+     * may reclaim it when space is low, which is exactly what we want for a
+     * temporary export file.
+     */
+    async function shareData() {
+        if (!opened) return;
+        try {
+            const name = brewFilename(opened.record, "json");
+            const file = new FSFile(Paths.cache, name);
+            file.write(toExportJson(opened.record, opened.samples));
+            if (!(await Sharing.isAvailableAsync())) return;
+            await Sharing.shareAsync(file.uri, {
+                mimeType:    "application/json",
+                dialogTitle: name
+            });
+        } catch {
+            // User cancelled — not an error.
+        }
     }
 
     useEffect(() => {
@@ -113,38 +187,43 @@ export default function BrewRecord({recipeLookup}: Props) {
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
             <Text color={palette.dim} fontSize={13}>{record.recipeName}</Text>
 
-            {record.hasStream ? (
-                <BrewTrace
-                    pours={[]}
-                    samples={samples}
-                    accent={accent}
-                    width={width - SCREEN_PADDING * 2}
-                    height={TRACE_HEIGHT}
-                    plannedSeconds={plannedSecs}
-                    planOpacity={0}
-                    planColor={palette.muted}
-                    planDashed={false}
-                />
-            ) : (
-                <YStack height={TRACE_HEIGHT} alignItems="center"
-                        justifyContent="center">
-                    <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6}
-                                   color={palette.muted}>
-                        NO TRACE KEPT
-                    </DotMatrixText>
-                    <Text color={palette.muted} fontSize={12} marginTop="$2"
-                          textAlign="center">
-                        No trace was kept for this brew.
-                    </Text>
-                </YStack>
-            )}
+            {/* The ViewShot wraps only the trace and the figures — the parts a
+                person would share as an image. The ladder and the buttons are
+                outside it deliberately. */}
+            <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
+                {record.hasStream ? (
+                    <BrewTrace
+                        pours={[]}
+                        samples={samples}
+                        accent={accent}
+                        width={width - SCREEN_PADDING * 2}
+                        height={TRACE_HEIGHT}
+                        plannedSeconds={plannedSecs}
+                        planOpacity={0}
+                        planColor={palette.muted}
+                        planDashed={false}
+                    />
+                ) : (
+                    <YStack height={TRACE_HEIGHT} alignItems="center"
+                            justifyContent="center">
+                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6}
+                                       color={palette.muted}>
+                            NO TRACE KEPT
+                        </DotMatrixText>
+                        <Text color={palette.muted} fontSize={12} marginTop="$2"
+                              textAlign="center">
+                            No trace was kept for this brew.
+                        </Text>
+                    </YStack>
+                )}
 
-            <BrewFigures
-                water={record.waterTotal}
-                cup={record.cupTotal}
-                seconds={durationSeconds}
-                accent={accent}
-            />
+                <BrewFigures
+                    water={record.waterTotal}
+                    cup={record.cupTotal}
+                    seconds={durationSeconds}
+                    accent={accent}
+                />
+            </ViewShot>
 
             {recipe !== null ? (
                 <BrewStageLadder
@@ -158,6 +237,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                     Recipe deleted — stages not available.
                 </DotMatrixText>
             )}
+
+            <XStack gap="$3">
+                <ExportButton label="Save as image"
+                              onPress={() => void shareImage()} />
+                <ExportButton label="Export the data"
+                              onPress={() => void shareData()} />
+            </XStack>
         </YStack>
     );
 }
