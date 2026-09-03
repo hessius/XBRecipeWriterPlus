@@ -11,6 +11,11 @@ found, tuned or were sent can be put on a card and brewed.
   your browser.
 * Edits every field the card carries: dose, ratio, grind size and speed, and
   each pour's volume, temperature, pattern, agitation, flow rate and pause.
+* Brews a recipe straight to an xBloom Studio (J15) over Bluetooth, with no
+  card in between.
+* Draws the brew as it happens — the plan, the live line, and the stage you
+  are on — and keeps every brew, which you can export as a picture or as
+  JSON.
 * Backs the whole library up to a file and restores it again.
 
 ## Limitations
@@ -44,8 +49,9 @@ An Expo app on **SDK 57**.
 
 * Node 20.19.4 or newer
 * Xcode (iOS) and/or Android Studio (Android)
-* **A physical device.** NFC is a native module, so this cannot run in Expo Go,
-  and simulators have no NFC radio. A simulator build is still useful for UI.
+* **A physical device.** NFC and Bluetooth are native modules, so this cannot
+  run in Expo Go, and a simulator has neither an NFC radio nor a way to reach a
+  real machine. A simulator build is still useful for UI.
 * **iOS only:** a *paid* Apple Developer Program membership. The
   `com.apple.developer.nfc.readersession.formats` entitlement needed for raw
   ISO 15693 block access is not available to free accounts.

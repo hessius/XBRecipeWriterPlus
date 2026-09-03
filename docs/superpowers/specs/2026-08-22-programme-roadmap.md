@@ -37,15 +37,42 @@ Where the app stopped being a card writer.
 | M1 · Sharper cards | Grind guidance | `2026-08-31-grind-guidance-design.md` | done |
 | M2 · Share your recipe | Outbound share links | `2026-08-31-share-link-design.md` | done |
 | M3 · Brew from the app | BLE connection, brewing, the machine console | `2026-08-31-ble-brew-design.md` | done |
-| M4 · Watch it brew | Live telemetry, brew history, the machine as app-wide state | `2026-09-03-machine-ux-design.md` | in design |
+| M4 · Watch it brew | Live telemetry, brew history, the machine as app-wide state | `2026-09-03-machine-ux-design.md` | **done** — hardware verification outstanding; see below |
 | M5 · A library worth keeping | Tags, filtering, search; post-brew notes and rating | — | not started |
 | M6 · Your xBloom library | Cloud library import and push, authentication, a "what leaves this device" screen | — | not started |
 
 M4 grew during design. It was scoped as one issue about telemetry (#63) and
 became the milestone in which the machine stops living inside Settings: a status
 dot in the home header, a BREW action on every recipe, a brew you can watch and
-then keep. That expansion was deliberate, and it absorbed #71 (Live Activity)
-rather than leaving it stranded.
+then keep. That expansion was deliberate, and it took in the app-wide machine
+state that #71 (Live Activity) would need.
+
+**Deferred: the Live Activity itself (#71).** Showing a brew on the Lock Screen
+and the Dynamic Island needs a separate native widget target and ActivityKit,
+which is a build-system change rather than an app change, and it would have held
+up everything else in the milestone. The issue stays open. The work is now
+cheap: `LiveBrewProvider` already holds the phase, the elapsed time and the
+active stage above the navigator, so the Live Activity has only to read what the
+mini-bar reads.
+
+**M4 hardware verification outstanding.** None of the brew path can be exercised
+in a simulator. Before any EAS release build, verify all of the following on a
+real J15:
+
+- A clean brew: the trace tracks the plan, the figures move, the ladder
+  auto-scrolls, the record lands in history.
+- An overflow-protection hold: the lane re-scales, the fill and the live line
+  turn amber, the card explains it, and the finished chart shows the gap with
+  `+N s`.
+- A refused brew for low water: amber, the plan untouched, the recipe's own
+  volume in the sentence, TRY AGAIN offered, and no history row written.
+- Dismissing the sheet mid-brew: the mini-bar appears, keeps drawing, and
+  reopens the sheet.
+- The BREW capsule against the swipe-to-delete tiles on the same edge — the
+  one thing in this milestone judged acceptable on screen and unproven in the
+  hand.
+- The status dot's states, and the popover's water refresh.
+- Export: a PNG that is legible when shared, and a JSON file that opens.
 
 ## Constraints that apply throughout
 
