@@ -13,6 +13,7 @@ import {BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
 import {palette} from "@/constants/colors";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import {useSetting} from "@/hooks/useSetting";
+import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {resolveAccent} from "@/library/accent";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
@@ -60,6 +61,7 @@ export default function Brew() {
     }, [phase.name, firstBrewDone, setFirstBrewDone]);
 
     const accent = resolveAccent(recipe);
+    const motion = useTraceAnimation(phase.name);
     const running = RUNNING.has(phase.name);
     // The two water events are not the same thing. `blocked` means nothing was
     // sent and the dose is safe; a failure by name means the machine stopped
@@ -92,6 +94,10 @@ export default function Brew() {
                 stage={phase.name === "pouring" ? phase.pour : undefined}
                 stages={phase.name === "pouring" ? phase.pours : undefined}
                 holding={holding}
+                planOpacity={motion.opacity}
+                planColor={motion.warmth > 0 ? accent : palette.muted}
+                planDashed={motion.dashed}
+                planHeadAt={motion.headAt}
             />
 
             <BrewFigures

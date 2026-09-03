@@ -24,6 +24,10 @@ type Props = {
     /** Driven by Task 13's phase animations; plain numbers keep this testable. */
     planOpacity?: number;
     planColor?: string;
+    /** False once the recipe is in the machine and the dashes should fuse. */
+    planDashed?: boolean;
+    /** 0 to 1: how far the lit head has travelled. 1 means no head. */
+    planHeadAt?: number;
     /** When true, render only the SVG at exactly width × height — no stage counter, no overrun label. */
     compact?: boolean;
 };
@@ -37,8 +41,10 @@ const PLOT_FLOOR = 10;
 /** Below this an overrun is rounding, not a hold worth naming. */
 const GAP_FLOOR_SECONDS = 2;
 
-/**
- * The brew on one plane: what was asked for, what the machine did, what landed
+/** The lit head's length, as a fraction of the curve. */
+const LIT = 0.12;
+
+/** what was asked for, what the machine did, what landed
  * in the cup.
  *
  * The axis is sized to the longer of the plan and the run, so a brew held by
@@ -49,6 +55,7 @@ const GAP_FLOOR_SECONDS = 2;
 export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
     stage, stages, holding = false, planOpacity = 1, planColor = palette.muted,
+    planDashed = true, planHeadAt = 1,
     compact = false
 }: Props) {
     const plan = planPoints(pours);
@@ -85,7 +92,7 @@ export default function BrewTrace({
                         stroke={planColor}
                         strokeOpacity={planOpacity}
                         strokeWidth={1.5}
-                        strokeDasharray="4 4"
+                        strokeDasharray={planDashed ? "4 4" : undefined}
                         fill="none"
                     />
                 )}
@@ -134,7 +141,18 @@ export default function BrewTrace({
                         stroke={planColor}
                         strokeOpacity={planOpacity}
                         strokeWidth={1.5}
-                        strokeDasharray="4 4"
+                        strokeDasharray={planDashed ? "4 4" : undefined}
+                        fill="none"
+                    />
+                )}
+                {planPath !== "" && planHeadAt < 1 && (
+                    <Path
+                        testID="trace-head"
+                        d={planPath}
+                        stroke={accent}
+                        strokeWidth={2}
+                        strokeDasharray={`${width * LIT} ${width}`}
+                        strokeDashoffset={-planHeadAt * width * (1 + LIT)}
                         fill="none"
                     />
                 )}
