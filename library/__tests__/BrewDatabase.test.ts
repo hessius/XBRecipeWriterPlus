@@ -170,6 +170,16 @@ describe("BrewDatabase", () => {
         expect(db.all()).toHaveLength(1);
     });
 
+    it("refuses a nonsense keep count rather than deleting everything", () => {
+        // NaN slices from zero, so an unguarded sweep would expire every trace
+        // the user has on a single corrupt settings row.
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", startedAt: 1}), stream);
+        db.sweep(Number.NaN);
+        db.sweep(-3);
+        expect(db.samples("a")).toEqual(stream);
+    });
+
     it("clears every brew", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "a", startedAt: 1}), stream);

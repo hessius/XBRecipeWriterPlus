@@ -146,7 +146,10 @@ class BrewDatabase {
      * row counts are dozens and this version can be checked by reading it.
      */
     public sweep(keep: number): void {
-        const expiring = this.all().slice(Math.max(0, keep)).filter((b) => b.hasStream);
+        // A nonsense keep count would slice from zero and quietly expire every
+        // trace the user has. Refuse rather than delete on a bad number.
+        if (!Number.isFinite(keep) || keep < 0) return;
+        const expiring = this.all().slice(keep).filter((b) => b.hasStream);
         if (expiring.length === 0) return;
         this.db.withTransactionSync(() => {
             expiring.forEach((brew) => {
