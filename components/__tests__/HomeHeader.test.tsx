@@ -21,7 +21,7 @@ function props(overrides = {}) {
 describe("HomeHeader", () => {
     it("shows the title and the recipe count", async () => {
         await renderWithProviders(<HomeHeader {...props()}/>);
-        expect(screen.getByText("Recipes")).toBeTruthy();
+        expect(screen.getByLabelText("XBRW++")).toBeTruthy();
         expect(screen.getByText("7")).toBeTruthy();
     });
 
@@ -81,10 +81,10 @@ describe("HomeHeader", () => {
         // rendered tree, so re-querying it after a second render finds one tree,
         // not two.
         const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
-        const big = expanded.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
+        const big = expanded.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
 
         const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
-        const small = collapsed.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
+        const small = collapsed.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
 
         expect(small).toBeLessThan(big);
     });

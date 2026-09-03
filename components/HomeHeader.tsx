@@ -4,7 +4,8 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
-import ScreenTitle, {TITLE_FONT_SIZE, TITLE_FONT_SIZE_COMPACT} from "@/components/ScreenTitle";
+import HomeTitle from "@/components/HomeTitle";
+import {TITLE_FONT_SIZE, TITLE_FONT_SIZE_COMPACT} from "@/components/ScreenTitle";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
@@ -129,8 +130,8 @@ export default function HomeHeader({
                 alignItems="center" justifyContent="space-between" gap="$2"
                 paddingHorizontal="$3" paddingVertical="$2"
                 paddingTop={insets.top + 8}>
-            <ScreenTitle title="Recipes" count={count}
-                         fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
+            <HomeTitle count={count}
+                       fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 
             <XStack alignItems="center">
                 {/* The arriving glyphs go at the left edge of the group. The

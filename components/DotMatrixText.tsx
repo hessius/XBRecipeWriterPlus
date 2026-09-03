@@ -1,5 +1,7 @@
 import React from "react";
 import {PixelRatio, Text, type StyleProp, type TextStyle} from "react-native";
+import Animated, {useAnimatedStyle, useSharedValue, type SharedValue}
+    from "react-native-reanimated";
 
 import {palette} from "@/constants/colors";
 
@@ -78,6 +80,19 @@ type Props = {
     children: string | number;
     /** Clamped up to `DOTO_MIN_FONT_SIZE`. */
     fontSize?: number;
+    /**
+     * A size that changes over time, driving the same clamp on the UI thread.
+     *
+     * Here rather than left to call sites so that this component remains the
+     * single place Doto's family and floor are enforced: a header that wanted
+     * an animated dot-matrix title would otherwise have to reach for
+     * `Animated.Text` and name the font itself, and the floor would hold only
+     * by convention.
+     *
+     * Takes precedence over `fontSize`, which is still required — it is what
+     * the text is laid out at before the first frame.
+     */
+    animatedFontSize?: SharedValue<number>;
     weight?: DotoWeight;
     color?: string;
     /** Doto is dense, so most call sites want a little extra tracking. */
@@ -99,6 +114,7 @@ type Props = {
 export default function DotMatrixText({
     children,
     fontSize = 14,
+    animatedFontSize,
     weight = "bold",
     color = palette.text,
     letterSpacing = 0.5,
@@ -106,8 +122,21 @@ export default function DotMatrixText({
     style,
     testID
 }: Props) {
+    // `PixelRatio` cannot be read from the UI thread, so the floor is worked
+    // out here and the worklet closes over the number.
+    const floor = DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1);
+    // Hooks cannot be called conditionally, so an unused shared value stands in
+    // when no animated size was given.
+    const parked = useSharedValue(fontSize);
+    const source = animatedFontSize ?? parked;
+    const animatedStyle = useAnimatedStyle(() => ({
+        fontSize: Math.max(source.value, floor)
+    }));
+
+    const Component = animatedFontSize ? Animated.Text : Text;
+
     return (
-        <Text
+        <Component
             testID={testID}
             numberOfLines={numberOfLines}
             maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
@@ -120,9 +149,12 @@ export default function DotMatrixText({
                 {
                     fontFamily: DOTO_FAMILIES[weight],
                     fontSize:   requestedSize(fontSize)
-                }
+                },
+                // Last of all, so the animated size wins over the static one it
+                // was laid out at.
+                animatedFontSize ? animatedStyle : null
             ]}>
             {children}
-        </Text>
+        </Component>
     );
 }
