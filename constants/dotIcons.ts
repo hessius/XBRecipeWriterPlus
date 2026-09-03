@@ -270,6 +270,24 @@ export const DOT_ICONS = {
         "....#....",
         ".........",
         "........."
+    ],
+    /**
+     * A circular arrow: ask again for a fresh reading.
+     *
+     * Three-quarter arc of dots, open at the bottom-right, with a small
+     * arrowhead pointing clockwise. Axis-aligned runs and pure diagonals only,
+     * so every dot lands on the grid.
+     */
+    refresh: [
+        "...####..",
+        "..#....#.",
+        ".#......#",
+        ".#......#",
+        ".#.......",
+        "..#......",
+        "...##....",
+        "......##.",
+        "....####."
     ]
 } as const satisfies Record<string, readonly string[]>;
 

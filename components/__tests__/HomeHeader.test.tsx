@@ -144,4 +144,11 @@ describe("HomeHeader", () => {
 
         expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
     });
+
+    it("shows the machine dot left of the settings gear", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <HomeHeader {...props({machineStatus: "connected"})} />
+        );
+        expect(getByLabelText("Machine connected")).toBeTruthy();
+    });
 });

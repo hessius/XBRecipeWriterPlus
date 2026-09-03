@@ -1,14 +1,18 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useState} from "react";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import HomeTitle from "@/components/HomeTitle";
+import MachineDot from "@/components/MachineDot";
+import MachinePopover from "@/components/MachinePopover";
 import {TITLE_FONT_SIZE, TITLE_FONT_SIZE_COMPACT} from "@/components/ScreenTitle";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import type {LinkStatus} from "@/hooks/useMachine";
+import type {MachineVitals} from "@/components/MachinePopover";
 
 const ACTION_ICON_SIZE = 20;
 
@@ -67,6 +71,16 @@ type Props = {
     showEdit: boolean;
     /** False until sub-project 5 gives import a way to be handed a recipe. */
     canImport?: boolean;
+    /** The machine link status, for the dot. */
+    machineStatus?: LinkStatus;
+    /** The machine accent colour, for the dot. */
+    machineAccent?: string;
+    /** What the machine last reported. Null when not connected or not asked. */
+    machineVitals?: MachineVitals | null;
+    /** Called when the user asks the machine to refresh water. */
+    onRefreshWater?: () => void;
+    /** Called when the user taps TRY NOW in the popover. */
+    onMachineConnect?: () => void;
     onToggleEdit: () => void;
     onScan: () => void;
     onImport: () => void;
@@ -91,6 +105,11 @@ export default function HomeHeader({
     editing,
     showEdit,
     canImport = true,
+    machineStatus,
+    machineAccent = palette.muted,
+    machineVitals = null,
+    onRefreshWater = () => undefined,
+    onMachineConnect = () => undefined,
     onToggleEdit,
     onScan,
     onImport,
@@ -99,6 +118,9 @@ export default function HomeHeader({
     const insets = useSafeAreaInsets();
 
     const reduced = useReducedMotion();
+
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [popoverNow, setPopoverNow] = useState(0);
 
     // Two values, not one. Under Reduced Motion the glyphs must still fade, so
     // the user sees that the header changed — but they must not travel, so the
@@ -163,6 +185,28 @@ export default function HomeHeader({
                     <Action icon="edit" active={editing}
                             label={editing ? "Done editing" : "Edit recipes"}
                             onPress={onToggleEdit}/>
+                )}
+                {machineStatus !== undefined && (
+                    <>
+                        <MachineDot
+                            status={machineStatus}
+                            accent={machineAccent}
+                            onPress={() => {
+                                setPopoverNow(Date.now());
+                                setPopoverOpen(true);
+                            }}
+                        />
+                        <MachinePopover
+                            open={popoverOpen}
+                            status={machineStatus}
+                            accent={machineAccent}
+                            vitals={machineVitals}
+                            now={popoverNow}
+                            onRefreshWater={onRefreshWater}
+                            onConnect={onMachineConnect}
+                            onClose={() => setPopoverOpen(false)}
+                        />
+                    </>
                 )}
                 <Action icon="settings" label="Settings" onPress={onSettings}/>
             </XStack>
