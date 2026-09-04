@@ -1295,7 +1295,9 @@ Refs #87"
 
 ## Task 7: Three shapes for BREW
 
-`BrewCapsule` goes. Its five faults are catalogued in the spec: a radius half a point off the card's and derived by a rule that only coincides at one width, a collision with the `TEA` marker, a label that cannot be centred in a 21 pt column, a 21 pt target, and a shared edge with the swipe tray.
+`BrewCapsule` goes. Its five faults are catalogued in the spec: a radius derived from its own width rather than the card's, a collision with the `TEA` marker, a label that cannot be centred in a 21 pt column, a 21 pt target, and a shared edge with the swipe tray.
+
+On the first of those the spec undercounted. `BrewCapsule` uses `WIDTH / 2`, which is **10.5** against the card's real radius of **22** — not the 16 the spec assumed. So the two curves are not half a point apart, they are less than half the size of each other, which is why the outline reads as broken where the pill meets the card.
 
 The last of those is **accepted**, not fixed. `BrewCapsule`'s own comment predicted it and asked for a hardware check; the hardware said no, but a tap and a horizontal drag are distinguishable by intent and every alternative costs more.
 
@@ -1345,11 +1347,11 @@ describe("BrewShortcut", () => {
             <BrewShortcut variant="tab" accent={ACCENT} ink={palette.base}
                           onPress={() => undefined}/>
         );
-        // 16 - 4. Two curves that nearly agree read as a sticker; one curve
+        // 22 - 4. Two curves that nearly agree read as a sticker; one curve
         // inside another sharing a centre reads as a cut-out. The old capsule
-        // used width/2, which was 10.5 and right only by coincidence.
+        // used width/2, which was 10.5 against a card radius of 22.
         expect(screen.getByTestId("brew-shortcut").props.style)
-            .toEqual(expect.objectContaining({borderRadius: 12}));
+            .toEqual(expect.objectContaining({borderRadius: 18}));
     });
 
     it("gives the edge band no radius of its own", async () => {
@@ -1419,23 +1421,29 @@ type Props = {
 /** Wide enough to centre four stacked letters, which 21 was not. */
 const BAND_WIDTH = 34;
 const TAB_INSET = 4;
-/** `RecipeCard`'s `borderRadius="$8"`. */
-const CARD_RADIUS = 16;
+/**
+ * `RecipeCard`'s `borderRadius="$8"`, read off the running theme.
+ *
+ * A literal because the token is not a number at this call site — the same
+ * reason `constants/layout.ts` exists. Tamagui's `$8` radius is 22, which is
+ * not the value a reader guesses, so it is written down here once.
+ */
+const CARD_RADIUS = 22;
 /**
  * Concentric with the card, rather than derived from the tab's own width.
  *
  * A shape inset by n inside a radius r is concentric at r - n. The capsule this
- * replaces used `width / 2`, which gave 10.5 against the card's 16 — half a
- * point off, and arrived at by a rule that only coincides with the right answer
- * at one width.
+ * replaces used `width / 2`, which gave 10.5 against the card's 22: a rule that
+ * refers to the shape's own width can only agree with the card by coincidence,
+ * and here it did not come close.
  */
 const TAB_RADIUS = CARD_RADIUS - TAB_INSET;
 const CHIP_WIDTH = 78;
 const CHIP_HEIGHT = 34;
 /** The chip's inner corner. A fold, so it is smaller than the card's own. */
 const CHIP_FOLD = 14;
-/** The card's own padding, which the shortcut's reservation is measured against. */
-const CARD_PADDING = 14;
+/** `RecipeCard`'s `padding="$3.5"`, read off the running theme. It is 16. */
+const CARD_PADDING = 16;
 
 /**
  * How much of the card's trailing edge each shape occupies.
@@ -1536,7 +1544,9 @@ export default function BrewShortcut({variant, accent, ink, onPress}: Props) {
 }
 ```
 
-`CARD_RADIUS` and `CARD_PADDING` restate values that `RecipeCard` expresses as Tamagui tokens (`$8`, `$3.5`). They are duplicated rather than imported because the tokens are not numbers at this call site. **Verify both against the running theme rather than trusting this plan**: `$8` should be 16 and `$3.5` should be 14. If either differs, use the real value and report it.
+`CARD_RADIUS` and `CARD_PADDING` restate values that `RecipeCard` expresses as Tamagui tokens (`$8`, `$3.5`). They are duplicated rather than imported because the tokens are not numbers at this call site — the same problem `constants/layout.ts` was created for.
+
+Both values above were read off the running theme: `$8` is **22** and `$3.5` is **16**. An earlier draft of this plan guessed 16 and 14, which is why the numbers are stated here rather than left to be inferred. Do not change them without reading the theme again.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -1560,10 +1570,14 @@ Note that this commit leaves the tree not typechecking, which is why it says so.
 git add components/BrewShortcut.tsx components/__tests__/BrewShortcut.test.tsx
 git commit -m "feat: three shapes for the BREW shortcut
 
-The capsule had five faults in the hand: a radius half a point off the card's
-and derived by a rule that only coincides at one width, a collision with the
-TEA marker, a label that cannot be centred in a 21pt column, a 21pt target,
-and a shared edge with the swipe tray.
+The capsule had five faults in the hand: a radius derived from its own width
+rather than the card's, a collision with the TEA marker, a label that cannot
+be centred in a 21pt column, a 21pt target, and a shared edge with the swipe
+tray.
+
+The first was worse than recorded. width/2 gave 10.5 against the card's real
+radius of 22, so the two curves were not close enough to read as one shape at
+all.
 
 Four of the five are fixed here. The fifth is accepted: the capsule's own
 comment predicted the swipe collision and asked for a hardware check, the
