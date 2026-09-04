@@ -805,10 +805,11 @@ describe("stallsInStage", () => {
             sample(11, 0, 2), sample(12, 70, 2)
         ];
 
-        // Stage 1 stalled for seven seconds. Stage 2 did not, and must not
-        // inherit it.
+        // Stage 1 sat at 20 ml from t=2 and had reached 40 by t=10, so its
+        // stall is bounded at eight seconds. Stage 2 never stalled, and must
+        // not inherit stage 1's.
         expect(stallsInStage(samples, 2, 70)).toEqual([]);
-        expect(stallsInStage(samples, 1, 40)).toEqual([{atMl: 20, seconds: 7}]);
+        expect(stallsInStage(samples, 1, 40)).toEqual([{atMl: 20, seconds: 8}]);
     });
 
     it("ignores drift below the noise floor", () => {
