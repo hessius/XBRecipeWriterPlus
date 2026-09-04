@@ -1,6 +1,7 @@
 import Pour from "@/library/Pour";
 import {
-    livePoints, planPoints, plannedSeconds, pourSeconds, stageSpans, toPath
+    livePoints, pathLength, planPoints, plannedSeconds, pourSeconds, stageSpans,
+    toPath
 } from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 
@@ -88,5 +89,27 @@ describe("toPath", () => {
         // maxT is elapsed time, which is 0 on the first frame of every brew.
         expect(toPath([{t: 0, v: 0}, {t: 0, v: 0}],
                       {width: 100, height: 40, maxT: 0, maxV: 0})).toBe("M0 40 L0 40");
+    });
+});
+
+describe("pathLength", () => {
+    const box = {width: 100, height: 100, maxT: 100, maxV: 100};
+
+    it("is the width for a path that only runs across", () => {
+        expect(pathLength([{t: 0, v: 0}, {t: 100, v: 0}], box)).toBeCloseTo(100);
+    });
+
+    it("counts the rise as well, which is what a staircase is mostly made of", () => {
+        // The travelling head's dash pattern was sized in `width`, so on a
+        // staircase -- which every plan is -- the pattern was shorter than the
+        // line and repeated, putting a second lit head on the trace and
+        // stopping the first one short of the end.
+        const stair = [{t: 0, v: 0}, {t: 0, v: 100}, {t: 100, v: 100}];
+
+        expect(pathLength(stair, box)).toBeCloseTo(200);
+    });
+
+    it("is zero when there is nothing to draw", () => {
+        expect(pathLength([{t: 0, v: 0}], box)).toBe(0);
     });
 });

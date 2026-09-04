@@ -101,6 +101,33 @@ export type Box = {width: number; height: number; maxT: number; maxV: number};
  * some engines and a stray dot in others, and neither is what an empty brew
  * should look like.
  */
+/**
+ * How long the line `toPath` draws actually is, in points.
+ *
+ * The travelling head is a dash pattern, and a dash pattern is measured along
+ * the path. Sizing it in `box.width` assumed the plan ran straight across, but
+ * a plan is a staircase: its length is the width plus the whole of its rise.
+ * Too short a pattern repeats, so a second lit head appeared on the line and
+ * the first stopped short of the end.
+ */
+export function pathLength(points: Point[], box: Box): number {
+    if (points.length < 2) return 0;
+    const spanT = box.maxT > 0 ? box.maxT : 1;
+    const spanV = box.maxV > 0 ? box.maxV : 1;
+    const at = ({t, v}: Point) => ({
+        x: (t / spanT) * box.width,
+        y: box.height - (v / spanV) * box.height
+    });
+
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+        const a = at(points[i - 1]);
+        const b = at(points[i]);
+        total += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    return total;
+}
+
 export function toPath(points: Point[], box: Box): string {
     if (points.length < 2) return "";
     // Both ranges are zero on the first frame of every brew, before any time

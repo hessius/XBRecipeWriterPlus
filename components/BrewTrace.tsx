@@ -5,7 +5,8 @@ import {XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {livePoints, planPoints, stageSpans, toPath, type Box} from "@/library/brew/brewShape";
+import {livePoints, pathLength, planPoints, stageSpans, toPath, type Box}
+    from "@/library/brew/brewShape";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -83,6 +84,8 @@ export default function BrewTrace({
     };
 
     const planPath = toPath(plan, box);
+    // The dash pattern below is measured along the line, not across the box.
+    const planLength = pathLength(plan, box);
     const waterPath = toPath(water, box);
     const cupPath = toPath(cup, box);
     // The water line, carried down to the floor and back, so it can be filled.
@@ -183,8 +186,8 @@ export default function BrewTrace({
                         d={planPath}
                         stroke={accent}
                         strokeWidth={2}
-                        strokeDasharray={`${width * LIT} ${width}`}
-                        strokeDashoffset={-planHeadAt * width * (1 + LIT)}
+                        strokeDasharray={`${planLength * LIT} ${planLength}`}
+                        strokeDashoffset={-planHeadAt * planLength * (1 + LIT)}
                         fill="none"
                     />
                 )}

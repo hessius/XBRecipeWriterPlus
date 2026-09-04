@@ -216,3 +216,17 @@ describe("the trace as it was drawn", () => {
         expect(getByText("WATER")).toBeTruthy();
     });
 });
+
+describe("the travelling head", () => {
+    it("sizes its dash along the line, not across the box", async () => {
+        // A plan is a staircase, so its length is the width plus its whole
+        // rise. The pattern used to be sized in `width`, which is shorter than
+        // the line it runs along: it repeated, so a second lit head appeared,
+        // and the real one reset before reaching the end.
+        const {getByTestId} = await draw({planHeadAt: 0.5, width: 300});
+        const dash = getByTestId("trace-head").props.strokeDasharray as string;
+        const period = Number(String(dash).trim().split(/[\s,]+/)[1]);
+
+        expect(period).toBeGreaterThan(300);
+    });
+});
