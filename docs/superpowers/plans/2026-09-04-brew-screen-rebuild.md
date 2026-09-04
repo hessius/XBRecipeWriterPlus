@@ -578,12 +578,23 @@ Three copy defects: em dashes, the false "nothing has been sent to the machine",
 
 Create or extend `constants/__tests__/brewCopy.test.ts`:
 
+`constants/brewCopy.ts` has **five** tables of user-facing strings plus two loose ones. Flatten all of them, or the guard only covers the two the task happens to touch and the next em dash lands somewhere else.
+
 ```ts
-import {blockedWaterCopy, PHASE_COPY} from "@/constants/brewCopy";
+import {
+    BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
+    FIRST_BREW_REMINDER, MINI_FAILURE_WHY, PHASE_COPY, PRO_MODE_PROMPT
+} from "@/constants/brewCopy";
 
 /** Every string the user can read, flattened. */
 const ALL: string[] = [
     ...Object.values(PHASE_COPY),
+    ...Object.values(FAILURE_COPY),
+    ...Object.values(BLOCKED_HEADLINE),
+    ...Object.values(MINI_FAILURE_WHY),
+    BLOCKED_WATER_HEADLINE,
+    FIRST_BREW_REMINDER,
+    PRO_MODE_PROMPT,
     blockedWaterCopy(240)
 ];
 
@@ -613,32 +624,33 @@ describe("brew copy", () => {
 npx jest constants/__tests__/brewCopy.test.ts
 ```
 
-Expected: FAIL on all four.
+Expected: FAIL on the em dash case (`PHASE_COPY.lostContact` and `blockedWaterCopy`), on the "nothing was sent" case, on the hopper sentence, and on the missing `connecting` key — four failures.
 
 - [ ] **Step 3: Implement**
 
-In `constants/brewCopy.ts`:
+In `constants/brewCopy.ts`, make **two** edits to `PHASE_COPY`. Do not retype the table: every entry in it already carries a comment explaining why it is worded as it is, and those comments are the most valuable thing in the file. Add one key and change one string, in place.
+
+Add after `idle`:
 
 ```ts
-export const PHASE_COPY: Record<string, string> = {
-    idle:        "Ready when you are.",
     /**
-     * Commanded, but the machine has not moved yet. The brew screen shows this
-     * instead of `idle`, which claimed the run was finished at the exact
-     * moment it had not begun.
+     * Commanded, but the machine has not moved yet.
+     *
+     * Not a phase — there is no `{name: "connecting"}` in `BrewPhase`. It is
+     * the copy the brew screen substitutes for `idle` when a run has been
+     * asked for, because "Ready when you are." claimed the run was finished at
+     * the exact moment it had not begun. Task 14 does the substituting.
      */
     connecting:  "Connecting to the machine…",
-    waking:      "Waiting for the machine to answer…",
-    sending:     "Sending the recipe… this takes a few seconds.",
-    readyToStart: "Recipe loaded. Ready when you are.",
-    armed:       "Recipe loaded.",
-    pressPlay:   "PRESS ▶ ON THE MACHINE",
-    grinding:    "Grinding…",
-    done:        "Enjoy.",
-    cancelled:   "Stopped.",
-    lostContact: "Lost contact. The machine is still brewing."
-};
 ```
+
+and change the last line, leaving the rest of the table untouched:
+
+```ts
+    lostContact: "Lost contact. The machine is still brewing."
+```
+
+`connecting` is deliberately unreachable until Task 14 wires it up. If you are running the tasks in order, the key is dead code for now and that is expected.
 
 and:
 
