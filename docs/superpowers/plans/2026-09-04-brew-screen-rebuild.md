@@ -2694,6 +2694,20 @@ describe("the trace as it was drawn", () => {
 
 `pours` and `samples` are whatever helpers the existing file already defines; reuse them rather than adding new ones.
 
+There is a third caller to be aware of, even though neither of them needs editing: `app/brewRecord.tsx:216` and `components/BrewMiniBar.tsx:125` also render `BrewTrace`. Nothing breaks, because `stage` and `stages` were optional and only `app/brew.tsx` passed them, and this task adds no required prop. But the history screen passes `pours={[]}` and `planOpacity={0}` — there is no plan line in a finished brew — so an ungated legend would name a "PLAN" line that is not on the graph. Hence the gate above, and this test, which goes in with the others in Step 1:
+
+```tsx
+    it("does not name a plan line that is not drawn", async () => {
+        const {queryByText} = await renderWithProviders(
+            <BrewTrace pours={[]} samples={[]} accent={palette.brand} width={300}
+                       height={160} plannedSeconds={60} planOpacity={0} />
+        );
+
+        expect(queryByText("PLAN")).toBeNull();
+        expect(queryByText("WATER")).toBeTruthy();
+    });
+```
+
 - [ ] **Step 2: Run it and see it fail**
 
 ```bash
@@ -2796,7 +2810,9 @@ Then, between the `</Svg>` and the overrun row, the legend:
             <XStack height={LEGEND} alignItems="center" gap="$3">
                 <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
                 <LegendItem colour={palette.muted} label="CUP" dotted />
-                <LegendItem colour={planColor} label="PLAN" dashed />
+                {plan.length > 0 && planOpacity > 0 && (
+                    <LegendItem colour={planColor} label="PLAN" dashed />
+                )}
             </XStack>
 ```
 
