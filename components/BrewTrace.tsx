@@ -18,7 +18,7 @@ type Props = {
     plannedSeconds: number;
     /** Overflow protection has stopped the water. Turns the live line amber. */
     holding?: boolean;
-    /** Driven by Task 13's phase animations; plain numbers keep this testable. */
+    /** Driven by the screen's phase animations; plain numbers keep this testable. */
     planOpacity?: number;
     planColor?: string;
     /** False once the recipe is in the machine and the dashes should fuse. */

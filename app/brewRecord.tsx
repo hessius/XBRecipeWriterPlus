@@ -15,9 +15,9 @@ import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {brewFilename, toExportJson} from "@/library/brew/brewExport";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
+import {SCREEN_PADDING} from "@/constants/layout";
 
 const TRACE_HEIGHT = 150;
-const SCREEN_PADDING = 16;
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};

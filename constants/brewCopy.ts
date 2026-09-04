@@ -10,7 +10,7 @@ export const PHASE_COPY: Record<string, string> = {
      * Not a phase — there is no `{name: "connecting"}` in `BrewPhase`. It is
      * the copy the brew screen substitutes for `idle` when a run has been
      * asked for, because "Ready when you are." claimed the run was finished at
-     * the exact moment it had not begun. Task 14 does the substituting.
+     * the exact moment it had not begun. `app/brew.tsx` does the substituting.
      */
     connecting:  "Connecting to the machine…",
     // The machine loses the question rather than refusing it, and each retry

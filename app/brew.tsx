@@ -22,8 +22,8 @@ import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
+import {SCREEN_PADDING} from "@/constants/layout";
 
-const SCREEN_PADDING = 16;
 const WORKING = new Set(["idle", "waking", "sending"]);
 
 /** A bordered press. The screen has four of them and they differ only in colour. */
