@@ -3342,47 +3342,48 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 Add to `components/__tests__/LiveBrewBar.test.tsx`:
 
+Two cases, not four. The file already tests `/brew` ("hides itself on the brew
+screen") and already tests that the bar shows on another route ("shows the
+running brew on any other screen"). Only the record and history screens are new.
+
+Add inside the existing `describe("LiveBrewBar", ...)`, beside its siblings:
+
 ```tsx
-describe("where the bar shows itself", () => {
-    it("hides on the brew screen, which is the same brew at full size", async () => {
-        mockPathname("/brew");
-        const {toJSON} = await drawBar();
-
-        expect(toJSON()).toBeNull();
-    });
-
     it("hides on the export screen, which the modal would otherwise cover", async () => {
-        mockPathname("/brewRecord");
-        const {toJSON} = await drawBar();
-
-        expect(toJSON()).toBeNull();
+        mockPathname = "/brewRecord";
+        const {queryByText} = await renderWithProviders(<LiveBrewBar />);
+        expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
     });
 
     it("hides on the history screen, for the same reason", async () => {
-        mockPathname("/brewHistory");
-        const {toJSON} = await drawBar();
-
-        expect(toJSON()).toBeNull();
+        mockPathname = "/brewHistory";
+        const {queryByText} = await renderWithProviders(<LiveBrewBar />);
+        expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
     });
-
-    it("shows itself everywhere else", async () => {
-        mockPathname("/settings");
-        const {toJSON} = await drawBar();
-
-        expect(toJSON()).not.toBeNull();
-    });
-});
 ```
 
-`mockPathname` and `drawBar` are the helpers the existing file already uses for `usePathname`; reuse them rather than adding new ones.
+Follow the idiom already in the file, which differs from how this task was first
+written in three ways that all matter:
+
+- **`mockPathname` is a `let` variable, not a function.** Assign to it
+  (`mockPathname = "/brewRecord"`), do not call it. `beforeEach` resets it
+  to `"/"`.
+- **There is no `drawBar` helper.** Render with
+  `await renderWithProviders(<LiveBrewBar />)` like every other test here.
+- **Do not assert `toJSON()).toBeNull()`.** `renderWithProviders` wraps the tree
+  in a provider, so the root is a node even when the component returns `null`,
+  and that assertion cannot pass. It is why the file asserts on
+  `queryByText(/ETHIOPIA GUJI/i)` instead. The same mistake was caught in
+  Task 10 after it had already been written.
 
 - [ ] **Step 2: Run them and see them fail**
 
 ```bash
-npx jest components/__tests__/LiveBrewBar.test.tsx -t "where the bar shows"
+npx jest components/__tests__/LiveBrewBar.test.tsx -t "hides on the"
 ```
 
-Expected: FAIL — the bar renders on `/brewRecord` and `/brewHistory`.
+Expected: FAIL, both new cases — the bar renders on `/brewRecord` and
+`/brewHistory`, so `ETHIOPIA GUJI` is found where it should be absent.
 
 - [ ] **Step 3: Implement**
 
