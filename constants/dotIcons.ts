@@ -259,15 +259,22 @@ export const DOT_ICONS = {
         "..##.....",
         "........."
     ],
-    /** Dismisses the brew modal downwards, mirroring `chevron-right`. */
+    /**
+     * Dismisses the brew modal downwards.
+     *
+     * `chevron-right` turned a quarter turn, dot for dot, so the two read as
+     * the same mark pointing two ways. Drawn by rotation rather than by hand
+     * because a wider, shallower chevron sits beside `back` in the same nav
+     * row and looked like a different icon set at the same point size.
+     */
     "chevron-down": [
         ".........",
         ".........",
-        ".........",
-        "##.....##",
+        ".#.....#.",
         ".##...##.",
         "..##.##..",
         "...###...",
+        "....#....",
         ".........",
         "........."
     ],

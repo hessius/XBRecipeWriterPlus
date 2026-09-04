@@ -11,6 +11,19 @@ describe("DOT_ICONS", () => {
         );
     });
 
+    it("draws chevron-down as chevron-right turned a quarter turn", () => {
+        // Stated in the comment on the icon, so worth holding: the two are the
+        // same mark pointing two ways. Drawn by hand they drifted, and a
+        // shallower, full-width chevron read as a different icon set beside
+        // `back` in the same nav row.
+        const right = DOT_ICONS["chevron-right"];
+        const rotated = Array.from({length: DOT_ICON_GRID}, (_, r) =>
+            Array.from({length: DOT_ICON_GRID}, (_, c) =>
+                right[DOT_ICON_GRID - 1 - c][r]).join(""));
+
+        expect(DOT_ICONS["chevron-down"]).toEqual(rotated);
+    });
+
     it.each(names)("%s is a square grid of the declared size", (name) => {
         const rows = DOT_ICONS[name];
         expect(rows).toHaveLength(DOT_ICON_GRID);
