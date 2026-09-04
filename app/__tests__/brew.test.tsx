@@ -103,9 +103,9 @@ beforeEach(() => {
 
 describe("brew route", () => {
     it("draws the trace, the figures and the ladder", async () => {
-        const {getByLabelText, getByText, getByTestId} = await renderWithProviders(<Brew />);
+        const {getByLabelText, getAllByText, getByTestId} = await renderWithProviders(<Brew />);
         expect(getByLabelText("Brew trace")).toBeTruthy();
-        expect(getByText("WATER")).toBeTruthy();
+        expect(getAllByText("WATER").length).toBeGreaterThan(0);
         expect(getByTestId("ladder")).toBeTruthy();
     });
 
@@ -263,11 +263,7 @@ describe("brew route", () => {
         expect(queryByLabelText("Switch to PRO")).toBeNull();
     });
 
-    it("renders the pour counter as 1/2 during a two-pour brew", async () => {
-        // The brew screen passes phase.pour / phase.pours to BrewTrace which
-        // renders them as the stage counter. The default mockPhase is already
-        // {name: "pouring", pour: 1, pours: 2}, so nothing to set here.
-        const {getByText} = await renderWithProviders(<Brew />);
-        expect(getByText("1/2")).toBeTruthy();
-    });
+    // Task 12 removes this counter from BrewTrace. Task 14 moves the single
+    // source of truth for the counter into the nav row.
+    it.skip("renders the pour counter as 1/2 during a two-pour brew", async () => {});
 });

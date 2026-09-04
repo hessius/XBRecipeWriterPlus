@@ -131,8 +131,6 @@ export default function Brew() {
                 width={width - SCREEN_PADDING * 2}
                 height={TRACE_HEIGHT}
                 plannedSeconds={plannedSeconds(recipe.pours)}
-                stage={phase.name === "pouring" ? phase.pour : undefined}
-                stages={phase.name === "pouring" ? phase.pours : undefined}
                 holding={holding}
                 planOpacity={motion.opacity}
                 planColor={planColor}

@@ -11,6 +11,12 @@ import {renderWithProviders} from "@/test-utils/render";
 const TEST_ACCENT = accents.coffee[1];
 
 const pours = [new Pour(1, 40, 93, 40, 0, 0, 20), new Pour(2, 160, 92, 40, 0, 0, 0)];
+const fourPours = [
+    new Pour(1, 40, 93, 40, 0, 0, 20),
+    new Pour(2, 60, 92, 40, 0, 0, 0),
+    new Pour(3, 50, 92, 40, 0, 0, 0),
+    new Pour(4, 50, 92, 40, 0, 0, 0),
+];
 
 function samples(...rows: [number, number, number][]): BrewSample[] {
     return rows.map(([at, water, cup]) => ({at, water, cup, pour: 1}));
@@ -77,11 +83,6 @@ describe("BrewTrace", () => {
         expect(queryByText("+1 S")).toBeNull();
     });
 
-    it("shows the stage counter", async () => {
-        const {getByText} = await draw({stage: 3, stages: 5});
-        expect(getByText("3/5")).toBeTruthy();
-    });
-
     it("turns the water line amber while the machine is holding", async () => {
         const {getByTestId} = await draw({
             samples: samples([0, 0, 0], [5000, 20, 12]),
@@ -100,13 +101,10 @@ describe("BrewTrace", () => {
     it("compact draws the chart and nothing else", async () => {
         const {queryByText, getByTestId} = await draw({
             compact: true,
-            stage: 2,
-            stages: 4,
             samples: samples([0, 0, 0], [84_000, 200, 190]),
             plannedSeconds: 70,
         });
-        // Stage counter and overrun label must not appear in compact mode.
-        expect(queryByText("2/4")).toBeNull();
+        // The overrun label must not appear in compact mode.
         expect(queryByText("+14 S")).toBeNull();
         // The chart itself must still render.
         expect(getByTestId("trace-water")).toBeTruthy();
@@ -124,11 +122,11 @@ describe("BrewTrace", () => {
 
     it("the plot fits inside the height it was given", async () => {
         const knownHeight = 140;
-        // Non-compact: SVG height = height - 32 (two 16-px chrome rows).
+        // Non-compact: SVG height = height - 30 (legend plus overrun rows).
         const {getByLabelText: getLabelA} = await draw({height: knownHeight, compact: false});
         const {getByLabelText: getLabelB} = await draw({height: knownHeight, compact: true});
 
-        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - 32);
+        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - 30);
         expect(getLabelB("Brew trace").props.height).toBe(knownHeight);
     });
 
@@ -142,5 +140,79 @@ describe("BrewTrace", () => {
         expect(travelling.getByTestId("trace-head")).toBeTruthy();
         const arrived = await draw({planHeadAt: 1});
         expect(arrived.queryByTestId("trace-head")).toBeNull();
+    });
+});
+
+describe("the trace as it was drawn", () => {
+    it("fills beneath the water line", async () => {
+        const {getByTestId} = await draw({
+            pours: fourPours,
+            samples: samples([0, 0, 0], [5000, 20, 12]),
+            accent: palette.brand,
+            width: 320,
+            height: 180,
+            plannedSeconds: 80,
+        });
+
+        expect(getByTestId("trace-water-fill")).toBeTruthy();
+    });
+
+    it("marks where each stage ends", async () => {
+        const {getAllByTestId} = await draw({
+            pours: fourPours,
+            samples: samples([0, 0, 0], [5000, 20, 12]),
+            accent: palette.brand,
+            width: 320,
+            height: 180,
+            plannedSeconds: 80,
+        });
+
+        // Three internal boundaries on four stages; the last one is the edge.
+        expect(getAllByTestId(/^trace-gridline-/)).toHaveLength(3);
+    });
+
+    it("names its three lines in a row beneath the graph", async () => {
+        const {getByText} = await draw({
+            pours: fourPours,
+            samples: samples([0, 0, 0], [5000, 20, 12]),
+            accent: palette.brand,
+            width: 320,
+            height: 180,
+            plannedSeconds: 80,
+        });
+
+        expect(getByText("WATER")).toBeTruthy();
+        expect(getByText("CUP")).toBeTruthy();
+        expect(getByText("PLAN")).toBeTruthy();
+    });
+
+    it("draws neither fill nor legend in the bar", async () => {
+        const {queryByTestId, queryByText} = await draw({
+            pours: fourPours,
+            samples: samples([0, 0, 0], [5000, 20, 12]),
+            accent: palette.brand,
+            width: 86,
+            height: 34,
+            plannedSeconds: 80,
+            compact: true,
+        });
+
+        expect(queryByTestId("trace-water-fill")).toBeNull();
+        expect(queryByText("WATER")).toBeNull();
+    });
+
+    it("does not name a plan line that is not drawn", async () => {
+        const {queryByText, getByText} = await draw({
+            pours: [],
+            samples: [],
+            accent: palette.brand,
+            width: 300,
+            height: 160,
+            plannedSeconds: 60,
+            planOpacity: 0,
+        });
+
+        expect(queryByText("PLAN")).toBeNull();
+        expect(getByText("WATER")).toBeTruthy();
     });
 });
