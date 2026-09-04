@@ -154,6 +154,54 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
+     * The machine link, at three amounts of presence.
+     *
+     * One shape at three sizes rather than three symbols, so the three states
+     * rank against each other before any colour is read: strip the colour and
+     * a filled diamond, a hollow one and four dots still say more, less and
+     * least. That is what lets the dot desaturate on collapse without losing
+     * the only thing it was saying.
+     *
+     * Diamonds because of this file's own constraint. Only axis-aligned runs
+     * and pure diagonals survive at 9x9, and a diamond is the one closed shape
+     * that is entirely diagonal, so it is unmistakably not a square and still
+     * lands cleanly on every dot.
+     */
+    "link-on": [
+        "....#....",
+        "...###...",
+        "..#####..",
+        ".#######.",
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#...."
+    ],
+    "link-wait": [
+        "....#....",
+        "...#.#...",
+        "..#...#..",
+        ".#.....#.",
+        "#.......#",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#...."
+    ],
+    /** Four lit cells: the same diamond at its smallest drawable size. */
+    "link-off": [
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        "....#....",
+        "...#.#...",
+        "....#....",
+        ".........",
+        "........."
+    ],
+    /**
      * A blocky question mark: the help marker.
      *
      * The markers used the "i" above, which is four separate one-dot features

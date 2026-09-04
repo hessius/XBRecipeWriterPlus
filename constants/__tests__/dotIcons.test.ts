@@ -6,8 +6,9 @@ describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
             ["back", "chevron-down", "chevron-right", "close", "delete", "duplicate",
-             "edit", "error", "help", "import", "info", "minus", "more", "overflow",
-             "plus", "refresh", "revert", "scan", "settings", "share", "success"]
+             "edit", "error", "help", "import", "info", "link-off", "link-on", "link-wait",
+             "minus", "more", "overflow", "plus", "refresh", "revert", "scan", "settings",
+             "share", "success"]
         );
     });
 
