@@ -17,6 +17,21 @@ export const NOISE_FLOOR_ML = 0.5;
 const MIN_STALL_SECONDS = 2;
 
 /**
+ * The brew total as it stood before `stage` began.
+ *
+ * `water` is a scale reading for the whole brew, never re-tared between
+ * stages, so this is what a stage's own millilitres are counted from. Zero for
+ * the first stage, and for any stage with nothing before it.
+ *
+ * @param stage 1-based, matching `BrewSample.pour`
+ */
+export function stageOriginMl(samples: BrewSample[], stage: number): number {
+    let origin: number | null = null;
+    for (const s of samples) if (s.pour < stage) origin = s.water;
+    return origin ?? 0;
+}
+
+/**
  * The stalls in one stage.
  *
  * A stall is water not moving while the stage still owes millilitres. That
@@ -41,7 +56,7 @@ export function stallsInStage(
     const mine = samples.filter((s) => s.pour === stage);
     if (mine.length === 0) return [];
 
-    const startMl = mine[0].water;
+    const startMl = stageOriginMl(samples, stage);
     const stalls: Stall[] = [];
 
     // Where the water last rose, and whether we have since seen it sitting

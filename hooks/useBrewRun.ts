@@ -5,6 +5,8 @@ import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
+import {NOISE_FLOOR_ML, stageOriginMl, stallsInStage, type Stall}
+    from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type Recipe from "@/library/Recipe";
 
@@ -16,6 +18,52 @@ const PUBLISH_MS = 250;
 
 /** One empty array, so "no samples yet" is a stable identity across renders. */
 const NO_SAMPLES: BrewSample[] = [];
+
+/**
+ * Millilitres delivered in one stage.
+ *
+ * The machine reports a running total for the whole brew -- `water` is a scale
+ * reading, ~10 a second, never re-tared between stages -- so a stage's own
+ * share is its last reading minus the total as it stood *before the stage
+ * began*.
+ *
+ * Not "minus the first reading of the stage": frames are event-driven, so
+ * water arrives between the boundary and the stage's first sample, and that
+ * water would simply vanish. It would vanish at every boundary, so the
+ * per-stage figures would not sum to the brew total, a rung would never
+ * quite fill, and -- worst -- a stage would never register as having met its
+ * target, which is the clause that stops a planned rest being called a stall.
+ * The #87 defect would come back through the side door.
+ *
+ * Exported so the arithmetic can be tested without a renderer.
+ *
+ * @param stage 1-based, matching `BrewSample.pour`
+ */
+export function stageWaterFrom(samples: BrewSample[], stage: number): number {
+    const mine = samples.filter((s) => s.pour === stage);
+    if (mine.length === 0) return 0;
+    const origin = stageOriginMl(samples, stage);
+    return Math.max(0, mine[mine.length - 1].water - origin);
+}
+
+/** Seconds into the brew at which a stage first reached its target volume. */
+function reachedAt(samples: BrewSample[], stage: number, targetMl: number): number | null {
+    if (targetMl <= 0) return null;
+    const mine = samples.filter((s) => s.pour === stage);
+    if (mine.length === 0) return null;
+    const startMl = stageOriginMl(samples, stage);
+    const hit = mine.find((s) => s.water - startMl >= targetMl);
+    return hit === undefined ? null : hit.at / 1000;
+}
+
+/** Whether the most recent sample of a stage is part of a stall still open. */
+function stillStalled(samples: BrewSample[], stage: number): boolean {
+    const mine = samples.filter((s) => s.pour === stage);
+    if (mine.length < 2) return false;
+    const last = mine[mine.length - 1];
+    const before = mine[mine.length - 2];
+    return last.water - before.water <= NOISE_FLOOR_ML;
+}
 
 /**
  * One brew, from the command to the record.
@@ -127,29 +175,49 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         ? (phase as {name: "pouring"; pour: number; pours: number}).pour - 1
         : over ? pours.length : null;
 
-    // Where this stage was *planned* to begin, not where it actually did.
-    //
-    // Deliberate. An earlier stage that ran long or short drags this with it,
-    // so the current rung's fill can start slightly ahead or clamp briefly at
-    // zero. Measuring from the real transition instead would make the rung
-    // jump whenever a stage came in short, which reads worse than the drift
-    // does — and nothing that is persisted or exported passes through here:
-    // the trace, the figures and the record all use real elapsed time. This
-    // only drives the fill of the live rung and the hold hint.
+    // Where this stage was *planned* to begin. Still plan-relative, and still
+    // only a time source: nothing that is persisted or exported passes through
+    // here, and the rung's fill is millilitres now rather than seconds.
     const stageStart = pours
         .slice(0, Math.max(0, activeIndex ?? 0))
         .reduce((total, pour) => total + pourSeconds(pour) + pauseSeconds(pour), 0);
     const stageElapsed = pouring ? Math.max(0, elapsed - stageStart) : 0;
-    const live = activeIndex !== null ? pours[activeIndex] : undefined;
-    const stageSpan = live === undefined ? 0 : pourSeconds(live) + pauseSeconds(live);
-    // The stage has run past its own plan, which is what an overflow-protection
-    // hold looks like and what a planned pause never does.
-    const holding = pouring && stageSpan > 0 && stageElapsed > stageSpan;
-    // Per-stage arithmetic: the over-run on this pour, not elapsed-vs-total.
-    // Using total elapsed here would clamp to 0 for every pour except the last.
-    const heldSeconds = holding ? stageElapsed - stageSpan : 0;
 
-    return {...brewer, samples, elapsed, stageElapsed, activeIndex, holding, heldSeconds};
+    // Per stage, 1-based on the machine's numbering. Computed for every stage
+    // and not just the live one, because a stall stays visible after the stage
+    // that suffered it is finished.
+    const stalls: Stall[][] = pours.map((pour, i) =>
+        stallsInStage(samples, i + 1, Math.max(pour.volume, 0))
+    );
+    const stageWater: number[] = pours.map((_, i) => stageWaterFrom(samples, i + 1));
+
+    const live = activeIndex !== null ? pours[activeIndex] : undefined;
+    const liveTarget = live === undefined ? 0 : Math.max(live.volume, 0);
+    const liveWater = activeIndex !== null ? (stageWater[activeIndex] ?? 0) : 0;
+    // The rest has not begun until the water is in. Measured from the moment
+    // the stage reached its target rather than from the plan, so an early or
+    // late pour does not shift the countdown.
+    const pouredAt = activeIndex !== null
+        ? reachedAt(samples, activeIndex + 1, liveTarget)
+        : null;
+    const pauseElapsed = pouredAt === null ? 0 : Math.max(0, elapsed - pouredAt);
+
+    // Holding is now a fact about the water, not a comparison against the
+    // plan: the live stage has an unfinished stall. A planned rest cannot
+    // produce one, which is what the old `stageElapsed > stageSpan` test got
+    // wrong and then never recovered from.
+    const liveStalls = activeIndex !== null ? (stalls[activeIndex] ?? []) : [];
+    const heldSeconds = liveStalls.reduce((sum, s) => sum + s.seconds, 0);
+    // `activeIndex !== null` leads the chain so TypeScript narrows it for the
+    // `activeIndex + 1` below; `pouring` alone does not tell it anything.
+    const holding = activeIndex !== null && pouring
+        && liveWater < liveTarget && liveStalls.length > 0
+        && stillStalled(samples, activeIndex + 1);
+
+    return {
+        ...brewer, samples, elapsed, stageElapsed, activeIndex, holding, heldSeconds,
+        stalls, stageWater, pauseElapsed
+    };
 }
 
 export default useBrewRun;

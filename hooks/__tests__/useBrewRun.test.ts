@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {useBrewRun} from "@/hooks/useBrewRun";
+import {stageWaterFrom, useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
@@ -82,6 +82,22 @@ describe("useBrewRun", () => {
         expect(result.current.samples).toEqual([]);
     });
 
+    describe("what a run publishes per stage", () => {
+        it("reports the millilitres this stage has delivered, not the brew total", () => {
+            const samples = [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 5000, water: 48, cup: 40, pour: 1},
+                {at: 12000, water: 60, cup: 52, pour: 2}
+            ];
+
+            expect(stageWaterFrom(samples, 2)).toBe(12);
+        });
+
+        it("reports nothing delivered for a stage that has not begun", () => {
+            expect(stageWaterFrom([{at: 0, water: 0, cup: 0, pour: 1}], 3)).toBe(0);
+        });
+    });
+
     it("publishes samples at 4 Hz", async () => {
         const h = harness();
         const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
@@ -132,16 +148,54 @@ describe("useBrewRun", () => {
         expect(result.current.holding).toBe(false);
     });
 
-    it("is holding once the stage outruns its plan", async () => {
-        // Stage 1 is 10 s of pour plus a 20 s pause. Past 30 s, the machine is
-        // waiting for the bed to drain.
+    it("is holding when the live stage has an open stall", async () => {
+        // Two readings a few seconds apart with the water essentially still,
+        // in a stage that still owes millilitres. 10 to 10.2 is inside the
+        // noise floor, so this is flat water rather than a slow pour.
         const h = harness();
         const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
         await h.setPhase({name: "pouring", pour: 1, pours: 2});
-        await act(async () => { jest.advanceTimersByTime(34_000); });
-        await h.water(40);
+        await h.water(10);
         await act(async () => { jest.advanceTimersByTime(250); });
+        await act(async () => { jest.advanceTimersByTime(5_000); });
+        await h.water(10.2);
+        await act(async () => { jest.advanceTimersByTime(250); });
+
         expect(result.current.holding).toBe(true);
+        expect(result.current.heldSeconds).toBeGreaterThan(0);
+    });
+
+    it("is not holding while the water is still rising", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(10);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await act(async () => { jest.advanceTimersByTime(3_000); });
+        await h.water(30);
+        await act(async () => { jest.advanceTimersByTime(250); });
+
+        expect(result.current.holding).toBe(false);
+    });
+
+    it("does not call the planned rest a hold", async () => {
+        // This is the device defect from #87. Stage 1 wants 40 ml and has had
+        // them, so everything flat after that is the 20 s rest the recipe
+        // asked for. The old rule reported HOLDING here and never took it
+        // back.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(10);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.water(50);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await act(async () => { jest.advanceTimersByTime(30_000); });
+        await h.water(50.2);
+        await act(async () => { jest.advanceTimersByTime(250); });
+
+        expect(result.current.holding).toBe(false);
+        expect(result.current.heldSeconds).toBe(0);
     });
 
     it("writes the brew to history when it ends", async () => {
@@ -224,19 +278,4 @@ describe("useBrewRun", () => {
         expect(result.current.activeIndex).toBeNull();
     });
 
-    it("reports heldSeconds from per-stage time, not total elapsed", async () => {
-        // Stage 1 is 10 s pour + 20 s pause = 30 s plan.  The brew has two
-        // stages so the total plan is ~70 s.  Advancing 35 s into stage 1 makes
-        // it hold.  The buggy formula (elapsed − totalPlanned) clamps to 0
-        // because 35 < 70.  The correct formula (stageElapsed − stageSpan)
-        // yields 35 − 30 = 5.  This test would fail with the buggy formula.
-        const h = harness();
-        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
-        await h.setPhase({name: "pouring", pour: 1, pours: 2});
-        await act(async () => { jest.advanceTimersByTime(35_000); });
-        await h.water(40);
-        await act(async () => { jest.advanceTimersByTime(250); });
-        expect(result.current.holding).toBe(true);
-        expect(result.current.heldSeconds).toBeGreaterThan(0);
-    });
 });

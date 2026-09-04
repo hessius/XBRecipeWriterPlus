@@ -4,6 +4,7 @@ import {OVER} from "@/constants/brewCopy";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {Stall} from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type Recipe from "@/library/Recipe";
 
@@ -17,6 +18,12 @@ export type LiveBrewSnapshot = {
     phase: BrewPhase;
     holding: boolean;
     heldSeconds: number;
+    /** Per stage, index-aligned with `recipe.pours`. Millilitres delivered. */
+    stageWater: number[];
+    /** Per stage, index-aligned with `recipe.pours`. */
+    stalls: Stall[][];
+    /** Seconds into the live stage's planned rest. Zero while it is pouring. */
+    pauseElapsed: number;
 };
 
 type LiveBrew = {
@@ -127,8 +134,8 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
 }) {
     const result = useBrewRun(recipe, store, runId);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
-           heldSeconds, brew, startBrew, cancelBrew, canOfferProMode,
-           switchToProAndRetry} = result;
+           heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
+           cancelBrew, canOfferProMode, switchToProAndRetry} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
     // `start` in the Context is replaced with a no-op while RunOwner is
@@ -147,7 +154,7 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
-        holding, heldSeconds,
+        holding, heldSeconds, stalls, stageWater, pauseElapsed,
     };
 
     return (

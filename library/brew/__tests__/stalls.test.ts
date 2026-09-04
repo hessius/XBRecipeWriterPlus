@@ -79,7 +79,9 @@ describe("stallsInStage", () => {
     it("reads only its own stage", () => {
         const samples = [
             sample(0, 0, 1), sample(2, 20, 1), sample(9, 20, 1), sample(10, 40, 1),
-            sample(11, 0, 2), sample(12, 70, 2)
+            // Stage 2 continues the running total; the scale is never re-tared
+            // between stages, so it picks up from stage 1's 40 ml.
+            sample(11, 40, 2), sample(12, 110, 2)
         ];
 
         // Stage 1 sat at 20 ml from t=2 and had reached 40 by t=10, so its
@@ -87,6 +89,18 @@ describe("stallsInStage", () => {
         // not inherit stage 1's.
         expect(stallsInStage(samples, 2, 70)).toEqual([]);
         expect(stallsInStage(samples, 1, 40)).toEqual([{atMl: 20, seconds: 8}]);
+    });
+
+    it("counts from the total before the stage, not its first reading", () => {
+        // 8 ml arrived between the boundary and stage 2's first frame. Stage 2
+        // owes 40 and has had 38, so its flat tail is still a stall -- under
+        // the old rule it looked like 30 delivered and the numbers drifted.
+        const samples = [
+            sample(0, 0, 1), sample(4, 40, 1),
+            sample(5, 48, 2), sample(6, 78, 2), sample(12, 78, 2)
+        ];
+
+        expect(stallsInStage(samples, 2, 40)).toEqual([{atMl: 38, seconds: 6}]);
     });
 
     it("ignores drift below the noise floor", () => {
