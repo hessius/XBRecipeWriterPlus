@@ -2090,7 +2090,8 @@ A fixed-height card that says what **this** stage is doing, replacing the four-i
 
 **Files:**
 - Create: `components/BrewNowCard.tsx`
-- Modify: `constants/brewCopy.ts` (`PATTERN_SENTENCE`)
+- Modify: `constants/brewCopy.ts` (`PATTERN_SENTENCE`, `AGITATION_SENTENCE`)
+- Modify: `constants/__tests__/brewCopy.test.ts` (the em-dash guard has to see the new tables)
 - Test: `components/__tests__/BrewNowCard.test.tsx`
 
 - [ ] **Step 1: Write the failing test**
@@ -2147,6 +2148,16 @@ describe("BrewNowCard", () => {
         expect(getByText("RESTING · SPIRAL · 92°")).toBeTruthy();
     });
 
+    it("mentions the stirring, which the pour pattern never says", async () => {
+        const stirring = new Pour(1, 70, 92, 40, AGITATION.BEFORE_ON_AFTER_ON,
+                                  POUR_PATTERN.CIRCULAR, 0);
+        const {getByText} = await renderWithProviders(
+            <BrewNowCard pour={stirring} accent={palette.brand} resting={false} />
+        );
+
+        expect(getByText(/It stirs the bed before and after\.$/)).toBeTruthy();
+    });
+
     it("shows nothing at all before a stage is live", async () => {
         const {toJSON} = await renderWithProviders(
             <BrewNowCard pour={undefined} accent={palette.brand} resting={false} />
@@ -2176,13 +2187,43 @@ In `constants/brewCopy.ts`, add:
  * The brew screen used to list all four of these at once, whether or not the
  * stage in front of the user was any of them. It names the live one instead.
  */
-export const PATTERN_SENTENCE: Record<string, string> = {
+export const PATTERN_SENTENCE: Record<GlyphKind, string> = {
     centered: "Straight down onto the middle of the bed",
     circular: "Round the bed in a steady ring",
     spiral: "Out from the centre and back",
+    /**
+     * Unreachable through `glyphForPattern`, which only ever returns the three
+     * above -- agitation is a separate field on the pour, not a pattern, and
+     * only `StageTile` ever asks for this glyph by name. The key stays so the
+     * table is total over `GlyphKind` and an index can never come back
+     * undefined and print "POURING · undefined · 92°".
+     */
     agitation: "It stirs the bed rather than pouring"
 };
+
+/**
+ * The stirring, which the pour pattern cannot tell you about.
+ *
+ * `Pour.agitation` is its own field with its own four values, so a stage that
+ * both spirals and stirs was described only as a spiral. Keyed by
+ * `AGITATION.*`; `ALL_OFF` is deliberately absent, because saying nothing is
+ * the right thing to say about a stage that does not stir.
+ */
+export const AGITATION_SENTENCE: Record<number, string> = {
+    [AGITATION.BEFORE_ON_AFTER_OFF]: "It stirs the bed first.",
+    [AGITATION.BEFORE_OFF_AFTER_ON]: "It stirs the bed afterwards.",
+    [AGITATION.BEFORE_ON_AFTER_ON]: "It stirs the bed before and after."
+};
 ```
+
+`brewCopy.ts` currently imports nothing. Add, at the top of the file:
+
+```ts
+import type {GlyphKind} from "@/components/PourGlyph";
+import {AGITATION} from "@/library/Pour";
+```
+
+`constants/recipeHelp.ts:13` already imports from `@/library`, so this direction is established, and neither `Pour` nor `PourGlyph` imports `brewCopy`, so there is no cycle.
 
 Create `components/BrewNowCard.tsx`:
 
@@ -2192,8 +2233,8 @@ import React from "react";
 import {YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
-import {glyphForPattern} from "@/components/PourGlyph";
-import {PATTERN_SENTENCE} from "@/constants/brewCopy";
+import {glyphForPattern, type GlyphKind} from "@/components/PourGlyph";
+import {AGITATION_SENTENCE, PATTERN_SENTENCE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
 import type Pour from "@/library/Pour";
@@ -2206,8 +2247,12 @@ type Props = {
     resting: boolean;
 };
 
-/** The pattern word, upper case, for the heading. */
-const PATTERN_WORD: Record<string, string> = {
+/**
+ * The pattern word, upper case, for the heading.
+ *
+ * Total over `GlyphKind` for the same reason `PATTERN_SENTENCE` is.
+ */
+const PATTERN_WORD: Record<GlyphKind, string> = {
     centered: "CENTRED",
     circular: "CIRCULAR",
     spiral: "SPIRAL",
@@ -2228,9 +2273,11 @@ export default function BrewNowCard({pour, accent, resting}: Props) {
     const rest = Math.round(pauseSeconds(pour));
     const heading = `${resting ? "RESTING" : "POURING"} · ${PATTERN_WORD[kind]} · `
         + `${Math.max(pour.temperature, 0)}°`;
-    const sentence = rest > 0
+    const pattern = rest > 0
         ? `${PATTERN_SENTENCE[kind]}, then it rests ${rest} s.`
         : `${PATTERN_SENTENCE[kind]}.`;
+    const stir = AGITATION_SENTENCE[pour.agitation];
+    const sentence = stir === undefined ? pattern : `${pattern} ${stir}`;
 
     return (
         <YStack
@@ -2251,19 +2298,31 @@ export default function BrewNowCard({pour, accent, resting}: Props) {
 }
 ```
 
-- [ ] **Step 4: Run it and see it pass**
+- [ ] **Step 4: Let the em-dash guard see the new tables**
+
+`constants/__tests__/brewCopy.test.ts` flattens every user-readable table into `ALL` and asserts none of them contains an em dash. Two new tables of user-readable prose have just been added and the guard cannot see either, so add them to the import list and to `ALL`:
+
+```ts
+    ...Object.values(PATTERN_SENTENCE),
+    ...Object.values(AGITATION_SENTENCE),
+```
+
+Then prove the guard actually reaches them: put an em dash into one `PATTERN_SENTENCE` value, run `npx jest constants/__tests__/brewCopy.test.ts`, watch it fail, and take it out again. Report that you did this.
+
+- [ ] **Step 5: Run it and see it pass**
 
 ```bash
 npx jest components/__tests__/BrewNowCard.test.tsx
 ```
 
-Expected: PASS, five tests.
+Expected: PASS, six tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 npm run typecheck && npm run lint && npm test
-git add components/BrewNowCard.tsx constants/brewCopy.ts components/__tests__/BrewNowCard.test.tsx
+git add components/BrewNowCard.tsx constants/brewCopy.ts \
+    components/__tests__/BrewNowCard.test.tsx constants/__tests__/brewCopy.test.ts
 git commit -m "feat: a card that says what this stage is doing
 
 It replaces a legend that listed all four pour patterns whether or not
