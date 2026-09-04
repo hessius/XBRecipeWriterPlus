@@ -69,6 +69,29 @@ describe("BrewStageLadder", () => {
         );
     });
 
+    it("dims the stages still to come and not the ones already poured", async () => {
+        // The mid-brew case, which is the only one where the boundary matters:
+        // the all-done and not-yet-started tests either side of this one are
+        // both satisfied by a component that ignores `activeIndex` entirely.
+        const {getByTestId} = await draw({activeIndex: 1, stageWater: [40, 20, 0, 0]});
+
+        const dim = expect.objectContaining({opacity: 0.45});
+        expect(getByTestId("rung-0").props.style).not.toEqual(dim);
+        expect(getByTestId("rung-1").props.style).not.toEqual(dim);
+        expect(getByTestId("rung-2").props.style).toEqual(dim);
+        expect(getByTestId("rung-3").props.style).toEqual(dim);
+    });
+
+    it("survives a recipe with no pours", async () => {
+        // A ladder with nothing to draw still has to lay itself out. This is a
+        // crash guard, not a rendering assertion.
+        const {queryByTestId} = await draw({
+            pours: [], activeIndex: null, stageWater: [], stalls: []
+        });
+
+        expect(queryByTestId("rung-0")).toBeNull();
+    });
+
     it("marks everything pending before it starts", async () => {
         const {getByTestId} = await draw({
             activeIndex: null, stageWater: [0, 0, 0, 0]
