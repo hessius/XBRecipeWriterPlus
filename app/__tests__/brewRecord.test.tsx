@@ -49,7 +49,9 @@ const noRecipeLookup: RecipeLookup = {getRecipe: jest.fn(() => null)};
 // The real ladder, wrapped so a test can see what the screen handed it. Stalls
 // travel a long way — recorder, database, screen — and the last leg is the one
 // no rendered pixel would reveal if it broke.
-let ladderProps: {stalls?: unknown} = {};
+let ladderProps: {
+    stalls?: unknown; stageWater?: unknown; activeIndex?: unknown; pours?: unknown;
+} = {};
 jest.mock("@/components/BrewStageLadder", () => {
     const actual = jest.requireActual("@/components/BrewStageLadder");
     const Ladder = actual.default;
@@ -141,6 +143,84 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={noRecipeLookup} />);
         expect(screen.queryByTestId("ladder")).toBeNull();
         expect(screen.getByText(/recipe deleted/i)).toBeTruthy();
+    });
+
+    it("still draws a ladder for a recipe that has been deleted", async () => {
+        // #86: the ladder used to be built from the live recipe, so deleting
+        // the recipe left the record with no stages at all.
+        mockOpened = {
+            record: {
+                ...record,
+                plan: [
+                    {pourNumber: 1, volume: 40, temperature: 93, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 2, volume: 160, temperature: 92, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}
+                ],
+                stageWater: [40, 160]
+            },
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={noRecipeLookup} />);
+
+        expect(screen.getByTestId("ladder")).toBeTruthy();
+        expect(screen.queryByText(/recipe deleted/i)).toBeNull();
+        expect(ladderProps.stageWater).toEqual([40, 160]);
+    });
+
+    it("stops the ladder in the stage a failed brew stopped in", async () => {
+        // #89: stage 2 poured nothing, and used to be drawn full to the brim.
+        mockOpened = {
+            record: {...record, outcome: "failed", stageWater: [40, 0]},
+            samples: []
+        };
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+
+        expect(ladderProps.activeIndex).toBe(0);
+        expect(ladderProps.stageWater).toEqual([40, 0]);
+    });
+
+    it("prefers what the brew poured over what the recipe now says", async () => {
+        // The recipe may have been edited since. `twoPours` asks for 40 and 40;
+        // the brew that was actually run delivered 40 and 70.
+        mockOpened = {
+            record: {...record, stageWater: [40, 70]},
+            samples: []
+        };
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+
+        expect(ladderProps.stageWater).toEqual([40, 70]);
+    });
+
+    it("draws the stages the plan asked for, not what the recipe now says", async () => {
+        // The recipe may have been edited since the brew. The plan is what was
+        // actually brewed, and the ladder must draw that, not the recipe's
+        // current numbers -- here the recipe asks for 40 and 40, but the
+        // brew's own plan asked for 40 and 160.
+        mockOpened = {
+            record: {
+                ...record,
+                plan: [
+                    {pourNumber: 1, volume: 40, temperature: 93, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 2, volume: 160, temperature: 92, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}
+                ],
+                stageWater: [40, 160]
+            },
+            samples: []
+        };
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+
+        const pours = ladderProps.pours as Pour[];
+        expect(pours.length).toBe(2);
+        expect(pours[1].volume).toBe(160);
     });
 
     it("says the trace has expired rather than drawing an empty chart", async () => {

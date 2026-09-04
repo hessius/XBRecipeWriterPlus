@@ -13,6 +13,8 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {brewFilename, toExportJson} from "@/library/brew/brewExport";
+import {poursFromPlan} from "@/library/brew/BrewRecord";
+import {ladderFrontier} from "@/library/brew/ladderState";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -204,6 +206,16 @@ export default function BrewRecord({recipeLookup}: Props) {
     // Planned seconds is total minus the overrun the record saved.
     const plannedSecs = Math.max(0, durationSeconds - record.heldSeconds);
 
+    // The record's own plan, or the live recipe for rows written before brews
+    // kept one. A snapshot is preferred even when the recipe still exists: it
+    // is what was actually brewed, and the recipe may have been edited since.
+    const snapshot = poursFromPlan(record.plan);
+    const stages = snapshot.length > 0 ? snapshot : recipe?.pours ?? [];
+    // Falling back to the plan means claiming every stage poured, which is
+    // what it always did and is only ever right for a brew that finished.
+    const delivered = record.stageWater
+        ?? stages.map((pour) => Math.max(pour.volume, 0));
+
     return (
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
             <Text color={palette.dim} fontSize={13}>{record.recipeName}</Text>
@@ -246,16 +258,16 @@ export default function BrewRecord({recipeLookup}: Props) {
                 />
             </ViewShot>
 
-            {recipe !== null ? (
+            {snapshot.length > 0 || recipe !== null ? (
                 <BrewStageLadder
-                    pours={recipe.pours}
+                    pours={stages}
                     accent={accent}
-                    activeIndex={recipe.pours.length}
+                    activeIndex={ladderFrontier(record.outcome, delivered)}
                     barHeight={11}
                     rungGap={8}
                     scrolls={false}
-                    stageWater={recipe.pours.map(pour => Math.max(pour.volume, 0))}
-                    stalls={record.stalls ?? recipe.pours.map(() => [])}
+                    stageWater={delivered}
+                    stalls={record.stalls ?? stages.map(() => [])}
                     pauseElapsed={0}
                 />
             ) : (
