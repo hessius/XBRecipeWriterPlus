@@ -1604,13 +1604,13 @@ Refs #87"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `components/__tests__/RecipeCard.test.tsx`, following the file's existing helper for building a `Recipe`:
+Add to `components/__tests__/RecipeCard.test.tsx`. The file's helper for building a recipe is `makeRecipe(overrides)` (around line 87), and the block below uses it — there is no `aRecipe`/`aTeaRecipe`.
 
 ```tsx
 describe("the BREW shortcut", () => {
     it.each(["edge", "tab", "chip"] as const)("draws a %s", async (variant) => {
         await renderWithProviders(
-            <RecipeCard recipe={aRecipe()} onPress={() => undefined}
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
                         brewShortcut={variant} onBrew={() => undefined}/>
         );
         expect(screen.getByTestId("brew-shortcut")).toBeTruthy();
@@ -1618,7 +1618,7 @@ describe("the BREW shortcut", () => {
 
     it("draws nothing for swipe, which is the tray's job", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={aRecipe()} onPress={() => undefined}
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
                         brewShortcut="swipe" onBrew={() => undefined}/>
         );
         expect(screen.queryByTestId("brew-shortcut")).toBeNull();
@@ -1626,14 +1626,14 @@ describe("the BREW shortcut", () => {
 
     it("draws nothing when there is no shortcut at all", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={aRecipe()} onPress={() => undefined}/>
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}/>
         );
         expect(screen.queryByTestId("brew-shortcut")).toBeNull();
     });
 
     it("stands aside while the card is editing", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={aRecipe()} onPress={() => undefined} editing
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined} editing
                         brewShortcut="chip" onBrew={() => undefined}
                         onDuplicate={() => undefined} onDelete={() => undefined}/>
         );
@@ -1641,12 +1641,17 @@ describe("the BREW shortcut", () => {
         // exactly where the chip lands, and editing is the one mode where
         // brewing is plainly not what the user came to do.
         expect(screen.queryByTestId("brew-shortcut")).toBeNull();
-        expect(screen.getByTestId("recipe-card-delete")).toBeTruthy();
+        // The action's glyph is hidden from the accessibility tree on purpose,
+        // so this needs includeHiddenElements the way the file's other
+        // assertions on these two controls do.
+        expect(screen.getByTestId("recipe-card-delete",
+                                  {includeHiddenElements: true})).toBeTruthy();
     });
 
     it("keeps the marker clear of the band", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={aTeaRecipe()} onPress={() => undefined}
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={() => undefined}
                         brewShortcut="tab" onBrew={() => undefined}/>
         );
         // The shipped capsule sat on top of the TEA marker. The card reserves
@@ -1657,9 +1662,11 @@ describe("the BREW shortcut", () => {
 });
 ```
 
-`aTeaRecipe()` must be a recipe whose `cupType` is `CUP_TYPE.TEA`, so the marker renders. The file almost certainly already builds one for its marker tests — **use that helper rather than adding another.**
+`CUP_TYPE` is already imported in this file — its marker tests use `makeRecipe({cupType: CUP_TYPE.TEA})`. Do not add a second recipe helper.
 
 Import `SHORTCUT_INSET` from `@/components/BrewShortcut`.
+
+`brew-shortcut` itself carries an `accessibilityLabel`, so it is visible to the default queries and the absence assertions above need no `includeHiddenElements`. Anything reaching *inside* it to a `DotIcon` would.
 
 - [ ] **Step 2: Run them and watch them fail**
 
