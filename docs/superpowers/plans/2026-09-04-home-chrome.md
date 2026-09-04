@@ -376,6 +376,16 @@ describe("collapsing", () => {
         // would be a pixel-identical overdraw on every frame of every scroll.
         expect(screen.queryByTestId("machine-dot-dim")).toBeNull();
     });
+
+    it("keeps the greyed-out glyph visible when the header collapses", async () => {
+        await renderWithProviders(
+            <MachineDot status="disconnected" collapsed onPress={() => undefined}/>
+        );
+        // With no copy underneath to reveal, fading this one out does not
+        // desaturate it, it deletes it.
+        expect(screen.getByTestId("machine-dot-tint").props.style)
+            .toEqual(expect.objectContaining({opacity: 1}));
+    });
 });
 ```
 
@@ -463,15 +473,22 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
     const reduced = useReducedMotion();
     const look = LOOKS[status];
 
-    // 1 is fully saturated. Collapsing carries it to 0, revealing the dim copy.
-    const tint = useSharedValue(collapsed ? 0 : 1);
+    /**
+     * 1 is fully saturated. Collapsing carries it to 0, revealing the dim copy.
+     *
+     * Pinned at 1 when there is no dim copy. Fading the only drawn glyph out
+     * would not desaturate it, it would delete it — the desaturation is the
+     * *other* copy showing through, not this one going away.
+     */
+    const fades = look.dim !== null;
+    const tint = useSharedValue(fades && collapsed ? 0 : 1);
 
     useEffect(() => {
-        const target = collapsed ? 0 : 1;
+        const target = fades && collapsed ? 0 : 1;
         tint.value = reduced
             ? target
             : withTiming(target, {duration: DURATION.base, easing: EASING.out});
-    }, [collapsed, reduced, tint]);
+    }, [collapsed, fades, reduced, tint]);
 
     const tintStyle = useAnimatedStyle(() => ({opacity: tint.value}));
 
@@ -487,13 +504,13 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
                 justifyContent: "center"
             }}
         >
-            {look.dim !== null && (
+            {fades && (
                 <DotIcon testID="machine-dot-dim" name={look.icon}
                          size={SIZE} color={look.dim}/>
             )}
             <Animated.View
                 testID="machine-dot-tint"
-                style={[look.dim !== null ? StyleSheet.absoluteFill : null, tintStyle]}
+                style={[fades ? StyleSheet.absoluteFill : null, tintStyle]}
                 pointerEvents="none">
                 <DotIcon testID="machine-dot-lit" name={look.icon}
                          size={SIZE} color={look.lit}/>
@@ -507,6 +524,7 @@ Two things to check rather than assume:
 
 1. `SIZE` must equal `ACTION_ICON_SIZE` in `HomeHeader.tsx`. If that constant is not 20, use its value and say so in your report. Do not import it — it is private to the header and the dot matching it is a design decision, not a dependency.
 2. When `look.dim` is null there is no absolutely-positioned sibling, so the `Animated.View` must lay out normally or the glyph will collapse to zero size. That is what the conditional `StyleSheet.absoluteFill` is doing. Verify the disconnected glyph actually renders at size in the test output rather than trusting the reasoning.
+3. `fades` gates the animation as well as the second copy. Both branches matter and both are tested: without the gate, collapsing the header makes a disconnected machine's glyph vanish entirely rather than step back.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -1500,10 +1518,17 @@ In `components/RecipeCard.tsx`, replace the `showBrew` prop with:
      * `swipe` draws nothing here: it is a tile in the swipe tray rather than
      * anything on the card.
      */
-    brewShortcut?: BrewShortcut;
+    brewShortcut?: BrewShortcutSetting;
 ```
 
-Import `BrewShortcut` from `@/library/brewShortcut`, and `BrewShortcutView` plus `SHORTCUT_INSET` from `@/components/BrewShortcut`. Import the type `CardShortcut` as well.
+The setting's type and the component share the name `BrewShortcut`, so alias one of them:
+
+```ts
+import BrewShortcut, {type CardShortcut, SHORTCUT_INSET} from "@/components/BrewShortcut";
+import type {BrewShortcut as BrewShortcutSetting} from "@/library/brewShortcut";
+```
+
+Alias rather than rename either export. The component is `BrewShortcut` because that is what it is, and the setting's type is `BrewShortcut` because that is what it holds.
 
 - [ ] **Step 4: Render it**
 
