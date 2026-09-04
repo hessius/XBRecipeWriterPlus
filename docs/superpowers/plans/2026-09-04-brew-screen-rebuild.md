@@ -20,6 +20,8 @@
 - The React Compiler is on: do not hand-write `useMemo`/`useCallback`, and destructure props before using them in a hook.
 - `react-hooks/set-state-in-effect` and `react-hooks/purity` are lint **errors**. `onLayout` is an event handler, not an effect, so `setState` inside it is allowed and is how the elastic bands measure.
 - Component tests render through `renderWithProviders` from `test-utils/render.tsx` and `await` it.
+- Test fixtures: the real constants are `CUP_TYPE.XPOD` and `AGITATION.ALL_OFF`. `Pour`'s signature is `Pour(pourNumber, volume, temperature, flowRate, agitation, pourPattern, pauseTime)` and `flowRate` is stored times ten, so `40` is 4 ml/s. Every arithmetic expectation below assumes 4 ml/s. That is fine for the pure functions in `library/brew/` and for components, but `Machine.brewBlock` refuses a flow rate outside the card's 30 to 35 range, so a fixture fed to `machine.brew()` must use `30` and its arithmetic recomputed at 3 ml/s.
+- `FakeTransport.emit` takes a `number[]`, not a `Uint8Array`.
 
 **Validation commands** (run before every commit):
 
@@ -133,13 +135,13 @@ And the helper the two tests share, placed next to the other helpers at the top 
 /** Six identical pours. The trace in research/PROTOCOL.md was captured on six. */
 function sixPourRecipe(): Recipe {
     const recipe = new Recipe();
-    recipe.cupType = CUP_TYPE.SINGLE;
+    recipe.cupType = CUP_TYPE.XPOD;
     recipe.dosage = 18;
     recipe.ratio = 16;
     // Pour(pourNumber, volume, temperature, flowRate, agitation, pattern, pause).
     // flowRate is stored times ten, so 40 is 4 ml/s.
     recipe.pours = [1, 2, 3, 4, 5, 6].map(
-        (n) => new Pour(n, 48, 93, 40, AGITATION.NONE, POUR_PATTERN.CENTERED, 20)
+        (n) => new Pour(n, 48, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20)
     );
     return recipe;
 }
@@ -884,7 +886,7 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 function stage(volume: number, pause: number): Pour {
     // Pour(pourNumber, volume, temperature, flowRate, agitation, pattern, pause).
     // flowRate is stored times ten.
-    return new Pour(1, volume, 93, 40, AGITATION.NONE, POUR_PATTERN.CENTERED, pause);
+    return new Pour(1, volume, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, pause);
 }
 
 describe("rungSegments", () => {
@@ -1141,7 +1143,7 @@ import {renderWithProviders} from "@/test-utils/render";
 const ACCENT = palette.brand;
 
 function stage(volume = 70, pause = 20): Pour {
-    return new Pour(1, volume, 93, 40, AGITATION.NONE, POUR_PATTERN.CENTERED, pause);
+    return new Pour(1, volume, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, pause);
 }
 
 async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageRung>> = {}) {
@@ -1886,7 +1888,7 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
 function stage(pattern: number, pause: number): Pour {
-    return new Pour(1, 70, 92, 40, AGITATION.NONE, pattern, pause);
+    return new Pour(1, 70, 92, 40, AGITATION.ALL_OFF, pattern, pause);
 }
 
 describe("BrewNowCard", () => {
@@ -2076,7 +2078,7 @@ import {renderWithProviders} from "@/test-utils/render";
 
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
-        new Pour(i + 1, 40, 93, 40, AGITATION.NONE, POUR_PATTERN.CENTERED, 10));
+        new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
 }
 
 async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageLadder>> = {}) {
