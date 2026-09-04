@@ -2557,7 +2557,35 @@ export default function BrewStageLadder({
 
 `GLYPH_WORDS`, the inline stage card and the holding banner are all gone: the sentence now lives in `BrewNowCard`, and holding is drawn inside the rung where it happened.
 
-- [ ] **Step 4: Run it and see it pass**
+- [ ] **Step 4: Keep the history screen compiling**
+
+The ladder has two callers, not one. `app/brew.tsx` is rewritten in Task 14 and can be left alone; `app/brewRecord.tsx:249` is **not touched by any later task in this plan**, and it currently passes `stageElapsed={0}`, which no longer exists, and none of the six props that are now required. Without this step the history screen fails typecheck from here to the end of the plan.
+
+Replace that element:
+
+```tsx
+                <BrewStageLadder
+                    pours={recipe.pours}
+                    accent={accent}
+                    activeIndex={recipe.pours.length}
+                    barHeight={11}
+                    rungGap={8}
+                    scrolls={false}
+                    stageWater={recipe.pours.map(pour => Math.max(pour.volume, 0))}
+                    stalls={recipe.pours.map(() => [])}
+                    pauseElapsed={0}
+                />
+```
+
+Every stage is `done`, so the planned volume is what each of them got, and there is no live stage to be part-way through a rest. `scrolls={false}` because this screen is already inside a scroll view and a second one would fight it.
+
+The empty `stalls` are a placeholder. Task 17 stores the real ones on the record and swaps them in; leave a comment saying so:
+
+```tsx
+                    // Task 17 puts the recorded stalls here.
+```
+
+- [ ] **Step 5: Run it and see it pass**
 
 ```bash
 npx jest components/__tests__/BrewStageLadder.test.tsx
@@ -2565,11 +2593,12 @@ npx jest components/__tests__/BrewStageLadder.test.tsx
 
 Expected: PASS, six tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 npm run typecheck && npm run lint && npm test
-git add components/BrewStageLadder.tsx components/__tests__/BrewStageLadder.test.tsx
+git add components/BrewStageLadder.tsx components/__tests__/BrewStageLadder.test.tsx \
+    app/brewRecord.tsx
 git commit -m "feat: the ladder grows into the height it is given
 
 Bar height and spacing come from the bands, the lane takes the row, the
@@ -3578,7 +3607,17 @@ function stallsOf(row: BrewRow): Stall[][] {
 
 and include `stalls: stallsOf(row)` in each mapped record.
 
-- [ ] **Step 4: Run it and see it pass**
+- [ ] **Step 4: Draw them in history**
+
+Stored and never shown is not worth storing. Task 11 left a placeholder in `app/brewRecord.tsx` with a comment pointing here. Replace it, and the comment:
+
+```tsx
+                    stalls={record.stalls ?? recipe.pours.map(() => [])}
+```
+
+`stalls` is optional on `BrewRecord`, and rows written before the column existed come back `[]`, so the fallback covers both a missing field and an older brew.
+
+- [ ] **Step 5: Run it and see it pass**
 
 ```bash
 npx jest library/brew/__tests__/BrewRecord.test.ts library/brew/__tests__/BrewRecorder.test.ts
@@ -3586,12 +3625,13 @@ npx jest library/brew/__tests__/BrewRecord.test.ts library/brew/__tests__/BrewRe
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 npm run typecheck && npm run lint && npm test
 npx expo-doctor
-git add library/brew/BrewRecord.ts library/brew/BrewRecorder.ts library/BrewDatabase.ts library/brew/__tests__/BrewRecord.test.ts
+git add library/brew/BrewRecord.ts library/brew/BrewRecorder.ts library/BrewDatabase.ts \
+    library/brew/__tests__/BrewRecord.test.ts app/brewRecord.tsx
 git commit -m "feat: a brew keeps where it stalled
 
 One list per stage on the record, so history and export keep the detail
