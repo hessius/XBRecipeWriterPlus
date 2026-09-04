@@ -3047,51 +3047,98 @@ The nav row, the elastic layout, the honest handshake, the suppressed error, and
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `app/__tests__/brew.test.tsx`, following the existing render helper in that file:
+**First, two changes to the file's scaffolding, or nothing here can work.**
+
+There is no `drawBrew` helper. This file drives the screen through module-level
+`let mock*` variables that the `jest.mock` factories close over, and renders with
+`await renderWithProviders(<Brew />)`. Follow that.
+
+*(a)* `error` is hard-coded to `null` in the `useLiveBrew` factory, so there is no
+way to set it. Add a variable beside the others at the top:
+
+```tsx
+let mockError: string | null = null;
+```
+
+and read it in the factory, replacing `error: null,`:
+
+```tsx
+        error: mockError,
+```
+
+Reset it in `beforeEach` alongside the other resets: `mockError = null;`.
+
+*(b)* **Mock `useMachine`.** Step 3 calls it for the nav row's machine dot, and
+this file does not mock it, so every test in it would fall through to
+`sharedMachine()` and a real BLE manager. Four other test files already mock this
+hook; copy the shape from `app/__tests__/index.test.tsx`, trimmed to what the
+brew screen touches:
+
+```tsx
+jest.mock("@/hooks/useMachine", () => ({
+    __esModule: true,
+    useMachine: () => ({
+        machine:    {isConnected: () => true, onLink: () => () => undefined},
+        status:     "connected",
+        error:      null,
+        remembered: null,
+        connect:    jest.fn(),
+        forget:     jest.fn()
+    })
+}));
+```
+
+If any pre-existing test in this file turns red once you add this, stop and tell
+me rather than adjusting it — that would mean the screen was reading something
+from the machine that this stub does not provide.
+
+Now add the tests:
 
 ```tsx
 describe("the brew screen says true things", () => {
     it("never claims to be ready when it has only just been asked", async () => {
-        const {queryByText} = await drawBrew({phase: {name: "idle"}});
+        mockPhase = {name: "idle"} as BrewPhase;
+        const {queryByText} = await renderWithProviders(<Brew />);
 
         expect(queryByText("Ready when you are.")).toBeNull();
         expect(queryByText("Connecting to the machine…")).toBeTruthy();
     });
 
     it("still says ready once the recipe is actually loaded", async () => {
-        const {getByText} = await drawBrew({phase: {name: "readyToStart"}});
+        mockPhase = {name: "readyToStart"} as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
 
         expect(getByText("Recipe loaded. Ready when you are.")).toBeTruthy();
     });
 
     it("does not say the same refusal twice", async () => {
-        const {queryAllByText} = await drawBrew({
-            phase: {name: "failed", reason: "blocked", block: "busy",
-                    detail: "The machine is busy. Wait for it to finish."},
-            error: "The machine is busy. Wait for it to finish."
-        });
+        mockPhase = {name: "failed", reason: "blocked", block: "busy",
+                     detail: "The machine is busy. Wait for it to finish."} as BrewPhase;
+        mockError = "The machine is busy. Wait for it to finish.";
+        const {queryAllByText} = await renderWithProviders(<Brew />);
 
         expect(queryAllByText("The machine is busy. Wait for it to finish."))
             .toHaveLength(1);
     });
 
     it("still reports a transport error that no phase explains", async () => {
-        const {getByText} = await drawBrew({
-            phase: {name: "pouring", pour: 2, pours: 4},
-            error: "The link dropped."
-        });
+        mockPhase = {name: "pouring", pour: 2, pours: 4} as BrewPhase;
+        mockError = "The link dropped.";
+        const {getByText} = await renderWithProviders(<Brew />);
 
         expect(getByText("The link dropped.")).toBeTruthy();
     });
 
     it("puts the stage counter in the nav row, where there is only one of it", async () => {
-        const {getByTestId} = await drawBrew({phase: {name: "pouring", pour: 3, pours: 4}});
+        mockPhase = {name: "pouring", pour: 3, pours: 4} as BrewPhase;
+        const {getByTestId} = await renderWithProviders(<Brew />);
 
         expect(getByTestId("brew-stage-counter").props.children).toBe("3/4");
     });
 
     it("offers a chevron down rather than a DONE button", async () => {
-        const {getByLabelText, queryByLabelText} = await drawBrew({phase: {name: "done"}});
+        mockPhase = {name: "done"} as BrewPhase;
+        const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
 
         expect(getByLabelText("Close")).toBeTruthy();
         expect(queryByLabelText("Done")).toBeNull();
@@ -3099,7 +3146,15 @@ describe("the brew screen says true things", () => {
 });
 ```
 
-`drawBrew` is the existing helper. If it does not yet accept an `error` override, extend it: the screen reads `error` from `useLiveBrew`, so the override belongs on the mocked context value the helper already builds.
+Note the first test asserts on the *absence* of `"Ready when you are."` by text,
+not on `toJSON()` being null: `renderWithProviders` wraps every tree in a
+provider, so the root is a node whether or not anything is drawn.
+
+The stage-counter assertion reads `.props.children` off the `DotMatrixText` that
+Step 3 gives `testID="brew-stage-counter"`. If that renders its children through
+another element rather than as a bare string, the assertion will need
+`getByText("3/4")` instead — that is a fair change, unlike loosening it to
+`toBeTruthy()`, which would pass for any counter at all.
 
 - [ ] **Step 2: Run them and see them fail**
 
@@ -3107,7 +3162,8 @@ describe("the brew screen says true things", () => {
 npx jest app/__tests__/brew.test.tsx -t "true things"
 ```
 
-Expected: FAIL on all six.
+Expected: FAIL on all six — and the rest of the file still green. If the whole
+file errors instead, the `useMachine` mock is missing.
 
 - [ ] **Step 3: Implement**
 
