@@ -453,38 +453,38 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 ## Task 3: Beans, during grinding
 
-Event `40517` maps to `idling` unconditionally. Arriving during grinding it almost certainly means the machine is flashing `+BEANS`, and "the machine went idle before the brew started" sends the user looking in the wrong place.
+Event `40517` (`EVENT.ERROR_IDLING`) maps to `idling` unconditionally. Arriving during grinding it almost certainly means the machine is flashing `+BEANS`, and "the machine went idle before the brew started" sends the user looking in the wrong place.
+
+Note that `MACHINE_STATE.NO_BEANS` (`0x0F`) already produces `failed`/`noBeans` in `onState`, for the case where the machine says so itself. This task adds the inferred case, and both share one copy string.
 
 **Files:**
-- Modify: `library/machine/Machine.ts` (`onEvent`)
+- Modify: `library/machine/Machine.ts` (`FAILURE_EVENTS`, `onEvent`)
+- Modify: `constants/brewCopy.ts` (`FAILURE_COPY`)
 - Test: `library/machine/__tests__/Machine.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
+The suite has helpers — use them rather than hand-rolling a transport. `readyMachine()` (line 124) connects, sends the info frame, puts the machine in `0x01` and clears `transport.written`. `brewable()` (line 100) is a two-pour recipe the machine will accept. `notification` and `status` are already imported from `./protocolFixtures`.
+
+Grinding is reached with a **status frame**, `status(0x22)` = `MACHINE_STATE.STARTING` — not with event `40502`, which `Machine.ts` does not handle at all.
+
 ```ts
 describe("event 40517", () => {
     it("means beans when it arrives during grinding", async () => {
-        const transport = new FakeTransport();
-        const machine = new Machine(transport, {frameGapMs: 0});
-        await machine.connect("AA:BB");
-        transport.emit(machineInfoFrame());
-        transport.emit(status(0x01));
-        await machine.brew(sixPourRecipe());
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
 
         // The grinder is running; then the machine stops and idles.
-        transport.emit(new Uint8Array(notification(40502 & 0xFF, 40502 >> 8, [0])));
+        transport.emit(status(0x22));
+        expect(machine.phase.name).toBe("grinding");
         transport.emit(new Uint8Array(notification(40517 & 0xFF, 40517 >> 8, [0])));
 
         expect(machine.phase).toMatchObject({name: "failed", reason: "noBeans"});
     });
 
     it("still means idling when it arrives before grinding", async () => {
-        const transport = new FakeTransport();
-        const machine = new Machine(transport, {frameGapMs: 0});
-        await machine.connect("AA:BB");
-        transport.emit(machineInfoFrame());
-        transport.emit(status(0x01));
-        await machine.brew(sixPourRecipe());
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
 
         transport.emit(new Uint8Array(notification(40517 & 0xFF, 40517 >> 8, [0])));
 
@@ -493,37 +493,34 @@ describe("event 40517", () => {
 });
 ```
 
-`notification` is already imported in this file from `./protocolFixtures`. `40502` is `EVENT.COFFEE_STARTING`, which is what puts the phase into `grinding`; check that mapping in `onEvent`/`onState` and use whichever event the file already uses to reach `grinding` if it differs.
-
 - [ ] **Step 2: Run it and see it fail**
 
 ```bash
 npx jest library/machine/__tests__/Machine.test.ts -t "40517"
 ```
 
-Expected: FAIL — the first case reports `idling`.
+Expected: FAIL — the first case reports `idling`, the second passes already.
+
+A second case that passes before the change is intentional: it is there to catch the over-correction where every `40517` becomes `noBeans`. Confirm it fails if you make the mapping unconditional.
 
 - [ ] **Step 3: Implement**
 
-In `library/machine/Machine.ts`, remove `40517` from the unconditional `FAILURE_EVENTS` table:
+In `library/machine/Machine.ts`, remove `40517` from `FAILURE_EVENTS`:
 
 ```ts
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
     40522: "noWater",
     8203:  "gearPosition",
     8204:  "doseMismatch"
-    // 40517 is deliberately absent: it means different things depending on
-    // when it arrives, and `onEvent` decides. See EVENT.IDLE below.
+    // EVENT.ERROR_IDLING is deliberately absent: it means different things
+    // depending on the phase it arrives in, and `onEvent` decides.
 };
-
-/** "The machine stopped and went idle." Ambiguous without the phase it arrived in. */
-const IDLE_EVENT = 40517;
 ```
 
 and at the top of `onEvent`, before the `FAILURE_EVENTS` lookup:
 
 ```ts
-        if (code === IDLE_EVENT) {
+        if (code === EVENT.ERROR_IDLING) {
             // During grinding the machine is almost certainly flashing +BEANS:
             // it stops the burr and idles rather than reporting an empty
             // hopper as its own event. Outside grinding it is what it says.
@@ -534,11 +531,15 @@ and at the top of `onEvent`, before the `FAILURE_EVENTS` lookup:
         }
 ```
 
-Then in `constants/brewCopy.ts`, make `noBeans` say what to do:
+`EVENT` is already imported from `./protocol`, where `ERROR_IDLING: 40517` is defined. Do not introduce a second constant for the same number.
+
+Then in `constants/brewCopy.ts`, in the **`FAILURE_COPY`** table (line 22 — not `BLOCKED_HEADLINE` and not `MINI_FAILURE_WHY`, which have their own `noBeans` entries for the pre-flight refusal and are correct as they are):
 
 ```ts
     noBeans:      "The machine stopped during grinding. Check there are beans in the hopper.",
 ```
+
+This string now serves both the inferred case and `MACHINE_STATE.NO_BEANS`. It has to be true of both, which is why it describes what happened rather than what the machine reported.
 
 - [ ] **Step 4: Run it and see it pass**
 
@@ -546,7 +547,7 @@ Then in `constants/brewCopy.ts`, make `noBeans` say what to do:
 npx jest library/machine/__tests__/Machine.test.ts
 ```
 
-Expected: PASS.
+Expected: PASS, whole file. If another test asserts the old `"The machine is waiting for beans."` it will fail here — update it, and say so in your report.
 
 - [ ] **Step 5: Commit**
 
