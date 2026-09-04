@@ -1075,6 +1075,19 @@ In `library/Settings.ts`, in `DEFAULTS`, directly beneath `showBrewOnRecipeRows`
 
 Import `DEFAULT_BREW_SHORTCUT` from `@/library/brewShortcut`.
 
+**Expect two things to break the moment you add this key, and do not "fix"
+either by editing a test.**
+
+- `npm run typecheck` will fail on `settingsSnapshot()` in `app/settings.tsx`.
+  It returns `Record<Exclude<SettingKey, BackupExcluded>, unknown>`, so the new
+  key is a required member. Step 9 is what satisfies it.
+- `app/__tests__/settings.test.tsx` — *"hands the whole library and the live
+  settings to the exporter"* — will fail. It compares the exported snapshot's
+  keys against `Object.keys(DEFAULTS)` minus `NOT_IN_BACKUP`, precisely so a new
+  setting cannot be added and forgotten. **This is the guard working.** Leave it
+  alone; Step 9 turns it green. That existing test is the reason Step 10 does not
+  need to write its own "carries the shape into a backup" case.
+
 **Typed as `string`, not as `BrewShortcut`**, on purpose: `SettingValue` is derived from the shape of `DEFAULTS`, and a literal union there would let call sites believe a stored value is already narrowed when `get` has done no such check. Widening here is what forces every reader through the guard. If `Settings.ts` has an existing key that solves this differently, follow that instead and say so.
 
 - [ ] **Step 6: Write the failing test for the stacked row**
@@ -1197,37 +1210,60 @@ Two edits in the same file, following exactly what the neighbouring keys do:
 
 The guard is what makes an unknown value from a newer or older build land on the default rather than on nothing.
 
-You will need to add `brewShortcut` to whatever type `BackupPayload` is. Find it and add it as optional, matching how the other settings are declared there.
+**No type change is needed in `library/backup.ts`.** `BackupSettings` is
+`Record<string, unknown>` and `BackupPayload` carries it whole, so there is no
+per-key declaration to extend. If you find yourself adding a field there, stop —
+you are editing the wrong file.
 
 - [ ] **Step 10: Test the screen**
 
-Add to `app/__tests__/settings.test.tsx`, matching the file's existing conventions for building a `Settings` with a fake store:
+This suite builds a screen with `new Settings(memoryStorage())` — there is no
+`fakeSettings` helper — and reads an export through `mockExportBackup.mock.calls`.
+Add:
 
 ```ts
-it("offers the shape only when the shortcut is on", async () => {
-    const settings = fakeSettings({showBrewOnRecipeRows: false});
+it("offers the shape only when the shortcut is drawn", async () => {
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", false);
     await renderWithProviders(<SettingsScreen settings={settings}/>);
+
     // A shape for a shortcut that is not drawn is a dead control.
     expect(screen.queryByText("BREW shortcut shape")).toBeNull();
 });
 
-it("offers the shape when the shortcut is on", async () => {
-    const settings = fakeSettings({showBrewOnRecipeRows: true});
+it("offers the shape when the shortcut is drawn", async () => {
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", true);
     await renderWithProviders(<SettingsScreen settings={settings}/>);
+
     expect(screen.getByText("BREW shortcut shape")).toBeTruthy();
 });
 
-it("carries the shape into a backup", async () => {
-    const settings = fakeSettings({brewShortcut: "chip"});
-    await renderWithProviders(<SettingsScreen settings={settings}/>);
-    // A backup that drops a preference silently is worse than one that fails.
-    expect(await exportedPayload()).toEqual(
-        expect.objectContaining({brewShortcut: "chip"})
-    );
+it("remembers the chosen shape", async () => {
+    const storage = memoryStorage();
+    await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+    await fireEvent.press(screen.getByRole("button", {name: "CHIP"}));
+
+    // Read back through a second Settings over the same storage, the way the
+    // neighbouring tests do: the point is that it was written down, not that
+    // one component's state moved.
+    expect(new Settings(storage).get("brewShortcut")).toBe("chip");
 });
 ```
 
-`fakeSettings` and `exportedPayload` are placeholders for whatever this suite already uses — **read the file and use its real helpers.** If it has no way to inspect an exported payload, assert the snapshot another way rather than inventing an export seam, and say so in your report.
+The default for `showBrewOnRecipeRows` is `true`, so the second test would pass
+without the `set` — it is written explicitly anyway so it does not quietly start
+testing the default if that default ever changes.
+
+Look at how the existing segmented-control test presses a segment (the
+`temperatureUnit` one, around line 214) and match it. If `getByRole("button")`
+is not how that file reaches a segment, use whatever it does.
+
+**Do not** add a "carries the shape into a backup" test. The suite already has
+one that holds *every* key to account by comparing against `DEFAULTS`; a second,
+narrower test of the same thing would be the hand-kept list that test's comment
+exists to warn against.
 
 - [ ] **Step 11: Run everything**
 
