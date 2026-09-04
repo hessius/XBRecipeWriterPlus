@@ -29,6 +29,28 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageRung
 }
 
 describe("BrewStageRung", () => {
+    it("numbers the stage from one, padded", async () => {
+        const {getByText} = await draw({index: 8});
+
+        expect(getByText("09")).toBeTruthy();
+    });
+
+    it("shows the stage temperature", async () => {
+        const {getByText} = await draw({pour: new Pour(
+            1, 70, 92, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(getByText("92°")).toBeTruthy();
+    });
+
+    it("shows the pattern glyph", async () => {
+        const {getByLabelText} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.SPIRAL, 20
+        )});
+
+        expect(getByLabelText("Spiral pour")).toBeTruthy();
+    });
+
     it("gives the lane the whole row rather than a fixed width", async () => {
         const {getByTestId} = await draw();
 
@@ -91,6 +113,42 @@ describe("BrewStageRung", () => {
         });
 
         expect(getByTestId("segment-1").props.style.backgroundColor).toBe(palette.warn);
+    });
+
+    it("puts the agitation mark on the leading edge for agitation before", async () => {
+        const {getByTestId, queryByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_OFF, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(getByTestId("rung-agitation-before")).toBeTruthy();
+        expect(queryByTestId("rung-agitation-after")).toBeNull();
+    });
+
+    it("puts the agitation mark on the trailing edge for agitation after", async () => {
+        const {getByTestId, queryByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(getByTestId("rung-agitation-after")).toBeTruthy();
+        expect(queryByTestId("rung-agitation-before")).toBeNull();
+    });
+
+    it("puts agitation marks on both edges when both are on", async () => {
+        const {getByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(getByTestId("rung-agitation-before")).toBeTruthy();
+        expect(getByTestId("rung-agitation-after")).toBeTruthy();
+    });
+
+    it("does not draw agitation marks when agitation is off", async () => {
+        const {queryByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(queryByTestId("rung-agitation-before")).toBeNull();
+        expect(queryByTestId("rung-agitation-after")).toBeNull();
     });
 
     it("says the whole stage in one sentence for VoiceOver", async () => {

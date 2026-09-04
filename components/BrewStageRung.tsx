@@ -41,7 +41,9 @@ type Props = {
 const PENDING_OPACITY = 0.45;
 
 /** One spoken sentence for a rung, for VoiceOver / TalkBack. */
-function buildLabel(pour: Pour, index: number, stalls: Stall[]): string {
+function buildLabel(
+    pour: Pour, index: number, stalls: Stall[], before: boolean, after: boolean
+): string {
     const stage = `Stage ${String(index + 1).padStart(2, "0")}`;
     const kind = glyphForPattern(pour.pourPattern);
     const pattern = kind === "agitation" ? "agitation"
@@ -52,8 +54,6 @@ function buildLabel(pour: Pour, index: number, stalls: Stall[]): string {
     const pauseSec = Math.round(pauseSeconds(pour));
     const pause = pauseSec > 0 ? `, then ${pauseSec} seconds pause` : "";
 
-    const before = pour.getAgitationBefore();
-    const after = pour.getAgitationAfter();
     let agitation = "";
     if (before && after) agitation = ", agitates before and after";
     else if (before) agitation = ", agitates before";
@@ -106,11 +106,13 @@ export default function BrewStageRung({
     const slack = Math.max(0, span - used);
     const done = state === "done";
     const radius = barHeight / 2;
+    const before = pour.getAgitationBefore();
+    const after = pour.getAgitationAfter();
 
     return (
         <XStack
             testID={testID}
-            accessibilityLabel={buildLabel(pour, index, stalls)}
+            accessibilityLabel={buildLabel(pour, index, stalls, before, after)}
             accessible
             alignItems="center"
             gap="$2"
@@ -133,6 +135,19 @@ export default function BrewStageRung({
 
             <XStack testID="rung-lane" style={{flex: 1}} height={barHeight}
                     alignItems="center">
+                {before && (
+                    <View
+                        testID="rung-agitation-before"
+                        style={{
+                            width: 0,
+                            height: barHeight,
+                            overflow: "visible",
+                            justifyContent: "center"
+                        }}
+                    >
+                        <PourGlyph kind="agitation" accent={palette.dim} size={10} />
+                    </View>
+                )}
                 {segments.map((segment, i) => (
                     <View
                         key={`segment-${i}`}
@@ -164,6 +179,20 @@ export default function BrewStageRung({
                     </View>
                 ))}
                 {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}
+                {after && (
+                    <View
+                        testID="rung-agitation-after"
+                        style={{
+                            width: 0,
+                            height: barHeight,
+                            overflow: "visible",
+                            justifyContent: "center",
+                            alignItems: "flex-end"
+                        }}
+                    >
+                        <PourGlyph kind="agitation" accent={palette.dim} size={10} />
+                    </View>
+                )}
             </XStack>
 
             <DotMatrixText fontSize={12} weight="bold" color={palette.dim}>
