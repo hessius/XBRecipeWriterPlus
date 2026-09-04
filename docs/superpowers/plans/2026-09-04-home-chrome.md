@@ -1964,6 +1964,1010 @@ The last wiring. `app/index.tsx` reads `showBrewOnRecipeRows`, and now the shape
 
 - [ ] **Step 1: Write the failing test**
 
+Three things about this suite that the test has to respect, all of them checked:
+
+- `useMachine` is **mocked** at the top of the file, and `remembered` comes from a
+  module-level `let mockRemembered` that `beforeEach` resets to `""`. Writing
+  `machineDeviceId` into a `Settings` here does **nothing** — the hook that would
+  have read it is not running. Set `mockRemembered` instead, the way the machine
+  dot's own tests at the bottom of the file do.
+- Screens are built with `<HomeScreen db={store([...])} settings={new Settings(memoryStorage())}/>`.
+  There is no `fakeSettings`, and `db` is required.
+- A card only exists if the library has a recipe, so `store([])` cannot show a
+  shortcut and would make the absence test pass for the wrong reason.
+
+```tsx
+it("draws the shape the settings chose", async () => {
+    mockRemembered = "machine-device-id";
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", true);
+    settings.set("brewShortcut", "chip");
+    await renderWithProviders(
+        <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+    );
+
+    expect(await screen.findByTestId("brew-shortcut")).toBeTruthy();
+});
+
+it("draws no shortcut when nobody here owns a machine", async () => {
+    // Same library and same setting as above -- only the machine differs, so
+    // this cannot pass because the card or the recipe went missing.
+    mockRemembered = "";
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", true);
+    settings.set("brewShortcut", "chip");
+    await renderWithProviders(
+        <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+    );
+
+    // A dead BREW button on every recipe would be worse than no button.
+    expect(await screen.findByText("Ethiopia")).toBeTruthy();
+    expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+});
+```
+
+The `findByText` in the second test is the point of it. Without something
+proving the card rendered, an absence assertion here passes whenever anything
+upstream breaks.
+
+`named` and `store` are this file's existing helpers; check their real names
+before using them.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `npx jest library/__tests__/brewShortcut.test.ts`
+Expected: FAIL, module not found.
+
+- [ ] **Step 3: Write the module**
+
+Create `library/brewShortcut.ts`. It mirrors `library/units.ts`, which is where `asTemperatureUnit` lives and is the pattern for a small typed-value module.
+
+```ts
+/**
+ * Which shape the BREW shortcut takes on a recipe card.
+ *
+ * Four of them, because the last one shipped on the strength of a mockup and
+ * had five distinct faults in the hand. They are alternatives, never composed,
+ * and one of them will be chosen on a device and the rest deleted. Whether
+ * there is a shortcut at all is a separate, older setting.
+ */
+export const BREW_SHORTCUTS = ["edge", "tab", "chip", "swipe"] as const;
+
+export type BrewShortcut = (typeof BREW_SHORTCUTS)[number];
+
+/**
+ * The trailing-edge band.
+ *
+ * Reached by the eye last, after the name and the figures, which is the right
+ * order of importance for a shortcut. Its cost is that full bleed stacks the
+ * bands into a near-continuous strip down a scrolling list, which is the thing
+ * to watch for on a device and the reason `tab` exists.
+ */
+export const DEFAULT_BREW_SHORTCUT: BrewShortcut = "edge";
+
+export function asBrewShortcut(value: unknown): BrewShortcut {
+    return BREW_SHORTCUTS.includes(value as BrewShortcut)
+        ? (value as BrewShortcut)
+        : DEFAULT_BREW_SHORTCUT;
+}
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `npx jest library/__tests__/brewShortcut.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the key**
+
+In `library/Settings.ts`, in `DEFAULTS`, directly beneath `showBrewOnRecipeRows` so the two read together:
+
+```ts
+    /**
+     * Which shape that shortcut takes.
+     *
+     * A second key rather than five values on the boolean above. `get` falls
+     * back to `DEFAULTS[key]` for an absent row and there is no migration
+     * machinery here, so folding the two together would quietly switch the
+     * shortcut back on for anybody who had turned it off. When one shape wins,
+     * this key goes and the boolean stays.
+     *
+     * Read through `asBrewShortcut`: `get` only compares `typeof` against the
+     * default, which cannot tell one string from another.
+     */
+    brewShortcut: DEFAULT_BREW_SHORTCUT as string,
+```
+
+Import `DEFAULT_BREW_SHORTCUT` from `@/library/brewShortcut`.
+
+**Expect two things to break the moment you add this key, and do not "fix"
+either by editing a test.**
+
+- `npm run typecheck` will fail on `settingsSnapshot()` in `app/settings.tsx`.
+  It returns `Record<Exclude<SettingKey, BackupExcluded>, unknown>`, so the new
+  key is a required member. Step 9 is what satisfies it.
+- `app/__tests__/settings.test.tsx` — *"hands the whole library and the live
+  settings to the exporter"* — will fail. It compares the exported snapshot's
+  keys against `Object.keys(DEFAULTS)` minus `NOT_IN_BACKUP`, precisely so a new
+  setting cannot be added and forgotten. **This is the guard working.** Leave it
+  alone; Step 9 turns it green. That existing test is the reason Step 10 does not
+  need to write its own "carries the shape into a backup" case.
+
+**Typed as `string`, not as `BrewShortcut`**, on purpose: `SettingValue` is derived from the shape of `DEFAULTS`, and a literal union there would let call sites believe a stored value is already narrowed when `get` has done no such check. Widening here is what forces every reader through the guard. If `Settings.ts` has an existing key that solves this differently, follow that instead and say so.
+
+- [ ] **Step 6: Write the failing test for the stacked row**
+
+Four labels beside a flexible label leave the label about 118 pt, so its description wraps to four lines. `SegmentedControl` sizes to its content and does not flex, so the row needs to put the control on its own line.
+
+Add to `components/__tests__/SettingsChoiceRow.test.tsx`:
+
+```ts
+it("puts a wide choice on its own line", async () => {
+    await renderWithProviders(
+        <SettingsChoiceRow stacked label="Shortcut shape" description="Which one."
+                           value="edge" options={FOUR_OPTIONS}
+                           onChange={() => undefined}/>
+    );
+    // Beside a flexible label, four segments squeeze the description to a
+    // four-line wrap. Stacking is a layout, not a different control.
+    expect(screen.getByTestId("settings-choice-stacked")).toBeTruthy();
+});
+
+it("keeps a narrow choice beside its label", async () => {
+    await renderWithProviders(
+        <SettingsChoiceRow label="Temperature" description="Which one."
+                           value="C" options={TWO_OPTIONS}
+                           onChange={() => undefined}/>
+    );
+    expect(screen.queryByTestId("settings-choice-stacked")).toBeNull();
+});
+```
+
+Define `FOUR_OPTIONS` and `TWO_OPTIONS` at the top of the file. If the file does not exist, create it and cover the unstacked case too, since it is currently untested.
+
+- [ ] **Step 7: Run it and watch it fail, then add the layout**
+
+Run: `npx jest components/__tests__/SettingsChoiceRow.test.tsx`
+Expected: FAIL.
+
+In `components/SettingsChoiceRow.tsx`, add to `Props`:
+
+```ts
+    /**
+     * Put the control beneath the label rather than beside it.
+     *
+     * For a choice too wide to share a line. `SegmentedControl` sizes to its
+     * content and does not flex, so four segments beside a flexible label
+     * squeeze the description into a four-line wrap.
+     */
+    stacked?: boolean;
+```
+
+Then branch the return. Keep the existing row exactly as it is for the unstacked case, and add:
+
+```tsx
+    if (stacked) {
+        return (
+            <YStack testID="settings-choice-stacked" gap="$2.5"
+                    paddingVertical="$3" paddingHorizontal="$4">
+                <YStack gap="$1">
+                    <Text fontSize={16} color={palette.text}>{label}</Text>
+                    <Text fontSize={13} color={palette.dim}>{description}</Text>
+                </YStack>
+                <SegmentedControl value={value} options={options} onChange={onChange}
+                                  accessibilityLabel={label}/>
+            </YStack>
+        );
+    }
+```
+
+`SegmentedControl` is content-sized, so it sits left-aligned under the label rather than stretching. That is deliberate — a segmented control stretched to full width reads as four buttons.
+
+The label and description markup is now written twice. That is acceptable here and preferable to a wrapper component whose only job is to be shared by two layouts of the same row; if you disagree, extract it to a module-scope function in the same file, **not** inside the component body.
+
+- [ ] **Step 8: Add the row to the settings screen**
+
+In `app/settings.tsx`:
+
+```tsx
+const BREW_SHORTCUT_OPTIONS = [
+    {value: "edge", label: "EDGE"},
+    {value: "tab", label: "TAB"},
+    {value: "chip", label: "CHIP"},
+    {value: "swipe", label: "SWIPE"}
+] as const;
+```
+
+Read the setting beside the others:
+
+```tsx
+    const [brewShortcut, setBrewShortcut] = useSetting("brewShortcut", settings);
+```
+
+And render it directly beneath the `Show BREW on recipe rows` toggle, inside the same `SettingsSection`:
+
+```tsx
+                    {showBrewOnRecipeRows && (
+                        <SettingsChoiceRow
+                            stacked
+                            label="BREW shortcut shape"
+                            description="Four shapes to try on the device. One of them will win and the rest will go."
+                            value={brewShortcut}
+                            options={BREW_SHORTCUT_OPTIONS}
+                            onChange={(value) => setBrewShortcut(asBrewShortcut(value))}/>
+                    )}
+```
+
+Import `asBrewShortcut` from `@/library/brewShortcut`.
+
+- [ ] **Step 9: Carry it through backup and restore**
+
+Two edits in the same file, following exactly what the neighbouring keys do:
+
+- In `settingsSnapshot()`, add `brewShortcut` to the returned object.
+- In the restore path, beside the `showBrewOnRecipeRows` check:
+
+```tsx
+        if (typeof incoming.brewShortcut === "string") {
+            setBrewShortcut(asBrewShortcut(incoming.brewShortcut));
+        }
+```
+
+The guard is what makes an unknown value from a newer or older build land on the default rather than on nothing.
+
+**No type change is needed in `library/backup.ts`.** `BackupSettings` is
+`Record<string, unknown>` and `BackupPayload` carries it whole, so there is no
+per-key declaration to extend. If you find yourself adding a field there, stop —
+you are editing the wrong file.
+
+- [ ] **Step 10: Test the screen**
+
+This suite builds a screen with `new Settings(memoryStorage())` — there is no
+`fakeSettings` helper — and reads an export through `mockExportBackup.mock.calls`.
+Add:
+
+```ts
+it("offers the shape only when the shortcut is drawn", async () => {
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", false);
+    await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+    // A shape for a shortcut that is not drawn is a dead control.
+    expect(screen.queryByText("BREW shortcut shape")).toBeNull();
+});
+
+it("offers the shape when the shortcut is drawn", async () => {
+    const settings = new Settings(memoryStorage());
+    settings.set("showBrewOnRecipeRows", true);
+    await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+    expect(screen.getByText("BREW shortcut shape")).toBeTruthy();
+});
+
+it("remembers the chosen shape", async () => {
+    const storage = memoryStorage();
+    await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+    await fireEvent.press(screen.getByRole("button", {name: "CHIP"}));
+
+    // Read back through a second Settings over the same storage, the way the
+    // neighbouring tests do: the point is that it was written down, not that
+    // one component's state moved.
+    expect(new Settings(storage).get("brewShortcut")).toBe("chip");
+});
+```
+
+The default for `showBrewOnRecipeRows` is `true`, so the second test would pass
+without the `set` — it is written explicitly anyway so it does not quietly start
+testing the default if that default ever changes.
+
+Look at how the existing segmented-control test presses a segment (the
+`temperatureUnit` one, around line 214) and match it. If `getByRole("button")`
+is not how that file reaches a segment, use whatever it does.
+
+**Do not** add a "carries the shape into a backup" test. The suite already has
+one that holds *every* key to account by comparing against `DEFAULTS`; a second,
+narrower test of the same thing would be the hand-kept list that test's comment
+exists to warn against.
+
+- [ ] **Step 11: Run everything**
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add library/brewShortcut.ts library/__tests__/brewShortcut.test.ts library/Settings.ts components/SettingsChoiceRow.tsx components/__tests__/SettingsChoiceRow.test.tsx app/settings.tsx app/__tests__/settings.test.tsx
+git commit -m "feat: a setting for the BREW shortcut's shape
+
+The last shortcut shipped on the strength of a mockup and had five distinct
+faults in the hand, so the replacement is four shapes to be chosen between on
+a device rather than one more guess.
+
+A second key rather than five values on the existing boolean. Settings has no
+migration machinery and get falls back to the default for an absent row, so
+folding the two together would quietly switch the shortcut back on for anybody
+who had turned it off. When a shape wins, this key goes and the boolean stays.
+
+Refs #87"
+```
+
+---
+
+## Task 7: Three shapes for BREW
+
+`BrewCapsule` goes. Its five faults are catalogued in the spec: a radius derived from its own width rather than the card's, a collision with the `TEA` marker, a label that cannot be centred in a 21 pt column, a 21 pt target, and a shared edge with the swipe tray.
+
+On the first of those the spec undercounted. `BrewCapsule` uses `WIDTH / 2`, which is **10.5** against the card's real radius of **22** — not the 16 the spec assumed. So the two curves are not half a point apart, they are less than half the size of each other, which is why the outline reads as broken where the pill meets the card.
+
+The last of those is **accepted**, not fixed. `BrewCapsule`'s own comment predicted it and asked for a hardware check; the hardware said no, but a tap and a horizontal drag are distinguishable by intent and every alternative costs more.
+
+`swipe` is not built here. It is a tile in the swipe tray rather than card chrome, and it is Task 9.
+
+**Files:**
+- Create: `components/BrewShortcut.tsx`
+- Create: `components/__tests__/BrewShortcut.test.tsx`
+- Delete: `components/BrewCapsule.tsx`, `components/__tests__/BrewCapsule.test.tsx`
+
+- [ ] **Step 1: Read what is being replaced**
+
+```bash
+cat components/BrewCapsule.tsx
+cat components/__tests__/BrewCapsule.test.tsx
+```
+
+Every assertion in that test file is either about a fault being removed or about behaviour that must survive. **Nothing is dropped.** Go through it line by line and carry each assertion into the new file, adapted. If you conclude one genuinely no longer has meaning, say which and why in your report rather than deleting it quietly.
+
+- [ ] **Step 2: Write the failing tests**
+
+Create `components/__tests__/BrewShortcut.test.tsx`:
+
+```tsx
+import React from "react";
+import {screen} from "@testing-library/react-native";
+
+import BrewShortcut, {SHORTCUT_INSET} from "@/components/BrewShortcut";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+const ACCENT = "#FF8800";
+
+describe("BrewShortcut", () => {
+    it.each(["edge", "tab", "chip"] as const)("says BREW as a %s", async (variant) => {
+        await renderWithProviders(
+            <BrewShortcut variant={variant} accent={ACCENT} ink={palette.base}
+                          onPress={() => undefined}/>
+        );
+        // The three differ in shape alone, so the word and the colours are
+        // the invariant across all of them.
+        expect(screen.getByLabelText("Brew this recipe")).toBeTruthy();
+    });
+
+    it("gives the tab a radius concentric with the card's", async () => {
+        await renderWithProviders(
+            <BrewShortcut variant="tab" accent={ACCENT} ink={palette.base}
+                          onPress={() => undefined}/>
+        );
+        // 22 - 4. Two curves that nearly agree read as a sticker; one curve
+        // inside another sharing a centre reads as a cut-out. The old capsule
+        // used width/2, which was 10.5 against a card radius of 22.
+        expect(screen.getByTestId("brew-shortcut").props.style)
+            .toEqual(expect.objectContaining({borderRadius: 18}));
+    });
+
+    it("gives the edge band no radius of its own", async () => {
+        await renderWithProviders(
+            <BrewShortcut variant="edge" accent={ACCENT} ink={palette.base}
+                          onPress={() => undefined}/>
+        );
+        // It bleeds to the card's boundary and the card's overflow: hidden
+        // clips it, so there is no second radius to get wrong.
+        expect(screen.getByTestId("brew-shortcut").props.style.borderRadius)
+            .toBeUndefined();
+    });
+
+    it("reserves room on the card's trailing edge for the bands", () => {
+        // Fault 2 was the capsule landing on the TEA marker. Fixed by the card
+        // knowing what each shape occupies, not by picking a shape that misses.
+        expect(SHORTCUT_INSET.edge).toBeGreaterThan(0);
+        expect(SHORTCUT_INSET.tab).toBeGreaterThan(SHORTCUT_INSET.edge);
+        // The chip is at the bottom, where nothing sits unless the card is
+        // editing, and the card hides the shortcut while it is.
+        expect(SHORTCUT_INSET.chip).toBe(0);
+    });
+
+    it("reaches a full touch target", async () => {
+        await renderWithProviders(
+            <BrewShortcut variant="edge" accent={ACCENT} ink={palette.base}
+                          onPress={() => undefined}/>
+        );
+        const slop = screen.getByTestId("brew-shortcut").props.hitSlop;
+        // 34 wide plus 10 of slop. left stays 0: a left slop steals presses
+        // from the card body, which is the bigger and more common target.
+        expect(slop.left).toBe(0);
+        expect(34 + slop.right).toBeGreaterThanOrEqual(44);
+    });
+});
+```
+
+Carry the old file's press test across too, in whatever form it took.
+
+- [ ] **Step 3: Run them and watch them fail**
+
+Run: `npx jest components/__tests__/BrewShortcut.test.tsx`
+Expected: FAIL, module not found.
+
+- [ ] **Step 4: Write the component**
+
+Create `components/BrewShortcut.tsx`:
+
+```tsx
+import React from "react";
+import {Pressable, type ViewStyle} from "react-native";
+
+import DotMatrixText from "@/components/DotMatrixText";
+
+/** The shapes the card itself draws. `swipe` is a tile in the tray, not chrome. */
+export type CardShortcut = "edge" | "tab" | "chip";
+
+type Props = {
+    variant: CardShortcut;
+    /** The card's accent, used for the letter ink. */
+    accent: string;
+    /** The card's own ink, so the shortcut reads as cut from the card. */
+    ink: string;
+    onPress: () => void;
+};
+
+/** Wide enough to centre four stacked letters, which 21 was not. */
+const BAND_WIDTH = 34;
+const TAB_INSET = 4;
+/**
+ * `RecipeCard`'s `borderRadius="$8"`, read off the running theme.
+ *
+ * A literal because the token is not a number at this call site — the same
+ * reason `constants/layout.ts` exists. Tamagui's `$8` radius is 22, which is
+ * not the value a reader guesses, so it is written down here once.
+ */
+const CARD_RADIUS = 22;
+/**
+ * Concentric with the card, rather than derived from the tab's own width.
+ *
+ * A shape inset by n inside a radius r is concentric at r - n. The capsule this
+ * replaces used `width / 2`, which gave 10.5 against the card's 22: a rule that
+ * refers to the shape's own width can only agree with the card by coincidence,
+ * and here it did not come close.
+ */
+const TAB_RADIUS = CARD_RADIUS - TAB_INSET;
+const CHIP_WIDTH = 78;
+const CHIP_HEIGHT = 34;
+/** The chip's inner corner. A fold, so it is smaller than the card's own. */
+const CHIP_FOLD = 14;
+/** `RecipeCard`'s `padding="$3.5"`, read off the running theme. It is 16. */
+const CARD_PADDING = 16;
+
+/**
+ * How much of the card's trailing edge each shape occupies.
+ *
+ * The card adds this to its title row's right padding. Fault 2 of the shipped
+ * capsule was landing on the `TEA` marker, and it is fixed by the card knowing
+ * what the shortcut takes rather than by choosing a shape that happens to miss.
+ * The pour profile and the stats row are not inset, because neither reaches
+ * that edge.
+ */
+export const SHORTCUT_INSET: Record<CardShortcut, number> = {
+    edge: BAND_WIDTH - CARD_PADDING,
+    tab:  BAND_WIDTH + TAB_INSET - CARD_PADDING,
+    chip: 0
+};
+
+/**
+ * Slop, not a wider shape.
+ *
+ * `left` is deliberately 0, for the reason the capsule's comment gave: a left
+ * slop steals presses from the card body behind it, and the card is the bigger
+ * and more common target. The bands are 34 across, so 10 to the right reaches
+ * the HIG's 44; they already run the card's height. The chip is 34 tall and
+ * takes its 10 vertically instead.
+ */
+const BAND_SLOP = {top: 8, bottom: 8, left: 0, right: 10};
+const CHIP_SLOP = {top: 10, bottom: 0, left: 10, right: 0};
+
+const SHAPES: Record<CardShortcut, ViewStyle> = {
+    edge: {right: 0, top: 0, bottom: 0, width: BAND_WIDTH},
+    tab:  {
+        right:        TAB_INSET,
+        top:          TAB_INSET,
+        bottom:       TAB_INSET,
+        width:        BAND_WIDTH,
+        borderRadius: TAB_RADIUS
+    },
+    chip: {
+        right:                   0,
+        bottom:                  0,
+        width:                   CHIP_WIDTH,
+        height:                  CHIP_HEIGHT,
+        borderTopLeftRadius:     CHIP_FOLD,
+        borderBottomRightRadius: CARD_RADIUS
+    }
+};
+
+/**
+ * BREW, on a recipe card, in one of three shapes.
+ *
+ * Three rather than one because the shape that shipped was chosen from a mockup
+ * and had five faults in the hand. They are alternatives, never composed, and
+ * they live in one file precisely so they can be read against each other while
+ * the choice is open. When one wins the other two are deleted.
+ *
+ * The bands stack their letters, one per line, rather than rotating them:
+ * rotated text at this size is unreadable, and four stacked letters stay a
+ * shape you recognise without reading. The chip is wide enough to say the word
+ * outright, which is most of why it is worth trying.
+ *
+ * Every shape shares the card's right edge with the swipe tray. That was
+ * predicted before the capsule shipped and confirmed on hardware, and it is
+ * accepted: a tap and a horizontal drag are distinguishable by intent, and
+ * every alternative costs more than the collision does.
+ */
+export default function BrewShortcut({variant, accent, ink, onPress}: Props) {
+    const horizontal = variant === "chip";
+
+    return (
+        <Pressable
+            testID="brew-shortcut"
+            accessibilityRole="button"
+            accessibilityLabel="Brew this recipe"
+            onPress={onPress}
+            hitSlop={horizontal ? CHIP_SLOP : BAND_SLOP}
+            style={{
+                position:        "absolute",
+                backgroundColor: ink,
+                alignItems:      "center",
+                justifyContent:  "center",
+                ...SHAPES[variant]
+            }}
+        >
+            {horizontal ? (
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                               color={accent}>
+                    BREW
+                </DotMatrixText>
+            ) : (
+                ["B", "R", "E", "W"].map((letter) => (
+                    <DotMatrixText key={letter} fontSize={9} weight="bold" color={accent}>
+                        {letter}
+                    </DotMatrixText>
+                ))
+            )}
+        </Pressable>
+    );
+}
+```
+
+`CARD_RADIUS` and `CARD_PADDING` restate values that `RecipeCard` expresses as Tamagui tokens (`$8`, `$3.5`). They are duplicated rather than imported because the tokens are not numbers at this call site — the same problem `constants/layout.ts` was created for.
+
+Both values above were read off the running theme: `$8` is **22** and `$3.5` is **16**. An earlier draft of this plan guessed 16 and 14, which is why the numbers are stated here rather than left to be inferred. Do not change them without reading the theme again.
+
+- [ ] **Step 5: Run the tests and watch them pass**
+
+Run: `npx jest components/__tests__/BrewShortcut.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 6: Delete the capsule**
+
+```bash
+git rm components/BrewCapsule.tsx components/__tests__/BrewCapsule.test.tsx
+```
+
+Run: `npm run typecheck`
+Expected: FAIL, naming `components/RecipeCard.tsx`. That is Task 8. Confirm nothing else imports it.
+
+- [ ] **Step 7: Commit**
+
+Note that this commit leaves the tree not typechecking, which is why it says so.
+
+```bash
+git add components/BrewShortcut.tsx components/__tests__/BrewShortcut.test.tsx
+git commit -m "feat: three shapes for the BREW shortcut
+
+The capsule had five faults in the hand: a radius derived from its own width
+rather than the card's, a collision with the TEA marker, a label that cannot
+be centred in a 21pt column, a 21pt target, and a shared edge with the swipe
+tray.
+
+The first was worse than recorded. width/2 gave 10.5 against the card's real
+radius of 22, so the two curves were not close enough to read as one shape at
+all.
+
+Four of the five are fixed here. The fifth is accepted: the capsule's own
+comment predicted the swipe collision and asked for a hardware check, the
+hardware said no, and every alternative costs more than the collision does.
+
+Three shapes rather than one, because choosing from a mockup is what produced
+the first five faults. They live in one file so they can be read against each
+other, and two of them will be deleted.
+
+Typechecking is broken until RecipeCard stops importing BrewCapsule.
+
+Refs #87"
+```
+
+---
+
+## Task 8: The card draws the shape it is told
+
+`RecipeCard` takes `showBrew: boolean` and renders `BrewCapsule`. It becomes a variant, the title row reserves the space the variant occupies, and the shortcut disappears while the card is editing.
+
+**Files:**
+- Modify: `components/RecipeCard.tsx`
+- Test: `components/__tests__/RecipeCard.test.tsx`
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `components/__tests__/RecipeCard.test.tsx`. The file's helper for building a recipe is `makeRecipe(overrides)` (around line 87), and the block below uses it — there is no `aRecipe`/`aTeaRecipe`.
+
+```tsx
+describe("the BREW shortcut", () => {
+    it.each(["edge", "tab", "chip"] as const)("draws a %s", async (variant) => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
+                        brewShortcut={variant} onBrew={() => undefined}/>
+        );
+        expect(screen.getByTestId("brew-shortcut")).toBeTruthy();
+    });
+
+    it("draws nothing for swipe, which is the tray's job", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
+                        brewShortcut="swipe" onBrew={() => undefined}/>
+        );
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+    });
+
+    it("draws nothing when there is no shortcut at all", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined}/>
+        );
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+    });
+
+    it("stands aside while the card is editing", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => undefined} editing
+                        brewShortcut="chip" onBrew={() => undefined}
+                        onDuplicate={() => undefined} onDelete={() => undefined}/>
+        );
+        // Duplicate and delete sit in the card's bottom right, which is
+        // exactly where the chip lands, and editing is the one mode where
+        // brewing is plainly not what the user came to do.
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+        // The action's glyph is hidden from the accessibility tree on purpose,
+        // so this needs includeHiddenElements the way the file's other
+        // assertions on these two controls do.
+        expect(screen.getByTestId("recipe-card-delete",
+                                  {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("keeps the marker clear of the band", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                        onPress={() => undefined}
+                        brewShortcut="tab" onBrew={() => undefined}/>
+        );
+        // The shipped capsule sat on top of the TEA marker. The card reserves
+        // the trailing edge rather than hoping the shape misses it.
+        expect(screen.getByTestId("recipe-card-title-row").props.style)
+            .toEqual(expect.objectContaining({paddingRight: SHORTCUT_INSET.tab}));
+    });
+});
+```
+
+`CUP_TYPE` is already imported in this file — its marker tests use `makeRecipe({cupType: CUP_TYPE.TEA})`. Do not add a second recipe helper.
+
+Import `SHORTCUT_INSET` from `@/components/BrewShortcut`.
+
+`brew-shortcut` itself carries an `accessibilityLabel`, so it is visible to the default queries and the absence assertions above need no `includeHiddenElements`. Anything reaching *inside* it to a `DotIcon` would.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `npx jest components/__tests__/RecipeCard.test.tsx`
+Expected: FAIL. Existing tests in this file that pass `showBrew` will also fail to typecheck — that is expected and they are updated in the next step.
+
+- [ ] **Step 3: Change the props**
+
+In `components/RecipeCard.tsx`, replace the `showBrew` prop with:
+
+```ts
+    /**
+     * Which shape the BREW shortcut takes, or undefined for none.
+     *
+     * `swipe` draws nothing here: it is a tile in the swipe tray rather than
+     * anything on the card.
+     */
+    brewShortcut?: BrewShortcutSetting;
+```
+
+The setting's type and the component share the name `BrewShortcut`, so alias one of them:
+
+```ts
+import BrewShortcut, {type CardShortcut, SHORTCUT_INSET} from "@/components/BrewShortcut";
+import type {BrewShortcut as BrewShortcutSetting} from "@/library/brewShortcut";
+```
+
+Alias rather than rename either export. The component is `BrewShortcut` because that is what it is, and the setting's type is `BrewShortcut` because that is what it holds.
+
+- [ ] **Step 4: Render it**
+
+Replace the `showBrew && onBrew !== undefined` block:
+
+```tsx
+            {shortcut !== null && onBrew !== undefined && (
+                <BrewShortcut variant={shortcut} accent={accent}
+                              ink={onAccent.text} onPress={onBrew}/>
+            )}
+```
+
+and compute `shortcut` at the top of the component body:
+
+```tsx
+    /**
+     * The shape this card actually draws, or null for none.
+     *
+     * `swipe` is the tray's tile and `editing` gives the card's bottom right
+     * over to duplicate and delete, which every shape would land on.
+     */
+    const shortcut: CardShortcut | null =
+        editing || brewShortcut === undefined || brewShortcut === "swipe"
+            ? null
+            : brewShortcut;
+```
+
+- [ ] **Step 5: Reserve the space**
+
+Give the title row a `testID` and the reservation. It is the `XStack` holding the name, the marker and the will-not-write icon:
+
+```tsx
+            <XStack testID="recipe-card-title-row"
+                    justifyContent="space-between" alignItems="flex-start" gap="$2"
+                    paddingRight={shortcut === null ? 0 : SHORTCUT_INSET[shortcut]}>
+```
+
+Only this row. The pour profile bleeds past the card's edge by design and the stats row is left-aligned, so neither reaches the trailing edge.
+
+- [ ] **Step 6: Fix the existing tests that passed `showBrew`**
+
+Run: `grep -n "showBrew" components/__tests__/RecipeCard.test.tsx`
+
+Change each `showBrew` to `brewShortcut="edge"`. **Do not delete any of them** — they assert the shortcut appears, calls back and is labelled, all of which still hold.
+
+- [ ] **Step 7: Run everything for this file**
+
+Run: `npx jest components/__tests__/RecipeCard.test.tsx`
+Expected: PASS.
+
+Run: `npm run typecheck`
+Expected: FAIL, naming `components/SwipeableRecipeRow.tsx` and `app/index.tsx`. Those are Tasks 9 and 10.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add components/RecipeCard.tsx components/__tests__/RecipeCard.test.tsx
+git commit -m "feat: the card reserves the space its shortcut occupies
+
+The shipped capsule was positioned absolutely against the card's right edge
+while the TEA marker sat in normal flow at the same edge, knowing nothing
+about it, so on a tea recipe the capsule sat on the T. Choosing a shape that
+happens to miss would leave the next shape to rediscover it, so each shape
+declares what it takes and the title row takes it as padding.
+
+The shortcut also stands aside while the card is editing. The bottom right is
+empty except in that mode, where it holds duplicate and delete, and editing is
+the one mode where brewing is plainly not what the user came to do.
+
+Typechecking is broken until SwipeableRecipeRow and app/index.tsx follow.
+
+Refs #87"
+```
+
+---
+
+## Task 9: BREW as a swipe tile
+
+The fourth shape. No card chrome at all: BREW joins duplicate and delete in the swipe tray, in the recipe's accent so it reads as the one non-destructive tile among two neutrals.
+
+**Files:**
+- Modify: `components/SwipeableRecipeRow.tsx`
+- Test: `components/__tests__/SwipeableRecipeRow.test.tsx`
+
+- [ ] **Step 1: Read the row**
+
+```bash
+cat components/SwipeableRecipeRow.tsx
+sed -n '40,130p' components/__tests__/SwipeableRecipeRow.test.tsx
+```
+
+Four things there that this task depends on, all of them checked:
+
+- **`Tile` already says a word.** It takes `caption` and renders it in `DotMatrixText` beneath the glyph — `COPY` and `DELETE`. So BREW does not need a new mechanism for text; it needs a decision about its glyph.
+- **There is no `brew` glyph and none is being added.** `grep -c '"brew"' constants/dotIcons.ts` is 0, the icon set's own comment asks that it be kept small, and choosing a bitmap for BREW is a design decision this plan has not made. Make `icon` optional instead and let the BREW tile be its word alone.
+- **`Tile` puts its `testID` on the `DotIcon`, not on the tile.** So a caption-only tile has no `testID` at all, and pressing a tile by `testID` would press the glyph rather than the pressable. The file's own tests already know this: they press with `getByLabelText("Delete Ethiopia Guji")` and use the testIDs only to count dots. Follow that.
+- **There is no `close()` helper.** Each tile calls `swipeableRef.current?.close()` inline before its callback.
+
+- [ ] **Step 2: Write the failing tests**
+
+The label convention is `` `<Verb> ${recipe.displayName()}` ``, and this file's recipes are named `Ethiopia Guji`. Match whatever its existing helper builds.
+
+```tsx
+it("offers BREW in the tray when that is the chosen shape", async () => {
+    await renderWithProviders(
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                            onDelete={() => undefined} onDuplicate={() => undefined}
+                            brewShortcut="swipe" onBrew={() => undefined}/>
+    );
+    expect(screen.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
+});
+
+it.each(["edge", "tab", "chip"] as const)("keeps the tray to two tiles for %s", async (shape) => {
+    await renderWithProviders(
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                            onDelete={() => undefined} onDuplicate={() => undefined}
+                            brewShortcut={shape} onBrew={() => undefined}/>
+    );
+    // The card is drawing it. Two places to brew one recipe is one too many.
+    expect(screen.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
+    // And the other two are still there, so this is not passing because the
+    // whole tray failed to render.
+    expect(screen.getByLabelText("Delete Ethiopia Guji")).toBeTruthy();
+});
+
+it("brews when the tile is pressed", async () => {
+    const onBrew = jest.fn();
+    await renderWithProviders(
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                            onDelete={() => undefined} onDuplicate={() => undefined}
+                            brewShortcut="swipe" onBrew={onBrew}/>
+    );
+    await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
+    expect(onBrew).toHaveBeenCalled();
+});
+
+it("gives the brew tile the recipe's accent, not a system colour", async () => {
+    await renderWithProviders(
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                            onDelete={() => undefined} onDuplicate={() => undefined}
+                            brewShortcut="swipe" onBrew={() => undefined}/>
+    );
+    // The one non-destructive tile among two neutrals. Same helper the card
+    // uses, so the tile and the card it slid off cannot disagree.
+    const word = within(screen.getByLabelText("Brew Ethiopia Guji"))
+        .getByText("BREW");
+    expect(word.props.style).toEqual(
+        expect.objectContaining({color: resolveAccent(makeRecipe())})
+    );
+});
+```
+
+The second assertion in the absence test matters. Without it, a change that stopped the tray rendering entirely would make that test pass.
+
+If `word.props.style` turns out to be an array rather than an object, match it the way the file's other colour assertions do — it has a `dotColourOf` helper and a style-flattening idiom already; use those rather than inventing a third.
+
+- [ ] **Step 3: Run them and watch them fail**
+
+Run: `npx jest components/__tests__/SwipeableRecipeRow.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 4: Let a tile be a word on its own**
+
+In `TileProps`, make the glyph optional:
+
+```ts
+    /**
+     * The tile's glyph, or nothing.
+     *
+     * BREW has no glyph: the icon set is deliberately small and no bitmap for
+     * it has been designed. A tile that is only its word is the honest way to
+     * say that, and it also sets the one non-destructive action apart from the
+     * two that carry glyphs.
+     */
+    icon?: DotIconName;
+```
+
+and in `Tile`, guard the glyph and let a wordless tile carry its word a little larger, so the tile does not read as half-drawn:
+
+```tsx
+            {icon !== undefined && (
+                <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            )}
+            <DotMatrixText fontSize={icon === undefined ? 13 : 11} weight="bold"
+                           letterSpacing={1.2} color={tone}>
+                {caption}
+            </DotMatrixText>
+```
+
+`testID` stays on the `DotIcon`, which is where the existing tests look for it. A wordless tile therefore has no `testID`, and nothing needs one: it is reached by its label, like every other tile.
+
+Whether a glyphless tile actually reads well beside two glyphed ones is a device-pass question, not one this plan can settle.
+
+- [ ] **Step 5: Change the props and add the tile**
+
+Replace `showBrew?: boolean` with:
+
+```ts
+    /**
+     * Forwarded to the card, except for `swipe`, which the tray draws itself.
+     */
+    brewShortcut?: BrewShortcut;
+```
+
+Import the type from `@/library/brewShortcut` and `resolveAccent` from wherever `RecipeCard` gets it — `grep -n "resolveAccent" components/RecipeCard.tsx` and use the same import. Do not derive the accent a second way.
+
+In `renderRightActions`, add the BREW tile **first**, so it is nearest the thumb and the destructive ones stay furthest:
+
+```tsx
+                {brewShortcut === "swipe" && onBrew !== undefined && (
+                    <Tile caption="BREW" tone={resolveAccent(recipe)}
+                          testID="row-action-brew"
+                          label={`Brew ${recipe.displayName()}`}
+                          onPress={() => {
+                              swipeableRef.current?.close();
+                              onBrew();
+                          }}/>
+                )}
+```
+
+`testID` is still passed, so that if a glyph is ever given to this tile the tests reach it the same way as the others. It renders nothing today.
+
+- [ ] **Step 6: Forward the rest**
+
+Replace `showBrew={showBrew}` on `RecipeCard` with `brewShortcut={brewShortcut}`, and remove `showBrew` from the destructured parameter list and its `= false` default. The card already ignores `swipe`.
+
+- [ ] **Step 7: Run everything**
+
+```bash
+npx jest components/__tests__/SwipeableRecipeRow.test.tsx
+npm run typecheck
+```
+
+Typecheck is expected to still name `app/index.tsx`, which is Task 10.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add components/SwipeableRecipeRow.tsx components/__tests__/SwipeableRecipeRow.test.tsx
+git commit -m "feat: BREW as a swipe tile
+
+The fourth candidate shape, and the only one that costs the card nothing: no
+chrome, no reserved edge, no collision with the marker or with the swipe tray,
+because it is the swipe tray.
+
+In the recipe's accent so it reads as the one non-destructive tile among two
+neutrals, and nearest the thumb so the destructive ones stay furthest.
+
+It is its word alone. Tiles already carry a caption, so the only thing BREW
+needed was a glyph, and the icon set's own comment asks that it be kept small
+-- choosing a bitmap for BREW is a design decision nobody has made. Being the
+one tile without a glyph also happens to set it apart from the two that can
+lose you something.
+
+Refs #87"
+```
+
+---
+
+## Task 10: Read the setting
+
+The last wiring. `app/index.tsx` reads `showBrewOnRecipeRows`, and now the shape too.
+
+**Files:**
+- Modify: `app/index.tsx`
+- Test: `app/__tests__/index.test.tsx`
+
+- [ ] **Step 1: Write the failing test**
+
 ```tsx
 it("draws the shape the settings chose", async () => {
     const settings = fakeSettings({
