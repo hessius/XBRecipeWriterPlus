@@ -144,15 +144,12 @@ export default function RecipeCard({
     showCoffeeMarker = true,
     dottedProfile = false,
     brewShortcut,
-    onBrew,
-    ...legacyProps
+    onBrew
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
     const marker = isTea ? "TEA" : "COFFEE";
     const showMarker = isTea || showCoffeeMarker;
-    const legacyShowBrew = (legacyProps as {showBrew?: boolean}).showBrew === true;
-    const effectiveBrewShortcut = brewShortcut ?? (legacyShowBrew ? "edge" : undefined);
     /**
      * The shape this card actually draws, or null for none.
      *
@@ -160,9 +157,9 @@ export default function RecipeCard({
      * over to duplicate and delete, which every shape would land on.
      */
     const shortcut: CardShortcut | null =
-        editing || effectiveBrewShortcut === undefined || effectiveBrewShortcut === "swipe"
+        editing || brewShortcut === undefined || brewShortcut === "swipe"
             ? null
-            : effectiveBrewShortcut;
+            : brewShortcut;
 
     // `accessible` groups the whole subtree into one element on iOS, so nothing
     // inside is announced on its own. Everything the card shows has to be in
