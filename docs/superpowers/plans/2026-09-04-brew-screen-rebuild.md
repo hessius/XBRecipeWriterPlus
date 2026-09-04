@@ -222,19 +222,34 @@ Add to `library/machine/__tests__/Machine.test.ts`:
 
 ```ts
 describe("a stale state does not refuse a fresh brew", () => {
-    it("does not report a machine as busy on a state heard long ago", async () => {
+    it("does not refuse forever on a fault the user has since fixed", async () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(machineInfoFrame());
 
-        // The machine said it was brewing, and then went quiet.
-        transport.emit(status(0x10));
-        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("busy");
+        // The machine complained about its tank, and the user filled it.
+        transport.emit(status(0x0C));
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noWater");
 
         jest.advanceTimersByTime(STATE_FRESH_MS + 1);
 
         expect(machine.brewBlock(sixPourRecipe())).toBeNull();
+    });
+
+    it("still believes a machine that said it was brewing and then went quiet", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+
+        transport.emit(status(0x10));
+        jest.advanceTimersByTime(STATE_FRESH_MS * 10);
+
+        // Grinding emits no status frame for about twenty seconds and a pour
+        // emits none for minutes, so silence is what a busy machine sounds
+        // like. Expiring this would send a recipe into a running brew.
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("busy");
     });
 
     it("calls a low tank a low tank, not a busy machine", async () => {
@@ -287,8 +302,21 @@ In `constants/machine.ts`, add:
  * `state` is written only when the machine volunteers a status frame and was
  * previously cleared only on disconnect, so a refusal left `NO_WATER` sitting
  * there and every later attempt was refused as busy — on an idle machine with
- * a full tank — until the app was force quit. Fifteen seconds is longer than a
- * pre-flight and far shorter than a brew.
+ * a full tank — until the app was force quit.
+ *
+ * This expires **fault states only**, never activity. A busy machine goes
+ * quiet: `docs/machine-integration/ble-protocol.md` records that grinding
+ * emits no status frame for about twenty seconds, and status is event-driven,
+ * so a three-minute pour produces one frame at the start and nothing until it
+ * completes. Expiring an activity state would therefore let the app decide a
+ * mid-pour machine was free and send it a recipe and a commit — a worse
+ * failure than the one being fixed, and one the protocol notes behaves
+ * differently across firmware.
+ *
+ * A fault is the opposite case. It is fixed by the user, at the machine, while
+ * the app is not looking, and the machine does not always announce the repair.
+ * Fifteen seconds is long enough that nobody sees a stale refusal and short
+ * enough that a tank filled during the refusal is believed on the retry.
  */
 export const STATE_FRESH_MS = 15_000;
 ```
@@ -328,15 +356,16 @@ Add the reader and the fault map above `brewBlock`:
 
 ```ts
     /**
-     * The machine's state, if it is recent enough to act on.
+     * The machine's state, with an expired fault treated as unknown.
      *
-     * A state the machine has not repeated in `STATE_FRESH_MS` is treated as
-     * unknown rather than as current, because the alternative is refusing a
-     * brew on a reading from before the user fixed the thing it complained
-     * about.
+     * Only a fault expires. The alternative to expiring one is refusing a brew
+     * on a reading from before the user filled the tank it complained about,
+     * which is the bug this fixes. The alternative to *keeping* an activity
+     * state is deciding a silently grinding machine is free, which is worse.
      */
     private freshState(): number | null {
         if (this.state === null) return null;
+        if (FAULT_BLOCKS[this.state] === undefined) return this.state;
         if (Date.now() - this.stateAt > STATE_FRESH_MS) return null;
         return this.state;
     }
@@ -371,15 +400,16 @@ Then in `brewBlock`, replace the busy check:
         }
 ```
 
-And in `brew()`, immediately after `this.retriedInPro = false;`:
+**Do not clear `state` in `brew()`.** It looks like the tidy thing to do and it is a live hazard. The pre-flight sends `MACHINE_INFO` (40521) and waits for an info reply; it never asks for a status frame, and the protocol has no way to ask for one. So clearing the state before the pre-flight guarantees `freshState()` returns null when `brewBlock` runs, which makes the busy check unreachable on real hardware: a machine that announced `BREWING` a second ago would be sent a full recipe and an 8002 commit. `freshState()` is the entire fix; the reset subtracts from it.
+
+In `forget()`, where `state` is already cleared, clear `stateAt` beside it:
 
 ```ts
-        // Forget what the machine last said about itself. The pre-flight is
-        // about to open a fresh session, and only what arrives inside it
-        // describes the machine the user is standing in front of now.
         this.state = null;
         this.stateAt = 0;
 ```
+
+Inert today, because `freshState` short-circuits on a null `state` before it reads the age. But "`stateAt` is the age of `state`" is the invariant that makes `freshState` correct, and an invariant that holds at two of its three sites is not one.
 
 Finally, in `constants/brewCopy.ts`, add the two headlines to `BLOCKED_HEADLINE`:
 
