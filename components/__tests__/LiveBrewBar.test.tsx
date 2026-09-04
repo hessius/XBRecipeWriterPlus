@@ -51,6 +51,18 @@ describe("LiveBrewBar", () => {
         expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
     });
 
+    it("hides on the export screen, which the modal would otherwise cover", async () => {
+        mockPathname = "/brewRecord";
+        const {queryByText} = await renderWithProviders(<LiveBrewBar />);
+        expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
+    });
+
+    it("hides on the history screen, for the same reason", async () => {
+        mockPathname = "/brewHistory";
+        const {queryByText} = await renderWithProviders(<LiveBrewBar />);
+        expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
+    });
+
     it("shows nothing when there is no run", async () => {
         mockRun = null;
         const {queryByText} = await renderWithProviders(<LiveBrewBar />);

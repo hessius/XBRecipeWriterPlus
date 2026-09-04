@@ -132,6 +132,20 @@ export default function RootLayout() {
                                             <Stack.Screen name="about" options={{headerShown: false}}/>
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
+                                            {/* The brew screen is the mini bar
+                                                expanded: it rises from the
+                                                bottom and a chevron-down puts
+                                                it back. Declared here rather
+                                                than nowhere, which is what left
+                                                it falling through to the
+                                                default native bar with a
+                                                `< index` back title. */}
+                                            <Stack.Screen name="brew"
+                                                          options={{
+                                                              headerShown: false,
+                                                              presentation: "modal",
+                                                              animation: "slide_from_bottom"
+                                                          }}/>
                                         </Stack>
                                         {/* Beside the navigator, not inside a
                                             screen: a brew you walked away from

@@ -12,15 +12,22 @@ import {resolveAccent} from "@/library/accent";
  * the bar is that a brew you walked away from is still there when you are in
  * Settings or the editor, and a bar that belongs to the library screen goes
  * away with it.
- *
- * It hides itself on the brew screen, which is the same brew at full size.
  */
+/**
+ * Where the bar has nothing to add.
+ *
+ * `brew` is the same brew at full size. The other two are the record it
+ * becomes: the modal covers them, and before it was a modal the bar sat on top
+ * of the export screen.
+ */
+const SILENT = new Set(["/brew", "/brewRecord", "/brewHistory"]);
+
 export default function LiveBrewBar() {
     const {run, dismiss} = useLiveBrew();
     const router = useRouter();
     const pathname = usePathname();
 
-    if (run === null || pathname === "/brew") return null;
+    if (run === null || SILENT.has(pathname)) return null;
 
     return (
         <BrewMiniBar
