@@ -3,7 +3,9 @@ import {
     BLOCKED_WATER_HEADLINE,
     FAILURE_COPY,
     FIRST_BREW_REMINDER,
+    AGITATION_SENTENCE,
     MINI_FAILURE_WHY,
+    PATTERN_SENTENCE,
     PHASE_COPY,
     PRO_MODE_PROMPT,
     blockedWaterCopy
@@ -15,6 +17,8 @@ const ALL: string[] = [
     ...Object.values(FAILURE_COPY),
     ...Object.values(BLOCKED_HEADLINE),
     ...Object.values(MINI_FAILURE_WHY),
+    ...Object.values(PATTERN_SENTENCE),
+    ...Object.values(AGITATION_SENTENCE),
     BLOCKED_WATER_HEADLINE,
     FIRST_BREW_REMINDER,
     PRO_MODE_PROMPT,

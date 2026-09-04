@@ -1,3 +1,6 @@
+import type {GlyphKind} from "@/components/PourGlyph";
+import {AGITATION} from "@/library/Pour";
+
 /** What each phase says. The wording is the feature. */
 export const PHASE_COPY: Record<string, string> = {
     idle:        "Ready when you are.",
@@ -119,4 +122,38 @@ export const MINI_FAILURE_WHY: Record<string, string> = {
     doseMismatch: "the dose was refused",
     idling:       "it went idle",
     rejected:     "the recipe was refused"
+};
+
+/**
+ * What each pour pattern is doing, in one clause.
+ *
+ * The brew screen used to list all four of these at once, whether or not the
+ * stage in front of the user was any of them. It names the live one instead.
+ */
+export const PATTERN_SENTENCE: Record<GlyphKind, string> = {
+    centered: "Straight down onto the middle of the bed",
+    circular: "Round the bed in a steady ring",
+    spiral: "Out from the centre and back",
+    /**
+     * Unreachable through `glyphForPattern`, which only ever returns the three
+     * above -- agitation is a separate field on the pour, not a pattern, and
+     * only `StageTile` ever asks for this glyph by name. The key stays so the
+     * table is total over `GlyphKind` and an index can never come back
+     * undefined and print "POURING · undefined · 92°".
+     */
+    agitation: "It stirs the bed rather than pouring"
+};
+
+/**
+ * The stirring, which the pour pattern cannot tell you about.
+ *
+ * `Pour.agitation` is its own field with its own four values, so a stage that
+ * both spirals and stirs was described only as a spiral. Keyed by
+ * `AGITATION.*`; `ALL_OFF` is deliberately absent, because saying nothing is
+ * the right thing to say about a stage that does not stir.
+ */
+export const AGITATION_SENTENCE: Record<number, string> = {
+    [AGITATION.BEFORE_ON_AFTER_OFF]: "It stirs the bed first.",
+    [AGITATION.BEFORE_OFF_AFTER_ON]: "It stirs the bed afterwards.",
+    [AGITATION.BEFORE_ON_AFTER_ON]:  "It stirs the bed before and after."
 };
