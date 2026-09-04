@@ -17,6 +17,26 @@ export const NOISE_FLOOR_ML = 0.5;
 const MIN_STALL_SECONDS = 2;
 
 /**
+ * How close to its target a stage has to get before flat water counts as the
+ * planned rest rather than a stall.
+ *
+ * The noise floor is the wrong measure here. Half a millilitre is what the
+ * scale settles by; it is not what a pour lands within. A stage that asked for
+ * 40 ml and delivered 39.4 had its whole rest recorded as one stall -- amber
+ * painted over a planned pause, and a lane long enough to shrink every other
+ * rung on the ladder, since they share a scale.
+ *
+ * One millilitre: twice the noise floor, enough to cover a pour that lands a
+ * shade under, and deliberately no more. Two millilitres would have taken in
+ * the 38-of-40 case that `counts from the total before the stage` records as a
+ * genuine stall, and overturning that on no evidence is not this fix's job.
+ *
+ * Whether 1 ml is the right number is a hardware question, not an arithmetic
+ * one. It wants checking against a real brew.
+ */
+const TARGET_TOLERANCE_ML = 1;
+
+/**
  * The brew total as it stood before `stage` began.
  *
  * `water` is a scale reading for the whole brew, never re-tared between
@@ -74,7 +94,7 @@ export function stallsInStage(
     // A stall that has not ended yet, so the rung can draw it growing. Only
     // while the stage still owes water: flat water at the target is the pause.
     const last = mine[mine.length - 1];
-    if (last.water - startMl + NOISE_FLOOR_ML < targetMl) {
+    if (last.water - startMl + TARGET_TOLERANCE_ML < targetMl) {
         push(state.anchorAt, state.anchorMl, last.at, state.flatSeen);
     }
 
@@ -139,7 +159,7 @@ export function stalledNow(
     const startMl = stageOriginMl(samples, stage);
     const last = mine[mine.length - 1];
     // Flat water at or past the target is the planned rest, not a stall.
-    if (last.water - startMl + NOISE_FLOOR_ML >= targetMl) return false;
+    if (last.water - startMl + TARGET_TOLERANCE_ML >= targetMl) return false;
 
     const {anchorAt, flatSeen} = scan(mine);
     return flatSeen > 0 && (last.at - anchorAt) / 1000 >= minSeconds;

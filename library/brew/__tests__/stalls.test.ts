@@ -115,3 +115,31 @@ describe("stallsInStage", () => {
         expect(stallsInStage(samples, 1, 40)).toEqual([{atMl: 20, seconds: 9}]);
     });
 });
+
+describe("a stage that stops just short of its target", () => {
+    /** A pour to `endMl` over 12 s, then `restSeconds` of flat water. */
+    function shortPour(endMl: number, restSeconds: number) {
+        const s = [{at: 0, water: 0, cup: 0, pour: 1}];
+        for (let i = 1; i <= 12; i++) {
+            s.push({at: i * 1000, water: (endMl * i) / 12, cup: 0, pour: 1});
+        }
+        for (let i = 1; i <= restSeconds; i++) {
+            s.push({at: 12_000 + i * 1000, water: endMl, cup: 0, pour: 1});
+        }
+        return s;
+    }
+
+    it("does not call the planned rest a stall when it lands a shade under", () => {
+        // The tolerance used to be the 0.5 ml noise floor, which is what the
+        // scale settles by, not what a pour lands within. A stage that wanted
+        // 40 ml and delivered 39.4 therefore had its entire 30 s rest recorded
+        // as one stall: amber across a planned pause, and a lane long enough
+        // to shrink every other rung on the ladder.
+        expect(stallsInStage(shortPour(39.4, 30), 1, 40)).toEqual([]);
+    });
+
+    it("still catches a stage that genuinely stopped well short", () => {
+        // Half the water and then nothing is not a rest, whatever the plan says.
+        expect(stallsInStage(shortPour(20, 30), 1, 40)).toHaveLength(1);
+    });
+});
