@@ -1,5 +1,6 @@
 import React from "react";
 import {Pressable} from "react-native";
+import Animated, {FadeIn, SlideOutDown} from "react-native-reanimated";
 import {XStack, YStack} from "tamagui";
 
 import BrewTrace from "@/components/BrewTrace";
@@ -7,6 +8,7 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import {MINI_FAILURE_WHY, OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
+import {DURATION} from "@/constants/motion";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import type {BrewPhase} from "@/library/machine/Machine";
@@ -108,56 +110,64 @@ export default function BrewMiniBar(props: Props) {
     const over = OVER.has(phase.name);
 
     return (
-        <XStack
-            alignItems="center"
-            gap="$3"
-            padding="$2.5"
-            backgroundColor={palette.surface}
-            borderTopWidth={1}
-            borderTopColor={palette.line}
+        <Animated.View
+            entering={FadeIn.duration(DURATION.base)}
+            exiting={SlideOutDown.duration(DURATION.base)}
         >
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open the brew"
-                onPress={onOpen}
-                style={{flexDirection: "row", alignItems: "center", flex: 1, gap: 12}}
+            <XStack
+                alignItems="center"
+                gap="$3"
+                padding="$2.5"
+                backgroundColor={palette.surface}
+                borderTopWidth={1}
+                borderTopColor={palette.line}
             >
-                <BrewTrace
-                    pours={pours}
-                    samples={samples}
-                    accent={line}
-                    width={TRACE_WIDTH}
-                    height={TRACE_HEIGHT}
-                    plannedSeconds={plannedSeconds(pours)}
-                    holding={holding}
-                    compact
-                />
-                <YStack flex={1} gap="$1">
-                    <DotMatrixText fontSize={12} weight="bold" color={palette.text}>
-                        {title}
-                    </DotMatrixText>
-                    <DotMatrixText
-                        fontSize={10}
-                        weight="bold"
-                        letterSpacing={1.4}
-                        color={palette.dim}
-                    >
-                        {detail}
-                    </DotMatrixText>
-                </YStack>
-                <DotIcon name="chevron-right" size={14} color={palette.dim} />
-            </Pressable>
-            {/* Dismiss is only offered once the brew is over: offering it during
-                a brew would suggest it could stop the brew. */}
-            {over && (
+                {/* The whole bar is the tap target, which is why there is no
+                    chevron: two affordances nine points apart compete, and the
+                    chevron did nothing the bar did not already do. */}
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Dismiss"
-                    onPress={onDismiss}
+                    accessibilityLabel="Open the brew"
+                    onPress={onOpen}
+                    style={{flexDirection: "row", alignItems: "center", flex: 1, gap: 12}}
                 >
-                    <DotIcon name="close" size={14} color={palette.dim} />
+                    <BrewTrace
+                        pours={pours}
+                        samples={samples}
+                        accent={line}
+                        width={TRACE_WIDTH}
+                        height={TRACE_HEIGHT}
+                        plannedSeconds={plannedSeconds(pours)}
+                        holding={holding}
+                        compact
+                    />
+                    <YStack flex={1} gap="$1">
+                        <DotMatrixText fontSize={12} weight="bold" color={palette.text}>
+                            {title}
+                        </DotMatrixText>
+                        <DotMatrixText
+                            fontSize={10}
+                            weight="bold"
+                            letterSpacing={1.4}
+                            color={palette.dim}
+                        >
+                            {detail}
+                        </DotMatrixText>
+                    </YStack>
                 </Pressable>
-            )}
-        </XStack>
+                {/* Dismiss is only offered once the brew is over: offering it during
+                    a brew would suggest it could stop the brew. */}
+                {over && (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Dismiss"
+                        hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                        onPress={onDismiss}
+                    >
+                        <DotIcon name="close" size={14} color={palette.dim} />
+                    </Pressable>
+                )}
+            </XStack>
+        </Animated.View>
     );
 }

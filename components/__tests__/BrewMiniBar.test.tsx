@@ -112,4 +112,35 @@ describe("BrewMiniBar", () => {
         const finished = await draw({phase: {name: "done"}});
         expect(finished.getByLabelText("Dismiss")).toBeTruthy();
     });
+
+    describe("the bar's controls", () => {
+        it("has no chevron, because the whole bar is the tap target", async () => {
+            const {queryByTestId} = await draw({phase: {name: "pouring", pour: 1, pours: 4}});
+
+            expect(queryByTestId("mini-chevron", {includeHiddenElements: true})).toBeNull();
+        });
+
+        it("gives the close button room to be pressed", async () => {
+            const {getByLabelText} = await draw({phase: {name: "done"}});
+
+            expect(getByLabelText("Dismiss").props.hitSlop).toEqual(
+                {top: 12, bottom: 12, left: 12, right: 12}
+            );
+        });
+
+        it("uses the recipe's accent while it is pouring", async () => {
+            const {getByTestId} = await draw({
+                phase: {name: "pouring", pour: 1, pours: 4},
+                accent: "#123456",
+                samples: [
+                    {at: 10_000, water: 40, cup: 35, pour: 1},
+                    {at: 20_000, water: 80, cup: 72, pour: 1}
+                ]
+            });
+
+            expect(getByTestId("trace-water").props.stroke).toEqual(
+                expect.objectContaining({payload: processColor("#123456")})
+            );
+        });
+    });
 });
