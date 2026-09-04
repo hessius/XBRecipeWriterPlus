@@ -1888,7 +1888,7 @@ Add one test to that file for the behaviour this step exists to create:
     });
 ```
 
-If that expectation does not match what the code produces, **print the actual output and tell me rather than adjusting either number**. I derived it by hand and it is the one number in this task I have not executed.
+That expectation is executed, not guessed: origin 40, one stall at 38 ml lasting 6 s. If the code disagrees, **print the actual output and tell me rather than adjusting either number.**
 
 - [ ] **Step 4: Replace the two tests that encode the old definition of holding**
 
