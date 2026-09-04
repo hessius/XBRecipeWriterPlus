@@ -39,7 +39,6 @@ type Props = {
 
 /** The dimmed opacity of a stage that has not happened. */
 const PENDING_OPACITY = 0.45;
-const LEGACY_LADDER_PROBE_WIDTH = 120;
 
 /** One spoken sentence for a rung, for VoiceOver / TalkBack. */
 function buildLabel(pour: Pour, index: number, stalls: Stall[]): string {
@@ -85,10 +84,6 @@ function readout(pour: Pour, delivered: number, pauseElapsed: number): string {
         return `${Math.max(0, Math.round(rest - pauseElapsed))} s left`;
     }
     return `${Math.round(delivered)}/${target} ml`;
-}
-
-function legacyProbeWidth(seconds: number, span: number): number {
-    return Math.min((seconds / span) * LEGACY_LADDER_PROBE_WIDTH, LEGACY_LADDER_PROBE_WIDTH);
 }
 
 /**
@@ -156,18 +151,6 @@ export default function BrewStageRung({
                             flexDirection: "row"
                         }}
                     >
-                        {process.env.NODE_ENV === "test"
-                            && (segment.kind === "water" || segment.kind === "pause") && (
-                            <View
-                                testID={segment.kind === "water" ? "rung-pour" : "rung-pause"}
-                                style={{
-                                    position: "absolute",
-                                    opacity: 0,
-                                    height: 0,
-                                    width: legacyProbeWidth(segment.seconds, span)
-                                }}
-                            />
-                        )}
                         <View
                             testID={`segment-fill-${i}`}
                             style={{

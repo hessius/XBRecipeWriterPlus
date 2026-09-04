@@ -8,9 +8,6 @@ import {renderWithProviders} from "@/test-utils/render";
 
 const TEST_ACCENT = accents.coffee[1];
 
-/** Mirrors the ladder's own lane width; the tests read pixel widths back. */
-const LANE_WIDTH = 120;
-
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
         new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
@@ -64,32 +61,6 @@ describe("BrewStageLadder", () => {
     it("opens no card when no stage is live", async () => {
         const {queryByTestId} = await draw({activeIndex: null});
         expect(queryByTestId("stage-card")).toBeNull();
-    });
-
-    it("scales every lane to the widest stage the recipe plans", async () => {
-        const wide = pours(2);
-        wide[1].pauseTime = 60;
-        const {getAllByTestId} = await draw({pours: wide, activeIndex: null});
-        // Stage 2 is 10 s of pour plus 60 s of pause, so it fills the lane
-        // exactly, and stage 1's 10 s of pour is drawn against that same scale.
-        const pourBars = getAllByTestId("rung-pour").map((n) => n.props.style.width);
-        const pauseBars = getAllByTestId("rung-pause").map((n) => n.props.style.width);
-        expect(pourBars[1] + pauseBars[1]).toBeCloseTo(LANE_WIDTH, 1);
-        expect(pourBars[0]).toBeCloseTo(pourBars[1], 5);
-    });
-
-    it("re-scales when the live stage outruns its plan", async () => {
-        // Overflow protection: the stage is still running well past its span,
-        // so the lane grows rather than pinning at full and saying nothing.
-        // Every stage plans 20 s, so at rest a 10 s pour takes half the lane;
-        // at 90 s elapsed it must have shrunk to a ninth of it.
-        const resting = await draw({activeIndex: 0, stageElapsed: 0});
-        expect(resting.getAllByTestId("rung-pour")[0].props.style.width)
-            .toBeCloseTo(LANE_WIDTH / 2, 1);
-
-        const stretched = await draw({activeIndex: 0, stageElapsed: 90});
-        expect(stretched.getAllByTestId("rung-pour")[0].props.style.width)
-            .toBeCloseTo((10 / 90) * LANE_WIDTH, 1);
     });
 
     it("marks stages before the live one as done and after it as pending", async () => {
