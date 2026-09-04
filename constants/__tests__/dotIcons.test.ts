@@ -5,9 +5,9 @@ const names = Object.keys(DOT_ICONS) as DotIconName[];
 describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
-            ["back", "chevron-right", "close", "delete", "duplicate", "edit", "error",
-             "help", "import", "info", "minus", "more", "overflow", "plus", "refresh",
-             "revert", "scan", "settings", "share", "success"]
+            ["back", "chevron-down", "chevron-right", "close", "delete", "duplicate",
+             "edit", "error", "help", "import", "info", "minus", "more", "overflow",
+             "plus", "refresh", "revert", "scan", "settings", "share", "success"]
         );
     });
 

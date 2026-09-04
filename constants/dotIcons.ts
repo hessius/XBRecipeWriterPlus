@@ -259,6 +259,18 @@ export const DOT_ICONS = {
         "..##.....",
         "........."
     ],
+    /** Dismisses the brew modal downwards, mirroring `chevron-right`. */
+    "chevron-down": [
+        ".........",
+        ".........",
+        ".........",
+        "##.....##",
+        ".##...##.",
+        "..##.##..",
+        "...###...",
+        ".........",
+        "........."
+    ],
     /** An X mark: close or dismiss. */
     close: [
         ".........",
