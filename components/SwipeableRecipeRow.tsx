@@ -9,6 +9,8 @@ import DotMatrixText from "@/components/DotMatrixText";
 import RecipeCard from "@/components/RecipeCard";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
+import type {BrewShortcut} from "@/library/brewShortcut";
+import {resolveAccent} from "@/library/accent";
 
 type Props = {
     recipe: Recipe;
@@ -23,8 +25,10 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
     dottedProfile?: boolean;
-    /** Forwarded to the card. Show the BREW capsule. */
-    showBrew?: boolean;
+    /**
+     * Forwarded to the card, except for `swipe`, which the tray draws itself.
+     */
+    brewShortcut?: BrewShortcut;
     /** Forwarded to the card. Called when the BREW capsule is pressed. */
     onBrew?: () => void;
 };
@@ -36,7 +40,15 @@ const TILE_WIDTH = 76;
 const TILE_GLYPH_SIZE = 24;
 
 type TileProps = {
-    icon: DotIconName;
+    /**
+     * The tile's glyph, or nothing.
+     *
+     * BREW has no glyph: the icon set is deliberately small and no bitmap for
+     * it has been designed. A tile that is only its word is the honest way to
+     * say that, and it also sets the one non-destructive action apart from the
+     * two that carry glyphs.
+     */
+    icon?: DotIconName;
     caption: string;
     tone: string;
     label: string;
@@ -71,8 +83,11 @@ function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
             // objects of the same kind, rather than as chrome behind it.
             borderRadius="$8"
             backgroundColor={palette.surface}>
-            <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
-            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2} color={tone}>
+            {icon !== undefined && (
+                <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            )}
+            <DotMatrixText fontSize={icon === undefined ? 13 : 11} weight="bold"
+                           letterSpacing={1.2} color={tone}>
                 {caption}
             </DotMatrixText>
         </YStack>
@@ -88,7 +103,7 @@ export default function SwipeableRecipeRow({
                                                editing = false,
                                                showCoffeeMarker = true,
                                                dottedProfile = false,
-                                               showBrew = false,
+                                               brewShortcut,
                                                onBrew
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
@@ -112,6 +127,15 @@ export default function SwipeableRecipeRow({
             // part of it, rather than as something the card slid off.
             <XStack testID="row-actions" paddingLeft="$2" paddingRight="$2"
                     paddingVertical="$3" alignItems="stretch" gap="$2">
+                {brewShortcut === "swipe" && onBrew !== undefined && (
+                    <Tile caption="BREW" tone={resolveAccent(recipe)}
+                          testID="row-action-brew"
+                          label={`Brew ${recipe.displayName()}`}
+                          onPress={() => {
+                              swipeableRef.current?.close();
+                              onBrew();
+                          }}/>
+                )}
                 <Tile icon="duplicate" caption="COPY" tone={palette.success}
                       testID="row-action-duplicate"
                       label={`Duplicate ${recipe.displayName()}`}
@@ -141,7 +165,7 @@ export default function SwipeableRecipeRow({
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
-                            brewShortcut={showBrew ? "edge" : undefined} onBrew={onBrew}
+                            brewShortcut={brewShortcut} onBrew={onBrew}
                             onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>

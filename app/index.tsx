@@ -500,7 +500,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
-                                showBrew={showBrew}
+                                brewShortcut={showBrew ? "edge" : undefined}
                                 onBrew={() => openBrew(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {

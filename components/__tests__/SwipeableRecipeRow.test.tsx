@@ -5,6 +5,7 @@ import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import Recipe from "@/library/Recipe";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
+import {resolveAccent} from "@/library/accent";
 
 /** The colour a dot icon's dots are drawn in. */
 function dotColourOf(testID: string): string {
@@ -131,6 +132,58 @@ describe("SwipeableRecipeRow", () => {
 
         expect(screen.getByText("DELETE")).toBeTruthy();
         expect(screen.getByText("COPY")).toBeTruthy();
+    });
+
+    it("offers BREW in the tray when that is the chosen shape", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut="swipe" onBrew={() => undefined}/>
+        );
+        expect(screen.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
+    });
+
+    it.each(["edge", "tab", "chip"] as const)("keeps the tray to two tiles for %s", async (shape) => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut={shape} onBrew={() => undefined}/>
+        );
+        // The card is drawing it. Two places to brew one recipe is one too many.
+        expect(screen.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
+        // And the other two are still there, so this is not passing because the
+        // whole tray failed to render.
+        expect(screen.getByLabelText("Delete Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("brews when the tile is pressed", async () => {
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut="swipe" onBrew={onBrew}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
+        expect(onBrew).toHaveBeenCalled();
+    });
+
+    it("gives the brew tile the recipe's accent, not a system colour", async () => {
+        const brewedRecipe = makeRecipe();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={brewedRecipe} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut="swipe" onBrew={() => undefined}/>
+        );
+        // The one non-destructive tile among two neutrals. Same helper the card
+        // uses, so the tile and the card it slid off cannot disagree.
+        const word = within(screen.getByLabelText("Brew Ethiopia Guji"))
+            .getByText("BREW");
+        const list = (Array.isArray(word.props.style) ? word.props.style : [word.props.style]) as
+            {color?: string}[];
+        const colour = String(list.reduce<string | undefined>(
+            (found, entry) => entry?.color ?? found, undefined
+        ));
+        expect(colour).toBe(resolveAccent(brewedRecipe));
     });
 
     it("renders the recipe as a card", async () => {
