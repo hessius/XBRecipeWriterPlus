@@ -1770,9 +1770,8 @@ Expected: FAIL, naming `components/SwipeableRecipeRow.tsx` and `app/index.tsx`, 
 - [ ] **Step 8: Commit**
 
 ```bash
+# The two deletions are already staged by the `git rm` in Step 6b.
 git add components/RecipeCard.tsx components/__tests__/RecipeCard.test.tsx
-git rm --cached -q --ignore-unmatch components/BrewCapsule.tsx components/__tests__/BrewCapsule.test.tsx 2>/dev/null || true
-git add -u components/
 git commit -m "feat: the card reserves the space its shortcut occupies
 
 The shipped capsule was positioned absolutely against the card's right edge
