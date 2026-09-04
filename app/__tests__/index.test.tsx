@@ -1,6 +1,6 @@
 import React from "react";
 import {AccessibilityInfo} from "react-native";
-import {act, screen, fireEvent, waitFor} from "@testing-library/react-native";
+import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
 import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
@@ -1038,6 +1038,29 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(screen.getByText("62")).toBeTruthy();
     });
 
+    it("renders the machine popover outside the home header so it is not clipped", async () => {
+        // A non-modal sheet renders in place. When it lived inside the header's
+        // icon row — an animated, height-constrained container — it was clipped
+        // to nothing. The popover must be at screen root so it is never occluded
+        // by its mounting container.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+
+        // Popover content must appear on screen...
+        expect(screen.getByText("WATER")).toBeTruthy();
+
+        // ...but must NOT be a descendant of the header (it was, before the fix).
+        const header = screen.getByTestId("home-header");
+        expect(within(header).queryByText("WATER")).toBeNull();
+    });
+
     it("keeps the last snapshot after disconnect so 'last seen' is reachable (task 2)", async () => {
         // Before the fix, the onLink handler called setMachineVitals(null) on
         // disconnect, making the 'Last seen' branch in MachinePopover
@@ -1060,5 +1083,82 @@ describe("HomeScreen, opening one editor at a time", () => {
         // popover must show "Last seen" rather than "Not in range".
         expect(screen.getByText(/last seen/i)).toBeTruthy();
         expect(screen.queryByText(/not in range/i)).toBeNull();
+    });
+});
+
+describe("HomeScreen age timer", () => {
+    // Counted the same way as useTraceAnimation.test.ts: spy, not getTimerCount,
+    // because getTimerCount also counts the timers React keeps for itself.
+    let started: {fn: () => void; ms: number}[];
+    let stopped: number;
+
+    beforeEach(() => {
+        started = [];
+        stopped = 0;
+        jest.useFakeTimers();
+        jest.spyOn(global, "setInterval").mockImplementation(((
+            fn: () => void, ms: number
+        ) => {
+            started.push({fn, ms});
+            return {fn} as unknown as ReturnType<typeof setInterval>;
+        }) as typeof setInterval);
+        jest.spyOn(global, "clearInterval").mockImplementation(() => { stopped += 1; });
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+    });
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
+
+    it("starts a clock when the popover opens", async () => {
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        const before = started.length;
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // Exactly one new 25-second clock for the age.
+        expect(started.length).toBe(before + 1);
+        expect(started.at(-1)!.ms).toBe(25_000);
+    });
+
+    it("stops the clock on unmount so no timer is left running", async () => {
+        // The timer is now in a route rather than a component. A setInterval in
+        // a screen that is not cleaned up leaks across navigations.
+        const {unmount} = await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        const stoppedBefore = stopped;
+        await act(async () => { unmount(); });
+        expect(stopped).toBeGreaterThan(stoppedBefore);
+    });
+
+    it("advances the label while the popover is open", async () => {
+        // The interval callback calls setPopoverNow(Date.now()), which causes a
+        // re-render with an updated `now` prop on MachinePopover. Seed the
+        // vitals at T=0 by mounting at that time, open the popover at T=2min,
+        // then fire the callback at T=3min and confirm the displayed age moved.
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z")); // T = 0, askedAt = 0
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        jest.setSystemTime(new Date("2026-01-01T00:02:00Z")); // T = 2 min mark
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // popoverNow = 2 min, askedAt = 0 → age = 2 min.
+        expect(screen.getByText("2 MIN AGO")).toBeTruthy();
+
+        // The clock was started with a 25-second period.
+        const ageClock = started.find((s) => s.ms === 25_000);
+        expect(ageClock).toBeDefined();
+
+        // Advance fake time by 1 more minute and fire the interval callback.
+        jest.setSystemTime(new Date("2026-01-01T00:03:00Z")); // T = 3 min mark
+        await act(async () => { ageClock!.fn(); }); // manual tick — mirrors what the real timer would do
+        // popoverNow = Date.now() at 3-min mark, askedAt = 0 → age = 3 min.
+        expect(screen.getByText("3 MIN AGO")).toBeTruthy();
     });
 });

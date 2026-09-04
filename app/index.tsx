@@ -14,6 +14,7 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import MachinePopover from "@/components/MachinePopover";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
@@ -88,6 +89,21 @@ export default function HomeScreen({db, settings}: Props) {
         return {waterEnough: info.waterEnough, mode: info.mode,
                 grindSize: info.grindSize, askedAt: Date.now()};
     });
+
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [popoverNow, setPopoverNow] = useState(0);
+
+    // Advance the displayed age while the popover is open.
+    //
+    // Minutes-granularity only, so every 25 s is more than enough. The timer
+    // is created only while open and cleared on close and on unmount. setState
+    // is called only from inside the interval callback — never synchronously
+    // from the effect body — which satisfies react-hooks/set-state-in-effect.
+    useEffect(() => {
+        if (!popoverOpen) return;
+        const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
+        return () => clearInterval(id);
+    }, [popoverOpen]);
     const {run: liveRun} = useLiveBrew();
     /** When the brew screen was last pushed, so a second press in that window is refused. */
     const lastBrewPushRef = useRef(0);
@@ -433,8 +449,10 @@ export default function HomeScreen({db, settings}: Props) {
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
                     machineAccent={palette.success}
-                    machineVitals={machineVitals}
-                    onRefreshWater={refreshWater}
+                    onMachinePress={() => {
+                        setPopoverNow(Date.now());
+                        setPopoverOpen(true);
+                    }}
                     onMachineConnect={connectMachine}
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
@@ -508,6 +526,22 @@ export default function HomeScreen({db, settings}: Props) {
                         library.refresh();
                     }
                 }}/>
+
+            {remembered && (
+                <MachinePopover
+                    open={popoverOpen}
+                    status={machineStatus}
+                    accent={palette.success}
+                    vitals={machineVitals}
+                    now={popoverNow}
+                    onRefreshWater={() => {
+                        setPopoverNow(Date.now());
+                        refreshWater();
+                    }}
+                    onConnect={connectMachine}
+                    onClose={() => setPopoverOpen(false)}
+                />
+            )}
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>

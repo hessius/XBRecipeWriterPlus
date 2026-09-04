@@ -1,5 +1,5 @@
 import React from "react";
-import {act, screen, fireEvent} from "@testing-library/react-native";
+import {screen, fireEvent} from "@testing-library/react-native";
 
 import HomeHeader from "@/components/HomeHeader";
 import {renderWithProviders, TEST_INSETS} from "@/test-utils/render";
@@ -151,80 +151,13 @@ describe("HomeHeader", () => {
         );
         expect(getByLabelText("Machine connected")).toBeTruthy();
     });
-});
 
-describe("HomeHeader age timer", () => {
-    // Counted the same way as useTraceAnimation.test.ts: spy, not getTimerCount,
-    // because getTimerCount also counts the timers React keeps for itself.
-    let started: {fn: () => void; ms: number}[];
-    let stopped: number;
-
-    const vitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 0};
-
-    beforeEach(() => {
-        started = [];
-        stopped = 0;
-        jest.useFakeTimers();
-        jest.spyOn(global, "setInterval").mockImplementation(((
-            fn: () => void, ms: number
-        ) => {
-            started.push({fn, ms});
-            return {fn} as unknown as ReturnType<typeof setInterval>;
-        }) as typeof setInterval);
-        jest.spyOn(global, "clearInterval").mockImplementation(() => { stopped += 1; });
-    });
-    afterEach(() => {
-        jest.restoreAllMocks();
-        jest.useRealTimers();
-    });
-
-    it("starts a clock when the popover opens", async () => {
+    it("calls onMachinePress when the machine dot is tapped", async () => {
+        const onMachinePress = jest.fn();
         await renderWithProviders(
-            <HomeHeader {...props({machineStatus: "connected", machineVitals: vitals})}/>
-        );
-        const before = started.length;
-        await fireEvent.press(screen.getByLabelText("Machine connected"));
-        // Exactly one new 25-second clock for the age.
-        expect(started.length).toBe(before + 1);
-        expect(started.at(-1)!.ms).toBe(25_000);
-    });
-
-    it("stops the clock on unmount so no timer is left running", async () => {
-        const {unmount} = await renderWithProviders(
-            <HomeHeader {...props({machineStatus: "connected", machineVitals: vitals})}/>
+            <HomeHeader {...props({machineStatus: "connected", onMachinePress})}/>
         );
         await fireEvent.press(screen.getByLabelText("Machine connected"));
-        const stoppedBefore = stopped;
-        await act(async () => { unmount(); });
-        expect(stopped).toBeGreaterThan(stoppedBefore);
-    });
-
-    it("advances the label while the popover is open", async () => {
-        // The interval callback calls setPopoverNow(Date.now()), which causes a
-        // re-render with an updated `now` prop. Capture the callback from the spy,
-        // advance fake time, call it directly, and confirm the displayed age moved.
-        jest.setSystemTime(new Date("2026-01-01T01:02:00Z")); // T = 2 min mark
-        const baseMs = Date.now(); // 2-minute epoch
-
-        await renderWithProviders(
-            <HomeHeader {...props({
-                machineStatus:  "connected",
-                machineVitals:  {waterEnough: true, mode: "PRO" as const, grindSize: 62,
-                                 askedAt: baseMs - 2 * 60_000}
-            })}/>
-        );
-        await fireEvent.press(screen.getByLabelText("Machine connected"));
-
-        // The clock was started with a 25-second period.
-        const ageClock = started.find((s) => s.ms === 25_000);
-        expect(ageClock).toBeDefined();
-
-        // Advance fake time by 1 minute and fire the interval twice.
-        jest.setSystemTime(new Date("2026-01-01T01:03:00Z")); // T = 3 min mark
-        ageClock!.fn(); // manual tick — mirrors what the real timer would do
-        // Now popoverNow = Date.now() at 3-min mark.
-        // askedAt = 0 (base - 120 000), now = base + 60 000 → age = 3 min.
-        // Just confirm that clearInterval is eventually called (not leaked).
-        expect(started.some((s) => s.ms === 25_000)).toBe(true);
+        expect(onMachinePress).toHaveBeenCalledTimes(1);
     });
 });

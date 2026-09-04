@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect} from "react";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack} from "tamagui";
@@ -6,13 +6,11 @@ import {XStack} from "tamagui";
 import DotIcon from "@/components/DotIcon";
 import HomeTitle from "@/components/HomeTitle";
 import MachineDot from "@/components/MachineDot";
-import MachinePopover from "@/components/MachinePopover";
 import {TITLE_FONT_SIZE, TITLE_FONT_SIZE_COMPACT} from "@/components/ScreenTitle";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import type {LinkStatus} from "@/hooks/useMachine";
-import type {MachineVitals} from "@/components/MachinePopover";
 
 const ACTION_ICON_SIZE = 20;
 
@@ -75,10 +73,8 @@ type Props = {
     machineStatus?: LinkStatus;
     /** The machine accent colour, for the dot. */
     machineAccent?: string;
-    /** What the machine last reported. Null when not connected or not asked. */
-    machineVitals?: MachineVitals | null;
-    /** Called when the user asks the machine to refresh water. */
-    onRefreshWater?: () => void;
+    /** Called when the user taps the machine dot. */
+    onMachinePress?: () => void;
     /** Called when the user taps TRY NOW in the popover. */
     onMachineConnect?: () => void;
     onToggleEdit: () => void;
@@ -107,8 +103,7 @@ export default function HomeHeader({
     canImport = true,
     machineStatus,
     machineAccent = palette.muted,
-    machineVitals = null,
-    onRefreshWater = () => undefined,
+    onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
     onToggleEdit,
     onScan,
@@ -118,21 +113,6 @@ export default function HomeHeader({
     const insets = useSafeAreaInsets();
 
     const reduced = useReducedMotion();
-
-    const [popoverOpen, setPopoverOpen] = useState(false);
-    const [popoverNow, setPopoverNow] = useState(0);
-
-    // Advance the displayed age while the popover is open.
-    //
-    // Minutes-granularity only, so every 25 s is more than enough. The timer
-    // is created only while open and cleared on close and on unmount. setState
-    // is called only from inside the interval callback — never synchronously
-    // from the effect body — which satisfies react-hooks/set-state-in-effect.
-    useEffect(() => {
-        if (!popoverOpen) return;
-        const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
-        return () => clearInterval(id);
-    }, [popoverOpen]);
 
     // Two values, not one. Under Reduced Motion the glyphs must still fade, so
     // the user sees that the header changed — but they must not travel, so the
@@ -199,29 +179,11 @@ export default function HomeHeader({
                             onPress={onToggleEdit}/>
                 )}
                 {machineStatus !== undefined && (
-                    <>
-                        <MachineDot
-                            status={machineStatus}
-                            accent={machineAccent}
-                            onPress={() => {
-                                setPopoverNow(Date.now());
-                                setPopoverOpen(true);
-                            }}
-                        />
-                        <MachinePopover
-                            open={popoverOpen}
-                            status={machineStatus}
-                            accent={machineAccent}
-                            vitals={machineVitals}
-                            now={popoverNow}
-                            onRefreshWater={() => {
-                                setPopoverNow(Date.now());
-                                onRefreshWater();
-                            }}
-                            onConnect={onMachineConnect}
-                            onClose={() => setPopoverOpen(false)}
-                        />
-                    </>
+                    <MachineDot
+                        status={machineStatus}
+                        accent={machineAccent}
+                        onPress={onMachinePress}
+                    />
                 )}
                 <Action icon="settings" label="Settings" onPress={onSettings}/>
             </XStack>
