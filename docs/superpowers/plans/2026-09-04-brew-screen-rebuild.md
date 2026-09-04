@@ -1545,11 +1545,70 @@ npx jest components/__tests__/BrewStageRung.test.tsx
 
 Expected: PASS, eleven tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Keep the ladder compiling**
+
+`components/BrewStageLadder.tsx` is the rung's only caller, and it passes `laneWidth`, `progress` and `holding`, none of which exist any more, while passing none of `barHeight`, `delivered`, `pauseElapsed` or `stalls`, all of which are required. Without this step `npm run typecheck` fails and the commit gate cannot pass.
+
+This is a **bridge, not the real wiring.** Task 11 rewrites this file properly with elastic bands and a shared lane scale that accounts for stalls. Here you are doing the least that keeps the tree green and lets the real values flow in later without another signature change.
+
+Add to the ladder's `Props`, after `stageElapsed`:
+
+```ts
+    /**
+     * Millilitres delivered per stage, 1:1 with `pours`.
+     *
+     * Optional because Task 11 is what wires the real values through from
+     * `useBrewRun`. Until then a finished stage is assumed to have had all of
+     * its water, which is true, and a live one none, which is not -- the live
+     * fill is deliberately wrong for one task rather than faked from elapsed
+     * time, because a plausible-looking wrong fill is the thing that made the
+     * old ladder unreadable on hardware.
+     */
+    stageWater?: number[];
+    /** Seconds into the live stage's planned rest. Task 11 wires it. */
+    pauseElapsed?: number;
+    /** Stalls per stage, 1:1 with `pours`. Task 11 wires them. */
+    stalls?: Stall[][];
+```
+
+Import the type:
+
+```ts
+import type {Stall} from "@/library/brew/stalls";
+```
+
+Destructure the three new props in the signature, defaulting `pauseElapsed` to `0`.
+
+Then replace the `<BrewStageRung .../>` element. Delete the `progress` calculation above it as well — nothing uses it now:
+
+```tsx
+                <BrewStageRung
+                    testID={`rung-${index}`}
+                    pour={pour}
+                    index={index}
+                    state={state}
+                    accent={accent}
+                    laneSeconds={laneSeconds}
+                    barHeight={11}
+                    delivered={stageWater?.[index]
+                        ?? (state === "done" ? Math.max(pour.volume, 0) : 0)}
+                    pauseElapsed={state === "active" ? pauseElapsed
+                        : state === "done" ? pauseSeconds(pour) : 0}
+                    stalls={stalls?.[index] ?? []}
+                />
+```
+
+`barHeight={11}` is a placeholder in the middle of the 9-to-15 range that Task 11 replaces with the measured value.
+
+**Leave the ladder's own `holding` prop alone.** It is still read at the bottom of the file to draw "HOLDING: THE CUP IS BEHIND" in the stage card, and `components/__tests__/BrewStageLadder.test.tsx` asserts that. Only the forwarding of `holding` down into the rung goes away, because the rung no longer takes it.
+
+If `components/__tests__/BrewStageLadder.test.tsx` fails on anything other than that, stop and report it rather than editing the test.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 npm run typecheck && npm run lint && npm test
-git add components/BrewStageRung.tsx components/__tests__/BrewStageRung.test.tsx
+git add components/BrewStageRung.tsx components/__tests__/BrewStageRung.test.tsx components/BrewStageLadder.tsx
 git commit -m "feat: the rung takes the whole row and fills by millilitre
 
 LANE_WIDTH was a hard-coded 120 where the mockup said flex: 1, which is
