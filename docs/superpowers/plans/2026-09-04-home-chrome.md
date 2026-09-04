@@ -1306,7 +1306,8 @@ The last of those is **accepted**, not fixed. `BrewCapsule`'s own comment predic
 **Files:**
 - Create: `components/BrewShortcut.tsx`
 - Create: `components/__tests__/BrewShortcut.test.tsx`
-- Delete: `components/BrewCapsule.tsx`, `components/__tests__/BrewCapsule.test.tsx`
+
+`BrewCapsule` is **not** deleted here. It is deleted in Task 8, in the same commit that stops `RecipeCard` importing it. An earlier draft removed it here and expected only typecheck to break; in fact lint fails on the unresolved import and three test suites fail with it, and a commit that leaves the tree in that state is worse than the two-commit split was worth. Read the old capsule and its tests, take everything from them, and leave both files where they are.
 
 - [ ] **Step 1: Read what is being replaced**
 
@@ -1553,18 +1554,19 @@ Both values above were read off the running theme: `$8` is **22** and `$3.5` is 
 Run: `npx jest components/__tests__/BrewShortcut.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 6: Delete the capsule**
+- [ ] **Step 6: Leave the capsule alone and check the gate**
 
 ```bash
-git rm components/BrewCapsule.tsx components/__tests__/BrewCapsule.test.tsx
+npm run typecheck
+npm run lint
+npm test
 ```
 
-Run: `npm run typecheck`
-Expected: FAIL, naming `components/RecipeCard.tsx`. That is Task 8. Confirm nothing else imports it.
+Expected: all three clean. This task only adds files, so nothing existing may
+break. `BrewCapsule` is still imported by `RecipeCard` and still tested; Task 8
+removes both together.
 
 - [ ] **Step 7: Commit**
-
-Note that this commit leaves the tree not typechecking, which is why it says so.
 
 ```bash
 git add components/BrewShortcut.tsx components/__tests__/BrewShortcut.test.tsx
@@ -1587,7 +1589,8 @@ Three shapes rather than one, because choosing from a mockup is what produced
 the first five faults. They live in one file so they can be read against each
 other, and two of them will be deleted.
 
-Typechecking is broken until RecipeCard stops importing BrewCapsule.
+The capsule itself goes when RecipeCard stops importing it, so that its
+removal and its last use land together.
 
 Refs #87"
 ```
@@ -1601,6 +1604,9 @@ Refs #87"
 **Files:**
 - Modify: `components/RecipeCard.tsx`
 - Test: `components/__tests__/RecipeCard.test.tsx`
+- Delete: `components/BrewCapsule.tsx`, `components/__tests__/BrewCapsule.test.tsx`
+
+The deletion is here rather than in Task 7 so that the capsule's removal and its last use land in one commit. Removing it a task earlier left the tree failing lint and three test suites, not merely typecheck.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1740,18 +1746,33 @@ Run: `grep -n "showBrew" components/__tests__/RecipeCard.test.tsx`
 
 Change each `showBrew` to `brewShortcut="edge"`. **Do not delete any of them** — they assert the shortcut appears, calls back and is labelled, all of which still hold.
 
+- [ ] **Step 6b: Delete the capsule**
+
+Nothing imports it now. Confirm that, then remove it:
+
+```bash
+grep -rn "BrewCapsule" --include=*.ts --include=*.tsx .
+git rm components/BrewCapsule.tsx components/__tests__/BrewCapsule.test.tsx
+```
+
+The `grep` must come back empty before the `git rm`. Task 7 carried every
+assertion out of `BrewCapsule.test.tsx` into `BrewShortcut.test.tsx`, which is
+the only reason deleting it is not a loss of coverage.
+
 - [ ] **Step 7: Run everything for this file**
 
 Run: `npx jest components/__tests__/RecipeCard.test.tsx`
 Expected: PASS.
 
 Run: `npm run typecheck`
-Expected: FAIL, naming `components/SwipeableRecipeRow.tsx` and `app/index.tsx`. Those are Tasks 9 and 10.
+Expected: FAIL, naming `components/SwipeableRecipeRow.tsx` and `app/index.tsx`, and nothing else. Those are Tasks 9 and 10. If `BrewCapsule` is still named anywhere, Step 6b's `grep` was not empty and you deleted it too early.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add components/RecipeCard.tsx components/__tests__/RecipeCard.test.tsx
+git rm --cached -q --ignore-unmatch components/BrewCapsule.tsx components/__tests__/BrewCapsule.test.tsx 2>/dev/null || true
+git add -u components/
 git commit -m "feat: the card reserves the space its shortcut occupies
 
 The shipped capsule was positioned absolutely against the card's right edge
@@ -1763,6 +1784,9 @@ declares what it takes and the title row takes it as padding.
 The shortcut also stands aside while the card is editing. The bottom right is
 empty except in that mode, where it holds duplicate and delete, and editing is
 the one mode where brewing is plainly not what the user came to do.
+
+The capsule goes in this commit rather than the last one, so that it is
+removed and stops being used at the same moment.
 
 Typechecking is broken until SwipeableRecipeRow and app/index.tsx follow.
 
