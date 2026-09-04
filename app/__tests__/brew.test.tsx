@@ -36,8 +36,26 @@ const mockRecipe = (() => {
     r.pours = [
         new Pour(1, 40, 93, 40, 0, 0, 20),
     ];
+    // Deliberately not the default (120), so a hardcoded RPM in the screen
+    // would fail the trace-animation test below instead of passing by luck.
+    r.grindRPM = 90;
     return r;
 })();
+
+// The real hook, wrapped so a test can see what the screen handed it. The
+// flicker reading the recipe's grind speed lives on one line of the screen --
+// `useTraceAnimation(phase.name, recipe.grindRPM)` -- and nothing else in this
+// file would reveal its loss if that second argument were replaced with a
+// literal.
+let traceAnimationArgs: unknown[] = [];
+jest.mock("@/hooks/useTraceAnimation", () => {
+    const actual = jest.requireActual("@/hooks/useTraceAnimation");
+    const wrapped = (...args: unknown[]) => {
+        traceAnimationArgs = args;
+        return actual.useTraceAnimation(...args);
+    };
+    return {__esModule: true, ...actual, default: wrapped, useTraceAnimation: wrapped};
+});
 
 // The brew screen now reads its run from useLiveBrew rather than calling
 // useBrewRun itself.  The seam moves here so all 17 assertions are preserved.
@@ -118,6 +136,7 @@ beforeEach(() => {
     mockCanOfferPro = false;
     mockFirstBrewDone = true;
     mockError = null;
+    traceAnimationArgs = [];
 });
 
 describe("brew route", () => {
@@ -129,6 +148,15 @@ describe("brew route", () => {
         // hold if the figures row vanished entirely.
         expect(getAllByText("WATER")).toHaveLength(2);
         expect(getByTestId("ladder")).toBeTruthy();
+    });
+
+    it("feeds the trace the recipe's own grind speed, not a fixed number", async () => {
+        // The whole point of the flicker reading the burr is that it reads
+        // *this* recipe's burr. Asserted against the fixture's own value
+        // (90, not the 120 default) so a screen that hardcodes 120 fails
+        // this test instead of passing by coincidence.
+        await renderWithProviders(<Brew />);
+        expect(traceAnimationArgs[1]).toBe(mockRecipe.grindRPM);
     });
 
     it("offers CANCEL while the machine is running", async () => {

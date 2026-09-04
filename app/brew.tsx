@@ -90,7 +90,7 @@ export default function Brew() {
     }, [phase.name, firstBrewDone, setFirstBrewDone]);
 
     const accent = resolveAccent(recipe);
-    const motion = useTraceAnimation(phase.name);
+    const motion = useTraceAnimation(phase.name, recipe.grindRPM);
     const running = RUNNING.has(phase.name);
 
     // The two water events are not the same thing. `blocked` means nothing was

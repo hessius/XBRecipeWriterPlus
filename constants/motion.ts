@@ -102,7 +102,7 @@ export const ATTRACT = {
     /**
      * Brew-chart pre-pour animation timings.
      *
-     * These three drive the waking/sending/grinding phases of the trace
+     * These two drive the waking/sending/grinding phases of the trace
      * animation. They are a full order of magnitude longer than UI feedback
      * timings: the chart is passive decoration while the machine is getting
      * ready, not a response to a tap.
@@ -111,8 +111,6 @@ export const ATTRACT = {
     brewBreath: 3400,
     /** One pass of the travelling send-head across the trace. */
     brewTravel: 1400,
-    /** The grinder's flicker period. Fast and uneven-feeling, which is what grinding is. */
-    brewFlicker: 420,
 
     /**
      * How long the `++` wordmark tint lasts after launch.
