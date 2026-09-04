@@ -311,6 +311,29 @@ Note `ACTION_ICON_SIZE` from `HomeHeader`. The new glyph uses that same value, b
 Replace the three look tests in `components/__tests__/MachineDot.test.tsx` with the block below. Leave the accessibility and press tests alone.
 
 ```ts
+/**
+ * Which glyph a `DotIcon` drew, and in what colour.
+ *
+ * Not `.props.name`: `testID` lands on a host `View` whose only props are
+ * `testID`, `accessible`, `accessibilityElementsHidden`,
+ * `importantForAccessibility`, `style` and `children`. The name never reaches
+ * the tree. What does reach it is one `dot-icon-dot` per lit cell, so the
+ * count identifies the glyph — and the three link glyphs were drawn with 41,
+ * 16 and 4 lit cells precisely so they rank. That makes this assertion the
+ * design's own claim, checked.
+ *
+ * `includeHiddenElements` because an unlabelled `DotIcon` sets
+ * `accessibilityElementsHidden`, and the default queries skip hidden elements
+ * — without it every one of these fails "unable to find an element" rather
+ * than on its assertion.
+ */
+function drawn(testID: string) {
+    const icon = screen.getByTestId(testID, {includeHiddenElements: true});
+    const dots = within(icon).getAllByTestId("dot-icon-dot",
+                                             {includeHiddenElements: true});
+    return {cells: dots.length, colour: dots[0].props.style.backgroundColor};
+}
+
 describe("the shape says the state", () => {
     it.each([
         ["connected", "link-on", palette.success],
@@ -321,11 +344,8 @@ describe("the shape says the state", () => {
         await renderWithProviders(
             <MachineDot status={status} collapsed={false} onPress={() => undefined}/>
         );
-        // The saturated copy is the one on top. Reading its props rather than
-        // its pixels: the glyph's identity is the whole point of the change.
-        const lit = screen.getByTestId("machine-dot-lit");
-        expect(lit.props.name).toBe(icon);
-        expect(lit.props.color).toBe(colour);
+        expect(drawn("machine-dot-lit"))
+            .toEqual({cells: litCells(DOT_ICONS[icon]).length, colour});
     });
 
     it("has no ring left to draw", async () => {
@@ -334,7 +354,8 @@ describe("the shape says the state", () => {
         );
         // The ring was compensating for a shape that could not say "present".
         // The filled diamond says it, so the ring is gone rather than restyled.
-        expect(screen.queryByTestId("machine-dot-ring")).toBeNull();
+        expect(screen.queryByTestId("machine-dot-ring",
+                                    {includeHiddenElements: true})).toBeNull();
     });
 });
 
@@ -346,10 +367,8 @@ describe("collapsing", () => {
         // Two copies, cross-faded, because Reanimated cannot drive a colour
         // that arrives as a prop. Same reason HomeTitle draws its wordmark
         // twice.
-        expect(screen.getByTestId("machine-dot-dim").props.color)
-            .toBe(palette.successMuted);
-        expect(screen.getByTestId("machine-dot-lit").props.color)
-            .toBe(palette.success);
+        expect(drawn("machine-dot-dim").colour).toBe(palette.successMuted);
+        expect(drawn("machine-dot-lit").colour).toBe(palette.success);
     });
 
     it("starts collapsed already desaturated, with no animation to watch", async () => {
@@ -376,7 +395,8 @@ describe("collapsing", () => {
         );
         // muted has no twin because it is already grey, so the second copy
         // would be a pixel-identical overdraw on every frame of every scroll.
-        expect(screen.queryByTestId("machine-dot-dim")).toBeNull();
+        expect(screen.queryByTestId("machine-dot-dim",
+                                    {includeHiddenElements: true})).toBeNull();
     });
 
     it("keeps the greyed-out glyph visible when the header collapses", async () => {
@@ -391,9 +411,11 @@ describe("collapsing", () => {
 });
 ```
 
-The file will need `palette` imported from `@/constants/colors` if it does not already import it.
+The file will need `palette` imported from `@/constants/colors`, `within` from `@testing-library/react-native`, and `litCells` and `DOT_ICONS` from `@/constants/dotIcons`, if it does not already import them.
 
-**On reading `.props.style.opacity` from an `Animated.View`:** this works in this repo and there is precedent at `components/__tests__/BrewStageRung.test.tsx:106`. If the shared value's initial state does not surface there in your run, do not weaken the assertion to `toBeDefined`. Read `components/__tests__/HomeTitle.test.tsx` to see how the existing tint test reaches the same kind of value and follow it.
+`ACTION_ICON_SIZE` is a module-private `const` in `components/HomeHeader.tsx:15` — it is **not exported**. Export it there and import it here rather than writing `20` in a second place; the point of the task is that the two stay equal.
+
+**On reading `.props.style.opacity` from an `Animated.View`:** this works in this repo and there is precedent at `components/__tests__/BrewStageRung.test.tsx:106`. The `machine-dot-tint` wrapper is yours to write, so give it no `accessibilityElementsHidden` and the plain query will find it. If the shared value's initial state does not surface there in your run, do not weaken the assertion to `toBeDefined`. Read `components/__tests__/HomeTitle.test.tsx` to see how the existing tint test reaches the same kind of value and follow it.
 
 - [ ] **Step 3: Run them and watch them fail**
 
