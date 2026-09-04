@@ -217,3 +217,32 @@ describe("BrewDatabase", () => {
         expect(db.samples("b")).toEqual([]);
     });
 });
+
+describe("the plan and the delivered water", () => {
+    it("gives them back as they went in", () => {
+        const db = new BrewDatabase();
+        const plan = [
+            {pourNumber: 1, volume: 40, temperature: 93, flowRate: 40,
+             agitation: 1, pourPattern: 0, pauseTime: 20}
+        ];
+
+        db.insert(record({plan, stageWater: [38]}), stream);
+
+        const [back] = db.all();
+        expect(back.plan).toEqual(plan);
+        expect(back.stageWater).toEqual([38]);
+    });
+
+    it("leaves both absent on a row that never had them", () => {
+        // Rows written before these columns fall back to the live recipe, which
+        // is what they did before. Absent, not empty: the screen tests for
+        // undefined to decide whether it has a snapshot at all.
+        const db = new BrewDatabase();
+
+        db.insert(record(), stream);
+
+        const [back] = db.all();
+        expect(back.plan).toBeUndefined();
+        expect(back.stageWater).toBeUndefined();
+    });
+});

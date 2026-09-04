@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 import type {BrewFailure} from "./machine/Machine";
-import type {BrewOutcome, BrewRecord, BrewSample} from "./brew/BrewRecord";
+import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
 
 /** A record as it comes back out, with whether its stream survived retention. */
@@ -24,6 +24,10 @@ type BrewRow = {
     heldSeconds: number;
     /** JSON, one list of stalls per stage. `[]` on rows written before it. */
     stalls: string | null;
+    /** JSON, the plan as it stood. `[]` on rows written before it. */
+    plan: string | null;
+    /** JSON, one delivered volume per stage. `[]` on rows written before it. */
+    stageWater: string | null;
     hasStream: number;
 };
 
@@ -65,6 +69,8 @@ class BrewDatabase {
                 cupTotal REAL NOT NULL,
                 heldSeconds INTEGER NOT NULL,
                 stalls TEXT NOT NULL DEFAULT '[]',
+                plan TEXT NOT NULL DEFAULT '[]',
+                stageWater TEXT NOT NULL DEFAULT '[]',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -88,6 +94,19 @@ class BrewDatabase {
         } catch {
             // Already there.
         }
+        // Rows written before these two fall back to the live recipe, exactly
+        // as every row did until now.
+        try {
+            this.db.execSync("ALTER TABLE brews ADD COLUMN plan TEXT NOT NULL DEFAULT '[]';");
+        } catch {
+            // Already there.
+        }
+        try {
+            this.db.execSync(
+                "ALTER TABLE brews ADD COLUMN stageWater TEXT NOT NULL DEFAULT '[]';");
+        } catch {
+            // Already there.
+        }
     }
 
     public insert(record: BrewRecord, samples: BrewSample[]): void {
@@ -97,14 +116,16 @@ class BrewDatabase {
             this.db.runSync(
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, stalls, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    heldSeconds, stalls, plan, stageWater, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
                     record.endedAt, record.outcome, record.failure,
                     record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
                     JSON.stringify(record.stalls ?? []),
+                    JSON.stringify(record.plan ?? []),
+                    JSON.stringify(record.stageWater ?? []),
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -187,7 +208,9 @@ class BrewDatabase {
 }
 
 function hydrate(row: BrewRow): StoredBrew {
-    const stalls = stallsOf(row);
+    const stalls = jsonOf<Stall[]>(row.stalls);
+    const plan = jsonOf<PlanStage>(row.plan);
+    const stageWater = jsonOf<number>(row.stageWater);
     return {
         id: row.id,
         recipeUuid: row.recipeUuid,
@@ -205,14 +228,17 @@ function hydrate(row: BrewRow): StoredBrew {
         cupTotal: row.cupTotal,
         heldSeconds: row.heldSeconds,
         ...(stalls.length > 0 ? {stalls} : {}),
+        ...(plan.length > 0 ? {plan} : {}),
+        ...(stageWater.length > 0 ? {stageWater} : {}),
         hasStream: row.hasStream === 1
     };
 }
 
-function stallsOf(row: BrewRow): Stall[][] {
-    if (row.stalls === null) return [];
+function jsonOf<T>(value: string | null): T[] {
+    if (value === null) return [];
     try {
-        return JSON.parse(row.stalls) as Stall[][];
+        const parsed = JSON.parse(value) as T[];
+        return Array.isArray(parsed) ? parsed : [];
     } catch {
         return [];
     }
