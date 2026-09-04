@@ -81,15 +81,15 @@ Each is its original converted to OKLCH with chroma multiplied by 0.45, lightnes
 - Modify: `constants/colors.ts`
 - Test: `constants/__tests__/colors.test.ts`
 
-- [ ] **Step 1: Read the existing colour test**
+- [ ] **Step 1: Create the colour test file**
 
-Run: `cat constants/__tests__/colors.test.ts`
+`constants/__tests__/colors.test.ts` **does not exist** — this task creates it. `constants/__tests__/` currently holds only `brewCopy`, `dotIcons`, `licences`, `motion.sheet` and `recipeHelp`, and nothing anywhere iterates the palette. So there is no existing luminance or contrast helper to reuse; write it in the test file.
 
-You need to know what helpers it already has. It very likely has a relative-luminance or contrast helper — **use it rather than writing a second one**. If it does not, write the helper in the test file, not in `constants/colors.ts`, which is a data module and must stay one.
+Keep it out of `constants/colors.ts`, which is a data module and must stay one.
 
 - [ ] **Step 2: Write the failing test**
 
-Add to `constants/__tests__/colors.test.ts`. If the file already has a contrast helper under another name, call that instead of `contrastOnBase` and delete the local definition below.
+Create `constants/__tests__/colors.test.ts` with the import it needs (`import {palette} from "@/constants/colors";`) and:
 
 ```ts
 describe("the desaturated twins", () => {
@@ -158,7 +158,9 @@ Expected: PASS.
 - [ ] **Step 6: Check nothing else enumerates the palette**
 
 Run: `npx jest constants/`
-Expected: PASS. Some tests iterate every palette key to assert contrast floors. If one now fails on the twins, that is a real signal — read it before changing it, and say so in your report.
+Expected: PASS. Nothing currently iterates the palette keys, so this should be uneventful — but run it, because adding a key to a widely imported module is exactly the change that surprises you.
+
+The two twins have been checked independently: `#9BCDA8` and `#DAC799` are `success` and `warn` at OKLCH chroma × 0.45, and contrast against `base` is 11.69:1 and 12.61:1 against the originals' 12.07:1 and 12.52:1. Both clear the 3:1 floor and both sit inside `toBeCloseTo(…, 0)`. If your test disagrees with any of those numbers, your helper is wrong, not the palette.
 
 - [ ] **Step 7: Commit**
 
