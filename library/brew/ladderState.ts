@@ -15,7 +15,11 @@ import type {BrewOutcome} from "./BrewRecord";
 export function ladderFrontier(outcome: BrewOutcome, stageWater: number[]): number {
     const poured = stageWater.filter((ml) => ml > 0).length;
     if (outcome === "done" || poured === stageWater.length) return stageWater.length;
-    // The last stage that delivered anything. A brew that poured nothing has
-    // no last stage and points at the first, which draws as the one it died in.
-    return Math.max(0, poured - 1);
+    // The *last* stage that delivered anything, by index rather than by count:
+    // a zero-volume stage in the middle would otherwise pull the frontier back
+    // behind stages that had already poured.
+    const last = stageWater.reduce((seen, ml, index) => (ml > 0 ? index : seen), -1);
+    // A brew that poured nothing has no last stage and points at the first,
+    // which draws as the one it died in.
+    return Math.max(0, last);
 }

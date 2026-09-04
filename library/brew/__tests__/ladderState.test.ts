@@ -22,4 +22,11 @@ describe("where a finished brew's ladder stops", () => {
         // Stopped after the last drop rather than during: nothing is pending.
         expect(ladderFrontier("cancelled", [40, 70])).toBe(2);
     });
+
+    it("does not step back behind a stage that delivered nothing", () => {
+        // A zero-volume stage in the middle. Counting the stages that poured
+        // would answer 1 here, marking stage 2 as the one it died in and
+        // stage 3 as never reached -- though stage 3 is where it got to.
+        expect(ladderFrontier("cancelled", [5, 0, 5, 0])).toBe(2);
+    });
 });

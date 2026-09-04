@@ -1,7 +1,7 @@
 import type {BrewFailure} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
 
-import {stageOriginMl, stallsInStage, type Stall} from "./stalls";
+import {stageWaterFrom, stallsInStage, type Stall} from "./stalls";
 
 /**
  * One instant of a brew, as the machine reported it.
@@ -180,11 +180,6 @@ export function poursFromPlan(plan: PlanStage[] | undefined): Pour[] {
  * negative bar would draw backwards.
  */
 export function stageWaterFromSamples(samples: BrewSample[], stages: number): number[] {
-    return Array.from({length: stages}, (_unused, index) => {
-        const stage = index + 1;
-        const mine = samples.filter((s) => s.pour === stage);
-        const last = mine[mine.length - 1];
-        if (last === undefined) return 0;
-        return Math.max(0, last.water - stageOriginMl(samples, stage));
-    });
+    return Array.from({length: stages}, (_unused, index) =>
+        stageWaterFrom(samples, index + 1));
 }

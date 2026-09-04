@@ -5,7 +5,7 @@ import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
-import {stageOriginMl, stalledNow, stallsInStage, type Stall}
+import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
     from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type Recipe from "@/library/Recipe";
@@ -19,32 +19,10 @@ const PUBLISH_MS = 250;
 /** One empty array, so "no samples yet" is a stable identity across renders. */
 const NO_SAMPLES: BrewSample[] = [];
 
-/**
- * Millilitres delivered in one stage.
- *
- * The machine reports a running total for the whole brew -- `water` is a scale
- * reading, ~10 a second, never re-tared between stages -- so a stage's own
- * share is its last reading minus the total as it stood *before the stage
- * began*.
- *
- * Not "minus the first reading of the stage": frames are event-driven, so
- * water arrives between the boundary and the stage's first sample, and that
- * water would simply vanish. It would vanish at every boundary, so the
- * per-stage figures would not sum to the brew total, a rung would never
- * quite fill, and -- worst -- a stage would never register as having met its
- * target, which is the clause that stops a planned rest being called a stall.
- * The #87 defect would come back through the side door.
- *
- * Exported so the arithmetic can be tested without a renderer.
- *
- * @param stage 1-based, matching `BrewSample.pour`
- */
-export function stageWaterFrom(samples: BrewSample[], stage: number): number {
-    const mine = samples.filter((s) => s.pour === stage);
-    if (mine.length === 0) return 0;
-    const origin = stageOriginMl(samples, stage);
-    return Math.max(0, mine[mine.length - 1].water - origin);
-}
+// Re-exported from where it now lives: the live rungs and the recorded ladder
+// must not be able to drift apart, so there is one implementation and the
+// record path reaches it through `stageWaterFromSamples`.
+export {stageWaterFrom};
 
 /** Seconds into the brew at which a stage first reached its target volume. */
 function reachedAt(samples: BrewSample[], stage: number, targetMl: number): number | null {
