@@ -2,13 +2,14 @@ import React from "react";
 import {View} from "react-native";
 import {XStack, YStack, Text} from "tamagui";
 
-import BrewCapsule from "@/components/BrewCapsule";
+import BrewShortcut, {type CardShortcut, SHORTCUT_INSET} from "@/components/BrewShortcut";
 import DigitRoll from "@/components/DigitRoll";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
+import type {BrewShortcut as BrewShortcutSetting} from "@/library/brewShortcut";
 import {canWriteToCard} from "@/library/cardLimits";
 import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
@@ -116,8 +117,13 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Fill the pour profile with a dot screen. Owned by the settings screen. */
     dottedProfile?: boolean;
-    /** Show the BREW capsule. Only when a machine is remembered. */
-    showBrew?: boolean;
+    /**
+     * Which shape the BREW shortcut takes, or undefined for none.
+     *
+     * `swipe` draws nothing here: it is a tile in the swipe tray rather than
+     * anything on the card.
+     */
+    brewShortcut?: BrewShortcutSetting;
     /** Called when the BREW capsule is pressed. */
     onBrew?: () => void;
 };
@@ -137,13 +143,26 @@ export default function RecipeCard({
     onDelete,
     showCoffeeMarker = true,
     dottedProfile = false,
-    showBrew = false,
-    onBrew
+    brewShortcut,
+    onBrew,
+    ...legacyProps
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
     const marker = isTea ? "TEA" : "COFFEE";
     const showMarker = isTea || showCoffeeMarker;
+    const legacyShowBrew = (legacyProps as {showBrew?: boolean}).showBrew === true;
+    const effectiveBrewShortcut = brewShortcut ?? (legacyShowBrew ? "edge" : undefined);
+    /**
+     * The shape this card actually draws, or null for none.
+     *
+     * `swipe` is the tray's tile and `editing` gives the card's bottom right
+     * over to duplicate and delete, which every shape would land on.
+     */
+    const shortcut: CardShortcut | null =
+        editing || effectiveBrewShortcut === undefined || effectiveBrewShortcut === "swipe"
+            ? null
+            : effectiveBrewShortcut;
 
     // `accessible` groups the whole subtree into one element on iOS, so nothing
     // inside is announced on its own. Everything the card shows has to be in
@@ -165,7 +184,9 @@ export default function RecipeCard({
             ? [{name: "duplicate", label: "Duplicate recipe"}]
             : []),
         ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
-        ...(showBrew && onBrew !== undefined ? [{name: "brew", label: "Brew this recipe"}] : [])
+        ...(shortcut !== null && onBrew !== undefined
+            ? [{name: "brew", label: "Brew this recipe"}]
+            : [])
     ];
 
     return (
@@ -210,11 +231,14 @@ export default function RecipeCard({
                              width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
             </View>
 
-            {showBrew && onBrew !== undefined && (
-                <BrewCapsule accent={accent} ink={onAccent.text} onPress={onBrew}/>
+            {shortcut !== null && onBrew !== undefined && (
+                <BrewShortcut variant={shortcut} accent={accent}
+                              ink={onAccent.text} onPress={onBrew}/>
             )}
 
-            <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
+            <XStack testID="recipe-card-title-row"
+                    justifyContent="space-between" alignItems="flex-start" gap="$2"
+                    paddingRight={shortcut === null ? 0 : SHORTCUT_INSET[shortcut]}>
                 {/* Bounded to the same scale Doto is, so the two halves of the
                     card grow together rather than the prose swamping the data. */}
                 <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}

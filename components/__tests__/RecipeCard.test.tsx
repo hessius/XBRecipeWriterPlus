@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
+import {SHORTCUT_INSET} from "@/components/BrewShortcut";
 import {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
@@ -119,6 +120,60 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
         expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
+    });
+
+    describe("the BREW shortcut", () => {
+        it.each(["edge", "tab", "chip"] as const)("draws a %s", async (variant) => {
+            await renderWithProviders(
+                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
+                            brewShortcut={variant} onBrew={() => undefined}/>
+            );
+            expect(screen.getByTestId("brew-shortcut")).toBeTruthy();
+        });
+
+        it("draws nothing for swipe, which is the tray's job", async () => {
+            await renderWithProviders(
+                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
+                            brewShortcut="swipe" onBrew={() => undefined}/>
+            );
+            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+        });
+
+        it("draws nothing when there is no shortcut at all", async () => {
+            await renderWithProviders(
+                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}/>
+            );
+            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+        });
+
+        it("stands aside while the card is editing", async () => {
+            await renderWithProviders(
+                <RecipeCard recipe={makeRecipe()} onPress={() => undefined} editing
+                            brewShortcut="chip" onBrew={() => undefined}
+                            onDuplicate={() => undefined} onDelete={() => undefined}/>
+            );
+            // Duplicate and delete sit in the card's bottom right, which is
+            // exactly where the chip lands, and editing is the one mode where
+            // brewing is plainly not what the user came to do.
+            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+            // The action's glyph is hidden from the accessibility tree on purpose,
+            // so this needs includeHiddenElements the way the file's other
+            // assertions on these two controls do.
+            expect(screen.getByTestId("recipe-card-delete",
+                                      {includeHiddenElements: true})).toBeTruthy();
+        });
+
+        it("keeps the marker clear of the band", async () => {
+            await renderWithProviders(
+                <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
+                            onPress={() => undefined}
+                            brewShortcut="tab" onBrew={() => undefined}/>
+            );
+            // The shipped capsule sat on top of the TEA marker. The card reserves
+            // the trailing edge rather than hoping the shape misses it.
+            expect(screen.getByTestId("recipe-card-title-row").props.style)
+                .toEqual(expect.objectContaining({paddingRight: SHORTCUT_INSET.tab}));
+        });
     });
 
     it("shows the dose and ratio", async () => {
@@ -635,7 +690,7 @@ describe("RecipeCard", () => {
     it("carries the BREW capsule when a machine is remembered", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        showBrew onBrew={jest.fn()} />
+                        brewShortcut="edge" onBrew={jest.fn()} />
         );
         expect(screen.getByLabelText("Brew this recipe")).toBeTruthy();
     });
@@ -655,7 +710,7 @@ describe("RecipeCard", () => {
         const onBrew = jest.fn();
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        showBrew onBrew={onBrew}/>
+                        brewShortcut="edge" onBrew={onBrew}/>
         );
         const card = screen.getByTestId("recipe-card");
         expect(card.props.accessibilityActions).toEqual(
