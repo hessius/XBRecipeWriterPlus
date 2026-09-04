@@ -588,31 +588,33 @@ Refs #87"
 
 ## Task 4: Wire the dot up
 
-`MachineDot` no longer takes `accent` and now requires `collapsed`. Two callers to fix, and one prop to delete on the way through.
+`MachineDot` no longer takes `accent` and now requires `collapsed`. **Three** call sites to fix, and one prop to delete on the way through.
 
 `HomeHeader` takes a `machineAccent` prop purely to forward it. `app/index.tsx` fills it with `palette.success`. With the colour now decided by the state inside `MachineDot`, that whole channel is dead and goes.
+
+The third is the brew screen's nav row (`app/brew.tsx:152`), which passes the *recipe's* accent. That is the clearest evidence the old prop was wrong: the same control was tinted by the coffee on one screen and by the connection on another, so its colour never meant one thing. It loses the accent with everybody else, and it is never collapsed.
 
 **Files:**
 - Modify: `components/HomeHeader.tsx`
 - Modify: `app/index.tsx`
+- Modify: `app/brew.tsx`
 - Test: `components/__tests__/HomeHeader.test.tsx`
 
 - [ ] **Step 1: Confirm the break**
 
 Run: `npm run typecheck`
-Expected: FAIL, naming `HomeHeader.tsx` for passing `accent` and omitting `collapsed`. If it names any file other than `components/HomeHeader.tsx`, stop and report it — this plan assumed two callers and would be wrong.
+Expected: FAIL, naming **both** `components/HomeHeader.tsx` and `app/brew.tsx` for passing `accent` and omitting `collapsed`. If it names any *other* file, stop and report it — this plan assumes exactly those three call sites.
 
 - [ ] **Step 2: Write the failing test**
 
 Add to `components/__tests__/HomeHeader.test.tsx`:
 
+The file already has a `props(overrides)` helper at the top that supplies every required prop. Use it rather than spelling them out:
+
 ```ts
 it("tells the dot when the header has collapsed", async () => {
     await renderWithProviders(
-        <HomeHeader count={3} collapsed editing={false} showEdit
-                    machineStatus="connected"
-                    onToggleEdit={() => undefined} onScan={() => undefined}
-                    onImport={() => undefined} onSettings={() => undefined}/>
+        <HomeHeader {...props({collapsed: true, machineStatus: "connected"})}/>
     );
     // The dot desaturates with the header rather than on its own schedule, so
     // the header is the only thing that knows the threshold.
@@ -620,8 +622,6 @@ it("tells the dot when the header has collapsed", async () => {
         .toEqual(expect.objectContaining({opacity: 0}));
 });
 ```
-
-Match the surrounding tests' prop spelling — read one before writing this, because `HomeHeader` has required props this snippet may not have guessed correctly.
 
 - [ ] **Step 3: Run it and watch it fail**
 
@@ -648,6 +648,23 @@ Delete the line `machineAccent={palette.success}` (around line 451).
 
 **Leave the `accent={palette.success}` on `MachinePopover` alone** (around line 534). That is a different component, it is out of scope, and removing it would break the popover.
 
+- [ ] **Step 5b: Fix the brew screen**
+
+`app/brew.tsx:152` reads:
+
+```tsx
+                <MachineDot status={status} accent={accent} onPress={() => void connect()} />
+```
+
+Drop the accent and say what this screen knows, which is that its header never collapses:
+
+```tsx
+                <MachineDot status={status} collapsed={false}
+                            onPress={() => void connect()} />
+```
+
+`accent` is used widely elsewhere on that screen, so it stays defined; do not remove it.
+
 - [ ] **Step 6: Check `palette` is still used**
 
 Run: `grep -n "palette\." app/index.tsx | head`
@@ -667,13 +684,18 @@ Expected: all clean. Any `HomeHeader` snapshot or accessibility test that named 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add components/HomeHeader.tsx components/__tests__/HomeHeader.test.tsx app/index.tsx
+git add components/HomeHeader.tsx components/__tests__/HomeHeader.test.tsx \
+    app/index.tsx app/brew.tsx
 git commit -m "refactor: the header stops choosing the dot's colour
 
 MachineDot decides its own colour from its own state now, so the accent prop
 threaded from app/index.tsx through HomeHeader existed only to deliver a
 constant. What the header does know, and the dot cannot, is whether it has
 collapsed, so that is what it passes instead.
+
+The brew screen was passing the recipe's accent to the same control, so the
+dot was tinted by the coffee on one screen and by the connection on another
+and its colour never meant one thing. It loses the accent too.
 
 Refs #87"
 ```
