@@ -285,4 +285,43 @@ describe("BrewRecorder", () => {
         expect(warn).toHaveBeenCalled();
         warn.mockRestore();
     });
+
+    it("keeps the plan it was started from", () => {
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "done"});
+
+        const [{record}] = records;
+        expect(record.plan).toHaveLength(2);
+        expect(record.plan?.[0].volume).toBe(40);
+        expect(record.plan?.[1].volume).toBe(160);
+        // A structural copy, not the Pour objects: this goes through JSON.
+        expect(record.plan?.[0]).not.toBeInstanceOf(Pour);
+    });
+
+    it("keeps what each stage actually poured", () => {
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(150);
+        fake.phase({name: "done"});
+
+        // Cumulative in the stream, per stage on the record.
+        expect(records[0].record.stageWater).toEqual([40, 110]);
+    });
+
+    it("gives a stage that never ran nothing at all", () => {
+        // The failure this is for: a brew that stopped in stage 1 of 2 must
+        // not say stage 2 poured.
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(25);
+        fake.phase({name: "failed", reason: "noWater"});
+
+        // Two entries for two planned stages, so the ladder always gets a full
+        // set -- the trailing 0 is the assertion, not the 25.
+        expect(records[0].record.stageWater).toEqual([25, 0]);
+    });
 });
