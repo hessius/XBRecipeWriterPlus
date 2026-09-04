@@ -55,10 +55,9 @@ only ever been seen in a mockup.
 
 - **`edge`** — a 34 pt band on the trailing edge, bled to the card's boundary so
   the card's own `overflow: hidden` clips it. There is no second radius to get
-  wrong because there is no second shape. The marker never moves. **Default.**
+  wrong because there is no second shape. **Default.**
 - **`tab`** — the same band, inset 4 pt, radius 12, which is `16 - inset` and
-  therefore concentric with the card. The marker shifts left by the tab's width
-  plus its inset.
+  therefore concentric with the card.
 - **`chip`** — 78 × 34 in the bottom-right corner, radius `14 0 16 0` so its
   outer corner matches the card's and its inner corner is a fold. The word is
   horizontal, so centring stops being a question, and the target is honest with
