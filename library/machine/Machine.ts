@@ -853,9 +853,14 @@ export default class Machine {
             case EVENT.POUR_START:
                 this.setPhase({
                     name: "pouring",
-                    // The machine's own index, when it sends one. Counting our
-                    // own would drift the moment a pour is skipped or repeated.
-                    pour: Math.min(Math.max(value ?? 1, 1), this.pourCount),
+                    // The machine's index is **zero-based**: the captured trace
+                    // in research/PROTOCOL.md records 0 for the first pour and
+                    // 5 for the sixth. Clamping it up to one with `Math.max`
+                    // made the first stage right by accident and every later
+                    // stage wrong by one, which froze the counter, stopped the
+                    // second rung ever animating and left the holding warning
+                    // permanently on.
+                    pour: Math.min((value ?? 0) + 1, this.pourCount),
                     pours: this.pourCount
                 });
                 break;

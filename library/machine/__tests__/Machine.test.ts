@@ -8,9 +8,26 @@ import {RadioUnavailableError} from "@/library/machine/errors";
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
 
-/** A pour-start event carrying the machine's own one-based pour index. */
+/** A pour-start event carrying the machine's own zero-based pour index. */
 function Uint8ArrayPourEvent(index: number): number[] {
     return notification(40510 & 0xFF, 40510 >> 8, [index]);
+}
+
+/** Six identical pours. The trace in research/PROTOCOL.md was captured on six. */
+function sixPourRecipe(): Recipe {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.XPOD;
+    recipe.dosage = 18;
+    recipe.ratio = 16;
+    recipe.grindSize = 60;
+    recipe.grindRPM = 90;
+    recipe.grinder = true;
+    // Pour(pourNumber, volume, temperature, flowRate, agitation, pattern, pause).
+    // flowRate is stored times ten, so 30 is 3 ml/s.
+    recipe.pours = [1, 2, 3, 4, 5, 6].map(
+        (n) => new Pour(n, 48, 93, 30, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20)
+    );
+    return recipe;
 }
 
 describe("connecting to a machine", () => {
@@ -517,7 +534,7 @@ describe("brewing", () => {
 
         transport.emit(status(0x22));
         transport.emit(event(40507));
-        transport.emit(Uint8ArrayPourEvent(2));
+        transport.emit(Uint8ArrayPourEvent(1));
 
         expect(machine.phase).toMatchObject({name: "pouring", pour: 2, pours: 3});
     });
@@ -1139,5 +1156,50 @@ describe("where a frame arrived from", () => {
         transport.emit(status(0x01), "ffe3");
 
         expect(sources).toEqual(["ffe3"]);
+    });
+});
+
+describe("the machine's pour index", () => {
+    it("is zero-based, so index 0 is stage 1 of six", async () => {
+        // From the captured trace in research/PROTOCOL.md: a six-pour recipe
+        // reports pour_index 0,1,2,3,4,5 — not 1..6.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        const seen: number[] = [];
+        machine.onPhase((phase) => {
+            if (phase.name === "pouring") seen.push(phase.pour);
+        });
+
+        const recipe = sixPourRecipe();
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x01));
+        await machine.brew(recipe);
+
+        for (const index of [0, 1, 2, 3, 4, 5]) {
+            transport.emit(Uint8ArrayPourEvent(index));
+        }
+
+        expect(seen.slice(-6)).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    it("clamps an index past the end rather than reporting stage seven of six", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        const seen: number[] = [];
+        machine.onPhase((phase) => {
+            if (phase.name === "pouring") seen.push(phase.pour);
+        });
+
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x01));
+        await machine.brew(sixPourRecipe());
+
+        transport.emit(Uint8ArrayPourEvent(9));
+
+        expect(seen[seen.length - 1]).toBe(6);
     });
 });
