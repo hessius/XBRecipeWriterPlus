@@ -1545,7 +1545,17 @@ npx jest components/__tests__/BrewStageRung.test.tsx
 
 Expected: PASS, eleven tests.
 
-- [ ] **Step 5: Keep the ladder compiling**
+- [ ] **Step 5: Keep the agitation marks**
+
+*Added after this task was first implemented, because the implementation block above drops them and nobody decided to.*
+
+The old rung drew a small agitation glyph at each end of the lane, keyed off `Pour.agitation`, with `testID`s `rung-agitation-before` and `rung-agitation-after`. The rewrite keeps `before`/`after` only inside the accessibility label, so the marks are readable by a screen reader and invisible to everyone else. Agitation is a field the machine acts on and it was on every rung before; the ladder is not allowed to lose it.
+
+Restore them, flanking the segment row rather than overlaid on it -- the lane is `flex: 1` now and has no pixel width to position against, so the old absolute offsets computed from `pourWidth`/`pauseWidth` do not exist. Reuse the `before`/`after` booleans that already feed the label. Keep `<PourGlyph kind="agitation" accent={palette.dim} size={10} />` and both `testID`s.
+
+Four tests, one per `AGITATION` value: before only, after only, both, neither.
+
+- [ ] **Step 6: Keep the ladder compiling**
 
 `components/BrewStageLadder.tsx` is the rung's only caller, and it passes `laneWidth`, `progress` and `holding`, none of which exist any more, while passing none of `barHeight`, `delivered`, `pauseElapsed` or `stalls`, all of which are required. Without this step `npm run typecheck` fails and the commit gate cannot pass.
 
@@ -1604,7 +1614,7 @@ Then replace the `<BrewStageRung .../>` element. Delete the `progress` calculati
 
 If `components/__tests__/BrewStageLadder.test.tsx` fails on anything other than that, stop and report it rather than editing the test.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 npm run typecheck && npm run lint && npm test
