@@ -68,6 +68,23 @@ export const palette = {
     danger:  "#FF6B5E",
     /** Recoverable problems and cautions. */
     warn:    "#F0C24A",
+    /**
+     * `success` and `warn`, desaturated.
+     *
+     * For chrome that has stepped back — today, the connection dot as the
+     * header collapses. Each is its original in OKLCH with the chroma
+     * multiplied by 0.45 and the lightness and hue left alone, so the
+     * transition between the two is a change in saturation and nothing else.
+     * That is what reads as receding; dropping opacity instead reads as the
+     * glyph being broken.
+     *
+     * Lightness held means contrast against `base` is held too: 11.7:1 and
+     * 12.6:1, against 12.1:1 and 12.5:1 for the originals.
+     *
+     * `muted` needs no twin. It is already grey.
+     */
+    successMuted: "#9BCDA8",
+    warnMuted:    "#DAC799",
     /** Informational accents. */
     info:    "#7FB4FF"
 } as const;
