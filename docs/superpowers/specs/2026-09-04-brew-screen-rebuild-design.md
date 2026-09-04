@@ -30,7 +30,7 @@ pour: Math.min(Math.max(value ?? 1, 1), this.pourCount)
 ```
 
 The machine's index is **zero-based**. Our own captured trace
-(`research/PROTOCOL.md`) records `pour_index=0` for the first pour and then 1,
+(quoted in `docs/machine-integration/ble-protocol.md`) records `pour_index=0` for the first pour and then 1,
 2, 3, 4, 5 for a six-pour recipe. `Math.max(value, 1)` clamps the zero up to
 one, which makes the first stage correct by accident and every later stage wrong
 by one:
@@ -255,7 +255,8 @@ The compact layout itself is kept; it was judged to work.
 ## Testing
 
 - **`library/machine/`** — the pour index off-by-one gets a characterisation
-  test driven from the captured trace in `research/PROTOCOL.md`: indices 0..5 on
+  test driven from the HCI snoop in `docs/machine-integration/ble-protocol.md`:
+  indices 0..5 on
   a six-pour recipe must produce stages 1..6. Stale `state` after a refusal must
   not refuse a later attempt. `NO_WATER` and `NO_BEANS` must not report as busy.
   `40517` during grinding must report beans.

@@ -13,7 +13,7 @@ function Uint8ArrayPourEvent(index: number): number[] {
     return notification(40510 & 0xFF, 40510 >> 8, [index]);
 }
 
-/** Six identical pours. The trace in research/PROTOCOL.md was captured on six. */
+/** Six identical pours. The HCI snoop in docs/machine-integration was captured on six. */
 function sixPourRecipe(): Recipe {
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
@@ -1161,7 +1161,8 @@ describe("where a frame arrived from", () => {
 
 describe("the machine's pour index", () => {
     it("is zero-based, so index 0 is stage 1 of six", async () => {
-        // From the captured trace in research/PROTOCOL.md: a six-pour recipe
+        // From the HCI snoop quoted in docs/machine-integration/ble-protocol.md:
+        // a six-pour recipe
         // reports pour_index 0,1,2,3,4,5 — not 1..6.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});

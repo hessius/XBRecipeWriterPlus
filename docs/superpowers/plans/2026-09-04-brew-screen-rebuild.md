@@ -85,8 +85,8 @@ Add to `library/machine/__tests__/Machine.test.ts`. Note the existing helper at 
 ```ts
 describe("the machine's pour index", () => {
     it("is zero-based, so index 0 is stage 1 of six", async () => {
-        // From the captured trace in research/PROTOCOL.md: a six-pour recipe
-        // reports pour_index 0,1,2,3,4,5 — not 1..6.
+        // From the HCI snoop quoted in docs/machine-integration/ble-protocol.md:
+        // a six-pour recipe reports pour_index 0,1,2,3,4,5 — not 1..6.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
@@ -132,7 +132,7 @@ describe("the machine's pour index", () => {
 And the helper the two tests share, placed next to the other helpers at the top of the file:
 
 ```ts
-/** Six identical pours. The trace in research/PROTOCOL.md was captured on six. */
+/** Six identical pours. The HCI snoop in docs/machine-integration was captured on six. */
 function sixPourRecipe(): Recipe {
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
@@ -163,9 +163,10 @@ In `library/machine/Machine.ts`, in `onEvent`, replace the `EVENT.POUR_START` ca
             case EVENT.POUR_START:
                 this.setPhase({
                     name: "pouring",
-                    // The machine's index is **zero-based**: the captured trace
-                    // in research/PROTOCOL.md records 0 for the first pour and
-                    // 5 for the sixth. Clamping it up to one with `Math.max`
+                    // The machine's index is **zero-based**: the HCI snoop
+                    // quoted in docs/machine-integration/ble-protocol.md
+                    // records 0 for the first pour of six and 5 for the last.
+                    // Clamping it up to one with `Math.max`
                     // made the first stage right by accident and every later
                     // stage wrong by one, which froze the counter, stopped the
                     // second rung ever animating and left the holding warning
@@ -193,8 +194,8 @@ npm run typecheck && npm run lint && npm test
 git add library/machine/Machine.ts library/machine/__tests__/Machine.test.ts
 git commit -m "fix: the machine's pour index is zero-based
 
-The captured trace in research/PROTOCOL.md records pour_index 0 for the
-first pour. Math.max(value, 1) clamped that up, so the counter froze at
+The HCI snoop quoted in docs/machine-integration/ble-protocol.md records
+pour_index 0 for the first pour. Math.max(value, 1) clamped that up, so the counter froze at
 1/4, the second rung never animated, the last stage never went active,
 and the holding warning never cleared.
 

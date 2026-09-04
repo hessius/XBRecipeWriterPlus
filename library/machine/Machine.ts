@@ -853,9 +853,10 @@ export default class Machine {
             case EVENT.POUR_START:
                 this.setPhase({
                     name: "pouring",
-                    // The machine's index is **zero-based**: the captured trace
-                    // in research/PROTOCOL.md records 0 for the first pour and
-                    // 5 for the sixth. Clamping it up to one with `Math.max`
+                    // The machine's index is **zero-based**: the HCI snoop
+                    // quoted in docs/machine-integration/ble-protocol.md
+                    // records 0 for the first pour of six and 5 for the last.
+                    // Clamping it up to one with `Math.max`
                     // made the first stage right by accident and every later
                     // stage wrong by one, which froze the counter, stopped the
                     // second rung ever animating and left the holding warning
