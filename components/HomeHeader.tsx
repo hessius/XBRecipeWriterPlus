@@ -141,7 +141,7 @@ export default function HomeHeader({
                 alignItems="center" justifyContent="space-between" gap="$2"
                 paddingHorizontal="$3" paddingVertical="$2"
                 paddingTop={insets.top + 8}>
-            <HomeTitle count={count}
+            <HomeTitle count={count} collapsed={collapsed}
                        fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 
             <XStack alignItems="center">

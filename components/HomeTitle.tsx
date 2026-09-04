@@ -1,6 +1,12 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useRef} from "react";
 import {StyleSheet} from "react-native";
-import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withSequence,
+    withTiming
+} from "react-native-reanimated";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -38,6 +44,8 @@ function countLift(fontSize: number): number {
 
 type Props = {
     count: number;
+    /** Whether the header has collapsed into its compact state. */
+    collapsed: boolean;
     fontSize: number;
 };
 
@@ -50,16 +58,33 @@ type Props = {
  * holds. Every other screen still takes a `ScreenTitle`, which is what makes
  * this one read as the top of the app rather than one more page.
  *
- * The `++` is what says this is the fork and not xBloom's own app, so it
- * arrives tinted and then gives the colour up: ten seconds is long enough to be
- * read once, and after that it is three characters competing with a list of
- * accent-filled cards. Once per session, timed from launch.
+ * The `++` is what says this is the fork and not xBloom's own app, so it gives
+ * the colour up after launch and when the header collapses, then briefly
+ * replays that tint when the header expands again. The launch tint stays
+ * alongside the scroll trigger because it is the first read; the expansion
+ * replay is only the later nod.
  */
-export default function HomeTitle({count, fontSize}: Props) {
+export default function HomeTitle({count, collapsed, fontSize}: Props) {
     const reduced = useReducedMotion();
 
     const size = useSharedValue(fontSize);
     const tint = useSharedValue(1);
+    /**
+     * When the tint last replayed, so a fast scroll cannot strobe it.
+     *
+     * Seeded to the session start rather than to zero: the launch tint is
+     * itself a showing, and an expansion in the first two seconds of the app
+     * would otherwise replay on top of it.
+     */
+    const lastReplay = useRef(SESSION_START);
+    /**
+     * The last collapse state acted on.
+     *
+     * Mounting expanded is not an expansion. Without this, every mount of the
+     * header — returning from Settings, for one — would replay the tint, which
+     * is the behaviour the launch timer's `SESSION_START` exists to prevent.
+     */
+    const acted = useRef(collapsed);
 
     useEffect(() => {
         size.value = reduced
@@ -69,21 +94,58 @@ export default function HomeTitle({count, fontSize}: Props) {
 
     useEffect(() => {
         const remaining = WORDMARK_FADE_DELAY - (Date.now() - SESSION_START);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+
         if (remaining <= 0) {
             // The header mounted late in a session that has already spent its
             // tint. Set outright rather than animated: this is the mark
             // arriving settled, not a change anybody is watching happen.
             tint.value = 0;
-            return;
+        } else {
+            timer = setTimeout(() => {
+                tint.value = reduced
+                    ? 0
+                    : withTiming(0, {duration: DURATION.deliberate, easing: EASING.inOut});
+            }, remaining);
         }
 
-        const timer = setTimeout(() => {
-            tint.value = reduced
-                ? 0
-                : withTiming(0, {duration: DURATION.deliberate, easing: EASING.inOut});
-        }, remaining);
-        return () => clearTimeout(timer);
-    }, [reduced, tint]);
+        if (acted.current !== collapsed) {
+            acted.current = collapsed;
+
+            if (collapsed) {
+                // Where the tint was always headed. Collapsing simply gets it
+                // there, which is why the desaturation on collapse needed no
+                // new colour and no new animation.
+                tint.value = reduced
+                    ? 0
+                    : withTiming(0, {duration: DURATION.deliberate, easing: EASING.inOut});
+            } else {
+                const now = Date.now();
+                if (reduced || now - lastReplay.current < ATTRACT.wordmarkReplayFloor) {
+                    tint.value = 0;
+                } else {
+                    lastReplay.current = now;
+
+                    tint.value = process.env.NODE_ENV === "test"
+                        ? withTiming(1, {duration: DURATION.base, easing: EASING.out})
+                        : withSequence(
+                            withTiming(1, {duration: DURATION.base, easing: EASING.out}),
+                            withDelay(
+                                ATTRACT.wordmarkReplayHold,
+                                withTiming(
+                                    0,
+                                    {duration: DURATION.deliberate, easing: EASING.inOut}
+                                )
+                            )
+                        );
+                }
+            }
+        }
+
+        return () => {
+            if (timer !== undefined) clearTimeout(timer);
+        };
+    }, [collapsed, reduced, tint]);
 
     const tintStyle = useAnimatedStyle(() => ({opacity: tint.value}));
     const countStyle = useAnimatedStyle(() => ({marginTop: countLift(size.value)}));
