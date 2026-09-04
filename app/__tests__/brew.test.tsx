@@ -16,6 +16,7 @@ let mockActiveIndex: number | null = 0;
 let mockHolding = false;
 let mockCanOfferPro = false;
 let mockFirstBrewDone = true;
+let mockError: string | null = null;
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
@@ -56,10 +57,22 @@ jest.mock("@/hooks/useLiveBrew", () => {
         cancelBrew: mockCancelBrew,
         canOfferProMode: () => mockCanOfferPro,
         switchToProAndRetry: mockSwitchToProAndRetry,
-        error: null,
+        error: mockError,
     });
     return {__esModule: true, default: value, useLiveBrew: value};
 });
+
+jest.mock("@/hooks/useMachine", () => ({
+    __esModule: true,
+    useMachine: () => ({
+        machine: {isConnected: () => true, onLink: () => () => undefined},
+        status: "connected",
+        error: null,
+        remembered: null,
+        connect: jest.fn(),
+        forget: jest.fn()
+    })
+}));
 
 jest.mock("@/hooks/useSetting", () => {
     const useSetting = (key: string) => {
@@ -99,6 +112,7 @@ beforeEach(() => {
     mockHolding = false;
     mockCanOfferPro = false;
     mockFirstBrewDone = true;
+    mockError = null;
 });
 
 describe("brew route", () => {
@@ -199,12 +213,11 @@ describe("brew route", () => {
         expect(later.queryByText(/cup under the spout/)).toBeNull();
     });
 
-    it("offers EXPORT and DONE when the brew is over", async () => {
+    it("offers EXPORT when the brew is over", async () => {
         mockPhase = {name: "done"} as BrewPhase;
         mockActiveIndex = 1;
         const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
         expect(getByLabelText("Export this brew")).toBeTruthy();
-        expect(getByLabelText("Done")).toBeTruthy();
         // A finished brew is not a failed one — retry would invite a second brew
         // into a full cup, and there is nothing left to cancel.
         expect(queryByLabelText("Try again")).toBeNull();
@@ -266,8 +279,54 @@ describe("brew route", () => {
         expect(queryByLabelText("Switch to PRO")).toBeNull();
     });
 
-    // The pour counter is deliberately untested between here and Task 14: it
-    // has left the trace and has not yet reached the nav row, so for now there
-    // is nothing to assert. Task 14 puts it back under test as
-    // `brew-stage-counter`, where there is only one of it.
+});
+
+describe("the brew screen says true things", () => {
+    it("never claims to be ready when it has only just been asked", async () => {
+        mockPhase = {name: "idle"} as BrewPhase;
+        const {queryByText} = await renderWithProviders(<Brew />);
+
+        expect(queryByText("Ready when you are.")).toBeNull();
+        expect(queryByText("Connecting to the machine…")).toBeTruthy();
+    });
+
+    it("still says ready once the recipe is actually loaded", async () => {
+        mockPhase = {name: "readyToStart"} as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
+
+        expect(getByText("Recipe loaded. Ready when you are.")).toBeTruthy();
+    });
+
+    it("does not say the same refusal twice", async () => {
+        mockPhase = {name: "failed", reason: "blocked", block: "busy",
+                     detail: "The machine is busy. Wait for it to finish."} as BrewPhase;
+        mockError = "The machine is busy. Wait for it to finish.";
+        const {queryAllByText} = await renderWithProviders(<Brew />);
+
+        expect(queryAllByText("The machine is busy. Wait for it to finish."))
+            .toHaveLength(1);
+    });
+
+    it("still reports a transport error that no phase explains", async () => {
+        mockPhase = {name: "pouring", pour: 2, pours: 4} as BrewPhase;
+        mockError = "The link dropped.";
+        const {getByText} = await renderWithProviders(<Brew />);
+
+        expect(getByText("The link dropped.")).toBeTruthy();
+    });
+
+    it("puts the stage counter in the nav row, where there is only one of it", async () => {
+        mockPhase = {name: "pouring", pour: 3, pours: 4} as BrewPhase;
+        const {getByTestId} = await renderWithProviders(<Brew />);
+
+        expect(getByTestId("brew-stage-counter").props.children).toBe("3/4");
+    });
+
+    it("offers a chevron down rather than a DONE button", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
+
+        expect(getByLabelText("Close")).toBeTruthy();
+        expect(queryByLabelText("Done")).toBeNull();
+    });
 });

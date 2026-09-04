@@ -1,25 +1,30 @@
-import {router, useLocalSearchParams, useNavigation} from "expo-router";
+import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
-import {Text, YStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
+import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import MachineDot from "@/components/MachineDot";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
         FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
         RUNNING} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
+import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
-import {plannedSeconds} from "@/library/brew/brewShape";
+import {allocateBands} from "@/library/brew/bands";
+import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
 
-const TRACE_HEIGHT = 150;
 const SCREEN_PADDING = 16;
+const WORKING = new Set(["idle", "waking", "sending"]);
 
 /** A bordered press. The screen has four of them and they differ only in colour. */
 function Action({label, color, onPress}: {label: string; color: string; onPress: () => void}) {
@@ -42,7 +47,6 @@ export default function Brew() {
     // made would make it again: `start` replaces a finished run, and this
     // screen would hand it a freshly deserialised recipe on every mount.
     const viewing = view === "1";
-    const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
     // A local recipe from the route params. Used for the first render (before
@@ -77,11 +81,9 @@ export default function Brew() {
     const stalls = run?.stalls ?? recipe.pours.map(() => []);
     const pauseElapsed = run?.pauseElapsed ?? 0;
 
+    const [flexHeight, setFlexHeight] = useState(0);
+    const bands = allocateBands(flexHeight, recipe.pours.length);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
-
-    useEffect(() => {
-        navigation.setOptions({title: ""});
-    }, [navigation]);
 
     useEffect(() => {
         if (phase.name === "pouring" && !firstBrewDone) setFirstBrewDone(true);
@@ -106,12 +108,21 @@ export default function Brew() {
     // Water is the default when the kind is missing, so a phase from before
     // `block` existed still reads the way it always did.
     const blockedForWater = blocked && (blockKind ?? "notEnoughWater") === "notEnoughWater";
+    // A commanded run that has not moved yet is not finished, which is what
+    // "Ready when you are." claimed at the exact moment it had not begun.
+    const phaseCopy = phase.name === "idle" && !viewing
+        ? PHASE_COPY.connecting
+        : PHASE_COPY[phase.name];
     const headline = blocked
         ? (BLOCKED_HEADLINE[blockKind ?? "notEnoughWater"] ?? BLOCKED_WATER_HEADLINE)
         : failed
             ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
-            : PHASE_COPY[phase.name];
+            : phaseCopy;
     const headlineColor = blocked ? palette.warn : failed ? palette.danger : palette.text;
+    // The same beat that pulses the plan line. A second progress metaphor
+    // would compete with the ladder, and a spinner says "busy" without saying
+    // "busy with what".
+    const headlineOpacity = WORKING.has(phase.name) ? motion.opacity : 1;
     const offerPro = failed && phase.reason === "rejected" && canOfferProMode();
     const offerRetry = blocked || (failed && !NO_RETRY.has(phase.reason));
     // Blended, not thresholded. `warmth` is how far the line has travelled
@@ -119,24 +130,63 @@ export default function Brew() {
     // which are "greater than zero", so a threshold drew the two halves of the
     // beat identically and the flicker never appeared at all.
     const planColor = mix(palette.muted, accent, motion.warmth);
+    const {status, connect} = useMachine();
+    const liveIndex = activeIndex !== null && activeIndex < recipe.pours.length
+        ? activeIndex : null;
+    const livePour = liveIndex === null ? undefined : recipe.pours[liveIndex];
+    const resting = livePour !== undefined
+        && (stageWater[liveIndex ?? 0] ?? 0) >= Math.max(livePour.volume, 0)
+        && pauseSeconds(livePour) > 0;
 
     return (
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
-            <Text color={palette.dim} fontSize={13}>{recipe.displayName()}</Text>
+            {/* The nav row the mockup drew. `brew` is declared in the navigator
+                with `headerShown: false`, so this is the only bar. */}
+            <XStack alignItems="center" gap="$2">
+                <Pressable accessibilityRole="button" accessibilityLabel="Close"
+                           onPress={() => router.back()}>
+                    <DotIcon name="chevron-down" size={16} color={palette.dim} />
+                </Pressable>
+                <MachineDot status={status} accent={accent} onPress={() => void connect()} />
+                <Text color={palette.dim} fontSize={13} flex={1} numberOfLines={1}>
+                    {recipe.displayName()}
+                </Text>
+                {phase.name === "pouring" && (
+                    <DotMatrixText testID="brew-stage-counter" fontSize={12}
+                                   weight="bold" letterSpacing={1.4} color={palette.dim}>
+                        {`${phase.pour}/${phase.pours}`}
+                    </DotMatrixText>
+                )}
+            </XStack>
 
-            <BrewTrace
-                pours={recipe.pours}
-                samples={samples}
-                accent={accent}
-                width={width - SCREEN_PADDING * 2}
-                height={TRACE_HEIGHT}
-                plannedSeconds={plannedSeconds(recipe.pours)}
-                holding={holding}
-                planOpacity={motion.opacity}
-                planColor={planColor}
-                planDashed={motion.dashed}
-                planHeadAt={motion.headAt}
-            />
+            <YStack flex={1} gap="$3"
+                    onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
+                <BrewTrace
+                    pours={recipe.pours}
+                    samples={samples}
+                    accent={accent}
+                    width={width - SCREEN_PADDING * 2}
+                    height={bands.traceHeight}
+                    plannedSeconds={plannedSeconds(recipe.pours)}
+                    holding={holding}
+                    planOpacity={motion.opacity}
+                    planColor={planColor}
+                    planDashed={motion.dashed}
+                    planHeadAt={motion.headAt}
+                />
+
+                <BrewStageLadder
+                    pours={recipe.pours}
+                    accent={accent}
+                    activeIndex={activeIndex}
+                    barHeight={bands.barHeight}
+                    rungGap={bands.rungGap}
+                    scrolls={bands.scrolls}
+                    stageWater={stageWater}
+                    stalls={stalls}
+                    pauseElapsed={pauseElapsed}
+                />
+            </YStack>
 
             <BrewFigures
                 water={last?.water ?? 0}
@@ -145,8 +195,10 @@ export default function Brew() {
                 accent={accent}
             />
 
+            <BrewNowCard pour={livePour} accent={accent} resting={resting} />
+
             <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.8}
-                           color={headlineColor}>
+                           color={headlineColor} style={{opacity: headlineOpacity}}>
                 {headline}
             </DotMatrixText>
 
@@ -167,21 +219,13 @@ export default function Brew() {
             )}
 
             {offerPro && <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>}
-            {error !== null && <Text color={palette.danger} fontSize={13}>{error}</Text>}
-
-            <YStack flex={1}>
-                <BrewStageLadder
-                    pours={recipe.pours}
-                    accent={accent}
-                    activeIndex={activeIndex}
-                    barHeight={11}
-                    rungGap={8}
-                    scrolls
-                    stageWater={stageWater}
-                    stalls={stalls}
-                    pauseElapsed={pauseElapsed}
-                />
-            </YStack>
+            {/* `error` is the transport channel. When the phase is already a
+                failure it is restating it, which is how one refusal came to be
+                printed three times. It speaks only about things the phase
+                cannot. */}
+            {error !== null && phase.name !== "failed" && (
+                <Text color={palette.danger} fontSize={13}>{error}</Text>
+            )}
 
             {running ? (
                 <YStack gap="$3">
@@ -218,7 +262,10 @@ export default function Brew() {
                         <Action label="Export this brew" color={palette.dim}
                                 onPress={() => router.push("/brewRecord?latest=1")} />
                     )}
-                    <Action label="Done" color={palette.line} onPress={() => router.back()} />
+                    {/* No DONE. The chevron in the nav row dismisses the modal,
+                        and a second control duplicated it — painted in
+                        `palette.line`, the hairline colour, which is why it
+                        read as disabled. */}
                 </YStack>
             )}
         </YStack>
