@@ -61,12 +61,13 @@ describe("BrewNowCard", () => {
     });
 
     it("shows nothing at all before a stage is live", async () => {
-        const {queryByText, toJSON} = await renderWithProviders(
+        const {queryByText} = await renderWithProviders(
             <BrewNowCard pour={undefined} accent={palette.brand} resting={false} />
         );
 
-        const tree = toJSON();
-        expect(Array.isArray(tree) ? tree : [tree]).toHaveLength(1);
-        expect(queryByText(/POURING|RESTING/)).toBeNull();
+        // Not `toJSON()).toBeNull()`: the provider wrapper is a node whether or
+        // not the card draws, so that assertion would pass for the wrong reason.
+        // Any text at all means the card put something on the screen.
+        expect(queryByText(/\S/)).toBeNull();
     });
 });
