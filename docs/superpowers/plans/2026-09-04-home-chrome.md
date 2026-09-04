@@ -754,63 +754,126 @@ In `constants/motion.ts`, inside `ATTRACT`, beside `wordmarkFadeDelay`:
 
 - [ ] **Step 3: Write the failing tests**
 
-Add to `components/__tests__/HomeTitle.test.tsx`. Read the file's existing setup first — it pins its clock to `SESSION_START` and installs fake timers, and you must follow that pattern rather than inventing a second one.
+Read `components/__tests__/HomeTitle.test.tsx` before writing anything. It has
+three conventions you must follow rather than reinvent, and the block below
+depends on all three:
+
+- `tintOpacity()` reads `props.jestAnimatedStyle.value.opacity`, **not**
+  `props.style`. The tinted copy's style is an array (`[absoluteFill, tintStyle]`)
+  and Reanimated's jest mock does not merge the animated half into `style`, so
+  `props.style.opacity` is `undefined` and any assertion on it passes or fails
+  for the wrong reason. It also passes `includeHiddenElements: true`, which the
+  tint needs because it is `pointerEvents="none"`.
+- Fake timers are **per test**, via `startTheSessionNow()` in a `try` with
+  `jest.useRealTimers()` in the `finally`. Nothing installs them globally. These
+  tests need them for a second reason as well: the replay floor is measured with
+  `Date.now()` against a ref seeded to `SESSION_START`, so on real time the gap
+  is however long the suite took to get here and the strobe test would pass or
+  fail by luck.
+- Every `jest.advanceTimersByTime` is wrapped in `await act(async () => {...})`.
+
+Add:
 
 ```ts
 describe("the tint replays on the way back up", () => {
     it("gives the tint up when the header collapses", async () => {
-        const {rerender} = await renderWithProviders(
-            <HomeTitle count={3} fontSize={28} collapsed={false}/>
-        );
-        await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
-        jest.advanceTimersByTime(DURATION.deliberate + 1);
+        startTheSessionNow();
+        try {
+            const {rerender} = await renderWithProviders(
+                <HomeTitle count={3} fontSize={28} collapsed={false}/>
+            );
+            await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.deliberate + DURATION_SLACK);
+            });
 
-        expect(screen.getByTestId("home-title-tint").props.style)
-            .toEqual(expect.objectContaining({opacity: 0}));
+            expect(tintOpacity()).toBe(0);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it("replays it when the header expands again", async () => {
-        const {rerender} = await renderWithProviders(
-            <HomeTitle count={3} fontSize={28} collapsed={false}/>
-        );
-        await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
-        jest.advanceTimersByTime(ATTRACT.wordmarkReplayFloor + 1);
-        await rerender(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
+        startTheSessionNow();
+        try {
+            const {rerender} = await renderWithProviders(
+                <HomeTitle count={3} fontSize={28} collapsed={false}/>
+            );
+            await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
+            await act(async () => {
+                jest.advanceTimersByTime(ATTRACT.wordmarkReplayFloor + 1);
+            });
+            expect(tintOpacity()).toBe(0);
 
-        // Caught mid-rise: the point is that it came back, not where it got to.
-        jest.advanceTimersByTime(DURATION.base);
-        expect(screen.getByTestId("home-title-tint").props.style.opacity)
-            .toBeGreaterThan(0);
+            await rerender(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.base + DURATION_SLACK);
+            });
+
+            expect(tintOpacity()).toBe(1);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it("does not strobe when the list is scrubbed up and down", async () => {
-        const {rerender} = await renderWithProviders(
-            <HomeTitle count={3} fontSize={28} collapsed={false}/>
-        );
-        await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
-        // Back up immediately, the way a flick does.
-        await rerender(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
-        jest.advanceTimersByTime(DURATION.base);
+        startTheSessionNow();
+        try {
+            const {rerender} = await renderWithProviders(
+                <HomeTitle count={3} fontSize={28} collapsed={false}/>
+            );
+            await rerender(<HomeTitle count={3} fontSize={20} collapsed/>);
+            // Back up immediately, the way a flick does.
+            await rerender(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.base + DURATION_SLACK);
+            });
 
-        expect(screen.getByTestId("home-title-tint").props.style.opacity).toBe(0);
+            expect(tintOpacity()).toBe(0);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it("does not replay on mount, so a settled session stays settled", async () => {
-        await renderWithProviders(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
-        // Mounting expanded is not an expansion. Only the launch timer, which
-        // has its own tests, may touch the tint here.
-        jest.advanceTimersByTime(DURATION.base);
-        expect(screen.getByTestId("home-title-tint").props.style.opacity).toBe(1);
+        startTheSessionNow();
+        try {
+            // Mounting expanded is not an expansion. Only the launch timer,
+            // which has its own tests, may touch the tint here.
+            await renderWithProviders(<HomeTitle count={3} fontSize={28} collapsed={false}/>);
+            await act(async () => {
+                jest.advanceTimersByTime(DURATION.base + DURATION_SLACK);
+            });
+
+            expect(tintOpacity()).toBe(1);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });
 ```
 
 You will need `ATTRACT` and `DURATION` imported from `@/constants/motion`.
 
+Note what the second test pins. It advances past the floor **while collapsed**,
+so the expansion is allowed to replay, and it checks the tint reached 0 first —
+otherwise a component that simply never touched the tint would pass the final
+assertion for free.
+
+**On the existing tests.** `collapsed` is a required prop, so the eight renders
+already in the file will not typecheck without it. Adding `collapsed={false}` to
+each is the one edit you are permitted to make to them: it is a prop the
+component now demands, and it changes nothing any of them assert. Do not touch
+their assertions, their timers or their expectations. Making the prop optional
+instead is the wrong fix — the only caller is `HomeHeader`, and a default would
+let Step 6 be forgotten silently.
+
 - [ ] **Step 4: Run them and watch them fail**
 
-Run: `npx jest components/__tests__/HomeTitle.test.tsx -t "replays"`
-Expected: FAIL. `collapsed` is not a prop.
+Run: `npx jest components/__tests__/HomeTitle.test.tsx`
+Expected: the four new tests FAIL. Three of them fail because the tint never
+moves off 1; "does not replay on mount" will pass already, and is there to stay
+passing.
 
 - [ ] **Step 5: Add the trigger**
 
