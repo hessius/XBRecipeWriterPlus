@@ -349,7 +349,7 @@ function BrewDeck({
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
-                          invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
+                          invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
@@ -749,7 +749,7 @@ export default function EditRecipe() {
             network:     "Could not reach the sharing service. Check your connection.",
             limited:     "Sharing is busy right now. Try again in a few minutes.",
             unavailable: "Sharing is temporarily unavailable. Everything else still works.",
-            unusable:    "This recipe cannot be shared yet — check the pour volumes and dose.",
+            unusable:    "This recipe cannot be shared yet. Check the pour volumes and dose.",
             pending:     "This recipe's link is still being created. Try again in a moment."
         }[shareState.reason];
         notify({tone: "error", message});

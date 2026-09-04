@@ -1018,7 +1018,7 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(screen.queryByLabelText(/machine/i)).toBeNull();
     });
 
-    it("shows vitals immediately when machine.info is set at mount (task 1 — seeding)", async () => {
+    it("shows vitals immediately when machine.info is set at mount (task 1: seeding)", async () => {
         // Before the fix, machineVitals was initialised to null regardless of
         // machine.info, so the popover showed "Not in range" even when the
         // machine was already connected when the screen mounted.

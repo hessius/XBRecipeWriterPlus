@@ -137,12 +137,12 @@ describe("the machine console", () => {
         // say nothing about a connection that never came up — there is no
         // screen open to log it and no frame to log.
         sharedSettings().set("machineConsoleAcknowledged", true);
-        mockMachine.linkHistory.push({at: Date.now(), text: "refused — connection failed"});
+        mockMachine.linkHistory.push({at: Date.now(), text: "refused: connection failed"});
 
         await renderWithProviders(<Console/>);
 
         expect(screen.getByLabelText("Connection log").props.value)
-            .toMatch(/refused — connection failed/);
+            .toMatch(/refused: connection failed/);
     });
 
     it("makes you read the warning once before it will do anything", async () => {
@@ -218,9 +218,9 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
 
-        expect(screen.getByLabelText("Bypass and dose — bypass volume").props.keyboardType)
+        expect(screen.getByLabelText("Bypass and dose, bypass volume").props.keyboardType)
             .toBe("decimal-pad");
-        expect(screen.getByLabelText("Bypass and dose — dose g").props.keyboardType)
+        expect(screen.getByLabelText("Bypass and dose, dose g").props.keyboardType)
             .toBe("numeric");
     });
 

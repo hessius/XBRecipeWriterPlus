@@ -395,7 +395,7 @@ describe("RecipeCard", () => {
                         onPress={jest.fn()}/>
         );
         expect(screen.queryByLabelText("0")).toBeNull();
-        expect(screen.getAllByText("—")).toHaveLength(2);
+        expect(screen.getAllByText("–")).toHaveLength(2);
     });
 
     it("announces everything the grouping hides", async () => {

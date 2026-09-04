@@ -76,8 +76,8 @@ const ENTRIES = {
         detail: "Turning the grinder off writes grind size 81, one past the " +
                 "maximum, and the machine will refuse a card in that state " +
                 "outright. The workaround is to load any other recipe with the " +
-                "grinder enabled first — a shortcut button, another card, or " +
-                "the xBloom app — after " +
+                "grinder enabled first: a shortcut button, another card, or " +
+                "the xBloom app. After " +
                 "which this card will be accepted and the machine will show " +
                 "'--' for the grind size. There is no better way to disable " +
                 "the grinder from a recipe card."
@@ -96,7 +96,7 @@ const ENTRIES = {
         question: "What is the recipe ID for?",
         detail: "The recipe ID is how the app finds a recipe online. It is a " +
                 "three-letter vendor code, an optional T for tea, then two or " +
-                "three digits — CGL12, CGLT123. The card stores this ID and " +
+                "three digits, like CGL12 or CGLT123. The card stores this ID and " +
                 "not the name, so a card written without one will read back " +
                 "nameless. Changing or clearing it stops the wrong recipe " +
                 "being shown in the app; the machine brews the same either way."

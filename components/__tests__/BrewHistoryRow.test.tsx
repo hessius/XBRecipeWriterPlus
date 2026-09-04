@@ -59,7 +59,7 @@ describe("BrewHistoryRow", () => {
         );
     });
 
-    it("marks a brew where contact was lost as stopped (task 3 — lostContact)", async () => {
+    it("marks a brew where contact was lost as stopped (task 3: lostContact)", async () => {
         // lostContact previously fell through to the same rendering as "done"
         // because the stopped flag only checked for "failed" and "cancelled".
         const {getByText} = await renderWithProviders(

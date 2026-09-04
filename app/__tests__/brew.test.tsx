@@ -119,7 +119,8 @@ describe("brew route", () => {
         const {getByText} = await renderWithProviders(<Brew />);
         expect(getByText("NOT ENOUGH WATER FOR THIS BREW")).toBeTruthy();
         expect(getByText(/this recipe's 40 ml/)).toBeTruthy();
-        expect(getByText(/nothing has been sent/)).toBeTruthy();
+        expect(getByText(/No recipe was sent/)).toBeTruthy();
+        expect(getByText(/still in the hopper/)).toBeTruthy();
     });
 
     it("asks for a brew when opened normally", async () => {

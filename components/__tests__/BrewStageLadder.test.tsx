@@ -58,7 +58,7 @@ describe("BrewStageLadder", () => {
 
     it("explains a hold in the open card", async () => {
         const {getByText} = await draw({holding: true});
-        expect(getByText("HOLDING — THE CUP IS BEHIND")).toBeTruthy();
+        expect(getByText("HOLDING: THE CUP IS BEHIND")).toBeTruthy();
     });
 
     it("opens no card when no stage is live", async () => {

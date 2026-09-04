@@ -114,7 +114,7 @@ export default function BrewStageLadder({
                         <YStack gap="$1">
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                            color={palette.warn}>
-                                HOLDING — THE CUP IS BEHIND
+                                HOLDING: THE CUP IS BEHIND
                             </DotMatrixText>
                             <DotMatrixText fontSize={11} color={palette.dim}>
                                 The machine has stopped the water until the bed drains.

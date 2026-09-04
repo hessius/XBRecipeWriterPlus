@@ -255,7 +255,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                 />
             ) : (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
-                    Recipe deleted — stages not available.
+                    Recipe deleted. Stages not available.
                 </DotMatrixText>
             )}
 

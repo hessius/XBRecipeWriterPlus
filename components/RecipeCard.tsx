@@ -65,7 +65,7 @@ function Stat({label, value, suffix}: StatProps) {
             ) : (
                 <DotMatrixText fontSize={18} weight="extrabold"
                                color={onAccent.text}>
-                    —
+                    –
                 </DotMatrixText>
             )}
         </YStack>

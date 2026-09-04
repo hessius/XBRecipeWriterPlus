@@ -136,12 +136,12 @@ function waterVolumeOf(frame: Uint8Array): number | undefined {
 
 function telemetryText(snapshot: TelemetrySnapshot): string {
     const parts = [`suppressed ${snapshot.suppressed}`];
-    parts.push(`water ${snapshot.waterWeight === undefined ? "—" : `${snapshot.waterWeight.toFixed(1)} g`}`);
-    parts.push(`cup ${snapshot.cupWeight === undefined ? "—" : `${snapshot.cupWeight.toFixed(1)} g`}`);
-    parts.push(`tank ${snapshot.waterVolume === undefined ? "—" : `${snapshot.waterVolume.toFixed(1)} ml`}`
+    parts.push(`water ${snapshot.waterWeight === undefined ? "n/a" : `${snapshot.waterWeight.toFixed(1)} g`}`);
+    parts.push(`cup ${snapshot.cupWeight === undefined ? "n/a" : `${snapshot.cupWeight.toFixed(1)} g`}`);
+    parts.push(`tank ${snapshot.waterVolume === undefined ? "n/a" : `${snapshot.waterVolume.toFixed(1)} ml`}`
         + ` ×${snapshot.tankSeen}`);
     parts.push(`info ${snapshot.info === undefined
-        ? "—"
+        ? "n/a"
         : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`
           + ` water ${snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
     return parts.join(" · ");
@@ -287,7 +287,7 @@ function CommandRow({command, onSend}: CommandRowProps) {
                        color={palette.text} placeholderTextColor={palette.muted as ColorTokens}
                        keyboardType={arg.kind === "float32" ? "decimal-pad" : "numeric"}
                        placeholder={arg.label}
-                       accessibilityLabel={`${command.name} — ${arg.label}`}
+                       accessibilityLabel={`${command.name}, ${arg.label}`}
                        value={values[index]}
                        onChangeText={(text) => setArg(index, text)}/>
             ))}
@@ -359,7 +359,7 @@ export default function MachineConsole() {
         try {
             await machine.send(frame);
         } catch (e) {
-            appendLog(setLog, "→", frame, `not sent — ${(e as Error).message}`);
+            appendLog(setLog, "→", frame, `not sent: ${(e as Error).message}`);
         }
     }
 
@@ -482,7 +482,7 @@ export default function MachineConsole() {
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
                         <Text fontSize={12} color={palette.dim}>
                             An undocumented code is a paste away. The checksum is sent exactly
-                            as typed — never recomputed.
+                            as typed, never recomputed.
                         </Text>
                         <Input size="$3" backgroundColor={palette.raised} color={palette.text}
                                placeholderTextColor={palette.muted as ColorTokens} autoCapitalize="none"

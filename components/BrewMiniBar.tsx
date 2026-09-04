@@ -59,7 +59,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
                 ? "lost contact"
                 : (MINI_FAILURE_WHY[phase.reason] ?? "the machine stopped");
         return {
-            title: `Stopped — ${why}`,
+            title: `Stopped: ${why}`,
             detail: "KEPT IN YOUR BREW HISTORY",
             line: palette.danger
         };

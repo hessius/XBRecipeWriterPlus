@@ -65,7 +65,7 @@ describe("BrewMiniBar", () => {
 
     it("says where a stopped brew went", async () => {
         const {getByText} = await draw({phase: {name: "failed", reason: "noWater"}});
-        expect(getByText("Stopped — no water")).toBeTruthy();
+        expect(getByText("Stopped: no water")).toBeTruthy();
         expect(getByText("KEPT IN YOUR BREW HISTORY")).toBeTruthy();
     });
 
@@ -83,7 +83,7 @@ describe("BrewMiniBar", () => {
 
     it("names each mid-brew failure rather than calling them all lost contact", async () => {
         const beans = await draw({phase: {name: "failed", reason: "noBeans"}});
-        expect(beans.getByText("Stopped — no beans")).toBeTruthy();
+        expect(beans.getByText("Stopped: no beans")).toBeTruthy();
     });
 
     it("draws a stopped brew in danger", async () => {

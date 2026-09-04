@@ -1,6 +1,15 @@
 /** What each phase says. The wording is the feature. */
 export const PHASE_COPY: Record<string, string> = {
     idle:        "Ready when you are.",
+    /**
+     * Commanded, but the machine has not moved yet.
+     *
+     * Not a phase — there is no `{name: "connecting"}` in `BrewPhase`. It is
+     * the copy the brew screen substitutes for `idle` when a run has been
+     * asked for, because "Ready when you are." claimed the run was finished at
+     * the exact moment it had not begun. Task 14 does the substituting.
+     */
+    connecting:  "Connecting to the machine…",
     // The machine loses the question rather than refusing it, and each retry
     // opens a fresh session, which beeps. Saying so explains the beeping.
     waking:      "Waiting for the machine to answer…",
@@ -16,7 +25,7 @@ export const PHASE_COPY: Record<string, string> = {
     grinding:    "Grinding…",
     done:        "Enjoy.",
     cancelled:   "Stopped.",
-    lostContact: "Lost contact — the machine is still brewing."
+    lostContact: "Lost contact. The machine is still brewing."
 };
 
 export const FAILURE_COPY: Record<string, string> = {
@@ -39,7 +48,7 @@ export const FAILURE_COPY: Record<string, string> = {
  */
 export function blockedWaterCopy(totalMl: number): string {
     return `The tank will not cover this recipe's ${totalMl} ml. `
-        + "Fill it and try again — nothing has been sent to the machine.";
+        + "Fill it and try again. No recipe was sent. Your dose is still in the hopper.";
 }
 
 export const BLOCKED_WATER_HEADLINE = "NOT ENOUGH WATER FOR THIS BREW";
