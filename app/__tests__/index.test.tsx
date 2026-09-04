@@ -950,6 +950,45 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(mockPush).toHaveBeenCalledTimes(1);
     });
 
+    it("draws the shape the settings chose", async () => {
+        mockRemembered = "machine-device-id";
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", true);
+        settings.set("brewShortcut", "chip");
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+        );
+
+        const shortcut = await screen.findByTestId("brew-shortcut");
+
+        // Presence alone proves nothing here. The screen currently hands every
+        // card the `edge` shape from a bridge left by the previous task, so a
+        // shortcut appears whatever the setting says -- which is the bug this
+        // task exists to fix.
+        //
+        // The chip is wide enough to say the word outright; the bands stack their
+        // letters one per line. So the word itself is what distinguishes the
+        // shape that was chosen from the shape that was hardcoded.
+        expect(within(shortcut).getByText("BREW")).toBeTruthy();
+        expect(within(shortcut).queryByText("B")).toBeNull();
+    });
+
+    it("draws no shortcut when nobody here owns a machine", async () => {
+        // Same library and same setting as above -- only the machine differs, so
+        // this cannot pass because the card or the recipe went missing.
+        mockRemembered = "";
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", true);
+        settings.set("brewShortcut", "chip");
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+        );
+
+        // A dead BREW button on every recipe would be worse than no button.
+        expect(await screen.findByText("Ethiopia")).toBeTruthy();
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+    });
+
     it("refuses a second recipe while the machine is still brewing", async () => {
         // There is one machine. Pushing the brew screen anyway would show the
         // recipe that is *already* brewing, which reads as the app having

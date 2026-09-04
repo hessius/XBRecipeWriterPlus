@@ -29,6 +29,7 @@ import {useSetting} from "@/hooks/useSetting";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
+import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import type {Settings} from "@/library/Settings";
@@ -75,10 +76,19 @@ export default function HomeScreen({db, settings}: Props) {
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
+    const [shortcutShape] = useSetting("brewShortcut", settings);
 
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
-    const showBrew = showBrewRows && remembered !== "";
+    /**
+     * Undefined rather than a shape when there is nothing to brew on.
+     *
+     * A dead BREW button on every recipe would be worse than no button, which
+     * is the same reason the editor's action bar checks `machineDeviceId`.
+     */
+    const brewShortcut = showBrewRows && remembered !== ""
+        ? asBrewShortcut(shortcutShape)
+        : undefined;
     // Seeded from machine.info so a machine that is already connected when the
     // screen mounts does not show "Not in range" while the header dot says
     // connected. The useState initialiser runs once; subsequent updates arrive
@@ -500,7 +510,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
-                                brewShortcut={showBrew ? "edge" : undefined}
+                                brewShortcut={brewShortcut}
                                 onBrew={() => openBrew(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
