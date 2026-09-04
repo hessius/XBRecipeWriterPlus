@@ -59,23 +59,48 @@ export function stallsInStage(
     const startMl = stageOriginMl(samples, stage);
     const stalls: Stall[] = [];
 
-    // Where the water last rose, and whether we have since seen it sitting
-    // still. `flatSeen` is what separates a stall from a quiet radio.
-    let anchorAt = mine[0].at;
-    let anchorMl = mine[0].water;
-    let flatSeen = 0;
-
-    const close = (endAt: number): void => {
+    const push = (anchorAt: number, anchorMl: number, endAt: number,
+                  flatSeen: number): void => {
         const seconds = (endAt - anchorAt) / 1000;
         if (flatSeen > 0 && seconds >= minSeconds) {
             stalls.push({atMl: round1(anchorMl - startMl), seconds: round1(seconds)});
         }
     };
 
+    // `scan` reports each rise as it happens, closing whatever plateau came
+    // before it.
+    const state = scan(mine, push);
+
+    // A stall that has not ended yet, so the rung can draw it growing. Only
+    // while the stage still owes water: flat water at the target is the pause.
+    const last = mine[mine.length - 1];
+    if (last.water - startMl + NOISE_FLOOR_ML < targetMl) {
+        push(state.anchorAt, state.anchorMl, last.at, state.flatSeen);
+    }
+
+    return stalls;
+}
+
+/**
+ * Walk a stage's samples, tracking where the water last rose.
+ *
+ * Shared so that the recorded stalls and the live warning cannot drift apart:
+ * `anchorAt`/`anchorMl` are the last reading that counted as movement, and
+ * `flatSeen` is how many readings have since sat still — the thing that
+ * separates a stall from a quiet radio.
+ */
+function scan(
+    mine: BrewSample[],
+    onRise?: (anchorAt: number, anchorMl: number, at: number, flatSeen: number) => void
+): {anchorAt: number; anchorMl: number; flatSeen: number} {
+    let anchorAt = mine[0].at;
+    let anchorMl = mine[0].water;
+    let flatSeen = 0;
+
     for (let i = 1; i < mine.length; i++) {
         const s = mine[i];
         if (s.water - anchorMl > NOISE_FLOOR_ML) {
-            close(s.at);
+            onRise?.(anchorAt, anchorMl, s.at, flatSeen);
             anchorAt = s.at;
             anchorMl = s.water;
             flatSeen = 0;
@@ -84,12 +109,40 @@ export function stallsInStage(
         }
     }
 
-    // A stall that has not ended yet, so the rung can draw it growing. Only
-    // while the stage still owes water: flat water at the target is the pause.
-    const last = mine[mine.length - 1];
-    if (last.water - startMl + NOISE_FLOOR_ML < targetMl) close(last.at);
+    return {anchorAt, anchorMl, flatSeen};
+}
 
-    return stalls;
+/**
+ * Whether the stage's most recent reading sits inside a stall that has not
+ * ended.
+ *
+ * The same rule as `stallsInStage`, asked of the present moment, and it has to
+ * be: this is what raises the live HOLDING warning, and `stallsInStage` is
+ * what draws the amber, so answering them two different ways puts the words
+ * and the picture at odds.
+ *
+ * Notably it is *not* a comparison of the last two samples. Weight frames
+ * arrive around ten times a second and a pour runs around 3.2 ml/s, so
+ * consecutive readings differ by about 0.32 ml — inside the noise floor. Any
+ * adjacent-pair test therefore calls a perfectly healthy pour flat, and the
+ * warning latches on for the rest of the stage.
+ *
+ * @param stage 1-based, matching `BrewSample.pour`
+ */
+export function stalledNow(
+    samples: BrewSample[], stage: number, targetMl: number,
+    minSeconds: number = MIN_STALL_SECONDS
+): boolean {
+    const mine = samples.filter((s) => s.pour === stage);
+    if (mine.length < 2) return false;
+
+    const startMl = stageOriginMl(samples, stage);
+    const last = mine[mine.length - 1];
+    // Flat water at or past the target is the planned rest, not a stall.
+    if (last.water - startMl + NOISE_FLOOR_ML >= targetMl) return false;
+
+    const {anchorAt, flatSeen} = scan(mine);
+    return flatSeen > 0 && (last.at - anchorAt) / 1000 >= minSeconds;
 }
 
 /** One decimal. Millilitres arrive from a scale and carry more than they mean. */

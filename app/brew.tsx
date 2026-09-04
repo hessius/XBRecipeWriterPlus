@@ -98,7 +98,9 @@ export default function Brew() {
     // with the dose already spent.
     const blocked = phase.name === "failed" && phase.reason === "blocked";
     const failed = phase.name === "failed" && !blocked;
-    const total = localRecipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
+    // From `recipe`, not `localRecipe`: opened from the mini bar the route
+    // carries no recipe at all, and the refusal copy quoted 0 ml.
+    const total = recipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
     const last = samples[samples.length - 1];
 
     // Only a refusal for water gets the water copy. `block` names which of the

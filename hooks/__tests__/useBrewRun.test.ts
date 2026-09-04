@@ -178,6 +178,33 @@ describe("useBrewRun", () => {
         expect(result.current.holding).toBe(false);
     });
 
+    it("stops holding once the water moves again, at a real pour's pace", async () => {
+        // The device defect this rule was written for, in its second half.
+        // A stall opens, then the machine resumes -- but water frames arrive
+        // about ten times a second and a pour runs about 3.2 ml/s, so each
+        // frame is ~0.32 ml apart. Comparing two adjacent samples against the
+        // 0.5 ml noise floor calls that flat, so HOLDING latched on for the
+        // rest of the stage while the machine was visibly pouring.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(10);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await act(async () => { jest.advanceTimersByTime(5_000); });
+        await h.water(10.2);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(result.current.holding).toBe(true);
+
+        // Now pour, one realistic frame at a time.
+        for (let i = 1; i <= 12; i++) {
+            await act(async () => { jest.advanceTimersByTime(100); });
+            await h.water(10.2 + i * 0.32);
+            await act(async () => { jest.advanceTimersByTime(50); });
+        }
+
+        expect(result.current.holding).toBe(false);
+    });
+
     it("does not call the planned rest a hold", async () => {
         // This is the device defect from #87. Stage 1 wants 40 ml and has had
         // them, so everything flat after that is the 20 s rest the recipe

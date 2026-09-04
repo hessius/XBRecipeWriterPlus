@@ -25,6 +25,10 @@ const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
 
+// The mini bar opens this screen as `/brew?view=1`, with no recipe on the
+// route -- the run already holds one. Settable so a test can be that case.
+let mockRecipeJSON: string | undefined;
+
 // Build a minimal Recipe for the mock run. Two-pour recipe: pour 1 is 40 ml.
 const mockRecipe = (() => {
     const r = new Recipe();
@@ -86,17 +90,18 @@ jest.mock("expo-router", () => ({
     router: {back: jest.fn(), push: jest.fn()},
     useLocalSearchParams: () => ({
         view: mockView,
-        recipeJSON: JSON.stringify({
-            name: "Ethiopia Guji",
-            pours: [{pourNumber: 1, volume: 40, temperature: 93,
-                     flowRate: 40, agitation: 0, pourPattern: 0, pauseTime: 20}]
-        })
+        recipeJSON: mockRecipeJSON
     }),
     useNavigation: () => ({setOptions: jest.fn()})
 }));
 
 beforeEach(() => {
     mockView = undefined;
+    mockRecipeJSON = JSON.stringify({
+        name: "Ethiopia Guji",
+        pours: [{pourNumber: 1, volume: 40, temperature: 93,
+                 flowRate: 40, agitation: 0, pourPattern: 0, pauseTime: 20}]
+    });
     mockStart.mockClear();
     mockStartInPro.mockClear();
     mockBrew.mockClear();
@@ -171,6 +176,21 @@ describe("brew route", () => {
         } as BrewPhase;
         const {getByText} = await renderWithProviders(<Brew />);
         expect(getByText("NOT ENOUGH WATER FOR THIS BREW")).toBeTruthy();
+        expect(getByText(/this recipe's 40 ml/)).toBeTruthy();
+    });
+
+    it("names the recipe's real volume when opened from the mini bar", async () => {
+        // The mini bar routes to /brew?view=1 with no recipeJSON, because the
+        // run already holds the recipe. The total was read off the route's
+        // copy regardless, so tapping "TAP TO SEE WHY" on a refused brew
+        // reported that the tank would not cover this recipe's 0 ml.
+        mockView = "1";
+        mockRecipeJSON = undefined;
+        mockPhase = {
+            name: "failed", reason: "blocked", block: "notEnoughWater",
+            detail: "The tank is low."
+        } as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
         expect(getByText(/this recipe's 40 ml/)).toBeTruthy();
     });
 

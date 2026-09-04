@@ -89,6 +89,16 @@ describe("BrewStageRung", () => {
         expect(getByText("14 s left")).toBeTruthy();
     });
 
+    it("shows what it poured, not a countdown, once the stage is done", async () => {
+        // The resting branch used to be chosen on delivered-versus-target
+        // alone, with no reference to the state. A finished stage is handed
+        // pauseElapsed 0, so every completed rung of every brew in history
+        // read "20 s left" — a stage that ended last week, still counting.
+        const {getByText} = await draw({state: "done", delivered: 70});
+
+        expect(getByText("70/70 ml")).toBeTruthy();
+    });
+
     it("changes texture, not colour, for a planned rest", async () => {
         const {getByTestId} = await draw({
             state: "active", delivered: 70, pauseElapsed: 6

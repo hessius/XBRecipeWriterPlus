@@ -5,7 +5,7 @@ import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
-import {NOISE_FLOOR_ML, stageOriginMl, stallsInStage, type Stall}
+import {stageOriginMl, stalledNow, stallsInStage, type Stall}
     from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type Recipe from "@/library/Recipe";
@@ -54,15 +54,6 @@ function reachedAt(samples: BrewSample[], stage: number, targetMl: number): numb
     const startMl = stageOriginMl(samples, stage);
     const hit = mine.find((s) => s.water - startMl >= targetMl);
     return hit === undefined ? null : hit.at / 1000;
-}
-
-/** Whether the most recent sample of a stage is part of a stall still open. */
-function stillStalled(samples: BrewSample[], stage: number): boolean {
-    const mine = samples.filter((s) => s.pour === stage);
-    if (mine.length < 2) return false;
-    const last = mine[mine.length - 1];
-    const before = mine[mine.length - 2];
-    return last.water - before.water <= NOISE_FLOOR_ML;
 }
 
 /**
@@ -193,7 +184,6 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
 
     const live = activeIndex !== null ? pours[activeIndex] : undefined;
     const liveTarget = live === undefined ? 0 : Math.max(live.volume, 0);
-    const liveWater = activeIndex !== null ? (stageWater[activeIndex] ?? 0) : 0;
     // The rest has not begun until the water is in. Measured from the moment
     // the stage reached its target rather than from the plan, so an early or
     // late pour does not shift the countdown.
@@ -210,9 +200,11 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const heldSeconds = liveStalls.reduce((sum, s) => sum + s.seconds, 0);
     // `activeIndex !== null` leads the chain so TypeScript narrows it for the
     // `activeIndex + 1` below; `pouring` alone does not tell it anything.
+    // One rule, asked of the present moment. `stalledNow` already refuses a
+    // stage that has reached its target, so the planned rest is covered there
+    // rather than by a second condition that could disagree with it.
     const holding = activeIndex !== null && pouring
-        && liveWater < liveTarget && liveStalls.length > 0
-        && stillStalled(samples, activeIndex + 1);
+        && stalledNow(samples, activeIndex + 1, liveTarget);
 
     return {
         ...brewer, samples, elapsed, stageElapsed, activeIndex, holding, heldSeconds,

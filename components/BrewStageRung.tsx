@@ -76,11 +76,20 @@ function fillColour(kind: Segment["kind"], accent: string, done: boolean): strin
     return done ? palette.muted : accent;
 }
 
-/** `41/70 ml` while pouring, `14 s left` while resting. */
-function readout(pour: Pour, delivered: number, pauseElapsed: number): string {
+/**
+ * `41/70 ml` while pouring, `14 s left` while resting, `70/70 ml` once done.
+ *
+ * The countdown belongs to the active stage alone. A done stage is handed a
+ * `pauseElapsed` of 0 — the ladder only tracks it for the active index — so
+ * without the state in hand this read the full rest back out as time
+ * remaining, on every finished rung, forever.
+ */
+function readout(
+    pour: Pour, delivered: number, pauseElapsed: number, state: RungState
+): string {
     const target = Math.max(pour.volume, 0);
     const rest = pauseSeconds(pour);
-    if (delivered >= target && rest > 0) {
+    if (state === "active" && delivered >= target && rest > 0) {
         return `${Math.max(0, Math.round(rest - pauseElapsed))} s left`;
     }
     return `${Math.round(delivered)}/${target} ml`;
@@ -198,7 +207,7 @@ export default function BrewStageRung({
             <DotMatrixText fontSize={12} weight="bold" color={palette.dim}>
                 {state === "pending"
                     ? `${Math.max(pour.volume, 0)} ml`
-                    : readout(pour, delivered, pauseElapsed)}
+                    : readout(pour, delivered, pauseElapsed, state)}
             </DotMatrixText>
         </XStack>
     );
