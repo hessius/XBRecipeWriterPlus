@@ -1,6 +1,7 @@
 import type {BrewFailure} from "@/library/machine/Machine";
+import Pour from "@/library/Pour";
 
-import {stallsInStage, type Stall} from "./stalls";
+import {stageOriginMl, stallsInStage, type Stall} from "./stalls";
 
 /**
  * One instant of a brew, as the machine reported it.
@@ -64,6 +65,23 @@ export type BrewRecord = {
      * existed.
      */
     stalls?: Stall[][];
+    /**
+     * The plan this brew was started from.
+     *
+     * Copied for the same reason `recipeName` and `accent` are: a brew is a
+     * record of an event, and editing or deleting the recipe afterwards must
+     * not rewrite it. Absent on rows written before it existed, which fall
+     * back to the live recipe as they always did.
+     */
+    plan?: PlanStage[];
+    /**
+     * What each stage actually delivered, index-aligned with `plan`.
+     *
+     * Stored rather than recomputed on read, like `stalls`: the stream is
+     * subject to retention, and a record whose samples have been swept would
+     * silently go back to drawing the plan as though it had all poured.
+     */
+    stageWater?: number[];
 };
 
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
@@ -94,4 +112,79 @@ export function summarise(samples: BrewSample[], plannedSeconds: number): BrewSu
  */
 export function stallsFromSamples(samples: BrewSample[], targets: number[]): Stall[][] {
     return targets.map((target, i) => stallsInStage(samples, i + 1, target));
+}
+
+/**
+ * One stage of the plan a brew was started from.
+ *
+ * A structural copy of `Pour`'s fields rather than the object, because this
+ * goes through JSON into a database column and comes back without methods.
+ */
+export type PlanStage = {
+    pourNumber: number;
+    volume: number;
+    temperature: number;
+    flowRate: number;
+    agitation: number;
+    pourPattern: number;
+    pauseTime: number;
+};
+
+/** The plan as it stood when the brew began. */
+export function planFromPours(pours: Pour[]): PlanStage[] {
+    return pours.map((pour) => ({
+        pourNumber: pour.pourNumber,
+        volume: pour.volume,
+        temperature: pour.temperature,
+        flowRate: pour.flowRate,
+        agitation: pour.agitation,
+        pourPattern: pour.pourPattern,
+        pauseTime: pour.pauseTime
+    }));
+}
+
+/**
+ * Back into `Pour`s, because the ladder calls `getAgitationBefore` and friends.
+ *
+ * Anything that is not a plan reads as no plan, which falls back to the live
+ * recipe. A half-understood plan drawn as a ladder would be a lie with a
+ * shape, and this column can hold whatever an older version wrote.
+ */
+export function poursFromPlan(plan: PlanStage[] | undefined): Pour[] {
+    if (!Array.isArray(plan)) return [];
+    const numeric = (value: unknown): value is number =>
+        typeof value === "number" && Number.isFinite(value);
+    if (!plan.every((stage) => stage !== null && typeof stage === "object"
+        && numeric(stage.volume) && numeric(stage.temperature)
+        && numeric(stage.agitation) && numeric(stage.pourPattern))) {
+        return [];
+    }
+    return plan.map((stage, index) => new Pour(
+        numeric(stage.pourNumber) ? stage.pourNumber : index + 1,
+        stage.volume, stage.temperature,
+        numeric(stage.flowRate) ? stage.flowRate : 0,
+        stage.agitation, stage.pourPattern,
+        numeric(stage.pauseTime) ? stage.pauseTime : 0
+    ));
+}
+
+/**
+ * What each stage actually delivered, from the stream.
+ *
+ * `water` is cumulative across the brew, so a stage's own delivery is the
+ * difference across it. A stage that never ran contributes 0 rather than the
+ * running total, which is the whole point: a brew that died in stage 2 of 4
+ * used to draw stages 3 and 4 full to the brim.
+ *
+ * Clamped at 0 because the firmware auto-tares during the bloom (#90) and a
+ * negative bar would draw backwards.
+ */
+export function stageWaterFromSamples(samples: BrewSample[], stages: number): number[] {
+    return Array.from({length: stages}, (_unused, index) => {
+        const stage = index + 1;
+        const mine = samples.filter((s) => s.pour === stage);
+        const last = mine[mine.length - 1];
+        if (last === undefined) return 0;
+        return Math.max(0, last.water - stageOriginMl(samples, stage));
+    });
 }
