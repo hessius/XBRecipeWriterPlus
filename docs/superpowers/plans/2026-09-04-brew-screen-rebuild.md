@@ -3459,16 +3459,37 @@ Padding on the close button, the chevron removed, the recipe's accent, and a dis
 
 Add to `components/__tests__/BrewMiniBar.test.tsx`:
 
+The helper in that file is called `draw`, not `drawBar`, and it already supplies
+every prop; pass only the overrides.
+
+**First, make the chevron addressable.** It currently has no `testID`, so
+`queryByTestId("mini-chevron")` returns null whether or not the chevron is
+there, and the test would pass before the change as well as after — it could
+never fail, and would have proved nothing. There is no `ByType` query available
+in this setup to identify it instead (the render result exposes text, testID,
+label, role and hint queries only). So add the tag to the element you are about
+to delete:
+
+```tsx
+                <DotIcon name="chevron-right" size={14} color={palette.dim}
+                         testID="mini-chevron" />
+```
+
+That one line exists only to produce a real red, and Step 3 deletes it together
+with the chevron itself. Nothing test-only survives the task.
+
+Now add to `components/__tests__/BrewMiniBar.test.tsx`:
+
 ```tsx
 describe("the bar's controls", () => {
     it("has no chevron, because the whole bar is the tap target", async () => {
-        const {queryByTestId} = await drawBar({phase: {name: "pouring", pour: 1, pours: 4}});
+        const {queryByTestId} = await draw({phase: {name: "pouring", pour: 1, pours: 4}});
 
         expect(queryByTestId("mini-chevron")).toBeNull();
     });
 
     it("gives the close button room to be pressed", async () => {
-        const {getByLabelText} = await drawBar({phase: {name: "done"}});
+        const {getByLabelText} = await draw({phase: {name: "done"}});
 
         expect(getByLabelText("Dismiss").props.hitSlop).toEqual(
             {top: 12, bottom: 12, left: 12, right: 12}
@@ -3476,16 +3497,21 @@ describe("the bar's controls", () => {
     });
 
     it("uses the recipe's accent while it is pouring", async () => {
-        const {getByTestId} = await drawBar({
+        const {getByTestId} = await draw({
             phase: {name: "pouring", pour: 1, pours: 4}, accent: "#123456"
         });
 
-        expect(getByTestId("trace-water").props.stroke).toBe("#123456");
+        expect(getByTestId("trace-water").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor("#123456")})
+        );
     });
 });
 ```
 
-`drawBar` is the existing helper in that file.
+`stroke` is an animated value, not the string you passed, which is why the
+neighbouring "draws a stopped brew in danger" test matches on
+`expect.objectContaining({payload: processColor(...)})`. `processColor` is
+already imported at the top of the file. Asserting `.toBe("#123456")` fails.
 
 - [ ] **Step 2: Run them and see them fail**
 
@@ -3493,16 +3519,19 @@ describe("the bar's controls", () => {
 npx jest components/__tests__/BrewMiniBar.test.tsx -t "the bar's controls"
 ```
 
-Expected: FAIL — the chevron is present and the close button has no `hitSlop`.
+Expected: FAIL — the chevron is present (now that it is tagged) and the close
+button has no `hitSlop`. If the chevron test passes at this point, you have not
+added the `testID`, and the test is vacuous.
 
 - [ ] **Step 3: Implement**
 
 In `components/BrewMiniBar.tsx`:
 
-Delete this line and the now-unused parts of the `DotIcon` usage for it:
+Delete the chevron outright, including the `testID` Step 1 added to it:
 
 ```tsx
-                <DotIcon name="chevron-right" size={14} color={palette.dim} />
+                <DotIcon name="chevron-right" size={14} color={palette.dim}
+                         testID="mini-chevron" />
 ```
 
 The comment for the deletion belongs on the `Pressable` that wraps the whole bar:
@@ -3526,7 +3555,12 @@ Give the dismiss control room:
                 </Pressable>
 ```
 
-The trace already takes `line` as its accent, and `line` is `props.accent` in the pouring and grinding branches of `say()`, so the third test passes once `accent` is threaded through the test helper. Confirm the `pouring` branch reads `props.accent` and not a palette constant; if it does not, change it to `props.accent`.
+The trace already takes `line` as its accent, and `line` is `props.accent` in
+both the pouring and grinding branches of `say()` (confirmed at
+`BrewMiniBar.tsx:89` and `:94`, passed to the trace at `:128`). So the third
+test should pass as soon as it is written correctly. If it is the only red left
+after Step 3, check the matcher before changing any source: it is far more
+likely that `stroke` was asserted as a bare string.
 
 Animate the dismissal. Wrap the returned `XStack` in a Reanimated view with an exiting animation, using the app's own timing rather than a library default:
 
