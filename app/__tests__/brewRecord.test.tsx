@@ -10,6 +10,7 @@ import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type Recipe from "@/library/Recipe";
+import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -44,6 +45,31 @@ jest.mock("@/hooks/useBrewHistory", () => ({
 const mockRecipe = {pours: []} as unknown as Recipe;
 const mockLookup: RecipeLookup = {getRecipe: jest.fn(() => mockRecipe)};
 const noRecipeLookup: RecipeLookup = {getRecipe: jest.fn(() => null)};
+
+// The real ladder, wrapped so a test can see what the screen handed it. Stalls
+// travel a long way — recorder, database, screen — and the last leg is the one
+// no rendered pixel would reveal if it broke.
+let ladderProps: {stalls?: unknown} = {};
+jest.mock("@/components/BrewStageLadder", () => {
+    const actual = jest.requireActual("@/components/BrewStageLadder");
+    const Ladder = actual.default;
+    return {
+        __esModule: true,
+        ...actual,
+        default: (props: Record<string, unknown>) => {
+            ladderProps = props;
+            return Ladder(props);
+        }
+    };
+});
+
+// A recipe with real pours, since the ladder draws each rung from the Pour.
+const twoPours = {
+    pours: [
+        new Pour(1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10),
+        new Pour(2, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10)
+    ]
+} as unknown as Recipe;
 
 const record: StoredBrew = {
     id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
@@ -93,6 +119,22 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         // BrewStageLadder's root view carries testID="ladder".
         expect(screen.getByTestId("ladder")).toBeTruthy();
+    });
+
+    it("hands the recorded stalls to the ladder", async () => {
+        const stalls = [[{atMl: 20, seconds: 11}], []];
+        mockOpened = {record: {...record, stalls}, samples: []};
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+        expect(ladderProps.stalls).toEqual(stalls);
+    });
+
+    it("gives the ladder an empty list per stage for a brew recorded before stalls", async () => {
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+        expect(ladderProps.stalls).toEqual([[], []]);
     });
 
     it("shows a note and no ladder when the recipe has been deleted", async () => {

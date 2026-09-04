@@ -127,6 +127,23 @@ describe("BrewDatabase", () => {
         expect(db.get("brew-1")).toMatchObject({outcome: "failed", failure: "noWater"});
     });
 
+    it("round-trips the stalls, one list per stage", () => {
+        // The column list and the parameter array are written out separately,
+        // so a stall that survives the trip is also proof the two still line up.
+        const stalls = [[{atMl: 20, seconds: 11}], []];
+        const db = new BrewDatabase();
+        db.insert(record({stalls}), []);
+        expect(db.get("brew-1")?.stalls).toEqual(stalls);
+    });
+
+    it("reads a row written before stalls existed as a brew that stalled nowhere", () => {
+        // Not as one whose stalls are unknown: an older brew draws no amber,
+        // and must not throw history away for want of a column.
+        const db = new BrewDatabase();
+        db.insert(record(), []);
+        expect(db.get("brew-1")?.stalls).toBeUndefined();
+    });
+
     it("round-trips a stream", () => {
         const db = new BrewDatabase();
         db.insert(record(), stream);
