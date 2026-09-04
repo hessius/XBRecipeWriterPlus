@@ -23,7 +23,7 @@ export const FAILURE_COPY: Record<string, string> = {
     // The machine stopped mid-brew. Rare, and not the same event as a refusal:
     // this one costs a dose.
     noWater:      "The machine ran out of water.",
-    noBeans:      "The machine is waiting for beans.",
+    noBeans:      "The machine stopped during grinding. Check there are beans in the hopper.",
     gearPosition: "The grinder could not find its gear position.",
     doseMismatch: "The machine would not accept that dose and water volume.",
     idling:       "The machine went idle before the brew started.",

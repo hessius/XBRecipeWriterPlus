@@ -88,8 +88,9 @@ export type BrewPhase =
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
     40522: "noWater",
     8203:  "gearPosition",
-    8204:  "doseMismatch",
-    40517: "idling"
+    8204:  "doseMismatch"
+    // EVENT.ERROR_IDLING is deliberately absent: it means different things
+    // depending on the phase it arrives in, and `onEvent` decides.
 };
 
 /** States from which a brew may be started at all. */
@@ -877,6 +878,16 @@ export default class Machine {
 
     private onEvent(code: number, value?: number): void {
         if (!this.brewing) return;
+
+        if (code === EVENT.ERROR_IDLING) {
+            // During grinding the machine is almost certainly flashing +BEANS:
+            // it stops the burr and idles rather than reporting an empty
+            // hopper as its own event. Outside grinding it is what it says.
+            this.setPhase(this.phase.name === "grinding"
+                ? {name: "failed", reason: "noBeans"}
+                : {name: "failed", reason: "idling"});
+            return;
+        }
 
         const failure = FAILURE_EVENTS[code];
         if (failure !== undefined) {

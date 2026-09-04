@@ -1205,6 +1205,29 @@ describe("the machine's pour index", () => {
     });
 });
 
+describe("event 40517", () => {
+    it("means beans when it arrives during grinding", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        // The grinder is running; then the machine stops and idles.
+        transport.emit(status(0x22));
+        expect(machine.phase.name).toBe("grinding");
+        transport.emit(notification(40517 & 0xFF, 40517 >> 8, [0]));
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noBeans"});
+    });
+
+    it("still means idling when it arrives before grinding", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        transport.emit(notification(40517 & 0xFF, 40517 >> 8, [0]));
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "idling"});
+    });
+});
+
 describe("a stale state does not refuse a fresh brew", () => {
     beforeEach(() => { jest.useFakeTimers(); });
     afterEach(() => { jest.useRealTimers(); });
