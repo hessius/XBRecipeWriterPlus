@@ -8,6 +8,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import PourGlyph, {glyphForPattern, type GlyphKind} from "@/components/PourGlyph";
 import {palette} from "@/constants/colors";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
+import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -21,10 +22,23 @@ type Props = {
     activeIndex: number | null;
     /** Seconds spent in the live stage. Drives the fill and the re-scale. */
     stageElapsed: number;
+    /**
+     * Millilitres delivered per stage, 1:1 with `pours`.
+     *
+     * Optional because Task 11 is what wires the real values through from
+     * `useBrewRun`. Until then a finished stage is assumed to have had all of
+     * its water, which is true, and a live one none, which is not -- the live
+     * fill is deliberately wrong for one task rather than faked from elapsed
+     * time, because a plausible-looking wrong fill is the thing that made the
+     * old ladder unreadable on hardware.
+     */
+    stageWater?: number[];
+    /** Seconds into the live stage's planned rest. Task 11 wires it. */
+    pauseElapsed?: number;
+    /** Stalls per stage, 1:1 with `pours`. Task 11 wires them. */
+    stalls?: Stall[][];
     holding?: boolean;
 };
-
-const LANE_WIDTH = 120;
 
 const GLYPH_WORDS: [GlyphKind, string][] = [
     ["centered", "CENTRED"],
@@ -46,7 +60,8 @@ function stageSeconds(pour: Pour): number {
  * the list it reads as a footer belonging to no stage in particular.
  */
 export default function BrewStageLadder({
-    pours, accent, activeIndex, stageElapsed, holding = false
+    pours, accent, activeIndex, stageElapsed, stageWater, pauseElapsed = 0,
+    stalls, holding = false
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured y-offset relative to the ScrollView content.
@@ -74,10 +89,6 @@ export default function BrewStageLadder({
             : index < activeIndex ? "done"
             : index === activeIndex ? "active"
             : "pending";
-        const span = stageSeconds(pour);
-        const progress = state === "done"
-            ? 1
-            : state === "active" && span > 0 ? stageElapsed / span : 0;
 
         rows.push(
             <View
@@ -92,9 +103,12 @@ export default function BrewStageLadder({
                     state={state}
                     accent={accent}
                     laneSeconds={laneSeconds}
-                    laneWidth={LANE_WIDTH}
-                    progress={progress}
-                    holding={holding && state === "active"}
+                    barHeight={11}
+                    delivered={stageWater?.[index]
+                        ?? (state === "done" ? Math.max(pour.volume, 0) : 0)}
+                    pauseElapsed={state === "active" ? pauseElapsed
+                        : state === "done" ? pauseSeconds(pour) : 0}
+                    stalls={stalls?.[index] ?? []}
                 />
             </View>
         );

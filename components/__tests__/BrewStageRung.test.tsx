@@ -1,139 +1,110 @@
-// components/__tests__/BrewStageRung.test.tsx
 import React from "react";
 
 import BrewStageRung from "@/components/BrewStageRung";
-import {accents, palette} from "@/constants/colors";
-
+import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
-const TEST_ACCENT = accents.coffee[1];
+const ACCENT = palette.brand;
 
-function pour(overrides: Partial<Pour> = {}): Pour {
-    const p = new Pour(1, 45, 94, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20);
-    Object.assign(p, overrides);
-    return p;
+function stage(volume = 70, pause = 20): Pour {
+    return new Pour(1, volume, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, pause);
 }
 
-async function draw(props: Partial<React.ComponentProps<typeof BrewStageRung>> = {}) {
+async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageRung>> = {}) {
     return renderWithProviders(
         <BrewStageRung
-            pour={pour()}
-            index={5}
+            pour={stage()}
+            index={0}
             state="pending"
-            accent={TEST_ACCENT}
-            laneSeconds={60}
-            laneWidth={120}
-            progress={0}
-            {...props}
+            accent={ACCENT}
+            laneSeconds={40}
+            barHeight={11}
+            delivered={0}
+            pauseElapsed={0}
+            stalls={[]}
+            {...overrides}
         />
     );
 }
 
 describe("BrewStageRung", () => {
-    it("numbers the stage from one, padded", async () => {
-        // Padded so a nine-stage recipe's numbers form a column rather than a
-        // ragged edge.
-        const {getByText} = await draw();
-        expect(getByText("06")).toBeTruthy();
-    });
-
-    it("shows temperature and volume", async () => {
-        const {getByText} = await draw();
-        expect(getByText("94°")).toBeTruthy();
-        expect(getByText("45 ml")).toBeTruthy();
-    });
-
-    it("shows the pattern glyph", async () => {
-        const {getByLabelText} = await draw({pour: pour({pourPattern: POUR_PATTERN.SPIRAL})});
-        expect(getByLabelText("Spiral pour")).toBeTruthy();
-    });
-
-    it("draws the pour and its pause to real seconds on a shared scale", async () => {
-        // 45 ml at 4 ml/s is 11.25 s of pour, then a 20 s pause: 31.25 s of a
-        // 60 s lane 120 px wide.
+    it("gives the lane the whole row rather than a fixed width", async () => {
         const {getByTestId} = await draw();
-        expect(getByTestId("rung-pour").props.style.width).toBeCloseTo(22.5, 1);
-        expect(getByTestId("rung-pause").props.style.width).toBeCloseTo(40, 1);
+
+        expect(getByTestId("rung-lane").props.style).toEqual(
+            expect.objectContaining({flex: 1})
+        );
     });
 
-    it("draws no pause bar for a stage that has none", async () => {
-        const {queryByTestId} = await draw({pour: pour({pauseTime: 0})});
-        expect(queryByTestId("rung-pause")).toBeNull();
+    it("is dimmed before the stage happens", async () => {
+        const {getByTestId} = await draw({testID: "rung"});
+
+        expect(getByTestId("rung").props.style).toEqual(
+            expect.objectContaining({opacity: 0.45})
+        );
     });
 
-    it("puts the agitation mark on the leading edge for agitation before", async () => {
-        const {getByTestId, queryByTestId} = await draw({
-            pour: pour({agitation: AGITATION.BEFORE_ON_AFTER_OFF})
+    it("fills the water segment by millilitres, not by time", async () => {
+        const {getByTestId} = await draw({state: "active", delivered: 35});
+
+        // The lane is 40 s wide; a clean 70 ml stage pours for 17.5 s of it.
+        // Half delivered is half of that segment lit.
+        expect(getByTestId("segment-fill-0").props.style.flex).toBeCloseTo(0.5);
+    });
+
+    it("counts millilitres while pouring", async () => {
+        const {getByText} = await draw({state: "active", delivered: 41});
+
+        expect(getByText("41/70 ml")).toBeTruthy();
+    });
+
+    it("counts down seconds while resting, because millilitres have stopped moving", async () => {
+        const {getByText} = await draw({
+            state: "active", delivered: 70, pauseElapsed: 6
         });
-        expect(getByTestId("rung-agitation-before")).toBeTruthy();
-        expect(queryByTestId("rung-agitation-after")).toBeNull();
+
+        expect(getByText("14 s left")).toBeTruthy();
     });
 
-    it("puts it on the trailing edge for agitation after", async () => {
-        const {getByTestId, queryByTestId} = await draw({
-            pour: pour({agitation: AGITATION.BEFORE_OFF_AFTER_ON})
-        });
-        expect(getByTestId("rung-agitation-after")).toBeTruthy();
-        expect(queryByTestId("rung-agitation-before")).toBeNull();
-    });
-
-    it("draws both marks when both are on", async () => {
+    it("changes texture, not colour, for a planned rest", async () => {
         const {getByTestId} = await draw({
-            pour: pour({agitation: AGITATION.BEFORE_ON_AFTER_ON})
+            state: "active", delivered: 70, pauseElapsed: 6
         });
-        expect(getByTestId("rung-agitation-before")).toBeTruthy();
-        expect(getByTestId("rung-agitation-after")).toBeTruthy();
+
+        expect(getByTestId("segment-1").props.style.borderStyle).toBe("dashed");
+        expect(getByTestId("segment-fill-1").props.style.backgroundColor).toBe(ACCENT);
     });
 
-    it("fills the lane in proportion to the live stage's progress", async () => {
-        const {getByTestId} = await draw({state: "active", progress: 0.5});
-        expect(getByTestId("rung-fill").props.style.width).toBeCloseTo(60, 1);
+    it("changes colour, not texture, where it held", async () => {
+        const {getByTestId} = await draw({
+            state: "active", delivered: 40, stalls: [{atMl: 20, seconds: 9}]
+        });
+
+        expect(getByTestId("segment-1").props.style.backgroundColor).toBe(palette.warn);
     });
 
-    it("shows a full lane on a stage that is done", async () => {
-        const {getByTestId} = await draw({state: "done", progress: 1});
-        expect(getByTestId("rung-fill").props.style.width).toBeCloseTo(120, 1);
+    it("keeps the stall bands after the stage is done", async () => {
+        const {getByTestId} = await draw({
+            state: "done", delivered: 70, pauseElapsed: 20,
+            stalls: [{atMl: 20, seconds: 9}]
+        });
+
+        expect(getByTestId("segment-1").props.style.backgroundColor).toBe(palette.warn);
     });
 
-    it("turns the fill amber while the machine is holding", async () => {
-        const {getByTestId} = await draw({state: "active", progress: 0.5, holding: true});
-        expect(getByTestId("rung-fill").props.style.backgroundColor).toBe(palette.warn);
+    it("says the whole stage in one sentence for VoiceOver", async () => {
+        const {getByLabelText} = await draw();
+
+        expect(getByLabelText(/Stage 01, centred pour, 93 degrees, 70 millilitres/))
+            .toBeTruthy();
     });
 
-    it("fades a stage that has not run yet", async () => {
-        const {getByTestId} = await draw({state: "pending", testID: "rung"});
-        expect(getByTestId("rung").props.style.opacity).toBeLessThan(1);
-    });
+    it("says where it held, for VoiceOver", async () => {
+        const {getByLabelText} = await draw({
+            state: "active", delivered: 40, stalls: [{atMl: 20, seconds: 9}]
+        });
 
-    it("the lane never draws wider than its scale", async () => {
-        // 200 ml at 4 ml/s is 50 s pour, plus 120 s pause — far more than the
-        // 60 s scale, so both bars must be clamped to the 120 px lane.
-        const oversize = pour({volume: 200, pauseTime: 120});
-        const {getByTestId} = await draw({pour: oversize});
-        const pourW = getByTestId("rung-pour").props.style.width;
-        const pauseW = getByTestId("rung-pause").props.style.width;
-        expect(pourW).toBeLessThanOrEqual(120);
-        expect(pourW + pauseW).toBeLessThanOrEqual(120);
-    });
-
-    it("a rung says what the pour does, in one sentence", async () => {
-        const p = pour({pourPattern: POUR_PATTERN.SPIRAL, agitation: AGITATION.BEFORE_OFF_AFTER_ON});
-        const {getByLabelText} = await draw({pour: p, index: 5});
-        // Stage number, pattern, temperature, volume, agitation — in one label.
-        const label = getByLabelText(/06/);
-        expect(label).toBeTruthy();
-        const text: string = label.props.accessibilityLabel;
-        expect(text).toContain("spiral");
-        expect(text).toContain("94");
-        expect(text).toContain("45");
-        expect(text).toContain("agitates");
-    });
-
-    it("a stage with no pause does not mention one", async () => {
-        const {getByLabelText} = await draw({pour: pour({pauseTime: 0}), index: 5});
-        const label = getByLabelText(/06/);
-        const text: string = label.props.accessibilityLabel;
-        expect(text).not.toContain("pause");
+        expect(getByLabelText(/held once, 9 seconds/)).toBeTruthy();
     });
 });
