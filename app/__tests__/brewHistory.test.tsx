@@ -1,6 +1,6 @@
 // app/__tests__/brewHistory.test.tsx
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import BrewHistory from "@/app/brewHistory";
 import {renderWithProviders} from "@/test-utils/render";
@@ -68,6 +68,26 @@ function makeBrews(): StoredBrew[] {
     ];
 }
 
+/**
+ * Press a button on the confirmation sheet, retrying until the press lands.
+ *
+ * The sheet animates in, and while it is animating its button is in the tree
+ * and findable but its press is discarded. On an idle machine the animation is
+ * over before the next line runs; under load it is not, the press goes nowhere
+ * with no error, and the test fails on the assertion afterwards — pointing at
+ * the delete rather than at the press that never happened. That is what made
+ * this intermittent failure so hard to name.
+ *
+ * Retrying the press rather than sleeping first, because what is being waited
+ * for is the press taking effect, and that is the only honest test of it.
+ */
+async function pressOnSheet(label: string, landed: () => boolean): Promise<void> {
+    await waitFor(async () => {
+        await fireEvent.press(screen.getByLabelText(label));
+        expect(landed()).toBe(true);
+    });
+}
+
 describe("brew history", () => {
     beforeEach(() => {
         mockFilter = undefined;
@@ -133,8 +153,7 @@ describe("brew history", () => {
         await fireEvent.press(tiles[0]);
 
         // The confirmation button names the brew so there is no ambiguity.
-        const confirmButton = screen.getByLabelText("Delete Ethiopia Guji");
-        await fireEvent.press(confirmButton);
+        await pressOnSheet("Delete Ethiopia Guji", () => mockRemove.mock.calls.length > 0);
 
         expect(mockRemove).toHaveBeenCalledWith("a");
     });
