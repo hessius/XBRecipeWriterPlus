@@ -1783,52 +1783,112 @@ The fourth shape. No card chrome at all: BREW joins duplicate and delete in the 
 
 ```bash
 cat components/SwipeableRecipeRow.tsx
+sed -n '40,130p' components/__tests__/SwipeableRecipeRow.test.tsx
 ```
 
-Note `TILE_WIDTH`, `TILE_GLYPH_SIZE`, the `Tile` component and `renderRightActions`. There is no `brew` glyph in `constants/dotIcons.ts` — check with `grep -n '"brew"\|brew:' constants/dotIcons.ts`. **Do not draw one.** The tile says the word, in Doto, the way the card's shortcut does; a new glyph is a design decision this plan has not made and the icon set's own comment says to keep the set small.
+Four things there that this task depends on, all of them checked:
+
+- **`Tile` already says a word.** It takes `caption` and renders it in `DotMatrixText` beneath the glyph — `COPY` and `DELETE`. So BREW does not need a new mechanism for text; it needs a decision about its glyph.
+- **There is no `brew` glyph and none is being added.** `grep -c '"brew"' constants/dotIcons.ts` is 0, the icon set's own comment asks that it be kept small, and choosing a bitmap for BREW is a design decision this plan has not made. Make `icon` optional instead and let the BREW tile be its word alone.
+- **`Tile` puts its `testID` on the `DotIcon`, not on the tile.** So a caption-only tile has no `testID` at all, and pressing a tile by `testID` would press the glyph rather than the pressable. The file's own tests already know this: they press with `getByLabelText("Delete Ethiopia Guji")` and use the testIDs only to count dots. Follow that.
+- **There is no `close()` helper.** Each tile calls `swipeableRef.current?.close()` inline before its callback.
 
 - [ ] **Step 2: Write the failing tests**
+
+The label convention is `` `<Verb> ${recipe.displayName()}` ``, and this file's recipes are named `Ethiopia Guji`. Match whatever its existing helper builds.
 
 ```tsx
 it("offers BREW in the tray when that is the chosen shape", async () => {
     await renderWithProviders(
-        <SwipeableRecipeRow recipe={aRecipe()} onPress={() => undefined}
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                             onDelete={() => undefined} onDuplicate={() => undefined}
                             brewShortcut="swipe" onBrew={() => undefined}/>
     );
-    expect(screen.getByTestId("recipe-row-brew")).toBeTruthy();
+    expect(screen.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
 });
 
 it.each(["edge", "tab", "chip"] as const)("keeps the tray to two tiles for %s", async (shape) => {
     await renderWithProviders(
-        <SwipeableRecipeRow recipe={aRecipe()} onPress={() => undefined}
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                             onDelete={() => undefined} onDuplicate={() => undefined}
                             brewShortcut={shape} onBrew={() => undefined}/>
     );
     // The card is drawing it. Two places to brew one recipe is one too many.
-    expect(screen.queryByTestId("recipe-row-brew")).toBeNull();
+    expect(screen.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
+    // And the other two are still there, so this is not passing because the
+    // whole tray failed to render.
+    expect(screen.getByLabelText("Delete Ethiopia Guji")).toBeTruthy();
 });
 
 it("brews when the tile is pressed", async () => {
     const onBrew = jest.fn();
     await renderWithProviders(
-        <SwipeableRecipeRow recipe={aRecipe()} onPress={() => undefined}
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                             onDelete={() => undefined} onDuplicate={() => undefined}
                             brewShortcut="swipe" onBrew={onBrew}/>
     );
-    await fireEvent.press(screen.getByTestId("recipe-row-brew"));
+    await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
     expect(onBrew).toHaveBeenCalled();
+});
+
+it("gives the brew tile the recipe's accent, not a system colour", async () => {
+    await renderWithProviders(
+        <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                            onDelete={() => undefined} onDuplicate={() => undefined}
+                            brewShortcut="swipe" onBrew={() => undefined}/>
+    );
+    // The one non-destructive tile among two neutrals. Same helper the card
+    // uses, so the tile and the card it slid off cannot disagree.
+    const word = within(screen.getByLabelText("Brew Ethiopia Guji"))
+        .getByText("BREW");
+    expect(word.props.style).toEqual(
+        expect.objectContaining({color: resolveAccent(makeRecipe())})
+    );
 });
 ```
 
-Follow the file's existing tests for how they reach the tray — the tiles are rendered by `renderRightActions`, which a gesture-handler `Swipeable` may not call until it is opened. **If the existing tests have a helper for opening the row, use it.** If the tray turns out not to be reachable in tests at all, say so plainly rather than asserting something weaker that looks equivalent.
+The second assertion in the absence test matters. Without it, a change that stopped the tray rendering entirely would make that test pass.
+
+If `word.props.style` turns out to be an array rather than an object, match it the way the file's other colour assertions do — it has a `dotColourOf` helper and a style-flattening idiom already; use those rather than inventing a third.
 
 - [ ] **Step 3: Run them and watch them fail**
 
 Run: `npx jest components/__tests__/SwipeableRecipeRow.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 4: Change the props and add the tile**
+- [ ] **Step 4: Let a tile be a word on its own**
+
+In `TileProps`, make the glyph optional:
+
+```ts
+    /**
+     * The tile's glyph, or nothing.
+     *
+     * BREW has no glyph: the icon set is deliberately small and no bitmap for
+     * it has been designed. A tile that is only its word is the honest way to
+     * say that, and it also sets the one non-destructive action apart from the
+     * two that carry glyphs.
+     */
+    icon?: DotIconName;
+```
+
+and in `Tile`, guard the glyph and let a wordless tile carry its word a little larger, so the tile does not read as half-drawn:
+
+```tsx
+            {icon !== undefined && (
+                <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            )}
+            <DotMatrixText fontSize={icon === undefined ? 13 : 11} weight="bold"
+                           letterSpacing={1.2} color={tone}>
+                {caption}
+            </DotMatrixText>
+```
+
+`testID` stays on the `DotIcon`, which is where the existing tests look for it. A wordless tile therefore has no `testID`, and nothing needs one: it is reached by its label, like every other tile.
+
+Whether a glyphless tile actually reads well beside two glyphed ones is a device-pass question, not one this plan can settle.
+
+- [ ] **Step 5: Change the props and add the tile**
 
 Replace `showBrew?: boolean` with:
 
@@ -1839,34 +1899,38 @@ Replace `showBrew?: boolean` with:
     brewShortcut?: BrewShortcut;
 ```
 
-In `renderRightActions`, add the BREW tile **first**, so it is the nearest to the thumb and the destructive ones stay furthest:
+Import the type from `@/library/brewShortcut` and `resolveAccent` from wherever `RecipeCard` gets it — `grep -n "resolveAccent" components/RecipeCard.tsx` and use the same import. Do not derive the accent a second way.
+
+In `renderRightActions`, add the BREW tile **first**, so it is nearest the thumb and the destructive ones stay furthest:
 
 ```tsx
                 {brewShortcut === "swipe" && onBrew !== undefined && (
-                    <Tile label="Brew this recipe" testID="recipe-row-brew"
-                          tone={accentFor(recipe)}
+                    <Tile caption="BREW" tone={resolveAccent(recipe)}
+                          testID="row-action-brew"
+                          label={`Brew ${recipe.displayName()}`}
                           onPress={() => {
-                              close();
+                              swipeableRef.current?.close();
                               onBrew();
                           }}/>
                 )}
 ```
 
-Match the existing tiles' closing behaviour exactly — read how duplicate and delete close the row and do the same thing, whatever it is called.
+`testID` is still passed, so that if a glyph is ever given to this tile the tests reach it the same way as the others. It renders nothing today.
 
-`Tile` currently takes an `icon`. It needs to take a word instead, for this tile only. Give it an optional `word?: string` that renders a `DotMatrixText` in place of the `DotIcon`, and assert in the type or in a comment that exactly one of `icon` and `word` is given. Do not add a `brew` glyph to `constants/dotIcons.ts`.
+- [ ] **Step 6: Forward the rest**
 
-Find how the accent is derived for a recipe — `RecipeCard` computes it; there is very likely a shared helper. Use the same one rather than a second derivation.
+Replace `showBrew={showBrew}` on `RecipeCard` with `brewShortcut={brewShortcut}`, and remove `showBrew` from the destructured parameter list and its `= false` default. The card already ignores `swipe`.
 
-- [ ] **Step 5: Forward the rest**
-
-Replace the forwarding of `showBrew` to `RecipeCard` with `brewShortcut={brewShortcut}`. The card already ignores `swipe`.
-
-- [ ] **Step 6: Run and commit**
+- [ ] **Step 7: Run everything**
 
 ```bash
 npx jest components/__tests__/SwipeableRecipeRow.test.tsx
+npm run typecheck
 ```
+
+Typecheck is expected to still name `app/index.tsx`, which is Task 10.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add components/SwipeableRecipeRow.tsx components/__tests__/SwipeableRecipeRow.test.tsx
@@ -1879,9 +1943,11 @@ because it is the swipe tray.
 In the recipe's accent so it reads as the one non-destructive tile among two
 neutrals, and nearest the thumb so the destructive ones stay furthest.
 
-It says the word rather than taking a glyph. The icon set's own comment asks
-that it be kept small, and choosing a bitmap for BREW is a design decision
-nobody has made.
+It is its word alone. Tiles already carry a caption, so the only thing BREW
+needed was a glyph, and the icon set's own comment asks that it be kept small
+-- choosing a bitmap for BREW is a design decision nobody has made. Being the
+one tile without a glyph also happens to set it apart from the two that can
+lose you something.
 
 Refs #87"
 ```
