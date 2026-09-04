@@ -1,6 +1,6 @@
 import {
     BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
-    RECIPE_ACK_MS
+    RECIPE_ACK_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -49,7 +49,8 @@ export type BrewFailure =
 
 /** Why a brew will not start, in a form the UI can branch on. */
 export type BrewBlock = {
-    kind: "notConnected" | "noVitals" | "notEnoughWater" | "busy" | "recipe";
+    kind: "notConnected" | "noVitals" | "notEnoughWater" | "noWater" | "noBeans"
+        | "busy" | "recipe";
     /** The sentence to show. Still the only thing most callers need. */
     message: string;
 };
@@ -96,6 +97,18 @@ const STARTABLE = new Set<number>([
     MACHINE_STATE.IDLE, MACHINE_STATE.COMPLETE, MACHINE_STATE.READY
 ]);
 
+/** States that are faults rather than activity. They are not "busy". */
+const FAULT_BLOCKS: Record<number, BrewBlock> = {
+    [MACHINE_STATE.NO_WATER]: {
+        kind: "noWater",
+        message: "The machine's water tank is empty. Fill it and try again."
+    },
+    [MACHINE_STATE.NO_BEANS]: {
+        kind: "noBeans",
+        message: "The machine is waiting for beans. Fill the hopper and try again."
+    }
+};
+
 /**
  * One thing that happened to the link.
  *
@@ -117,6 +130,8 @@ const LINK_HISTORY_LIMIT = 200;
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
+    /** When `state` was last heard, as a wall clock. 0 means never. */
+    private stateAt = 0;
 
     /**
      * What the link has been doing, oldest first.
@@ -542,6 +557,7 @@ export default class Machine {
         const parsed = parseNotification(frame);
         if (parsed.kind === "status") {
             this.state = parsed.state;
+            this.stateAt = Date.now();
             this.onState(parsed.state);
         }
         if (parsed.kind === "info") {
@@ -575,6 +591,21 @@ export default class Machine {
     }
 
     /**
+     * The machine's state, with an expired fault treated as unknown.
+     *
+     * Only a fault expires. The alternative to expiring one is refusing a brew
+     * on a reading from before the user filled the tank it complained about,
+     * which is the bug this fixes. The alternative to *keeping* an activity
+     * state is deciding a silently grinding machine is free, which is worse.
+     */
+    private freshState(): number | null {
+        if (this.state === null) return null;
+        if (FAULT_BLOCKS[this.state] === undefined) return this.state;
+        if (Date.now() - this.stateAt > STATE_FRESH_MS) return null;
+        return this.state;
+    }
+
+    /**
      * Why this recipe cannot be sent right now, or null.
      *
      * Strict, deliberately: a false refusal costs one more press, a false send
@@ -605,8 +636,15 @@ export default class Machine {
         if (!this.info.waterEnough) {
             return {kind: "notEnoughWater", message: "The machine's water tank is low."};
         }
-        if (this.state !== null && !STARTABLE.has(this.state)) {
-            return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
+        const state = this.freshState();
+        if (state !== null) {
+            const fault = FAULT_BLOCKS[state];
+            // A fault is not activity. Telling somebody with an empty hopper
+            // to wait for the machine to finish is both wrong and unactionable.
+            if (fault !== undefined) return fault;
+            if (!STARTABLE.has(state)) {
+                return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
+            }
         }
         const problems = cardWriteProblems(recipe);
         if (problems.length > 0) return {kind: "recipe", message: problems[0]};
@@ -893,6 +931,7 @@ export default class Machine {
         // talking to.
         this.info = null;
         this.state = null;
+        this.stateAt = 0;
         // Last, so a listener reading `isConnected()` or `info` sees the link
         // as gone rather than half torn down.
         this.announceLink();

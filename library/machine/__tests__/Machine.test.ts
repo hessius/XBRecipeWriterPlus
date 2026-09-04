@@ -1,7 +1,7 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
+import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS, STATE_FRESH_MS} from "@/constants/machine";
 import {buildType1} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
 
@@ -1202,5 +1202,60 @@ describe("the machine's pour index", () => {
         transport.emit(Uint8ArrayPourEvent(9));
 
         expect(seen[seen.length - 1]).toBe(6);
+    });
+});
+
+describe("a stale state does not refuse a fresh brew", () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    it("does not refuse forever on a fault the user has since fixed", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+
+        // The machine complained about its tank, and the user filled it.
+        transport.emit(status(0x0C));
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noWater");
+
+        jest.advanceTimersByTime(STATE_FRESH_MS + 1);
+
+        expect(machine.brewBlock(sixPourRecipe())).toBeNull();
+    });
+
+    it("still believes a machine that said it was brewing and then went quiet", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+
+        transport.emit(status(0x10));
+        jest.advanceTimersByTime(STATE_FRESH_MS * 10);
+
+        // Grinding emits no status frame for about twenty seconds and a pour
+        // emits none for minutes, so silence is what a busy machine sounds
+        // like. Expiring this would send a recipe into a running brew.
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("busy");
+    });
+
+    it("calls a low tank a low tank, not a busy machine", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x0C));
+
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noWater");
+    });
+
+    it("calls an empty hopper an empty hopper, not a busy machine", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x0F));
+
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noBeans");
     });
 });

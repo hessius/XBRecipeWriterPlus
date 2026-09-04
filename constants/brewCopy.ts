@@ -56,6 +56,8 @@ export const BLOCKED_HEADLINE: Record<string, string> = {
     notEnoughWater: BLOCKED_WATER_HEADLINE,
     notConnected:   "THE MACHINE IS NOT CONNECTED",
     noVitals:       "THE MACHINE HAS NOT ANSWERED YET",
+    noWater:        "THE MACHINE'S TANK IS EMPTY",
+    noBeans:        "THE HOPPER IS EMPTY",
     busy:           "THE MACHINE IS BUSY",
     recipe:         "THIS RECIPE WILL NOT GO ON A CARD"
 };

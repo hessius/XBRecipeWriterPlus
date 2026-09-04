@@ -128,3 +128,24 @@ export const BREW_INFO_ROUNDS = 3;
  * unlikely to accept a millisecond later.
  */
 export const CONNECT_DELAYS_MS = [0, 1200, 2500, 4000, 6000];
+
+/**
+ * How long a fault state is believed before it is treated as unknown.
+ *
+ * Only fault states (`NO_WATER`, `NO_BEANS`) expire. Activity states never do,
+ * because the machine is silent while it works: grinding emits no `0x57` frame
+ * for around twenty seconds and a pour emits none for the duration of the pour,
+ * so silence is what a busy machine sounds like. Expiring an activity state
+ * would let the app decide a running machine is free.
+ *
+ * A fault expires because the user fixes it at the machine, away from the app,
+ * and the app cannot observe that. Without expiry, `NO_WATER` stays forever and
+ * every subsequent attempt is refused as a tank fault on a full tank.
+ *
+ * Fifteen seconds is safely shorter than the ~20 s grind gap recorded in
+ * `docs/machine-integration/ble-protocol.md`, so a fault frame emitted at the
+ * start of a grind could not masquerade as a grind silence. It is also longer
+ * than a full pre-flight, so a fault that arrives during a pre-flight is still
+ * fresh when `brewBlock` runs.
+ */
+export const STATE_FRESH_MS = 15_000;
