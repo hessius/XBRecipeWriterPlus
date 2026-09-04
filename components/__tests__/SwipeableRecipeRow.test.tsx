@@ -186,6 +186,20 @@ describe("SwipeableRecipeRow", () => {
         expect(colour).toBe(resolveAccent(brewedRecipe));
     });
 
+    it("carries a testID even though it has no glyph to put one on", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut="swipe" onBrew={() => undefined}/>
+        );
+        // Tiles hang their testID on the DotIcon, and this one has no icon. So
+        // without an explicit fallback the id lands nowhere, and any later
+        // query for it -- an absence assertion above all -- would pass whether
+        // or not the tray had drawn anything.
+        expect(screen.getByTestId("row-action-brew", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
     it("renders the recipe as a card", async () => {
         await renderWithProviders(<SwipeableRecipeRow {...props()}/>);
         expect(screen.getByTestId("recipe-card")).toBeTruthy();

@@ -721,4 +721,45 @@ describe("RecipeCard", () => {
                         {nativeEvent: {actionName: "brew"}});
         expect(onBrew).toHaveBeenCalledTimes(1);
     });
+
+    it("still offers the brew action when the tray draws the shortcut", async () => {
+        // `swipe` puts BREW in the tray, behind a pan gesture that VoiceOver
+        // cannot perform -- the same reason duplicate and delete are mirrored
+        // here. So this is the shape that needs the action most, and it was
+        // the one shape that did not publish it.
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        brewShortcut="swipe" onBrew={onBrew}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+
+        // The card draws nothing for `swipe`, so this is not the visual
+        // shortcut coming back -- only the non-visual path to it.
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "brew"}});
+        expect(onBrew).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers no brew action when there is nothing to brew on", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDelete={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+
+        // The other actions are here, so this is not passing because the card
+        // published no actions at all.
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "delete", label: "Delete recipe"}])
+        );
+        expect(card.props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+    });
 });

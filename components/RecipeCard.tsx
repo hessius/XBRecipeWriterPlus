@@ -176,12 +176,17 @@ export default function RecipeCard({
     // The row actions are nested inside that same group, so VoiceOver cannot
     // reach the buttons. These are the only non-visual path to them -- and the
     // swipe gesture they mirror is not available to a screen reader either.
+    //
+    // Which is why `brew` asks whether brewing is possible rather than whether
+    // this card is the thing drawing it. Under `swipe` the card draws nothing
+    // and the only visible affordance is a tray tile behind a pan gesture, so
+    // that is the shape which needs the action most, not least.
     const actions = [
         ...(onDuplicate !== undefined
             ? [{name: "duplicate", label: "Duplicate recipe"}]
             : []),
         ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
-        ...(shortcut !== null && onBrew !== undefined
+        ...(brewShortcut !== undefined && onBrew !== undefined
             ? [{name: "brew", label: "Brew this recipe"}]
             : [])
     ];

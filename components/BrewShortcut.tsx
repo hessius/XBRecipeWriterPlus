@@ -60,13 +60,20 @@ export const SHORTCUT_INSET: Record<CardShortcut, number> = {
 /**
  * Slop, not a wider shape.
  *
- * `left` is deliberately 0, for the reason the capsule's comment gave: a left
- * slop steals presses from the card body behind it, and the card is the bigger
- * and more common target. The bands are 34 across, so 10 to the right reaches
- * the HIG's 44; they already run the card's height. The chip is 34 tall and
- * takes its 10 vertically instead.
+ * It has to point inward. The card clips its subtree, and React Native will
+ * not hit-test into a clipping container for a point outside it, so slop on
+ * the band's top, right and bottom -- every side it shares with the card's
+ * edge -- is bought and never delivered. Only `left` reaches anywhere the
+ * finger can actually be found.
+ *
+ * That reverses the capsule's rule, which kept `left` at 0 so as not to steal
+ * presses from the card body. The capsule was an island in the middle of the
+ * card, where the body it stole from was on both sides of it; a band is pinned
+ * to the edge, and the alternative to stealing 10 is a 34 wide target for the
+ * one control on the card that starts a machine. The chip already takes its
+ * slop inward for the same reason.
  */
-const BAND_SLOP = {top: 8, bottom: 8, left: 0, right: 10};
+const BAND_SLOP = {top: 8, bottom: 8, left: 10, right: 0};
 const CHIP_SLOP = {top: 10, bottom: 0, left: 10, right: 0};
 
 const SHAPES: Record<CardShortcut, ViewStyle> = {

@@ -70,6 +70,11 @@ type TileProps = {
 function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
     return (
         <YStack
+            // A glyphless tile has no `DotIcon` to carry the testID, and
+            // without this it would carry none at all -- so a query for it,
+            // including an absence assertion, would match nothing and pass
+            // whatever the tray had done.
+            testID={icon === undefined ? testID : undefined}
             accessible
             accessibilityRole="button"
             accessibilityLabel={label}

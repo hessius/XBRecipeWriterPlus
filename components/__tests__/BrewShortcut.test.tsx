@@ -2,10 +2,10 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import BrewShortcut, {SHORTCUT_INSET} from "@/components/BrewShortcut";
-import {palette} from "@/constants/colors";
+import {accents, palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
-const ACCENT = "#FF8800";
+const ACCENT = accents.coffee[0];
 
 describe("BrewShortcut", () => {
     it.each(["edge", "tab", "chip"] as const)("says BREW as a %s", async (variant) => {
@@ -56,11 +56,18 @@ describe("BrewShortcut", () => {
             <BrewShortcut variant="edge" accent={ACCENT} ink={palette.base}
                           onPress={() => undefined}/>
         );
-        const slop = screen.getByTestId("brew-shortcut").props.hitSlop;
-        // 34 wide plus 10 of slop. left stays 0: a left slop steals presses
-        // from the card body, which is the bigger and more common target.
-        expect(slop.left).toBe(0);
-        expect(34 + slop.right).toBeGreaterThanOrEqual(44);
+        const band = screen.getByTestId("brew-shortcut");
+        const slop = band.props.hitSlop;
+        const width = (band.props.style as {width: number}).width;
+
+        // Read off the rendered style rather than restated, because the whole
+        // point of this assertion is the number the component actually draws.
+        //
+        // Only the inward slop counts. The card clips its subtree, and React
+        // Native will not hit-test into a clipping container for a point
+        // outside it, so the band's top, bottom and right slop -- all three of
+        // them beyond the card's edge -- buy nothing at all.
+        expect(width + slop.left).toBeGreaterThanOrEqual(44);
     });
 
     it("sets BREW upright, one letter per line for the bands", async () => {
