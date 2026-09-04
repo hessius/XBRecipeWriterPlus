@@ -130,17 +130,31 @@ nothing for it; `SwipeableRecipeRow` grows a third tile.
 
 ### What is wrong
 
-`MachineDot` draws a 9 pt circle filled with the **recipe accent**, plus a faint
-ring when connected, falling back to `palette.muted` when not. Two problems, one
-of them structural:
+`MachineDot` draws a 9 pt circle. It takes an `accent` prop, and `app/index.tsx`
+passes `palette.success` to it — so the colour is already from the palette, and
+the guess that it was showing the recipe accent was wrong. What is actually
+wrong is subtler, and worse:
 
-- The accent is the *library's* vocabulary. It means "this recipe" and it earns
-  its loudness there. In the toolbar it means nothing and simply competes, which
-  is what "steals focus and isn't in line with the palette" describes.
-- The state is carried by hue alone. That is why it could not simply be
+- **Connected and connecting are the same colour.** Both take `accent`; they are
+  told apart by `opacity: 0.5` and nothing else. A half-strength dot does not
+  read as "connecting", it reads as a dot. So of three states the dot really
+  distinguishes two, and `palette.warn` is unused here despite meaning exactly
+  "in progress" everywhere else in the app.
+- **`success` at full strength is loud for ambient chrome.** #5DDC8A is the
+  brightest thing in a header of grey glyphs on black, and it is lit whenever a
+  machine is remembered, which for an owner is always. That is what "steals
+  focus" describes: not the wrong hue, the wrong *insistence*.
+- **The state is carried by colour alone.** Which is why it could not simply be
   desaturated: desaturating it would delete the only thing it says.
+- **It is the one item in the toolbar that is not a dot-matrix glyph.** A filled
+  circle beside five 9 x 9 bitmaps.
 
-The dot is also the one item in the toolbar that is not a dot-matrix glyph.
+The faint ring drawn when connected is a fourth symptom: it exists because a
+filled circle had no way to say "more present than the other filled circle".
+
+Once the shape speaks, the accent prop has no remaining job, and `MachineDot`
+stops taking one. `app/index.tsx` keeps passing `palette.success` to
+`MachinePopover`, which is a different component and out of scope.
 
 ### What replaces it
 
