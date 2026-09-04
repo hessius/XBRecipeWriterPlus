@@ -18,6 +18,10 @@ function props(overrides = {}) {
     };
 }
 
+function tintOpacity(): number {
+    return screen.getByTestId("machine-dot-tint").props.jestAnimatedStyle.value.opacity;
+}
+
 describe("HomeHeader", () => {
     it("shows the title and the recipe count", async () => {
         await renderWithProviders(<HomeHeader {...props()}/>);
@@ -150,6 +154,15 @@ describe("HomeHeader", () => {
             <HomeHeader {...props({machineStatus: "connected"})} />
         );
         expect(getByLabelText("Machine connected")).toBeTruthy();
+    });
+
+    it("tells the dot when the header has collapsed", async () => {
+        await renderWithProviders(
+            <HomeHeader {...props({collapsed: true, machineStatus: "connected"})}/>
+        );
+        // The dot desaturates with the header rather than on its own schedule, so
+        // the header is the only thing that knows the threshold.
+        expect(tintOpacity()).toBe(0);
     });
 
     it("calls onMachinePress when the machine dot is tapped", async () => {

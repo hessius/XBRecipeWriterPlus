@@ -71,8 +71,6 @@ type Props = {
     canImport?: boolean;
     /** The machine link status, for the dot. */
     machineStatus?: LinkStatus;
-    /** The machine accent colour, for the dot. */
-    machineAccent?: string;
     /** Called when the user taps the machine dot. */
     onMachinePress?: () => void;
     /** Called when the user taps TRY NOW in the popover. */
@@ -102,7 +100,6 @@ export default function HomeHeader({
     showEdit,
     canImport = true,
     machineStatus,
-    machineAccent = palette.muted,
     onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
     onToggleEdit,
@@ -181,7 +178,7 @@ export default function HomeHeader({
                 {machineStatus !== undefined && (
                     <MachineDot
                         status={machineStatus}
-                        accent={machineAccent}
+                        collapsed={collapsed}
                         onPress={onMachinePress}
                     />
                 )}

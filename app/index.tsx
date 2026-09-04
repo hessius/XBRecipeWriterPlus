@@ -448,7 +448,6 @@ export default function HomeScreen({db, settings}: Props) {
                     showEdit={!isEmpty}
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
-                    machineAccent={palette.success}
                     onMachinePress={() => {
                         setPopoverNow(Date.now());
                         setPopoverOpen(true);

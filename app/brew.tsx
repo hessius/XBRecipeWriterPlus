@@ -149,7 +149,8 @@ export default function Brew() {
                            onPress={() => router.back()}>
                     <DotIcon name="chevron-down" size={16} color={palette.dim} />
                 </Pressable>
-                <MachineDot status={status} accent={accent} onPress={() => void connect()} />
+                <MachineDot status={status} collapsed={false}
+                            onPress={() => void connect()} />
                 <Text color={palette.dim} fontSize={13} flex={1} numberOfLines={1}>
                     {recipe.displayName()}
                 </Text>
