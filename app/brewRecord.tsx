@@ -255,8 +255,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     rungGap={8}
                     scrolls={false}
                     stageWater={recipe.pours.map(pour => Math.max(pour.volume, 0))}
-                    // Task 17 puts the recorded stalls here.
-                    stalls={recipe.pours.map(() => [])}
+                    stalls={record.stalls ?? recipe.pours.map(() => [])}
                     pauseElapsed={0}
                 />
             ) : (

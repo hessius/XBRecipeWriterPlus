@@ -4,7 +4,7 @@ import type {Notification} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 
 import type {BrewOutcome, BrewRecord, BrewSample} from "./BrewRecord";
-import {summarise} from "./BrewRecord";
+import {stallsFromSamples, summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
 
 /** The part of `Machine` a recorder needs. Narrow, so a test can be a literal. */
@@ -138,6 +138,10 @@ export default class BrewRecorder {
             outcome: phase.name as BrewOutcome,
             failure,
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
+            stalls: stallsFromSamples(
+                this.collected,
+                recipe.pours.map((pour) => Math.max(pour.volume, 0))
+            ),
             ...summarise(this.collected, plannedSeconds(recipe.pours))
         };
         // The machine hands a phase to every listener in turn, and this is one

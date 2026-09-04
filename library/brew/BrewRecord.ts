@@ -1,5 +1,7 @@
 import type {BrewFailure} from "@/library/machine/Machine";
 
+import {stallsInStage, type Stall} from "./stalls";
+
 /**
  * One instant of a brew, as the machine reported it.
  *
@@ -52,6 +54,16 @@ export type BrewRecord = {
     cupTotal: number;
     /** Seconds the brew ran beyond its plan — overflow protection, mostly. */
     heldSeconds: number;
+    /**
+     * Where each stage stopped pouring, one list per stage, index-aligned with
+     * the recipe's pours.
+     *
+     * Kept on the record rather than recomputed from the samples on read: the
+     * definition of a stall may be tuned, and a brew from last month should go
+     * on saying what it said at the time. Absent on rows written before it
+     * existed.
+     */
+    stalls?: Stall[][];
 };
 
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
@@ -73,4 +85,13 @@ export function summarise(samples: BrewSample[], plannedSeconds: number): BrewSu
         cupTotal: last.cup,
         heldSeconds: Math.max(0, Math.round(elapsed - plannedSeconds)),
     };
+}
+
+/**
+ * Every stage's stalls, from the stream.
+ *
+ * @param targets each stage's planned volume, index-aligned with the pours
+ */
+export function stallsFromSamples(samples: BrewSample[], targets: number[]): Stall[][] {
+    return targets.map((target, i) => stallsInStage(samples, i + 1, target));
 }

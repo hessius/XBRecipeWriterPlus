@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 
 import type {BrewFailure} from "./machine/Machine";
 import type {BrewOutcome, BrewRecord, BrewSample} from "./brew/BrewRecord";
+import type {Stall} from "./brew/stalls";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
@@ -21,6 +22,8 @@ type BrewRow = {
     waterTotal: number;
     cupTotal: number;
     heldSeconds: number;
+    /** JSON, one list of stalls per stage. `[]` on rows written before it. */
+    stalls: string | null;
     hasStream: number;
 };
 
@@ -61,6 +64,7 @@ class BrewDatabase {
                 waterTotal REAL NOT NULL,
                 cupTotal REAL NOT NULL,
                 heldSeconds INTEGER NOT NULL,
+                stalls TEXT NOT NULL DEFAULT '[]',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -76,6 +80,14 @@ class BrewDatabase {
         } catch {
             // Already there.
         }
+        // Rows written before `stalls` existed get an empty list, which reads
+        // as "nothing recorded" rather than "nothing happened" -- a brew from
+        // before this column simply draws no amber.
+        try {
+            this.db.execSync("ALTER TABLE brews ADD COLUMN stalls TEXT NOT NULL DEFAULT '[]';");
+        } catch {
+            // Already there.
+        }
     }
 
     public insert(record: BrewRecord, samples: BrewSample[]): void {
@@ -85,13 +97,14 @@ class BrewDatabase {
             this.db.runSync(
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    heldSeconds, stalls, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
                     record.endedAt, record.outcome, record.failure,
                     record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
+                    JSON.stringify(record.stalls ?? []),
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -174,6 +187,7 @@ class BrewDatabase {
 }
 
 function hydrate(row: BrewRow): StoredBrew {
+    const stalls = stallsOf(row);
     return {
         id: row.id,
         recipeUuid: row.recipeUuid,
@@ -190,8 +204,18 @@ function hydrate(row: BrewRow): StoredBrew {
         waterTotal: row.waterTotal,
         cupTotal: row.cupTotal,
         heldSeconds: row.heldSeconds,
+        ...(stalls.length > 0 ? {stalls} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+function stallsOf(row: BrewRow): Stall[][] {
+    if (row.stalls === null) return [];
+    try {
+        return JSON.parse(row.stalls) as Stall[][];
+    } catch {
+        return [];
+    }
 }
 
 export default BrewDatabase;
