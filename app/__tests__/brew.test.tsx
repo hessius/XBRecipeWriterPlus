@@ -105,7 +105,10 @@ describe("brew route", () => {
     it("draws the trace, the figures and the ladder", async () => {
         const {getByLabelText, getAllByText, getByTestId} = await renderWithProviders(<Brew />);
         expect(getByLabelText("Brew trace")).toBeTruthy();
-        expect(getAllByText("WATER").length).toBeGreaterThan(0);
+        // Two of them now: the figures row above and the trace's own legend
+        // below it. Pinned at two rather than "at least one", which would also
+        // hold if the figures row vanished entirely.
+        expect(getAllByText("WATER")).toHaveLength(2);
         expect(getByTestId("ladder")).toBeTruthy();
     });
 
@@ -263,7 +266,8 @@ describe("brew route", () => {
         expect(queryByLabelText("Switch to PRO")).toBeNull();
     });
 
-    // Task 12 removes this counter from BrewTrace. Task 14 moves the single
-    // source of truth for the counter into the nav row.
-    it.skip("renders the pour counter as 1/2 during a two-pour brew", async () => {});
+    // The pour counter is deliberately untested between here and Task 14: it
+    // has left the trace and has not yet reached the nav row, so for now there
+    // is nothing to assert. Task 14 puts it back under test as
+    // `brew-stage-counter`, where there is only one of it.
 });
