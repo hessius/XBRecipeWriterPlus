@@ -211,6 +211,16 @@ export default class Machine {
      */
     private pendingCommit: Uint8Array | null = null;
 
+    /**
+     * Whether this brew's commit frame has gone out.
+     *
+     * Not derivable from `pendingCommit`, which `startBrew` clears before it
+     * sends: a brew that has just been committed and one that was never
+     * uploaded both hold null. The difference is the whole question `0x1E`
+     * asks -- the machine says "waiting to be started" and cannot say by whom.
+     */
+    private committed: boolean = false;
+
     private frameGapMs: number;
     private infoWaitMs: number;
     private handshakeFreshMs: number;
@@ -587,7 +597,10 @@ export default class Machine {
         // A brew that has ended takes its uncommitted recipe with it. Left
         // behind, START on a later screen would commit a recipe the user has
         // already cancelled or watched fail.
-        if (!this.brewing) this.pendingCommit = null;
+        if (!this.brewing) {
+            this.pendingCommit = null;
+            this.committed = false;
+        }
         this.phaseListeners.forEach((listener) => listener(phase));
     }
 
@@ -710,6 +723,7 @@ export default class Machine {
         const tea = recipe.isTea();
         const commit = tea ? buildType1(4512) : buildType1(8002);
         this.pendingCommit = null;
+        this.committed = false;
 
         try {
             // This whole sequence, gaps and all, mirrors `run_brew` in the
@@ -740,6 +754,9 @@ export default class Machine {
             // The first frame of that burst was a handshake, so the session is
             // good again and the next question does not need to beep for one.
             this.lastHandshakeAt = Date.now();
+            // The burst carried the commit when auto-start is on, so from here
+            // the machine is starting itself and needs nothing from the user.
+            this.committed = this.autoStart;
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
             // the phase is only ever left by an acknowledgement that can no
@@ -786,6 +803,7 @@ export default class Machine {
             });
             throw error;
         }
+        this.committed = true;
         this.armAckTimer();
     }
 
@@ -855,9 +873,18 @@ export default class Machine {
                 this.setPhase({name: "armed"});
                 break;
             case MACHINE_STATE.AWAITING_CONFIRM:
-                // The machine is waiting for a human. We do not send 40518:
-                // one source watched it move the state backwards, another
-                // verified it aborts a running brew, a third calls it PAUSE.
+                // "Waiting to be started" -- the machine cannot say by whom,
+                // and only we know. Once our commit has gone out this is a
+                // waypoint on the way to grinding, and hardware confirms the
+                // firmware usually skips it entirely; telling the user to
+                // press a button they just pressed in the app is how it read
+                // on the device.
+                //
+                // Uncommitted, it is the state the prompt exists for. We still
+                // do not send 40518 to escape it: one source watched it move
+                // the state backwards, another verified it aborts a running
+                // brew, a third calls it PAUSE.
+                if (this.committed) break;
                 this.setPhase({name: "pressPlay"});
                 break;
             case MACHINE_STATE.STARTING:

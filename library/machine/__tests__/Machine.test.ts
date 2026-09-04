@@ -544,7 +544,11 @@ describe("brewing", () => {
         // 40518 move the state backwards, another verified it aborts a running
         // brew, a third calls it PAUSE. The fallback costs the user one press
         // of a button they are standing in front of.
+        //
+        // Auto-start off is the path this prompt exists for: the recipe is on
+        // the machine and the only thing that can start it is a person.
         const {transport, machine} = await readyMachine();
+        machine.setAutoStart(false);
         await machine.brew(brewable());
         transport.written = [];
 
@@ -552,6 +556,97 @@ describe("brewing", () => {
 
         expect(machine.phase.name).toBe("pressPlay");
         expect(brewFrames(transport)).not.toContain(40518);
+    });
+
+    it("does not ask for the machine's button once the app has committed", async () => {
+        // 0x1E is a waypoint on this firmware, not a request for a human:
+        // commit auto-proceeds straight to grinding, and hardware notes record
+        // it usually being skipped altogether. Telling the user to press a
+        // button they have already pressed is how it read on the device.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable()); // auto-start on by default
+        const before = machine.phase.name;
+
+        transport.emit(status(0x1E));
+
+        expect(machine.phase.name).toBe(before);
+        expect(machine.phase.name).not.toBe("pressPlay");
+    });
+
+    it("goes on to grinding from the waypoint", async () => {
+        // Not a driver of the fix -- STARTING sets `grinding` unconditionally,
+        // so this passes with or without the guard. It is here against the
+        // *wrong* fix: hoisting the check to the top of `onState` rather than
+        // into the one case would swallow every state after a commit, and this
+        // is what notices.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        transport.emit(status(0x1E));
+        transport.emit(status(0x22)); // the state the file's other tests use
+                                      // to reach grinding
+
+        expect(machine.phase.name).toBe("grinding");
+    });
+
+    it("asks again for a brew held back after one that was committed", async () => {
+        // That the prompt comes back for the next brew, whatever the last one
+        // did. Note this does not pin the resets themselves: the assignment at
+        // the end of the burst re-decides the flag for every upload, so it
+        // would pass with both of them deleted. The upload window is what
+        // needs them, and the test below is what covers it.
+        //
+        // The brew is ended with `cancelBrew`, which is how the rest of this
+        // file ends one. A state frame will not do it: `onState` returns early
+        // unless a brew is running, and the idle state 0x01 falls through its
+        // switch, so emitting it changes nothing at all.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        await machine.cancelBrew();
+
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+        transport.emit(status(0x1E));
+
+        expect(machine.phase.name).toBe("pressPlay");
+    });
+
+    it("does not carry a committed brew's silence into the next upload", async () => {
+        // The window the two `committed = false` resets exist for. The machine
+        // goes on reporting state while the next recipe is going out, and the
+        // burst is paced, so 0x1E can arrive mid-upload. With the flag left
+        // over from the brew before, the prompt for a recipe nobody has
+        // started would be swallowed.
+        //
+        // This pins the pair, not either one: they are the same guard written
+        // twice, mirroring how `pendingCommit` is cleared in both places, and
+        // removing either alone is covered by the other.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        await machine.cancelBrew();
+
+        const seen: string[] = [];
+        machine.onPhase((phase) => seen.push(phase.name));
+
+        machine.setAutoStart(false);
+        const realWrite = transport.write.bind(transport);
+        let fired = false;
+        transport.write = async (frame: Uint8Array) => {
+            await realWrite(frame);
+            // Skip 40521, the "how are you doing" ask `brew()` opens with:
+            // firing on it would set the machine's tracked state to 0x1E
+            // before `brewBlock` has even run, which the precondition check
+            // reads as a machine that is busy rather than as a mid-upload
+            // status frame.
+            const code = frame[3] | (frame[4] << 8);
+            if (fired || code === 40521) return;
+            fired = true;
+            transport.emit(status(0x1E));
+        };
+
+        await machine.brew(brewable());
+
+        expect(seen).toContain("pressPlay");
     });
 
     it("does not give up during the twenty seconds the machine grinds in silence", async () => {
