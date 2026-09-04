@@ -10,12 +10,34 @@ type Props = {
     value: string;
     options: readonly SegmentOption[];
     onChange: (value: string) => void;
+    /**
+     * Put the control beneath the label rather than beside it.
+     *
+     * For a choice too wide to share a line. `SegmentedControl` sizes to its
+     * content and does not flex, so four segments beside a flexible label
+     * squeeze the description into a four-line wrap.
+     */
+    stacked?: boolean;
 };
 
 /** A setting that is one of a short list. */
 export default function SettingsChoiceRow({
-    label, description, value, options, onChange
+    label, description, value, options, onChange, stacked
 }: Props) {
+    if (stacked) {
+        return (
+            <YStack testID="settings-choice-stacked" gap="$2.5"
+                    paddingVertical="$3" paddingHorizontal="$4">
+                <YStack gap="$1">
+                    <Text fontSize={16} color={palette.text}>{label}</Text>
+                    <Text fontSize={13} color={palette.dim}>{description}</Text>
+                </YStack>
+                <SegmentedControl value={value} options={options} onChange={onChange}
+                                  accessibilityLabel={label}/>
+            </YStack>
+        );
+    }
+
     return (
         // Same card-row treatment as the other two: the section draws the
         // dividers, `paddingHorizontal="$4"` insets the content, `minHeight={44}`

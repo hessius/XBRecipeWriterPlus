@@ -178,6 +178,35 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
 
+    it("offers the shape only when the shortcut is drawn", async () => {
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", false);
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        // A shape for a shortcut that is not drawn is a dead control.
+        expect(screen.queryByText("BREW shortcut shape")).toBeNull();
+    });
+
+    it("offers the shape when the shortcut is drawn", async () => {
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", true);
+        await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+        expect(screen.getByText("BREW shortcut shape")).toBeTruthy();
+    });
+
+    it("remembers the chosen shape", async () => {
+        const storage = memoryStorage();
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByLabelText("CHIP"));
+
+        // Read back through a second Settings over the same storage, the way the
+        // neighbouring tests do: the point is that it was written down, not that
+        // one component's state moved.
+        expect(new Settings(storage).get("brewShortcut")).toBe("chip");
+    });
+
     it("does not offer the one-line hints", async () => {
         // The hints toggle lives in the editor's more menu, beside the deck it
         // annotates, rather than a screen away from it.
