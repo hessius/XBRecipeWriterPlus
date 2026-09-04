@@ -1678,23 +1678,36 @@ Expected: FAIL — `stageWaterFrom` is not exported.
 In `hooks/useBrewRun.ts`, add the import and the helper:
 
 ```ts
-import {NOISE_FLOOR_ML, stallsInStage, type Stall} from "@/library/brew/stalls";
+import {NOISE_FLOOR_ML, stageOriginMl, stallsInStage, type Stall}
+    from "@/library/brew/stalls";
 ```
 
 ```ts
 /**
  * Millilitres delivered in one stage.
  *
- * The machine reports a running total for the whole brew, so a stage's own
- * share is the last reading minus the first one it was in. Exported so the
- * arithmetic can be tested without a renderer.
+ * The machine reports a running total for the whole brew -- `water` is a scale
+ * reading, ~10 a second, never re-tared between stages -- so a stage's own
+ * share is its last reading minus the total as it stood *before the stage
+ * began*.
+ *
+ * Not "minus the first reading of the stage": frames are event-driven, so
+ * water arrives between the boundary and the stage's first sample, and that
+ * water would simply vanish. It would vanish at every boundary, so the
+ * per-stage figures would not sum to the brew total, a rung would never
+ * quite fill, and -- worst -- a stage would never register as having met its
+ * target, which is the clause that stops a planned rest being called a stall.
+ * The #87 defect would come back through the side door.
+ *
+ * Exported so the arithmetic can be tested without a renderer.
  *
  * @param stage 1-based, matching `BrewSample.pour`
  */
 export function stageWaterFrom(samples: BrewSample[], stage: number): number {
     const mine = samples.filter((s) => s.pour === stage);
     if (mine.length === 0) return 0;
-    return Math.max(0, mine[mine.length - 1].water - mine[0].water);
+    const origin = stageOriginMl(samples, stage);
+    return Math.max(0, mine[mine.length - 1].water - origin);
 }
 ```
 
@@ -1810,6 +1823,73 @@ and in `RunOwner`, destructure and pass the three new values:
     };
 ```
 
+- [ ] **Step 3b: Give the stalls the same origin**
+
+*Added after this task was first attempted, because its own fixture proved the rule above was written down wrongly the first time.*
+
+`library/brew/stalls.ts` measures a stall's `atMl` from `mine[0].water` -- the first reading *inside* the stage. `stageWaterFrom` now measures from the reading before the stage. If the two disagree, the rung's fill and the amber band it draws on top of that fill are on different scales, and the band lands in the wrong place by however much water arrived at the boundary.
+
+They have to share one definition. Add the origin to `library/brew/stalls.ts` and export it:
+
+```ts
+/**
+ * The brew total as it stood before `stage` began.
+ *
+ * `water` is a scale reading for the whole brew, never re-tared between
+ * stages, so this is what a stage's own millilitres are counted from. Zero for
+ * the first stage, and for any stage with nothing before it.
+ *
+ * @param stage 1-based, matching `BrewSample.pour`
+ */
+export function stageOriginMl(samples: BrewSample[], stage: number): number {
+    let origin: number | null = null;
+    for (const s of samples) if (s.pour < stage) origin = s.water;
+    return origin ?? 0;
+}
+```
+
+Then, inside `stallsInStage`, replace `const startMl = mine[0].water;` with:
+
+```ts
+    const startMl = stageOriginMl(samples, stage);
+```
+
+**Every existing test in `library/brew/__tests__/stalls.test.ts` still passes after this** -- I checked all nine against both definitions before writing this step. They agree because every fixture either starts its stage at zero or has no earlier stage to carry from. If any of them goes red, stop and tell me, because that means one of us is wrong about the fixtures.
+
+One fixture is worth correcting while you are there, even though it passes either way. In `"reads only its own stage"`:
+
+```ts
+            sample(11, 0, 2), sample(12, 70, 2)
+```
+
+Water cannot fall from 40 to 0 at a stage boundary on a machine that never re-tares. Make it continue the running total, and say why:
+
+```ts
+            // Stage 2 continues the running total; the scale is never re-tared
+            // between stages, so it picks up from stage 1's 40 ml.
+            sample(11, 40, 2), sample(12, 110, 2)
+```
+
+The assertions do not change: stage 2 still has no stall, and stage 1 still has its eight-second one.
+
+Add one test to that file for the behaviour this step exists to create:
+
+```ts
+    it("counts from the total before the stage, not its first reading", () => {
+        // 8 ml arrived between the boundary and stage 2's first frame. Stage 2
+        // owes 40 and has had 38, so its flat tail is still a stall -- under
+        // the old rule it looked like 30 delivered and the numbers drifted.
+        const samples = [
+            sample(0, 0, 1), sample(4, 40, 1),
+            sample(5, 48, 2), sample(6, 78, 2), sample(12, 78, 2)
+        ];
+
+        expect(stallsInStage(samples, 2, 40)).toEqual([{atMl: 38, seconds: 6}]);
+    });
+```
+
+If that expectation does not match what the code produces, **print the actual output and tell me rather than adjusting either number**. I derived it by hand and it is the one number in this task I have not executed.
+
 - [ ] **Step 4: Replace the two tests that encode the old definition of holding**
 
 `hooks/__tests__/useBrewRun.test.ts` has two tests that will now fail, and **they are supposed to**. They assert the old rule — that a stage which outruns its planned duration is holding — which is the defect this task exists to remove. On hardware it raised a HOLDING warning during a *planned rest* and then never cleared once pouring resumed, because a planned rest always outruns the pour it follows.
@@ -1877,7 +1957,7 @@ Add these three in their place:
 
 Two things to know about the harness, because they are not obvious:
 
-- `stageWaterFrom` is **last reading minus first reading of the stage**, because the machine reports a running total for the whole brew. So a stage whose first sample reads 10 g and whose last reads 50 g has delivered 40, which is why the numbers above are offset by 10 rather than starting at 0.
+- `stageWaterFrom` counts from **the brew total before the stage began**, which for stage 1 is zero. So in these tests, which all run in stage 1, a last reading of 50 means 50 delivered, not 40. The stage-1 target is 40, so the "planned rest" test is comfortably past its target either way -- but do not read the offset as meaning anything.
 - The readings deliberately differ by 0.2 g rather than repeating a value exactly. That is inside `NOISE_FLOOR_ML`, so it still counts as flat, and it avoids depending on whether `BrewRecorder` buffers an identical consecutive reading. If a test does not behave as described, print `result.current.samples` and look at the actual `at` and `water` values before changing anything else — and tell me what you saw.
 
 - [ ] **Step 5: Run the whole suite**
