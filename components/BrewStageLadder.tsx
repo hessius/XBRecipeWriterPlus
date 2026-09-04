@@ -1,13 +1,11 @@
 // components/BrewStageLadder.tsx
 import React, {useEffect, useRef} from "react";
 import {ScrollView, View} from "react-native";
-import {XStack, YStack} from "tamagui";
+import {YStack} from "tamagui";
 
 import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
-import DotMatrixText from "@/components/DotMatrixText";
-import PourGlyph, {glyphForPattern, type GlyphKind} from "@/components/PourGlyph";
-import {palette} from "@/constants/colors";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
+import {rungSegments} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -20,57 +18,46 @@ type Props = {
      * brew in history shows every stage done.
      */
     activeIndex: number | null;
-    /** Seconds spent in the live stage. Drives the fill and the re-scale. */
-    stageElapsed: number;
-    /**
-     * Millilitres delivered per stage, 1:1 with `pours`.
-     *
-     * Optional because Task 11 is what wires the real values through from
-     * `useBrewRun`. Until then a finished stage is assumed to have had all of
-     * its water, which is true, and a live one none, which is not -- the live
-     * fill is deliberately wrong for one task rather than faked from elapsed
-     * time, because a plausible-looking wrong fill is the thing that made the
-     * old ladder unreadable on hardware.
-     */
-    stageWater?: number[];
-    /** Seconds into the live stage's planned rest. Task 11 wires it. */
-    pauseElapsed?: number;
-    /** Stalls per stage, 1:1 with `pours`. Task 11 wires them. */
-    stalls?: Stall[][];
-    holding?: boolean;
+    /** From `allocateBands`. */
+    barHeight: number;
+    rungGap: number;
+    /** True when the bands are at their floors and the list will not fit. */
+    scrolls: boolean;
+    /** Millilitres delivered, index-aligned with `pours`. */
+    stageWater: number[];
+    /** Index-aligned with `pours`. */
+    stalls: Stall[][];
+    /** Seconds into the live stage's planned rest. */
+    pauseElapsed: number;
 };
 
-const GLYPH_WORDS: [GlyphKind, string][] = [
-    ["centered", "CENTRED"],
-    ["circular", "CIRCULAR"],
-    ["spiral", "SPIRAL"],
-    ["agitation", "AGITATION"]
-];
-
-function stageSeconds(pour: Pour): number {
-    return pourSeconds(pour) + pauseSeconds(pour);
-}
-
 /**
- * The stages, as a ladder that scrolls.
+ * The stages, as a ladder.
  *
- * Not compacted at nine stages — the machine's maximum — because scrolling
- * costs less than legibility, and the auto-scroll usually makes it cost
- * nothing. The open card sits directly beneath its own rung: at the bottom of
- * the list it reads as a footer belonging to no stage in particular.
+ * The lane inside a rung is `flex: 1` and the whole ladder grows into whatever
+ * height it is given, so a four-stage recipe on a large phone fills the screen
+ * and a nine-stage one sits at every floor and scrolls.
  */
 export default function BrewStageLadder({
-    pours, accent, activeIndex, stageElapsed, stageWater, pauseElapsed = 0,
-    stalls, holding = false
+    pours, accent, activeIndex, barHeight, rungGap, scrolls, stageWater, stalls,
+    pauseElapsed
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured y-offset relative to the ScrollView content.
     const rungY = useRef<Record<number, number>>({});
 
-    const planned = pours.reduce((widest, pour) => Math.max(widest, stageSeconds(pour)), 0);
-    // Raised by the live stage once it outruns its plan, which is how a hold
-    // becomes a growing wedge instead of a bar pinned silently at full.
-    const laneSeconds = Math.max(planned, stageElapsed);
+    // One scale for every rung, or a lane says nothing about its neighbours.
+    // Stalls are in it: that is what makes a stage that struggled stick out
+    // past the ones that did not, by exactly the time it lost.
+    const laneSeconds = pours.reduce((widest, pour, i) => {
+        const spent = rungSegments({
+            pour,
+            delivered: stageWater[i] ?? 0,
+            pauseElapsed: i === activeIndex ? pauseElapsed : 0,
+            stalls: stalls[i] ?? []
+        }).reduce((sum, segment) => sum + segment.seconds, 0);
+        return Math.max(widest, pourSeconds(pour) + pauseSeconds(pour), spent);
+    }, 0);
 
     useEffect(() => {
         // Sentinels: null = not yet started, pours.length = brew finished.
@@ -82,19 +69,19 @@ export default function BrewStageLadder({
         scroller.current?.scrollTo({y: Math.max(0, y - 8), animated: true});
     }, [activeIndex, pours.length]);
 
-    const rows: React.ReactNode[] = [];
-    pours.forEach((pour, index) => {
+    const rows = pours.map((pour, index) => {
         const state: RungState =
             activeIndex === null ? "pending"
             : index < activeIndex ? "done"
             : index === activeIndex ? "active"
             : "pending";
 
-        rows.push(
+        return (
             <View
                 key={`row-${index}`}
                 testID={`row-${index}`}
-                onLayout={e => { rungY.current[index] = e.nativeEvent.layout.y; }}
+                style={{paddingVertical: rungGap / 2}}
+                onLayout={(e) => { rungY.current[index] = e.nativeEvent.layout.y; }}
             >
                 <BrewStageRung
                     testID={`rung-${index}`}
@@ -103,62 +90,21 @@ export default function BrewStageLadder({
                     state={state}
                     accent={accent}
                     laneSeconds={laneSeconds}
-                    barHeight={11}
-                    delivered={stageWater?.[index]
-                        ?? (state === "done" ? Math.max(pour.volume, 0) : 0)}
-                    pauseElapsed={state === "active" ? pauseElapsed
-                        : state === "done" ? pauseSeconds(pour) : 0}
-                    stalls={stalls?.[index] ?? []}
+                    barHeight={barHeight}
+                    delivered={stageWater[index] ?? 0}
+                    pauseElapsed={index === activeIndex ? pauseElapsed : 0}
+                    stalls={stalls[index] ?? []}
                 />
             </View>
         );
-
-        if (index === activeIndex) {
-            rows.push(
-                <YStack
-                    key="stage-card"
-                    testID="stage-card"
-                    backgroundColor={palette.raised}
-                    borderRadius="$4"
-                    padding="$3"
-                    gap="$2"
-                    marginBottom="$2"
-                >
-                    {holding && (
-                        <YStack gap="$1">
-                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                                           color={palette.warn}>
-                                HOLDING: THE CUP IS BEHIND
-                            </DotMatrixText>
-                            <DotMatrixText fontSize={11} color={palette.dim}>
-                                The machine has stopped the water until the bed drains.
-                                It will carry on by itself.
-                            </DotMatrixText>
-                        </YStack>
-                    )}
-                    {/* The legend, built into the thing it explains, so the
-                        vocabulary is learned in passing. */}
-                    {GLYPH_WORDS.map(([kind, word]) => (
-                        <XStack key={kind} alignItems="center" gap="$2">
-                            <PourGlyph
-                                kind={kind}
-                                accent={kind === glyphForPattern(pour.pourPattern)
-                                    ? accent : palette.dim}
-                                size={14}
-                            />
-                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
-                                           color={palette.dim}>
-                                {word}
-                            </DotMatrixText>
-                        </XStack>
-                    ))}
-                </YStack>
-            );
-        }
     });
 
+    // Only a ladder that cannot fit is allowed to scroll. A ScrollView that
+    // never scrolls still swallows the drag that dismisses the modal.
+    if (!scrolls) return <YStack testID="ladder" flex={1}>{rows}</YStack>;
+
     return (
-        <ScrollView ref={scroller}>
+        <ScrollView ref={scroller} style={{flex: 1}}>
             <View testID="ladder">{rows}</View>
         </ScrollView>
     );

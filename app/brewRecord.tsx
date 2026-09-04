@@ -251,7 +251,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                     pours={recipe.pours}
                     accent={accent}
                     activeIndex={recipe.pours.length}
-                    stageElapsed={0}
+                    barHeight={11}
+                    rungGap={8}
+                    scrolls={false}
+                    stageWater={recipe.pours.map(pour => Math.max(pour.volume, 0))}
+                    // Task 17 puts the recorded stalls here.
+                    stalls={recipe.pours.map(() => [])}
+                    pauseElapsed={0}
                 />
             ) : (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>

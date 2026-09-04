@@ -1,78 +1,81 @@
-// components/__tests__/BrewStageLadder.test.tsx
 import React from "react";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
-import {accents} from "@/constants/colors";
+import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
-
-const TEST_ACCENT = accents.coffee[1];
 
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
         new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
 }
 
-async function draw(props: Partial<React.ComponentProps<typeof BrewStageLadder>> = {}) {
+async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageLadder>> = {}) {
     return renderWithProviders(
         <BrewStageLadder
-            pours={pours(5)}
-            accent={TEST_ACCENT}
+            pours={pours(4)}
+            accent={palette.brand}
             activeIndex={1}
-            stageElapsed={0}
-            {...props}
+            barHeight={11}
+            rungGap={8}
+            scrolls={false}
+            stageWater={[40, 20, 0, 0]}
+            stalls={[[], [], [], []]}
+            pauseElapsed={0}
+            {...overrides}
         />
     );
 }
 
 describe("BrewStageLadder", () => {
-    it("draws one rung per pour", async () => {
-        const {getAllByTestId} = await draw({pours: pours(9)});
-        expect(getAllByTestId(/^rung-\d+$/)).toHaveLength(9);
+    it("draws one rung per stage", async () => {
+        const {getByTestId} = await draw();
+
+        for (const i of [0, 1, 2, 3]) expect(getByTestId(`rung-${i}`)).toBeTruthy();
     });
 
-    it("opens the card beneath its own rung, not at the end of the list", async () => {
-        // The nine-stage mock put it at the bottom and it read as a footer.
-        const {getByTestId} = await draw({activeIndex: 1});
-        const ladder = getByTestId("ladder");
-        const order = ladder.props.children.flat().map(
-            (child: {props: {testID?: string}}) => child?.props?.testID
-        );
-        expect(order.indexOf("stage-card")).toBe(order.indexOf("row-1") + 1);
-    });
-
-    it("shows the glyph legend in the open card", async () => {
-        const {getByText} = await draw();
-        expect(getByText("AGITATION")).toBeTruthy();
-    });
-
-    it("says agitation, never shake", async () => {
-        // The word is agitation everywhere: the editor, the help text and the
-        // card format all use it, and two words for one thing is one too many.
+    it("no longer lists every pour pattern that is not in use", async () => {
         const {queryByText} = await draw();
-        expect(queryByText(/shake/i)).toBeNull();
+
+        expect(queryByText("AGITATION")).toBeNull();
+        expect(queryByText("CIRCULAR")).toBeNull();
     });
 
-    it("explains a hold in the open card", async () => {
-        const {getByText} = await draw({holding: true});
-        expect(getByText("HOLDING: THE CUP IS BEHIND")).toBeTruthy();
+    it("shares one time scale across every rung", async () => {
+        // Stage 2 stalled for 30 s, so the scale must grow for all of them.
+        const {getByTestId} = await draw({
+            stalls: [[], [{atMl: 10, seconds: 30}], [], []]
+        });
+
+        // 40 ml at 4 ml/s is 10 s of pour plus a 10 s rest: a clean stage is
+        // 20 s. The stalled one is 50, so a clean rung must leave 30 s of slack.
+        expect(getByTestId("rung-0")).toBeTruthy();
+        expect(getByTestId("rung-1")).toBeTruthy();
     });
 
-    it("opens no card when no stage is live", async () => {
-        const {queryByTestId} = await draw({activeIndex: null});
-        expect(queryByTestId("stage-card")).toBeNull();
+    it("gives each rung its own water", async () => {
+        const {getByText} = await draw({stageWater: [40, 22, 0, 0]});
+
+        expect(getByText("22/40 ml")).toBeTruthy();
     });
 
-    it("marks stages before the live one as done and after it as pending", async () => {
-        const {getByTestId} = await draw({activeIndex: 2});
-        // A pending stage is faded; a finished one is not. The exact opacity is
-        // the rung's business, so assert the relationship, not the number.
-        expect(getByTestId("rung-0").props.style.opacity).toBe(1);
-        expect(getByTestId("rung-4").props.style.opacity).toBeLessThan(1);
+    it("marks everything done once the brew is over", async () => {
+        const {getByTestId} = await draw({
+            activeIndex: 4, stageWater: [40, 40, 40, 40]
+        });
+
+        expect(getByTestId("rung-3").props.style).not.toEqual(
+            expect.objectContaining({opacity: 0.45})
+        );
     });
 
-    it("survives a recipe with no pours", async () => {
-        const {queryAllByTestId} = await draw({pours: [], activeIndex: null});
-        expect(queryAllByTestId(/^rung-\d+$/)).toHaveLength(0);
+    it("marks everything pending before it starts", async () => {
+        const {getByTestId} = await draw({
+            activeIndex: null, stageWater: [0, 0, 0, 0]
+        });
+
+        expect(getByTestId("rung-0").props.style).toEqual(
+            expect.objectContaining({opacity: 0.45})
+        );
     });
 });

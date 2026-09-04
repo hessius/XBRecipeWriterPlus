@@ -67,13 +67,15 @@ export default function Brew() {
     const phase = run?.phase ?? {name: "grinding"} as const;
     const samples = run?.samples ?? [];
     const elapsed = run?.elapsed ?? 0;
-    const stageElapsed = run?.stageElapsed ?? 0;
     const activeIndex = run?.activeIndex ?? null;
     const holding = run?.holding ?? false;
 
     // The recipe the provider is running takes precedence once it is available,
     // because it is the object the recorder was started with.
     const recipe = run?.recipe ?? localRecipe;
+    const stageWater = run?.stageWater ?? recipe.pours.map(() => 0);
+    const stalls = run?.stalls ?? recipe.pours.map(() => []);
+    const pauseElapsed = run?.pauseElapsed ?? 0;
 
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
@@ -174,8 +176,12 @@ export default function Brew() {
                     pours={recipe.pours}
                     accent={accent}
                     activeIndex={activeIndex}
-                    stageElapsed={stageElapsed}
-                    holding={holding}
+                    barHeight={11}
+                    rungGap={8}
+                    scrolls
+                    stageWater={stageWater}
+                    stalls={stalls}
+                    pauseElapsed={pauseElapsed}
                 />
             </YStack>
 
