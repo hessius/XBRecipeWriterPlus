@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {fireEvent} from "@testing-library/react-native";
 
 import Brew from "@/app/brew";
@@ -376,5 +377,20 @@ describe("the brew screen says true things", () => {
 
         expect(getByLabelText("Close")).toBeTruthy();
         expect(queryByLabelText("Done")).toBeNull();
+    });
+
+    /**
+     * On device the chevron did nothing while dragging the sheet down worked:
+     * a 16-point glyph at the top of a modal is a target you miss. The HIG asks
+     * for 44. Padding rather than hit slop, because the machine dot is its
+     * neighbour and overlapping slop hands the tap to the later sibling.
+     */
+    it("gives the close chevron a target a finger can find", async () => {
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        const style = StyleSheet.flatten(
+            getByLabelText("Close").props.style as StyleProp<ViewStyle>
+        );
+        const padding = Number(style?.padding ?? 0);
+        expect(16 + padding * 2).toBeGreaterThanOrEqual(44);
     });
 });

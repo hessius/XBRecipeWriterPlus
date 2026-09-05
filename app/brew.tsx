@@ -1,6 +1,6 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable, useWindowDimensions} from "react-native";
+import {Pressable, StyleSheet, useWindowDimensions} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
@@ -146,7 +146,7 @@ export default function Brew() {
                 with `headerShown: false`, so this is the only bar. */}
             <XStack alignItems="center" gap="$2">
                 <Pressable accessibilityRole="button" accessibilityLabel="Close"
-                           onPress={() => router.back()}>
+                           style={styles.close} onPress={() => router.back()}>
                     <DotIcon name="chevron-down" size={16} color={palette.dim} />
                 </Pressable>
                 <MachineDot status={status} collapsed={false}
@@ -274,3 +274,25 @@ export default function Brew() {
         </YStack>
     );
 }
+
+const CLOSE_ICON = 16;
+/** The HIG's smallest comfortable target. */
+const TOUCH_TARGET = 44;
+const CLOSE_PADDING = (TOUCH_TARGET - CLOSE_ICON) / 2;
+
+const styles = StyleSheet.create({
+    /**
+     * A 16-point glyph at the top of a modal sheet is a target you miss, and on
+     * device this chevron read as broken while dragging the sheet worked.
+     *
+     * Padded out rather than given `hitSlop`, for the reason `RecipeCard`
+     * records: slop on adjacent controls overlaps and the later sibling wins,
+     * and the machine dot is right next to this. The negative margins give the
+     * padding back to the layout, so the row looks exactly as it did.
+     */
+    close: {
+        padding:     CLOSE_PADDING,
+        marginLeft:  -CLOSE_PADDING,
+        marginRight: -CLOSE_PADDING
+    }
+});
