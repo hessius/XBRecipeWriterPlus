@@ -50,11 +50,17 @@ describe("HatchFill", () => {
             </>
         );
 
-        const fillA = r.getByTestId("a-bright").props.fill as string;
-        const fillB = r.getByTestId("b-bright").props.fill as string;
+        // react-native-svg parses `url(#id)` into a brush object, so the ids
+        // have to be compared by value: two distinct objects are never `toBe`
+        // each other, and an identity comparison here passes even when both
+        // lanes point at the same pattern.
+        const brushOf = (id: string) =>
+            (r.getByTestId(id).props.fill as {brushRef: string}).brushRef;
+
         // Each instance generates its own useId-based pattern id. If they
         // collided, the second lane would silently paint with the first's
-        // colour — the wrong colour at the wrong opacity.
-        expect(fillA).not.toBe(fillB);
+        // colour.
+        expect(brushOf("a-bright")).not.toBe(brushOf("b-bright"));
+        expect(brushOf("a-dim")).not.toBe(brushOf("b-dim"));
     });
 });
