@@ -3,7 +3,7 @@ import {Pressable} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
-import XbrwSheet from "@/components/XbrwSheet";
+import Collapsible from "@/components/Collapsible";
 import {palette} from "@/constants/colors";
 import {useRefreshRequest} from "@/hooks/useRefreshRequest";
 import type {LinkStatus} from "@/hooks/useMachine";
@@ -27,7 +27,6 @@ type Props = {
     now: number;
     onRefreshWater: () => void;
     onConnect: () => void;
-    onClose: () => void;
 };
 
 /** `4 MIN AGO`. Minutes only: seconds would change while it was being read. */
@@ -108,10 +107,12 @@ function RefreshButton({accent, askedAt, onRefresh}: {
  * sits under all three readings rather than on the water row, because a press
  * re-reads the whole blob — water, mode and grind — not the water alone.
  *
- * Driven by `open` and `onClose`, presented as a bottom sheet via `XbrwSheet`.
+ * Driven by `open`, and revealed inline beneath the header via `Collapsible`.
+ * The machine dot that opened it is still in place two rows up, so it is also
+ * the control that closes it: the panel needs no dismiss affordance of its own.
  */
 export default function MachinePanel({
-    open, status, accent, vitals, now, onRefreshWater, onConnect, onClose
+    open, status, accent, vitals, now, onRefreshWater, onConnect
 }: Props) {
     let body: React.ReactNode;
 
@@ -178,12 +179,21 @@ export default function MachinePanel({
         );
     }
 
+    // A panel the header owns, not an overlay. Nothing is covered, so there is
+    // nothing to have to get back to, and the only way to close it is the
+    // control that opened it -- still visible, still in place, two rows up. It
+    // used to rise from the bottom of the screen, opened by a control in the
+    // top-right corner; it arrived from the wrong end.
+    //
+    // `Collapsible` measures its content and animates height and opacity,
+    // honouring Reduced Motion, which is the same treatment the header's own
+    // collapse already gets.
     return (
-        <XbrwSheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}
-                   title="Machine" showTitle={false} heightPercent={40}>
-            <YStack paddingBottom="$2">
+        <Collapsible open={open}>
+            <YStack testID="machine-panel" paddingHorizontal="$3"
+                    paddingBottom="$2">
                 {body}
             </YStack>
-        </XbrwSheet>
+        </Collapsible>
     );
 }

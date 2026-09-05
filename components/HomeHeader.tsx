@@ -1,7 +1,7 @@
 import React, {useEffect} from "react";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {XStack} from "tamagui";
+import {XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import HomeTitle from "@/components/HomeTitle";
@@ -75,6 +75,13 @@ type Props = {
     onMachinePress?: () => void;
     /** Called when the user taps TRY NOW in the popover. */
     onMachineConnect?: () => void;
+    /**
+     * Rendered directly beneath the header row.
+     *
+     * A node rather than the machine's readings themselves: the header should
+     * not have to know what a water level is to be able to make room for one.
+     */
+    machinePanel?: React.ReactNode;
     onToggleEdit: () => void;
     onScan: () => void;
     onImport: () => void;
@@ -102,6 +109,7 @@ export default function HomeHeader({
     machineStatus,
     onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
+    machinePanel,
     onToggleEdit,
     onScan,
     onImport,
@@ -136,54 +144,58 @@ export default function HomeHeader({
 
     return (
         // The screen has no navigation bar to clear the status bar for it, so
-        // the header carries the top inset itself.
-        <XStack testID="home-header"
-                alignItems="center" justifyContent="space-between" gap="$2"
-                paddingHorizontal="$3" paddingVertical="$2"
-                paddingTop={insets.top + 8}>
-            <HomeTitle count={count} collapsed={collapsed}
-                       fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
+        // the header carries the top inset itself -- on the wrapper now, so
+        // that the panel below the row is inside the header's box and pushes
+        // the list down rather than covering it.
+        <YStack testID="home-header-inset" paddingTop={insets.top + 8}>
+            <XStack testID="home-header"
+                    alignItems="center" justifyContent="space-between" gap="$2"
+                    paddingHorizontal="$3" paddingVertical="$2">
+                <HomeTitle count={count} collapsed={collapsed}
+                           fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 
-            <XStack alignItems="center">
-                {/* The arriving glyphs go at the left edge of the group. The
-                    group is right-aligned, so it grows leftwards and edit and
-                    settings stay exactly where the user last saw them —
-                    inserting in the middle would slide them sideways every
-                    time the list crossed the threshold.
+                <XStack alignItems="center">
+                    {/* The arriving glyphs go at the left edge of the group. The
+                        group is right-aligned, so it grows leftwards and edit and
+                        settings stay exactly where the user last saw them —
+                        inserting in the middle would slide them sideways every
+                        time the list crossed the threshold.
 
-                    They stay mounted at zero width rather than being added and
-                    removed, so the width is something that can be animated;
-                    mounting them made the slot appear in one frame, and no
-                    amount of fading hid that. Zero width is only a visual
-                    absence, so they are also taken out of the accessibility
-                    tree and made untappable while parked. */}
-                <Animated.View testID="home-header-slide"
-                               style={[slide, {overflow: "hidden"}]}
-                               pointerEvents={collapsed ? "auto" : "none"}
-                               accessibilityElementsHidden={!collapsed}
-                               importantForAccessibility={
-                                   collapsed ? "auto" : "no-hide-descendants"
-                               }>
-                    <XStack alignItems="center" width={SLIDE_WIDTH}>
-                        <Action icon="scan" label="Read a card" onPress={onScan}/>
-                        <Action icon="import" label="Import a recipe"
-                                disabled={!canImport} onPress={onImport}/>
-                    </XStack>
-                </Animated.View>
-                {showEdit && (
-                    <Action icon="edit" active={editing}
-                            label={editing ? "Done editing" : "Edit recipes"}
-                            onPress={onToggleEdit}/>
-                )}
-                {machineStatus !== undefined && (
-                    <MachineDot
-                        status={machineStatus}
-                        collapsed={collapsed}
-                        onPress={onMachinePress}
-                    />
-                )}
-                <Action icon="settings" label="Settings" onPress={onSettings}/>
+                        They stay mounted at zero width rather than being added and
+                        removed, so the width is something that can be animated;
+                        mounting them made the slot appear in one frame, and no
+                        amount of fading hid that. Zero width is only a visual
+                        absence, so they are also taken out of the accessibility
+                        tree and made untappable while parked. */}
+                    <Animated.View testID="home-header-slide"
+                                   style={[slide, {overflow: "hidden"}]}
+                                   pointerEvents={collapsed ? "auto" : "none"}
+                                   accessibilityElementsHidden={!collapsed}
+                                   importantForAccessibility={
+                                       collapsed ? "auto" : "no-hide-descendants"
+                                   }>
+                        <XStack alignItems="center" width={SLIDE_WIDTH}>
+                            <Action icon="scan" label="Read a card" onPress={onScan}/>
+                            <Action icon="import" label="Import a recipe"
+                                    disabled={!canImport} onPress={onImport}/>
+                        </XStack>
+                    </Animated.View>
+                    {showEdit && (
+                        <Action icon="edit" active={editing}
+                                label={editing ? "Done editing" : "Edit recipes"}
+                                onPress={onToggleEdit}/>
+                    )}
+                    {machineStatus !== undefined && (
+                        <MachineDot
+                            status={machineStatus}
+                            collapsed={collapsed}
+                            onPress={onMachinePress}
+                        />
+                    )}
+                    <Action icon="settings" label="Settings" onPress={onSettings}/>
+                </XStack>
             </XStack>
-        </XStack>
+            {machinePanel}
+        </YStack>
     );
 }

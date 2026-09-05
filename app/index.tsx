@@ -458,9 +458,20 @@ export default function HomeScreen({db, settings}: Props) {
                     showEdit={!isEmpty}
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
+                    machinePanel={remembered ? (
+                        <MachinePanel
+                            open={popoverOpen}
+                            status={machineStatus}
+                            accent={palette.success}
+                            vitals={machineVitals}
+                            now={popoverNow}
+                            onRefreshWater={refreshWater}
+                            onConnect={connectMachine}
+                        />
+                    ) : undefined}
                     onMachinePress={() => {
                         setPopoverNow(Date.now());
-                        setPopoverOpen(true);
+                        setPopoverOpen((open) => !open);
                     }}
                     onMachineConnect={connectMachine}
                     onToggleEdit={() => setEditing((current) => !current)}
@@ -535,19 +546,6 @@ export default function HomeScreen({db, settings}: Props) {
                         library.refresh();
                     }
                 }}/>
-
-            {remembered && (
-                <MachinePanel
-                    open={popoverOpen}
-                    status={machineStatus}
-                    accent={palette.success}
-                    vitals={machineVitals}
-                    now={popoverNow}
-                    onRefreshWater={refreshWater}
-                    onConnect={connectMachine}
-                    onClose={() => setPopoverOpen(false)}
-                />
-            )}
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>

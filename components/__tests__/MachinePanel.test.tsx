@@ -19,7 +19,6 @@ async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = 
             now={4 * 60 * 1000}
             onRefreshWater={jest.fn()}
             onConnect={jest.fn()}
-            onClose={jest.fn()}
             {...props}
         />
     );
@@ -146,6 +145,18 @@ describe("MachinePanel", () => {
         await fireEvent.press(r.getByTestId("machine-refresh"));
 
         expect(onRefreshWater).toHaveBeenCalledTimes(1);
+    });
+
+    it("is not a sheet", async () => {
+        const r = await draw({open: true, status: "connected", vitals: someVitals});
+
+        expect(r.queryByLabelText("Close")).toBeNull();
+    });
+
+    it("shows nothing at all when closed", async () => {
+        const r = await draw({open: false, status: "connected", vitals: someVitals});
+
+        expect(r.queryByTestId("machine-refresh")).toBeNull();
     });
 
     it("reads the water level large enough to glance at", async () => {

@@ -1116,11 +1116,11 @@ describe("HomeScreen, opening one editor at a time", () => {
         }
     });
 
-    it("renders the machine popover outside the home header so it is not clipped", async () => {
-        // A non-modal sheet renders in place. When it lived inside the header's
-        // icon row — an animated, height-constrained container — it was clipped
-        // to nothing. The popover must be at screen root so it is never occluded
-        // by its mounting container.
+    it("renders the machine panel inside the header, below its row (task 9)", async () => {
+        // The panel used to be a bottom sheet at screen root. It now extends
+        // inline from the top toolbar: it is a child of the header's wrapper
+        // (so it pushes the list down), but below the header row rather than
+        // inside it.
         mockRemembered = "machine-device-id";
         mockMachineStatus = "connected";
         mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
@@ -1131,12 +1131,33 @@ describe("HomeScreen, opening one editor at a time", () => {
 
         await fireEvent.press(screen.getByLabelText("Machine connected"));
 
-        // Popover content must appear on screen...
+        // The panel's readings show, and they are inside the header's box...
+        expect(screen.getByText("WATER")).toBeTruthy();
+        const wrap = screen.getByTestId("home-header-inset");
+        expect(within(wrap).getByText("WATER")).toBeTruthy();
+
+        // ...but below the header row, not within it.
+        const row = screen.getByTestId("home-header");
+        expect(within(row).queryByText("WATER")).toBeNull();
+    });
+
+    it("closes the panel again when the machine dot is tapped twice (task 9)", async () => {
+        // The dot is the only close control now, so it must toggle: a second
+        // tap must take the panel back down, not leave it open.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
         expect(screen.getByText("WATER")).toBeTruthy();
 
-        // ...but must NOT be a descendant of the header (it was, before the fix).
-        const header = screen.getByTestId("home-header");
-        expect(within(header).queryByText("WATER")).toBeNull();
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // Closed: Collapsible hides its subtree, so the readings are gone.
+        expect(screen.queryByText("WATER")).toBeNull();
     });
 
     it("keeps the last snapshot after disconnect so 'last seen' is reachable (task 2)", async () => {

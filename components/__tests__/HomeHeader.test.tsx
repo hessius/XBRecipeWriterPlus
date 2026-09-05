@@ -1,4 +1,5 @@
 import React from "react";
+import {View} from "react-native";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import HomeHeader from "@/components/HomeHeader";
@@ -142,9 +143,11 @@ describe("HomeHeader", () => {
 
     it("clears the status bar itself", async () => {
         // This screen hides the navigation bar, so nothing above the header is
-        // holding the status bar off it.
+        // holding the status bar off it. The inset sits on the wrapper that now
+        // also carries the machine panel, so the panel is inside the header's
+        // box rather than over the screen.
         await renderWithProviders(<HomeHeader {...props()}/>);
-        const style = screen.getByTestId("home-header").props.style;
+        const style = screen.getByTestId("home-header-inset").props.style;
 
         expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
     });
@@ -172,5 +175,19 @@ describe("HomeHeader", () => {
         );
         await fireEvent.press(screen.getByLabelText("Machine connected"));
         expect(onMachinePress).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the machine panel below the header row, not over the screen", async () => {
+        const r = await renderWithProviders(
+            <HomeHeader {...props()} machinePanel={<View testID="the-panel" />} />
+        );
+
+        expect(r.getByTestId("the-panel")).toBeTruthy();
+    });
+
+    it("has no panel when it is not given one", async () => {
+        const r = await renderWithProviders(<HomeHeader {...props()} />);
+
+        expect(r.queryByTestId("the-panel")).toBeNull();
     });
 });
