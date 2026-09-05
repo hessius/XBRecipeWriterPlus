@@ -199,3 +199,77 @@ export function mix(from: string, to: string, amount: number): string {
     });
     return `#${blended.join("")}`;
 }
+
+/**
+ * `warn`'s hue, in degrees.
+ *
+ * Stated rather than derived so the guard below cannot silently follow `warn`
+ * somewhere else: if the amber is ever retuned, this is the second place that
+ * has to agree, and the colour tests say so.
+ */
+const WARN_HUE = 43;
+
+/**
+ * How near amber a derived hue may come before it is pushed out.
+ *
+ * Deliberately tight. The trace spends hue on meaning -- the accent is this
+ * recipe, amber is the machine stopped -- and a wider band would start moving
+ * colours that are already clear. At 25 degrees the guard fires for exactly one
+ * of the twelve accents (Sky, whose complement lands ten degrees from amber);
+ * the next nearest are Ice at 27 and Lilac at 29, and both are left alone.
+ */
+const AMBER_GUARD = 25;
+
+/** Below this a derived colour is too dark to read as a line on `base`. */
+const CUP_LIGHTNESS_FLOOR = 0.6;
+
+function toHsl(hex: string): {h: number; s: number; l: number} {
+    const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const delta = max - min;
+    if (delta === 0) return {h: 0, s: 0, l};
+    const s = delta / (1 - Math.abs(2 * l - 1));
+    const h = max === r ? 60 * (((g - b) / delta) % 6)
+            : max === g ? 60 * ((b - r) / delta + 2)
+            :             60 * ((r - g) / delta + 4);
+    return {h: (h + 360) % 360, s, l};
+}
+
+function toHex(h: number, s: number, l: number): string {
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    const [r, g, b] =
+          h < 60  ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+        : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return `#${[r, g, b]
+        .map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0"))
+        .join("")}`;
+}
+
+/**
+ * The colour of the cup line, for a recipe drawn in `accent`.
+ *
+ * Derived rather than chosen, because it cannot be chosen: the accent is one of
+ * twelve the user picks between, two of which are themselves orange, so any
+ * fixed contrasting colour collides with somebody's recipe. The complement of
+ * the accent never collides with it, whichever one it is.
+ *
+ * Saturation is held and lightness is held with a floor, so the cup line is as
+ * vivid as the recipe it belongs to and still legible on black. Only the hue
+ * moves -- and only far enough to clear amber, which already means the machine
+ * stopped and is not available to mean anything else.
+ */
+export function cupLineFor(accent: string): string {
+    const {h, s, l} = toHsl(accent);
+    let hue = (h + 180) % 360;
+    // Signed, so the push is to the nearer edge of the band rather than always
+    // to the same one -- a complement just below amber must not jump over it.
+    const drift = ((hue - WARN_HUE + 540) % 360) - 180;
+    if (Math.abs(drift) < AMBER_GUARD) {
+        hue = ((drift >= 0 ? WARN_HUE + AMBER_GUARD : WARN_HUE - AMBER_GUARD) + 360) % 360;
+    }
+    return toHex(hue, s, Math.max(CUP_LIGHTNESS_FLOOR, l));
+}
