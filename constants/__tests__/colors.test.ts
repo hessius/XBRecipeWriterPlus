@@ -103,4 +103,12 @@ describe("cupLineFor", () => {
                 .toBeGreaterThanOrEqual(0.599);
         }
     });
+
+    it("lifts an accent that is too dark to complement usefully", () => {
+        // Every accent we ship is pastel, so the floor never bears any weight
+        // against the twelve above -- the assertion passes whether the floor is
+        // there or not. This is the case the floor exists for: a deep accent,
+        // whose complement would be just as deep and would vanish into `base`.
+        expect(lightnessOf(cupLineFor("#1A2E1A"))).toBeGreaterThanOrEqual(0.599);
+    });
 });
