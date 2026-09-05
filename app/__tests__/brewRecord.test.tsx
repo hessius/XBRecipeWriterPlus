@@ -1,11 +1,14 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
+import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
 
 import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
+import {palette} from "@/constants/colors";
+import {SCREEN_PADDING} from "@/constants/layout";
 import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -274,6 +277,39 @@ describe("brew record", () => {
                 expect.objectContaining({mimeType: "image/png"})
             )
         );
+    });
+
+    // ── Finding: what the exported PNG actually contains ─────────────────────
+
+    it("offers the image as a PNG the photo library will accept", async () => {
+        (Sharing.shareAsync as jest.Mock).mockClear();
+        const {getByLabelText} = await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        fireEvent.press(getByLabelText("Save as image"));
+        // Without a UTI, iOS offers Files but not Save Image.
+        await waitFor(() =>
+            expect(Sharing.shareAsync).toHaveBeenCalledWith(
+                "file:///mock/brew.png",
+                expect.objectContaining({UTI: "public.png"})
+            )
+        );
+    });
+
+    it("captures the stage ladder along with the trace and the figures", async () => {
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
+        );
+        // "viewshot" is the mock's own testID: the capture boundary itself.
+        const capture = within(screen.getByTestId("viewshot"));
+        expect(capture.getByTestId("ladder")).toBeTruthy();
+    });
+
+    it("paints the captured area so the PNG is not a white sheet with no margin", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        const style = StyleSheet.flatten(
+            screen.getByTestId("brew-capture").props.style as StyleProp<ViewStyle>
+        );
+        expect(style?.backgroundColor).toBe(palette.base);
+        expect(style?.padding).toBe(SCREEN_PADDING);
     });
 
     it("pressing Export the data writes the file and calls shareAsync with the file URI", async () => {

@@ -29,11 +29,15 @@ jest.mock("expo-sharing", () => ({
  */
 jest.mock("react-native-view-shot", () => {
     const React = require("react");
-    const ViewShot = React.forwardRef(function MockViewShot({children}, ref) {
+    const {View} = require("react-native");
+    // Rendered as a real View rather than a passthrough so a test can ask what
+    // is inside the captured subtree and what style the capture is given —
+    // both of which decide what the exported PNG looks like.
+    const ViewShot = React.forwardRef(function MockViewShot({children, ...rest}, ref) {
         React.useImperativeHandle(ref, () => ({
             capture: jest.fn(async () => "file:///mock/brew.png")
         }));
-        return children;
+        return React.createElement(View, {testID: "viewshot", ...rest}, children);
     });
     ViewShot.displayName = "ViewShot";
     return {__esModule: true, default: ViewShot};
