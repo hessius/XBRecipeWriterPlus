@@ -676,6 +676,11 @@ export default class Machine {
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
+        // A brew that died on the machine leaves a warning up, and a machine
+        // sitting on a warning will not take a recipe: on device, TRY AGAIN
+        // after a no-beans stop did nothing until the warning was dismissed by
+        // hand. Send it home first -- it is the same pair `cancelBrew` sends.
+        if (this.mayBeShowingAWarning()) await this.sendHome();
         // Ask how it is doing *now*, every time. Not only when the vitals are
         // missing: they go stale, and the tank is the whole point of asking.
         // Telling the user to reconnect is also asking them to do something the
@@ -851,14 +856,36 @@ export default class Machine {
         this.ackTimer = null;
     }
 
+    /**
+     * Stop whatever is happening and put the machine back on its home screen.
+     *
+     * Paced, and through `sendPaced` rather than two bare writes: the pacing is
+     * what a burst of Write Without Response needs to survive at all, and going
+     * through it is also what takes the radio away from a brew sequence that
+     * may still be mid-flight.
+     */
+    private async sendHome(): Promise<void> {
+        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+    }
+
     /** Stop a brew and put the machine back on its home screen. */
     async cancelBrew(): Promise<void> {
-        // Paced, and through `sendPaced` rather than two bare writes: the
-        // pacing is what a burst of Write Without Response needs to survive at
-        // all, and going through it is also what takes the radio away from a
-        // brew sequence that may still be mid-flight.
-        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+        await this.sendHome();
         this.setPhase({name: "cancelled"});
+    }
+
+    /**
+     * Whether the machine is likely to be sitting on something it wants
+     * acknowledged, rather than on its home screen.
+     *
+     * Two endings are excluded. A pre-flight refusal never told the machine
+     * anything, so there is nothing on its screen. And a cancel already sent it
+     * home -- that is what `cancelBrew` is.
+     */
+    private mayBeShowingAWarning(): boolean {
+        const p = this.phase;
+        if (p.name === "lostContact") return true;
+        return p.name === "failed" && p.reason !== "blocked";
     }
 
     private onState(state: number): void {

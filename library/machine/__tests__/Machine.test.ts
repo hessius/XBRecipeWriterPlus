@@ -354,6 +354,37 @@ describe("brewing", () => {
         }
     });
 
+    /**
+     * On device: a brew died during grinding for want of beans, and TRY AGAIN
+     * did nothing until the warning was dismissed on the machine's own screen.
+     * A machine sitting on a warning is not a machine that will take a recipe.
+     */
+    it("clears the machine's screen before retrying a brew that failed", async () => {
+        const {transport, machine} = await readyMachine();
+
+        await machine.brew(brewable()).catch(() => undefined);
+        machine.phase = {name: "failed", reason: "noBeans"} as typeof machine.phase;
+        transport.written = [];
+        transport.sent.length = 0;
+
+        await machine.brew(brewable()).catch(() => undefined);
+        // Stop and go home, ahead of anything the new brew has to say.
+        expect(brewFrames(transport).slice(0, 2)).toEqual([40519, 8022]);
+    });
+
+    it("does not clear the screen for a brew that never reached the machine", async () => {
+        const {transport, machine} = await readyMachine();
+
+        machine.phase = {
+            name: "failed", reason: "blocked", block: "notEnoughWater"
+        } as typeof machine.phase;
+        transport.written = [];
+        transport.sent.length = 0;
+
+        await machine.brew(brewable()).catch(() => undefined);
+        expect(brewFrames(transport)).not.toContain(8022);
+    });
+
     it("leaves a gap between the two frames of a cancel", async () => {
         // Unpaced they are exactly the burst that the brew sequence had to be
         // paced to survive -- and this is the pair whose job is to stop a
