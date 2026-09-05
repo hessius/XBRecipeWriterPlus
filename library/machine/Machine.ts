@@ -1,6 +1,6 @@
 import {
     BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
-    RECIPE_ACK_MS
+    RECIPE_ACK_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -47,6 +47,14 @@ export type BrewFailure =
      */
     | "blocked";
 
+/** Why a brew will not start, in a form the UI can branch on. */
+export type BrewBlock = {
+    kind: "notConnected" | "noVitals" | "notEnoughWater" | "noWater" | "noBeans"
+        | "busy" | "recipe";
+    /** The sentence to show. Still the only thing most callers need. */
+    message: string;
+};
+
 /**
  * Where a brew has got to.
  *
@@ -69,19 +77,38 @@ export type BrewPhase =
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
     | {name: "lostContact"}
-    | {name: "failed"; reason: BrewFailure; detail?: string};
+    /**
+     * `block` is the kind of pre-flight refusal, present only when `reason` is
+     * `"blocked"`. Without it every refusal looks the same to the UI, and a
+     * busy machine or an unwritable recipe was being explained as an empty
+     * water tank.
+     */
+    | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
     40522: "noWater",
     8203:  "gearPosition",
-    8204:  "doseMismatch",
-    40517: "idling"
+    8204:  "doseMismatch"
+    // EVENT.ERROR_IDLING is deliberately absent: it means different things
+    // depending on the phase it arrives in, and `onEvent` decides.
 };
 
 /** States from which a brew may be started at all. */
 const STARTABLE = new Set<number>([
     MACHINE_STATE.IDLE, MACHINE_STATE.COMPLETE, MACHINE_STATE.READY
 ]);
+
+/** States that are faults rather than activity. They are not "busy". */
+const FAULT_BLOCKS: Record<number, BrewBlock> = {
+    [MACHINE_STATE.NO_WATER]: {
+        kind: "noWater",
+        message: "The machine's water tank is empty. Fill it and try again."
+    },
+    [MACHINE_STATE.NO_BEANS]: {
+        kind: "noBeans",
+        message: "The machine is waiting for beans. Fill the hopper and try again."
+    }
+};
 
 /**
  * One thing that happened to the link.
@@ -104,6 +131,8 @@ const LINK_HISTORY_LIMIT = 200;
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
+    /** When `state` was last heard, as a wall clock. 0 means never. */
+    private stateAt = 0;
 
     /**
      * What the link has been doing, oldest first.
@@ -181,6 +210,16 @@ export default class Machine {
      * never commit one the user has already walked away from.
      */
     private pendingCommit: Uint8Array | null = null;
+
+    /**
+     * Whether this brew's commit frame has gone out.
+     *
+     * Not derivable from `pendingCommit`, which `startBrew` clears before it
+     * sends: a brew that has just been committed and one that was never
+     * uploaded both hold null. The difference is the whole question `0x1E`
+     * asks -- the machine says "waiting to be started" and cannot say by whom.
+     */
+    private committed: boolean = false;
 
     private frameGapMs: number;
     private infoWaitMs: number;
@@ -306,7 +345,7 @@ export default class Machine {
      * Ask the machine to describe itself until it does, or give up.
      *
      * Does not throw: a machine that never introduces itself is still worth
-     * being connected to from the console, and `brewBlockReason` is where the
+     * being connected to from the console, and `brewBlock` is where the
      * consequence belongs.
      *
      * @returns whether the vitals are now known.
@@ -324,7 +363,7 @@ export default class Machine {
      * The *next* one, not "one at some point": a caller asking how the machine
      * is doing now must not be handed the answer to a question asked when the
      * link came up. Does not reject — a machine that stays quiet is still worth
-     * being connected to, and `brewBlockReason` is where the consequence
+     * being connected to, and `brewBlock` is where the consequence
      * belongs.
      *
      * @returns whether the machine answered before the window closed.
@@ -529,6 +568,7 @@ export default class Machine {
         const parsed = parseNotification(frame);
         if (parsed.kind === "status") {
             this.state = parsed.state;
+            this.stateAt = Date.now();
             this.onState(parsed.state);
         }
         if (parsed.kind === "info") {
@@ -557,8 +597,26 @@ export default class Machine {
         // A brew that has ended takes its uncommitted recipe with it. Left
         // behind, START on a later screen would commit a recipe the user has
         // already cancelled or watched fail.
-        if (!this.brewing) this.pendingCommit = null;
+        if (!this.brewing) {
+            this.pendingCommit = null;
+            this.committed = false;
+        }
         this.phaseListeners.forEach((listener) => listener(phase));
+    }
+
+    /**
+     * The machine's state, with an expired fault treated as unknown.
+     *
+     * Only a fault expires. The alternative to expiring one is refusing a brew
+     * on a reading from before the user filled the tank it complained about,
+     * which is the bug this fixes. The alternative to *keeping* an activity
+     * state is deciding a silently grinding machine is free, which is worse.
+     */
+    private freshState(): number | null {
+        if (this.state === null) return null;
+        if (FAULT_BLOCKS[this.state] === undefined) return this.state;
+        if (Date.now() - this.stateAt > STATE_FRESH_MS) return null;
+        return this.state;
     }
 
     /**
@@ -568,22 +626,42 @@ export default class Machine {
      * costs water on the counter or a brew interrupted halfway. What it cannot
      * check — whether a cup is under the spout, whether the pod is in, whether
      * the beans match the dose — is stated on the brew route instead.
+     *
+     * Typed rather than prose because the two water failures are not the same
+     * event: refused before anything was sent is amber, recoverable and offers
+     * TRY AGAIN, while the machine stopping mid-brew is red and deliberately
+     * offers nothing, because the dose is already spent.
      */
-    brewBlockReason(recipe: Recipe): string | null {
-        if (!this.isConnected()) return "The machine is not connected.";
+    brewBlock(recipe: Recipe): BrewBlock | null {
+        if (!this.isConnected()) {
+            return {kind: "notConnected", message: "The machine is not connected."};
+        }
         if (this.info === null) {
             // Not a pedantic check. The water level is reported nowhere else,
             // and "we never heard" is not the same as "the tank is fine" —
             // treating it as such is how a recipe gets committed to a machine
             // with an empty tank.
-            return "The machine has not said how it is doing yet. Reconnect and try again.";
+            return {
+                kind: "noVitals",
+                message:
+                    "The machine has not said how it is doing yet. Reconnect and try again."
+            };
         }
-        if (!this.info.waterEnough) return "The machine's water tank is low.";
-        if (this.state !== null && !STARTABLE.has(this.state)) {
-            return "The machine is busy. Wait for it to finish.";
+        if (!this.info.waterEnough) {
+            return {kind: "notEnoughWater", message: "The machine's water tank is low."};
+        }
+        const state = this.freshState();
+        if (state !== null) {
+            const fault = FAULT_BLOCKS[state];
+            // A fault is not activity. Telling somebody with an empty hopper
+            // to wait for the machine to finish is both wrong and unactionable.
+            if (fault !== undefined) return fault;
+            if (!STARTABLE.has(state)) {
+                return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
+            }
         }
         const problems = cardWriteProblems(recipe);
-        if (problems.length > 0) return problems[0];
+        if (problems.length > 0) return {kind: "recipe", message: problems[0]};
         return null;
     }
 
@@ -598,6 +676,11 @@ export default class Machine {
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
+        // A brew that died on the machine leaves a warning up, and a machine
+        // sitting on a warning will not take a recipe: on device, TRY AGAIN
+        // after a no-beans stop did nothing until the warning was dismissed by
+        // hand. Send it home first -- it is the same pair `cancelBrew` sends.
+        if (this.mayBeShowingAWarning()) await this.sendHome();
         // Ask how it is doing *now*, every time. Not only when the vitals are
         // missing: they go stale, and the tank is the whole point of asking.
         // Telling the user to reconnect is also asking them to do something the
@@ -626,14 +709,17 @@ export default class Machine {
     }
 
     private async brewOnce(recipe: Recipe): Promise<void> {
-        const blocked = this.brewBlockReason(recipe);
+        const blocked = this.brewBlock(recipe);
         if (blocked !== null) {
             // The phase as well as the throw. The caller gets an exception to
             // handle, but the brew screen watches the phase, and a refusal that
             // left the phase at `idle` sat there saying "Ready when you are."
             // with nothing to press.
-            this.setPhase({name: "failed", reason: "blocked", detail: blocked});
-            throw new Error(blocked);
+            this.setPhase({
+                name: "failed", reason: "blocked",
+                detail: blocked.message, block: blocked.kind
+            });
+            throw new Error(blocked.message);
         }
 
         this.pourCount = recipe.pours.length;
@@ -642,6 +728,7 @@ export default class Machine {
         const tea = recipe.isTea();
         const commit = tea ? buildType1(4512) : buildType1(8002);
         this.pendingCommit = null;
+        this.committed = false;
 
         try {
             // This whole sequence, gaps and all, mirrors `run_brew` in the
@@ -672,6 +759,9 @@ export default class Machine {
             // The first frame of that burst was a handshake, so the session is
             // good again and the next question does not need to beep for one.
             this.lastHandshakeAt = Date.now();
+            // The burst carried the commit when auto-start is on, so from here
+            // the machine is starting itself and needs nothing from the user.
+            this.committed = this.autoStart;
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
             // the phase is only ever left by an acknowledgement that can no
@@ -718,6 +808,7 @@ export default class Machine {
             });
             throw error;
         }
+        this.committed = true;
         this.armAckTimer();
     }
 
@@ -765,14 +856,36 @@ export default class Machine {
         this.ackTimer = null;
     }
 
+    /**
+     * Stop whatever is happening and put the machine back on its home screen.
+     *
+     * Paced, and through `sendPaced` rather than two bare writes: the pacing is
+     * what a burst of Write Without Response needs to survive at all, and going
+     * through it is also what takes the radio away from a brew sequence that
+     * may still be mid-flight.
+     */
+    private async sendHome(): Promise<void> {
+        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+    }
+
     /** Stop a brew and put the machine back on its home screen. */
     async cancelBrew(): Promise<void> {
-        // Paced, and through `sendPaced` rather than two bare writes: the
-        // pacing is what a burst of Write Without Response needs to survive at
-        // all, and going through it is also what takes the radio away from a
-        // brew sequence that may still be mid-flight.
-        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+        await this.sendHome();
         this.setPhase({name: "cancelled"});
+    }
+
+    /**
+     * Whether the machine is likely to be sitting on something it wants
+     * acknowledged, rather than on its home screen.
+     *
+     * Two endings are excluded. A pre-flight refusal never told the machine
+     * anything, so there is nothing on its screen. And a cancel already sent it
+     * home -- that is what `cancelBrew` is.
+     */
+    private mayBeShowingAWarning(): boolean {
+        const p = this.phase;
+        if (p.name === "lostContact") return true;
+        return p.name === "failed" && p.reason !== "blocked";
     }
 
     private onState(state: number): void {
@@ -787,9 +900,18 @@ export default class Machine {
                 this.setPhase({name: "armed"});
                 break;
             case MACHINE_STATE.AWAITING_CONFIRM:
-                // The machine is waiting for a human. We do not send 40518:
-                // one source watched it move the state backwards, another
-                // verified it aborts a running brew, a third calls it PAUSE.
+                // "Waiting to be started" -- the machine cannot say by whom,
+                // and only we know. Once our commit has gone out this is a
+                // waypoint on the way to grinding, and hardware confirms the
+                // firmware usually skips it entirely; telling the user to
+                // press a button they just pressed in the app is how it read
+                // on the device.
+                //
+                // Uncommitted, it is the state the prompt exists for. We still
+                // do not send 40518 to escape it: one source watched it move
+                // the state backwards, another verified it aborts a running
+                // brew, a third calls it PAUSE.
+                if (this.committed) break;
                 this.setPhase({name: "pressPlay"});
                 break;
             case MACHINE_STATE.STARTING:
@@ -811,6 +933,16 @@ export default class Machine {
     private onEvent(code: number, value?: number): void {
         if (!this.brewing) return;
 
+        if (code === EVENT.ERROR_IDLING) {
+            // During grinding the machine is almost certainly flashing +BEANS:
+            // it stops the burr and idles rather than reporting an empty
+            // hopper as its own event. Outside grinding it is what it says.
+            this.setPhase(this.phase.name === "grinding"
+                ? {name: "failed", reason: "noBeans"}
+                : {name: "failed", reason: "idling"});
+            return;
+        }
+
         const failure = FAILURE_EVENTS[code];
         if (failure !== undefined) {
             this.setPhase({name: "failed", reason: failure});
@@ -824,9 +956,15 @@ export default class Machine {
             case EVENT.POUR_START:
                 this.setPhase({
                     name: "pouring",
-                    // The machine's own index, when it sends one. Counting our
-                    // own would drift the moment a pour is skipped or repeated.
-                    pour: Math.min(Math.max(value ?? 1, 1), this.pourCount),
+                    // The machine's index is **zero-based**: the HCI snoop
+                    // quoted in docs/machine-integration/ble-protocol.md
+                    // records 0 for the first pour of six and 5 for the last.
+                    // Clamping it up to one with `Math.max`
+                    // made the first stage right by accident and every later
+                    // stage wrong by one, which froze the counter, stopped the
+                    // second rung ever animating and left the holding warning
+                    // permanently on.
+                    pour: Math.min((value ?? 0) + 1, this.pourCount),
                     pours: this.pourCount
                 });
                 break;
@@ -858,6 +996,7 @@ export default class Machine {
         // talking to.
         this.info = null;
         this.state = null;
+        this.stateAt = 0;
         // Last, so a listener reading `isConnected()` or `info` sees the link
         // as gone rather than half torn down.
         this.announceLink();

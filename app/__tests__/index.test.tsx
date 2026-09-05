@@ -1,6 +1,6 @@
 import React from "react";
 import {AccessibilityInfo} from "react-native";
-import {act, screen, fireEvent, waitFor} from "@testing-library/react-native";
+import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
 import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
@@ -94,6 +94,58 @@ jest.mock("@/components/XbrwToast", () => ({
     notify: (notice: unknown) => mockNotify(notice)
 }));
 
+// The machine hook transitively imports the BLE transport — a native module
+// that throws at load under Jest. Only the disconnected-or-paired state matters
+// for screen tests, so the hook is stubbed here, the same way it is in
+// settings.test.tsx.
+let mockRemembered = "";
+let mockMachineStatus = "disconnected";
+let mockMachineInfo: {waterEnough: boolean; mode: "PRO" | "EASY"; grindSize: number} | null = null;
+
+const mockOnLink = jest.fn((_listener: () => void) => () => undefined);
+const mockAskHowItIsDoing = jest.fn(async () => false);
+
+jest.mock("@/hooks/useMachine", () => ({
+    __esModule:   true,
+    useMachine:   () => ({
+        machine:    {
+            get info()   { return mockMachineInfo; },
+            isConnected:     () => false,
+            onLink:          (listener: () => void) => mockOnLink(listener),
+            askHowItIsDoing: () => mockAskHowItIsDoing()
+        },
+        status:     mockMachineStatus,
+        error:      null,
+        remembered: mockRemembered,
+        connect:    jest.fn(),
+        forget:     jest.fn()
+    })
+}));
+
+// The provider that owns a running brew lives above the navigator, so a screen
+// test never mounts it. Stubbed here so a test can put a brew in flight and
+// check what the BREW capsule does while the machine is occupied.
+let mockLiveRun: Record<string, unknown> | null = null;
+
+/** A run snapshot complete enough for the mini bar to draw. */
+function liveRun(recipe: Recipe, phase: string): Record<string, unknown> {
+    return {
+        recipe, phase: {name: phase}, samples: [], elapsed: 0, stageElapsed: 0,
+        activeIndex: 0, holding: false, heldSeconds: 0
+    };
+}
+
+jest.mock("@/hooks/useLiveBrew", () => ({
+    __esModule:  true,
+    useLiveBrew: () => ({
+        run:     mockLiveRun,
+        start:   jest.fn(),
+        dismiss: jest.fn(),
+        brew:    jest.fn(),
+        error:   null
+    })
+}));
+
 // react-native-nfc-manager reaches for a NativeEventEmitter that does not
 // exist under jest, and throws merely by being imported — so an automock
 // (which still evaluates the real module to learn its shape) is not enough.
@@ -141,6 +193,12 @@ beforeEach(() => {
     mockGetRecipe = () => undefined;
     mockNativePasteOnPress = undefined;
     mockFocusEpoch = 0;
+    mockRemembered = "";
+    mockMachineStatus = "disconnected";
+    mockMachineInfo = null;
+    mockLiveRun = null;
+    mockOnLink.mockClear();
+    mockAskHowItIsDoing.mockClear();
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
@@ -874,5 +932,332 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(mockNotify).not.toHaveBeenCalledWith(
             expect.objectContaining({message: "Already in your library"})
         );
+    });
+
+    it("opens one brew screen when the capsule is tapped twice in a row", async () => {
+        // Same race as the editor: the push is not instantaneous and a second
+        // tap within the guard window would stack a second brew on top of the
+        // first — one running, one waiting beneath it.
+        mockRemembered = "machine-device-id";
+        await renderHome({recipes: [named("Ethiopia")]});
+        const capsule = await screen.findByLabelText("Brew this recipe");
+
+        await act(async () => {
+            fireEvent.press(capsule);
+            fireEvent.press(capsule);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("draws the shape the settings chose", async () => {
+        mockRemembered = "machine-device-id";
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", true);
+        settings.set("brewShortcut", "chip");
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+        );
+
+        const shortcut = await screen.findByTestId("brew-shortcut");
+
+        // Presence alone proves nothing here. The screen currently hands every
+        // card the `edge` shape from a bridge left by the previous task, so a
+        // shortcut appears whatever the setting says -- which is the bug this
+        // task exists to fix.
+        //
+        // The chip is wide enough to say the word outright; the bands stack their
+        // letters one per line. So the word itself is what distinguishes the
+        // shape that was chosen from the shape that was hardcoded.
+        expect(within(shortcut).getByText("BREW")).toBeTruthy();
+        expect(within(shortcut).queryByText("B")).toBeNull();
+    });
+
+    it("draws no shortcut when nobody here owns a machine", async () => {
+        // Same library and same setting as above -- only the machine differs, so
+        // this cannot pass because the card or the recipe went missing.
+        mockRemembered = "";
+        const settings = new Settings(memoryStorage());
+        settings.set("showBrewOnRecipeRows", true);
+        settings.set("brewShortcut", "chip");
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
+        );
+
+        // A dead BREW button on every recipe would be worse than no button.
+        expect(await screen.findByText("Ethiopia")).toBeTruthy();
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+    });
+
+    it("refuses a second recipe while the machine is still brewing", async () => {
+        // There is one machine. Pushing the brew screen anyway would show the
+        // recipe that is *already* brewing, which reads as the app having
+        // started the wrong one.
+        mockRemembered = "machine-device-id";
+        const brewing = named("Ethiopia");
+        const other = named("Colombia");
+        mockLiveRun = liveRun(brewing, "pouring");
+        await renderHome({recipes: [other]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+        });
+
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "info",
+            message: "The machine is busy brewing Ethiopia."
+        });
+    });
+
+    it("reopens the brew it is already running when that recipe is tapped", async () => {
+        // Tapping BREW on the recipe in the machine is not a second brew, it
+        // is asking to watch the one in progress.
+        mockRemembered = "machine-device-id";
+        const brewing = named("Ethiopia");
+        mockLiveRun = liveRun(brewing, "pouring");
+        await renderHome({recipes: [brewing]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it("lets a new recipe be brewed once the last brew is over", async () => {
+        mockRemembered = "machine-device-id";
+        mockLiveRun = liveRun(named("Ethiopia"), "done");
+        await renderHome({recipes: [named("Colombia")]});
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the machine dot when a machine has been paired", async () => {
+        // The dot is hidden until the user has paired a machine (remembered
+        // !== ""), so a first-time user sees a clean header.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        expect(screen.getByLabelText("Machine connected")).toBeTruthy();
+    });
+
+    it("hides the machine dot when no machine has been paired", async () => {
+        mockRemembered = "";
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        expect(screen.queryByLabelText(/machine/i)).toBeNull();
+    });
+
+    it("shows vitals immediately when machine.info is set at mount (task 1: seeding)", async () => {
+        // Before the fix, machineVitals was initialised to null regardless of
+        // machine.info, so the popover showed "Not in range" even when the
+        // machine was already connected when the screen mounted.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+
+        // Vitals seeded from machine.info, not waiting for an onLink event.
+        expect(screen.getByText("WATER")).toBeTruthy();
+        expect(screen.getByText("PRO")).toBeTruthy();
+        expect(screen.getByText("62")).toBeTruthy();
+    });
+
+    it("keeps the reading's age fixed on refresh until the machine answers (task 8)", async () => {
+        // The original bug reset the displayed age to the press moment via
+        // setPopoverNow(Date.now()) in the refresh handler, so a press looked
+        // like it had succeeded instantly even though the machine had not
+        // answered. The age must come from the reading's askedAt, which only a
+        // real answer moves — a press alone must leave it where it was.
+        //
+        // Date.now is spied rather than using fake timers: the sheet only
+        // becomes pressable once its requestAnimationFrame has run, which fake
+        // timers would freeze.
+        const nowSpy = jest.spyOn(Date, "now");
+        try {
+            nowSpy.mockReturnValue(0); // mount → askedAt = 0
+            mockRemembered = "machine-device-id";
+            mockMachineStatus = "connected";
+            mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+            mockAskHowItIsDoing.mockResolvedValue(false); // machine stays silent
+
+            await renderWithProviders(
+                <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+            );
+
+            nowSpy.mockReturnValue(4 * 60_000); // open at T = 4 min
+            await fireEvent.press(screen.getByLabelText("Machine connected"));
+            expect(screen.getByText("4 MIN AGO")).toBeTruthy();
+
+            nowSpy.mockReturnValue(5 * 60_000); // a minute passes
+            await act(async () => {
+                await fireEvent.press(screen.getByTestId("machine-refresh"));
+            });
+
+            // The machine has not answered, so the reading is still 4 min old.
+            // Under the bug this read "5 MIN AGO": the press reset the clock.
+            expect(screen.getByText("4 MIN AGO")).toBeTruthy();
+        } finally {
+            nowSpy.mockRestore();
+        }
+    });
+
+    it("renders the machine panel inside the header, below its row (task 9)", async () => {
+        // The panel used to be a bottom sheet at screen root. It now extends
+        // inline from the top toolbar: it is a child of the header's wrapper
+        // (so it pushes the list down), but below the header row rather than
+        // inside it.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+
+        // The panel's readings show, and they are inside the header's box...
+        expect(screen.getByText("WATER")).toBeTruthy();
+        const wrap = screen.getByTestId("home-header-inset");
+        expect(within(wrap).getByText("WATER")).toBeTruthy();
+
+        // ...but below the header row, not within it.
+        const row = screen.getByTestId("home-header");
+        expect(within(row).queryByText("WATER")).toBeNull();
+    });
+
+    it("closes the panel again when the machine dot is tapped twice (task 9)", async () => {
+        // The dot is the only close control now, so it must toggle: a second
+        // tap must take the panel back down, not leave it open.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        expect(screen.getByText("WATER")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // Closed: Collapsible hides its subtree, so the readings are gone.
+        expect(screen.queryByText("WATER")).toBeNull();
+    });
+
+    it("keeps the last snapshot after disconnect so 'last seen' is reachable (task 2)", async () => {
+        // Before the fix, the onLink handler called setMachineVitals(null) on
+        // disconnect, making the 'Last seen' branch in MachinePanel
+        // unreachable — a disconnected machine always showed 'Not in range'.
+        //
+        // This test proves the seeded path works: if machine.info is non-null
+        // at mount but status is "disconnected" (stale info surviving a drop),
+        // the popover must show "Last seen" rather than "Not in range".
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "disconnected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Machine not in range"));
+
+        // Vitals seeded from machine.info; status is disconnected, so the
+        // popover must show "Last seen" rather than "Not in range".
+        expect(screen.getByText(/last seen/i)).toBeTruthy();
+        expect(screen.queryByText(/not in range/i)).toBeNull();
+    });
+});
+
+describe("HomeScreen age timer", () => {
+    // Counted the same way as useTraceAnimation.test.ts: spy, not getTimerCount,
+    // because getTimerCount also counts the timers React keeps for itself.
+    let started: {fn: () => void; ms: number}[];
+    let stopped: number;
+
+    beforeEach(() => {
+        started = [];
+        stopped = 0;
+        jest.useFakeTimers();
+        jest.spyOn(global, "setInterval").mockImplementation(((
+            fn: () => void, ms: number
+        ) => {
+            started.push({fn, ms});
+            return {fn} as unknown as ReturnType<typeof setInterval>;
+        }) as typeof setInterval);
+        jest.spyOn(global, "clearInterval").mockImplementation(() => { stopped += 1; });
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+    });
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
+
+    it("starts a clock when the popover opens", async () => {
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        const before = started.length;
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // Exactly one new 25-second clock for the age.
+        expect(started.length).toBe(before + 1);
+        expect(started.at(-1)!.ms).toBe(25_000);
+    });
+
+    it("stops the clock on unmount so no timer is left running", async () => {
+        // The timer is now in a route rather than a component. A setInterval in
+        // a screen that is not cleaned up leaks across navigations.
+        const {unmount} = await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        const stoppedBefore = stopped;
+        await act(async () => { unmount(); });
+        expect(stopped).toBeGreaterThan(stoppedBefore);
+    });
+
+    it("advances the label while the popover is open", async () => {
+        // The interval callback calls setPopoverNow(Date.now()), which causes a
+        // re-render with an updated `now` prop on MachinePanel. Seed the
+        // vitals at T=0 by mounting at that time, open the popover at T=2min,
+        // then fire the callback at T=3min and confirm the displayed age moved.
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z")); // T = 0, askedAt = 0
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        jest.setSystemTime(new Date("2026-01-01T00:02:00Z")); // T = 2 min mark
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        // popoverNow = 2 min, askedAt = 0 → age = 2 min.
+        expect(screen.getByText("2 MIN AGO")).toBeTruthy();
+
+        // The clock was started with a 25-second period.
+        const ageClock = started.find((s) => s.ms === 25_000);
+        expect(ageClock).toBeDefined();
+
+        // Advance fake time by 1 more minute and fire the interval callback.
+        jest.setSystemTime(new Date("2026-01-01T00:03:00Z")); // T = 3 min mark
+        await act(async () => { ageClock!.fn(); }); // manual tick — mirrors what the real timer would do
+        // popoverNow = Date.now() at 3-min mark, askedAt = 0 → age = 3 min.
+        expect(screen.getByText("3 MIN AGO")).toBeTruthy();
     });
 });

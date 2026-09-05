@@ -1,108 +1,219 @@
-import {router, useLocalSearchParams, useNavigation} from "expo-router";
+import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable} from "react-native";
-import {Text, YStack} from "tamagui";
+import {Pressable, StyleSheet, useWindowDimensions} from "react-native";
+import {Text, XStack, YStack} from "tamagui";
 
+import BrewFigures from "@/components/BrewFigures";
+import BrewNowCard from "@/components/BrewNowCard";
+import BrewStageLadder from "@/components/BrewStageLadder";
+import BrewTrace from "@/components/BrewTrace";
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import {palette} from "@/constants/colors";
-import {useBrew} from "@/hooks/useBrew";
+import MachineDot from "@/components/MachineDot";
+import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
+        FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
+        RUNNING} from "@/constants/brewCopy";
+import {mix, palette} from "@/constants/colors";
+import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import {useTraceAnimation} from "@/hooks/useTraceAnimation";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
+import {resolveAccent} from "@/library/accent";
+import {allocateBands} from "@/library/brew/bands";
+import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
+import {SCREEN_PADDING} from "@/constants/layout";
 
-/** What each phase says. The wording is the feature. */
-const PHASE_COPY: Record<string, string> = {
-    idle:        "Ready when you are.",
-    // The machine loses the question rather than refusing it, and each retry
-    // opens a fresh session, which beeps. Saying so explains the beeping.
-    waking:      "Waiting for the machine to answer…",
-    // Deliberately slow: the frames are spaced two seconds apart, because the
-    // machine drops a burst. Saying so stops this reading as a hang.
-    sending:     "Sending the recipe… this takes a few seconds.",
-    readyToStart: "Recipe loaded. Ready when you are.",
-    armed:       "Recipe loaded.",
-    // The app never sends 40518, so this is where a parked machine ends up.
-    // The user is standing in front of it; one press costs them a second.
-    pressPlay:   "PRESS ▶ ON THE MACHINE",
-    grinding:    "Grinding…",
-    done:        "Enjoy.",
-    cancelled:   "Stopped.",
-    lostContact: "Lost contact — the machine is still brewing."
-};
+const WORKING = new Set(["idle", "waking", "sending"]);
 
-const FAILURE_COPY: Record<string, string> = {
-    noWater:      "The machine ran out of water.",
-    noBeans:      "The machine is waiting for beans.",
-    gearPosition: "The grinder could not find its gear position.",
-    doseMismatch: "The machine would not accept that dose and water volume.",
-    idling:       "The machine went idle before the brew started.",
-    rejected:     "The machine would not take the recipe."
-};
-
-/**
- * Said once, on a user's first brew, and never again.
- *
- * None of it is detectable — the machine cannot tell us whether a cup is under
- * the spout, whether the pod is loaded, or whether the beans in the hopper are
- * the ones the recipe was written for. So it is stated rather than checked, and
- * stating it every time would train people to stop reading it.
- */
-const FIRST_BREW_REMINDER =
-    "Check there is a cup under the spout and a pod in the holder.";
-
-/** The offer to escape EASY mode, when a send has gone nowhere because of it. */
-const PRO_MODE_PROMPT =
-    "Your machine is in Easy mode. Switch it to Pro and try again?";
-
-/** The phases during which stopping the machine is still a meaningful thing. */
-const RUNNING = new Set([
-    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
-]);
+/** A bordered press. The screen has four of them and they differ only in colour. */
+function Action({label, color, onPress}: {label: string; color: string; onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                    borderWidth={1} borderColor={color}>
+                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={color}>
+                    {label.toUpperCase()}
+                </DotMatrixText>
+            </YStack>
+        </Pressable>
+    );
+}
 
 export default function Brew() {
-    const {recipeJSON} = useLocalSearchParams<{recipeJSON: string}>();
-    const navigation = useNavigation();
-    const {phase, error, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry} = useBrew();
-    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
-    const [recipe] = useState(() => new Recipe(undefined, recipeJSON));
+    const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
+    // Opened to look at a run that already exists — from the mini bar — rather
+    // than to start one. Without this, coming back to watch the brew you just
+    // made would make it again: `start` replaces a finished run, and this
+    // screen would hand it a freshly deserialised recipe on every mount.
+    const viewing = view === "1";
+    const {width} = useWindowDimensions();
 
-    useEffect(() => {
-        navigation.setOptions({title: ""});
-    }, [navigation]);
+    // A local recipe from the route params. Used for the first render (before
+    // RunOwner in the provider has its first tick) and for `total` below.
+    const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
 
-    // Once, on mount. Re-sending on every render would commit the recipe again
-    // to a machine that is already grinding it.
+    const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
+           error} = useLiveBrew();
+
+    // Tell the provider to start a run for this recipe. `start` is idempotent:
+    // if RunOwner is already mounted it replaces `start` with a no-op, so
+    // re-mounting this screen while a brew is in flight never commands a second
+    // brew (Finding 2).
     useEffect(() => {
-        void brew(recipe);
+        if (!viewing) start(localRecipe);
+        // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Read display state from the provider's run. The provider owns the single
+    // recorder and the single DB write; the screen is a pure reader (Finding 1).
+    const phase = run?.phase ?? {name: "grinding"} as const;
+    const samples = run?.samples ?? [];
+    const elapsed = run?.elapsed ?? 0;
+    const activeIndex = run?.activeIndex ?? null;
+    const holding = run?.holding ?? false;
+
+    // The recipe the provider is running takes precedence once it is available,
+    // because it is the object the recorder was started with.
+    const recipe = run?.recipe ?? localRecipe;
+    const stageWater = run?.stageWater ?? recipe.pours.map(() => 0);
+    const stalls = run?.stalls ?? recipe.pours.map(() => []);
+    const pauseElapsed = run?.pauseElapsed ?? 0;
+
+    const [flexHeight, setFlexHeight] = useState(0);
+    const bands = allocateBands(flexHeight, recipe.pours.length);
+    const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
         if (phase.name === "pouring" && !firstBrewDone) setFirstBrewDone(true);
     }, [phase.name, firstBrewDone, setFirstBrewDone]);
 
+    const accent = resolveAccent(recipe);
+    const motion = useTraceAnimation(phase.name, recipe.grindRPM);
     const running = RUNNING.has(phase.name);
-    // A failure the machine reported has copy of its own; one the app decided
-    // on arrives as a sentence in `detail`, and falling back to it is what
-    // stops a refused brew from displaying nothing at all.
-    const headline = phase.name === "failed"
-        ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
+
+    // The two water events are not the same thing. `blocked` means nothing was
+    // sent and the dose is safe; a failure by name means the machine stopped
+    // with the dose already spent.
+    const blocked = phase.name === "failed" && phase.reason === "blocked";
+    const failed = phase.name === "failed" && !blocked;
+    // From `recipe`, not `localRecipe`: opened from the mini bar the route
+    // carries no recipe at all, and the refusal copy quoted 0 ml.
+    const total = recipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
+    const last = samples[samples.length - 1];
+
+    // Only a refusal for water gets the water copy. `block` names which of the
+    // pre-flight checks said no, so a busy machine is no longer told to go and
+    // fill a tank that is already full.
+    const blockKind = phase.name === "failed" ? phase.block : undefined;
+    // Water is the default when the kind is missing, so a phase from before
+    // `block` existed still reads the way it always did.
+    const blockedForWater = blocked && (blockKind ?? "notEnoughWater") === "notEnoughWater";
+    // A commanded run that has not moved yet is not finished, which is what
+    // "Ready when you are." claimed at the exact moment it had not begun.
+    const phaseCopy = phase.name === "idle" && !viewing
+        ? PHASE_COPY.connecting
         : PHASE_COPY[phase.name];
-    const offerPro = phase.name === "failed"
-        && phase.reason === "rejected"
-        && canOfferProMode();
+    const headline = blocked
+        ? (BLOCKED_HEADLINE[blockKind ?? "notEnoughWater"] ?? BLOCKED_WATER_HEADLINE)
+        : failed
+            ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
+            : phaseCopy;
+    const headlineColor = blocked ? palette.warn : failed ? palette.danger : palette.text;
+    // The same beat that pulses the plan line. A second progress metaphor
+    // would compete with the ladder, and a spinner says "busy" without saying
+    // "busy with what".
+    const headlineOpacity = WORKING.has(phase.name) ? motion.opacity : 1;
+    const offerPro = failed && phase.reason === "rejected" && canOfferProMode();
+    const offerRetry = blocked || (failed && !NO_RETRY.has(phase.reason));
+    // Blended, not thresholded. `warmth` is how far the line has travelled
+    // between the two colours, and grinding beats between 1 and 0.15 — both of
+    // which are "greater than zero", so a threshold drew the two halves of the
+    // beat identically and the flicker never appeared at all.
+    const planColor = mix(palette.muted, accent, motion.warmth);
+    const {status, connect} = useMachine();
+    const liveIndex = activeIndex !== null && activeIndex < recipe.pours.length
+        ? activeIndex : null;
+    const livePour = liveIndex === null ? undefined : recipe.pours[liveIndex];
+    const resting = livePour !== undefined
+        && (stageWater[liveIndex ?? 0] ?? 0) >= Math.max(livePour.volume, 0)
+        && pauseSeconds(livePour) > 0;
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$4">
-            <Text color={palette.dim} fontSize={13}>{recipe.displayName()}</Text>
+        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
+            {/* The nav row the mockup drew. `brew` is declared in the navigator
+                with `headerShown: false`, so this is the only bar. */}
+            <XStack alignItems="center" gap="$2">
+                <Pressable accessibilityRole="button" accessibilityLabel="Close"
+                           style={styles.close} onPress={() => router.back()}>
+                    <DotIcon name="chevron-down" size={16} color={palette.dim} />
+                </Pressable>
+                <MachineDot status={status} collapsed={false}
+                            onPress={() => void connect()} />
+                <Text color={palette.dim} fontSize={13} flex={1} numberOfLines={1}>
+                    {recipe.displayName()}
+                </Text>
+                {phase.name === "pouring" && (
+                    <DotMatrixText testID="brew-stage-counter" fontSize={12}
+                                   weight="bold" letterSpacing={1.4} color={palette.dim}>
+                        {`${phase.pour}/${phase.pours}`}
+                    </DotMatrixText>
+                )}
+            </XStack>
 
-            <DotMatrixText fontSize={16} weight="bold" letterSpacing={2}
-                           color={phase.name === "failed" ? palette.danger : palette.text}>
+            <YStack flex={1} gap="$3"
+                    onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
+                <BrewTrace
+                    pours={recipe.pours}
+                    samples={samples}
+                    accent={accent}
+                    width={width - SCREEN_PADDING * 2}
+                    height={bands.traceHeight}
+                    plannedSeconds={plannedSeconds(recipe.pours)}
+                    holding={holding}
+                    planOpacity={motion.opacity}
+                    planColor={planColor}
+                    planDashed={motion.dashed}
+                    planHeadAt={motion.headAt}
+                />
+
+                <BrewStageLadder
+                    pours={recipe.pours}
+                    accent={accent}
+                    activeIndex={activeIndex}
+                    barHeight={bands.barHeight}
+                    rungGap={bands.rungGap}
+                    scrolls={bands.scrolls}
+                    stageWater={stageWater}
+                    stalls={stalls}
+                    pauseElapsed={pauseElapsed}
+                />
+            </YStack>
+
+            <BrewFigures
+                water={last?.water ?? 0}
+                cup={last?.cup ?? 0}
+                seconds={elapsed}
+                accent={accent}
+            />
+
+            <BrewNowCard pour={livePour} accent={accent} resting={resting} />
+
+            <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.8}
+                           color={headlineColor} style={{opacity: headlineOpacity}}>
                 {headline}
             </DotMatrixText>
 
-            {phase.name === "pouring" && (
-                <Text color={palette.dim} fontSize={13}>
-                    {`Pour ${phase.pour} of ${phase.pours}`}
+            {blocked && (
+                <Text color={palette.warn} fontSize={13}>
+                    {/* The water sentence names the recipe's own volume and
+                        promises the dose is safe. Every other refusal already
+                        arrives as a sentence from the machine. */}
+                    {blockedForWater
+                        ? blockedWaterCopy(total)
+                        : (phase.name === "failed" ? phase.detail : undefined)
+                          ?? "The machine would not take this brew."}
                 </Text>
             )}
 
@@ -110,15 +221,14 @@ export default function Brew() {
                 <Text color={palette.warn} fontSize={13}>{FIRST_BREW_REMINDER}</Text>
             )}
 
-            {offerPro && (
-                <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>
-            )}
-
-            {error !== null && (
+            {offerPro && <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>}
+            {/* `error` is the transport channel. When the phase is already a
+                failure it is restating it, which is how one refusal came to be
+                printed three times. It speaks only about things the phase
+                cannot. */}
+            {error !== null && phase.name !== "failed" && (
                 <Text color={palette.danger} fontSize={13}>{error}</Text>
             )}
-
-            <YStack flex={1}/>
 
             {running ? (
                 <YStack gap="$3">
@@ -126,72 +236,63 @@ export default function Brew() {
                         // The frame this sends is the one that sets a burr
                         // spinning, so it is a press of its own rather than
                         // something BREW did on the user's behalf.
-                        <Pressable accessibilityRole="button" accessibilityLabel="Start brewing"
-                                   onPress={() => void startBrew()}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.success}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.success}>
-                                    START BREWING
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        <Action label="Start brewing" color={palette.success}
+                                onPress={() => void startBrew()} />
                     )}
-                    <Pressable accessibilityRole="button" accessibilityLabel="Cancel"
-                               onPress={() => void cancelBrew()}>
-                        <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                borderWidth={1} borderColor={palette.danger}>
-                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                           color={palette.danger}>
-                                CANCEL
-                            </DotMatrixText>
-                        </YStack>
-                    </Pressable>
+                    <Action label="Cancel" color={palette.danger}
+                            onPress={() => void cancelBrew()} />
                 </YStack>
             ) : (
                 <YStack gap="$3">
-                    {phase.name === "failed" && (
+                    {offerRetry && (
                         // The machine will not answer a question outside a
                         // fresh session, and opening one makes it beep — so
                         // noticing a refilled tank cannot be done quietly on a
                         // timer. A press asks again, and only when somebody is
                         // there to have done something about the reason.
-                        <Pressable accessibilityRole="button" accessibilityLabel="Try again"
-                                   onPress={() => void brew(recipe)}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.text}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.text}>
-                                    TRY AGAIN
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        // Through `start`, not `brew`: a retry is a new run,
+                        // and only a new run gets a fresh recorder. Retrying
+                        // on the spent one brewed a coffee that no history row
+                        // ever mentioned.
+                        <Action label="Try again" color={palette.text}
+                                onPress={() => start(recipe)} />
                     )}
                     {offerPro && (
-                        <Pressable accessibilityRole="button"
-                                   accessibilityLabel="Switch to PRO mode and try again"
-                                   onPress={() => void switchToProAndRetry(recipe)}>
-                            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                    borderWidth={1} borderColor={palette.warn}>
-                                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                               color={palette.warn}>
-                                    SWITCH TO PRO
-                                </DotMatrixText>
-                            </YStack>
-                        </Pressable>
+                        <Action label="Switch to PRO" color={palette.warn}
+                                onPress={() => startInPro(recipe)} />
                     )}
-                    <Pressable accessibilityRole="button" accessibilityLabel="Done"
-                               onPress={() => router.back()}>
-                        <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                                borderWidth={1} borderColor={palette.line}>
-                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                           color={palette.text}>
-                                DONE
-                            </DotMatrixText>
-                        </YStack>
-                    </Pressable>
+                    {phase.name === "done" && (
+                        <Action label="Export this brew" color={palette.dim}
+                                onPress={() => router.push("/brewRecord?latest=1")} />
+                    )}
+                    {/* No DONE. The chevron in the nav row dismisses the modal,
+                        and a second control duplicated it — painted in
+                        `palette.line`, the hairline colour, which is why it
+                        read as disabled. */}
                 </YStack>
             )}
         </YStack>
     );
 }
+
+const CLOSE_ICON = 16;
+/** The HIG's smallest comfortable target. */
+const TOUCH_TARGET = 44;
+const CLOSE_PADDING = (TOUCH_TARGET - CLOSE_ICON) / 2;
+
+const styles = StyleSheet.create({
+    /**
+     * A 16-point glyph at the top of a modal sheet is a target you miss, and on
+     * device this chevron read as broken while dragging the sheet worked.
+     *
+     * Padded out rather than given `hitSlop`, for the reason `RecipeCard`
+     * records: slop on adjacent controls overlaps and the later sibling wins,
+     * and the machine dot is right next to this. The negative margins give the
+     * padding back to the layout, so the row looks exactly as it did.
+     */
+    close: {
+        padding:     CLOSE_PADDING,
+        marginLeft:  -CLOSE_PADDING,
+        marginRight: -CLOSE_PADDING
+    }
+});

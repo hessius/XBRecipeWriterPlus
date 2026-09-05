@@ -154,6 +154,54 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
+     * The machine link, at three amounts of presence.
+     *
+     * One shape at three sizes rather than three symbols, so the three states
+     * rank against each other before any colour is read: strip the colour and
+     * a filled diamond, a hollow one and four dots still say more, less and
+     * least. That is what lets the dot desaturate on collapse without losing
+     * the only thing it was saying.
+     *
+     * Diamonds because of this file's own constraint. Only axis-aligned runs
+     * and pure diagonals survive at 9x9, and a diamond is the one closed shape
+     * that is entirely diagonal, so it is unmistakably not a square and still
+     * lands cleanly on every dot.
+     */
+    "link-on": [
+        "....#....",
+        "...###...",
+        "..#####..",
+        ".#######.",
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#...."
+    ],
+    "link-wait": [
+        "....#....",
+        "...#.#...",
+        "..#...#..",
+        ".#.....#.",
+        "#.......#",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#...."
+    ],
+    /** Four lit cells: the same diamond at its smallest drawable size. */
+    "link-off": [
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        "....#....",
+        "...#.#...",
+        "....#....",
+        ".........",
+        "........."
+    ],
+    /**
      * A blocky question mark: the help marker.
      *
      * The markers used the "i" above, which is four separate one-dot features
@@ -247,6 +295,49 @@ export const DOT_ICONS = {
         ".....##..",
         "........."
     ],
+    /** A right chevron: forward or open detail. */
+    "chevron-right": [
+        ".........",
+        "..##.....",
+        "...##....",
+        "....##...",
+        ".....##..",
+        "....##...",
+        "...##....",
+        "..##.....",
+        "........."
+    ],
+    /**
+     * Dismisses the brew modal downwards.
+     *
+     * `chevron-right` turned a quarter turn, dot for dot, so the two read as
+     * the same mark pointing two ways. Drawn by rotation rather than by hand
+     * because a wider, shallower chevron sits beside `back` in the same nav
+     * row and looked like a different icon set at the same point size.
+     */
+    "chevron-down": [
+        ".........",
+        ".........",
+        ".#.....#.",
+        ".##...##.",
+        "..##.##..",
+        "...###...",
+        "....#....",
+        ".........",
+        "........."
+    ],
+    /** An X mark: close or dismiss. */
+    close: [
+        ".........",
+        ".##...##.",
+        "..##.##..",
+        "...###...",
+        "....#....",
+        "...###...",
+        "..##.##..",
+        ".##...##.",
+        "........."
+    ],
     /** A single axis-aligned run. Steps a value down. */
     minus: [
         ".........",
@@ -270,6 +361,24 @@ export const DOT_ICONS = {
         "....#....",
         ".........",
         "........."
+    ],
+    /**
+     * A circular arrow: ask again for a fresh reading.
+     *
+     * Three-quarter arc of dots, open at the bottom-right, with a small
+     * arrowhead pointing clockwise. Axis-aligned runs and pure diagonals only,
+     * so every dot lands on the grid.
+     */
+    refresh: [
+        "...####..",
+        "..#....#.",
+        ".#......#",
+        ".#......#",
+        ".#.......",
+        "..#......",
+        "...##....",
+        "......##.",
+        "....####."
     ]
 } as const satisfies Record<string, readonly string[]>;
 

@@ -57,7 +57,7 @@ export default function LicencesScreen({
                     <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                         {reading !== null && (
                             <Text fontSize={12} color={palette.muted}>
-                                {reading.name} {reading.version} — {reading.licence}
+                                {reading.name} {reading.version} · {reading.licence}
                             </Text>
                         )}
                         {reading?.copyright !== undefined && (
@@ -94,7 +94,7 @@ function LicenceRow({entry, onPress}: {entry: Licence; onPress?: () => void}) {
     const content = (
         <YStack paddingVertical="$1">
             <Text fontSize={11} color={palette.muted}>
-                {entry.name} {entry.version} — {entry.licence}
+                {entry.name} {entry.version} · {entry.licence}
             </Text>
             {entry.copyright !== undefined && (
                 <Text fontSize={10} color={palette.dim}>{entry.copyright}</Text>

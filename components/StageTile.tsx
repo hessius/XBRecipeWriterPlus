@@ -19,12 +19,18 @@ import {Text, XStack, YStack} from "tamagui";
 import Collapsible from "@/components/Collapsible";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
 import Stepper from "@/components/Stepper";
 import {palette} from "@/constants/colors";
 import {RECIPE_HELP, type HelpTopic} from "@/constants/recipeHelp";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
+import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {displayValues, displayRange, fromDisplay, toDisplay, unitSuffix,
         type TemperatureUnit} from "@/library/units";
+
+/** The timing lane's own geometry. One tile, one scale — see below. */
+const LANE_WIDTH = 56;
+const LANE_HEIGHT = 8;
 
 /** Which of a stage's values an edit refers to. */
 export type StageField =
@@ -82,6 +88,21 @@ export default function StageTile({
         </XStack>
     );
 
+    // The tile's own span, not a shared deck scale. The editor shows one stage
+    // at a time in its own card, so there is nothing to line up with. Reuse
+    // the arithmetic, not the scale.
+    const span = pourSeconds(pour) + pauseSeconds(pour);
+    const laneSeconds = Math.max(span, 1);
+    const pourWidth = Math.min((pourSeconds(pour) / laneSeconds) * LANE_WIDTH, LANE_WIDTH);
+    const pauseWidth = Math.min(
+        (pauseSeconds(pour) / laneSeconds) * LANE_WIDTH,
+        LANE_WIDTH - pourWidth
+    );
+    // `Pour` normalises its "never set" sentinel, so these agree with the
+    // share link and the card writer about what an untouched stage means.
+    const agitationBefore = pour.getAgitationBefore();
+    const agitationAfter = pour.getAgitationAfter();
+
     return (
         <YStack backgroundColor={open ? palette.surface : palette.raised}
                 borderRadius="$5" padding="$3" marginTop="$2.5"
@@ -95,11 +116,64 @@ export default function StageTile({
                                    color={accent}>
                         {String(index + 1).padStart(2, "0")}
                     </DotMatrixText>
+                    <PourGlyph
+                        kind={glyphForPattern(pour.pourPattern)}
+                        accent={accent}
+                        size={14}
+                    />
+                    {/* The timing lane: solid bar for the pour, dashed for the
+                        pause. The same two-bar shape as BrewStageRung, but the
+                        scale is the tile's own span — there is no column of
+                        lanes to line up with. */}
+                    <View testID="stage-lane"
+                          style={{width: LANE_WIDTH, height: LANE_HEIGHT,
+                                  justifyContent: "center"}}>
+                        <XStack height={LANE_HEIGHT} alignItems="center">
+                            {pourWidth > 0 && (
+                                <View
+                                    style={{
+                                        width: pourWidth,
+                                        height: LANE_HEIGHT,
+                                        borderRadius: LANE_HEIGHT / 2,
+                                        backgroundColor: palette.raised
+                                    }}
+                                />
+                            )}
+                            {pauseWidth > 0 && (
+                                <View
+                                    style={{
+                                        width: pauseWidth,
+                                        height: LANE_HEIGHT,
+                                        borderRadius: LANE_HEIGHT / 2,
+                                        borderWidth: 1,
+                                        borderStyle: "dashed",
+                                        borderColor: palette.line,
+                                        backgroundColor: "transparent"
+                                    }}
+                                />
+                            )}
+                        </XStack>
+                        {agitationBefore && (
+                            <View testID="stage-agitation-before"
+                                  style={{position: "absolute", left: -3}}>
+                                <PourGlyph kind="agitation" accent={palette.muted} size={10} />
+                            </View>
+                        )}
+                        {agitationAfter && (
+                            <View testID="stage-agitation-after"
+                                  style={{position: "absolute",
+                                          // Nothing sits left of the lane: on a
+                                          // near-zero bar the mark would else be
+                                          // drawn on top of the one before it.
+                                          left: Math.max(pourWidth + pauseWidth - 7, 0)}}>
+                                <PourGlyph kind="agitation" accent={palette.muted} size={10} />
+                            </View>
+                        )}
+                    </View>
                     <XStack flex={1} gap="$3" alignItems="baseline">
                         {fact(pour.getVolume(), "ml")}
                         {fact(toDisplay(pour.getTemperature(), temperatureUnit),
                               unitSuffix(temperatureUnit))}
-                        {fact(Pour.getPourPatternText(pour.getPourPattern()).toUpperCase())}
                     </XStack>
                     {/* No sparkline here any more. It drew a flat run of equal
                         bars saying only how far into the recipe this stage
@@ -111,7 +185,8 @@ export default function StageTile({
                         second that has to look like its sibling. DotIcon owns
                         its own style prop, so the rotation goes on a wrapper —
                         it is decorative, so the wrapper takes no label. */}
-                    <View style={{transform: [{rotate: open ? "180deg" : "0deg"}]}}>
+                    <View testID="stage-caret"
+                          style={{transform: [{rotate: open ? "180deg" : "0deg"}]}}>
                         <DotIcon name="more" size={14}
                                  color={open ? accent : palette.muted}/>
                     </View>

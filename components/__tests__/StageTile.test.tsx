@@ -2,7 +2,8 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import StageTile from "@/components/StageTile";
-import Pour, {POUR_PATTERN} from "@/library/Pour";
+import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
+import {accents, palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 function stage(volume = 96, temperature = 93): Pour {
@@ -26,7 +27,7 @@ describe("StageTile", () => {
     it("summarises the stage when closed", async () => {
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open={false}
-                       accent="#F0B98E" isTea={false} {...NOOP}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
         );
 
         expect(screen.getByText("96")).toBeTruthy();
@@ -36,7 +37,7 @@ describe("StageTile", () => {
     it("says that it opens, and which state it is in", async () => {
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open={false}
-                       accent="#F0B98E" isTea={false} {...NOOP}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
         );
 
         const tile = screen.getByLabelText("Stage 1 of 3");
@@ -48,7 +49,7 @@ describe("StageTile", () => {
         const onToggle = jest.fn();
         await renderWithProviders(
             <StageTile pour={stage()} index={1} count={3} open={false}
-                       accent="#F0B98E" isTea={false} {...NOOP} onToggle={onToggle}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onToggle={onToggle}/>
         );
 
         await fireEvent.press(screen.getByLabelText("Stage 2 of 3"));
@@ -59,7 +60,7 @@ describe("StageTile", () => {
     it("offers the controls when open", async () => {
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open
-                       accent="#F0B98E" isTea={false} {...NOOP}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
         );
 
         expect(screen.getByLabelText("Increase Stage volume")).toBeTruthy();
@@ -72,7 +73,7 @@ describe("StageTile", () => {
         const onChange = jest.fn();
         await renderWithProviders(
             <StageTile pour={stage()} index={2} count={3} open
-                       accent="#F0B98E" isTea={false} {...NOOP} onChange={onChange}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onChange={onChange}/>
         );
 
         await fireEvent.press(screen.getByLabelText("Increase Temperature"));
@@ -84,7 +85,7 @@ describe("StageTile", () => {
         const onChange = jest.fn();
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open
-                       accent="#F0B98E" isTea={false} {...NOOP} onChange={onChange}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onChange={onChange}/>
         );
 
         expect(screen.getByLabelText("Flow rate, 3.2")).toBeTruthy();
@@ -98,7 +99,7 @@ describe("StageTile", () => {
         const onChange = jest.fn();
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open
-                       accent="#F0B98E" isTea={false} {...NOOP} onChange={onChange}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onChange={onChange}/>
         );
 
         expect(screen.getByText("Agitation")).toBeTruthy();
@@ -113,7 +114,7 @@ describe("StageTile", () => {
     it("hides agitation for tea, which has none", async () => {
         await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open
-                       accent="#F0B98E" isTea {...NOOP}/>
+                       accent={accents.coffee[1]} isTea {...NOOP}/>
         );
 
         expect(screen.queryByText("Agitation")).toBeNull();
@@ -123,7 +124,7 @@ describe("StageTile", () => {
         const onDelete = jest.fn();
         const {rerender} = await renderWithProviders(
             <StageTile pour={stage()} index={0} count={3} open
-                       accent="#F0B98E" isTea={false} {...NOOP} onDelete={onDelete}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onDelete={onDelete}/>
         );
 
         await fireEvent.press(screen.getByLabelText("Delete stage 1"));
@@ -131,7 +132,7 @@ describe("StageTile", () => {
 
         await rerender(
             <StageTile pour={stage()} index={0} count={1} open
-                       accent="#F0B98E" isTea={false} {...NOOP} onDelete={onDelete}/>
+                       accent={accents.coffee[1]} isTea={false} {...NOOP} onDelete={onDelete}/>
         );
 
         expect(screen.queryByLabelText("Delete stage 1")).toBeNull();
@@ -141,7 +142,7 @@ describe("StageTile", () => {
 describe("StageTile help", () => {
     const OPEN = {
         pour: stage(), index: 0, count: 3, open: true,
-        accent: "#F0B98E", isTea: false, ...NOOP
+        accent: accents.coffee[1], isTea: false, ...NOOP
     };
 
     it("carries no help of its own, at any width", async () => {
@@ -188,7 +189,7 @@ describe("StageTile help", () => {
         const {rerender} = await renderWithProviders(<StageTile {...OPEN}/>);
         expect(shape()).toEqual([true, true, true, true]);
 
-        await rerender(<StageTile {...OPEN} accent="#9FD8A8"/>);
+        await rerender(<StageTile {...OPEN} accent={accents.coffee[3]}/>);
         expect(shape()).toEqual([true, true, true, true]);
         expect(screen.getByLabelText("CENTERED")).toBeTruthy();
         expect(screen.getByLabelText("Agitate before")).toBeTruthy();
@@ -210,7 +211,7 @@ describe("StageTile in Fahrenheit", () => {
         pour.setTemperature(93);
 
         await renderWithProviders(
-            <StageTile pour={pour} index={0} count={1} open={false} accent="#FFFFFF"
+            <StageTile pour={pour} index={0} count={1} open={false} accent={palette.text}
                        isTea={false} temperatureUnit="F"
                        onToggle={() => {}} onChange={() => {}} onDelete={() => {}}/>
         );
@@ -225,7 +226,7 @@ describe("StageTile in Fahrenheit", () => {
         pour.setTemperature(93);
 
         await renderWithProviders(
-            <StageTile pour={pour} index={0} count={1} open={false} accent="#FFFFFF"
+            <StageTile pour={pour} index={0} count={1} open={false} accent={palette.text}
                        isTea={false}
                        onToggle={() => {}} onChange={() => {}} onDelete={() => {}}/>
         );
@@ -240,7 +241,7 @@ describe("StageTile in Fahrenheit", () => {
         const onChange = jest.fn();
 
         await renderWithProviders(
-            <StageTile pour={pour} index={0} count={1} open accent="#FFFFFF"
+            <StageTile pour={pour} index={0} count={1} open accent={palette.text}
                        isTea={false} temperatureUnit="F"
                        onToggle={() => {}} onChange={onChange} onDelete={() => {}}/>
         );
@@ -249,5 +250,68 @@ describe("StageTile in Fahrenheit", () => {
 
         // 93 °C is 199 °F; the next value on the ladder is 201 °F, which is 94 °C.
         expect(onChange).toHaveBeenCalledWith(0, "temperature", 94);
+    });
+});
+
+describe("StageTile timing lane and glyphs", () => {
+    it("shows the pattern glyph on the collapsed header", async () => {
+        // Three numbers cannot convey rhythm. The glyph and the lane can.
+        const pour = stage();
+        pour.pourPattern = POUR_PATTERN.SPIRAL;
+        const {getByLabelText} = await renderWithProviders(
+            <StageTile pour={pour} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        expect(getByLabelText("Spiral pour")).toBeTruthy();
+    });
+
+    it("draws the timing lane to real seconds", async () => {
+        // 96 ml at 3.2 ml/s is 30 s of pouring against a 30 s pause: half the
+        // lane each. A lane that drew nothing would pass a bare existence check.
+        const {getByTestId} = await renderWithProviders(
+            <StageTile pour={stage()} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        const lane = getByTestId("stage-lane");
+        const widths = lane.children
+            .flatMap((child) => typeof child === "string" ? [] : child.children)
+            .flatMap((bar) => typeof bar === "string" ? [] : [bar.props.style?.width])
+            .filter((w): w is number => typeof w === "number");
+        expect(widths).toHaveLength(2);
+        widths.forEach((w) => expect(w).toBeCloseTo(28, 1));
+    });
+
+    it("leaves a stage that has never been agitated unmarked", async () => {
+        // A fresh Pour carries -1, and every bit of -1 is set: masking it
+        // straight would mark both edges of a stage nobody has touched.
+        const pour = stage();
+        pour.agitation = -1;
+        const {queryByTestId} = await renderWithProviders(
+            <StageTile pour={pour} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        expect(queryByTestId("stage-agitation-before")).toBeNull();
+        expect(queryByTestId("stage-agitation-after")).toBeNull();
+    });
+
+    it("shows a caret where the brew rung shows progress", async () => {
+        // The one difference between the two, and it is what says this tile opens.
+        const {getByTestId, queryByTestId} = await renderWithProviders(
+            <StageTile pour={stage()} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        expect(getByTestId("stage-caret")).toBeTruthy();
+        expect(queryByTestId("rung-fill")).toBeNull();
+    });
+
+    it("marks agitation on the edge where it happens", async () => {
+        const pour = stage();
+        pour.agitation = AGITATION.BEFORE_ON_AFTER_ON;
+        const {getByTestId} = await renderWithProviders(
+            <StageTile pour={pour} index={0} count={3} open={false}
+                       accent={accents.coffee[1]} isTea={false} {...NOOP}/>
+        );
+        expect(getByTestId("stage-agitation-before")).toBeTruthy();
+        expect(getByTestId("stage-agitation-after")).toBeTruthy();
     });
 });

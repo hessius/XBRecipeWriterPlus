@@ -14,16 +14,22 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import MachinePanel from "@/components/MachinePanel";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
+import type {MachineVitals} from "@/components/MachinePanel";
+import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
+import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import type {Settings} from "@/library/Settings";
@@ -69,6 +75,66 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+    const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
+    const [shortcutShape] = useSetting("brewShortcut", settings);
+
+    const {machine, status: machineStatus, connect: connectMachine, remembered} =
+        useMachine();
+    /**
+     * Undefined rather than a shape when there is nothing to brew on.
+     *
+     * A dead BREW button on every recipe would be worse than no button, which
+     * is the same reason the editor's action bar checks `machineDeviceId`.
+     */
+    const brewShortcut = showBrewRows && remembered !== ""
+        ? asBrewShortcut(shortcutShape)
+        : undefined;
+    // Seeded from machine.info so a machine that is already connected when the
+    // screen mounts does not show "Not in range" while the header dot says
+    // connected. The useState initialiser runs once; subsequent updates arrive
+    // through onLink below.
+    const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(() => {
+        const info = machine.info;
+        if (info === null) return null;
+        return {waterEnough: info.waterEnough, mode: info.mode,
+                grindSize: info.grindSize, askedAt: Date.now()};
+    });
+
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [popoverNow, setPopoverNow] = useState(0);
+
+    // Advance the displayed age while the popover is open.
+    //
+    // Minutes-granularity only, so every 25 s is more than enough. The timer
+    // is created only while open and cleared on close and on unmount. setState
+    // is called only from inside the interval callback — never synchronously
+    // from the effect body — which satisfies react-hooks/set-state-in-effect.
+    useEffect(() => {
+        if (!popoverOpen) return;
+        const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
+        return () => clearInterval(id);
+    }, [popoverOpen]);
+    const {run: liveRun} = useLiveBrew();
+    /** When the brew screen was last pushed, so a second press in that window is refused. */
+    const lastBrewPushRef = useRef(0);
+
+    // Repaint vitals whenever the link emits an event (connected, info arrived,
+    // disconnected). The info blob is mutated in place on the shared machine, so
+    // React cannot see it without this subscription.
+    // On disconnect the last answered snapshot is deliberately kept — MachinePanel
+    // shows "Last seen X min ago" when status is not "connected" but vitals exist,
+    // and that copy is unreachable if we clear here.
+    useEffect(() => machine.onLink(() => {
+        const info = machine.info;
+        if (info !== null) {
+            setMachineVitals({
+                waterEnough: info.waterEnough,
+                mode:        info.mode,
+                grindSize:   info.grindSize,
+                askedAt:     Date.now()
+            });
+        }
+    }), [machine]);
 
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
@@ -181,6 +247,7 @@ export default function HomeScreen({db, settings}: Props) {
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
             lastEditorPushAt = 0;
+            lastBrewPushRef.current = 0;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -318,6 +385,16 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
+    async function refreshWater() {
+        // Asking for the water level opens a BLE session and makes the machine
+        // beep — only do it when the user explicitly asks.
+        const answered = await machine.askHowItIsDoing();
+        if (answered && machine.info !== null) {
+            const {waterEnough, mode, grindSize} = machine.info;
+            setMachineVitals({waterEnough, mode, grindSize, askedAt: Date.now()});
+        }
+    }
+
     function openRecipe(recipe: Recipe): boolean {
         if (Date.now() - lastEditorPushAt < EDITOR_PUSH_GUARD_MS) {
             return false;
@@ -328,6 +405,32 @@ export default function HomeScreen({db, settings}: Props) {
             params:   {recipeJSON: JSON.stringify(recipe)}
         });
         return true;
+    }
+
+    function openBrew(recipe: Recipe): void {
+        // There is one machine, and `LiveBrewProvider.start` refuses a second
+        // run while the first is still going. Without this the tap would push
+        // a brew screen that quietly showed the *other* recipe brewing, which
+        // reads as the app having started the wrong thing.
+        if (liveRun !== null
+            && !OVER.has(liveRun.phase.name)
+            && liveRun.recipe.uuid !== recipe.uuid) {
+            notify({
+                tone:    "info",
+                message: `The machine is busy brewing ${liveRun.recipe.displayName()}.`
+            });
+            return;
+        }
+        // eslint-disable-next-line react-hooks/purity
+        if (Date.now() - lastBrewPushRef.current < EDITOR_PUSH_GUARD_MS) {
+            return;
+        }
+        // eslint-disable-next-line react-hooks/purity
+        lastBrewPushRef.current = Date.now();
+        router.push({
+            pathname: "/brew",
+            params:   {recipeJSON: JSON.stringify(recipe)}
+        });
     }
 
     // The import sheet covers the screen while it is open, and the NFC ceremony
@@ -354,6 +457,23 @@ export default function HomeScreen({db, settings}: Props) {
                     editing={editing}
                     showEdit={!isEmpty}
                     canImport
+                    machineStatus={remembered ? machineStatus : undefined}
+                    machinePanel={remembered ? (
+                        <MachinePanel
+                            open={popoverOpen}
+                            status={machineStatus}
+                            accent={palette.success}
+                            vitals={machineVitals}
+                            now={popoverNow}
+                            onRefreshWater={refreshWater}
+                            onConnect={connectMachine}
+                        />
+                    ) : undefined}
+                    onMachinePress={() => {
+                        setPopoverNow(Date.now());
+                        setPopoverOpen((open) => !open);
+                    }}
+                    onMachineConnect={connectMachine}
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}
@@ -401,6 +521,8 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
+                                brewShortcut={brewShortcut}
+                                onBrew={() => openBrew(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);

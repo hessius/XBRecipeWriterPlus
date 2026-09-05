@@ -1,6 +1,6 @@
 import {useFonts} from 'expo-font';
 import {DarkTheme, SplashScreen, Stack, ThemeProvider} from 'expo-router';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TamaguiProvider, Theme} from 'tamagui';
@@ -12,6 +12,10 @@ import {ShareIntentProvider} from 'expo-share-intent';
 import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
 import {startMachineLink} from '@/hooks/useMachine';
+import LiveBrewBar from '@/components/LiveBrewBar';
+import {LiveBrewProvider} from '@/hooks/useLiveBrew';
+import {sharedBrewDatabase, sweepOnLaunch} from '@/hooks/useBrewHistory';
+import {useSetting} from '@/hooks/useSetting';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -62,6 +66,18 @@ export default function RootLayout() {
         startMachineLink();
     }, []);
 
+    const [retention] = useSetting("brewTraceRetention");
+
+    // Sweep old brew streams once at launch, not after each brew. A ref guards
+    // against a double-run if `retention` changes before the sweep fires (e.g.,
+    // on a fresh install before the settings table has been read).
+    const sweptRef = useRef(false);
+    useEffect(() => {
+        if (sweptRef.current) return;
+        sweptRef.current = true;
+        sweepOnLaunch(sharedBrewDatabase(), retention);
+    }, [retention]);
+
     if (!loaded) {
         return null;
     }
@@ -83,6 +99,7 @@ export default function RootLayout() {
                                         actually need them, so backgrounds can reach the
                                         edges while their contents do not. */}
                                     <View style={{flex: 1, backgroundColor: palette.base}}>
+                                        <LiveBrewProvider>
                                         <Stack
                                             screenOptions={{
                                                 headerStyle:      {
@@ -115,9 +132,28 @@ export default function RootLayout() {
                                             <Stack.Screen name="about" options={{headerShown: false}}/>
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
+                                            {/* The brew screen is the mini bar
+                                                expanded: it rises from the
+                                                bottom and a chevron-down puts
+                                                it back. Declared here rather
+                                                than nowhere, which is what left
+                                                it falling through to the
+                                                default native bar with a
+                                                `< index` back title. */}
+                                            <Stack.Screen name="brew"
+                                                          options={{
+                                                              headerShown: false,
+                                                              presentation: "modal",
+                                                              animation: "slide_from_bottom"
+                                                          }}/>
                                         </Stack>
+                                        {/* Beside the navigator, not inside a
+                                            screen: a brew you walked away from
+                                            has to still be there in Settings. */}
+                                        <LiveBrewBar/>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
+                                        </LiveBrewProvider>
                                     </View>
                                     <SplashOverlay visible={!splashDone}
                                                    onFinished={() => setSplashDone(true)}/>

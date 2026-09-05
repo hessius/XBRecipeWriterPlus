@@ -147,7 +147,7 @@
 | 40502 | 0x9E26 | Coffee Starting / Grinder Start | — | Machine-side grinding begin | `spec` |
 | 40506 | 0x9E2A | Brewer Start | — | Water heater spinning up; fires ~3s after grind start (before pours) | `single-source` (Alshekhi) |
 | 40507 | 0x9E2B | Grinder Stop | — | Grinder finished | `spec` |
-| 40510 | 0x9E2E | Bloom/Pour Start | pour_index | One per pour | `spec` |
+| 40510 | 0x9E2E | Bloom/Pour Start | pour_index, **zero-based** (see below) | One per pour | `spec` |
 | 40511 | 0x9E2F | Brewer Stop | — | Brew complete | `spec` |
 | 40512 | 0x9E30 | Enjoy! | — | Final "coffee ready" notification | `spec` |
 | 40513 | 0x9E31 | Enjoy (2) | — | Second enjoy notification | `spec` |
@@ -157,6 +157,37 @@
 | 40520 | 0x9E38 | RD_Bypass | — | Bypass/dilution pour event | `single-source` (Alshekhi) |
 | 40522 | 0x9E3A | Error: No Water | — | Tank empty | `spec` |
 | 8203 | 0x200B | Error: Gear Position | — | Grinder gear error | `spec` |
+
+### `pour_index` is zero-based
+
+Worth stating on its own, because getting it wrong is silently survivable: the
+first stage comes out right and every later stage is off by one.
+
+From brAzzi64's HCI snoop of the official Android app (`adb bugreport` with
+Bluetooth HCI snoop logging, Pixel 3, 2026-03-28, firmware V12.0D.500). The
+recipe was 16 g at 1:16, 256 ml, **six pours**, spiral, grinder off:
+
+```
+Δt (s)   Cmd     Name              Payload decode
+16.7     40502   Coffee Starting
+17.7     40510   Pour Start        pour_index=0   (bloom)
+60.9     40510   Pour Start        pour_index=1
+83.9     40510   Pour Start        pour_index=2
+106.9    40510   Pour Start        pour_index=3
+129.9    40510   Pour Start        pour_index=4
+155.0    40510   Pour Start        pour_index=5
+178.0    40511   Brewer Stop
+180.1    40512   Enjoy!
+```
+
+Six pours, indices 0 through 5. A stage number for display is therefore
+`pour_index + 1`, which is what `Machine.onEvent` does.
+
+This is quoted here rather than cited to a URL because a code comment that
+points at a document nobody reviewing the diff can open is not evidence. The
+capture also shows no 40515 or 40516 in that session, which is where this
+document's `single-source` marking on those two comes from.
+
 | 8204 | 0x200C | Error: Dose/Water | — | Dose or water mismatch | `spec` |
 | 8107 | 0x1F6B | Brewer Mode | — | | `spec` |
 | 8108 | 0x1F6C | Brewer Temp | — | | `spec` |

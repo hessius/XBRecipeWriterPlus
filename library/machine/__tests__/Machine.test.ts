@@ -1,16 +1,33 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS} from "@/constants/machine";
+import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS, STATE_FRESH_MS} from "@/constants/machine";
 import {buildType1} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
 import {event, notification, status} from "./protocolFixtures";
 
-/** A pour-start event carrying the machine's own one-based pour index. */
+/** A pour-start event carrying the machine's own zero-based pour index. */
 function Uint8ArrayPourEvent(index: number): number[] {
     return notification(40510 & 0xFF, 40510 >> 8, [index]);
+}
+
+/** Six identical pours. The HCI snoop in docs/machine-integration was captured on six. */
+function sixPourRecipe(): Recipe {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.XPOD;
+    recipe.dosage = 18;
+    recipe.ratio = 16;
+    recipe.grindSize = 60;
+    recipe.grindRPM = 90;
+    recipe.grinder = true;
+    // Pour(pourNumber, volume, temperature, flowRate, agitation, pattern, pause).
+    // flowRate is stored times ten, so 30 is 3 ml/s.
+    recipe.pours = [1, 2, 3, 4, 5, 6].map(
+        (n) => new Pour(n, 48, 93, 30, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 20)
+    );
+    return recipe;
 }
 
 describe("connecting to a machine", () => {
@@ -337,6 +354,37 @@ describe("brewing", () => {
         }
     });
 
+    /**
+     * On device: a brew died during grinding for want of beans, and TRY AGAIN
+     * did nothing until the warning was dismissed on the machine's own screen.
+     * A machine sitting on a warning is not a machine that will take a recipe.
+     */
+    it("clears the machine's screen before retrying a brew that failed", async () => {
+        const {transport, machine} = await readyMachine();
+
+        await machine.brew(brewable()).catch(() => undefined);
+        machine.phase = {name: "failed", reason: "noBeans"} as typeof machine.phase;
+        transport.written = [];
+        transport.sent.length = 0;
+
+        await machine.brew(brewable()).catch(() => undefined);
+        // Stop and go home, ahead of anything the new brew has to say.
+        expect(brewFrames(transport).slice(0, 2)).toEqual([40519, 8022]);
+    });
+
+    it("does not clear the screen for a brew that never reached the machine", async () => {
+        const {transport, machine} = await readyMachine();
+
+        machine.phase = {
+            name: "failed", reason: "blocked", block: "notEnoughWater"
+        } as typeof machine.phase;
+        transport.written = [];
+        transport.sent.length = 0;
+
+        await machine.brew(brewable()).catch(() => undefined);
+        expect(brewFrames(transport)).not.toContain(8022);
+    });
+
     it("leaves a gap between the two frames of a cancel", async () => {
         // Unpaced they are exactly the burst that the brew sequence had to be
         // paced to survive -- and this is the pair whose job is to stop a
@@ -517,7 +565,7 @@ describe("brewing", () => {
 
         transport.emit(status(0x22));
         transport.emit(event(40507));
-        transport.emit(Uint8ArrayPourEvent(2));
+        transport.emit(Uint8ArrayPourEvent(1));
 
         expect(machine.phase).toMatchObject({name: "pouring", pour: 2, pours: 3});
     });
@@ -527,7 +575,11 @@ describe("brewing", () => {
         // 40518 move the state backwards, another verified it aborts a running
         // brew, a third calls it PAUSE. The fallback costs the user one press
         // of a button they are standing in front of.
+        //
+        // Auto-start off is the path this prompt exists for: the recipe is on
+        // the machine and the only thing that can start it is a person.
         const {transport, machine} = await readyMachine();
+        machine.setAutoStart(false);
         await machine.brew(brewable());
         transport.written = [];
 
@@ -535,6 +587,97 @@ describe("brewing", () => {
 
         expect(machine.phase.name).toBe("pressPlay");
         expect(brewFrames(transport)).not.toContain(40518);
+    });
+
+    it("does not ask for the machine's button once the app has committed", async () => {
+        // 0x1E is a waypoint on this firmware, not a request for a human:
+        // commit auto-proceeds straight to grinding, and hardware notes record
+        // it usually being skipped altogether. Telling the user to press a
+        // button they have already pressed is how it read on the device.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable()); // auto-start on by default
+        const before = machine.phase.name;
+
+        transport.emit(status(0x1E));
+
+        expect(machine.phase.name).toBe(before);
+        expect(machine.phase.name).not.toBe("pressPlay");
+    });
+
+    it("goes on to grinding from the waypoint", async () => {
+        // Not a driver of the fix -- STARTING sets `grinding` unconditionally,
+        // so this passes with or without the guard. It is here against the
+        // *wrong* fix: hoisting the check to the top of `onState` rather than
+        // into the one case would swallow every state after a commit, and this
+        // is what notices.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        transport.emit(status(0x1E));
+        transport.emit(status(0x22)); // the state the file's other tests use
+                                      // to reach grinding
+
+        expect(machine.phase.name).toBe("grinding");
+    });
+
+    it("asks again for a brew held back after one that was committed", async () => {
+        // That the prompt comes back for the next brew, whatever the last one
+        // did. Note this does not pin the resets themselves: the assignment at
+        // the end of the burst re-decides the flag for every upload, so it
+        // would pass with both of them deleted. The upload window is what
+        // needs them, and the test below is what covers it.
+        //
+        // The brew is ended with `cancelBrew`, which is how the rest of this
+        // file ends one. A state frame will not do it: `onState` returns early
+        // unless a brew is running, and the idle state 0x01 falls through its
+        // switch, so emitting it changes nothing at all.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        await machine.cancelBrew();
+
+        machine.setAutoStart(false);
+        await machine.brew(brewable());
+        transport.emit(status(0x1E));
+
+        expect(machine.phase.name).toBe("pressPlay");
+    });
+
+    it("does not carry a committed brew's silence into the next upload", async () => {
+        // The window the two `committed = false` resets exist for. The machine
+        // goes on reporting state while the next recipe is going out, and the
+        // burst is paced, so 0x1E can arrive mid-upload. With the flag left
+        // over from the brew before, the prompt for a recipe nobody has
+        // started would be swallowed.
+        //
+        // This pins the pair, not either one: they are the same guard written
+        // twice, mirroring how `pendingCommit` is cleared in both places, and
+        // removing either alone is covered by the other.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        await machine.cancelBrew();
+
+        const seen: string[] = [];
+        machine.onPhase((phase) => seen.push(phase.name));
+
+        machine.setAutoStart(false);
+        const realWrite = transport.write.bind(transport);
+        let fired = false;
+        transport.write = async (frame: Uint8Array) => {
+            await realWrite(frame);
+            // Skip 40521, the "how are you doing" ask `brew()` opens with:
+            // firing on it would set the machine's tracked state to 0x1E
+            // before `brewBlock` has even run, which the precondition check
+            // reads as a machine that is busy rather than as a mid-upload
+            // status frame.
+            const code = frame[3] | (frame[4] << 8);
+            if (fired || code === 40521) return;
+            fired = true;
+            transport.emit(status(0x1E));
+        };
+
+        await machine.brew(brewable());
+
+        expect(seen).toContain("pressPlay");
     });
 
     it("does not give up during the twenty seconds the machine grinds in silence", async () => {
@@ -947,12 +1090,48 @@ describe("asking how the machine is doing now", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
         await machine.connect("AA:BB");
         transport.emit(status(0x01));
-        expect(machine.brewBlockReason(brewable())).toMatch(/water/i);
+        // The brew screen draws a refusal amber with the plan untouched and a
+        // mid-brew failure red with the trace frozen. Telling those apart by
+        // matching on the text of a sentence would break the first time the
+        // sentence was improved.
+        expect(machine.brewBlock(brewable())).toEqual({
+            kind: "notEnoughWater",
+            message: "The machine's water tank is low."
+        });
 
         transport.infoReply = machineInfoFrame({waterEnough: 1});
         await machine.brew(brewable());
 
         expect(brewFrames(transport)).toContain(8002);
+    });
+
+    it("names each kind of block", async () => {
+        // One case per branch, so a reordering of the checks cannot silently
+        // change which reason a user is given. The brew screen draws these
+        // differently, so a block reported under the wrong name is a screen
+        // offering the wrong way out.
+        const disconnected = new Machine(new FakeTransport());
+        expect(disconnected.brewBlock(brewable())?.kind).toBe("notConnected");
+
+        const silent = new FakeTransport();
+        silent.infoReply = null;
+        const unheard = new Machine(silent, {frameGapMs: 0, infoWaitMs: 5});
+        await unheard.connect("AA:BB");
+        expect(unheard.brewBlock(brewable())?.kind).toBe("noVitals");
+
+        const dry = new FakeTransport();
+        dry.infoReply = machineInfoFrame({waterEnough: 0});
+        const thirsty = new Machine(dry, {frameGapMs: 0});
+        await thirsty.connect("AA:BB");
+        dry.emit(status(0x01));
+        expect(thirsty.brewBlock(brewable())?.kind).toBe("notEnoughWater");
+
+        const {transport, machine} = await readyMachine();
+        transport.emit(status(0x10)); // brewing
+        expect(machine.brewBlock(brewable())?.kind).toBe("busy");
+
+        transport.emit(status(0x01));
+        expect(machine.brewBlock(brewable([]))?.kind).toBe("recipe");
     });
 
     it("notices the tank emptied after the link came up", async () => {
@@ -1103,5 +1282,129 @@ describe("where a frame arrived from", () => {
         transport.emit(status(0x01), "ffe3");
 
         expect(sources).toEqual(["ffe3"]);
+    });
+});
+
+describe("the machine's pour index", () => {
+    it("is zero-based, so index 0 is stage 1 of six", async () => {
+        // From the HCI snoop quoted in docs/machine-integration/ble-protocol.md:
+        // a six-pour recipe
+        // reports pour_index 0,1,2,3,4,5 — not 1..6.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        const seen: number[] = [];
+        machine.onPhase((phase) => {
+            if (phase.name === "pouring") seen.push(phase.pour);
+        });
+
+        const recipe = sixPourRecipe();
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x01));
+        await machine.brew(recipe);
+
+        for (const index of [0, 1, 2, 3, 4, 5]) {
+            transport.emit(Uint8ArrayPourEvent(index));
+        }
+
+        expect(seen.slice(-6)).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    it("clamps an index past the end rather than reporting stage seven of six", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+
+        const seen: number[] = [];
+        machine.onPhase((phase) => {
+            if (phase.name === "pouring") seen.push(phase.pour);
+        });
+
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x01));
+        await machine.brew(sixPourRecipe());
+
+        transport.emit(Uint8ArrayPourEvent(9));
+
+        expect(seen[seen.length - 1]).toBe(6);
+    });
+});
+
+describe("event 40517", () => {
+    it("means beans when it arrives during grinding", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        // The grinder is running; then the machine stops and idles.
+        transport.emit(status(0x22));
+        expect(machine.phase.name).toBe("grinding");
+        transport.emit(notification(40517 & 0xFF, 40517 >> 8, [0]));
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noBeans"});
+    });
+
+    it("still means idling when it arrives before grinding", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+
+        transport.emit(notification(40517 & 0xFF, 40517 >> 8, [0]));
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "idling"});
+    });
+});
+
+describe("a stale state does not refuse a fresh brew", () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    it("does not refuse forever on a fault the user has since fixed", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+
+        // The machine complained about its tank, and the user filled it.
+        transport.emit(status(0x0C));
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noWater");
+
+        jest.advanceTimersByTime(STATE_FRESH_MS + 1);
+
+        expect(machine.brewBlock(sixPourRecipe())).toBeNull();
+    });
+
+    it("still believes a machine that said it was brewing and then went quiet", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+
+        transport.emit(status(0x10));
+        jest.advanceTimersByTime(STATE_FRESH_MS * 10);
+
+        // Grinding emits no status frame for about twenty seconds and a pour
+        // emits none for minutes, so silence is what a busy machine sounds
+        // like. Expiring this would send a recipe into a running brew.
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("busy");
+    });
+
+    it("calls a low tank a low tank, not a busy machine", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x0C));
+
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noWater");
+    });
+
+    it("calls an empty hopper an empty hopper, not a busy machine", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(machineInfoFrame());
+        transport.emit(status(0x0F));
+
+        expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noBeans");
     });
 });

@@ -45,3 +45,6 @@ skills-lock.json
 
 # Git worktrees
 .worktrees/
+
+# Jest writes this in CI so an intermittent failure can name itself (#91).
+jest-results.json

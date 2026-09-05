@@ -80,28 +80,40 @@ class Pour {
         this.agitation = agitation;
     }
 
+    /**
+     * The two agitation bits, with the "never set" sentinel read as neither.
+     *
+     * `agitation` shares this class's `-1` default, and unlike the other
+     * fields it is a bit field: every bit of `-1` is set, so masking it
+     * directly says a pour nobody has touched is agitated at both ends. The
+     * setters go through here too, or switching one side off would compute
+     * `-1 & 0b10` and turn the other side on.
+     */
+    private agitationBits(): number {
+        return this.agitation < 0 ? 0 : this.agitation;
+    }
+
     public getAgitationBefore(): boolean {
-        return (this.agitation & 0b01) > 0;
+        return (this.agitationBits() & 0b01) > 0;
     }
 
     public getAgitationAfter(): boolean {
-        return (this.agitation & 0b10) > 0;
+        return (this.agitationBits() & 0b10) > 0;
     }
 
     public setAgitationBefore(agitationBefore: boolean): void {
         if (agitationBefore) {
-            this.agitation |= 0b01;
+            this.agitation = this.agitationBits() | 0b01;
         } else {
-            this.agitation &= 0b10;
+            this.agitation = this.agitationBits() & 0b10;
         }
     }
 
     public setAgitationAfter(agitationAfter: boolean): void {
-
         if (agitationAfter) {
-            this.agitation |= 0b10;
+            this.agitation = this.agitationBits() | 0b10;
         } else {
-            this.agitation &= 0b01;
+            this.agitation = this.agitationBits() & 0b01;
         }
     }
 

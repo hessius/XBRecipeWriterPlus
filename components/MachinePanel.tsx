@@ -1,0 +1,199 @@
+import React from "react";
+import {Pressable} from "react-native";
+import {XStack, YStack} from "tamagui";
+
+import DotMatrixText from "@/components/DotMatrixText";
+import Collapsible from "@/components/Collapsible";
+import {palette} from "@/constants/colors";
+import {useRefreshRequest} from "@/hooks/useRefreshRequest";
+import type {LinkStatus} from "@/hooks/useMachine";
+
+/** What the panel shows, copied out of the machine's info blob. */
+export type MachineVitals = {
+    waterEnough: boolean;
+    mode: "PRO" | "EASY";
+    grindSize: number;
+    /** When the blob was asked for, in wall-clock milliseconds. */
+    askedAt: number;
+};
+
+type Props = {
+    open: boolean;
+    status: LinkStatus;
+    accent: string;
+    /** Null whenever the machine has not answered — connecting, or away. */
+    vitals: MachineVitals | null;
+    /** Injected so the age is testable without a fake clock. */
+    now: number;
+    onRefreshWater: () => void;
+    onConnect: () => void;
+};
+
+/** `4 MIN AGO`. Minutes only: seconds would change while it was being read. */
+function age(askedAt: number, now: number): string {
+    const minutes = Math.floor(Math.max(0, now - askedAt) / 60_000);
+    if (minutes < 1) return "JUST NOW";
+    return `${minutes} MIN AGO`;
+}
+
+function Row({label, children}: {label: string; children: React.ReactNode}) {
+    return (
+        <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1.5">
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                           color={palette.dim}>
+                {label}
+            </DotMatrixText>
+            <XStack alignItems="center" gap="$2">{children}</XStack>
+        </XStack>
+    );
+}
+
+/** How the button reads in each of its states. */
+const REFRESH_LABEL = {
+    idle:     "REFRESH",
+    asking:   "CHECKING…",
+    noAnswer: "NO ANSWER"
+} as const;
+
+/**
+ * The refresh button.
+ *
+ * Under the readings rather than on the water row: the round trip re-reads all
+ * three, and a control sitting on one row claims a narrower effect than it has.
+ * It was previously a bare twelve-point icon with no pressed state and no busy
+ * state, so the only evidence it had worked was that the machine beeped.
+ */
+function RefreshButton({accent, askedAt, onRefresh}: {
+    accent: string; askedAt: number; onRefresh: () => void;
+}) {
+    const {state, press} = useRefreshRequest(askedAt, onRefresh);
+    const colour = state === "noAnswer" ? palette.warn : accent;
+
+    return (
+        <YStack
+            testID="machine-refresh"
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Refresh the machine readings"
+            accessibilityState={{disabled: state !== "idle"}}
+            onPress={state === "idle" ? press : undefined}
+            marginTop="$2"
+            minHeight={44}
+            alignItems="center"
+            justifyContent="center"
+            borderRadius="$4"
+            borderWidth={1}
+            borderColor={colour}
+            opacity={state === "asking" ? 0.55 : 1}
+            pressStyle={state === "idle"
+                ? {opacity: 0.6, backgroundColor: palette.raised}
+                : undefined}>
+            <DotMatrixText testID="machine-refresh-label" fontSize={11}
+                           weight="bold" letterSpacing={2} color={colour}>
+                {REFRESH_LABEL[state]}
+            </DotMatrixText>
+        </YStack>
+    );
+}
+
+/**
+ * The machine status panel.
+ *
+ * Shows only what changes: water level with its age, mode, and grind size, with
+ * a REFRESH button beneath the readings. No MACHINE SETTINGS button — the gear
+ * is twenty pixels away in the same header and leads to the same place.
+ *
+ * TRY NOW appears only when the machine is out of range. The refresh button
+ * sits under all three readings rather than on the water row, because a press
+ * re-reads the whole blob — water, mode and grind — not the water alone.
+ *
+ * Driven by `open`, and revealed inline beneath the header via `Collapsible`.
+ * The machine dot that opened it is still in place two rows up, so it is also
+ * the control that closes it: the panel needs no dismiss affordance of its own.
+ */
+export default function MachinePanel({
+    open, status, accent, vitals, now, onRefreshWater, onConnect
+}: Props) {
+    let body: React.ReactNode;
+
+    if (status === "connected" && vitals !== null) {
+        body = (
+            <YStack gap="$1">
+                <Row label="WATER">
+                    <DotMatrixText testID="machine-water-value" fontSize={18} weight="bold"
+                                   color={vitals.waterEnough ? palette.text : palette.warn}>
+                        {vitals.waterEnough ? "OK" : "LOW"}
+                    </DotMatrixText>
+                    <DotMatrixText fontSize={11} color={palette.muted}>
+                        {age(vitals.askedAt, now)}
+                    </DotMatrixText>
+                </Row>
+                {!vitals.waterEnough && (
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                   color={palette.warn}>
+                        FILL THE TANK, THEN REFRESH
+                    </DotMatrixText>
+                )}
+                <Row label="MODE">
+                    <DotMatrixText fontSize={18} weight="bold"
+                                   color={vitals.mode === "EASY" ? palette.warn : palette.text}>
+                        {vitals.mode}
+                    </DotMatrixText>
+                </Row>
+                <Row label="GRIND">
+                    <DotMatrixText fontSize={18} weight="bold" color={palette.text}>
+                        {String(vitals.grindSize)}
+                    </DotMatrixText>
+                </Row>
+                <RefreshButton accent={accent} askedAt={vitals.askedAt}
+                               onRefresh={onRefreshWater} />
+            </YStack>
+        );
+    } else if (status === "connecting") {
+        body = (
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                           color={palette.dim}>
+                CONNECTING…
+            </DotMatrixText>
+        );
+    } else {
+        body = (
+            <YStack gap="$2">
+                <DotMatrixText fontSize={11} color={palette.dim}>
+                    {vitals === null
+                        ? "Not in range. It will reconnect by itself when it is."
+                        : `Last seen ${age(vitals.askedAt, now)}. `
+                          + "It will reconnect by itself when it is in range."}
+                </DotMatrixText>
+                <Pressable accessibilityRole="button" accessibilityLabel="Try now"
+                           onPress={onConnect}>
+                    <YStack alignItems="center" paddingVertical="$2.5" borderRadius="$4"
+                            borderWidth={1} borderColor={accent}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
+                                       color={accent}>
+                            TRY NOW
+                        </DotMatrixText>
+                    </YStack>
+                </Pressable>
+            </YStack>
+        );
+    }
+
+    // A panel the header owns, not an overlay. Nothing is covered, so there is
+    // nothing to have to get back to, and the only way to close it is the
+    // control that opened it -- still visible, still in place, two rows up. It
+    // used to rise from the bottom of the screen, opened by a control in the
+    // top-right corner; it arrived from the wrong end.
+    //
+    // `Collapsible` measures its content and animates height and opacity,
+    // honouring Reduced Motion, which is the same treatment the header's own
+    // collapse already gets.
+    return (
+        <Collapsible open={open}>
+            <YStack testID="machine-panel" paddingHorizontal="$3"
+                    paddingBottom="$2">
+                {body}
+            </YStack>
+        </Collapsible>
+    );
+}

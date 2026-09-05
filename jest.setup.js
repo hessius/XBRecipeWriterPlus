@@ -12,6 +12,50 @@ global.console.debug = jest.fn();
  * offers no way to tell those apart, so the app treats both as "nothing
  * happened". Tests that want a value override it per case.
  */
+/**
+ * `expo-sharing` is a native module; calling through would throw in Jest.
+ * `isAvailableAsync` returns true so tests can assert the happy path without
+ * platform-detecting. Individual tests that need it unavailable can override.
+ */
+jest.mock("expo-sharing", () => ({
+    isAvailableAsync: jest.fn(async () => true),
+    shareAsync:       jest.fn(async () => undefined)
+}));
+
+/**
+ * `react-native-view-shot` captures a native view; it has no meaningful
+ * implementation under Jest. The mock returns a stable URI so share tests
+ * can assert that shareAsync was called with it.
+ */
+jest.mock("react-native-view-shot", () => {
+    const React = require("react");
+    const {View} = require("react-native");
+    // Rendered as a real View rather than a passthrough so a test can ask what
+    // is inside the captured subtree and what style the capture is given —
+    // both of which decide what the exported PNG looks like.
+    const ViewShot = React.forwardRef(function MockViewShot({children, ...rest}, ref) {
+        React.useImperativeHandle(ref, () => ({
+            capture: jest.fn(async () => "file:///mock/brew.png")
+        }));
+        return React.createElement(View, {testID: "viewshot", ...rest}, children);
+    });
+    ViewShot.displayName = "ViewShot";
+    return {__esModule: true, default: ViewShot};
+});
+
+/**
+ * `expo-file-system` is native; the mock provides just the subset the app
+ * uses (the File class and Paths).
+ */
+jest.mock("expo-file-system", () => {
+    const MockFile = jest.fn(function MockFile(_dir, name) {
+        this.uri   = `file:///mock-cache/${String(name)}`;
+        this.write = jest.fn();
+    });
+    const Paths = {cache: {uri: "file:///mock-cache/"}};
+    return {__esModule: true, File: MockFile, Paths};
+});
+
 jest.mock("expo-clipboard", () => ({
     hasStringAsync:         jest.fn(async () => false),
     getStringAsync:         jest.fn(async () => ""),

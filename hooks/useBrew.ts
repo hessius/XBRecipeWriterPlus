@@ -10,6 +10,8 @@ import type Recipe from "@/library/Recipe";
 export type Brewer = {
     phase: BrewPhase;
     error: string | null;
+    /** The link itself, for a recorder that needs the raw notification stream. */
+    machine: Machine;
     brew: (recipe: Recipe) => Promise<void>;
     /**
      * Commit a recipe that was uploaded but held back, because the user has
@@ -98,7 +100,7 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
-    return {phase, error, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry};
+    return {phase, error, machine, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry};
 }
 
 export default useBrew;

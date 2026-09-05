@@ -153,6 +153,12 @@ export async function connectRememberedMachine(
  * Called from the root layout rather than from a screen, because the settings
  * screen is where the only `useMachine` on a normal launch path lives and a
  * user who never opens it would never be connected.
+ *
+ * This *is* the warm connect: by the time anyone reaches for BREW the app
+ * already knows whether the machine is there and whether its tank has water.
+ * Resist the urge to add a second one inside `sharedMachine()` — merely asking
+ * for the machine must not touch the radio, which is the whole reason the
+ * remembered-id check above is repeated here.
  */
 export function startMachineLink(): void {
     const store = settingsStore();

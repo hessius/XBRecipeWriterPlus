@@ -1,5 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
+import {DEFAULT_BREW_SHORTCUT} from "@/library/brewShortcut";
+
 /**
  * Every setting, with its default.
  *
@@ -100,7 +102,48 @@ export const DEFAULTS = {
      * grinder. With this off the recipe is uploaded and the brew route offers
      * START; the machine holds the recipe quite happily until then.
      */
-    machineAutoStart: false
+    machineAutoStart: false,
+    /**
+     * Whether every recipe row carries a BREW capsule.
+     *
+     * On by default: reaching the machine from the library is the whole point
+     * of the milestone, and a shortcut nobody can see is not a shortcut. It is
+     * also a permanent mark on every card, and somebody who brews rarely will
+     * want it gone.
+     */
+    showBrewOnRecipeRows: true,
+    /**
+     * Which shape that shortcut takes.
+     *
+     * A second key rather than five values on the boolean above. `get` falls
+     * back to `DEFAULTS[key]` for an absent row and there is no migration
+     * machinery here, so folding the two together would quietly switch the
+     * shortcut back on for anybody who had turned it off. When one shape wins,
+     * this key goes and the boolean stays.
+     *
+     * Read through `asBrewShortcut`: `get` only compares `typeof` against the
+     * default, which cannot tell one string from another.
+     */
+    brewShortcut: DEFAULT_BREW_SHORTCUT as string,
+    /**
+     * Whether the brew chart animates between phases.
+     *
+     * On by default, and layered on top of the system Reduced Motion
+     * preference rather than replacing it: the system switch is about
+     * vestibular safety and this one is about taste, and answering the first
+     * should not require answering the second. When either is off, each
+     * animation holds its end state rather than disappearing.
+     */
+    animateBrewChart: true,
+    /**
+     * How many brews keep their raw sample stream.
+     *
+     * A stream is about 2 400 samples — some tens of kilobytes — and only the
+     * brews you are still dialling in are worth that. The records themselves
+     * are never swept: history stays complete, and only the detail behind it
+     * expires. Zero is a real choice and means zero.
+     */
+    brewTraceRetention: 50
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

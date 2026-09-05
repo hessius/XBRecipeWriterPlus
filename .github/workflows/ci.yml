@@ -30,8 +30,25 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The JSON report is written alongside the usual output, because a test
+      # has failed twice under load (#91) and has never been identified: both
+      # times the log that named it was thrown away, and it has not reproduced
+      # since. A file that outlives the job means the next occurrence names
+      # itself instead of costing another twenty runs.
       - name: Test
-        run: npm test -- --ci
+        run: npm test -- --ci --json --outputFile=jest-results.json
+
+      - name: Name the failing test
+        if: failure()
+        run: node scripts/name-failing-tests.mjs jest-results.json
+
+      - name: Keep the jest report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: jest-results.json
+          retention-days: 14
 
       # Catches dependency versions drifting out of step with the installed
       # Expo SDK, which is how this project ended up a year stale in the first
