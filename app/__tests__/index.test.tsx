@@ -1102,7 +1102,7 @@ describe("HomeScreen, opening one editor at a time", () => {
 
     it("keeps the last snapshot after disconnect so 'last seen' is reachable (task 2)", async () => {
         // Before the fix, the onLink handler called setMachineVitals(null) on
-        // disconnect, making the 'Last seen' branch in MachinePopover
+        // disconnect, making the 'Last seen' branch in MachinePanel
         // unreachable — a disconnected machine always showed 'Not in range'.
         //
         // This test proves the seeded path works: if machine.info is non-null
@@ -1176,7 +1176,7 @@ describe("HomeScreen age timer", () => {
 
     it("advances the label while the popover is open", async () => {
         // The interval callback calls setPopoverNow(Date.now()), which causes a
-        // re-render with an updated `now` prop on MachinePopover. Seed the
+        // re-render with an updated `now` prop on MachinePanel. Seed the
         // vitals at T=0 by mounting at that time, open the popover at T=2min,
         // then fire the callback at T=3min and confirm the displayed age moved.
         jest.setSystemTime(new Date("2026-01-01T00:00:00Z")); // T = 0, askedAt = 0

@@ -62,7 +62,7 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
  *
  * Driven by `open` and `onClose`, presented as a bottom sheet via `XbrwSheet`.
  */
-export default function MachinePopover({
+export default function MachinePanel({
     open, status, accent, vitals, now, onRefreshWater, onConnect, onClose
 }: Props) {
     let body: React.ReactNode;

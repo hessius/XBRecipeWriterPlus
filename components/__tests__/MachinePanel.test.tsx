@@ -1,14 +1,14 @@
 import React from "react";
 
-import MachinePopover from "@/components/MachinePopover";
+import MachinePanel from "@/components/MachinePanel";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 const vitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 0};
 
-async function draw(props: Partial<React.ComponentProps<typeof MachinePopover>> = {}) {
+async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = {}) {
     return renderWithProviders(
-        <MachinePopover
+        <MachinePanel
             open
             status="connected"
             accent="#C86A3B"
@@ -22,7 +22,7 @@ async function draw(props: Partial<React.ComponentProps<typeof MachinePopover>> 
     );
 }
 
-describe("MachinePopover", () => {
+describe("MachinePanel", () => {
     it("shows water, mode and grind size", async () => {
         const {getByText} = await draw();
         expect(getByText("WATER")).toBeTruthy();

@@ -14,11 +14,11 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
-import MachinePopover from "@/components/MachinePopover";
+import MachinePanel from "@/components/MachinePanel";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
-import type {MachineVitals} from "@/components/MachinePopover";
+import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -121,7 +121,7 @@ export default function HomeScreen({db, settings}: Props) {
     // Repaint vitals whenever the link emits an event (connected, info arrived,
     // disconnected). The info blob is mutated in place on the shared machine, so
     // React cannot see it without this subscription.
-    // On disconnect the last answered snapshot is deliberately kept — MachinePopover
+    // On disconnect the last answered snapshot is deliberately kept — MachinePanel
     // shows "Last seen X min ago" when status is not "connected" but vitals exist,
     // and that copy is unreachable if we clear here.
     useEffect(() => machine.onLink(() => {
@@ -537,7 +537,7 @@ export default function HomeScreen({db, settings}: Props) {
                 }}/>
 
             {remembered && (
-                <MachinePopover
+                <MachinePanel
                     open={popoverOpen}
                     status={machineStatus}
                     accent={palette.success}
