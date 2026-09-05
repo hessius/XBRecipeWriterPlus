@@ -4,7 +4,7 @@ import {processColor} from "react-native";
 import BrewTrace from "@/components/BrewTrace";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
-import {accents, palette} from "@/constants/colors";
+import {accents, cupLineFor, palette} from "@/constants/colors";
 
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -140,6 +140,45 @@ describe("BrewTrace", () => {
         expect(travelling.getByTestId("trace-head")).toBeTruthy();
         const arrived = await draw({planHeadAt: 1});
         expect(arrived.queryByTestId("trace-head")).toBeNull();
+    });
+
+    it("draws the cup line in the accent's derived colour, not in muted", async () => {
+        const {getByTestId} = await draw({
+            samples: samples([0, 0, 0], [30, 60, 20], [70, 160, 120])
+        });
+
+        const cup = getByTestId("trace-cup");
+        // react-native-svg processes hex strings through processColor; compare via payload.
+        expect(cup.props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(cupLineFor(TEST_ACCENT))})
+        );
+        expect(cup.props.stroke).not.toEqual(
+            expect.objectContaining({payload: processColor(palette.muted)})
+        );
+    });
+
+    it("moves the cup line with the accent", async () => {
+        // Sky is the one accent whose complement the amber guard pushes.
+        const {getByTestId} = await draw({
+            accent: "#9FC3F0",
+            samples: samples([0, 0, 0], [30, 60, 20], [70, 160, 120])
+        });
+
+        expect(getByTestId("trace-cup").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(cupLineFor("#9FC3F0"))})
+        );
+    });
+
+    it("draws the cup line in that colour in compact mode too", async () => {
+        const {getByTestId} = await draw({
+            compact: true,
+            height: 80,
+            samples: samples([0, 0, 0], [30, 60, 20], [70, 160, 120])
+        });
+
+        expect(getByTestId("trace-cup").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(cupLineFor(TEST_ACCENT))})
+        );
     });
 });
 

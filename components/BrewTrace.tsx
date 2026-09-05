@@ -3,7 +3,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Stop} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
-import {palette} from "@/constants/colors";
+import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {livePoints, pathLength, planPoints, stageSpans, toPath, type Box}
     from "@/library/brew/brewShape";
@@ -88,6 +88,9 @@ export default function BrewTrace({
     const planLength = pathLength(plan, box);
     const waterPath = toPath(water, box);
     const cupPath = toPath(cup, box);
+    // Derived here rather than at each use so the compact render, the full render
+    // and the legend cannot drift apart.
+    const cupColour = cupLineFor(accent);
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
@@ -124,8 +127,8 @@ export default function BrewTrace({
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={palette.muted}
-                        strokeWidth={1.5}
+                        stroke={cupColour}
+                        strokeWidth={2}
                         strokeDasharray="1 3"
                         strokeLinecap="round"
                         fill="none"
@@ -195,8 +198,8 @@ export default function BrewTrace({
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={palette.muted}
-                        strokeWidth={1.5}
+                        stroke={cupColour}
+                        strokeWidth={2}
                         strokeDasharray="1 3"
                         strokeLinecap="round"
                         fill="none"
@@ -216,7 +219,7 @@ export default function BrewTrace({
             </Svg>
             <XStack height={LEGEND} alignItems="center" gap="$3">
                 <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
-                <LegendItem colour={palette.muted} label="CUP" dotted />
+                <LegendItem colour={cupColour} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
                     <LegendItem colour={planColor} label="PLAN" dashed />
                 )}
