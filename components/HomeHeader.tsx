@@ -148,9 +148,12 @@ export default function HomeHeader({
         // that the panel below the row is inside the header's box and pushes
         // the list down rather than covering it.
         <YStack testID="home-header-inset" paddingTop={insets.top + 8}>
+            {/* The row's spacing is bottom-only: the top spacing is the wrapper's
+                inset, and a top padding here would add to it rather than be
+                overridden by it, dropping the header lower than it used to sit. */}
             <XStack testID="home-header"
                     alignItems="center" justifyContent="space-between" gap="$2"
-                    paddingHorizontal="$3" paddingVertical="$2">
+                    paddingHorizontal="$3" paddingBottom="$2">
                 <HomeTitle count={count} collapsed={collapsed}
                            fontSize={collapsed ? TITLE_FONT_SIZE_COMPACT : TITLE_FONT_SIZE}/>
 

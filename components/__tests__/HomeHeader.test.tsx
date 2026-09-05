@@ -1,5 +1,5 @@
 import React from "react";
-import {View} from "react-native";
+import {StyleSheet, View} from "react-native";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import HomeHeader from "@/components/HomeHeader";
@@ -150,6 +150,17 @@ describe("HomeHeader", () => {
         const style = screen.getByTestId("home-header-inset").props.style;
 
         expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
+    });
+
+    it("holds the title the same distance below the status bar as before", async () => {
+        // The inset moved off the row and onto the wrapper. If the row kept a
+        // top padding of its own it would now be added to the inset rather than
+        // overridden by it, and everything in the header would sit lower.
+        await renderWithProviders(<HomeHeader {...props()}/>);
+        const wrap = StyleSheet.flatten(screen.getByTestId("home-header-inset").props.style);
+        const row  = StyleSheet.flatten(screen.getByTestId("home-header").props.style);
+
+        expect((wrap.paddingTop ?? 0) + (row.paddingTop ?? 0)).toBe(TEST_INSETS.top + 8);
     });
 
     it("shows the machine dot left of the settings gear", async () => {
