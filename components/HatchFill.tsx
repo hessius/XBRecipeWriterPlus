@@ -44,11 +44,17 @@ export default function HatchFill({dim, bright, fill, height, testID}: Props) {
             <Defs>
                 <Pattern id={dimId} patternUnits="userSpaceOnUse"
                          width={PITCH} height={PITCH}>
-                    <Path d={stripes} stroke={dim} strokeWidth={STRIPE} />
+                    {/* The stroke carries the testID, not just the rect that
+                        uses it: a rect's `fill` is parsed into a brush that
+                        only names the pattern, so the colour itself can only
+                        be read here. */}
+                    <Path testID={testID === undefined ? undefined : `${testID}-dim-stroke`}
+                          d={stripes} stroke={dim} strokeWidth={STRIPE} />
                 </Pattern>
                 <Pattern id={brightId} patternUnits="userSpaceOnUse"
                          width={PITCH} height={PITCH}>
-                    <Path d={stripes} stroke={bright} strokeWidth={STRIPE} />
+                    <Path testID={testID === undefined ? undefined : `${testID}-bright-stroke`}
+                          d={stripes} stroke={bright} strokeWidth={STRIPE} />
                 </Pattern>
             </Defs>
             <Rect testID={testID === undefined ? undefined : `${testID}-dim`}

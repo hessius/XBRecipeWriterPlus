@@ -1,4 +1,5 @@
 import React from "react";
+import {processColor} from "react-native";
 
 import HatchFill from "@/components/HatchFill";
 import {renderWithProviders} from "@/test-utils/render";
@@ -38,6 +39,18 @@ describe("HatchFill", () => {
         );
 
         expect(r.getByTestId("hatch-bright").props.width).toBe("100%");
+    });
+
+    it("paints each layer in the colour it was given", async () => {
+        const r = await renderWithProviders(
+            <HatchFill testID="hatch" dim="#223344" bright="#9FC3F0"
+                       fill={0.4} height={20} />
+        );
+
+        expect(r.getByTestId("hatch-dim-stroke").props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor("#223344")}));
+        expect(r.getByTestId("hatch-bright-stroke").props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor("#9FC3F0")}));
     });
 
     it("two instances on screen at once get different pattern ids", async () => {
