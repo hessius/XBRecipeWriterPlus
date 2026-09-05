@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import MachineDot from "@/components/MachineDot";
@@ -104,6 +105,23 @@ describe("MachineDot", () => {
             // With no copy underneath to reveal, fading this one out does not
             // desaturate it, it deletes it.
             expect(tintOpacity()).toBe(1);
+        });
+
+        it("lands the lit copy exactly on the dim one it is covering", async () => {
+            // The dim copy is a flow child, centred by the Pressable. The lit
+            // one floats above it, so it has to be centred the same way or it
+            // sits in the overlay's top-left corner -- which reads as two
+            // indicators at once, and drags the glyph out of line with the
+            // toolbar as the header collapses.
+            await renderWithProviders(
+                <MachineDot status="connected" collapsed={false} onPress={() => undefined}/>
+            );
+            const style = StyleSheet.flatten(
+                screen.getByTestId("machine-dot-tint").props.style as StyleProp<ViewStyle>
+            );
+            expect(style.position).toBe("absolute");
+            expect(style.alignItems).toBe("center");
+            expect(style.justifyContent).toBe("center");
         });
     });
 

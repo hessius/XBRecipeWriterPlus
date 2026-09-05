@@ -105,7 +105,7 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
             )}
             <Animated.View
                 testID="machine-dot-tint"
-                style={fades ? {...StyleSheet.flatten(StyleSheet.absoluteFill), ...tintStyle} : tintStyle}
+                style={fades ? [StyleSheet.absoluteFill, styles.cover, tintStyle] : tintStyle}
                 pointerEvents="none">
                 <DotIcon testID="machine-dot-lit" name={look.icon}
                          size={SIZE} color={look.lit}/>
@@ -113,3 +113,17 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
         </Pressable>
     );
 }
+
+const styles = StyleSheet.create({
+    /**
+     * The lit copy floats over the dim one, so it has to be centred the way the
+     * `Pressable` centres the dim copy in the touch target -- an overlay is not
+     * laid out by its parent's rules.
+     *
+     * Given as an array with the animated style rather than spread into one
+     * object: spreading a Reanimated style drops the static keys, which left
+     * this view with nothing but its opacity and put the lit glyph in the flow
+     * *below* the dim one instead of on top of it. Two indicators, one crooked.
+     */
+    cover: {alignItems: "center", justifyContent: "center"}
+});
