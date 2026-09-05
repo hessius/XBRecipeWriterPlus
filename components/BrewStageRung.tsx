@@ -4,7 +4,8 @@ import {XStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
-import {palette} from "@/constants/colors";
+import HatchFill from "@/components/HatchFill";
+import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
 import {rungSegments, type Segment} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
@@ -40,6 +41,19 @@ type Props = {
 /** The dimmed opacity of a stage that has not happened. */
 const PENDING_OPACITY = 0.45;
 
+/**
+ * The space between one segment and the next.
+ *
+ * Water and wait were previously flush, and with the wait filled in the same
+ * solid accent they read as one undifferentiated bar. The gap is taken out of
+ * the lane rather than out of the shared time scale: every segment loses the
+ * same 3 pt, so their widths stay proportional to their seconds.
+ */
+export const SEGMENT_GAP = 3;
+
+/** How far a faint stripe is mixed back toward the background. */
+const HATCH_DIM = 0.62;
+
 /** One spoken sentence for a rung, for VoiceOver / TalkBack. */
 function buildLabel(
     pour: Pour, index: number, stalls: Stall[], before: boolean, after: boolean
@@ -74,6 +88,18 @@ function buildLabel(
 function fillColour(kind: Segment["kind"], accent: string, done: boolean): string {
     if (kind === "stall") return palette.warn;
     return done ? palette.muted : accent;
+}
+
+/**
+ * The two stripe colours for a wait.
+ *
+ * Faint across the whole wait from the moment the ladder is drawn, so the rests
+ * in a recipe are visible before it runs and the ladder reads as a plan and not
+ * only as a progress bar; accent over the part that has elapsed.
+ */
+function hatchColours(accent: string, done: boolean): {dim: string; bright: string} {
+    const bright = done ? palette.muted : accent;
+    return {dim: mix(bright, palette.base, HATCH_DIM), bright};
 }
 
 /**
@@ -173,36 +199,53 @@ export default function BrewStageRung({
                         <PourGlyph kind="agitation" accent={palette.dim} size={10} />
                     </View>
                 )}
-                {segments.map((segment, i) => (
-                    <View
-                        key={`segment-${i}`}
-                        testID={`segment-${i}`}
-                        style={{
-                            flex: Math.max(segment.seconds, 0.001),
-                            height: barHeight,
-                            borderRadius: radius,
-                            borderWidth: segment.kind === "pause" ? 1 : 0,
-                            borderStyle: segment.kind === "pause" ? "dashed" : "solid",
-                            borderColor: palette.line,
-                            backgroundColor: segment.kind === "stall"
-                                ? palette.warn
-                                : palette.raised,
-                            overflow: "hidden",
-                            flexDirection: "row"
-                        }}
-                    >
+                {segments.map((segment, i) => {
+                    const fraction = Math.max(0, Math.min(1, segment.fill));
+                    const hatch = hatchColours(accent, done);
+                    return (
                         <View
-                            testID={`segment-fill-${i}`}
+                            key={`segment-${i}`}
+                            testID={`segment-${i}`}
                             style={{
-                                flex: Math.max(0, Math.min(1, segment.fill)),
+                                flex: Math.max(segment.seconds, 0.001),
                                 height: barHeight,
+                                marginRight: i < segments.length - 1 ? SEGMENT_GAP : 0,
                                 borderRadius: radius,
-                                backgroundColor: fillColour(segment.kind, accent, done)
+                                borderWidth: segment.kind === "pause" ? 1 : 0,
+                                borderStyle: segment.kind === "pause" ? "dashed" : "solid",
+                                borderColor: palette.line,
+                                backgroundColor: segment.kind === "stall"
+                                    ? palette.warn
+                                    : palette.raised,
+                                overflow: "hidden",
+                                flexDirection: "row"
                             }}
-                        />
-                        <View style={{flex: 1 - Math.max(0, Math.min(1, segment.fill))}} />
-                    </View>
-                ))}
+                        >
+                            {segment.kind === "pause" ? (
+                                <HatchFill
+                                    testID={`segment-hatch-${i}`}
+                                    dim={hatch.dim}
+                                    bright={hatch.bright}
+                                    fill={fraction}
+                                    height={barHeight}
+                                />
+                            ) : (
+                                <>
+                                    <View
+                                        testID={`segment-fill-${i}`}
+                                        style={{
+                                            flex: fraction,
+                                            height: barHeight,
+                                            borderRadius: radius,
+                                            backgroundColor: fillColour(segment.kind, accent, done)
+                                        }}
+                                    />
+                                    <View style={{flex: 1 - fraction}} />
+                                </>
+                            )}
+                        </View>
+                    );
+                })}
                 {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}
                 {after && (
                     <View

@@ -1,6 +1,7 @@
 import React from "react";
+import {processColor, StyleSheet} from "react-native";
 
-import BrewStageRung from "@/components/BrewStageRung";
+import BrewStageRung, {SEGMENT_GAP} from "@/components/BrewStageRung";
 import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
@@ -104,8 +105,9 @@ describe("BrewStageRung", () => {
             state: "active", delivered: 70, pauseElapsed: 6
         });
 
+        // The pause segment uses hatch stripes, not a solid fill.
         expect(getByTestId("segment-1").props.style.borderStyle).toBe("dashed");
-        expect(getByTestId("segment-fill-1").props.style.backgroundColor).toBe(ACCENT);
+        expect(getByTestId("segment-hatch-1-dim")).toBeTruthy();
     });
 
     it("changes colour, not texture, where it held", async () => {
@@ -205,5 +207,61 @@ describe("BrewStageRung", () => {
         expect(new Set(widths).size).toBe(1);
         // And it is at least as wide as the widest thing it has to hold.
         expect(widths[0].length).toBeGreaterThanOrEqual("70/70 ml".length);
+    });
+
+    it("never paints a wait the same as the water beside it", async () => {
+        // The original fault: `rungGeometry` distinguished the two and the paint
+        // threw the distinction away, so an active stage read as one long bar.
+        const {getByTestId, queryByTestId} =
+            await draw({state: "active", delivered: 40, pauseElapsed: 0});
+
+        expect(getByTestId("segment-fill-0")).toBeTruthy();
+        expect(queryByTestId("segment-fill-1")).toBeNull();
+        expect(getByTestId("segment-hatch-1-dim")).toBeTruthy();
+    });
+
+    it("shows a wait faintly before it has begun", async () => {
+        const {getByTestId, queryByTestId} =
+            await draw({state: "pending", delivered: 0, pauseElapsed: 0});
+
+        expect(getByTestId("segment-hatch-1-dim")).toBeTruthy();
+        expect(queryByTestId("segment-hatch-1-bright")).toBeNull();
+    });
+
+    it("brightens the stripes as the wait elapses", async () => {
+        const {getByTestId} =
+            await draw({state: "active", delivered: 70, pauseElapsed: 10});
+
+        expect(getByTestId("segment-hatch-1-bright")).toBeTruthy();
+    });
+
+    it("paints the faint stripes differently from the bright ones", async () => {
+        const {getByTestId} =
+            await draw({state: "active", delivered: 70, pauseElapsed: 10});
+
+        // Read the colours off the pattern strokes, not off the rects: a rect's
+        // `fill` is a brush that only names its pattern, so comparing two rects
+        // compares two names that always differ.
+        const strokeOf = (id: string) =>
+            (getByTestId(id).props.stroke as {payload: number}).payload;
+
+        expect(strokeOf("segment-hatch-1-dim-stroke"))
+            .not.toBe(strokeOf("segment-hatch-1-bright-stroke"));
+        expect(strokeOf("segment-hatch-1-bright-stroke"))
+            .toBe(processColor(ACCENT));
+    });
+
+    it("leaves a gap between one segment and the next", async () => {
+        const {getByTestId} =
+            await draw({state: "active", delivered: 40, pauseElapsed: 0});
+
+        // Pinned to the literal rather than to SEGMENT_GAP: comparing the
+        // margin against the very constant that sets it passes whatever that
+        // constant is, including zero, which is the case worth catching.
+        expect(SEGMENT_GAP).toBe(3);
+        const flat = (id: string) =>
+            StyleSheet.flatten(getByTestId(id).props.style) as {marginRight?: number};
+        expect(flat("segment-0").marginRight).toBe(3);
+        expect(flat("segment-1").marginRight).toBe(0);
     });
 });
