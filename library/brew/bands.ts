@@ -12,13 +12,17 @@
 /** The trace takes the first of the slack: it is the thing worth looking at. */
 export const TRACE_FLOOR = 120;
 export const TRACE_CAP = 200;
+export const TRACE_MAX = 300;
 
 /** Then the rung bars thicken. */
 export const BAR_FLOOR = 9;
-export const BAR_CAP = 15;
+export const BAR_CAP = 28;
+export const BAR_MAX = 44;
 
-/** Then the rungs spread out, without limit, until the ladder fills its box. */
+/** Then the rungs spread out. */
 export const GAP_FLOOR = 3;
+export const GAP_CAP = 20;
+export const GAP_MAX = 34;
 
 export type Bands = {
     traceHeight: number;
@@ -39,7 +43,7 @@ export type Bands = {
 export function allocateBands(flexHeight: number, stages: number): Bands {
     if (stages <= 0) {
         return {
-            traceHeight: Math.min(TRACE_CAP, Math.max(TRACE_FLOOR, flexHeight)),
+            traceHeight: Math.min(TRACE_MAX, Math.max(TRACE_FLOOR, flexHeight)),
             barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, scrolls: false
         };
     }
@@ -53,13 +57,34 @@ export function allocateBands(flexHeight: number, stages: number): Bands {
         };
     }
 
-    const traceHeight = Math.min(TRACE_CAP, TRACE_FLOOR + slack);
+    // Pass one, in priority order, up to each band's soft cap. The caps are
+    // what stop the first band in the queue from taking everything.
+    let traceHeight = Math.min(TRACE_CAP, TRACE_FLOOR + slack);
     slack -= traceHeight - TRACE_FLOOR;
 
-    const barHeight = Math.min(BAR_CAP, BAR_FLOOR + Math.floor(slack / stages));
+    let barHeight = Math.min(BAR_CAP, BAR_FLOOR + Math.floor(slack / stages));
     slack -= (barHeight - BAR_FLOOR) * stages;
 
-    const rungGap = GAP_FLOOR + Math.floor(slack / stages);
+    let rungGap = Math.min(GAP_CAP, GAP_FLOOR + Math.floor(slack / stages));
+    slack -= (rungGap - GAP_FLOOR) * stages;
 
+    // Pass two, same order, against hard ceilings. Without it every point the
+    // soft caps refused fell out of the bottom of the screen as black -- which
+    // is #88 in one sentence: BAR_CAP saturated at 15 and the rest went to a
+    // gap that had no cap at all, so a 15 pt bar sat in an 85 pt row.
+    const traceMore = Math.min(TRACE_MAX - traceHeight, slack);
+    traceHeight += traceMore;
+    slack -= traceMore;
+
+    const barMore = Math.min(BAR_MAX - barHeight, Math.floor(slack / stages));
+    barHeight += barMore;
+    slack -= barMore * stages;
+
+    const gapMore = Math.min(GAP_MAX - rungGap, Math.floor(slack / stages));
+    rungGap += gapMore;
+
+    // Anything still left is breathing room. The ladder is centred in it by
+    // `BrewStageLadder`: space around well-proportioned content reads as
+    // deliberate, where stretched content reads as a fault.
     return {traceHeight, barHeight, rungGap, scrolls: false};
 }
