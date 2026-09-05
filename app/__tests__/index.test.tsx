@@ -1077,6 +1077,45 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(screen.getByText("62")).toBeTruthy();
     });
 
+    it("keeps the reading's age fixed on refresh until the machine answers (task 8)", async () => {
+        // The original bug reset the displayed age to the press moment via
+        // setPopoverNow(Date.now()) in the refresh handler, so a press looked
+        // like it had succeeded instantly even though the machine had not
+        // answered. The age must come from the reading's askedAt, which only a
+        // real answer moves — a press alone must leave it where it was.
+        //
+        // Date.now is spied rather than using fake timers: the sheet only
+        // becomes pressable once its requestAnimationFrame has run, which fake
+        // timers would freeze.
+        const nowSpy = jest.spyOn(Date, "now");
+        try {
+            nowSpy.mockReturnValue(0); // mount → askedAt = 0
+            mockRemembered = "machine-device-id";
+            mockMachineStatus = "connected";
+            mockMachineInfo = {waterEnough: true, mode: "PRO", grindSize: 62};
+            mockAskHowItIsDoing.mockResolvedValue(false); // machine stays silent
+
+            await renderWithProviders(
+                <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+            );
+
+            nowSpy.mockReturnValue(4 * 60_000); // open at T = 4 min
+            await fireEvent.press(screen.getByLabelText("Machine connected"));
+            expect(screen.getByText("4 MIN AGO")).toBeTruthy();
+
+            nowSpy.mockReturnValue(5 * 60_000); // a minute passes
+            await act(async () => {
+                await fireEvent.press(screen.getByTestId("machine-refresh"));
+            });
+
+            // The machine has not answered, so the reading is still 4 min old.
+            // Under the bug this read "5 MIN AGO": the press reset the clock.
+            expect(screen.getByText("4 MIN AGO")).toBeTruthy();
+        } finally {
+            nowSpy.mockRestore();
+        }
+    });
+
     it("renders the machine popover outside the home header so it is not clipped", async () => {
         // A non-modal sheet renders in place. When it lived inside the header's
         // icon row — an animated, height-constrained container — it was clipped

@@ -543,10 +543,7 @@ export default function HomeScreen({db, settings}: Props) {
                     accent={palette.success}
                     vitals={machineVitals}
                     now={popoverNow}
-                    onRefreshWater={() => {
-                        setPopoverNow(Date.now());
-                        refreshWater();
-                    }}
+                    onRefreshWater={refreshWater}
                     onConnect={connectMachine}
                     onClose={() => setPopoverOpen(false)}
                 />

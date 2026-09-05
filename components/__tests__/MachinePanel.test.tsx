@@ -1,10 +1,13 @@
 import React from "react";
+import {StyleSheet} from "react-native";
+import {fireEvent} from "@testing-library/react-native";
 
 import MachinePanel from "@/components/MachinePanel";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 const vitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 0};
+const someVitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 1000};
 
 async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = {}) {
     return renderWithProviders(
@@ -42,9 +45,10 @@ describe("MachinePanel", () => {
         expect(getByText("4 MIN AGO")).toBeTruthy();
     });
 
-    it("puts the refresh on the water row, not among the buttons", async () => {
-        const {getByLabelText} = await draw();
-        expect(getByLabelText("Refresh the water reading")).toBeTruthy();
+    it("offers a refresh button with the readings label", async () => {
+        const {getByTestId, getByLabelText} = await draw();
+        expect(getByTestId("machine-refresh")).toBeTruthy();
+        expect(getByLabelText("Refresh the machine readings")).toBeTruthy();
     });
 
     it("warns when the tank is low, and says what to do", async () => {
@@ -99,5 +103,60 @@ describe("MachinePanel", () => {
     it("shows nothing but the state while connecting", async () => {
         const {queryByText} = await draw({status: "connecting", vitals: null});
         expect(queryByText("WATER")).toBeNull();
+    });
+
+    it("offers a refresh button, not a twelve-point icon", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        const button = r.getByTestId("machine-refresh");
+        expect(button.props.accessibilityRole).toBe("button");
+        const style = StyleSheet.flatten(button.props.style) as {minHeight?: number};
+        expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    });
+
+    it("says REFRESH when it is not doing anything", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        expect(r.getByTestId("machine-refresh-label").props.children).toBe("REFRESH");
+    });
+
+    it("says so while it is asking", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(r.getByTestId("machine-refresh-label").props.children)
+            .toBe("CHECKING…");
+    });
+
+    it("asks the machine when pressed", async () => {
+        const onRefreshWater = jest.fn();
+        const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(onRefreshWater).toHaveBeenCalledTimes(1);
+    });
+
+    it("will not ask twice while it is already asking", async () => {
+        const onRefreshWater = jest.fn();
+        const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(onRefreshWater).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads the water level large enough to glance at", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        // DotMatrixText delivers fontSize through style, not as a host prop
+        // (it is the app-wide floor enforcement point), so read the rendered
+        // size off the flattened style rather than props.fontSize.
+        const style = StyleSheet.flatten(
+            r.getByTestId("machine-water-value").props.style
+        ) as {fontSize?: number};
+        expect(style.fontSize).toBe(18);
     });
 });

@@ -2,13 +2,13 @@ import React from "react";
 import {Pressable} from "react-native";
 import {XStack, YStack} from "tamagui";
 
-import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
+import {useRefreshRequest} from "@/hooks/useRefreshRequest";
 import type {LinkStatus} from "@/hooks/useMachine";
 
-/** What the popover shows, copied out of the machine's info blob. */
+/** What the panel shows, copied out of the machine's info blob. */
 export type MachineVitals = {
     waterEnough: boolean;
     mode: "PRO" | "EASY";
@@ -40,7 +40,7 @@ function age(askedAt: number, now: number): string {
 function Row({label, children}: {label: string; children: React.ReactNode}) {
     return (
         <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1.5">
-            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                            color={palette.dim}>
                 {label}
             </DotMatrixText>
@@ -49,16 +49,64 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
     );
 }
 
+/** How the button reads in each of its states. */
+const REFRESH_LABEL = {
+    idle:     "REFRESH",
+    asking:   "CHECKING…",
+    noAnswer: "NO ANSWER"
+} as const;
+
 /**
- * The machine status popover.
+ * The refresh button.
  *
- * Shows only what changes: water level with its age and a refresh shortcut,
- * mode, and grind size. No MACHINE SETTINGS button — the gear is twenty pixels
- * away in the same header and leads to the same place.
+ * Under the readings rather than on the water row: the round trip re-reads all
+ * three, and a control sitting on one row claims a narrower effect than it has.
+ * It was previously a bare twelve-point icon with no pressed state and no busy
+ * state, so the only evidence it had worked was that the machine beeped.
+ */
+function RefreshButton({accent, askedAt, onRefresh}: {
+    accent: string; askedAt: number; onRefresh: () => void;
+}) {
+    const {state, press} = useRefreshRequest(askedAt, onRefresh);
+    const colour = state === "noAnswer" ? palette.warn : accent;
+
+    return (
+        <YStack
+            testID="machine-refresh"
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Refresh the machine readings"
+            accessibilityState={{disabled: state !== "idle"}}
+            onPress={state === "idle" ? press : undefined}
+            marginTop="$2"
+            minHeight={44}
+            alignItems="center"
+            justifyContent="center"
+            borderRadius="$4"
+            borderWidth={1}
+            borderColor={colour}
+            opacity={state === "asking" ? 0.55 : 1}
+            pressStyle={state === "idle"
+                ? {opacity: 0.6, backgroundColor: palette.raised}
+                : undefined}>
+            <DotMatrixText testID="machine-refresh-label" fontSize={11}
+                           weight="bold" letterSpacing={2} color={colour}>
+                {REFRESH_LABEL[state]}
+            </DotMatrixText>
+        </YStack>
+    );
+}
+
+/**
+ * The machine status panel.
  *
- * TRY NOW appears only when the machine is out of range. The refresh affordance
- * lives on the water row rather than among the buttons, because it acts on one
- * row and should not read as an equally important action.
+ * Shows only what changes: water level with its age, mode, and grind size, with
+ * a REFRESH button beneath the readings. No MACHINE SETTINGS button — the gear
+ * is twenty pixels away in the same header and leads to the same place.
+ *
+ * TRY NOW appears only when the machine is out of range. The refresh button
+ * sits under all three readings rather than on the water row, because a press
+ * re-reads the whole blob — water, mode and grind — not the water alone.
  *
  * Driven by `open` and `onClose`, presented as a bottom sheet via `XbrwSheet`.
  */
@@ -71,39 +119,33 @@ export default function MachinePanel({
         body = (
             <YStack gap="$1">
                 <Row label="WATER">
-                    <DotMatrixText fontSize={13} weight="bold"
+                    <DotMatrixText testID="machine-water-value" fontSize={18} weight="bold"
                                    color={vitals.waterEnough ? palette.text : palette.warn}>
                         {vitals.waterEnough ? "OK" : "LOW"}
                     </DotMatrixText>
-                    <DotMatrixText fontSize={10} color={palette.muted}>
+                    <DotMatrixText fontSize={11} color={palette.muted}>
                         {age(vitals.askedAt, now)}
                     </DotMatrixText>
-                    {/* On the row, because it acts on the row. Beside TRY NOW
-                        it would read as an equally important thing to do. */}
-                    <Pressable accessibilityRole="button"
-                               accessibilityLabel="Refresh the water reading"
-                               onPress={onRefreshWater}>
-                        <DotIcon name="refresh" size={12}
-                                 color={vitals.waterEnough ? accent : palette.warn} />
-                    </Pressable>
                 </Row>
                 {!vitals.waterEnough && (
-                    <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                    color={palette.warn}>
                         FILL THE TANK, THEN REFRESH
                     </DotMatrixText>
                 )}
                 <Row label="MODE">
-                    <DotMatrixText fontSize={13} weight="bold"
+                    <DotMatrixText fontSize={18} weight="bold"
                                    color={vitals.mode === "EASY" ? palette.warn : palette.text}>
                         {vitals.mode}
                     </DotMatrixText>
                 </Row>
                 <Row label="GRIND">
-                    <DotMatrixText fontSize={13} weight="bold" color={palette.text}>
+                    <DotMatrixText fontSize={18} weight="bold" color={palette.text}>
                         {String(vitals.grindSize)}
                     </DotMatrixText>
                 </Row>
+                <RefreshButton accent={accent} askedAt={vitals.askedAt}
+                               onRefresh={onRefreshWater} />
             </YStack>
         );
     } else if (status === "connecting") {
