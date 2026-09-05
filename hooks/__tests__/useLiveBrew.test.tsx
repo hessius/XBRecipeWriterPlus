@@ -1,7 +1,7 @@
 import React from "react";
 import {act, render, renderHook} from "@testing-library/react-native";
 
-import {LiveBrewProvider, useLiveBrew} from "@/hooks/useLiveBrew";
+import {LiveBrewProvider, STOPPED_BAR_MS, useLiveBrew} from "@/hooks/useLiveBrew";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
@@ -296,5 +296,54 @@ describe("LiveBrewProvider", () => {
         // History is written exactly once — no double-write from a second recorder.
         expect(h.written).toHaveLength(1);
         expect(h.written[0].record.recipeName).toBe("Ethiopia Guji");
+    });
+
+    /**
+     * On device: cancel a brew, start another, and the bar still said STOPPED
+     * for several seconds. The run had already been replaced -- what lingered
+     * was the machine's own phase, left over from the run before, standing in
+     * until the new one reported.
+     */
+    it("does not show the last brew's ending as the new brew's beginning", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        await act(async () => { result.current.start(recipe()); });
+        await h.setPhase({name: "cancelled"});
+        expect(result.current.run?.phase.name).toBe("cancelled");
+
+        // A second brew, with the machine not yet having said anything about it.
+        await act(async () => { result.current.start(recipe()); });
+        expect(result.current.run?.phase.name).not.toBe("cancelled");
+    });
+
+    /**
+     * A bar that says STOPPED is worth a few seconds and no more; left alone it
+     * sat there for the rest of the session.
+     */
+    it("clears a stopped bar by itself, and leaves a finished one alone", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        await act(async () => { result.current.start(recipe()); });
+        await h.setPhase({name: "cancelled"});
+        expect(result.current.run).not.toBeNull();
+
+        await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS); });
+        expect(result.current.run).toBeNull();
+
+        // A brew that finished is a record worth tapping, so it stays.
+        await act(async () => { result.current.start(recipe()); });
+        await h.setPhase({name: "done"});
+        await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS * 3); });
+        expect(result.current.run).not.toBeNull();
     });
 });

@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 
+import {OVER} from "@/constants/brewCopy";
 import {useBrew} from "@/hooks/useBrew";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
@@ -65,9 +66,14 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const [heard, setHeard] = useState<
         {from: unknown; runId: number; phase: BrewPhase} | null
     >(null);
-    const phase = heard !== null && heard.from === machine && heard.runId === runId
+    // Nothing heard for this run yet: the machine's own phase stands in. It is
+    // the right stand-in except when it is a *terminal* one, which can only
+    // have come from the run before -- this run has not had time to end. On
+    // device that showed as the last brew's STOPPED sitting over the new one.
+    const fresh = heard !== null && heard.from === machine && heard.runId === runId;
+    const phase: BrewPhase = fresh
         ? heard.phase
-        : machine.phase;
+        : OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
     // A brew's recipe is fixed at start. Hold the latest value in a ref so
@@ -112,7 +118,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     }, [machine, runId]);
 
     const pouring = phase.name === "pouring";
-    const over = ["done", "cancelled", "failed", "lostContact"].includes(phase.name);
+    const over = OVER.has(phase.name);
 
     useEffect(() => {
         if (!pouring) return;
@@ -185,8 +191,10 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         && stalledNow(samples, activeIndex + 1, liveTarget);
 
     return {
-        ...brewer, samples, elapsed, stageElapsed, activeIndex, holding, heldSeconds,
-        stalls, stageWater, pauseElapsed
+        // `phase` after the spread on purpose: the sanitised local reading, not
+        // the brewer's raw one, is what callers should see.
+        ...brewer, phase, samples, elapsed, stageElapsed, activeIndex, holding,
+        heldSeconds, stalls, stageWater, pauseElapsed
     };
 }
 

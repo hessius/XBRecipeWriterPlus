@@ -55,6 +55,19 @@ type LiveBrew = {
     error: string | null;
 };
 
+/**
+ * How long a bar that ended badly stays before it clears itself.
+ *
+ * A stopped or failed brew is worth saying, and then worth forgetting: left
+ * alone, that bar sat on every screen for the rest of the session. A brew that
+ * *finished* is not cleared -- it is a record, and tapping it is how you read
+ * the brew you just made.
+ */
+export const STOPPED_BAR_MS = 8000;
+
+/** Endings that clear themselves. `done` is deliberately not among them. */
+const CLEARS_ITSELF: ReadonlySet<string> = new Set(["cancelled", "failed", "lostContact"]);
+
 const noop = async () => {};
 
 const defaultValue: LiveBrew = {
@@ -143,6 +156,15 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
     // this effect a second time.
     // Command the machine once per run. Keyed on `runId` rather than a bare
     // mount, because this component is never remounted any more.
+    React.useEffect(() => {
+        if (recipe === null || !CLEARS_ITSELF.has(phase.name)) return;
+        const timer = setTimeout(onDismiss, STOPPED_BAR_MS);
+        return () => clearTimeout(timer);
+        // `onDismiss` is a fresh closure every render; including it would
+        // restart the countdown on every sample that arrives.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recipe, phase.name]);
+
     const brewFiredRef = useRef<number | null>(null);
     React.useEffect(() => {
         if (recipe === null || brewFiredRef.current === runId) return;
