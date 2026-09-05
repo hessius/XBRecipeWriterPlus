@@ -96,6 +96,22 @@ function readout(
 }
 
 /**
+ * The longest reading this rung will ever show.
+ *
+ * The lane beside the readout is `flex: 1`, so anything the readout does to its
+ * own width moves the lane's edge -- and the readout's text changes on nearly
+ * every frame. Reserving the widest form and drawing the current one over it
+ * holds the lane still, without depending on the font's metrics.
+ */
+function widestReadout(pour: Pour): string {
+    const target = Math.max(pour.volume, 0);
+    const rest = Math.round(pauseSeconds(pour));
+    const forms = [`${target} ml`, `${target}/${target} ml`];
+    if (rest > 0) forms.push(`${rest} s left`);
+    return forms.reduce((a, b) => (b.length > a.length ? b : a));
+}
+
+/**
  * One stage, as a lane.
  *
  * The lane is `flex: 1` and takes the whole row: it was a hard-coded 120 pt,
@@ -204,11 +220,25 @@ export default function BrewStageRung({
                 )}
             </XStack>
 
-            <DotMatrixText fontSize={12} weight="bold" color={palette.dim}>
-                {state === "pending"
-                    ? `${Math.max(pour.volume, 0)} ml`
-                    : readout(pour, delivered, pauseElapsed, state)}
-            </DotMatrixText>
+            <View>
+                {/* Reserves the width; never read. The rung is one accessible
+                    element with its own label, so this is not announced. */}
+                <DotMatrixText testID="rung-readout-reserve" fontSize={12}
+                               weight="bold" color={palette.dim}
+                               style={{opacity: 0}}>
+                    {widestReadout(pour)}
+                </DotMatrixText>
+                <View style={{
+                    position: "absolute", top: 0, bottom: 0, right: 0,
+                    justifyContent: "center"
+                }}>
+                    <DotMatrixText fontSize={12} weight="bold" color={palette.dim}>
+                        {state === "pending"
+                            ? `${Math.max(pour.volume, 0)} ml`
+                            : readout(pour, delivered, pauseElapsed, state)}
+                    </DotMatrixText>
+                </View>
+            </View>
         </XStack>
     );
 }

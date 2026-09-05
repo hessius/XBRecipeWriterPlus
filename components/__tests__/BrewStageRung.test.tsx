@@ -175,4 +175,35 @@ describe("BrewStageRung", () => {
 
         expect(getByLabelText(/held once, 9 seconds/)).toBeTruthy();
     });
+
+    /**
+     * The lane is `flex: 1` and the readout beside it is sized by its text. The
+     * text changes on almost every frame -- `70 ml`, `0/70 ml`, `41/70 ml`,
+     * `14 s left` -- so the lane's right edge moved with it, and the whole
+     * ladder wiggled a few pixels as stages began and filled.
+     *
+     * The cure is to reserve the widest reading and draw the current one over
+     * it, which costs nothing and does not depend on the font's metrics.
+     */
+    it("reserves the same width whatever the readout currently says", async () => {
+        const widths: string[] = [];
+        for (const props of [
+            {state: "pending" as const, delivered: 0, pauseElapsed: 0},
+            {state: "active" as const, delivered: 0, pauseElapsed: 0},
+            {state: "active" as const, delivered: 41, pauseElapsed: 0},
+            {state: "active" as const, delivered: 70, pauseElapsed: 6},
+            {state: "done" as const, delivered: 70, pauseElapsed: 0}
+        ]) {
+            const r = await draw(props);
+            // Hidden twice over: the reserve is transparent, and the rung is a
+            // single accessible element -- so the query has to be told to look.
+            widths.push(String(r.getByTestId(
+                "rung-readout-reserve", {includeHiddenElements: true}
+            ).props.children));
+        }
+
+        expect(new Set(widths).size).toBe(1);
+        // And it is at least as wide as the widest thing it has to hold.
+        expect(widths[0].length).toBeGreaterThanOrEqual("70/70 ml".length);
+    });
 });
