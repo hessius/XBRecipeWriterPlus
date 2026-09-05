@@ -66,14 +66,27 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const [heard, setHeard] = useState<
         {from: unknown; runId: number; phase: BrewPhase} | null
     >(null);
-    // Nothing heard for this run yet: the machine's own phase stands in. It is
-    // the right stand-in except when it is a *terminal* one, which can only
-    // have come from the run before -- this run has not had time to end. On
-    // device that showed as the last brew's STOPPED sitting over the new one.
+    // Nothing heard for this run yet.
+    //
+    // If the app started this brew, nothing the machine said before the run
+    // began belongs to it: the machine is still sitting in whatever phase the
+    // last brew left it in, and showing that is how a new brew came to wear the
+    // previous one's status. An earlier fix mapped only *terminal* stand-ins to
+    // `waking`, which removed the stale STOPPED and left every other leftover
+    // phase -- a machine still grinding from the last run -- showing through.
+    //
+    // A brew started by pressing play on the machine has no app-side send, and
+    // the machine's own phase is then the only truth there is -- the app has to
+    // join it in progress. So this is a distinction between a run the app
+    // started and a run it joined, not a refusal to read the machine. `recipe`
+    // is read straight, not through recipeRef: `react-hooks/refs` forbids a ref
+    // read during render, and before any phase is heard the prop still holds
+    // the recipe the run was started with.
+    const ours = recipe !== null;
     const fresh = heard !== null && heard.from === machine && heard.runId === runId;
     const phase: BrewPhase = fresh
         ? heard.phase
-        : OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
+        : ours || OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
     // A brew's recipe is fixed at start. Hold the latest value in a ref so

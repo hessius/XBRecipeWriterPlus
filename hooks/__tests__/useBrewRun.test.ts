@@ -290,6 +290,27 @@ describe("useBrewRun", () => {
         expect(h.written).toHaveLength(1);
         expect(h.written[0].record.recipeName).toBe("New Recipe");
     });
+    it("shows a run as waking until it hears a phase of its own", async () => {
+        // The machine is sitting in the phase the *last* brew left it in. This
+        // run is app-started, so nothing the machine said before it began
+        // belongs to it -- a leftover non-terminal phase must not leak through.
+        const h = harness();
+        global.__brewer.machine.phase = {name: "grinding"};
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+
+        expect(result.current.phase).toEqual({name: "waking"});
+    });
+
+    it("adopts the machine's phase for a brew it did not start", async () => {
+        // Play pressed on the machine: there is no app-side send, and the
+        // machine's phase is the only truth there is. The app joins in progress.
+        const h = harness();
+        global.__brewer.machine.phase = {name: "grinding"};
+        const {result} = await renderHook(() => useBrewRun(null, h.store));
+
+        expect(result.current.phase).toEqual({name: "grinding"});
+    });
+
     it("forgets the old machine's phase when a new one arrives", async () => {
         // A reconnect hands us a fresh machine with a fresh recorder. The phase
         // the previous one was left in describes a brew that is no longer ours,
