@@ -101,7 +101,17 @@ export default function BrewStageLadder({
 
     // Only a ladder that cannot fit is allowed to scroll. A ScrollView that
     // never scrolls still swallows the drag that dismisses the modal.
-    if (!scrolls) return <YStack testID="ladder" flex={1}>{rows}</YStack>;
+    // Centred, not top-aligned. `allocateBands` fills the screen exactly from
+    // four stages up, but at two or three the ceilings bite and there is height
+    // left over; pooled at the foot it reads as a layout that ran out, and
+    // split around the ladder it reads as margin.
+    if (!scrolls) {
+        return (
+            <YStack testID="ladder" flex={1} justifyContent="center">
+                {rows}
+            </YStack>
+        );
+    }
 
     return (
         <ScrollView ref={scroller} style={{flex: 1}}>

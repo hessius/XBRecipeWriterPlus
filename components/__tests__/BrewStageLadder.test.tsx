@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
 import {palette} from "@/constants/colors";
@@ -100,5 +101,21 @@ describe("BrewStageLadder", () => {
         expect(getByTestId("rung-0").props.style).toEqual(
             expect.objectContaining({opacity: 0.45})
         );
+    });
+
+    it("centres the rungs in the room it is given", async () => {
+        // At two or three stages the ceilings in `allocateBands` bite and there
+        // is height left over. Top-aligned, that pools as black at the foot of
+        // the screen and reads as a layout that ran out.
+        const {getByTestId} = await draw({
+            pours: pours(2),
+            stageWater: [40, 0],
+            stalls: [[], []]
+        });
+
+        const style = StyleSheet.flatten(
+            getByTestId("ladder").props.style
+        ) as {justifyContent?: string};
+        expect(style.justifyContent).toBe("center");
     });
 });
