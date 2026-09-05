@@ -2,7 +2,7 @@ import {useEffect, useState} from "react";
 
 import {ATTRACT, useReducedMotion} from "@/constants/motion";
 import {useSetting} from "@/hooks/useSetting";
-import {flickerMsFor} from "@/library/brew/grindFlicker";
+import {EDGE_EPSILON, flickerMsFor, grindEdgeElapsed, msToNextGrindEdge} from "@/library/brew/grindFlicker";
 
 export type TraceAnimation = {
     /** Multiplier on the plan's stroke opacity. */
@@ -54,8 +54,11 @@ export function traceAnimationFor(
     }
     if (phase === "grinding") {
         // A square wave, not a sine: grinding is loud, and a smooth fade reads
-        // as calm. Opacity is deliberately untouched.
-        const on = Math.floor(elapsedMs / flickerMsFor(grindRpm)) % 2 === 0;
+        // as calm. Opacity is deliberately untouched. The nudge is what keeps
+        // an elapsed sitting exactly on an edge -- every reading the hook
+        // publishes is a multiple of `half` -- from floating just under its own
+        // multiple and reading a half-beat behind.
+        const on = Math.floor(elapsedMs / flickerMsFor(grindRpm) + EDGE_EPSILON) % 2 === 0;
         return {opacity: 1, warmth: on ? 1 : 0.15, headAt: 1, dashed: true};
     }
     return STILL;
@@ -85,31 +88,45 @@ export function useTraceAnimation(phase: string, grindRpm: number): TraceAnimati
         // second, for minutes, to no visible effect.
         if (!animate || !MOVING.has(phase)) return;
         const start = Date.now();
-        // The grind is sampled at frame rate; the other two phases are not.
-        // Its half-period is 83 ms at the fastest burr, so the old 50 ms clock
-        // would put fewer than two readings in each half of the square wave
-        // and the flicker would alias into a stutter -- uneven, but from the
-        // sampler rather than from the grinder. A breath and a send are slow
-        // ramps and stay on the cheaper clock.
-        //
-        // The cost is bounded in a way `pouring`'s would not be: a grind is
-        // about twenty seconds, which is why it is clocked at all and why
-        // `pouring`, which is minutes, is deliberately not.
-        const period = phase === "grinding" ? 16 : 50;
-        const half = flickerMsFor(grindRpm);
+
+        // The grind flickers as a square wave, and a square wave has nothing to
+        // say between its edges. So rather than sample it on a clock and
+        // discover each edge a frame or two late -- which quantises every half
+        // of the wave to a multiple of the sample period and makes the flicker
+        // drift faster then slower on a beat -- the reading is *scheduled*:
+        // a self-correcting `setTimeout` aimed at the next true edge, re-armed
+        // from the wall clock on each fire so lateness never accumulates. That
+        // toggles at one exact rate and wakes the JS thread only at the edges,
+        // not sixty times a second to redraw the same thing. `grindEdgeElapsed`
+        // holds the published reading on the multiple of `half` it just crossed
+        // so React still bails out of re-rendering between edges.
+        if (phase === "grinding") {
+            const half = flickerMsFor(grindRpm);
+            let timer: ReturnType<typeof setTimeout>;
+            const arm = () => {
+                const ms = Date.now() - start;
+                const elapsed = grindEdgeElapsed(ms, half);
+                setTicked((prev) => prev !== null && prev.phase === phase && prev.elapsed === elapsed
+                    ? prev
+                    : {phase, elapsed});
+                timer = setTimeout(arm, msToNextGrindEdge(ms, half));
+            };
+            timer = setTimeout(arm, msToNextGrindEdge(0, half));
+            return () => clearTimeout(timer);
+        }
+
+        // A breath and a send are smooth ramps, not a wave with edges, so they
+        // legitimately want a steady clock and every tick of it draws something
+        // new. `pouring` is excluded above: it is the longest phase and draws
+        // the same thing at every millisecond, so a timer through it would
+        // repaint several hundred points twenty times a second, for minutes,
+        // to no visible effect.
         const tick = setInterval(() => setTicked((prev) => {
-            const ms = Date.now() - start;
-            // Grinding is sampled far faster than its output changes, so the
-            // reading is snapped to the edge of the square wave it drives.
-            // Returning the previous object unchanged is what lets React bail
-            // out of the render: a fresh literal every 16 ms would re-run the
-            // whole screen sixty times a second to draw the same thing five
-            // times over.
-            const elapsed = phase === "grinding" ? Math.floor(ms / half) * half : ms;
+            const elapsed = Date.now() - start;
             return prev !== null && prev.phase === phase && prev.elapsed === elapsed
                 ? prev
                 : {phase, elapsed};
-        }), period);
+        }), 50);
         return () => clearInterval(tick);
     }, [phase, animate, grindRpm]);
 

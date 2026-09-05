@@ -147,46 +147,69 @@ describe("useTraceAnimation", () => {
         expect(stopped).toBe(1);
     });
 
-    it("samples the grind fast enough to draw its square wave", async () => {
-        // At least two readings in each half of the wave. Sampled any slower,
-        // the flicker aliases into a stutter -- uneven, but from the sampler
-        // rather than from the grinder, which is the opposite of the point.
-        await renderHook(() => useTraceAnimation("grinding", 120));
-        expect(started[0]).toBeLessThanOrEqual(flickerMsFor(120) / 2);
+    it("schedules the grind to the wave's edges, not on a frame clock", async () => {
+        // The grind is a square wave, and a square wave says nothing between
+        // its edges. So no frame-rate sampler runs at all -- the old 16 ms
+        // interval is gone -- and the reading is instead scheduled to flip at
+        // the edge itself. Nothing changes for the first half-beat; the flip
+        // lands once it is crossed.
+        jest.restoreAllMocks();
+        const {result} = await renderHook(() => useTraceAnimation("grinding", 120));
+        const half = flickerMsFor(120);
+        const before = result.current.warmth;
+        await act(async () => { jest.advanceTimersByTime(Math.floor(half) - 1); });
+        expect(result.current.warmth).toBe(before);
+        await act(async () => { jest.advanceTimersByTime(2); });
+        expect(result.current.warmth).not.toBe(before);
     });
 
-    it("tells React only when the flicker changes, not on every frame", async () => {
-        // The grind is sampled at frame rate, but its output is a square wave
-        // that changes about twelve times a second. Without the bail-out every
-        // one of those frames would allocate a fresh reading and re-run the
-        // whole brew screen to draw the same thing five times over -- on the
-        // JS thread, for the twenty seconds of a grind, while BLE weight
-        // notifications are being decoded.
-        let renders = 0;
-        await renderHook(() => {
-            renders += 1;
-            return useTraceAnimation("grinding", 120);
-        });
-        const before = renders;
-
-        // Six frames is 96 ms, which crosses exactly one edge of an 83 ms
-        // half-period: 16, 32, 48, 64, 80 all land in the same half; 96 is the
-        // next one. That is two real state changes, so two renders -- plus one
-        // more that measurement showed is unavoidable here: React's cheapest
-        // bail-out (skipping the render call entirely) only applies when a
-        // fiber has no update already in flight, so the update immediately
-        // after a real change still calls the component once to discover it
-        // changed nothing, even though it returns the previous object. Every
-        // update after that one is free. Six renders -- one per frame, with no
-        // bail-out at all -- is what the mutation below produces.
-        for (let i = 0; i < 6; i += 1) {
-            await act(async () => {
-                jest.advanceTimersByTime(16);
-                ticks[0]();
-            });
+    it("wakes the JS thread only at the wave's edges, not every frame", async () => {
+        // Scheduling to the edges means the timer is re-armed about twelve
+        // times a second at the fastest burr -- once per edge -- not sixty. The
+        // old frame sampler woke the thread every 16 ms to redraw the same
+        // thing while BLE weight notifications were being decoded. Counted as
+        // re-arms rather than renders, because a sampler with the same bail-out
+        // re-renders exactly as seldom -- it just wakes far more often to
+        // decide not to.
+        jest.restoreAllMocks();
+        jest.useFakeTimers();
+        await renderHook(() => useTraceAnimation("grinding", 120));
+        const spy = jest.spyOn(global, "setTimeout");
+        for (let t = 0; t < 1000; t += 1) {
+            await act(async () => { jest.advanceTimersByTime(1); });
         }
+        // Counted among the re-arms only -- delays at a half-beat and up, which
+        // at the fastest burr is 83 ms. React's own scheduler fires a swarm of
+        // zero-delay timers that are not ours. A 16 ms sampler would arm none
+        // this long, and a reintroduced one uses `setInterval` and arms no
+        // `setTimeout` at all.
+        const arms = spy.mock.calls.filter((c) => Number(c[1]) >= 50).length;
+        expect(arms).toBeGreaterThanOrEqual(10);
+        expect(arms).toBeLessThanOrEqual(14);
+    });
 
-        expect(renders - before).toBeLessThanOrEqual(3);
+    it("flickers at one steady rate, not faster then slower on a loop", async () => {
+        // The bug this pins: the grind reading was sampled on a 16 ms clock,
+        // so each half of an 83 ms square wave was rounded to the nearest
+        // frame -- 80 ms one time, 96 ms the next -- and which one you got
+        // drifted, so the flicker sped up and slowed down on a beat. Driven
+        // here through three seconds of a real fake clock and sampled once a
+        // millisecond (so the measurement itself adds at most 1 ms of spread),
+        // every lit and dark interval must be the same length.
+        jest.restoreAllMocks();
+        const {result} = await renderHook(() => useTraceAnimation("grinding", 120));
+        const flips: number[] = [];
+        let warm = result.current.warmth;
+        for (let t = 1; t <= 3000; t += 1) {
+            await act(async () => { jest.advanceTimersByTime(1); });
+            if (result.current.warmth !== warm) {
+                flips.push(t);
+                warm = result.current.warmth;
+            }
+        }
+        const intervals = flips.slice(1).map((t, i) => t - flips[i]);
+        expect(intervals.length).toBeGreaterThan(20);
+        expect(Math.max(...intervals) - Math.min(...intervals)).toBeLessThanOrEqual(2);
     });
 
     it("starts the new phase from nothing, not from where the last one got to", async () => {

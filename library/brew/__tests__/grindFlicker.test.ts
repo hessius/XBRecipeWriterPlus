@@ -1,4 +1,11 @@
-import {flickerMsFor, FLICKER_BEATS_PER_TURN} from "@/library/brew/grindFlicker";
+import {
+    EDGE_EPSILON,
+    flickerMsFor,
+    FLICKER_BEATS_PER_TURN,
+    grindEdgeElapsed,
+    msToNextGrindEdge
+} from "@/library/brew/grindFlicker";
+import {traceAnimationFor} from "@/hooks/useTraceAnimation";
 
 describe("the grinder's flicker", () => {
     it("beats three times per turn of the burr", () => {
@@ -45,5 +52,74 @@ describe("the grinder's flicker", () => {
         // entirely. Doubling the beat would put it at twelve, which is not.
         const flashesPerSecond = 1000 / (flickerMsFor(120) * 2);
         expect(flashesPerSecond).toBeLessThan(7);
+    });
+});
+
+describe("scheduling the grind to its edges", () => {
+    // Walk the self-correcting timer the hook runs, in exact arithmetic with no
+    // sampler and no latency, and read the wave it drives through the real
+    // `traceAnimationFor` rather than a second copy of the parity rule -- so a
+    // test that the flips are evenly spaced is not just testing its own
+    // reimplementation. From a fresh grind, re-arm to the next edge, publish
+    // the snapped reading the way the hook does, and note every time the lit
+    // half flips to dark or back.
+    function flipsFor(rpm: number, edges: number): number[] {
+        const half = flickerMsFor(rpm);
+        const flips: number[] = [];
+        let ms = 0;
+        let lit = traceAnimationFor("grinding", grindEdgeElapsed(ms, half), true, rpm).warmth === 1;
+        for (let i = 0; i < edges; i += 1) {
+            ms += msToNextGrindEdge(ms, half);
+            const nowLit = traceAnimationFor("grinding", grindEdgeElapsed(ms, half), true, rpm)
+                .warmth === 1;
+            if (nowLit !== lit) flips.push(ms);
+            lit = nowLit;
+        }
+        return flips;
+    }
+
+    it("flips the wave at one constant interval, for every burr in range", () => {
+        // The whole fix: the interval between successive flips has exactly one
+        // value. The old frame sampler made it alternate between the floor and
+        // the ceiling of a 16 ms grid, and which one drifted -- the beat the
+        // user saw as speeding up then slowing down.
+        for (const rpm of [60, 70, 80, 90, 100, 110, 120]) {
+            const half = flickerMsFor(rpm);
+            const flips = flipsFor(rpm, 300);
+            const intervals = flips.slice(1).map((t, i) => t - flips[i]);
+            const distinct = new Set(intervals.map((v) => v.toFixed(6)));
+            expect(distinct.size).toBe(1);
+            expect(intervals[0]).toBeCloseTo(half, 6);
+        }
+    });
+
+    it("never drops a flip to a floating-point crumb on an exact multiple", () => {
+        // `n * half` does not round-trip through `floor(x / half)` for most
+        // burrs, so without the nudge about one edge in ten kept the same
+        // parity as the last and the wave stalled for a beat. Three hundred
+        // edges at 120 rpm cross that fault many times; every one must flip.
+        const flips = flipsFor(120, 300);
+        expect(flips.length).toBe(300);
+    });
+
+    it("aims at the next edge and never at zero, wherever it is asked from", () => {
+        const half = flickerMsFor(120);
+        // Exactly on an edge, the next is a whole half-beat away, not now: a
+        // zero delay would spin the timer.
+        expect(msToNextGrindEdge(0, half)).toBeCloseTo(half, 6);
+        expect(msToNextGrindEdge(half, half)).toBeCloseTo(half, 6);
+        // Partway through, only the remainder is left.
+        expect(msToNextGrindEdge(half * 0.25, half)).toBeCloseTo(half * 0.75, 6);
+        // An unset speed still yields the fastest burr's positive half-beat,
+        // never a zero or negative interval.
+        expect(msToNextGrindEdge(0, flickerMsFor(-1))).toBeGreaterThan(0);
+    });
+
+    it("holds the published reading on the multiple it last crossed", () => {
+        const half = flickerMsFor(120);
+        expect(grindEdgeElapsed(half * 0.9, half)).toBe(0);
+        expect(grindEdgeElapsed(half * 1.5, half)).toBeCloseTo(half, 6);
+        // The nudge is small enough not to move an honest mid-interval reading.
+        expect(EDGE_EPSILON).toBeLessThan(1e-6);
     });
 });
