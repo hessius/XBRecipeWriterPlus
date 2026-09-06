@@ -2,13 +2,11 @@ import {File as FSFile, Paths} from "expo-file-system";
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, StyleSheet, View, useWindowDimensions} from "react-native";
+import {Pressable, useWindowDimensions} from "react-native";
 import ViewShot, {type ViewShotRef} from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
-import BrewFigures from "@/components/BrewFigures";
-import BrewStageLadder from "@/components/BrewStageLadder";
-import BrewTrace from "@/components/BrewTrace";
+import BrewSummary from "@/components/BrewSummary";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
@@ -18,8 +16,6 @@ import {ladderFrontier} from "@/library/brew/ladderState";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
-
-const TRACE_HEIGHT = 150;
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
@@ -221,73 +217,27 @@ export default function BrewRecord({recipeLookup}: Props) {
 
     return (
         <YStack flex={1} backgroundColor={palette.base} paddingVertical="$4" gap="$3">
-            <Text color={palette.dim} fontSize={13}
-                  paddingHorizontal={SCREEN_PADDING}>{record.recipeName}</Text>
-
-            {/* Everything worth sharing sits inside the ViewShot: the trace,
-                the figures and the stage ladder — a brew with long waits is
-                mostly ladder, and an image without it says little. The screen's
-                horizontal padding lives in here rather than on the parent,
-                because a capture inherits neither margin nor background from
-                its ancestors: outside it, the PNG came out edge-to-edge on
-                white, which made the dot-matrix figures near-invisible. */}
+            {/* Everything worth sharing sits inside the ViewShot: the recipe
+                name, the trace, the figures and the stage ladder. BrewSummary
+                owns its own background and padding, because a capture inherits
+                neither margin nor background from its ancestors. */}
             <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
-            <View testID="brew-capture" style={styles.capture}>
-                {record.hasStream ? (
-                    <BrewTrace
-                        pours={[]}
-                        samples={samples}
-                        accent={accent}
-                        width={width - SCREEN_PADDING * 2}
-                        height={TRACE_HEIGHT}
-                        plannedSeconds={plannedSecs}
-                        planOpacity={0}
-                        planColor={palette.muted}
-                        planDashed={false}
-                    />
-                ) : (
-                    <YStack height={TRACE_HEIGHT} alignItems="center"
-                            justifyContent="center">
-                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6}
-                                       color={palette.muted}>
-                            NO TRACE KEPT
-                        </DotMatrixText>
-                        <Text color={palette.muted} fontSize={12} marginTop="$2"
-                              textAlign="center">
-                            No trace was kept for this brew.
-                        </Text>
-                    </YStack>
-                )}
-
-                <BrewFigures
+                <BrewSummary
+                    recipeName={record.recipeName}
+                    hasStream={record.hasStream}
+                    samples={samples}
+                    stages={stages}
+                    accent={accent}
+                    width={width}
+                    plannedSeconds={plannedSecs}
                     water={record.waterTotal}
                     cup={record.cupTotal}
                     seconds={durationSeconds}
-                    accent={accent}
+                    activeIndex={ladderFrontier(record.outcome, delivered)}
+                    stageWater={delivered}
+                    stalls={record.stalls ?? stages.map(() => [])}
+                    stagesUnavailable={snapshot.length === 0 && recipe === null}
                 />
-                {/* Spaced by hand: the capture has no gap, so the trace and
-                    the figures stay flush the way they were on screen. */}
-                <YStack marginTop="$3">
-                {snapshot.length > 0 || recipe !== null ? (
-                    <BrewStageLadder
-                        pours={stages}
-                        accent={accent}
-                        activeIndex={ladderFrontier(record.outcome, delivered)}
-                        barHeight={11}
-                        rungGap={8}
-                        scrolls={false}
-                        fill={false}
-                        stageWater={delivered}
-                        stalls={record.stalls ?? stages.map(() => [])}
-                        pauseElapsed={0}
-                    />
-                ) : (
-                    <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
-                        Recipe deleted. Stages not available.
-                    </DotMatrixText>
-                )}
-                </YStack>
-            </View>
             </ViewShot>
 
             <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
@@ -300,14 +250,3 @@ export default function BrewRecord({recipeLookup}: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    /**
-     * The captured subtree needs its own background and padding: a ViewShot
-     * renders what is inside it, so anything the screen supplies from further
-     * out is simply not in the PNG.
-     */
-    capture: {
-        backgroundColor: palette.base,
-        padding:         SCREEN_PADDING
-    }
-});

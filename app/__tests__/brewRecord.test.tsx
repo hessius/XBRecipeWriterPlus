@@ -8,7 +8,6 @@ import {File as FSFile} from "expo-file-system";
 import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
 import {palette} from "@/constants/colors";
-import {SCREEN_PADDING} from "@/constants/layout";
 import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -309,7 +308,9 @@ describe("brew record", () => {
             screen.getByTestId("brew-capture").props.style as StyleProp<ViewStyle>
         );
         expect(style?.backgroundColor).toBe(palette.base);
-        expect(style?.padding).toBe(SCREEN_PADDING);
+        // Screen padding (18) plus the export margin (12); pinned as a literal
+        // so shrinking the margin to 0 cannot pass this test unnoticed.
+        expect(style?.padding).toBe(30);
     });
 
     it("pressing Export the data writes the file and calls shareAsync with the file URI", async () => {
