@@ -23,6 +23,18 @@ type Props = {
     rungGap: number;
     /** True when the bands are at their floors and the list will not fit. */
     scrolls: boolean;
+    /**
+     * Whether the ladder should stretch to fill its parent with `flex: 1` and
+     * centre the rungs vertically (`justifyContent: "center"`).
+     *
+     * Set `true` only when the parent has a bounded height — `flex: 1` inside
+     * an auto-height container (e.g. a `ViewShot`) collapses to zero, and
+     * `justifyContent: "center"` then stacks every rung on top of the last.
+     * The component cannot detect this itself, so the caller must say.
+     *
+     * Ignored when `scrolls === true`.
+     */
+    fill: boolean;
     /** Millilitres delivered, index-aligned with `pours`. */
     stageWater: number[];
     /** Index-aligned with `pours`. */
@@ -39,7 +51,7 @@ type Props = {
  * and a nine-stage one sits at every floor and scrolls.
  */
 export default function BrewStageLadder({
-    pours, accent, activeIndex, barHeight, rungGap, scrolls, stageWater, stalls,
+    pours, accent, activeIndex, barHeight, rungGap, scrolls, fill, stageWater, stalls,
     pauseElapsed
 }: Props) {
     const scroller = useRef<ScrollView>(null);
@@ -106,8 +118,12 @@ export default function BrewStageLadder({
     // left over; pooled at the foot it reads as a layout that ran out, and
     // split around the ladder it reads as margin.
     if (!scrolls) {
-        return (
+        return fill ? (
             <YStack testID="ladder" flex={1} justifyContent="center">
+                {rows}
+            </YStack>
+        ) : (
+            <YStack testID="ladder">
                 {rows}
             </YStack>
         );

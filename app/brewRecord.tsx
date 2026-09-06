@@ -276,6 +276,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                         barHeight={11}
                         rungGap={8}
                         scrolls={false}
+                        fill={false}
                         stageWater={delivered}
                         stalls={record.stalls ?? stages.map(() => [])}
                         pauseElapsed={0}

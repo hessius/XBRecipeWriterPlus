@@ -20,6 +20,7 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageLadd
             barHeight={11}
             rungGap={8}
             scrolls={false}
+            fill={true}
             stageWater={[40, 20, 0, 0]}
             stalls={[[], [], [], []]}
             pauseElapsed={0}
@@ -109,6 +110,7 @@ describe("BrewStageLadder", () => {
         // the screen and reads as a layout that ran out.
         const {getByTestId} = await draw({
             pours: pours(2),
+            fill: true,
             stageWater: [40, 0],
             stalls: [[], []]
         });
@@ -117,5 +119,31 @@ describe("BrewStageLadder", () => {
             getByTestId("ladder").props.style
         ) as {justifyContent?: string};
         expect(style.justifyContent).toBe("center");
+    });
+
+    it("fill=false: no flex, no justifyContent on the ladder root", async () => {
+        // React Native Testing Library performs no layout; this test pins the
+        // *intent* (which style props are set), not the visual result. Confirm
+        // the actual rendering on a device.
+        const {getByTestId} = await draw({fill: false, scrolls: false});
+
+        const style = StyleSheet.flatten(
+            getByTestId("ladder").props.style
+        ) as Record<string, unknown>;
+        expect(style?.flex).toBeUndefined();
+        expect(style?.justifyContent).toBeUndefined();
+    });
+
+    it("fill=true: flex=1 and justifyContent=center on the ladder root", async () => {
+        // React Native Testing Library performs no layout; this test pins the
+        // *intent* (which style props are set), not the visual result. Confirm
+        // the actual rendering on a device.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+
+        const style = StyleSheet.flatten(
+            getByTestId("ladder").props.style
+        ) as Record<string, unknown>;
+        expect(style?.flex).toBe(1);
+        expect(style?.justifyContent).toBe("center");
     });
 });

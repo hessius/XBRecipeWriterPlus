@@ -185,6 +185,7 @@ export default function Brew() {
                     barHeight={bands.barHeight}
                     rungGap={bands.rungGap}
                     scrolls={bands.scrolls}
+                    fill={true}
                     stageWater={stageWater}
                     stalls={stalls}
                     pauseElapsed={pauseElapsed}
