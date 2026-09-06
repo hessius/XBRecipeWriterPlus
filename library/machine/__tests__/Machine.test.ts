@@ -6,7 +6,7 @@ import {buildType1} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
-import {event, notification, status} from "./protocolFixtures";
+import {event, float32, notification, status} from "./protocolFixtures";
 
 /** A pour-start event carrying the machine's own zero-based pour index. */
 function Uint8ArrayPourEvent(index: number): number[] {
@@ -1572,5 +1572,69 @@ describe("a stale state does not refuse a fresh brew", () => {
         transport.emit(status(0x0F));
 
         expect(machine.brewBlock(sixPourRecipe())?.kind).toBe("noBeans");
+    });
+});
+
+describe("the retained frame history", () => {
+    /** A cup-weight frame (type 0x15): grams straight off the wire. */
+    function cupWeight(grams: number): number[] {
+        return notification(0x15, 0x00, float32(grams));
+    }
+    /** A water-weight frame (type 0x4B): milligrams on the wire. */
+    function waterWeight(grams: number): number[] {
+        return notification(0x4B, 0x00, float32(grams * 1000));
+    }
+
+    it("keeps states, events and unknown frames but drops the weight stream", async () => {
+        const {transport, machine} = await readyMachine();
+        const before = machine.frameHistory.length;
+
+        transport.emit(status(0x22));                              // a state
+        transport.emit(event(40507));                             // an event
+        transport.emit([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);  // no header -> unknown
+        transport.emit(cupWeight(7.8));                          // weight, must be dropped
+        transport.emit(waterWeight(12));                        // weight, must be dropped
+
+        const kinds = machine.frameHistory.slice(before).map((entry) => entry.parsed.kind);
+        expect(kinds).toEqual(["status", "event", "unknown"]);
+    });
+
+    it("never exceeds its cap and evicts the oldest first", async () => {
+        const {transport, machine} = await readyMachine();
+        // Distinct event codes so eviction order is legible. 300 is comfortably
+        // past the cap, which is pinned below to a literal so mutating the
+        // constant to something absurd would still be caught.
+        for (let i = 0; i < 300; i++) transport.emit(event(40000 + i));
+
+        expect(machine.frameHistory.length).toBe(256);
+        const codes = machine.frameHistory.map((entry) =>
+            entry.parsed.kind === "event" ? entry.parsed.code : -1);
+        // The last 256 emitted survive, in order: 40044..40299. The earliest —
+        // 40000 and everything before it — has been evicted.
+        expect(codes[0]).toBe(40044);
+        expect(codes.at(-1)).toBe(40299);
+        expect(codes).not.toContain(40000);
+    });
+
+    it("stamps each entry with a wall clock and keeps its raw bytes", async () => {
+        const {machine, transport} = await readyMachine();
+        const before = Date.now();
+        const frame = status(0x22);
+
+        transport.emit(frame);
+
+        const entry = machine.frameHistory.at(-1);
+        expect(entry?.at).toBeGreaterThanOrEqual(before);
+        expect(entry ? Array.from(entry.frame) : null).toEqual(frame);
+    });
+
+    it("survives a disconnect, so the log spanning the drop is the one that is kept", async () => {
+        const {transport, machine} = await readyMachine();
+        transport.emit(event(40507));
+        const kept = machine.frameHistory.length;
+
+        transport.drop();
+
+        expect(machine.frameHistory.length).toBe(kept);
     });
 });
