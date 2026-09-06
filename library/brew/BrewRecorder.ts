@@ -45,8 +45,14 @@ export default class BrewRecorder {
     private unsubscribers: (() => void)[] = [];
 
     private startedAt = 0;
-    /** Wall clock of the first drop, or 0 before it. The samples' zero. */
+    /** Wall clock of the first water that moved, or 0 before it. The samples' zero. */
     private pouringAt = 0;
+    /** True once the pour phase has opened, so the backstop knows a brew began. */
+    private pourOpened = false;
+    /** Wall clock when the pour phase opened — the fallback zero if water never moves. */
+    private pourOpenedAt = 0;
+    /** The water reading when the pour opened; the clock starts once it rises past it. */
+    private pourBaselineWater = 0;
     private pour = 0;
     private pours = 0;
     private cup = 0;
@@ -124,9 +130,21 @@ export default class BrewRecorder {
         // through anyway.
         if (parsed.kind !== "waterWeight") return;
         this.lastWater = parsed.grams;
-        // Before the first drop the machine is grinding and the plan has not
-        // started. Nothing it says then belongs on the plan's axis.
-        if (this.pouringAt === 0) return;
+        if (this.pouringAt === 0) {
+            // Before the pour opens the machine is grinding; nothing it says
+            // then belongs on the plan's axis.
+            if (!this.pourOpened) return;
+            // The pour phase opens on GRINDER_STOP, seconds before water moves
+            // while the machine heats. Start the clock — and the trace — on the
+            // first reading that has risen past the noise floor above where the
+            // phase opened, so `at = 0` means "water started", not "grinder
+            // stopped", and the trace does not open with a flat run of dead
+            // time. NOISE_FLOOR_ML is the right scale for "a real change or just
+            // the scale"; unlike the lift test, where a ratcheting peak made it
+            // three orders of magnitude too small.
+            if (parsed.grams - this.pourBaselineWater <= NOISE_FLOOR_ML) return;
+            this.pouringAt = this.clock();
+        }
         this.push(parsed.grams);
     }
 
@@ -140,11 +158,31 @@ export default class BrewRecorder {
         });
     }
 
+    /**
+     * Anchor the samples' zero when water never started the clock itself.
+     *
+     * The clock is meant to start on the first water that moves. If that never
+     * happens — a silent channel, or a reading that never rises past the noise
+     * floor — a genuine brew would otherwise keep `pouringAt` at 0 and discard
+     * every frame. Fall back to where the pour opened, which is where the clock
+     * used to start: a degraded zero, but a real record beats an empty one.
+     */
+    private ensurePouringAt(): void {
+        if (this.pouringAt === 0 && this.pourOpened) this.pouringAt = this.pourOpenedAt;
+    }
+
     private observe(phase: BrewPhase): void {
         if (phase.name === "pouring") {
-            if (this.pouringAt === 0) this.pouringAt = this.clock();
             this.pour = phase.pour;
             this.pours = phase.pours;
+            if (!this.pourOpened) {
+                // The phase opens on GRINDER_STOP, not on water arriving. Note
+                // where and when it opened, but leave the clock unstarted: it
+                // begins on the first water that actually moves (see `receive`).
+                this.pourOpened = true;
+                this.pourOpenedAt = this.clock();
+                this.pourBaselineWater = this.lastWater;
+            }
             return;
         }
         // Non-terminal: water is done but coffee is still draining onto the
@@ -168,6 +206,11 @@ export default class BrewRecorder {
         // BREWER_STOP can only arrive once, but a missed one lets ENJOY fall
         // through to settling too, so guard against arming twice.
         if (this.settling || this.emitted) return;
+        // Water may never have crossed the threshold — a silent or barely
+        // moving channel — so the clock never started. Anchor it now, before
+        // the drawdown arrives on the cup channel, or those frames would be
+        // gated out at a zero of 0 and the settle would record nothing.
+        this.ensurePouringAt();
         this.settling = true;
         this.settlePeak = this.cup;
         this.settleAnchorCup = this.cup;
@@ -210,6 +253,10 @@ export default class BrewRecorder {
         // that drops mid-cancel produces two terminals for one brew.
         if (this.emitted) return;
         this.emitted = true;
+        // If a brew opened but water never moved the clock, fall back to where
+        // the pour opened so the record has a coherent, non-zero zero rather
+        // than being silently discarded — the defect-5 failure shape again.
+        this.ensurePouringAt();
         this.stop();
 
         const {recipe} = this.options;

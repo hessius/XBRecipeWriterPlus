@@ -66,14 +66,32 @@ describe("BrewRecorder", () => {
         expect(recorder.samples).toHaveLength(0);
     });
 
-    it("times samples from the first pour, not from the press", () => {
+    it("starts the clock at the first water, not at the grinder stopping", () => {
+        // The pour phase opens on GRINDER_STOP — the grinder finishing — and
+        // the machine then heats for a few seconds before the first drop. The
+        // clock, and so the trace, must start on that first drop: its `at` is 0
+        // rather than carrying the heat time the user never saw as a pour.
         const {fake, time, recorder} = build();
         time.advance(30_000);              // a long grind
         fake.phase({name: "pouring", pour: 1, pours: 2});
-        time.advance(5_000);
+        time.advance(5_000);               // heating: no water is moving yet
         fake.cup(4);
-        fake.water(20);
-        expect(recorder.samples).toEqual([{at: 5000, water: 20, cup: 4, pour: 1}]);
+        fake.water(20);                    // the first drop
+        expect(recorder.samples).toEqual([{at: 0, water: 20, cup: 4, pour: 1}]);
+    });
+
+    it("ignores the heating lead-in until water rises past the noise floor", () => {
+        // Between GRINDER_STOP and the first drop the scale still twitches. A
+        // change of 0.5 g or less is the scale settling, not water — pinned to
+        // the literal so mutating NOISE_FLOOR_ML to zero admits the twitches
+        // and fails this test. The first reading past it starts the clock.
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(0.3);                   // a twitch, below the floor
+        fake.water(0.5);                   // exactly the floor is not past it
+        expect(recorder.samples).toHaveLength(0);
+        fake.water(0.6);                   // past 0.5: water is really moving
+        expect(recorder.samples).toEqual([{at: 0, water: 0.6, cup: 0, pour: 1}]);
     });
 
     it("samples on water and carries the last cup weight through", () => {
@@ -265,21 +283,50 @@ describe("BrewRecorder", () => {
         expect(records[0].record.endedAt).toBeGreaterThan(enteredSettling);
     });
 
-    it("marks where the samples' zero is, so the record can draw them", () => {
+    it("marks the zero at the first water, so the record can draw them", () => {
         const {fake, time, records} = build();
-        // Waking and grinding: real time passes before a drop falls.
+        // Waking and grinding, then heating: real time passes before a drop.
         time.advance(45_000);
         fake.phase({name: "pouring", pour: 1, pours: 2});
-        const firstDrop = time.now();
-        time.advance(200_000);
+        time.advance(200_000);             // heating water after the grinder stops
+        const firstWater = time.now();
         fake.water(250);
         fake.phase({name: "done"});
 
         const {record} = records[0];
-        expect(record.pouringAt).toBe(firstDrop);
-        // And it is not the start: measuring the plan from there would carry
-        // the 45 seconds of grinding into an axis the trace knows nothing of.
-        expect(record.startedAt).toBeLessThan(firstDrop);
+        expect(record.pouringAt).toBe(firstWater);
+        // Not where the phase opened: the grind and heat would otherwise sit on
+        // an axis the trace knows nothing of.
+        expect(record.startedAt).toBeLessThan(firstWater);
+    });
+
+    it("still records the drawdown when water never crossed the threshold", () => {
+        // The backstop. If the water channel is silent or never rises past the
+        // floor, the clock never starts off water. Without a fallback zero the
+        // settling cup frames would be gated out at a zero of 0 and the record
+        // would be empty — the same silent-failure shape as the defect-5 bug.
+        // The pour genuinely opened, so fall back to that and keep the frames.
+        const {fake, recorder, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        // Not one water frame ever rises past the floor.
+        fake.phase({name: "settling"});
+        fake.cup(230);
+        fake.cup(240);
+        expect(recorder.samples.length).toBeGreaterThan(0);
+        fake.phase({name: "done"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record.pouringAt).toBeGreaterThan(0);
+    });
+
+    it("still produces a record if a brew ends before water ever moved", () => {
+        // A machine that faulted or dropped in the heat window after the pour
+        // opened. The clock never started off water, but a brew did begin, so
+        // the record must exist with a coherent zero rather than vanish.
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.phase({name: "lostContact"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record.pouringAt).toBeGreaterThan(0);
     });
 
     it("leaves the zero at nothing when the brew never poured", () => {
@@ -338,6 +385,7 @@ describe("BrewRecorder", () => {
         // The plan is 70 s: 40 ml at 4 ml/s, a 20 s pause, then 160 ml at 4.
         const {fake, time, records} = build();
         fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(1);                     // the first drop starts the clock
         time.advance(84_000);
         fake.water(200);
         fake.phase({name: "done"});
