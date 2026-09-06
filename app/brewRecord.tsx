@@ -1,16 +1,14 @@
-import {File as FSFile, Paths} from "expo-file-system";
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
-import * as Sharing from "expo-sharing";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, useWindowDimensions} from "react-native";
-import ViewShot, {type ViewShotRef} from "react-native-view-shot";
+import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewSummary from "@/components/BrewSummary";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
+import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
-import {brewFilename, toExportJson} from "@/library/brew/brewExport";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -98,12 +96,10 @@ export default function BrewRecord({recipeLookup}: Props) {
         return store.getRecipe(opened.record.recipeUuid);
     });
 
-    // Ref for capturing the trace + figures as a PNG.
-    const shotRef = useRef<ViewShotRef>(null);
-
-    // Guards against a second press while an export is already in flight.
-    const isSharingImageRef = useRef(false);
-    const isSharingDataRef  = useRef(false);
+    // Export mechanics — the ViewShot ref and both shares — live in the hook,
+    // shared with the live brew modal so the two export identically. The
+    // record and its samples are already in memory here.
+    const {shotRef, shareImage, shareData} = useBrewExport(() => opened);
 
     const lastPushRef = useRef(0);
 
@@ -111,64 +107,6 @@ export default function BrewRecord({recipeLookup}: Props) {
         if (Date.now() - lastPushRef.current < 2000) return;
         lastPushRef.current = Date.now();
         router.push("/brewHistory");
-    }
-
-    /**
-     * Capture the trace + figures as a PNG and hand it to the system share
-     * sheet. Sharing can fail silently (user cancel, simulator, no share
-     * sheet) — none of those is an error worth surfacing.
-     */
-    async function shareImage() {
-        if (!opened) return;
-        if (isSharingImageRef.current) return;
-        isSharingImageRef.current = true;
-        try {
-            const uri = await shotRef.current?.capture?.();
-            if (uri === undefined) return;
-            if (!(await Sharing.isAvailableAsync())) return;
-            await Sharing.shareAsync(uri, {
-                mimeType:    "image/png",
-                // iOS decides what the share sheet may offer from the UTI, not
-                // the MIME type. Without it there is no "Save Image".
-                UTI:         "public.png",
-                dialogTitle: brewFilename(opened.record, "png")
-            });
-        } catch {
-            // User cancelled, or the share sheet is unavailable — not an error.
-        } finally {
-            isSharingImageRef.current = false;
-        }
-    }
-
-    /**
-     * Write the brew as JSON to the cache directory and share the file.
-     * The cache directory is the right place: it is writable, and the system
-     * may reclaim it when space is low, which is exactly what we want for a
-     * temporary export file.
-     *
-     * Availability is checked before writing so we do not produce a file that
-     * is never read. The temporary file is deleted after sharing: it would
-     * eventually be reclaimed anyway, but removing it immediately avoids
-     * accumulating stale exports in the cache directory.
-     */
-    async function shareData() {
-        if (!opened) return;
-        if (isSharingDataRef.current) return;
-        isSharingDataRef.current = true;
-        try {
-            if (!(await Sharing.isAvailableAsync())) return;
-            const name = brewFilename(opened.record, "json");
-            const file = new FSFile(Paths.cache, name);
-            file.write(toExportJson(opened.record, opened.samples));
-            await Sharing.shareAsync(file.uri, {
-                mimeType:    "application/json",
-                dialogTitle: name
-            });
-        } catch {
-            // User cancelled — not an error.
-        } finally {
-            isSharingDataRef.current = false;
-        }
     }
 
     useEffect(() => {

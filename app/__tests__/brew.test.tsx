@@ -1,12 +1,23 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {fireEvent} from "@testing-library/react-native";
+import {fireEvent, waitFor} from "@testing-library/react-native";
+import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
+import type {StoredBrew} from "@/library/BrewDatabase";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
+
+// The record the provider writes when a brew finishes; the in-place export
+// sources it from the injected store on press.
+const record: StoredBrew = {
+    id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
+    accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
+    failure: null, pours: 1, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
+    hasStream: true
+};
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 let mockPhase: BrewPhase = {name: "pouring", pour: 1, pours: 2};
@@ -105,8 +116,11 @@ jest.mock("@/hooks/useSetting", () => {
     return {__esModule: true, default: useSetting, useSetting};
 });
 
+const mockPush = jest.fn();
+const mockBack = jest.fn();
+
 jest.mock("expo-router", () => ({
-    router: {back: jest.fn(), push: jest.fn()},
+    router: {back: (...a: unknown[]) => mockBack(...a), push: (...a: unknown[]) => mockPush(...a)},
     useLocalSearchParams: () => ({
         view: mockView,
         recipeJSON: mockRecipeJSON
@@ -128,6 +142,8 @@ beforeEach(() => {
     mockCancelBrew.mockClear();
     mockSwitchToProAndRetry.mockClear();
     mockStart.mockClear();
+    mockPush.mockClear();
+    mockBack.mockClear();
     mockPhase = {name: "pouring", pour: 1, pours: 2};
     mockSamples = [];
     mockElapsed = 12;
@@ -262,14 +278,39 @@ describe("brew route", () => {
         expect(later.queryByText(/cup under the spout/)).toBeNull();
     });
 
-    it("offers EXPORT when the brew is over", async () => {
+    it("offers both exports in place when the brew is over, and no second screen", async () => {
         mockPhase = {name: "done"} as BrewPhase;
         mockActiveIndex = 1;
         const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
-        expect(getByLabelText("Export this brew")).toBeTruthy();
+        expect(getByLabelText("Save as image")).toBeTruthy();
+        expect(getByLabelText("Export the data")).toBeTruthy();
+        // The old flow pushed /brewRecord, a second drawing of the same brew.
+        expect(mockPush).not.toHaveBeenCalled();
         // A finished brew is not a failed one — retry would invite a second brew
         // into a full cup, and there is nothing left to cancel.
         expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("captures and shares the brew in place, without pushing /brewRecord", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        (Sharing.shareAsync as jest.Mock).mockClear();
+        // The record the provider has just written; export sources it lazily.
+        const historyStore = {
+            all: () => [record],
+            samples: () => [{at: 0, water: 0, cup: 0, pour: 1}]
+        };
+        const {getByLabelText} = await renderWithProviders(
+            <Brew historyStore={historyStore} />
+        );
+        await fireEvent.press(getByLabelText("Save as image"));
+        await waitFor(() =>
+            expect(Sharing.shareAsync).toHaveBeenCalledWith(
+                "file:///mock/brew.png",
+                expect.objectContaining({mimeType: "image/png"})
+            )
+        );
+        expect(mockPush).not.toHaveBeenCalled();
     });
 
     it("offers START when the recipe is loaded but not committed", async () => {

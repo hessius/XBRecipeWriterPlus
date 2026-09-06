@@ -1,11 +1,13 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
 import {Pressable, StyleSheet, useWindowDimensions} from "react-native";
+import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
 import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
+import BrewSummary from "@/components/BrewSummary";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -14,6 +16,8 @@ import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY
         FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
         RUNNING} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
+import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
+import {sharedBrewDatabase, type HistoryStore} from "@/hooks/useBrewHistory";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
@@ -25,6 +29,16 @@ import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
+
+/** Where an export sources its record: the freshest brew in the store. */
+type ExportStore = Pick<HistoryStore, "all" | "samples">;
+
+/** The just-finished brew, read from the store on press (not on render). */
+function latestExport(store: ExportStore): BrewExportSource | null {
+    const latest = store.all()[0];
+    if (latest === undefined) return null;
+    return {record: latest, samples: store.samples(latest.id)};
+}
 
 /** A bordered press. The screen has four of them and they differ only in colour. */
 function Action({label, color, onPress}: {label: string; color: string; onPress: () => void}) {
@@ -40,7 +54,23 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
     );
 }
 
-export default function Brew() {
+/** An export action. Defined at module scope — see house rules. */
+function ExportButton({label, onPress}: {label: string; onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel={label}
+                   onPress={onPress} style={{flex: 1}}>
+            <YStack alignItems="center" paddingVertical="$3" borderRadius="$4"
+                    borderWidth={1} borderColor={palette.line}>
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    {label.toUpperCase()}
+                </DotMatrixText>
+            </YStack>
+        </Pressable>
+    );
+}
+
+export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) {
     const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
     // Opened to look at a run that already exists — from the mini bar — rather
     // than to start one. Without this, coming back to watch the brew you just
@@ -133,6 +163,13 @@ export default function Brew() {
     // beat identically and the flicker never appeared at all.
     const planColor = mix(palette.muted, accent, motion.warmth);
     const {status, connect} = useMachine();
+
+    // Export mechanics, shared with the record screen so the two look and
+    // behave identically. The record is read from the store on press — after
+    // the brew has finished and the provider has written it — never on render.
+    const {shotRef, shareImage, shareData} = useBrewExport(
+        () => latestExport(historyStore ?? sharedBrewDatabase())
+    );
     const liveIndex = activeIndex !== null && activeIndex < recipe.pours.length
         ? activeIndex : null;
     const livePour = liveIndex === null ? undefined : recipe.pours[liveIndex];
@@ -162,44 +199,70 @@ export default function Brew() {
                 )}
             </XStack>
 
-            <YStack flex={1} gap="$3"
-                    onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
-                <BrewTrace
-                    pours={recipe.pours}
-                    samples={samples}
-                    accent={accent}
-                    width={width - SCREEN_PADDING * 2}
-                    height={bands.traceHeight}
-                    plannedSeconds={plannedSeconds(recipe.pours)}
-                    holding={holding}
-                    planOpacity={motion.opacity}
-                    planColor={planColor}
-                    planDashed={motion.dashed}
-                    planHeadAt={motion.headAt}
-                />
+            {phase.name === "done" ? (
+                // The finished brew is drawn once, by the shared component, and
+                // that same node is what the export captures — so what you see
+                // is exactly what leaves the phone. No second screen.
+                <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
+                    <BrewSummary
+                        recipeName={recipe.displayName()}
+                        hasStream={samples.length > 0}
+                        samples={samples}
+                        stages={recipe.pours}
+                        accent={accent}
+                        width={width}
+                        plannedSeconds={plannedSeconds(recipe.pours)}
+                        water={last?.water ?? 0}
+                        cup={last?.cup ?? 0}
+                        seconds={elapsed}
+                        activeIndex={activeIndex}
+                        stageWater={stageWater}
+                        stalls={stalls}
+                        stagesUnavailable={false}
+                    />
+                </ViewShot>
+            ) : (
+                <>
+                    <YStack flex={1} gap="$3"
+                            onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
+                        <BrewTrace
+                            pours={recipe.pours}
+                            samples={samples}
+                            accent={accent}
+                            width={width - SCREEN_PADDING * 2}
+                            height={bands.traceHeight}
+                            plannedSeconds={plannedSeconds(recipe.pours)}
+                            holding={holding}
+                            planOpacity={motion.opacity}
+                            planColor={planColor}
+                            planDashed={motion.dashed}
+                            planHeadAt={motion.headAt}
+                        />
 
-                <BrewStageLadder
-                    pours={recipe.pours}
-                    accent={accent}
-                    activeIndex={activeIndex}
-                    barHeight={bands.barHeight}
-                    rungGap={bands.rungGap}
-                    scrolls={bands.scrolls}
-                    fill={true}
-                    stageWater={stageWater}
-                    stalls={stalls}
-                    pauseElapsed={pauseElapsed}
-                />
-            </YStack>
+                        <BrewStageLadder
+                            pours={recipe.pours}
+                            accent={accent}
+                            activeIndex={activeIndex}
+                            barHeight={bands.barHeight}
+                            rungGap={bands.rungGap}
+                            scrolls={bands.scrolls}
+                            fill={true}
+                            stageWater={stageWater}
+                            stalls={stalls}
+                            pauseElapsed={pauseElapsed}
+                        />
+                    </YStack>
 
-            <BrewFigures
-                water={last?.water ?? 0}
-                cup={last?.cup ?? 0}
-                seconds={elapsed}
-                accent={accent}
-            />
+                    <BrewFigures
+                        water={last?.water ?? 0}
+                        cup={last?.cup ?? 0}
+                        seconds={elapsed}
+                        accent={accent}
+                    />
 
-            <BrewNowCard pour={livePour} accent={accent} resting={resting} />
+                    <BrewNowCard pour={livePour} accent={accent} resting={resting} />
+                </>
+            )}
 
             <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.8}
                            color={headlineColor} style={{opacity: headlineOpacity}}>
@@ -263,8 +326,16 @@ export default function Brew() {
                                 onPress={() => startInPro(recipe)} />
                     )}
                     {phase.name === "done" && (
-                        <Action label="Export this brew" color={palette.dim}
-                                onPress={() => router.push("/brewRecord?latest=1")} />
+                        // In place, on the screen you are already on. This used
+                        // to push a second /brewRecord screen that drew the
+                        // brew again through different components, and that
+                        // second drawing was the mangled export.
+                        <XStack gap="$3">
+                            <ExportButton label="Save as image"
+                                          onPress={() => void shareImage()} />
+                            <ExportButton label="Export the data"
+                                          onPress={() => void shareData()} />
+                        </XStack>
                     )}
                     {/* No DONE. The chevron in the nav row dismisses the modal,
                         and a second control duplicated it — painted in
