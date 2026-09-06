@@ -123,4 +123,45 @@ describe("allocateBands", () => {
         });
         expect(600 - used).toBe(144);
     });
+
+    // Verified independently in node before the notch clearance was added to
+    // the gap floor, and pinned as literals: deriving these from the constants
+    // would let the whole budget go to zero without a single failure.
+    it("allocates a known table once the notch clearance is reserved", () => {
+        expect(allocateBands(600, 12)).toEqual({
+            traceHeight: 204, barHeight: 27, rungGap: 6, scrolls: false
+        });
+        expect(allocateBands(500, 9)).toEqual({
+            traceHeight: 203, barHeight: 27, rungGap: 6, scrolls: false
+        });
+        expect(allocateBands(420, 6)).toEqual({
+            traceHeight: 204, barHeight: 28, rungGap: 8, scrolls: false
+        });
+        expect(allocateBands(380, 4)).toEqual({
+            traceHeight: 200, barHeight: 28, rungGap: 17, scrolls: false
+        });
+        expect(allocateBands(600, 3)).toEqual({
+            traceHeight: 300, barHeight: 44, rungGap: 34, scrolls: false
+        });
+        expect(allocateBands(600, 2)).toEqual({
+            traceHeight: 300, barHeight: 44, rungGap: 34, scrolls: false
+        });
+    });
+
+    it("never leaves a rung with less clearance than its notch needs", () => {
+        for (const height of [380, 420, 500, 600]) {
+            for (const stages of [2, 3, 4, 6, 9, 12]) {
+                const bands = allocateBands(height, stages);
+                expect(bands.rungGap).toBeGreaterThanOrEqual(6);
+            }
+        }
+    });
+
+    it("still fits twelve stages without scrolling", () => {
+        // #88 was the ladder scrolling when it did not need to. The notch must
+        // not quietly undo that. 300 is exactly the new floor for twelve.
+        expect(allocateBands(300, 12).scrolls).toBe(false);
+        expect(allocateBands(380, 12).scrolls).toBe(false);
+        expect(allocateBands(600, 12).scrolls).toBe(false);
+    });
 });

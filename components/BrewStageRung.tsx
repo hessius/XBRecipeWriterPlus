@@ -7,7 +7,8 @@ import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
 import HatchFill from "@/components/HatchFill";
 import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
-import {rungSegments, seamSeconds, type Segment} from "@/library/brew/rungGeometry";
+import {NOTCH_OVERHANG, rungSegments, seamSeconds, type Segment}
+    from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -50,16 +51,6 @@ const PENDING_OPACITY = 0.45;
  * same 3 pt, so their widths stay proportional to their seconds.
  */
 export const SEGMENT_GAP = 3;
-
-/**
- * How far the agitation notch stands proud of the bar, above and below.
- *
- * The mark used to be a lone spiral floating past the end of the lane, which
- * was both too quiet to see and in the wrong place. Cutting a tick through the
- * bar at the crossover ties it to the moment it describes. The ladder budgets
- * this so the marks of neighbouring rungs cannot touch.
- */
-export const NOTCH_OVERHANG = 3;
 
 /** The width of the notch, in points. */
 const NOTCH_WIDTH = 2;
