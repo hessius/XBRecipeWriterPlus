@@ -1,6 +1,6 @@
 import {
-    BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
-    RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
+    BREW_INFO_ROUNDS, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS,
+    INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -36,6 +36,24 @@ export type FrameDirection = "sent" | "received";
 export type FrameListener = (
     direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
 ) => void;
+
+/**
+ * One frame kept in the machine's always-on history.
+ *
+ * `at` is a wall clock, like `LinkEvent.at`, because the only reader is a human
+ * lining the log up against a machine that beeped at a particular moment — and
+ * the ~20 s of grind silence between two entries is itself diagnostic, so the
+ * gaps have to be visible. `frame` is an independent copy of the raw bytes, kept
+ * beside the decode exactly as the console prints them, because a frame we could
+ * not decode on someone's firmware is the single most useful thing to have.
+ */
+export type FrameLogEntry = {
+    at: number;
+    direction: FrameDirection;
+    frame: Uint8Array;
+    parsed: Notification;
+    source?: string;
+};
 
 /** Why a brew ended badly. Each has its own copy on the brew route. */
 export type BrewFailure =
@@ -152,6 +170,17 @@ export default class Machine {
      * still say what happened.
      */
     public readonly linkHistory: LinkEvent[] = [];
+
+    /**
+     * The last frames in either direction, oldest first, minus the weight
+     * stream. See `FRAME_HISTORY_LIMIT` for why it lives here and what it holds.
+     *
+     * Deliberately never cleared on disconnect or reconnect: the most useful log
+     * is often the one that spans the drop — a link that failed mid-brew is
+     * exactly the case with no screen open to catch it — so `forget()` leaves
+     * this untouched even as it resets everything else.
+     */
+    public readonly frameHistory: FrameLogEntry[] = [];
 
     private transport: MachineTransport;
     private frameListeners = new Set<FrameListener>();
@@ -549,8 +578,7 @@ export default class Machine {
         // written before the radio has accepted the frame says a frame was
         // sent when the write is about to throw.
         await this.transport.write(frame);
-        this.frameListeners.forEach((listener) =>
-            listener("sent", frame, {kind: "unknown", raw: frame}));
+        this.emitFrame("sent", frame, {kind: "unknown", raw: frame});
     }
 
     /** Every frame in either direction, for the console's log. */
@@ -600,8 +628,37 @@ export default class Machine {
             this.announceLink();
         }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
-        this.frameListeners.forEach((listener) => listener("received", frame, parsed, source));
+        this.emitFrame("received", frame, parsed, source);
         this.notificationListeners.forEach((listener) => listener(parsed));
+    }
+
+    /**
+     * Announce a frame to the console's live listeners and fold it into the
+     * always-on history. One path so the two can never disagree about what the
+     * link carried.
+     */
+    private emitFrame(
+        direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
+    ): void {
+        this.retainFrame(direction, frame, parsed, source);
+        this.frameListeners.forEach((listener) => listener(direction, frame, parsed, source));
+    }
+
+    /**
+     * Fold one frame into the bounded history, dropping the weight stream.
+     *
+     * Cup and water weight arrive at ~10 Hz each and would evict everything
+     * diagnostic within seconds, so they are the one thing left out — the same
+     * point `parseNotification` makes about keeping `unknown` above all else.
+     * The bytes are copied because the parser hands out subarray views over a
+     * packet buffer the transport is free to reuse.
+     */
+    private retainFrame(
+        direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
+    ): void {
+        if (parsed.kind === "waterWeight" || parsed.kind === "cupWeight") return;
+        this.frameHistory.push({at: Date.now(), direction, frame: frame.slice(), parsed, source});
+        if (this.frameHistory.length > FRAME_HISTORY_LIMIT) this.frameHistory.shift();
     }
 
     onPhase(listener: (phase: BrewPhase) => void): () => void {

@@ -193,3 +193,22 @@ export const SETTLE_CAP_MS = 90_000;
  * grams sits safely between the two and cannot be reached by noise.
  */
 export const LIFT_DROP_G = 10;
+
+/**
+ * How many notification frames the machine keeps in its always-on history.
+ *
+ * The console's frame log only exists while that screen is mounted, but during
+ * a brew the user is on the brew sheet — so a brew produces no log at all, and
+ * the one-off field bugs that most need diagnosing leave nothing to read. This
+ * buffer lives on the machine so a log covering the brew can be copied
+ * afterwards.
+ *
+ * The weight stream is excluded (see `retainFrame`), so what lands here is
+ * sparse. A whole brew is a few minutes and emits only: a handful of state
+ * changes, ~10 lifecycle events (grinder-stop, up to six pour-starts,
+ * brewer-stop, the two enjoys), the five or so recipe-send frames, and the
+ * occasional info or unknown — tens of frames, not thousands. 256 holds several
+ * whole brews with wide margin while staying a small fixed cap (256 short byte
+ * arrays) that can never grow without bound.
+ */
+export const FRAME_HISTORY_LIMIT = 256;

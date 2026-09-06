@@ -14,6 +14,7 @@ import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import type {FrameLogEntry} from "@/library/machine/Machine";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
 import {MACHINE_STATE, type MachineInfo, type Notification} from "@/library/machine/protocol";
 
@@ -151,6 +152,20 @@ function stateText(state: MachineStateReading | null): string {
     if (state === null) return "Machine state: none yet";
     const hex = `0x${state.value.toString(16).padStart(2, "0")}`;
     return `Machine state: ${hex} ${stateName(state.value)} · ${state.changed ? "changed" : "repeated"} ${state.at}`;
+}
+
+/**
+ * One retained-history entry as a log line, in the same shape and clock as the
+ * live frame log: `HH:MM:SS.mmm  arrow  hex  reading`. The channel is named on
+ * the arrow, and a sent frame carries no decoded reading.
+ */
+function historyLine(entry: FrameLogEntry): string {
+    const at = new Date(entry.at).toISOString().slice(11, 23);
+    const arrow = entry.direction === "sent"
+        ? "→"
+        : entry.source === undefined ? "←" : `←${entry.source}`;
+    const reading = entry.direction === "sent" ? "" : readingOf(entry.parsed);
+    return `${at}  ${arrow}  ${toHex(entry.frame)}  ${reading}`;
 }
 
 function appendLog(
@@ -400,10 +415,16 @@ export default function MachineConsole() {
     );
 
     function copyLog() {
+        // Built from the machine's always-on history, not the live `log`: the
+        // live log only holds what arrived while this screen was mounted, but a
+        // brew is watched from the brew sheet with the console closed, so its
+        // frames are only here. The weight stream is absent by design (see
+        // `retainFrame`); everything diagnostic — states, events, the recipe
+        // send, anything unknown — is present and spans the whole session.
         const block = [
-            ...connectionLines.map((line) => `${line}`),
+            ...connectionLines,
             "",
-            ...log.map((entry) => `${entry.at}  ${entry.direction}  ${entry.hex}  ${entry.reading}`)
+            ...machine.frameHistory.map(historyLine)
         ].join("\n");
         void Clipboard.setStringAsync(block).then(() => notify({
             tone:    "success",

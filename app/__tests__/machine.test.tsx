@@ -1,5 +1,6 @@
 import React from "react";
 import {act, fireEvent, screen} from "@testing-library/react-native";
+import * as Clipboard from "expo-clipboard";
 
 import Console from "@/app/machine";
 import {sharedSettings} from "@/hooks/useSetting";
@@ -23,6 +24,10 @@ const mockMachine = {
     scan: jest.fn(),
     connect: jest.fn(),
     linkHistory: [] as {at: number; text: string}[],
+    frameHistory: [] as {
+        at: number; direction: "sent" | "received"; frame: Uint8Array;
+        parsed: unknown; source?: string;
+    }[],
     describeRadio: jest.fn().mockResolvedValue(undefined)
 };
 const send = mockSend;
@@ -96,6 +101,10 @@ jest.mock("expo-router", () => ({
     useNavigation: () => ({setOptions: jest.fn()})
 }));
 
+jest.mock("expo-clipboard", () => ({
+    setStringAsync: jest.fn().mockResolvedValue(true)
+}));
+
 describe("the machine console", () => {
     beforeEach(() => {
         send.mockClear();
@@ -103,6 +112,7 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
         mockMachine.linkHistory.length = 0;
+        mockMachine.frameHistory.length = 0;
         mockStatus = "connected";
         mockConnect.mockClear();
     });
@@ -337,6 +347,27 @@ describe("the machine console", () => {
         expect(value).toContain("←  57 1F  state 0x1f armed");
         expect(value).toContain("→  58 01");
         expect(value).not.toContain("cup 9.1 g");
+    });
+
+    it("copies the machine's retained history, so a log covers a brew this screen missed", async () => {
+        // The point of the buffer: a brew is watched from the brew sheet with
+        // the console closed, so its frames never reach the live `log`. Copy
+        // must draw on the machine's always-on history instead, which spans the
+        // brew even when nothing on this screen saw it arrive.
+        (Clipboard.setStringAsync as jest.Mock).mockClear();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        mockMachine.frameHistory.push({
+            at:        Date.parse("2026-09-06T13:00:00.000Z"),
+            direction: "received",
+            frame:     Uint8Array.from([0x58, 0x02, 0x07, 0x57]),
+            parsed:    {kind: "status", state: 0x22}
+        });
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Copy log"));
+
+        const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
+        expect(copied).toContain("13:00:00.000  ←  58 02 07 57  state 0x22 starting");
     });
 
     it("shows no machine state until a status frame arrives, then decodes the state name", async () => {
