@@ -1,5 +1,6 @@
 // components/__tests__/BrewHistoryRow.test.tsx
 import React from "react";
+import {StyleSheet} from "react-native";
 
 import BrewHistoryRow from "@/components/BrewHistoryRow";
 import {palette} from "@/constants/colors";
@@ -84,5 +85,25 @@ describe("BrewHistoryRow", () => {
             <BrewHistoryRow brew={brew({hasStream: false})} onPress={jest.fn()} />
         );
         expect(getByText("NO TRACE KEPT")).toBeTruthy();
+    });
+
+    it("does not call a brew the machine ended a failure", async () => {
+        const {queryByText, getByText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({outcome: "endedOnMachine", failure: null})}
+                            onPress={jest.fn()} />
+        );
+
+        expect(queryByText("STOPPED")).toBeNull();
+        expect(getByText("ENDED EARLY")).toBeTruthy();
+    });
+
+    it("marks an early end in the neutral colour, not the danger one", async () => {
+        const {getByText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({outcome: "endedOnMachine", failure: null})}
+                            onPress={jest.fn()} />
+        );
+
+        expect(StyleSheet.flatten(getByText("ENDED EARLY").props.style).color)
+            .toBe("#F0C24A");
     });
 });

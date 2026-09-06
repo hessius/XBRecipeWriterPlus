@@ -28,6 +28,10 @@ function formatDuration(startMs: number, endMs: number): string {
     return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
+/** The outcomes that mean the brew did not finish. Short is not one of them. */
+const STOPPED_OUTCOMES: ReadonlySet<string> =
+    new Set(["cancelled", "failed", "lostContact"]);
+
 /**
  * One past brew as a tappable row.
  *
@@ -35,7 +39,12 @@ function formatDuration(startMs: number, endMs: number): string {
  * recipe does not rewrite its own history.
  */
 export default function BrewHistoryRow({brew, onPress}: Props) {
-    const stopped = brew.outcome !== "done";
+    // Named outcomes, not "anything but done". A brew the machine finished
+    // short is not a failure and must not sit in the history wearing the same
+    // red chip as one that was cancelled or lost the link -- that would
+    // contradict the neutral note the record screen shows for it.
+    const stopped = STOPPED_OUTCOMES.has(brew.outcome);
+    const endedEarly = brew.outcome === "endedOnMachine";
 
     return (
         <Pressable accessibilityRole="button" accessibilityLabel={brew.recipeName}
@@ -62,6 +71,12 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
                             {formatDuration(brew.startedAt, brew.endedAt)}
                         </DotMatrixText>
+                        {endedEarly && (
+                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                                           color={palette.warn}>
+                                ENDED EARLY
+                            </DotMatrixText>
+                        )}
                         {stopped && (
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
                                            color={palette.danger}>

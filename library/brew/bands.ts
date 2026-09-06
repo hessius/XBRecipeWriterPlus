@@ -27,8 +27,13 @@ export const BAR_MAX = 44;
  * The floor is the notch's clearance rather than a chosen number: the
  * agitation mark overhangs its bar top and bottom, so any thinner gap and two
  * neighbouring rungs cut into each other's marks. It costs at most three
- * points of bar height on the tallest recipes and moves no recipe from fitting
- * to scrolling at any height the brew screen actually offers.
+ * points of bar height on the tallest recipes.
+ *
+ * It does move the point at which a ladder starts to scroll, by three points
+ * per stage: nine stages now scroll at a flexible height of 228-254, and
+ * twelve at 264-299, where before they just fit. That is the price of drawing
+ * the mark at all, and it is paid in a narrow band of window heights rather
+ * than in bar height everywhere -- but it is a real change, not a free one.
  */
 export const GAP_FLOOR = 2 * NOTCH_OVERHANG;
 export const GAP_CAP = 20;

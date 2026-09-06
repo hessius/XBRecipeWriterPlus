@@ -58,6 +58,13 @@ export function useRefreshRequest(ask: () => Promise<boolean>): {
         press: () => {
             const mine = seq.current + 1;
             seq.current = mine;
+            // Pressing again while already asking would set the state to the
+            // value it already holds, so React skips the re-render, the
+            // backstop effect below never re-runs, and the second ask would
+            // sit under the first press's timer. It cannot happen today only
+            // because MachinePanel leaves onPress undefined unless the state
+            // is idle. If another caller ever wires this up unconditionally,
+            // that guard has to move in here.
             setState("asking");
             const settle = (next: RefreshState): void => {
                 if (seq.current === mine) setState(next);

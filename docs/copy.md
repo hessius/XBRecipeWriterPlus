@@ -510,8 +510,9 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.confirm.keep` | `app/brewHistory.tsx:200` | Cancel button label. | `Keep this brew` |
 | `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:41` (a11y) | (a11y) / title of a brew-history row. `${...}` is the recipe name. | `${brew.recipeName}` |
 | `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:60` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
-| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:68` | Doto flag on a stopped brew. | `STOPPED` |
-| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:74` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
+| `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:77` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
+| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:83` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |
+| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:89` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
 
 ---
 
