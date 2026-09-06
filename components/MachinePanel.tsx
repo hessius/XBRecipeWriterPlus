@@ -25,7 +25,8 @@ type Props = {
     vitals: MachineVitals | null;
     /** Injected so the age is testable without a fake clock. */
     now: number;
-    onRefreshWater: () => void;
+    /** Asks the machine for its readings; resolves to whether it answered. */
+    onRefreshWater: () => Promise<boolean>;
     onConnect: () => void;
 };
 
@@ -63,10 +64,10 @@ const REFRESH_LABEL = {
  * It was previously a bare twelve-point icon with no pressed state and no busy
  * state, so the only evidence it had worked was that the machine beeped.
  */
-function RefreshButton({accent, askedAt, onRefresh}: {
-    accent: string; askedAt: number; onRefresh: () => void;
+function RefreshButton({accent, onRefresh}: {
+    accent: string; onRefresh: () => Promise<boolean>;
 }) {
-    const {state, press} = useRefreshRequest(askedAt, onRefresh);
+    const {state, press} = useRefreshRequest(onRefresh);
     const colour = state === "noAnswer" ? palette.warn : accent;
 
     return (
@@ -145,8 +146,7 @@ export default function MachinePanel({
                         {String(vitals.grindSize)}
                     </DotMatrixText>
                 </Row>
-                <RefreshButton accent={accent} askedAt={vitals.askedAt}
-                               onRefresh={onRefreshWater} />
+                <RefreshButton accent={accent} onRefresh={onRefreshWater} />
             </YStack>
         );
     } else if (status === "connecting") {
@@ -169,7 +169,7 @@ export default function MachinePanel({
                                color={palette.dim}>
                     CONNECTED. NO READINGS YET.
                 </DotMatrixText>
-                <RefreshButton accent={accent} askedAt={0} onRefresh={onRefreshWater} />
+                <RefreshButton accent={accent} onRefresh={onRefreshWater} />
             </YStack>
         );
     } else {

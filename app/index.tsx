@@ -385,7 +385,11 @@ export default function HomeScreen({db, settings}: Props) {
         setScanning(false);
     }
 
-    async function refreshWater() {
+    /**
+     * @returns whether the machine answered -- the refresh control's whole
+     * input, so it can show the wait rather than guess at how long one lasts.
+     */
+    async function refreshWater(): Promise<boolean> {
         // Asking for the water level opens a BLE session and makes the machine
         // beep — only do it when the user explicitly asks.
         const answered = await machine.askHowItIsDoing();
@@ -393,6 +397,7 @@ export default function HomeScreen({db, settings}: Props) {
             const {waterEnough, mode, grindSize} = machine.info;
             setMachineVitals({waterEnough, mode, grindSize, askedAt: Date.now()});
         }
+        return answered;
     }
 
     function openRecipe(recipe: Recipe): boolean {

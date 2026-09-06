@@ -1,53 +1,71 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 export type RefreshState = "idle" | "asking" | "noAnswer";
-
-/** How long the machine is given to answer before we say it has not. */
-export const ASK_TIMEOUT_MS = 6000;
 
 /** How long `NO ANSWER` is shown before the control offers itself again. */
 export const NO_ANSWER_MS = 4000;
 
 /**
- * The refresh control's state, over the age of the reading it refreshes.
+ * A bug net, not part of the normal path.
  *
- * `askedAt` is the whole input. Pressing does not make the reading fresh --
- * that was the original bug, a `setPopoverNow(Date.now())` on press which reset
- * the displayed age to `JUST NOW` before the machine had said anything. Once
- * only a real answer moves `askedAt`, a *change* in it is exactly the event
- * that ends the wait, and the wait becomes something the control can show.
- *
- * Pure over a number and a clock, so it is tested without a machine.
+ * `Machine.askHowItIsDoing` has a ceiling of its own: a handshake, a frame gap,
+ * three attempts each waiting `INFO_WAIT_MS`, and a gap between them -- about
+ * 12.2 s in the worst case. This sits comfortably above that, so it only ever
+ * fires for a promise that never settles at all, which would otherwise leave
+ * the control saying `CHECKING…` for good.
  */
-export function useRefreshRequest(askedAt: number, ask: () => void): {
+export const ASK_BACKSTOP_MS = 20_000;
+
+/**
+ * The refresh control's state, over the request it makes.
+ *
+ * Driven by the promise, not by a timer racing it. The original bug was a
+ * `setPopoverNow(Date.now())` on press, which reset the displayed age to
+ * `JUST NOW` before the machine had said anything. The fix for that introduced
+ * a second one: a six-second timeout, chosen before anybody had added up what
+ * the machine is actually allowed to spend. It gave up with half the machine's
+ * budget unspent, said `NO ANSWER`, and then the answer arrived -- which is
+ * what device testing reported, down to the third press appearing to be the
+ * one that worked.
+ *
+ * So the question is asked and the answer is awaited. A machine that says no,
+ * or throws, is a `NO ANSWER`; a machine that takes eleven seconds to say yes
+ * is simply a slow yes.
+ *
+ * Pure over a promise, so it is tested without a machine.
+ */
+export function useRefreshRequest(ask: () => Promise<boolean>): {
     state: RefreshState;
     press: () => void;
 } {
-    // The reading's age at the moment of asking, so a later change to it can be
-    // recognised as this request's answer.
-    const [request, setRequest] =
-        useState<{state: Exclude<RefreshState, "idle">; at: number} | null>(null);
-
-    const answered = request !== null && request.state === "asking"
-        && askedAt !== request.at;
-    const state: RefreshState = request === null || answered ? "idle" : request.state;
+    const [state, setState] = useState<RefreshState>("idle");
+    // Identifies the request in flight, so that a superseded one settling late
+    // cannot overwrite the state of the one that replaced it.
+    const seq = useRef(0);
 
     useEffect(() => {
-        if (request === null || answered) return;
-        const ms = request.state === "asking" ? ASK_TIMEOUT_MS : NO_ANSWER_MS;
+        if (state === "idle") return;
+        const mine = seq.current;
         const timer = setTimeout(() => {
-            setRequest(request.state === "asking"
-                ? {state: "noAnswer", at: request.at}
-                : null);
-        }, ms);
+            if (seq.current !== mine) return;
+            setState(state === "asking" ? "noAnswer" : "idle");
+        }, state === "asking" ? ASK_BACKSTOP_MS : NO_ANSWER_MS);
         return () => clearTimeout(timer);
-    }, [request, answered]);
+    }, [state]);
 
     return {
         state,
         press: () => {
-            setRequest({state: "asking", at: askedAt});
-            ask();
+            const mine = seq.current + 1;
+            seq.current = mine;
+            setState("asking");
+            const settle = (next: RefreshState): void => {
+                if (seq.current === mine) setState(next);
+            };
+            // A radio that refuses the question is no more of an answer than a
+            // machine that ignores it, and the user is owed the same words.
+            void ask().then((ok) => settle(ok ? "idle" : "noAnswer"),
+                            () => settle("noAnswer"));
         }
     };
 }

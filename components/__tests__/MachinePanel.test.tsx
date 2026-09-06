@@ -7,6 +7,15 @@ import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 const vitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 0};
+/**
+ * A request that never settles, so the control stays in its asking state for
+ * the duration of the test. The hook is driven by the promise now, so a mock
+ * returning undefined would have nothing to await.
+ */
+function pending() {
+    return jest.fn(() => new Promise<boolean>(() => undefined));
+}
+
 const someVitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 1000};
 
 async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = {}) {
@@ -17,7 +26,7 @@ async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = 
             accent="#C86A3B"
             vitals={vitals}
             now={4 * 60 * 1000}
-            onRefreshWater={jest.fn()}
+            onRefreshWater={pending()}
             onConnect={jest.fn()}
             {...props}
         />
@@ -129,7 +138,7 @@ describe("MachinePanel", () => {
     });
 
     it("asks the machine when pressed", async () => {
-        const onRefreshWater = jest.fn();
+        const onRefreshWater = pending();
         const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
 
         await fireEvent.press(r.getByTestId("machine-refresh"));
@@ -138,7 +147,7 @@ describe("MachinePanel", () => {
     });
 
     it("will not ask twice while it is already asking", async () => {
-        const onRefreshWater = jest.fn();
+        const onRefreshWater = pending();
         const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
 
         await fireEvent.press(r.getByTestId("machine-refresh"));
