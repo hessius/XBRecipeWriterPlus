@@ -6,6 +6,7 @@ import {Text, XStack, YStack} from "tamagui";
 
 import BrewSummary from "@/components/BrewSummary";
 import DotMatrixText from "@/components/DotMatrixText";
+import ExportButton from "@/components/ExportButton";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
@@ -28,22 +29,6 @@ type Props = {
     /** Injected by tests to avoid opening the real SQLite database. */
     recipeLookup?: RecipeLookup;
 };
-
-/** An export action button. Defined at module scope — see house rules. */
-function ExportButton({label, onPress}: {label: string; onPress: () => void}) {
-    return (
-        <Pressable accessibilityRole="button" accessibilityLabel={label}
-                   onPress={onPress} style={{flex: 1}}>
-            <YStack alignItems="center" paddingVertical="$3" borderRadius="$4"
-                    borderWidth={1} borderColor={palette.line}>
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
-                    {label.toUpperCase()}
-                </DotMatrixText>
-            </YStack>
-        </Pressable>
-    );
-}
 
 /** The "All brews" header button. Defined at module scope — see house rules. */
 function AllBrewsButton({onPress}: {onPress: () => void}) {
@@ -99,7 +84,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // Export mechanics — the ViewShot ref and both shares — live in the hook,
     // shared with the live brew modal so the two export identically. The
     // record and its samples are already in memory here.
-    const {shotRef, shareImage, shareData} = useBrewExport(() => opened);
+    const {shotRef, shareImage, shareData, busy} = useBrewExport(() => opened);
 
     const lastPushRef = useRef(0);
 
@@ -179,9 +164,9 @@ export default function BrewRecord({recipeLookup}: Props) {
             </ViewShot>
 
             <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
-                <ExportButton label="Save as image"
+                <ExportButton label="Save as image" busy={busy}
                               onPress={() => void shareImage()} />
-                <ExportButton label="Export the data"
+                <ExportButton label="Export the data" busy={busy}
                               onPress={() => void shareData()} />
             </XStack>
         </YStack>

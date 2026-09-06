@@ -8,6 +8,7 @@ import BrewFigures from "@/components/BrewFigures";
 import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewSummary from "@/components/BrewSummary";
+import ExportButton from "@/components/ExportButton";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -47,22 +48,6 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
             <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
                     borderWidth={1} borderColor={color}>
                 <DotMatrixText fontSize={12} weight="bold" letterSpacing={2} color={color}>
-                    {label.toUpperCase()}
-                </DotMatrixText>
-            </YStack>
-        </Pressable>
-    );
-}
-
-/** An export action. Defined at module scope — see house rules. */
-function ExportButton({label, onPress}: {label: string; onPress: () => void}) {
-    return (
-        <Pressable accessibilityRole="button" accessibilityLabel={label}
-                   onPress={onPress} style={{flex: 1}}>
-            <YStack alignItems="center" paddingVertical="$3" borderRadius="$4"
-                    borderWidth={1} borderColor={palette.line}>
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
                     {label.toUpperCase()}
                 </DotMatrixText>
             </YStack>
@@ -167,7 +152,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // Export mechanics, shared with the record screen so the two look and
     // behave identically. The record is read from the store on press — after
     // the brew has finished and the provider has written it — never on render.
-    const {shotRef, shareImage, shareData} = useBrewExport(
+    const {shotRef, shareImage, shareData, busy} = useBrewExport(
         () => latestExport(historyStore ?? sharedBrewDatabase())
     );
     const liveIndex = activeIndex !== null && activeIndex < recipe.pours.length
@@ -333,9 +318,9 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // brew again through different components, and that
                         // second drawing was the mangled export.
                         <XStack gap="$3">
-                            <ExportButton label="Save as image"
+                            <ExportButton label="Save as image" busy={busy}
                                           onPress={() => void shareImage()} />
-                            <ExportButton label="Export the data"
+                            <ExportButton label="Export the data" busy={busy}
                                           onPress={() => void shareData()} />
                         </XStack>
                     )}
