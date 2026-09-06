@@ -1,6 +1,7 @@
 import React from "react";
 import {Pressable} from "react-native";
 import Animated, {FadeIn, SlideOutDown} from "react-native-reanimated";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack, YStack} from "tamagui";
 
 import BrewTrace from "@/components/BrewTrace";
@@ -30,6 +31,15 @@ type Props = {
 
 const TRACE_WIDTH = 86;
 const TRACE_HEIGHT = 34;
+
+/**
+ * The bar's own padding, as a number rather than `$2.5`.
+ *
+ * The bottom edge adds the safe-area inset to it, and a token cannot be added
+ * to. `$2.5` interpolates to 10 between `$2` (7) and `$3` (13); this is that
+ * value, stated so the four sides stay equal above the inset.
+ */
+const BAR_PADDING = 10;
 
 /** `1:42`, floored — matches the brew screen clock. */
 function clock(seconds: number): string {
@@ -108,6 +118,7 @@ export default function BrewMiniBar(props: Props) {
     const {pours, samples, phase, holding, onOpen, onDismiss} = props;
     const {title, detail, line} = say(props);
     const over = OVER.has(phase.name);
+    const insets = useSafeAreaInsets();
 
     return (
         <Animated.View
@@ -115,9 +126,16 @@ export default function BrewMiniBar(props: Props) {
             exiting={SlideOutDown.duration(DURATION.base)}
         >
             <XStack
+                testID="mini-bar"
                 alignItems="center"
                 gap="$3"
-                padding="$2.5"
+                padding={BAR_PADDING}
+                // The bar is mounted beside the navigator rather than inside a
+                // screen, so it sits on the very edge of the display and the
+                // corner radius clips it: the close control came out half
+                // visible and the trace was cut. Only the bottom needs it --
+                // the sides and top are nowhere near a corner.
+                paddingBottom={insets.bottom + BAR_PADDING}
                 backgroundColor={palette.surface}
                 borderTopWidth={1}
                 borderTopColor={palette.line}

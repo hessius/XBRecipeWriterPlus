@@ -1,11 +1,11 @@
 import React from "react";
 import {fireEvent} from "@testing-library/react-native";
-import {processColor} from "react-native";
+import {StyleSheet, processColor} from "react-native";
 
 import BrewMiniBar from "@/components/BrewMiniBar";
 import {palette} from "@/constants/colors";
 import Pour from "@/library/Pour";
-import {renderWithProviders} from "@/test-utils/render";
+import {TEST_INSETS, renderWithProviders} from "@/test-utils/render";
 
 const pours = [new Pour(1, 40, 93, 40, 0, 0, 20), new Pour(2, 160, 92, 40, 0, 0, 0)];
 
@@ -142,5 +142,18 @@ describe("BrewMiniBar", () => {
                 expect.objectContaining({payload: processColor("#123456")})
             );
         });
+    });
+
+    it("clears the rounded corners at the foot of the display", async () => {
+        // The bar is mounted beside the navigator, so it sits on the very edge
+        // of the screen and the corner radius was cutting the close control in
+        // half and clipping the trace. 34 is the bottom inset the test metrics
+        // supply -- pinned as a literal so that zeroing the inset in the source
+        // cannot make this assertion agree with itself.
+        const {getByTestId} = await draw();
+        const style = StyleSheet.flatten(getByTestId("mini-bar").props.style);
+
+        expect(style.paddingBottom).toBeGreaterThanOrEqual(34);
+        expect(TEST_INSETS.bottom).toBe(34);
     });
 });
