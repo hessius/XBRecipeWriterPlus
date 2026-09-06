@@ -27,7 +27,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
-import {useShareRecipe} from "@/hooks/useShareRecipe";
+import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
@@ -171,14 +171,7 @@ export default function HomeScreen({db, settings}: Props) {
         if (shareState.status !== "failed") {
             return;
         }
-        const message = {
-            network:     "Could not reach the sharing service. Check your connection.",
-            limited:     "Sharing is busy right now. Try again in a few minutes.",
-            unavailable: "Sharing is temporarily unavailable. Everything else still works.",
-            unusable:    "This recipe cannot be shared yet. Check the pour volumes and dose.",
-            pending:     "This recipe's link is still being created. Try again in a moment."
-        }[shareState.reason];
-        notify({tone: "error", message});
+        notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
 
     const isEmpty = library.recipes.length === 0;

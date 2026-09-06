@@ -29,6 +29,10 @@ let mockShareState: {status: "idle"} | {status: "sharing"} |
     {status: "failed"; reason: "network" | "limited" | "unavailable" | "unusable"} = {status: "idle"};
 const mockShareRecipe = jest.fn();
 jest.mock("@/hooks/useShareRecipe", () => ({
+    // Spread the real module: only the hook needs faking, and the failure copy
+    // must stay the genuine `SHARE_FAILURE_MESSAGE` or the toast assertion below
+    // would be checking a string this file made up.
+    ...jest.requireActual("@/hooks/useShareRecipe"),
     useShareRecipe: () => ({
         state:        mockShareState,
         share:        mockShareRecipe,

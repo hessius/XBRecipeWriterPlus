@@ -94,6 +94,20 @@ jest.mock("@/components/XbrwToast", () => ({
     notify: (notice: unknown) => mockNotify(notice)
 }));
 
+// The share hook is faked so a test can put it in a failed state without a
+// network round trip. The real module is spread through: the failure copy has
+// to be the genuine `SHARE_FAILURE_MESSAGE`, or the toast assertion would only
+// prove this file agrees with itself.
+let mockShareState: {status: "idle"} | {status: "failed"; reason: string} = {status: "idle"};
+jest.mock("@/hooks/useShareRecipe", () => ({
+    ...jest.requireActual("@/hooks/useShareRecipe"),
+    useShareRecipe: () => ({
+        state:        mockShareState,
+        share:        jest.fn(),
+        dismissError: jest.fn()
+    })
+}));
+
 // The machine hook transitively imports the BLE transport — a native module
 // that throws at load under Jest. Only the disconnected-or-paired state matters
 // for screen tests, so the hook is stubbed here, the same way it is in
@@ -189,6 +203,7 @@ function store(recipes: Recipe[]) {
 beforeEach(() => {
     mockPush.mockClear();
     mockNotify.mockClear();
+    mockShareState = {status: "idle"};
     (XBloomRecipe as jest.Mock).mockClear();
     mockFetchRecipeDetail = () => Promise.resolve();
     mockGetRecipe = () => undefined;
@@ -1004,6 +1019,20 @@ describe("HomeScreen, opening one editor at a time", () => {
             .toBeTruthy();
         expect(screen.queryByLabelText("Brew Ethiopia", {includeHiddenElements: true}))
             .toBeNull();
+    });
+
+    it("reports a failed share from the action tray as a toast", async () => {
+        // The tray shares recipes just as the editor does, so it owes the user
+        // the same words when it cannot. Pinned as a literal: asserting against
+        // the map the screen just read would pass however the copy was mangled.
+        mockShareState = {status: "failed", reason: "limited"};
+        await renderHome({recipes: [named("Ethiopia")]});
+        await screen.findByText("Ethiopia");
+
+        expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: "Sharing is busy right now. Try again in a few minutes."
+        });
     });
 
     it("adds the brew tile to the action tray once a machine is paired", async () => {

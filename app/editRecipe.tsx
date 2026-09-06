@@ -23,7 +23,7 @@ import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
-import {useShareRecipe} from "@/hooks/useShareRecipe";
+import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
@@ -745,14 +745,7 @@ export default function EditRecipe() {
         if (shareState.status !== "failed") {
             return;
         }
-        const message = {
-            network:     "Could not reach the sharing service. Check your connection.",
-            limited:     "Sharing is busy right now. Try again in a few minutes.",
-            unavailable: "Sharing is temporarily unavailable. Everything else still works.",
-            unusable:    "This recipe cannot be shared yet. Check the pour volumes and dose.",
-            pending:     "This recipe's link is still being created. Try again in a moment."
-        }[shareState.reason];
-        notify({tone: "error", message});
+        notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
 
     // Computed before the header effect, not after the `recipe` guard below, so
