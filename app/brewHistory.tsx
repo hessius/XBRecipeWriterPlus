@@ -19,6 +19,38 @@ const TILE_WIDTH = 76;
 const TILE_GLYPH_SIZE = 24;
 
 /**
+ * The screen's own header, drawn in content rather than by the native bar.
+ *
+ * The route keeps the platform back chevron — it is pushed on top of the record
+ * screen or a recipe sheet — but its system-font title is emptied in favour of
+ * this, the same move the record screen makes: the native title read in the
+ * platform font, out of register with the app's Doto chrome. "BREW HISTORY" is
+ * fixed chrome, so it is Doto like the rest of it.
+ *
+ * When the list is filtered to one recipe, that recipe is named beneath the
+ * heading so the screen says which history it is showing. A recipe name is
+ * human-typed, so it is Inter prose (a plain `Text`) and never rendered through
+ * `DotMatrixText` — the one dot-matrix exception for a recipe name, on the brew
+ * screen, is not extended here.
+ */
+function HistoryHeader({recipeName}: {recipeName?: string}) {
+    return (
+        <YStack paddingHorizontal="$4" paddingTop="$3" paddingBottom="$2" gap="$1">
+            <DotMatrixText fontSize={16} weight="bold" letterSpacing={1.8}
+                           color={palette.text}>
+                BREW HISTORY
+            </DotMatrixText>
+            {recipeName !== undefined && (
+                <Text testID="history-header-recipe" fontSize={13}
+                      color={palette.dim} numberOfLines={1}>
+                    {recipeName}
+                </Text>
+            )}
+        </YStack>
+    );
+}
+
+/**
  * The delete tile revealed by swiping a row left.
  *
  * Tapping it does not delete immediately — it opens a confirmation sheet,
@@ -113,7 +145,9 @@ export default function BrewHistory() {
         : brews;
 
     useEffect(() => {
-        navigation.setOptions({title: "Brew history"});
+        // Empty the native system-font title; the styled header is drawn in
+        // content below, the same way the record screen handles its chrome.
+        navigation.setOptions({title: ""});
     }, [navigation]);
 
     function handlePress(brew: StoredBrew) {
@@ -145,23 +179,32 @@ export default function BrewHistory() {
         ? filtered.find((b) => b.id === pendingDeleteId) ?? null
         : null;
 
+    // When filtered to one recipe, name it under the heading. Taken from the
+    // brew rows themselves (the name at brew time), so a since-renamed recipe
+    // does not relabel its own history.
+    const recipeName = recipeUuid ? filtered[0]?.recipeName : undefined;
+
     if (filtered.length === 0) {
         return (
-            <YStack flex={1} backgroundColor={palette.base} padding="$4"
-                    alignItems="center" justifyContent="center" gap="$2">
-                <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
-                    NO BREWS YET
-                </DotMatrixText>
-                <Text color={palette.muted} fontSize={13} textAlign="center">
-                    Brew a recipe and it will appear here.
-                </Text>
+            <YStack flex={1} backgroundColor={palette.base}>
+                <HistoryHeader recipeName={recipeName} />
+                <YStack flex={1} padding="$4" alignItems="center"
+                        justifyContent="center" gap="$2">
+                    <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                                   color={palette.dim}>
+                        NO BREWS YET
+                    </DotMatrixText>
+                    <Text color={palette.muted} fontSize={13} textAlign="center">
+                        Brew a recipe and it will appear here.
+                    </Text>
+                </YStack>
             </YStack>
         );
     }
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
+            <HistoryHeader recipeName={recipeName} />
             <FlatList
                 data={filtered}
                 keyExtractor={(item) => item.id}

@@ -7,6 +7,7 @@ import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 const mockPush = jest.fn();
+const mockSetOptions = jest.fn();
 let mockFilter: string | undefined = undefined;
 let mockBrews: StoredBrew[] = [];
 let mockRefresh: jest.Mock = jest.fn();
@@ -18,7 +19,7 @@ jest.mock("expo-router", () => {
     return {
         router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
         useLocalSearchParams: () => ({recipeUuid: mockFilter}),
-        useNavigation: () => ({setOptions: jest.fn()}),
+        useNavigation: () => ({setOptions: (...args: unknown[]) => mockSetOptions(...args)}),
         useFocusEffect: (cb: () => void) => {
             const epoch = mockFocusEpoch;
             actualReact.useEffect(() => { cb(); }, [cb, epoch]);
@@ -93,6 +94,7 @@ describe("brew history", () => {
         mockFilter = undefined;
         mockBrews = makeBrews();
         mockPush.mockReset();
+        mockSetOptions.mockReset();
         mockRefresh = jest.fn();
         mockRemove = jest.fn();
         mockFocusEpoch = 0;
@@ -106,8 +108,10 @@ describe("brew history", () => {
 
     it("shows one recipe's brews when reached from that recipe", async () => {
         mockFilter = "uuid-2";
-        const {getByText, queryByText} = await renderWithProviders(<BrewHistory />);
-        expect(getByText("Kenya Nyeri")).toBeTruthy();
+        const {getAllByText, queryByText} = await renderWithProviders(<BrewHistory />);
+        // Kenya Nyeri now appears both as the header subtitle and in its row;
+        // Ethiopia Guji is filtered out of the list entirely.
+        expect(getAllByText("Kenya Nyeri").length).toBeGreaterThan(0);
         expect(queryByText("Ethiopia Guji")).toBeNull();
     });
 
@@ -130,6 +134,35 @@ describe("brew history", () => {
         await renderWithProviders(<BrewHistory />);
         await fireEvent.press(screen.getByLabelText("Ethiopia Guji"));
         expect(mockPush).toHaveBeenCalledWith("/brewRecord?id=a");
+    });
+
+    it("empties the native system-font title so the styled header stands alone", async () => {
+        // The native bar rendered "Brew history" in the platform font, out of
+        // register with the app's Doto chrome. It is now emptied (as the record
+        // screen does) and the header drawn in content instead.
+        await renderWithProviders(<BrewHistory />);
+        expect(mockSetOptions).toHaveBeenCalledWith({title: ""});
+    });
+
+    it("draws the BREW HISTORY chrome heading", async () => {
+        const {getByText} = await renderWithProviders(<BrewHistory />);
+        expect(getByText("BREW HISTORY")).toBeTruthy();
+    });
+
+    it("names the recipe when filtered to one, and not when unfiltered", async () => {
+        // The recipe subtitle says which recipe the filtered list belongs to.
+        // A recipe name is human-typed, so it is Inter prose, not Doto — this
+        // asserts it exists, the DotMatrixText rule is enforced by the type of
+        // the component it renders through.
+        mockFilter = "uuid-2";
+        const filtered = await renderWithProviders(<BrewHistory />);
+        expect(filtered.getByTestId("history-header-recipe")).toBeTruthy();
+        expect(filtered.getByTestId("history-header-recipe")).toHaveTextContent("Kenya Nyeri");
+    });
+
+    it("shows no recipe subtitle when nothing is filtered", async () => {
+        const {queryByTestId} = await renderWithProviders(<BrewHistory />);
+        expect(queryByTestId("history-header-recipe")).toBeNull();
     });
 
     it("shows a delete tile that opens a confirmation before removing", async () => {
