@@ -63,6 +63,20 @@ describe("BrewMiniBar", () => {
         expect(getByText("254 G · 3:48 · TAP TO SEE IT")).toBeTruthy();
     });
 
+    it("keeps the brew on screen while it drains, instead of flipping back to Grinding", async () => {
+        // Settling is a phase *after* the last pour. Before it had its own
+        // branch it fell through to the grinding default, so the bar flipped
+        // from POUR 6 OF 6 back to "Grinding" for the whole drawdown while the
+        // trace beside it was visibly still drawing.
+        const {getByText, queryByText} = await draw({
+            phase: {name: "settling"}, elapsed: 178,
+            samples: [{at: 178_000, water: 250, cup: 242, pour: 2}]
+        });
+        expect(getByText("Draining")).toBeTruthy();
+        expect(getByText("242 G · 2:58 · ALMOST THERE")).toBeTruthy();
+        expect(queryByText("Grinding")).toBeNull();
+    });
+
     it("says where a stopped brew went", async () => {
         const {getByText} = await draw({phase: {name: "failed", reason: "noWater"}});
         expect(getByText("Stopped: no water")).toBeTruthy();

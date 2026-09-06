@@ -167,8 +167,29 @@ export const SETTLE_FLAT_MS = 4000;
  * Settling waits for a physical signal — the cup line flattening or the cup
  * being lifted. Neither is guaranteed: a machine left untouched with a cup that
  * never quite stops weeping, or a weight stream that simply stops after the
- * pour, would leave a run that never ends and a recorder that never emits its
- * record. This cap is the backstop that guarantees termination. Ninety seconds
- * is far longer than any real drawdown, so it only ever fires on a stuck brew.
+ * pour, would leave a run that never ends. Worse, `settling` is non-terminal
+ * and only ENJOY_2 (40513) otherwise reaches `done`, so a single dropped BLE
+ * notification would strand the run — the screen stuck on CANCEL, the mini bar
+ * never finishing, the next brew refused as "machine busy".
+ *
+ * So this bounds two separate things with two separate timers on the same
+ * duration: `BrewRecorder` caps the *record* it writes, and `Machine` runs a
+ * *settling watchdog* that promotes `settling` → `done` so the *run* itself
+ * cannot hang. Ninety seconds is far longer than any real drawdown, so either
+ * only ever fires on a stuck brew.
  */
 export const SETTLE_CAP_MS = 90_000;
+
+/**
+ * How far the cup weight must fall from its peak to read as the cup being
+ * lifted off the scale, ending settling at once.
+ *
+ * Not the noise floor. `NOISE_FLOOR_ML` is the half-gram the scale settles by
+ * frame to frame, and `settlePeak` is a running maximum — so testing a
+ * peak-to-trough fall against it turns ordinary ±0.3 g jitter (a 0.6 g swing
+ * across a plateau) into a "lift" and truncates the drawdown this whole phase
+ * exists to capture. A cup actually being lifted changes the reading by tens
+ * to hundreds of grams, three orders of magnitude clear of that jitter, so ten
+ * grams sits safely between the two and cannot be reached by noise.
+ */
+export const LIFT_DROP_G = 10;

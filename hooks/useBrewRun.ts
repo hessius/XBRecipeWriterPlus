@@ -163,9 +163,12 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     }, [over, runId]);
 
     const pours = recipe?.pours ?? [];
+    // Settling is treated like `over` here: every stage has physically poured,
+    // so the ladder must stay fully lit rather than dropping to the un-started
+    // look while the coffee drains.
     const activeIndex = pouring
         ? (phase as {name: "pouring"; pour: number; pours: number}).pour - 1
-        : over ? pours.length : null;
+        : over || settling ? pours.length : null;
 
     // Where this stage was *planned* to begin. Still plan-relative, and still
     // only a time source: nothing that is persisted or exported passes through

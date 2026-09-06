@@ -2,7 +2,7 @@ import {resolveAccent} from "@/library/accent";
 import type {BrewFailure, BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
-import {SETTLE_CAP_MS, SETTLE_FLAT_MS} from "@/constants/machine";
+import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_FLAT_MS} from "@/constants/machine";
 
 import type {BrewRecord, BrewSample} from "./BrewRecord";
 import {finalOutcome, planFromPours, stageWaterFromSamples, stallsFromSamples,
@@ -50,6 +50,8 @@ export default class BrewRecorder {
     private pour = 0;
     private pours = 0;
     private cup = 0;
+    /** The most recent water reading, carried onto cup-driven settling samples. */
+    private lastWater = 0;
     private emitted = false;
 
     /** True while draining after the pour: still sampling, not yet a record. */
@@ -104,19 +106,35 @@ export default class BrewRecorder {
         if (this.emitted) return;
         if (parsed.kind === "cupWeight") {
             this.cup = parsed.grams;
-            if (this.settling) this.watchSettle(parsed.grams);
+            // During settling the water stream may have stopped at BREWER_STOP
+            // — that is the very hardware unknown this phase is contingent on.
+            // If it has, the drawdown reaches the record only through the cup
+            // channel, so sample on it here (the water value is static by now).
+            // A silent gap in the trace would look exactly like success. Record
+            // before deciding, so the frame that ends the settle is itself kept.
+            if (this.settling) {
+                if (this.pouringAt !== 0) this.push(this.lastWater);
+                this.watchSettle(parsed.grams);
+            }
             return;
         }
-        // Sampled on water alone. Both channels arrive at about 10 Hz, so
-        // sampling on each would double the stream to hold a second copy of
-        // the same instant, and the cup's value is carried through anyway.
+        // Outside settling, sampled on water alone. Both channels arrive at
+        // about 10 Hz, so sampling on each would double the stream to hold a
+        // second copy of the same instant, and the cup's value is carried
+        // through anyway.
         if (parsed.kind !== "waterWeight") return;
+        this.lastWater = parsed.grams;
         // Before the first drop the machine is grinding and the plan has not
         // started. Nothing it says then belongs on the plan's axis.
         if (this.pouringAt === 0) return;
+        this.push(parsed.grams);
+    }
+
+    /** Append one sample at the current instant, cup and pour carried through. */
+    private push(water: number): void {
         this.collected.push({
             at: this.clock() - this.pouringAt,
-            water: parsed.grams,
+            water,
             cup: this.cup,
             pour: this.pour
         });
@@ -169,8 +187,11 @@ export default class BrewRecorder {
      */
     private watchSettle(grams: number): void {
         if (grams > this.settlePeak) this.settlePeak = grams;
-        // The cup being lifted off the scale: a real, physical end signal.
-        if (this.settlePeak - grams > NOISE_FLOOR_ML) {
+        // The cup being lifted off the scale: a real, physical end signal. Held
+        // to LIFT_DROP_G, not the noise floor — `settlePeak` ratchets, so a
+        // peak-to-trough test against half a gram would fire on ordinary
+        // scale jitter and truncate the drawdown non-deterministically.
+        if (this.settlePeak - grams > LIFT_DROP_G) {
             this.emit({name: "done"});
             return;
         }

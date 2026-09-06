@@ -619,6 +619,58 @@ describe("brewing", () => {
         expect(machine.phase.name).toBe("done");
     });
 
+    it("promotes a stranded settling to done after the cap, so a dropped ENJOY_2 cannot hang the run", async () => {
+        // `settling` is non-terminal and only ENJOY_2 otherwise reaches `done`.
+        // Losing that one notification would leave the run stuck — CANCEL on
+        // screen, the next brew refused as busy. The watchdog is the backstop.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0, settleCapMs: 90_000});
+            await machine.connect("AA:BB");
+            transport.emit(machineInfoFrame());
+            transport.emit(status(0x01));
+            await machine.brew(brewable());
+            transport.emit(status(0x22));
+            transport.emit(event(40507));  // grinder stop -> pouring
+            transport.emit(event(40511));  // brewer stop -> settling; ENJOY_2 never comes
+
+            expect(machine.phase.name).toBe("settling");
+            // Just short of the 90 000 ms cap (pinned to the literal): still stuck.
+            jest.advanceTimersByTime(89_999);
+            expect(machine.phase.name).toBe("settling");
+            jest.advanceTimersByTime(1);
+            expect(machine.phase.name).toBe("done");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("does not let the settling watchdog fire into a later state after the link drops", async () => {
+        // The watchdog must be torn down with the link, or a promotion to
+        // `done` would land on whatever the machine is doing next time.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0, settleCapMs: 90_000});
+            await machine.connect("AA:BB");
+            transport.emit(machineInfoFrame());
+            transport.emit(status(0x01));
+            await machine.brew(brewable());
+            transport.emit(status(0x22));
+            transport.emit(event(40507));  // pouring
+            transport.emit(event(40511));  // settling
+            transport.drop();              // link lost mid-settle
+
+            expect(machine.phase.name).toBe("lostContact");
+            jest.advanceTimersByTime(90_000);
+            // The watchdog did not fire: the phase is still lostContact, not done.
+            expect(machine.phase.name).toBe("lostContact");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("counts the pours off the machine's own index", async () => {
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable([100, 100, 88]));

@@ -1,6 +1,6 @@
 import {
     BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
-    RECIPE_ACK_MS, STATE_FRESH_MS
+    RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -209,6 +209,15 @@ export default class Machine {
     private sequence = 0;
     private brewing = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * Promotes a stranded `settling` to `done` after `settleCapMs`.
+     *
+     * `settling` is non-terminal and only ENJOY_2 reaches `done`, so one
+     * dropped notification would otherwise leave the run hung — CANCEL on
+     * screen, the next brew refused as busy. This is the run's own backstop,
+     * separate from the recorder's cap on the record.
+     */
+    private settleTimer: ReturnType<typeof setTimeout> | null = null;
     private retriedInPro = false;
     /**
      * The commit frame of an uploaded recipe that has not been started yet.
@@ -232,6 +241,7 @@ export default class Machine {
     private frameGapMs: number;
     private infoWaitMs: number;
     private handshakeFreshMs: number;
+    private settleCapMs: number;
     /** When the session was last renewed, so it is not renewed needlessly. */
     private lastHandshakeAt = 0;
 
@@ -240,15 +250,21 @@ export default class Machine {
      * @param options.infoWaitMs How long to wait for an answer to the info request.
      * @param options.handshakeFreshMs How long a session handshake stays good for.
      *     Tests pass 0; nothing else should.
+     * @param options.settleCapMs How long a stranded settling phase waits before
+     *     it is promoted to done. Tests may shorten it; nothing else should.
      */
     constructor(
         transport: MachineTransport,
-        options: {frameGapMs?: number; infoWaitMs?: number; handshakeFreshMs?: number} = {}
+        options: {
+            frameGapMs?: number; infoWaitMs?: number; handshakeFreshMs?: number;
+            settleCapMs?: number;
+        } = {}
     ) {
         this.transport = transport;
         this.frameGapMs = options.frameGapMs ?? FRAME_GAP_MS;
         this.infoWaitMs = options.infoWaitMs ?? INFO_WAIT_MS;
         this.handshakeFreshMs = options.handshakeFreshMs ?? HANDSHAKE_FRESH_MS;
+        this.settleCapMs = options.settleCapMs ?? SETTLE_CAP_MS;
     }
 
     /** The pause between frames of a sequence. See `FRAME_GAP_MS`. */
@@ -599,9 +615,14 @@ export default class Machine {
         // answered it. A stale timer left running would fire a "rejected"
         // failure into the middle of a working pour.
         if (phase.name !== "sending") this.clearAckTimer();
+        // The settling watchdog belongs only to the settling phase; any other
+        // phase has already moved the run on, so drop it before it is possibly
+        // re-armed below. This is also what stops it firing into a later brew.
+        this.clearSettleTimer();
         this.phase = phase;
         this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
             .includes(phase.name);
+        if (phase.name === "settling") this.armSettleTimer();
         // A brew that has ended takes its uncommitted recipe with it. Left
         // behind, START on a later screen would commit a recipe the user has
         // already cancelled or watched fail.
@@ -864,6 +885,21 @@ export default class Machine {
         this.ackTimer = null;
     }
 
+    private armSettleTimer(): void {
+        this.clearSettleTimer();
+        this.settleTimer = setTimeout(() => {
+            // Only if nothing else moved the run on. A dropped ENJOY_2 must not
+            // strand it in a non-terminal phase forever.
+            if (this.phase.name === "settling") this.setPhase({name: "done"});
+        }, this.settleCapMs);
+        this.settleTimer.unref?.();
+    }
+
+    private clearSettleTimer(): void {
+        if (this.settleTimer !== null) clearTimeout(this.settleTimer);
+        this.settleTimer = null;
+    }
+
     /**
      * Stop whatever is happening and put the machine back on its home screen.
      *
@@ -1003,6 +1039,9 @@ export default class Machine {
         // about: a fired timer after a disconnect would report a phantom
         // failure about a machine we are no longer talking to.
         this.clearAckTimer();
+        // Likewise the settling watchdog: a promotion to `done` fired after the
+        // link dropped would land on whatever brew came next.
+        this.clearSettleTimer();
         if (this.brewing) {
             // The machine executes a committed recipe itself, so a dropped
             // link is very probably not a failed brew. Saying "failed" would

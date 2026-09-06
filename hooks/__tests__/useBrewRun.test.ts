@@ -150,6 +150,18 @@ describe("useBrewRun", () => {
         expect(result.current.activeIndex).toBe(2);
     });
 
+    it("keeps every stage lit through settling, not faded to un-started", async () => {
+        // Settling is neither pouring nor over, but every stage has physically
+        // poured. Left as null, activeIndex drops the whole ladder to the
+        // pending look for the length of the drawdown. It must read as done,
+        // exactly like `over`: pours.length, not null.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 2, pours: 2});
+        await h.setPhase({name: "settling"});
+        expect(result.current.activeIndex).toBe(2);
+    });
+
     it("is not holding while the stage is within its plan", async () => {
         // The clock runs off the samples, not off the wall: the trace and the
         // ladder must agree on one clock, and the stream is it. A held machine

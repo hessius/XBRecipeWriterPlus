@@ -125,10 +125,26 @@ describe("BrewRecorder", () => {
         fake.phase({name: "pouring", pour: 1, pours: 2});
         fake.water(200);
         fake.phase({name: "settling"});
-        fake.cup(240);
         fake.water(205);
         expect(recorder.samples).toHaveLength(2);
-        expect(recorder.samples[1]).toMatchObject({water: 205, cup: 240});
+        expect(recorder.samples[1]).toMatchObject({water: 205});
+    });
+
+    it("records the drawdown from the cup channel when the water stream has stopped", () => {
+        // The hardware unknown: the machine may stop the water stream at
+        // BREWER_STOP. If it does, the drawdown reaches the record only through
+        // the cup channel. A recorder that sampled on water alone would show a
+        // flat, empty settle that looked exactly like success — so cup frames
+        // must advance the record too, carrying the last (static) water value.
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        // Not one more water frame arrives; only the cup keeps reporting.
+        fake.phase({name: "settling"});
+        fake.cup(230);
+        fake.cup(240);
+        expect(recorder.samples).toHaveLength(3);
+        expect(recorder.samples[2]).toMatchObject({water: 200, cup: 240});
     });
 
     it("ends settling when the cup line has been flat long enough", () => {
@@ -166,17 +182,39 @@ describe("BrewRecorder", () => {
         expect(records).toHaveLength(0);
     });
 
+    it("does not read scale jitter on a plateau as the cup being lifted", () => {
+        // The regression test for the ratcheting-peak bug. `settlePeak` is a
+        // running maximum, so a plateau that jitters within ±0.3 g produces a
+        // ~0.6 g peak-to-trough swing. Measured against the 0.5 ml noise floor
+        // that ends the brew early and non-deterministically — the very
+        // truncation settling exists to prevent. Against LIFT_DROP_G it does
+        // not. The clock barely advances, so the flat window cannot end it
+        // either: if the record appears, it is the lift misfiring.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        const jitter = [240.3, 239.8, 240.2, 239.7, 240.3, 239.9, 240.1, 239.8, 240.2];
+        for (const g of jitter) {
+            time.advance(200);           // ~1.8 s total, well under SETTLE_FLAT_MS
+            fake.cup(g);
+        }
+        expect(records).toHaveLength(0);
+    });
+
     it("ends settling immediately when the cup is lifted off the scale", () => {
         const {fake, records} = build();
         fake.phase({name: "pouring", pour: 1, pours: 2});
         fake.water(200);
         fake.cup(240);
         fake.phase({name: "settling"});
-        // A dip of 0.4 g is inside the noise floor and does not count.
-        fake.cup(239.6);
+        // A 9 g fall is still short of the lift threshold: nothing ends.
+        fake.cup(231);
         expect(records).toHaveLength(0);
-        // A fall of more than 0.5 g from the peak is the cup being lifted.
-        fake.cup(239.4);
+        // A fall of more than 10 g (LIFT_DROP_G) from the peak is the cup being
+        // lifted. Pinned to the literal, not the constant.
+        fake.cup(229);
         expect(records).toHaveLength(1);
         expect(records[0].record.outcome).toBe("done");
     });
