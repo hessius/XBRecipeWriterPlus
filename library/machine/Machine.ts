@@ -967,6 +967,28 @@ export default class Machine {
                 this.setPhase({name: "failed", reason: "noBeans"});
                 break;
             case MACHINE_STATE.NO_WATER:
+                // The 0x57 status channel reports a water *level*, not a
+                // *fault*. While the pump draws hard during a pour, a tank
+                // sitting near the float sensor's threshold dips transiently
+                // below it and surfaces here as NO_WATER. The machine's
+                // explicit fault channel is the separate EVENT.ERROR_NO_WATER
+                // (40522), handled unchanged in `onEvent` for every phase.
+                //
+                // In the field report that prompted this, the machine was
+                // observed pouring normally throughout — it never beeped, never
+                // showed a water warning, and 40522 never fired — yet a single
+                // 0x0C mid-pour discarded the whole brew. So once water is
+                // actually running we ignore the *state*: `pouring`, and
+                // `settling` too, where the pour is over and the record all but
+                // complete, so throwing a finished brew away over a level
+                // reading would be strictly worse than the bug being fixed.
+                // Every other phase keeps the original fatal handling.
+                //
+                // This is a hypothesis about the hardware, not a verified fact,
+                // in the same spirit as the other unverified-hardware caveats
+                // here; the always-on frame buffer added alongside this exists
+                // so the next occurrence leaves proof to check it against.
+                if (this.phase.name === "pouring" || this.phase.name === "settling") break;
                 this.setPhase({name: "failed", reason: "noWater"});
                 break;
             default:

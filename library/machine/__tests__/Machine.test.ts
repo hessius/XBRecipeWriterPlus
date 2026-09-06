@@ -831,6 +831,60 @@ describe("brewing", () => {
         expect(machine.phase).toMatchObject({name: "failed", reason: "noBeans"});
     });
 
+    it("ignores a NO_WATER status while pouring, because the status channel reports a level, not a fault", async () => {
+        // The field bug this guards: mid-pour of the first stage a transient
+        // 0x0C level reading ended a brew the machine went on to complete
+        // perfectly, no beep and no on-machine warning. 0x0C on the 0x57 status
+        // channel is a level dipping under the float sensor as the pump draws,
+        // not the machine's explicit fault (EVENT.ERROR_NO_WATER, 40522).
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));      // starting -> grinding
+        transport.emit(event(40507));      // grinder stop -> pouring
+
+        transport.emit(status(0x0C));      // NO_WATER *state* mid-pour
+
+        expect(machine.phase.name).toBe("pouring");
+    });
+
+    it("ignores a NO_WATER status while settling, because the pour is over and the record all but complete", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));      // starting -> grinding
+        transport.emit(event(40507));      // grinder stop -> pouring
+        transport.emit(event(40511));      // brewer stop -> settling
+
+        transport.emit(status(0x0C));      // NO_WATER *state* while settling
+
+        expect(machine.phase.name).toBe("settling");
+    });
+
+    it("still fails on a NO_WATER *event* while pouring, because the event channel is the real fault", async () => {
+        // The distinction that justifies ignoring the state: 40522 is the
+        // machine's own declaration of an empty tank and is honoured in every
+        // phase. Only the level *reading* on the status channel is ignored.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));      // starting -> grinding
+        transport.emit(event(40507));      // grinder stop -> pouring
+
+        transport.emit(event(40522));      // NO_WATER *event* mid-pour
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noWater"});
+    });
+
+    it("still fails on a NO_WATER status while grinding, so the fix is not over-broad", async () => {
+        // Grinding is not pouring or settling: no water is running, so a
+        // NO_WATER state here keeps its original fatal handling.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));      // starting -> grinding
+
+        transport.emit(status(0x0C));      // NO_WATER *state* while grinding
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noWater"});
+    });
+
     it("cancels by asking the machine to stop and then to go home", async () => {
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
