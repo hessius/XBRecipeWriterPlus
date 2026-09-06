@@ -8,6 +8,7 @@ import BrewTrace from "@/components/BrewTrace";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
+import {SUMMARY_BANDS} from "@/library/brew/bands";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
@@ -121,8 +122,13 @@ export default function BrewSummary({
                     pours={stages}
                     accent={accent}
                     activeIndex={activeIndex}
-                    barHeight={11}
-                    rungGap={8}
+                    // From bands.ts, not literals: the live screen sizes its
+                    // ladder from a measured flex height, but a summary renders
+                    // inside a ViewShot with fill={false} and has none. The
+                    // soft-cap band set gives the same thick, proportional bars
+                    // a well-filled live ladder settles at — see SUMMARY_BANDS.
+                    barHeight={SUMMARY_BANDS.barHeight}
+                    rungGap={SUMMARY_BANDS.rungGap}
                     scrolls={false}
                     fill={false}
                     stageWater={stageWater}

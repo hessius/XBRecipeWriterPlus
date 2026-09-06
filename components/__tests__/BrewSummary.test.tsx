@@ -8,6 +8,23 @@ import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
+// The real ladder, wrapped so a test can see the band widths the summary hands
+// it. RNTL performs no layout, so the thickness is only ever a prop here — but
+// it is the prop that regressed: the summary drew #88's thin pre-caps.
+let ladderProps: {barHeight?: unknown; rungGap?: unknown} = {};
+jest.mock("@/components/BrewStageLadder", () => {
+    const actual = jest.requireActual("@/components/BrewStageLadder");
+    const Ladder = actual.default;
+    return {
+        __esModule: true,
+        ...actual,
+        default: (props: Record<string, unknown>) => {
+            ladderProps = props;
+            return Ladder(props);
+        }
+    };
+});
+
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
         new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
@@ -78,6 +95,16 @@ describe("BrewSummary", () => {
         // Screen padding (18) plus the export margin (12), pinned as a literal
         // so shrinking CAPTURE_MARGIN to 0 fails this test.
         expect(style?.padding).toBe(30);
+    });
+
+    it("draws the ladder with the thick, content-sized bands, not the old thin literals", async () => {
+        // The bug: the summary drew barHeight 11 / rungGap 8 — the pre-#88
+        // values — so a brew watched live with thick bars reopened from history
+        // thin. Pinned as integer literals: asserting against SUMMARY_BANDS
+        // would still pass if the caps it derives from went to zero.
+        await draw({stagesUnavailable: false});
+        expect(ladderProps.barHeight).toBe(28);
+        expect(ladderProps.rungGap).toBe(20);
     });
 
     it("says when the machine ended the brew early", async () => {

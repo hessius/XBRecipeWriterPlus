@@ -1,5 +1,6 @@
 import {allocateBands, BAR_CAP, BAR_FLOOR, BAR_MAX, GAP_CAP, GAP_FLOOR,
-        GAP_MAX, TRACE_CAP, TRACE_FLOOR, TRACE_MAX} from "@/library/brew/bands";
+        GAP_MAX, SUMMARY_BANDS, TRACE_CAP, TRACE_FLOOR,
+        TRACE_MAX} from "@/library/brew/bands";
 
 describe("allocateBands", () => {
     it("sits at every floor when there is only just enough room", () => {
@@ -163,5 +164,30 @@ describe("allocateBands", () => {
         expect(allocateBands(300, 12).scrolls).toBe(false);
         expect(allocateBands(380, 12).scrolls).toBe(false);
         expect(allocateBands(600, 12).scrolls).toBe(false);
+    });
+});
+
+describe("SUMMARY_BANDS", () => {
+    // The unbounded band set BrewSummary uses. It has no measured height to
+    // divide (it renders inside a ViewShot with fill={false}), so it cannot
+    // call allocateBands; it takes the soft caps instead — the thickness and
+    // spacing a well-filled ladder settles at on the live screen.
+
+    it("uses the thick soft-cap bar, not the pre-#88 literal", () => {
+        // Pinned as a literal: expect(...).toBe(BAR_CAP) would still pass if
+        // BAR_CAP went to 0. 28 is #88's thickened bar; 11 was the old value
+        // that left the summary drawing thin bars.
+        expect(SUMMARY_BANDS.barHeight).toBe(28);
+        expect(SUMMARY_BANDS.rungGap).toBe(20);
+    });
+
+    it("agrees with the live screen where a ladder is comfortably filled", () => {
+        // A four-stage brew on a mid-range phone height settles at exactly the
+        // soft caps, so the summary and the live screen draw the same bars.
+        // This is the cross-check that the two paths cannot silently drift:
+        // if either the caps or SUMMARY_BANDS moved alone, this would fail.
+        const live = allocateBands(400, 4);
+        expect(live.barHeight).toBe(SUMMARY_BANDS.barHeight);
+        expect(live.rungGap).toBe(SUMMARY_BANDS.rungGap);
     });
 });

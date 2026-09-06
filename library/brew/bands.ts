@@ -48,6 +48,31 @@ export type Bands = {
 };
 
 /**
+ * The bar thickness and rung spacing for a ladder that sizes to its content.
+ *
+ * `allocateBands` shares out a *measured* flexible height, thickening the bars
+ * as slack allows. A `BrewSummary` has no such height: it renders inside a
+ * `ViewShot` with `fill={false}`, an auto-height container with no slack to
+ * divide, so there is nothing to measure and `allocateBands` cannot be called.
+ *
+ * It still has to look like the same ladder the live screen draws. So it takes
+ * the two bands' *soft caps* — the thickness and spacing the live screen holds
+ * a comfortably-filled ladder at before it starts spending leftover height on
+ * a second helping. At a mid-range phone height a four-to-nine stage brew
+ * settles at exactly these values, so the frozen summary and the live screen
+ * read as the same app rather than two.
+ *
+ * Derived from the caps rather than restated as literals, because that drift is
+ * precisely the bug this replaces: the summary carried its own `11`/`8` from
+ * before #88 thickened the caps to `28`/`20`, so a brew watched with thick bars
+ * reopened from history with thin ones.
+ */
+export const SUMMARY_BANDS = {
+    barHeight: BAR_CAP,
+    rungGap:   GAP_CAP
+} as const;
+
+/**
  * Share `flexHeight` between the trace and the ladder.
  *
  * @param flexHeight the measured height available to the trace and the ladder
