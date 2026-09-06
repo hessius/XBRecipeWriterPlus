@@ -123,7 +123,7 @@ describe("RecipeCard", () => {
     });
 
     describe("the BREW shortcut", () => {
-        it.each(["edge", "tab", "chip"] as const)("draws a %s", async (variant) => {
+        it.each(["edge", "tab", "chip", "glyph"] as const)("draws a %s", async (variant) => {
             await renderWithProviders(
                 <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
                             brewShortcut={variant} onBrew={() => undefined}/>

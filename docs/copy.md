@@ -702,11 +702,12 @@ messages from `hooks/useBackup.ts` and `library/backup.ts`.
 | `settings.brewOnRows.label` | `app/settings.tsx:257` | Toggle label. | `Show BREW on recipe rows` |
 | `settings.brewOnRows.desc` | `app/settings.tsx:258` | Toggle description. | `Add a BREW shortcut to every recipe card. Turn it off if you brew rarely and prefer a quieter list.` |
 | `settings.brewShape.label` | `app/settings.tsx:264` | Choice label. | `BREW shortcut shape` |
-| `settings.brewShape.desc` | `app/settings.tsx:265` | Choice description. | `Four shapes to try on the device. One of them will win and the rest will go.` |
+| `settings.brewShape.desc` | `app/settings.tsx:265` | Choice description. | `Five shapes to try on the device. One of them will win and the rest will go.` |
 | `settings.brewShape.edge` | `app/settings.tsx:36` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `EDGE` |
 | `settings.brewShape.tab` | `app/settings.tsx:37` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `TAB` |
 | `settings.brewShape.chip` | `app/settings.tsx:38` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `CHIP` |
-| `settings.brewShape.swipe` | `app/settings.tsx:39` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `SWIPE` |
+| `settings.brewShape.glyph` | `app/settings.tsx:39` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `GLYPH` |
+| `settings.brewShape.swipe` | `app/settings.tsx:40` (`BREW_SHORTCUT_OPTIONS`) | Doto choice value. | `SWIPE` |
 | `settings.section.units` | `app/settings.tsx:272` | Section title. | `Units` |
 | `settings.temperature.label` | `app/settings.tsx:274` | Choice label. | `Temperature` |
 | `settings.temperature.desc` | `app/settings.tsx:275` | Choice description. | `What the editor shows and takes. The card always stores Celsius, so switching back and forth changes nothing that is written.` |

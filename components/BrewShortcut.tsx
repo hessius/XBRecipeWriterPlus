@@ -1,10 +1,10 @@
 import React from "react";
-import {Pressable, type ViewStyle} from "react-native";
+import {Pressable, View, type ViewStyle} from "react-native";
 
 import DotMatrixText from "@/components/DotMatrixText";
 
 /** The shapes the card itself draws. `swipe` is a tile in the tray, not chrome. */
-export type CardShortcut = "edge" | "tab" | "chip";
+export type CardShortcut = "edge" | "tab" | "chip" | "glyph";
 
 type Props = {
     variant: CardShortcut;
@@ -43,6 +43,26 @@ const CHIP_FOLD = 14;
 const CARD_PADDING = 16;
 
 /**
+ * The play mark's dimensions.
+ *
+ * ~20 pt tall, the brief's "roughly a 20 pt glyph", and drawn as the classic
+ * transparent-border triangle: `borderLeftWidth` becomes its width and the top
+ * and bottom borders its height. A little narrower than it is tall, which is
+ * how a play triangle reads as a play triangle rather than an arrowhead.
+ */
+const GLYPH_HEIGHT = 20;
+const GLYPH_WIDTH = 16;
+/**
+ * How faint the mark is until it is pressed.
+ *
+ * The brief asks for "low-contrast until pressed": the quietest possible
+ * visible affordance, a hint the card can be brewed rather than a control
+ * demanding it. On press it goes to full ink. Only a device settles whether
+ * this is the right amount of quiet.
+ */
+const GLYPH_REST_OPACITY = 0.4;
+
+/**
  * How much of the card's trailing edge each shape occupies.
  *
  * The card adds this to its title row's right padding. Fault 2 of the shipped
@@ -52,9 +72,12 @@ const CARD_PADDING = 16;
  * that edge.
  */
 export const SHORTCUT_INSET: Record<CardShortcut, number> = {
-    edge: BAND_WIDTH - CARD_PADDING,
-    tab:  BAND_WIDTH + TAB_INSET - CARD_PADDING,
-    chip: 0
+    edge:  BAND_WIDTH - CARD_PADDING,
+    tab:   BAND_WIDTH + TAB_INSET - CARD_PADDING,
+    chip:  0,
+    // The glyph occupies the edge band's column (a small mark centred in it),
+    // so it reserves the band's room and the marker clears it the same way.
+    glyph: BAND_WIDTH - CARD_PADDING
 };
 
 /**
@@ -92,21 +115,56 @@ const SHAPES: Record<CardShortcut, ViewStyle> = {
         height:                  CHIP_HEIGHT,
         borderTopLeftRadius:     CHIP_FOLD,
         borderBottomRightRadius: CARD_RADIUS
-    }
+    },
+    // The edge band's column with no fill: a full-height 34 wide touch target
+    // pinned to the trailing edge, holding a small centred triangle. Reusing
+    // the band's geometry is what lets it share the band's slop and inset.
+    glyph: {right: 0, top: 0, bottom: 0, width: BAND_WIDTH}
 };
 
 /**
- * BREW, on a recipe card, in one of three shapes.
+ * The play mark drawn by the `glyph` shape.
  *
- * Three rather than one because the shape that shipped was chosen from a mockup
+ * A right-pointing triangle built from borders: the left border is inked and
+ * becomes the width, the transparent top and bottom borders the height. A
+ * module-scope component, not a local render helper -- a component defined
+ * inside another's body is a new type every render, which remounts it and
+ * throws away its state.
+ */
+function PlayGlyph({ink, pressed}: {ink: string; pressed: boolean}) {
+    return (
+        <View
+            testID="brew-glyph"
+            style={{
+                width:             0,
+                height:            0,
+                borderStyle:       "solid",
+                borderTopWidth:    GLYPH_HEIGHT / 2,
+                borderBottomWidth: GLYPH_HEIGHT / 2,
+                borderLeftWidth:   GLYPH_WIDTH,
+                borderTopColor:    "transparent",
+                borderBottomColor: "transparent",
+                borderLeftColor:   ink,
+                opacity:           pressed ? 1 : GLYPH_REST_OPACITY
+            }}
+        />
+    );
+}
+
+/**
+ * BREW, on a recipe card, in one of four shapes.
+ *
+ * Four rather than one because the shape that shipped was chosen from a mockup
  * and had five faults in the hand. They are alternatives, never composed, and
  * they live in one file precisely so they can be read against each other while
- * the choice is open. When one wins the other two are deleted.
+ * the choice is open. When one wins the others are deleted.
  *
  * The bands stack their letters, one per line, rather than rotating them:
  * rotated text at this size is unreadable, and four stacked letters stay a
  * shape you recognise without reading. The chip is wide enough to say the word
- * outright, which is most of why it is worth trying.
+ * outright. The glyph is the opposite extreme: no word, no capsule, no fill,
+ * just a low-contrast play triangle centred in the edge band's column -- the
+ * quietest a visible affordance can be, to judge against the swipe tray.
  *
  * Every shape shares the card's right edge with the swipe tray. That was
  * predicted before the capsule shipped and confirmed on hardware, and it is
@@ -115,6 +173,7 @@ const SHAPES: Record<CardShortcut, ViewStyle> = {
  */
 export default function BrewShortcut({variant, accent, ink, onPress}: Props) {
     const horizontal = variant === "chip";
+    const isGlyph = variant === "glyph";
 
     return (
         <Pressable
@@ -124,25 +183,34 @@ export default function BrewShortcut({variant, accent, ink, onPress}: Props) {
             onPress={onPress}
             hitSlop={horizontal ? CHIP_SLOP : BAND_SLOP}
             style={{
-                position:        "absolute",
-                backgroundColor: ink,
+                position:   "absolute",
+                // No capsule and no fill for the glyph: the column stays
+                // transparent so only the play mark shows.
+                backgroundColor: isGlyph ? "transparent" : ink,
                 alignItems:      "center",
                 justifyContent:  "center",
                 ...SHAPES[variant]
             }}
         >
-            {horizontal ? (
-                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
-                               color={accent}>
-                    BREW
-                </DotMatrixText>
-            ) : (
-                ["B", "R", "E", "W"].map((letter) => (
-                    <DotMatrixText key={letter} fontSize={9} weight="bold" color={accent}>
-                        {letter}
+            {({pressed}) =>
+                isGlyph ? (
+                    <PlayGlyph ink={ink} pressed={pressed}/>
+                ) : horizontal ? (
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                                   color={accent}>
+                        BREW
                     </DotMatrixText>
-                ))
-            )}
+                ) : (
+                    <>
+                        {["B", "R", "E", "W"].map((letter) => (
+                            <DotMatrixText key={letter} fontSize={9} weight="bold"
+                                           color={accent}>
+                                {letter}
+                            </DotMatrixText>
+                        ))}
+                    </>
+                )
+            }
         </Pressable>
     );
 }

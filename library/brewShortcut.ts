@@ -1,12 +1,13 @@
 /**
  * Which shape the BREW shortcut takes on a recipe card.
  *
- * Four of them, because the last one shipped on the strength of a mockup and
- * had five distinct faults in the hand. They are alternatives, never composed,
- * and one of them will be chosen on a device and the rest deleted. Whether
- * there is a shortcut at all is a separate, older setting.
+ * Five of them. `edge`, `tab` and `chip` are one idea at three sizes; `glyph`
+ * is the quietest visible affordance — a bare play triangle, no label; and
+ * `swipe` draws nothing on the card, leaving BREW to the swipe tray. They are
+ * alternatives, never composed, and one will be chosen on a device and the rest
+ * deleted. Whether there is a shortcut at all is a separate, older setting.
  */
-export const BREW_SHORTCUTS = ["edge", "tab", "chip", "swipe"] as const;
+export const BREW_SHORTCUTS = ["edge", "tab", "chip", "glyph", "swipe"] as const;
 
 export type BrewShortcut = (typeof BREW_SHORTCUTS)[number];
 

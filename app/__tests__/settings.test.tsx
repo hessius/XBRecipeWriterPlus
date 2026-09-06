@@ -207,6 +207,17 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("brewShortcut")).toBe("chip");
     });
 
+    it("can choose the glyph shape", async () => {
+        // The fifth, quietest candidate: a bare play triangle to judge against
+        // the swipe tray before visible buttons are dropped for good.
+        const storage = memoryStorage();
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByLabelText("GLYPH"));
+
+        expect(new Settings(storage).get("brewShortcut")).toBe("glyph");
+    });
+
     it("does not offer the one-line hints", async () => {
         // The hints toggle lives in the editor's more menu, beside the deck it
         // annotates, rather than a screen away from it.

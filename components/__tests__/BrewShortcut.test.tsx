@@ -86,4 +86,88 @@ describe("BrewShortcut", () => {
         await fireEvent.press(screen.getByLabelText("Brew this recipe"));
         expect(onPress).toHaveBeenCalled();
     });
+
+    describe("the glyph", () => {
+        it("is a bare play mark, with no word and no capsule fill", async () => {
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={() => undefined}/>
+            );
+            // The quietest visible candidate: a triangle, not the word, and the
+            // trailing-edge column left transparent so the card shows through.
+            expect(screen.getByTestId("brew-glyph")).toBeTruthy();
+            expect(screen.queryByText("BREW")).toBeNull();
+            expect(screen.queryByText("B")).toBeNull();
+            expect((screen.getByTestId("brew-shortcut").props.style as {backgroundColor?: string})
+                .backgroundColor).toBe("transparent");
+        });
+
+        it("still labels itself for a screen reader", async () => {
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={() => undefined}/>
+            );
+            expect(screen.getByLabelText("Brew this recipe")).toBeTruthy();
+        });
+
+        it("draws the play mark in the card's ink, pointing right", async () => {
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={() => undefined}/>
+            );
+            const glyph = screen.getByTestId("brew-glyph").props.style as {
+                borderLeftColor?: string; borderLeftWidth?: number;
+                borderTopColor?: string; borderBottomColor?: string;
+            };
+            // A right-pointing triangle: only the left border is inked; the top
+            // and bottom collapse to transparent.
+            expect(glyph.borderLeftColor).toBe(palette.text);
+            expect(glyph.borderLeftWidth).toBeGreaterThan(0);
+            expect(glyph.borderTopColor).toBe("transparent");
+            expect(glyph.borderBottomColor).toBe("transparent");
+        });
+
+        it("is low-contrast until pressed", async () => {
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={() => undefined}/>
+            );
+            // At rest it is a hint, not a button demanding attention. The
+            // pressed state brightens to full ink, which only a device settles.
+            const opacity = (screen.getByTestId("brew-glyph").props.style as {opacity?: number})
+                .opacity;
+            expect(opacity).toBeLessThan(1);
+            expect(opacity).toBeGreaterThan(0);
+        });
+
+        it("reaches a full touch target though the mark is small", async () => {
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={() => undefined}/>
+            );
+            const shortcut = screen.getByTestId("brew-shortcut");
+            const slop = shortcut.props.hitSlop as {left: number};
+            const width = (shortcut.props.style as {width: number}).width;
+            // Same reasoning as the bands: only the inward slop is delivered,
+            // because the card clips its subtree.
+            expect(width + slop.left).toBeGreaterThanOrEqual(44);
+        });
+
+        it("brews on a press", async () => {
+            const onPress = jest.fn();
+            await renderWithProviders(
+                <BrewShortcut variant="glyph" accent={ACCENT} ink={palette.text}
+                              onPress={onPress}/>
+            );
+            await fireEvent.press(screen.getByLabelText("Brew this recipe"));
+            expect(onPress).toHaveBeenCalled();
+        });
+
+        it("reserves room on the trailing edge like the edge band", () => {
+            // It occupies the same trailing-edge column as the edge band, so it
+            // reserves the same room and the marker clears it the same way.
+            expect(SHORTCUT_INSET.glyph).toBe(SHORTCUT_INSET.edge);
+            expect(SHORTCUT_INSET.glyph).toBeGreaterThan(0);
+        });
+    });
 });

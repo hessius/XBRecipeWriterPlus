@@ -35,6 +35,7 @@ const BREW_SHORTCUT_OPTIONS = [
     {value: "edge", label: "EDGE"},
     {value: "tab", label: "TAB"},
     {value: "chip", label: "CHIP"},
+    {value: "glyph", label: "GLYPH"},
     {value: "swipe", label: "SWIPE"}
 ] as const;
 
@@ -262,7 +263,7 @@ export default function SettingsScreen({settings}: Props) {
                         <SettingsChoiceRow
                             stacked
                             label="BREW shortcut shape"
-                            description="Four shapes to try on the device. One of them will win and the rest will go."
+                            description="Five shapes to try on the device. One of them will win and the rest will go."
                             value={brewShortcut}
                             options={BREW_SHORTCUT_OPTIONS}
                             onChange={(value) => setBrewShortcut(asBrewShortcut(value))}/>
