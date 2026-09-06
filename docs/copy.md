@@ -360,7 +360,9 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | `brew.phase.armed` | `constants/brewCopy.ts:23` (`armed`) | Phase line once the recipe is loaded (auto-start on). | `Recipe loaded.` |
 | `brew.phase.pressPlay` | `constants/brewCopy.ts:27` (`pressPlay`) | Doto prompt to press play on the machine. `▶` is the play glyph. | `PRESS ▶ ON THE MACHINE` |
 | `brew.phase.grinding` | `constants/brewCopy.ts:28` (`grinding`) | Phase line while grinding. | `Grinding…` |
-| `brew.phase.done` | `constants/brewCopy.ts:29` (`done`) | Phase line when the brew finishes. | `Enjoy.` |
+| `brew.phase.settling` | `constants/brewCopy.ts:32` (`settling`) | Phase line after the water stops but while coffee is still dripping from the brewer onto the scale. The brew is not over yet; the trace is still moving. | `Letting the last of the coffee drain…` |
+| `brew.phase.done` | `constants/brewCopy.ts:33` (`done`) | Phase line when the brew finishes. | `Enjoy.` |
+| `brew.endedOnMachine` | `constants/brewCopy.ts:112` (`ENDED_ON_MACHINE_NOTE`) | Doto note on a brew the machine reported complete but which came in more than 15 ml under its plan — typically the ratio or dose being changed on the machine, or the beans running out. Deliberately states only the observation: a mid-brew ratio change is not observable over BLE, so naming a cause would be a guess. | `ENDED ON THE MACHINE` |
 | `brew.phase.cancelled` | `constants/brewCopy.ts:30` (`cancelled`) | Phase line after cancelling. | `Stopped.` |
 | `brew.phase.lostContact` | `constants/brewCopy.ts:31` (`lostContact`) | Phase line when the link drops mid-brew. | `Lost contact. The machine is still brewing.` |
 | `brew.headline.fallback` | `app/brew.tsx:121` | Generic headline if no phase-specific copy applies. | `The brew did not start.` |
@@ -526,8 +528,9 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.noTrace.title` | `app/brewRecord.tsx:253` | Doto heading when no trace was kept. | `NO TRACE KEPT` |
 | `brewRecord.noTrace.body` | `app/brewRecord.tsx:257` | Sub-line when no trace was kept. | `No trace was kept for this brew.` |
 | `brewRecord.recipeDeleted` | `app/brewRecord.tsx:285` | Note when the source recipe was deleted. | `Recipe deleted. Stages not available.` |
-| `brewRecord.export.image` | `app/brewRecord.tsx:293` | Button to export the record as an image. | `Save as image` |
-| `brewRecord.export.data` | `app/brewRecord.tsx:295` | Button to export the record data. | `Export the data` |
+| `brewRecord.export.image` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:167` and `app/brew.tsx:319`) | Button to export as an image. Drawn upper-cased in Doto; the sentence-case value here is also the spoken a11y label, which is why it is stored this way round. | `Save as image` |
+| `brewRecord.export.data` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:169` and `app/brew.tsx:321`) | Button to export the underlying data as JSON. | `Export the data` |
+| `brewRecord.export.busy` | `components/ExportButton.tsx:34` | Replaces either label while the capture and share sheet are in flight, so a press is visibly acknowledged. | `WORKING…` |
 
 ---
 
