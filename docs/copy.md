@@ -100,12 +100,17 @@ tray, and the overflow sheet.
 | `home.card.a11y.duplicate` | `components/RecipeCard.tsx:186,278` (a11y) | (a11y) Context action / button to duplicate a recipe. | `Duplicate recipe` |
 | `home.card.a11y.delete` | `components/RecipeCard.tsx:188,284` (a11y) | (a11y) Context action / button to delete a recipe. | `Delete recipe` |
 | `home.card.a11y.brew` | `components/RecipeCard.tsx:190` (a11y) | (a11y) Context action to brew a recipe. | `Brew this recipe` |
-| `home.swipe.brew.caption` | `components/SwipeableRecipeRow.tsx:136` | Doto caption on the swipe-tray brew tile. | `BREW` |
-| `home.swipe.brew.a11y` | `components/SwipeableRecipeRow.tsx:138` (a11y) | (a11y) Swipe-tray brew tile. `${...}` is the recipe name. | `Brew ${recipe.displayName()}` |
-| `home.swipe.duplicate.caption` | `components/SwipeableRecipeRow.tsx` (`caption="COPY"`) | Doto caption on the swipe-tray duplicate tile. | `COPY` |
-| `home.swipe.duplicate.a11y` | `components/SwipeableRecipeRow.tsx:146` (a11y) | (a11y) Swipe-tray duplicate tile. `${...}` is the recipe name. | `Duplicate ${recipe.displayName()}` |
-| `home.swipe.delete.caption` | `components/SwipeableRecipeRow.tsx` (`caption="DELETE"`) | Doto caption on the swipe-tray delete tile. | `DELETE` |
-| `home.swipe.delete.a11y` | `components/SwipeableRecipeRow.tsx:153` (a11y) | (a11y) Swipe-tray delete tile. `${...}` is the recipe name. | `Delete ${recipe.displayName()}` |
+| `home.swipe.brew.caption` | `components/SwipeableRecipeRow.tsx` (`caption="BREW"`) | Doto caption on the action-tray (swipe-right) brew tile. | `BREW` |
+| `home.swipe.brew.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Action-tray brew tile. `${...}` is the recipe name. | `Brew ${recipe.displayName()}` |
+| `home.swipe.share.caption` | `components/SwipeableRecipeRow.tsx` (`caption="SHARE"`) | Doto caption on the action-tray (swipe-right) share tile. | `SHARE` |
+| `home.swipe.share.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Action-tray share tile. `${...}` is the recipe name. | `Share ${recipe.displayName()}` |
+| `home.swipe.write.caption` | `components/SwipeableRecipeRow.tsx` (`caption="WRITE"`) | Doto caption on the action-tray (swipe-right) write tile. | `WRITE` |
+| `home.swipe.write.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Action-tray write tile. `${...}` is the recipe name. | `Write ${recipe.displayName()} to a card` |
+| `home.swipe.duplicate.caption` | `components/SwipeableRecipeRow.tsx` (`caption="COPY"`) | Doto caption on the management-tray (swipe-left) duplicate tile. | `COPY` |
+| `home.swipe.duplicate.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Management-tray duplicate tile. `${...}` is the recipe name. | `Duplicate ${recipe.displayName()}` |
+| `home.swipe.delete.caption` | `components/SwipeableRecipeRow.tsx` (`caption="DELETE"`) | Doto caption on the management-tray (swipe-left) delete tile. | `DELETE` |
+| `home.swipe.delete.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Management-tray delete tile. `${...}` is the recipe name. | `Delete ${recipe.displayName()}` |
+
 
 ### Recipe overflow sheet (`components/RecipeOverflowSheet.tsx`)
 

@@ -134,37 +134,81 @@ describe("SwipeableRecipeRow", () => {
         expect(screen.getByText("COPY")).toBeTruthy();
     });
 
-    it("offers BREW in the tray when that is the chosen shape", async () => {
+    it("keeps BREW out of the management tray", async () => {
+        // The right-swipe tray is housekeeping on the list. Brewing acts on the
+        // recipe and now lives on the other side, so it must not reappear here
+        // even when the card is drawing its own on-card shortcut.
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="swipe" onBrew={() => undefined}/>
+                                brewShortcut="edge" onBrew={() => undefined}/>
+        );
+        const management = within(
+            screen.getByTestId("row-actions", {includeHiddenElements: true})
+        );
+        expect(management.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
+        // The housekeeping tiles are still here, so this is not passing because
+        // the whole tray failed to render.
+        expect(management.getByLabelText("Delete Ethiopia Guji")).toBeTruthy();
+        expect(management.getByLabelText("Duplicate Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("offers BREW, SHARE and WRITE in the action tray", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                onBrew={() => undefined} onShare={() => undefined}
+                                onWrite={() => undefined}/>
+        );
+        const action = within(
+            screen.getByTestId("row-actions-brew", {includeHiddenElements: true})
+        );
+        expect(action.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
+        expect(action.getByLabelText("Share Ethiopia Guji")).toBeTruthy();
+        expect(action.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
+    });
+
+    it("offers BREW in the tray regardless of the on-card shape", async () => {
+        // The tray is the shortcut's home now; the shape setting only adds a
+        // second, visible affordance on the card to be judged against it. So a
+        // card drawing `edge` still gets a tray BREW.
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                brewShortcut="edge" onBrew={() => undefined}
+                                onShare={() => undefined} onWrite={() => undefined}/>
         );
         expect(screen.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
     });
 
-    it.each(["edge", "tab", "chip"] as const)("keeps the tray to two tiles for %s", async (shape) => {
+    it("drops the BREW tile when there is no machine to brew on", async () => {
+        // The same rule the card's shortcut follows: a dead BREW is worse than
+        // no BREW. Share and write do not need a machine, so they stay.
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut={shape} onBrew={() => undefined}/>
+                                onShare={() => undefined} onWrite={() => undefined}/>
         );
-        // The card is drawing it. Two places to brew one recipe is one too many.
         expect(screen.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
-        // And the other two are still there, so this is not passing because the
-        // whole tray failed to render.
-        expect(screen.getByLabelText("Delete Ethiopia Guji")).toBeTruthy();
+        expect(screen.getByLabelText("Share Ethiopia Guji")).toBeTruthy();
+        expect(screen.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
     });
 
-    it("brews when the tile is pressed", async () => {
+    it("fires brew, share and write from the action tiles", async () => {
         const onBrew = jest.fn();
+        const onShare = jest.fn();
+        const onWrite = jest.fn();
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="swipe" onBrew={onBrew}/>
+                                onBrew={onBrew} onShare={onShare} onWrite={onWrite}/>
         );
         await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
         expect(onBrew).toHaveBeenCalled();
+        await fireEvent.press(screen.getByLabelText("Share Ethiopia Guji"));
+        expect(onShare).toHaveBeenCalled();
+        await fireEvent.press(screen.getByLabelText("Write Ethiopia Guji to a card"));
+        expect(onWrite).toHaveBeenCalled();
     });
 
     it("gives the brew tile the recipe's accent, not a system colour", async () => {
@@ -172,10 +216,11 @@ describe("SwipeableRecipeRow", () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={brewedRecipe} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="swipe" onBrew={() => undefined}/>
+                                onBrew={() => undefined} onShare={() => undefined}
+                                onWrite={() => undefined}/>
         );
-        // The one non-destructive tile among two neutrals. Same helper the card
-        // uses, so the tile and the card it slid off cannot disagree.
+        // The one tile carrying an accent among neutral verbs. Same helper the
+        // card uses, so the tile and the card it slid off cannot disagree.
         const word = within(screen.getByLabelText("Brew Ethiopia Guji"))
             .getByText("BREW");
         const list = (Array.isArray(word.props.style) ? word.props.style : [word.props.style]) as
@@ -186,18 +231,47 @@ describe("SwipeableRecipeRow", () => {
         expect(colour).toBe(resolveAccent(brewedRecipe));
     });
 
-    it("carries a testID even though it has no glyph to put one on", async () => {
+    it("carries a testID on the glyphless action tiles", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="swipe" onBrew={() => undefined}/>
+                                onBrew={() => undefined} onShare={() => undefined}
+                                onWrite={() => undefined}/>
         );
-        // Tiles hang their testID on the DotIcon, and this one has no icon. So
-        // without an explicit fallback the id lands nowhere, and any later
+        // The action tiles are verbs and carry no DotIcon to hang a testID on,
+        // so without an explicit fallback the id lands nowhere and any later
         // query for it -- an absence assertion above all -- would pass whether
         // or not the tray had drawn anything.
         expect(screen.getByTestId("row-action-brew", {includeHiddenElements: true}))
             .toBeTruthy();
+        expect(screen.getByTestId("row-action-write", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("draws no action tray when it has nothing to put in it", async () => {
+        // With no brew, share or write handler the tray would open onto a blank
+        // strip. The card still swipes the other way to the management tray.
+        await renderWithProviders(<SwipeableRecipeRow {...props()}/>);
+        expect(screen.queryByTestId("row-actions-brew", {includeHiddenElements: true}))
+            .toBeNull();
+        expect(screen.getByTestId("row-actions", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("keeps three action tiles inside the smallest supported screen", () => {
+        // A three-tile tray was 76 pt a tile, near the width of a phone. Pinned
+        // to integer literals rather than the constants that produced the tray,
+        // so this still bites if a tile silently shrinks to zero.
+        const tile = 72;
+        const gap = 7;      // Tamagui `$2`
+        const padding = 7;  // Tamagui `$2`, both sides
+        const tray = 3 * tile + 2 * gap + 2 * padding;
+        // iPhone SE class: 320 pt, less the row's 12 pt padding on each side.
+        const available = 320 - 2 * 12;
+        // A strip of card must stay visible to grab when the tray is open.
+        expect(available - tray).toBeGreaterThanOrEqual(44);
+        // And a tile must not fall under the touch-target minimum.
+        expect(tile).toBeGreaterThanOrEqual(44);
     });
 
     it("renders the recipe as a card", async () => {

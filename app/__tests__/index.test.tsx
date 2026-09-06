@@ -990,6 +990,31 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(screen.queryByTestId("brew-shortcut")).toBeNull();
     });
 
+    it("offers share and write in every row's action tray, brew only with a machine", async () => {
+        // Share and write need no machine, so the action tray carries them
+        // whatever is paired. Brew is the one act that needs hardware, and it
+        // follows the same no-dead-button rule the card's shortcut does.
+        mockRemembered = "";
+        await renderHome({recipes: [named("Ethiopia")]});
+        await screen.findByText("Ethiopia");
+
+        expect(screen.getByLabelText("Share Ethiopia", {includeHiddenElements: true}))
+            .toBeTruthy();
+        expect(screen.getByLabelText("Write Ethiopia to a card", {includeHiddenElements: true}))
+            .toBeTruthy();
+        expect(screen.queryByLabelText("Brew Ethiopia", {includeHiddenElements: true}))
+            .toBeNull();
+    });
+
+    it("adds the brew tile to the action tray once a machine is paired", async () => {
+        mockRemembered = "machine-device-id";
+        await renderHome({recipes: [named("Ethiopia")]});
+        await screen.findByText("Ethiopia");
+
+        expect(screen.getByLabelText("Brew Ethiopia", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
     it("refuses a second recipe while the machine is still brewing", async () => {
         // There is one machine. Pushing the brew screen anyway would show the
         // recipe that is *already* brewing, which reads as the app having

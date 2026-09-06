@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Platform} from "react-native";
+import {Platform, Share} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
@@ -22,16 +22,20 @@ import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useCardWriter} from "@/hooks/useCardWriter";
 import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
+import RecipeDatabase from "@/library/RecipeDatabase";
 import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
+import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
 
 type Props = {
@@ -147,6 +151,35 @@ export default function HomeScreen({db, settings}: Props) {
     // Cancel the user could actually press closed a different `NFC` than the one
     // `readCard` was awaiting, hiding the ceremony while the request lived on.
     const [nfc] = useState(() => new NFC());
+
+    // The action tray on each row can write a recipe to a card and share a link
+    // to it, the same two acts the editor offers — so they come from the same
+    // two hooks rather than a second implementation. `useCardWriter` brings its
+    // own `NFC` transport, its own overlay state and the `getIsClosed()` handling
+    // for a cancelled Android scan, so hosting WRITE here is wiring, not a new
+    // NFC path. Its volume-error report has no field to land in on this screen,
+    // so it becomes a toast; a library recipe that will not write already shows
+    // the card's own "will not write" mark.
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} =
+        useCardWriter((message) => {
+            if (message !== null) notify({tone: "error", message});
+        });
+    const {state: shareState, share: shareRecipe} = useShareRecipe();
+
+    // The same failures, and the same words, as the editor's share path.
+    useEffect(() => {
+        if (shareState.status !== "failed") {
+            return;
+        }
+        const message = {
+            network:     "Could not reach the sharing service. Check your connection.",
+            limited:     "Sharing is busy right now. Try again in a few minutes.",
+            unavailable: "Sharing is temporarily unavailable. Everything else still works.",
+            unusable:    "This recipe cannot be shared yet. Check the pour volumes and dose.",
+            pending:     "This recipe's link is still being created. Try again in a moment."
+        }[shareState.reason];
+        notify({tone: "error", message});
+    }, [shareState]);
 
     const isEmpty = library.recipes.length === 0;
 
@@ -438,9 +471,38 @@ export default function HomeScreen({db, settings}: Props) {
         });
     }
 
+    async function shareFromHome(recipe: Recipe): Promise<void> {
+        // The same shape as the editor's share: ask first whether the recipe
+        // can be shared at all, mint a link, remember it, then hand it to the
+        // system sheet. The `share` hook owns the "cannot share" message, so a
+        // blocked recipe only reports and mints nothing.
+        if (shareBlockReason(recipe) !== null) {
+            await shareRecipe(recipe);
+            return;
+        }
+        const url = await shareRecipe(recipe);
+        if (!url) {
+            return;
+        }
+        // Persist the minted link onto the stored recipe so a second share of
+        // the unchanged recipe returns it rather than minting a second permanent
+        // copy. Best-effort: the share itself has already happened either way.
+        try {
+            new RecipeDatabase().updateRecipe(recipe.uuid, recipe);
+        } catch {
+            // The link is still live in memory for this session.
+        }
+        try {
+            await Share.share({message: url});
+        } catch {
+            // The user dismissing the system sheet throws on some platforms.
+            // Nothing failed; there is nothing to say.
+        }
+    }
+
     // The import sheet covers the screen while it is open, and the NFC ceremony
     // while a scan is running. Both hide the subtree below from the reader.
-    const screenCovered = scanning || importOpen;
+    const screenCovered = scanning || importOpen || showNfcOverlay;
 
     return (
         <>
@@ -527,7 +589,13 @@ export default function HomeScreen({db, settings}: Props) {
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
                                 brewShortcut={brewShortcut}
-                                onBrew={() => openBrew(item)}
+                                // Gated on a machine, the same rule the card's
+                                // own shortcut follows: a dead BREW on every row
+                                // is worse than none. Share and write need no
+                                // machine, so they are always offered.
+                                onBrew={remembered !== "" ? () => openBrew(item) : undefined}
+                                onShare={() => shareFromHome(item)}
+                                onWrite={() => writeCard(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
@@ -554,6 +622,12 @@ export default function HomeScreen({db, settings}: Props) {
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>
+
+            {/* The write ceremony, hosted the same way the editor hosts it. A
+                second overlay rather than a shared one because reading and
+                writing are separate transports and only ever one is visible. */}
+            <NfcOverlay visible={showNfcOverlay} mode="write" progress={writeProgress}
+                        onCancel={onNFCDialogClose}/>
         </>
     );
 }
