@@ -1,4 +1,4 @@
-import {rungSegments} from "@/library/brew/rungGeometry";
+import {rungSegments, seamSeconds} from "@/library/brew/rungGeometry";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 /** 70 ml at 4 ml/s is 17.5 s of pouring, then a 20 s rest. */
@@ -105,5 +105,33 @@ describe("rungSegments", () => {
             segments.reduce((sum, s) => sum + s.seconds, 0);
 
         expect(total(stalled) - total(clean)).toBe(9);
+    });
+});
+
+describe("seamSeconds", () => {
+    it("is where the water hands over to the wait", () => {
+        expect(seamSeconds([
+            {kind: "water", seconds: 12, fill: 1},
+            {kind: "pause", seconds: 30, fill: 0}
+        ])).toBe(12);
+    });
+
+    it("counts a stall as part of the water", () => {
+        expect(seamSeconds([
+            {kind: "water", seconds: 5, fill: 1},
+            {kind: "stall", seconds: 4, fill: 1},
+            {kind: "water", seconds: 6, fill: 1},
+            {kind: "pause", seconds: 30, fill: 0}
+        ])).toBe(15);
+    });
+
+    it("is the end of the water when there is no wait", () => {
+        expect(seamSeconds([
+            {kind: "water", seconds: 9, fill: 1}
+        ])).toBe(9);
+    });
+
+    it("is nothing at all for an empty lane", () => {
+        expect(seamSeconds([])).toBe(0);
     });
 });

@@ -7,7 +7,7 @@ import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
 import HatchFill from "@/components/HatchFill";
 import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
-import {rungSegments, type Segment} from "@/library/brew/rungGeometry";
+import {rungSegments, seamSeconds, type Segment} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -50,6 +50,22 @@ const PENDING_OPACITY = 0.45;
  * same 3 pt, so their widths stay proportional to their seconds.
  */
 export const SEGMENT_GAP = 3;
+
+/**
+ * How far the agitation notch stands proud of the bar, above and below.
+ *
+ * The mark used to be a lone spiral floating past the end of the lane, which
+ * was both too quiet to see and in the wrong place. Cutting a tick through the
+ * bar at the crossover ties it to the moment it describes. The ladder budgets
+ * this so the marks of neighbouring rungs cannot touch.
+ */
+export const NOTCH_OVERHANG = 3;
+
+/** The width of the notch, in points. */
+const NOTCH_WIDTH = 2;
+
+/** The size of the spiral sitting on top of the notch, in points. */
+const NOTCH_GLYPH = 11;
 
 /** How far a faint stripe is mixed back toward the background. */
 const HATCH_DIM = 0.62;
@@ -159,6 +175,7 @@ export default function BrewStageRung({
     const radius = barHeight / 2;
     const before = pour.getAgitationBefore();
     const after = pour.getAgitationAfter();
+    const markColour = done ? palette.muted : accent;
 
     return (
         <XStack
@@ -196,7 +213,7 @@ export default function BrewStageRung({
                             justifyContent: "center"
                         }}
                     >
-                        <PourGlyph kind="agitation" accent={palette.dim} size={10} />
+                        <PourGlyph kind="agitation" accent={markColour} size={NOTCH_GLYPH} />
                     </View>
                 )}
                 {segments.map((segment, i) => {
@@ -246,21 +263,32 @@ export default function BrewStageRung({
                         </View>
                     );
                 })}
-                {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}
                 {after && (
                     <View
                         testID="rung-agitation-after"
+                        pointerEvents="none"
                         style={{
-                            width: 0,
-                            height: barHeight,
-                            overflow: "visible",
-                            justifyContent: "center",
-                            alignItems: "flex-end"
+                            position: "absolute",
+                            left: `${(seamSeconds(segments) / span) * 100}%`,
+                            top: -(NOTCH_OVERHANG + NOTCH_GLYPH),
+                            bottom: -NOTCH_OVERHANG,
+                            alignItems: "center",
+                            transform: [{translateX: -NOTCH_WIDTH / 2}]
                         }}
                     >
-                        <PourGlyph kind="agitation" accent={palette.dim} size={10} />
+                        <PourGlyph kind="agitation" accent={markColour}
+                                   size={NOTCH_GLYPH} />
+                        <View
+                            testID="rung-agitation-notch"
+                            style={{
+                                width: NOTCH_WIDTH,
+                                flex: 1,
+                                backgroundColor: markColour
+                            }}
+                        />
                     </View>
                 )}
+                {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}
             </XStack>
 
             <View>

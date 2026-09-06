@@ -136,6 +136,60 @@ describe("BrewStageRung", () => {
         expect(queryByTestId("rung-agitation-after")).toBeNull();
     });
 
+    it("puts the agitation notch at the water-to-wait seam", async () => {
+        // 70 ml at 4 ml/s is 17.5 s of water; the lane is 40 s wide.
+        const {getByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        const style = StyleSheet.flatten(
+            getByTestId("rung-agitation-after").props.style
+        );
+        expect(style.left).toBe("43.75%");
+        expect(style.position).toBe("absolute");
+    });
+
+    it("cuts the notch through the bar in the accent colour", async () => {
+        const {getByTestId} = await draw({
+            state: "active",
+            pour: new Pour(
+                1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        const style = StyleSheet.flatten(
+            getByTestId("rung-agitation-notch").props.style
+        );
+        expect(style.backgroundColor).toBe("#FF007F");
+        expect(style.width).toBe(2);
+    });
+
+    it("stands the notch three points proud of the bar", async () => {
+        const {getByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        const style = StyleSheet.flatten(
+            getByTestId("rung-agitation-after").props.style
+        );
+        expect(style.bottom).toBe(-3);
+        // The glyph sits on top of the notch, so the mark reaches further up.
+        expect(style.top).toBe(-14);
+    });
+
+    it("draws the notch before the slack, not past it", async () => {
+        const {getByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        const lane = getByTestId("rung-lane");
+        const ids = lane.props.children.flat(9)
+            .filter((child: {props?: {testID?: string}}) => child?.props?.testID)
+            .map((child: {props: {testID: string}}) => child.props.testID);
+        expect(ids.indexOf("rung-agitation-after"))
+            .toBeLessThan(ids.indexOf("rung-slack"));
+    });
+
     it("puts the agitation mark on the trailing edge for agitation after", async () => {
         const {getByTestId, queryByTestId} = await draw({pour: new Pour(
             1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
