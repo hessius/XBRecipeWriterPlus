@@ -188,9 +188,11 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </Pressable>
                 <MachineDot status={status} collapsed={false}
                             onPress={() => void connect()} />
-                <Text color={palette.dim} fontSize={13} flex={1} numberOfLines={1}>
+                <DotMatrixText testID="brew-recipe-title" fontSize={13}
+                               color={palette.dim} numberOfLines={1}
+                               style={{flex: 1}}>
                     {recipe.displayName()}
-                </Text>
+                </DotMatrixText>
                 {phase.name === "pouring" && (
                     <DotMatrixText testID="brew-stage-counter" fontSize={12}
                                    weight="bold" letterSpacing={1.4} color={palette.dim}>

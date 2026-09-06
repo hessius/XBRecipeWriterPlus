@@ -434,4 +434,12 @@ describe("the brew screen says true things", () => {
         const padding = Number(style?.padding ?? 0);
         expect(16 + padding * 2).toBeGreaterThanOrEqual(44);
     });
+
+    it("draws the recipe title in the dot-matrix face", async () => {
+        const {getByTestId} = await renderWithProviders(<Brew />);
+
+        const style = StyleSheet.flatten(getByTestId("brew-recipe-title").props.style);
+        expect(style.fontFamily).toBe("Doto-Bold");
+        expect(style.fontSize).toBe(13);
+    });
 });

@@ -109,6 +109,13 @@ type Props = {
  * and system status. Anything a human typed — a recipe name, an error message —
  * stays in Inter and must not be rendered through here.
  *
+ * One deliberate exception, granted by the product owner after seeing it on a
+ * device: the recipe title on the brew screen and in the brew summary. Every
+ * other glyph on those two screens is Doto, and one line of Inter among them
+ * read as unstyled rather than as a different register. The name keeps its own
+ * casing there — this component does not upper-case, callers do — so it is
+ * still recognisably the name a person typed.
+ *
  * This is the only place in the app that names the Doto font family.
  */
 export default function DotMatrixText({
