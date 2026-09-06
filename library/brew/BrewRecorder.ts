@@ -4,8 +4,9 @@ import type {Notification} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 import {SETTLE_CAP_MS, SETTLE_FLAT_MS} from "@/constants/machine";
 
-import type {BrewOutcome, BrewRecord, BrewSample} from "./BrewRecord";
-import {planFromPours, stageWaterFromSamples, stallsFromSamples, summarise} from "./BrewRecord";
+import type {BrewRecord, BrewSample} from "./BrewRecord";
+import {finalOutcome, planFromPours, stageWaterFromSamples, stallsFromSamples,
+        summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
 import {NOISE_FLOOR_ML} from "./stalls";
 
@@ -191,6 +192,10 @@ export default class BrewRecorder {
         this.stop();
 
         const {recipe} = this.options;
+        const plannedWater = recipe.pours.reduce(
+            (sum, pour) => sum + Math.max(pour.volume, 0), 0
+        );
+        const figures = summarise(this.collected, plannedSeconds(recipe.pours));
         const failure: BrewFailure | null =
             phase.name === "failed" ? phase.reason : null;
         const record: BrewRecord = {
@@ -201,7 +206,7 @@ export default class BrewRecorder {
             startedAt: this.startedAt,
             pouringAt: this.pouringAt,
             endedAt: this.clock(),
-            outcome: phase.name as BrewOutcome,
+            outcome: finalOutcome(phase.name, figures.waterTotal, plannedWater),
             failure,
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
             stalls: stallsFromSamples(
@@ -213,7 +218,7 @@ export default class BrewRecorder {
             // it said even after the recipe is edited or deleted.
             plan: planFromPours(recipe.pours),
             stageWater: stageWaterFromSamples(this.collected, recipe.pours.length),
-            ...summarise(this.collected, plannedSeconds(recipe.pours))
+            ...figures
         };
         // The machine hands a phase to every listener in turn, and this is one
         // of them. If the write throws — a full disk is the realistic way —

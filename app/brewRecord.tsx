@@ -7,6 +7,7 @@ import {Text, XStack, YStack} from "tamagui";
 import BrewSummary from "@/components/BrewSummary";
 import DotMatrixText from "@/components/DotMatrixText";
 import ExportButton from "@/components/ExportButton";
+import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
@@ -159,6 +160,8 @@ export default function BrewRecord({recipeLookup}: Props) {
                     activeIndex={ladderFrontier(record.outcome, delivered)}
                     stageWater={delivered}
                     stalls={record.stalls ?? stages.map(() => [])}
+                    note={record.outcome === "endedOnMachine"
+                        ? ENDED_ON_MACHINE_NOTE : undefined}
                     stagesUnavailable={snapshot.length === 0 && recipe === null}
                 />
             </ViewShot>

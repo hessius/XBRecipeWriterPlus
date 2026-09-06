@@ -39,6 +39,8 @@ type Props = {
     stalls: Stall[][];
     /** True when the recipe is gone and no stage snapshot was kept. */
     stagesUnavailable: boolean;
+    /** A short Doto line about how the brew ended, when there is one to make. */
+    note?: string;
 };
 
 /**
@@ -53,7 +55,8 @@ type Props = {
  */
 export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
-    water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable
+    water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
+    note
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -90,6 +93,14 @@ export default function BrewSummary({
                         No trace was kept for this brew.
                     </Text>
                 </YStack>
+            )}
+
+            {note !== undefined && (
+                <DotMatrixText testID="brew-summary-note" fontSize={11}
+                               weight="bold" letterSpacing={1.6}
+                               color={palette.warn} style={{marginBottom: 8}}>
+                    {note}
+                </DotMatrixText>
             )}
 
             <BrewFigures

@@ -13,7 +13,8 @@ import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import MachineDot from "@/components/MachineDot";
-import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy, FAILURE_COPY,
+import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
+        ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
         FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
         RUNNING} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
@@ -25,6 +26,7 @@ import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
+import {finalOutcome} from "@/library/brew/BrewRecord";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -152,6 +154,11 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // Export mechanics, shared with the record screen so the two look and
     // behave identically. The record is read from the store on press — after
     // the brew has finished and the provider has written it — never on render.
+    // The live modal has no record to read yet, so it applies the same rule to
+    // the live figures. One definition, two call sites.
+    const plannedWater = recipe.pours.reduce(
+        (sum, pour) => sum + Math.max(pour.volume, 0), 0
+    );
     const {shotRef, shareImage, shareData, busy} = useBrewExport(
         () => latestExport(historyStore ?? sharedBrewDatabase())
     );
@@ -205,6 +212,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         activeIndex={activeIndex}
                         stageWater={stageWater}
                         stalls={stalls}
+                        note={finalOutcome("done", last?.water ?? 0, plannedWater)
+                            === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
                     />
                 </ViewShot>

@@ -101,6 +101,16 @@ export const RUNNING = new Set([
     "settling"
 ]);
 
+/**
+ * The note shown on a brew the machine finished well short of its plan.
+ *
+ * It states what was observed and nothing more. A mid-brew ratio or dose
+ * change is not observable over BLE — no event carries it, no characteristic
+ * exposes it, and the pour-start frames give only an index — so naming a cause
+ * would be a guess dressed as a reading.
+ */
+export const ENDED_ON_MACHINE_NOTE = "ENDED ON THE MACHINE";
+
 /** The phases a brew can end in: nothing more will arrive from the machine. */
 export const OVER: ReadonlySet<string> = new Set([
     "done", "cancelled", "failed", "lostContact"

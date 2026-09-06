@@ -79,4 +79,16 @@ describe("BrewSummary", () => {
         // so shrinking CAPTURE_MARGIN to 0 fails this test.
         expect(style?.padding).toBe(30);
     });
+
+    it("says when the machine ended the brew early", async () => {
+        const r = await draw({note: "ENDED ON THE MACHINE"});
+
+        expect(r.getByText("ENDED ON THE MACHINE")).toBeTruthy();
+    });
+
+    it("says nothing at all when the brew went to plan", async () => {
+        const r = await draw({});
+
+        expect(r.queryByTestId("brew-summary-note")).toBeNull();
+    });
 });

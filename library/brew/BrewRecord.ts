@@ -20,8 +20,44 @@ export type BrewSample = {
     pour: number;
 };
 
-/** How a brew ended. `failed` carries the reason separately. */
-export type BrewOutcome = "done" | "cancelled" | "lostContact" | "failed";
+/**
+ * How a brew ended. `failed` carries the reason separately.
+ *
+ * `endedOnMachine` is a brew the machine reported as complete but which
+ * delivered materially less water than the plan asked for -- what happens when
+ * somebody adjusts the ratio or the dose on the machine mid-brew, or the beans
+ * run out. We cannot say *why*: a mid-brew ratio change is not observable over
+ * BLE at all, as there is no event, no readable characteristic, and the
+ * pour-start frames carry only an index. So the outcome reports the
+ * observation and stops there rather than inventing a cause.
+ */
+export type BrewOutcome =
+    "done" | "endedOnMachine" | "cancelled" | "lostContact" | "failed";
+
+/**
+ * How far below plan a brew must land before it is called short, in ml.
+ *
+ * Below this the difference is scale noise and the last drops still in the
+ * brewer, not a decision somebody made on the machine.
+ */
+export const ENDED_EARLY_ML = 15;
+
+/**
+ * The outcome to record, given how the machine said the brew ended.
+ *
+ * Only a brew the machine called complete can be `endedOnMachine`; a cancelled
+ * or failed brew is already described by how it stopped, and is short for a
+ * reason that is already known.
+ *
+ * @param plannedWater the sum of the plan's pour volumes, ml
+ */
+export function finalOutcome(
+    phaseName: string, waterTotal: number, plannedWater: number
+): BrewOutcome {
+    if (phaseName !== "done") return phaseName as BrewOutcome;
+    if (plannedWater <= 0) return "done";
+    return plannedWater - waterTotal > ENDED_EARLY_ML ? "endedOnMachine" : "done";
+}
 
 /**
  * One brew that happened.

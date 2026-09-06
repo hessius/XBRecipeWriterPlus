@@ -134,7 +134,10 @@ describe("LiveBrewProvider", () => {
         expect(global.__brewer.brew).toHaveBeenCalledTimes(2);
 
         await h.setPhase({name: "pouring", pour: 1, pours: 2});
-        await h.water(40);
+        // The whole plan, 40 + 160. Pouring only the first stage would now be
+        // recorded as `endedOnMachine`, which would be correct and beside the
+        // point: this test is about the retry being recorded at all.
+        await h.water(200);
         await act(async () => { jest.advanceTimersByTime(250); });
         await h.setPhase({name: "done"});
 
@@ -163,7 +166,10 @@ describe("LiveBrewProvider", () => {
         expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
 
         await h.setPhase({name: "pouring", pour: 1, pours: 2});
-        await h.water(40);
+        // The whole plan, 40 + 160. Pouring only the first stage would now be
+        // recorded as `endedOnMachine`, which would be correct and beside the
+        // point: this test is about the retry being recorded at all.
+        await h.water(200);
         await act(async () => { jest.advanceTimersByTime(250); });
         await h.setPhase({name: "done"});
         // Two rows, and that is right: `rejected` is a mid-brew failure, which
@@ -212,7 +218,10 @@ describe("LiveBrewProvider", () => {
         const first = recipe();
         await act(async () => { result.current.start(first); });
         await h.setPhase({name: "pouring", pour: 1, pours: 2});
-        await h.water(40);
+        // The whole plan, 40 + 160. Pouring only the first stage would now be
+        // recorded as `endedOnMachine`, which would be correct and beside the
+        // point: this test is about the retry being recorded at all.
+        await h.water(200);
         await act(async () => { jest.advanceTimersByTime(250); });
         await h.setPhase({name: "done"});
 

@@ -1,5 +1,5 @@
 import Pour from "@/library/Pour";
-import {planFromPours, poursFromPlan, stageWaterFromSamples,
+import {finalOutcome, planFromPours, poursFromPlan, stageWaterFromSamples,
         stallsFromSamples, summarise, type BrewSample, type PlanStage} from "@/library/brew/BrewRecord";
 
 function samples(rows: [number, number, number][]): BrewSample[] {
@@ -175,5 +175,32 @@ describe("a plan, snapshotted", () => {
         expect(back[0].pourNumber).toBe(1);
         expect(back[0].flowRate).toBe(0);
         expect(back[0].pauseTime).toBe(0);
+    });
+});
+
+describe("the outcome of a finished brew", () => {
+    it("is endedOnMachine when the water fell well short of the plan", () => {
+        // 260 ml planned, 220 delivered: 40 ml short.
+        expect(finalOutcome("done", 220, 260)).toBe("endedOnMachine");
+    });
+
+    it("is plain done when the shortfall is only measurement noise", () => {
+        expect(finalOutcome("done", 257, 260)).toBe("done");
+    });
+
+    it("is plain done when the brew overshot", () => {
+        expect(finalOutcome("done", 268, 260)).toBe("done");
+    });
+
+    it("leaves a cancelled brew cancelled, however short it was", () => {
+        expect(finalOutcome("cancelled", 40, 260)).toBe("cancelled");
+    });
+
+    it("leaves a failed brew failed, however short it was", () => {
+        expect(finalOutcome("failed", 0, 260)).toBe("failed");
+    });
+
+    it("does not call a brew short when there was no plan to be short of", () => {
+        expect(finalOutcome("done", 0, 0)).toBe("done");
     });
 });
