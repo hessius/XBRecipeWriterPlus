@@ -110,6 +110,22 @@ describe("useBrewRun", () => {
         expect(result.current.samples).toHaveLength(2);
     });
 
+    it("keeps publishing the trace while the brew settles", async () => {
+        // Settling is neither pouring nor over. The cup is still filling, so
+        // the live trace has to keep publishing through it rather than freezing
+        // at the last pour tick.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(200);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "settling"});
+        await h.water(210);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(result.current.phase.name).toBe("settling");
+        expect(result.current.samples).toHaveLength(2);
+    });
+
     it("reports the live stage, zero-based", async () => {
         const h = harness();
         const {result} = await renderHook(() => useBrewRun(recipe(), h.store));

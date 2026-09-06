@@ -131,10 +131,14 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     }, [machine, runId]);
 
     const pouring = phase.name === "pouring";
+    // Water is done but coffee is still draining onto the scale. The cup line
+    // is still moving, so the live trace has to keep publishing through it —
+    // this is the part of the brew that BREWER_STOP used to throw away.
+    const settling = phase.name === "settling";
     const over = OVER.has(phase.name);
 
     useEffect(() => {
-        if (!pouring) return;
+        if (!pouring && !settling) return;
         const tick = setInterval(() => {
             const taken = recorder.current?.samples ?? [];
             setPublished({
@@ -144,7 +148,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
             });
         }, PUBLISH_MS);
         return () => clearInterval(tick);
-    }, [pouring, runId]);
+    }, [pouring, settling, runId]);
 
     // One last copy on the way out, so the finished chart is the whole brew and
     // not whatever the last tick happened to catch.

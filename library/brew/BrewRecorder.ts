@@ -2,10 +2,12 @@ import {resolveAccent} from "@/library/accent";
 import type {BrewFailure, BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
+import {SETTLE_CAP_MS, SETTLE_FLAT_MS} from "@/constants/machine";
 
 import type {BrewOutcome, BrewRecord, BrewSample} from "./BrewRecord";
 import {planFromPours, stageWaterFromSamples, stallsFromSamples, summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
+import {NOISE_FLOOR_ML} from "./stalls";
 
 /** The part of `Machine` a recorder needs. Narrow, so a test can be a literal. */
 export type RecorderMachine = {
@@ -49,6 +51,16 @@ export default class BrewRecorder {
     private cup = 0;
     private emitted = false;
 
+    /** True while draining after the pour: still sampling, not yet a record. */
+    private settling = false;
+    /** The highest cup weight seen while settling, so a drop reads as a lift. */
+    private settlePeak = 0;
+    /** The last cup reading that counted as a rise, and when it arrived. */
+    private settleAnchorCup = 0;
+    private settleAnchorAt = 0;
+    /** The backstop timer, so a machine that never flattens still ends. */
+    private settleCap: ReturnType<typeof setTimeout> | null = null;
+
     constructor(options: RecorderOptions) {
         this.options = options;
     }
@@ -73,6 +85,14 @@ export default class BrewRecorder {
     stop(): void {
         this.unsubscribers.forEach((off) => off());
         this.unsubscribers = [];
+        this.clearSettleCap();
+    }
+
+    private clearSettleCap(): void {
+        if (this.settleCap !== null) {
+            clearTimeout(this.settleCap);
+            this.settleCap = null;
+        }
     }
 
     private clock(): number {
@@ -83,6 +103,7 @@ export default class BrewRecorder {
         if (this.emitted) return;
         if (parsed.kind === "cupWeight") {
             this.cup = parsed.grams;
+            if (this.settling) this.watchSettle(parsed.grams);
             return;
         }
         // Sampled on water alone. Both channels arrive at about 10 Hz, so
@@ -107,6 +128,13 @@ export default class BrewRecorder {
             this.pours = phase.pours;
             return;
         }
+        // Non-terminal: water is done but coffee is still draining onto the
+        // scale. Keep sampling and wait for the cup line to settle rather than
+        // ending the record on the earliest of the machine's three end events.
+        if (phase.name === "settling") {
+            this.beginSettle();
+            return;
+        }
         if (!TERMINAL.has(phase.name)) return;
         // A refusal before anything was sent is not a brew. No frame went out
         // and no dose was spent, so there is nothing to keep.
@@ -115,6 +143,44 @@ export default class BrewRecorder {
             return;
         }
         this.emit(phase);
+    }
+
+    private beginSettle(): void {
+        // BREWER_STOP can only arrive once, but a missed one lets ENJOY fall
+        // through to settling too, so guard against arming twice.
+        if (this.settling || this.emitted) return;
+        this.settling = true;
+        this.settlePeak = this.cup;
+        this.settleAnchorCup = this.cup;
+        this.settleAnchorAt = this.clock();
+        // Without this, a machine whose cup never quite stops weeping — or
+        // whose weight stream simply stops after the pour — would leave a run
+        // that never ends and a record that is never written.
+        this.settleCap = setTimeout(() => this.emit({name: "done"}), SETTLE_CAP_MS);
+    }
+
+    /**
+     * Decide, on each cup reading during settling, whether the brew has ended.
+     *
+     * Flatness is frame-driven, not a wall-clock timer: a plateau is only real
+     * if we saw readings hold still across it. If the stream falls silent
+     * instead, there is nothing to call flat and the cap is what ends the run.
+     */
+    private watchSettle(grams: number): void {
+        if (grams > this.settlePeak) this.settlePeak = grams;
+        // The cup being lifted off the scale: a real, physical end signal.
+        if (this.settlePeak - grams > NOISE_FLOOR_ML) {
+            this.emit({name: "done"});
+            return;
+        }
+        // Still rising: coffee is still dripping. Reset the flat window.
+        if (grams - this.settleAnchorCup > NOISE_FLOOR_ML) {
+            this.settleAnchorCup = grams;
+            this.settleAnchorAt = this.clock();
+            return;
+        }
+        // Flat for long enough: the drawdown has stopped, so the brew has.
+        if (this.clock() - this.settleAnchorAt >= SETTLE_FLAT_MS) this.emit({name: "done"});
     }
 
     private emit(phase: BrewPhase): void {

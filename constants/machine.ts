@@ -149,3 +149,26 @@ export const CONNECT_DELAYS_MS = [0, 1200, 2500, 4000, 6000];
  * fresh when `brewBlock` runs.
  */
 export const STATE_FRESH_MS = 15_000;
+
+/**
+ * How long the cup weight must sit flat before a settling brew is called done.
+ *
+ * After the machine stops pouring, coffee keeps dripping from the brewer onto
+ * the scale for several seconds; the brew is not actually over until that
+ * drawdown stops and the cup line flattens. Four seconds of no meaningful rise
+ * is long enough that a slow last drip does not cut the trace short, and short
+ * enough that the record is stamped while the drawdown is still fresh.
+ */
+export const SETTLE_FLAT_MS = 4000;
+
+/**
+ * The longest a brew may sit in settling before it is force-ended.
+ *
+ * Settling waits for a physical signal — the cup line flattening or the cup
+ * being lifted. Neither is guaranteed: a machine left untouched with a cup that
+ * never quite stops weeping, or a weight stream that simply stops after the
+ * pour, would leave a run that never ends and a recorder that never emits its
+ * record. This cap is the backstop that guarantees termination. Ninety seconds
+ * is far longer than any real drawdown, so it only ever fires on a stuck brew.
+ */
+export const SETTLE_CAP_MS = 90_000;

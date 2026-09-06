@@ -46,8 +46,15 @@ function build(overrides: Partial<{onRecord: (r: BrewRecord, s: BrewSample[]) =>
         onRecord: overrides.onRecord ?? ((record, samples) => records.push({record, samples}))
     });
     recorder.start();
+    built.push(recorder);
     return {fake, time, records, recorder};
 }
+
+/** Every recorder built in a test, so the settle cap timer cannot outlive it. */
+const built: BrewRecorder[] = [];
+afterEach(() => {
+    built.splice(0).forEach((recorder) => recorder.stop());
+});
 
 describe("BrewRecorder", () => {
     it("ignores weights that arrive before the first pour", () => {
@@ -108,6 +115,116 @@ describe("BrewRecorder", () => {
             cupTotal: 244
         });
         expect(records[0].samples).toHaveLength(1);
+    });
+
+    it("keeps sampling through settling instead of stopping at the pour's end", () => {
+        // The heart of the change. `done` is still terminal — this proves the
+        // *new* non-terminal phase in between keeps the recorder alive so the
+        // drawdown is captured, where BREWER_STOP used to end it outright.
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase({name: "settling"});
+        fake.cup(240);
+        fake.water(205);
+        expect(recorder.samples).toHaveLength(2);
+        expect(recorder.samples[1]).toMatchObject({water: 205, cup: 240});
+    });
+
+    it("ends settling when the cup line has been flat long enough", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        // A wobble under the noise floor is not a rise, and 3.9 s of flat is
+        // not yet long enough.
+        time.advance(3900);
+        fake.cup(240.3);
+        expect(records).toHaveLength(0);
+        // Crossing 4000 ms (SETTLE_FLAT_MS) of no meaningful rise ends it. The
+        // 4000 is pinned to the literal, not the constant, so mutating the
+        // constant to zero cannot make this pass for the wrong reason.
+        time.advance(100);
+        fake.cup(240);
+        expect(records).toHaveLength(1);
+        expect(records[0].record.outcome).toBe("done");
+    });
+
+    it("keeps waiting while the cup is still filling", () => {
+        // Each meaningful rise resets the flat window: a brew that drips slowly
+        // for longer than SETTLE_FLAT_MS must not be cut short.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        for (let i = 0; i < 6; i++) {
+            time.advance(3000);
+            fake.cup(241 + i);           // a 1 g rise each time, above 0.5
+        }
+        expect(records).toHaveLength(0);
+    });
+
+    it("ends settling immediately when the cup is lifted off the scale", () => {
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        // A dip of 0.4 g is inside the noise floor and does not count.
+        fake.cup(239.6);
+        expect(records).toHaveLength(0);
+        // A fall of more than 0.5 g from the peak is the cup being lifted.
+        fake.cup(239.4);
+        expect(records).toHaveLength(1);
+        expect(records[0].record.outcome).toBe("done");
+    });
+
+    it("ends settling on ENJOY_2 (the done phase)", () => {
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        fake.water(210);
+        fake.phase({name: "done"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record).toMatchObject({outcome: "done", waterTotal: 210});
+    });
+
+    it("force-ends a settle that never flattens, even with no frames at all", () => {
+        // The cap is the backstop for a machine that never sends another frame
+        // after the pour. Fake timers so a broken cap fails fast rather than
+        // hanging for real seconds.
+        jest.useFakeTimers();
+        try {
+            const {fake, records} = build();
+            fake.phase({name: "pouring", pour: 1, pours: 2});
+            fake.water(200);
+            fake.phase({name: "settling"});
+            // Just short of the 90 000 ms cap: nothing has ended it.
+            jest.advanceTimersByTime(89_999);
+            expect(records).toHaveLength(0);
+            jest.advanceTimersByTime(1);
+            expect(records).toHaveLength(1);
+            expect(records[0].record.outcome).toBe("done");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("stamps endedAt at the settle's end, not at BREWER_STOP", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        time.advance(1000);
+        fake.phase({name: "settling"});
+        const enteredSettling = time.now();
+        time.advance(5000);
+        fake.phase({name: "done"});
+        expect(records[0].record.endedAt).toBe(enteredSettling + 5000);
+        expect(records[0].record.endedAt).toBeGreaterThan(enteredSettling);
     });
 
     it("marks where the samples' zero is, so the record can draw them", () => {

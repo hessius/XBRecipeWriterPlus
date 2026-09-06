@@ -26,6 +26,10 @@ export const PHASE_COPY: Record<string, string> = {
     // one used to look pressable while doing nothing.
     pressPlay:   "PRESS ▶ ON THE MACHINE",
     grinding:    "Grinding…",
+    // Water is done, but coffee is still dripping from the brewer onto the
+    // scale. The brew is not over until that drawdown stops, so this is a
+    // distinct, non-terminal status between the last pour and "Enjoy."
+    settling:    "Letting the last of the coffee drain…",
     done:        "Enjoy.",
     cancelled:   "Stopped.",
     lostContact: "Lost contact. The machine is still brewing."
@@ -91,7 +95,10 @@ export const PRO_MODE_PROMPT =
 
 /** The phases during which stopping the machine is still a meaningful thing. */
 export const RUNNING = new Set([
-    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring"
+    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring",
+    // The pour is done but the brew is not: coffee is still draining and the
+    // trace is still live, so the run's controls stay on screen.
+    "settling"
 ]);
 
 /** The phases a brew can end in: nothing more will arrive from the machine. */

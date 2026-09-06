@@ -552,11 +552,71 @@ describe("brewing", () => {
         transport.emit(event(40510));      // pour 1
         transport.emit(event(40511));      // brewer stop
         transport.emit(event(40512));      // enjoy
+        transport.emit(event(40513));      // enjoy 2
 
         expect(phases).toContain("armed");
         expect(phases).toContain("grinding");
         expect(phases).toContain("pouring");
+        // Water stops at BREWER_STOP, but the brew is not over until the second
+        // ENJOY: the drawdown in between is now kept rather than discarded.
+        expect(phases).toContain("settling");
         expect(phases.at(-1)).toBe("done");
+    });
+
+    it("enters settling on BREWER_STOP, not done", async () => {
+        // The core of the settling change (and the descendant of the step-1
+        // gate). BREWER_STOP is the earliest of the three end events; ending
+        // the brew here threw away the drawdown, so it now enters the
+        // non-terminal settling phase instead. Reverting it to `done` fails
+        // this. `.name` is pinned to the literal so a rename cannot hide it.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));      // starting
+        transport.emit(event(40507));      // grinder stop -> pouring
+        transport.emit(event(40511));      // brewer stop
+
+        expect(machine.phase.name).toBe("settling");
+    });
+
+    it("falls into settling on ENJOY when BREWER_STOP was missed", async () => {
+        // ENJOY (40512) is the "coffee is ready" beep. If the earlier
+        // BREWER_STOP was dropped, ENJOY arriving while still pouring is the
+        // next best entry into settling.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));
+        transport.emit(event(40507));      // grinder stop -> pouring
+        transport.emit(event(40512));      // enjoy, with no brewer stop before it
+
+        expect(machine.phase.name).toBe("settling");
+    });
+
+    it("lets ENJOY change nothing once already settling", async () => {
+        // ENJOY is a beep, not a state change. Arriving after BREWER_STOP has
+        // begun settling it must not restart or disturb the settle.
+        const {transport, machine} = await readyMachine();
+        const phases: string[] = [];
+        machine.onPhase((phase) => phases.push(phase.name));
+        await machine.brew(brewable());
+        transport.emit(status(0x22));
+        transport.emit(event(40507));      // grinder stop -> pouring
+        transport.emit(event(40511));      // brewer stop -> settling
+        const before = phases.length;
+        transport.emit(event(40512));      // enjoy
+
+        expect(phases.length).toBe(before);
+        expect(machine.phase.name).toBe("settling");
+    });
+
+    it("ends the brew on ENJOY_2", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));
+        transport.emit(event(40507));      // grinder stop -> pouring
+        transport.emit(event(40511));      // brewer stop -> settling
+        transport.emit(event(40513));      // enjoy 2 -> done
+
+        expect(machine.phase.name).toBe("done");
     });
 
     it("counts the pours off the machine's own index", async () => {

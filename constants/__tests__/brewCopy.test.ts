@@ -42,4 +42,11 @@ describe("brew copy", () => {
     it("has a line for the commanded-but-unmoved window", () => {
         expect(PHASE_COPY.connecting).toBe("Connecting to the machine…");
     });
+
+    it("has a non-terminal line for the drawdown after the pour", () => {
+        // Settling sits between the last pour and "Enjoy.", so it must read as
+        // still in progress rather than finished.
+        expect(PHASE_COPY.settling).toBe("Letting the last of the coffee drain…");
+        expect(PHASE_COPY.settling).not.toBe(PHASE_COPY.done);
+    });
 });

@@ -73,6 +73,14 @@ export type BrewPhase =
     | {name: "pressPlay"}
     | {name: "grinding"}
     | {name: "pouring"; pour: number; pours: number}
+    /**
+     * Water has stopped, but coffee is still draining from the brewer onto the
+     * scale. **Non-terminal**: the brew is not over until the cup line goes
+     * flat (or the cup is lifted). Ending the record at BREWER_STOP threw away
+     * the last several seconds of the cup filling — the part that says how much
+     * coffee actually landed and when the timer really stops.
+     */
+    | {name: "settling"}
     | {name: "done"}
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
@@ -969,7 +977,17 @@ export default class Machine {
                 });
                 break;
             case EVENT.BREWER_STOP:
+                // Water is done, drawdown is not. Enter settling so the
+                // recorder keeps the cup filling; the brew ends when the cup
+                // line flattens, not here.
+                this.setPhase({name: "settling"});
+                break;
             case EVENT.ENJOY:
+                // The "coffee is ready" beep. Only a fallback into settling if
+                // BREWER_STOP was somehow missed: while pouring it is the next
+                // best entry, but once settling it is not a state change.
+                if (this.phase.name === "pouring") this.setPhase({name: "settling"});
+                break;
             case EVENT.ENJOY_2:
                 this.setPhase({name: "done"});
                 break;
