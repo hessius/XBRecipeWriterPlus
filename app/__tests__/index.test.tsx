@@ -141,6 +141,7 @@ jest.mock("@/hooks/useLiveBrew", () => ({
         run:     mockLiveRun,
         start:   jest.fn(),
         dismiss: jest.fn(),
+        watch: () => () => {},
         brew:    jest.fn(),
         error:   null
     })

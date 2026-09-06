@@ -46,6 +46,17 @@ type LiveBrew = {
     startInPro: (recipe: Recipe) => void;
     /** Dismiss a finished or stopped bar. Has no effect while actively brewing. */
     dismiss: () => void;
+    /**
+     * Declare that a screen is showing this run in full, and get back a
+     * release to call when it stops.
+     *
+     * While anything is watching, the stopped-bar countdown does not run. That
+     * countdown exists to clear the mini bar off screens the brew is incidental
+     * to; letting it fire under the brew screen tore the run out from under
+     * somebody reading why their brew had failed, leaving the screen with no
+     * run to draw.
+     */
+    watch: () => () => void;
     /** Command the machine to brew this recipe.  Only meaningful after `start`. */
     brew: (recipe: Recipe) => Promise<void>;
     startBrew: () => Promise<void>;
@@ -75,6 +86,7 @@ const defaultValue: LiveBrew = {
     start: () => {},
     startInPro: () => {},
     dismiss: () => {},
+    watch: () => () => {},
     brew: noop,
     startBrew: noop,
     cancelBrew: noop,
@@ -151,6 +163,10 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
            cancelBrew, canOfferProMode, switchToProAndRetry} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
+    // How many screens are showing this run in full. A count rather than a
+    // flag: the brew screen can be mounted while another is animating away.
+    const [watchers, setWatchers] = React.useState(0);
+
     // `start` in the Context is replaced with a no-op while RunOwner is
     // rendered, so a re-mount of the brew screen cannot call `start` and reach
     // this effect a second time.
@@ -158,12 +174,16 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
     // mount, because this component is never remounted any more.
     React.useEffect(() => {
         if (recipe === null || !CLEARS_ITSELF.has(phase.name)) return;
+        // Not while a screen has it open. When the last watcher leaves, this
+        // effect runs again and the few seconds start from that moment, which
+        // is when the bar actually becomes incidental.
+        if (watchers > 0) return;
         const timer = setTimeout(onDismiss, STOPPED_BAR_MS);
         return () => clearTimeout(timer);
         // `onDismiss` is a fresh closure every render; including it would
         // restart the countdown on every sample that arrives.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [recipe, phase.name]);
+    }, [recipe, phase.name, watchers]);
 
     const brewFiredRef = useRef<number | null>(null);
     React.useEffect(() => {
@@ -196,6 +216,17 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
                 if (recipe === null || OVER.has(phase.name)) onStart(next, true);
             },
             dismiss: onDismiss,
+            watch: () => {
+                setWatchers((n) => n + 1);
+                let released = false;
+                // Guarded: a double release would drop somebody else's claim
+                // and let the countdown run under a screen still reading it.
+                return () => {
+                    if (released) return;
+                    released = true;
+                    setWatchers((n) => n - 1);
+                };
+            },
             brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry, error,
         }}>
             {children}

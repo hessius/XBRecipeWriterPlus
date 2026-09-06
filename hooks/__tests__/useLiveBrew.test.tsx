@@ -355,4 +355,59 @@ describe("LiveBrewProvider", () => {
         await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS * 3); });
         expect(result.current.run).not.toBeNull();
     });
+
+    /**
+     * The eight-second tidy-up exists to clear the mini bar off other screens.
+     * Firing it under an open brew screen replaced the failure somebody was
+     * reading with a grinding animation for a brew that had already ended.
+     */
+    it("does not clear a stopped run while a screen is reading it", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        await act(async () => { result.current.start(recipe()); });
+        let release = () => {};
+        await act(async () => { release = result.current.watch(); });
+        await h.setPhase({name: "failed", reason: "noWater"});
+
+        await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS * 4); });
+        expect(result.current.run).not.toBeNull();
+
+        // Once the reader leaves, the countdown starts from there.
+        await act(async () => { release(); });
+        await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS - 100); });
+        expect(result.current.run).not.toBeNull();
+        await act(async () => { jest.advanceTimersByTime(200); });
+        expect(result.current.run).toBeNull();
+    });
+
+    /**
+     * React can call an effect cleanup more than once, and a release that
+     * decremented twice would drop a claim belonging to a screen still on
+     * display -- the same tear-out this guard exists to prevent.
+     */
+    it("ignores a release called twice, rather than dropping another screen's claim", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        await act(async () => { result.current.start(recipe()); });
+        let first = () => {};
+        await act(async () => {
+            first = result.current.watch();
+            result.current.watch();
+        });
+        await h.setPhase({name: "failed", reason: "noWater"});
+
+        await act(async () => { first(); first(); });
+        await act(async () => { jest.advanceTimersByTime(STOPPED_BAR_MS * 3); });
+        expect(result.current.run).not.toBeNull();
+    });
 });

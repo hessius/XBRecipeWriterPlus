@@ -86,6 +86,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
         start: mockStart,
         startInPro: mockStartInPro,
         dismiss: jest.fn(),
+        watch: () => () => {},
         brew: mockBrew,
         startBrew: mockStartBrew,
         cancelBrew: mockCancelBrew,

@@ -71,7 +71,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
-           error} = useLiveBrew();
+           error, watch} = useLiveBrew();
 
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
@@ -83,8 +83,19 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Hold the run open for as long as this screen is showing it, so the
+    // stopped-bar countdown cannot clear it while it is being read.
+    // watch is stable for the life of the provider.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => watch(), []);
+
     // Read display state from the provider's run. The provider owns the single
     // recorder and the single DB write; the screen is a pure reader (Finding 1).
+    //
+    // The grinding default covers the moment between mounting and `start`
+    // taking effect, when the machine has genuinely not said anything yet. It
+    // must not be allowed to cover a run that has gone away: that drew a
+    // grinding animation for a brew which had already failed.
     const phase = run?.phase ?? {name: "grinding"} as const;
     const samples = run?.samples ?? [];
     const elapsed = run?.elapsed ?? 0;
