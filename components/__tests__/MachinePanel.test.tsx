@@ -170,4 +170,30 @@ describe("MachinePanel", () => {
         ) as {fontSize?: number};
         expect(style.fontSize).toBe(18);
     });
+
+    it("says so when it is connected but has not heard any readings yet", async () => {
+        // The panel used to branch on `connected && vitals !== null` and let
+        // everything else fall to a final else whose copy is "Not in range".
+        // A machine that is connected but whose info blob has not arrived
+        // landed there and was described as out of range, while the header dot
+        // two rows up was green -- and its TRY NOW called onConnect, which has
+        // nothing to do when we are already connected, so it did nothing.
+        const {queryByText, queryByLabelText, getByLabelText} =
+            await draw({status: "connected", vitals: null});
+
+        expect(queryByText(/Not in range/)).toBeNull();
+        expect(queryByLabelText("Try now")).toBeNull();
+        expect(getByLabelText("Refresh the machine readings")).toBeTruthy();
+    });
+
+    it("leaves room beneath the last reading", async () => {
+        // Device testing found the panel looked clipped: $2 is seven points,
+        // which is not enough to separate the last row from the edge of the
+        // header. 18 is $4; pinned as a literal so that shrinking the token in
+        // the source cannot make this assertion agree with itself.
+        const {getByTestId} = await draw();
+        const style = StyleSheet.flatten(getByTestId("machine-panel").props.style);
+
+        expect(style.paddingBottom).toBeGreaterThanOrEqual(14);
+    });
 });

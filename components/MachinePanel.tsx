@@ -156,6 +156,22 @@ export default function MachinePanel({
                 CONNECTING…
             </DotMatrixText>
         );
+    } else if (status === "connected") {
+        // Connected, but the info blob has not arrived. Without this branch it
+        // fell through to "Not in range" below -- describing a machine we are
+        // demonstrably talking to as absent, while the dot two rows up was
+        // green. TRY NOW would have been the wrong offer too: there is nothing
+        // to connect. Asking for the readings is the thing that would help, so
+        // that is what is offered.
+        body = (
+            <YStack gap="$2">
+                <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    CONNECTED. NO READINGS YET.
+                </DotMatrixText>
+                <RefreshButton accent={accent} askedAt={0} onRefresh={onRefreshWater} />
+            </YStack>
+        );
     } else {
         body = (
             <YStack gap="$2">
@@ -191,7 +207,10 @@ export default function MachinePanel({
     return (
         <Collapsible open={open}>
             <YStack testID="machine-panel" paddingHorizontal="$3"
-                    paddingBottom="$2">
+                    // $2 was seven points, which left the last reading almost
+                    // flush against the edge of the header and made the panel
+                    // read as clipped rather than finished.
+                    paddingBottom="$4">
                 {body}
             </YStack>
         </Collapsible>
