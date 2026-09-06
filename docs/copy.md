@@ -384,9 +384,14 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `It stirs the bed afterwards.` |
 | `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `It stirs the bed before and after.` |
 
-Note: `components/PourGlyph.tsx:27-32` also holds a11y labels for the pour
-glyphs — `Centred pour`, `Circular pour`, `Spiral pour`, `Agitation` — spoken
-where a pour icon appears.
+| `glyph.centered.a11y` | `components/PourGlyph.tsx:27` (a11y, `LABELS`) | (a11y) Spoken where the centred-pour icon appears. | `Centred pour` |
+| `glyph.circular.a11y` | `components/PourGlyph.tsx:28` (a11y, `LABELS`) | (a11y) Spoken where the circular-pour icon appears. | `Circular pour` |
+| `glyph.spiral.a11y` | `components/PourGlyph.tsx:29` (a11y, `LABELS`) | (a11y) Spoken where the spiral-pour icon appears. | `Spiral pour` |
+| `glyph.agitation.a11y` | `components/PourGlyph.tsx:33` (a11y, `LABELS`) | (a11y) Spoken where the agitation icon appears. The code comments that it is deliberately *agitation*, not *shake*: the card format, the editor and the help text all say agitation, and two words for one thing is one word too many. | `Agitation` |
+| `editor.stage.pattern.centered` | `library/Pour.ts:170` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site (`components/StageTile.tsx:237`). Note the American spelling here against `CENTRED` in the brew screen — see Inconsistencies. | `Centered` |
+| `editor.stage.pattern.circular` | `library/Pour.ts:172` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site. | `Circular` |
+| `editor.stage.pattern.spiral` | `library/Pour.ts:174` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site. | `Spiral` |
+| `editor.stage.pattern.unknown` | `library/Pour.ts:176` (`getPourPatternText`) | Shown if a card carries a pattern byte we do not recognise. A bare `Error` is not much help to a reader; worth rewording. | `Error` |
 
 ---
 
@@ -577,7 +582,7 @@ app-authored copy, so not edited here.
 
 The machine card in Settings (`components/MachineSection.tsx`), the header dot
 (`components/MachineDot.tsx`), the water/mode popover
-(`components/MachinePopover.tsx`), and the Bluetooth errors from
+(`components/MachinePanel.tsx`), and the Bluetooth errors from
 `hooks/useMachine.ts` and `library/machine/Transport.ts` (surfaced via the
 machine card's error line).
 
@@ -621,25 +626,33 @@ machine card's error line).
 | `machine.dot.disconnected.a11y` | `components/MachineDot.tsx:33` (a11y, `disconnected`) | (a11y) Header dot when out of range. | `Machine not in range` |
 | `machine.dot.failed.a11y` | `components/MachineDot.tsx:34` (a11y, `failed`) | (a11y) Header dot after a failed link. | `Machine not in range` |
 
-### Popover (`components/MachinePopover.tsx`)
+### The machine panel (`components/MachinePanel.tsx`)
+
+Note: this component was called `MachinePopover` when the catalogue was first
+written, which is why its IDs still read `machine.popover.*`. The IDs are the
+contract and have deliberately **not** been renamed — only the sources were
+re-pointed.
 
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
-| `machine.popover.title` | `components/MachinePopover.tsx:141` | Sheet title (not shown visibly; used for the frame). | `Machine` |
-| `machine.popover.water.label` | `components/MachinePopover.tsx:73` | Doto row label. | `WATER` |
-| `machine.popover.water.ok` | `components/MachinePopover.tsx:76` | Doto water value. | `OK` |
-| `machine.popover.water.low` | `components/MachinePopover.tsx:76` | Doto water value. | `LOW` |
-| `machine.popover.water.refresh.a11y` | `components/MachinePopover.tsx:84` (a11y) | (a11y) Refresh-the-water button. | `Refresh the water reading` |
-| `machine.popover.water.fillPrompt` | `components/MachinePopover.tsx:93` | Doto prompt when the tank is low. | `FILL THE TANK, THEN REFRESH` |
-| `machine.popover.mode.label` | `components/MachinePopover.tsx:96` | Doto row label. | `MODE` |
-| `machine.popover.grind.label` | `components/MachinePopover.tsx:102` | Doto row label. | `GRIND` |
-| `machine.popover.connecting` | `components/MachinePopover.tsx:113` | Doto status while connecting. | `CONNECTING…` |
-| `machine.popover.outOfRange` | `components/MachinePopover.tsx:121` | Prose when out of range. | `Not in range. It will reconnect by itself when it is.` |
-| `machine.popover.lastSeen` | `components/MachinePopover.tsx:122` | Prose with last-seen age. `${age(...)}` is a human age; sentence continues on line 123. | `Last seen ${age(vitals.askedAt, now)}. It will reconnect by itself when it is in range.` |
-| `machine.popover.tryNow.a11y` | `components/MachinePopover.tsx:125` (a11y) | (a11y) Try-now button. | `Try now` |
-| `machine.popover.tryNow` | `components/MachinePopover.tsx:131` | Doto label on the try-now button. | `TRY NOW` |
-| `machine.popover.age.justNow` | `components/MachinePopover.tsx:36` | Doto age helper. | `JUST NOW` |
-| `machine.popover.age.minAgo` | `components/MachinePopover.tsx:37` | Doto age helper. `${minutes}` is the count. | `${minutes} MIN AGO` |
+| `machine.popover.water.label` | `components/MachinePanel.tsx:123` | Doto row label. | `WATER` |
+| `machine.popover.water.ok` | `components/MachinePanel.tsx:126` | Doto water value. | `OK` |
+| `machine.popover.water.low` | `components/MachinePanel.tsx:126` | Doto water value. | `LOW` |
+| `machine.popover.water.refresh.a11y` | `components/MachinePanel.tsx:78` (a11y) | (a11y) Refresh-the-readings button. | `Refresh the machine readings` |
+| `machine.panel.refresh.idle` | `components/MachinePanel.tsx:54` (`LABEL.idle`) | Doto label on the refresh button at rest. | `REFRESH` |
+| `machine.panel.refresh.asking` | `components/MachinePanel.tsx:55` (`LABEL.asking`) | Doto label while the machine is being asked. The wait is real — it may take a dozen seconds. | `CHECKING…` |
+| `machine.panel.refresh.noAnswer` | `components/MachinePanel.tsx:56` (`LABEL.noAnswer`) | Doto label when the machine did not answer. Clears itself after a few seconds. | `NO ANSWER` |
+| `machine.popover.water.fillPrompt` | `components/MachinePanel.tsx:135` | Doto prompt when the tank is low. | `FILL THE TANK, THEN REFRESH` |
+| `machine.popover.mode.label` | `components/MachinePanel.tsx:138` | Doto row label. | `MODE` |
+| `machine.popover.grind.label` | `components/MachinePanel.tsx:144` | Doto row label. | `GRIND` |
+| `machine.popover.connecting` | `components/MachinePanel.tsx:156` | Doto status while connecting. | `CONNECTING…` |
+| `machine.panel.noReadings` | `components/MachinePanel.tsx:170` | Doto status when the machine is connected but has not yet reported its water, mode or grind. Offers refresh rather than reconnect — there is nothing to connect. | `CONNECTED. NO READINGS YET.` |
+| `machine.popover.outOfRange` | `components/MachinePanel.tsx:180` | Prose when out of range. | `Not in range. It will reconnect by itself when it is.` |
+| `machine.popover.lastSeen` | `components/MachinePanel.tsx:181` | Prose with last-seen age. `${age(...)}` is a human age; sentence continues on line 123. | `Last seen ${age(vitals.askedAt, now)}. It will reconnect by itself when it is in range.` |
+| `machine.popover.tryNow.a11y` | `components/MachinePanel.tsx:184` (a11y) | (a11y) Try-now button. | `Try now` |
+| `machine.popover.tryNow` | `components/MachinePanel.tsx:190` | Doto label on the try-now button. | `TRY NOW` |
+| `machine.popover.age.justNow` | `components/MachinePanel.tsx:36` | Doto age helper. | `JUST NOW` |
+| `machine.popover.age.minAgo` | `components/MachinePanel.tsx:37` | Doto age helper. `${minutes}` is the count. | `${minutes} MIN AGO` |
 
 ### Bluetooth errors (`hooks/useMachine.ts`, `library/machine/Transport.ts`)
 
