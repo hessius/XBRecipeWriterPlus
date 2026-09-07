@@ -17,16 +17,25 @@ export const GRIND_SIZE_OFFSET = 40;
 export const XID_LENGTH = 7;
 
 /**
- * xBloom XIDs look like `<VENDOR>[T]<NUM>`: a three-letter vendor code, an optional
- * `T` for tea, then two or three digits. An empty XID is allowed — the machine
- * brews fine without one, it just means the app cannot look the recipe up online.
+ * xBloom XIDs look like `<VENDOR>[T]<NUM>`: a vendor code of at least two
+ * letters, an optional `T` for tea, then at least two digits, within the seven
+ * characters the card field holds. An empty XID is allowed — the machine brews
+ * fine without one, it just means the app cannot look the recipe up online.
+ *
+ * The rule used to demand exactly three letters and at most three digits,
+ * which was an inference from the codes we happened to have seen. `XB0001` —
+ * xBloom's own house code, on the generic "Recipe Card" pod — breaks it in
+ * both directions at once, and was being refused by the same app that had just
+ * imported a recipe carrying it. The bound that is real is the field width;
+ * the shape is deliberately loose now, because the server is the only thing
+ * that actually knows whether a code exists.
  */
 export function isValidXID(xid: string): boolean {
     const trimmed = xid.trim();
     if (trimmed.length === 0) {
         return true;
     }
-    return trimmed.length <= XID_LENGTH && /^[A-Za-z]{3}T?[0-9]{2,3}$/.test(trimmed);
+    return trimmed.length <= XID_LENGTH && /^[A-Za-z]{2,}T?[0-9]{2,}$/.test(trimmed);
 }
 export const DEFAULT_GRIND_SIZE = 50;
 
