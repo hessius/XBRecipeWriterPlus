@@ -136,17 +136,28 @@ describe("brew history", () => {
         expect(mockPush).toHaveBeenCalledWith("/brewRecord?id=a");
     });
 
-    it("empties the native system-font title so the styled header stands alone", async () => {
-        // The native bar rendered "Brew history" in the platform font, out of
-        // register with the app's Doto chrome. It is now emptied (as the record
-        // screen does) and the header drawn in content instead.
+    it("draws the app's own pushed-screen header, with its own back key", async () => {
+        // The native bar is switched off in `app/_layout.tsx`, not from inside
+        // the screen: an effect runs after the first paint, so a screen that
+        // hides its own bar gives it one frame to flash. An earlier pass only
+        // emptied the bar's *title* from here, which left the bar itself — a
+        // blank strip and a system chevron sitting above the app's header.
         await renderWithProviders(<BrewHistory />);
-        expect(mockSetOptions).toHaveBeenCalledWith({title: ""});
+        expect(screen.getByText("Brew history")).toBeTruthy();
+        expect(screen.getByTestId("screen-header-back")).toBeTruthy();
     });
 
-    it("draws the BREW HISTORY chrome heading", async () => {
-        const {getByText} = await renderWithProviders(<BrewHistory />);
-        expect(getByText("BREW HISTORY")).toBeTruthy();
+    it("does not reach for the native bar's options at all", async () => {
+        // The whole bug was a screen trying to dress a bar it should not have
+        // had. If this screen starts calling setOptions again, the bar is back.
+        await renderWithProviders(<BrewHistory />);
+        expect(mockSetOptions).not.toHaveBeenCalled();
+    });
+
+    it("counts the brews beside the title", async () => {
+        // Two rows are seeded by this suite's fixture.
+        await renderWithProviders(<BrewHistory />);
+        expect(screen.getByTestId("screen-title-count")).toHaveTextContent("2");
     });
 
     it("names the recipe when filtered to one, and not when unfiltered", async () => {

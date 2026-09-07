@@ -1,5 +1,5 @@
-import {router, useFocusEffect, useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useEffect, useRef, useState} from "react";
+import {router, useFocusEffect, useLocalSearchParams} from "expo-router";
+import React, {useRef, useState} from "react";
 import {FlatList} from "react-native-gesture-handler";
 import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/ReanimatedSwipeable";
 import {Button, Text, YStack} from "tamagui";
@@ -7,6 +7,7 @@ import {Button, Text, YStack} from "tamagui";
 import BrewHistoryRow from "@/components/BrewHistoryRow";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import ScreenHeader from "@/components/ScreenHeader";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
@@ -33,16 +34,20 @@ const TILE_GLYPH_SIZE = 24;
  * `DotMatrixText` — the one dot-matrix exception for a recipe name, on the brew
  * screen, is not extended here.
  */
-function HistoryHeader({recipeName}: {recipeName?: string}) {
+function HistoryHeader({recipeName, count}: {recipeName?: string; count: number}) {
     return (
-        <YStack paddingHorizontal="$4" paddingTop="$3" paddingBottom="$2" gap="$1">
-            <DotMatrixText fontSize={16} weight="bold" letterSpacing={1.8}
-                           color={palette.text}>
-                BREW HISTORY
-            </DotMatrixText>
+        <YStack>
+            {/* The same header the other pushed screens draw, rather than a
+                second one of its own. An earlier pass hand-set a Doto title
+                here, which read as a third kind of header in an app that
+                already had two -- and, being drawn in content, sat *under* the
+                native bar instead of replacing it. */}
+            <ScreenHeader title="Brew history" count={count}
+                          onBack={() => router.back()}/>
             {recipeName !== undefined && (
                 <Text testID="history-header-recipe" fontSize={13}
-                      color={palette.dim} numberOfLines={1}>
+                      color={palette.dim} numberOfLines={1}
+                      paddingHorizontal="$4" paddingBottom="$2">
                     {recipeName}
                 </Text>
             )}
@@ -119,7 +124,6 @@ function SwipeableBrewRow({
  * (unfiltered).
  */
 export default function BrewHistory() {
-    const navigation = useNavigation();
     const {recipeUuid} = useLocalSearchParams<{recipeUuid?: string}>();
     const {brews, remove, refresh} = useBrewHistory();
 
@@ -143,12 +147,6 @@ export default function BrewHistory() {
     const filtered = recipeUuid
         ? brews.filter((b) => b.recipeUuid === recipeUuid)
         : brews;
-
-    useEffect(() => {
-        // Empty the native system-font title; the styled header is drawn in
-        // content below, the same way the record screen handles its chrome.
-        navigation.setOptions({title: ""});
-    }, [navigation]);
 
     function handlePress(brew: StoredBrew) {
         // eslint-disable-next-line react-hooks/purity
@@ -187,7 +185,7 @@ export default function BrewHistory() {
     if (filtered.length === 0) {
         return (
             <YStack flex={1} backgroundColor={palette.base}>
-                <HistoryHeader recipeName={recipeName} />
+                <HistoryHeader recipeName={recipeName} count={filtered.length} />
                 <YStack flex={1} padding="$4" alignItems="center"
                         justifyContent="center" gap="$2">
                     <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
@@ -204,7 +202,7 @@ export default function BrewHistory() {
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
-            <HistoryHeader recipeName={recipeName} />
+            <HistoryHeader recipeName={recipeName} count={filtered.length} />
             <FlatList
                 data={filtered}
                 keyExtractor={(item) => item.id}

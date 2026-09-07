@@ -1,16 +1,18 @@
-import {router, useLocalSearchParams, useNavigation} from "expo-router";
-import React, {useEffect, useRef, useState} from "react";
-import {Pressable, useWindowDimensions} from "react-native";
+import {router, useLocalSearchParams} from "expo-router";
+import React, {useState} from "react";
+import {useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewSummary from "@/components/BrewSummary";
 import DotMatrixText from "@/components/DotMatrixText";
 import ExportButton from "@/components/ExportButton";
+import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -31,19 +33,6 @@ type Props = {
     recipeLookup?: RecipeLookup;
 };
 
-/** The "All brews" header button. Defined at module scope — see house rules. */
-function AllBrewsButton({onPress}: {onPress: () => void}) {
-    return (
-        <Pressable accessibilityRole="button" accessibilityLabel="All brews"
-                   onPress={onPress} style={{paddingHorizontal: 12}}>
-            <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
-                           color={palette.dim}>
-                ALL BREWS
-            </DotMatrixText>
-        </Pressable>
-    );
-}
-
 /**
  * A single recorded brew, frozen.
  *
@@ -55,7 +44,6 @@ function AllBrewsButton({onPress}: {onPress: () => void}) {
  */
 export default function BrewRecord({recipeLookup}: Props) {
     const {id, latest} = useLocalSearchParams<{id?: string; latest?: string}>();
-    const navigation = useNavigation();
     const {width} = useWindowDimensions();
 
     const {open, brews} = useBrewHistory();
@@ -87,24 +75,16 @@ export default function BrewRecord({recipeLookup}: Props) {
     // record and its samples are already in memory here.
     const {shotRef, shareImage, shareData, busy} = useBrewExport(() => opened);
 
-    const lastPushRef = useRef(0);
-
-    function handleAllBrews() {
-        if (Date.now() - lastPushRef.current < 2000) return;
-        lastPushRef.current = Date.now();
-        router.push("/brewHistory");
-    }
-
-    useEffect(() => {
-        navigation.setOptions({
-            title: "",
-            headerRight: () => <AllBrewsButton onPress={handleAllBrews} />
-        });
-    }, [navigation]);
+    // No "All brews" control. The list is the only way in here, so it sat
+    // beside a back chevron that already went to exactly the same screen —
+    // two affordances for one destination, one of them pushing a *second*
+    // copy of the list onto the stack rather than returning to the first.
 
     if (opened === null) {
         return (
-            <YStack flex={1} backgroundColor={palette.base} padding="$4"
+            <YStack flex={1} backgroundColor={palette.base}>
+                <ScreenHeader title="Brew" onBack={() => router.back()}/>
+                <YStack flex={1} padding="$4"
                     alignItems="center" justifyContent="center" gap="$2">
                 <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
                                color={palette.dim}>
@@ -113,6 +93,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                 <Text color={palette.muted} fontSize={13} textAlign="center">
                     That brew is no longer here.
                 </Text>
+                </YStack>
             </YStack>
         );
     }
@@ -140,7 +121,19 @@ export default function BrewRecord({recipeLookup}: Props) {
         ?? stages.map((pour) => Math.max(pour.volume, 0));
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} paddingVertical="$4" gap="$3">
+        <YStack flex={1} backgroundColor={palette.base} gap="$3">
+            {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
+                that name immediately below, and it has to, because the capture
+                needs it. A header repeating it would say the same word twice in
+                two fonts. The date says the thing the name cannot — which brew
+                of that recipe this is. */}
+            <YStack>
+                <ScreenHeader title="Brew" onBack={() => router.back()}/>
+                <Text testID="record-header-when" fontSize={13} color={palette.dim}
+                      paddingHorizontal="$4" paddingBottom="$2">
+                    {`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
+                </Text>
+            </YStack>
             {/* Everything worth sharing sits inside the ViewShot: the recipe
                 name, the trace, the figures and the stage ladder. BrewSummary
                 owns its own background and padding, because a capture inherits

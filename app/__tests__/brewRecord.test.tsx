@@ -106,17 +106,24 @@ describe("brew record", () => {
         expect(screen.getByText(/\+14 S/)).toBeTruthy();
     });
 
-    it("puts All brews in the header, not the body", async () => {
+    it("offers one way back, not two that go to the same place", async () => {
+        // The history list is the only way in here, so an "All brews" button
+        // sat beside a back chevron that already went to exactly that screen —
+        // and it *pushed*, stacking a second copy of the list rather than
+        // returning to the first.
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        // The button lives in navigation.setOptions, not in the scroll body.
-        const call = mockSetOptions.mock.calls.find(
-            (c) => c[0] && typeof c[0].headerRight === "function"
-        );
-        expect(call).toBeTruthy();
-        // Render the header button and confirm its label.
-        const HeaderRight = call![0].headerRight as React.ComponentType;
-        const {getByLabelText} = await renderWithProviders(<HeaderRight />);
-        expect(getByLabelText("All brews")).toBeTruthy();
+        expect(screen.getByTestId("screen-header-back")).toBeTruthy();
+        expect(screen.queryByLabelText("All brews")).toBeNull();
+        expect(mockSetOptions).not.toHaveBeenCalled();
+    });
+
+    it("titles itself Brew and dates it, rather than repeating the recipe name", async () => {
+        // `BrewSummary` draws the name just below and has to, because the
+        // export capture needs it. The date is what the name cannot say: which
+        // brew of that recipe this one is.
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(screen.getByText("Brew")).toBeTruthy();
+        expect(screen.getByTestId("record-header-when")).toBeTruthy();
     });
 
     it("renders the stage ladder with every stage done when the recipe exists", async () => {

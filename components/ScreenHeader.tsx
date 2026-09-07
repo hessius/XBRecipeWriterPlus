@@ -12,6 +12,11 @@ const KEY_SIZE = 32;
 
 type Props = {
     title: string;
+    /**
+     * A machine-counted superscript beside the title, e.g. how many brews the
+     * list below holds. Hidden when absent or zero, which `ScreenTitle` decides.
+     */
+    count?: number;
     onBack: () => void;
 };
 
@@ -32,7 +37,7 @@ type Props = {
  * it, a screen reader arriving on a pushed screen has nothing for the rotor to
  * land on and no announcement saying where it landed.
  */
-export default function ScreenHeader({title, onBack}: Props) {
+export default function ScreenHeader({title, count, onBack}: Props) {
     const insets = useSafeAreaInsets();
 
     return (
@@ -47,7 +52,7 @@ export default function ScreenHeader({title, onBack}: Props) {
                         <DotIcon name="back" size={16} color={palette.text}/>
                     </YStack>
                 </Pressable>
-                <ScreenTitle title={title} heading/>
+                <ScreenTitle title={title} count={count} heading/>
             </XStack>
         </YStack>
     );

@@ -5,28 +5,13 @@ import {XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {formatBrewDate, formatBrewDuration} from "@/library/brew/brewFormat";
 
 type Props = {
     brew: StoredBrew;
     onPress: () => void;
 };
 
-/** `2026-09-03`. Uses local time so a brew made at 11 pm shows that night's date. */
-function formatDate(ms: number): string {
-    const d = new Date(ms);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-}
-
-/** `4:23`. */
-function formatDuration(startMs: number, endMs: number): string {
-    const totalSeconds = Math.round((endMs - startMs) / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${String(secs).padStart(2, "0")}`;
-}
 
 /** The outcomes that mean the brew did not finish. Short is not one of them. */
 const STOPPED_OUTCOMES: ReadonlySet<string> =
@@ -63,13 +48,13 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
                     </DotMatrixText>
                     <XStack gap="$3" alignItems="center">
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
-                            {formatDate(brew.startedAt)}
+                            {formatBrewDate(brew.startedAt)}
                         </DotMatrixText>
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.text}>
                             {`${Math.round(brew.cupTotal)} G`}
                         </DotMatrixText>
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
-                            {formatDuration(brew.startedAt, brew.endedAt)}
+                            {formatBrewDuration(brew.startedAt, brew.endedAt)}
                         </DotMatrixText>
                         {endedEarly && (
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}

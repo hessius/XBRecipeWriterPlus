@@ -132,6 +132,18 @@ export default function RootLayout() {
                                             <Stack.Screen name="about" options={{headerShown: false}}/>
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
+                                            {/* The history list and one brew's
+                                                record. These were registered
+                                                nowhere, so they fell through to
+                                                the default native bar: emptying
+                                                its title from inside the screen
+                                                only blanked the words and left
+                                                the bar itself, a grey strip
+                                                above the app's own header. */}
+                                            <Stack.Screen name="brewHistory"
+                                                          options={{headerShown: false}}/>
+                                            <Stack.Screen name="brewRecord"
+                                                          options={{headerShown: false}}/>
                                             {/* The brew screen is the mini bar
                                                 expanded: it rises from the
                                                 bottom and a chevron-down puts
