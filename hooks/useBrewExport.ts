@@ -24,7 +24,20 @@ export type BrewExportSource = {record: StoredBrew; samples: BrewSample[]};
  * double tap cannot open two share sheets. `busy` is the same fact as state,
  * for a caller that wants to disable a button.
  */
-export function useBrewExport(source: () => BrewExportSource | null) {
+export function useBrewExport(
+    source: () => BrewExportSource | null,
+    /**
+     * Run before the PNG is captured, for a caller that must take something
+     * off the screen first — the record screen clears its selected stage, so
+     * the shading and the tint do not end up baked into a picture nobody can
+     * tap.
+     *
+     * Awaited, and the capture waits a further frame afterwards, because
+     * `ViewShot` photographs what is on the glass: a state change is not on
+     * the glass until React has committed it and the compositor has drawn it.
+     */
+    prepare?: () => Promise<void>
+) {
     // Attached by the caller to the ViewShot wrapping the summary.
     const shotRef = useRef<ViewShotRef>(null);
 
@@ -45,6 +58,10 @@ export function useBrewExport(source: () => BrewExportSource | null) {
         isSharingImageRef.current = true;
         setBusy(true);
         try {
+            if (prepare) {
+                await prepare();
+                await nextPaint();
+            }
             const uri = await shotRef.current?.capture?.();
             if (uri === undefined) return;
             if (!(await Sharing.isAvailableAsync())) return;
@@ -96,6 +113,19 @@ export function useBrewExport(source: () => BrewExportSource | null) {
     }
 
     return {shotRef, shareImage, shareData, busy};
+}
+
+/**
+ * Resolve after the next paint.
+ *
+ * Two frames, not one: the first carries React's commit into the native tree,
+ * and the second is the one that actually draws it. Whether one frame would
+ * in fact do is untested on a device — two is the cheap, safe side of a guess.
+ */
+function nextPaint(): Promise<void> {
+    return new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
 }
 
 export default useBrewExport;

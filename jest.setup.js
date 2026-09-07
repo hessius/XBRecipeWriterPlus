@@ -33,14 +33,16 @@ jest.mock("react-native-view-shot", () => {
     // Rendered as a real View rather than a passthrough so a test can ask what
     // is inside the captured subtree and what style the capture is given —
     // both of which decide what the exported PNG looks like.
+    // Shared across instances and exported, so a test can observe when the
+    // capture happened relative to everything else the export does. Built
+    // inside `useImperativeHandle` it was unreachable from outside.
+    const mockCapture = jest.fn(async () => "file:///mock/brew.png");
     const ViewShot = React.forwardRef(function MockViewShot({children, ...rest}, ref) {
-        React.useImperativeHandle(ref, () => ({
-            capture: jest.fn(async () => "file:///mock/brew.png")
-        }));
+        React.useImperativeHandle(ref, () => ({capture: mockCapture}));
         return React.createElement(View, {testID: "viewshot", ...rest}, children);
     });
     ViewShot.displayName = "ViewShot";
-    return {__esModule: true, default: ViewShot};
+    return {__esModule: true, default: ViewShot, mockCapture};
 });
 
 /**

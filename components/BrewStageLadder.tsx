@@ -41,6 +41,10 @@ type Props = {
     stalls: Stall[][];
     /** Seconds into the live stage's planned rest. */
     pauseElapsed: number;
+    /** The stage whose detail is open, or `null`. */
+    selectedIndex?: number | null;
+    /** Absent makes the rungs inert, which is what the live screen and the export want. */
+    onSelectStage?: (index: number) => void;
 };
 
 /**
@@ -52,7 +56,7 @@ type Props = {
  */
 export default function BrewStageLadder({
     pours, accent, activeIndex, barHeight, rungGap, scrolls, fill, stageWater, stalls,
-    pauseElapsed
+    pauseElapsed, selectedIndex = null, onSelectStage
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured y-offset relative to the ScrollView content.
@@ -106,6 +110,8 @@ export default function BrewStageLadder({
                     delivered={stageWater[index] ?? 0}
                     pauseElapsed={index === activeIndex ? pauseElapsed : 0}
                     stalls={stalls[index] ?? []}
+                    selected={selectedIndex === index}
+                    onPress={onSelectStage ? () => onSelectStage(index) : undefined}
                 />
             </View>
         );

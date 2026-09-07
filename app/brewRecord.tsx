@@ -5,6 +5,7 @@ import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewSummary from "@/components/BrewSummary";
+import StageDetail from "@/components/StageDetail";
 import DotMatrixText from "@/components/DotMatrixText";
 import ExportButton from "@/components/ExportButton";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -73,7 +74,16 @@ export default function BrewRecord({recipeLookup}: Props) {
     // Export mechanics — the ViewShot ref and both shares — live in the hook,
     // shared with the live brew modal so the two export identically. The
     // record and its samples are already in memory here.
-    const {shotRef, shareImage, shareData, busy} = useBrewExport(() => opened);
+    // The stage whose detail is open, or null for none.
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    // Cleared before the PNG is taken. A shaded band and a tinted rung are
+    // answers to a tap, and a picture cannot be tapped: baked in they would
+    // read as the brew itself having done something odd at that stage.
+    const {shotRef, shareImage, shareData, busy} = useBrewExport(
+        () => opened,
+        async () => { setSelectedIndex(null); }
+    );
 
     // No "All brews" control. The list is the only way in here, so it sat
     // beside a back chevron that already went to exactly the same screen —
@@ -156,8 +166,28 @@ export default function BrewRecord({recipeLookup}: Props) {
                     note={record.outcome === "endedOnMachine"
                         ? ENDED_ON_MACHINE_NOTE : undefined}
                     stagesUnavailable={snapshot.length === 0 && recipe === null}
+                    selectedIndex={selectedIndex}
+                    onSelectStage={(index) =>
+                        setSelectedIndex((was) => (was === index ? null : index))}
                 />
             </ViewShot>
+
+            {/* Below the figures rather than over them: the panel explains a
+                stage that stays highlighted above it, and a sheet would cover
+                the very highlight that opened it. */}
+            {selectedIndex !== null && stages[selectedIndex] !== undefined && (
+                <StageDetail
+                    index={selectedIndex}
+                    stage={stages[selectedIndex]}
+                    deliveredMl={delivered[selectedIndex] ?? 0}
+                    stalls={(record.stalls ?? [])[selectedIndex] ?? []}
+                    samples={samples}
+                    hasStream={record.hasStream}
+                    outcome={record.outcome}
+                    accent={accent}
+                    onClose={() => setSelectedIndex(null)}
+                />
+            )}
 
             <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
                 <ExportButton label="Save as image" busy={busy}

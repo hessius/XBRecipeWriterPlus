@@ -2,6 +2,7 @@ import React from "react";
 import {Pressable, Text} from "react-native";
 import {fireEvent, render, waitFor} from "@testing-library/react-native";
 import ViewShot from "react-native-view-shot";
+import * as viewShotModule from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
 
@@ -22,8 +23,11 @@ const source = (): BrewExportSource => ({
 
 // A harness so the hook's ViewShot ref is wired to the (mocked) ViewShot,
 // which is what makes `capture()` resolve to a URL. Defined at module scope.
-function Harness({src}: {src: () => BrewExportSource | null}) {
-    const {shotRef, shareImage, shareData, busy} = useBrewExport(src);
+function Harness({src, prepare}: {
+    src: () => BrewExportSource | null;
+    prepare?: () => Promise<void>;
+}) {
+    const {shotRef, shareImage, shareData, busy} = useBrewExport(src, prepare);
     return (
         <>
             <ViewShot ref={shotRef}><Text>content</Text></ViewShot>
@@ -111,5 +115,42 @@ describe("useBrewExport", () => {
         releaseFirst(true);
         await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledTimes(1));
         expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("useBrewExport's prepare step", () => {
+    it("finishes preparing before it photographs the screen", async () => {
+        // The order is the entire point: the record screen clears its selected
+        // stage in `prepare`, and a capture taken first would bake the
+        // highlight into a picture nobody can tap. Asserting only that both ran
+        // would pass with them in either order.
+        const order: string[] = [];
+        const prepare = async () => { order.push("prepare"); };
+        (Sharing.shareAsync as jest.Mock).mockImplementation(async () => {
+            order.push("share");
+        });
+        // `mockCapture` exists only on the shared mock in jest.setup.js, not on
+        // the real module, so it has to be reached through a cast.
+        const {mockCapture} = viewShotModule as unknown as
+            {mockCapture: jest.Mock<Promise<string>, []>};
+        mockCapture.mockImplementation(async () => {
+            order.push("capture");
+            return "file:///mock/brew.png";
+        });
+
+        const {getByLabelText} = await render(
+            <Harness src={source} prepare={prepare} />
+        );
+        fireEvent.press(getByLabelText("image"));
+        await waitFor(() => expect(order).toEqual(["prepare", "capture", "share"]));
+        mockCapture.mockReset();
+        mockCapture.mockResolvedValue("file:///mock/brew.png");
+        (Sharing.shareAsync as jest.Mock).mockReset();
+    });
+
+    it("still exports for a caller that has nothing to prepare", async () => {
+        const {getByLabelText} = await render(<Harness src={source} />);
+        fireEvent.press(getByLabelText("image"));
+        await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
     });
 });

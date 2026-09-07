@@ -42,6 +42,13 @@ type Props = {
     stagesUnavailable: boolean;
     /** A short Doto line about how the brew ended, when there is one to make. */
     note?: string;
+    /** The stage whose detail is open. */
+    selectedIndex?: number | null;
+    /**
+     * Absent leaves the figure inert — which is what the export wants, since a
+     * captured PNG cannot be tapped and a shaded band in it would only puzzle.
+     */
+    onSelectStage?: (index: number) => void;
 };
 
 /**
@@ -57,7 +64,7 @@ type Props = {
 export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
-    note
+    note, selectedIndex = null, onSelectStage
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -81,6 +88,9 @@ export default function BrewSummary({
                     planOpacity={0}
                     planColor={palette.muted}
                     planDashed={false}
+                    stages={stages}
+                    selectedIndex={selectedIndex}
+                    onSelectStage={onSelectStage}
                 />
             ) : (
                 <YStack height={TRACE_HEIGHT} alignItems="center"
@@ -134,6 +144,8 @@ export default function BrewSummary({
                     stageWater={stageWater}
                     stalls={stalls}
                     pauseElapsed={0}
+                    selectedIndex={selectedIndex}
+                    onSelectStage={onSelectStage}
                 />
             )}
             </YStack>

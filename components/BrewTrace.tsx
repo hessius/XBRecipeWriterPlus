@@ -1,5 +1,6 @@
 import React from "react";
-import Svg, {Defs, Line, LinearGradient, Path, Stop} from "react-native-svg";
+import {Pressable} from "react-native";
+import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -7,6 +8,7 @@ import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {livePoints, pathLength, planPoints, stageSpans, toPath, type Box}
     from "@/library/brew/brewShape";
+import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -28,6 +30,21 @@ type Props = {
     planHeadAt?: number;
     /** When true, render only the SVG at exactly width × height — no stage counter, no overrun label. */
     compact?: boolean;
+    /**
+     * The stages a tap resolves against. Defaults to `pours`.
+     *
+     * A summary hides the plan line by passing `pours={[]}`, which leaves the
+     * chart with no stages to name — so it must say separately which stages
+     * the run actually had.
+     */
+    stages?: Pour[];
+    /** The stage whose detail is open, shaded on the chart. */
+    selectedIndex?: number | null;
+    /**
+     * Absent leaves the chart inert. The live screen and the export pass
+     * nothing, so neither gains a tap target it has no panel to answer with.
+     */
+    onSelectStage?: (index: number) => void;
 };
 
 /** Height of the overrun row. */
@@ -61,7 +78,7 @@ export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
     holding = false, planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
-    compact = false
+    compact = false, stages, selectedIndex = null, onSelectStage
 }: Props) {
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
@@ -104,6 +121,17 @@ export default function BrewTrace({
     const boundaries = stageSpans(pours)
         .slice(0, -1)
         .map((span) => (span.end / Math.max(box.maxT, 1)) * box.width);
+
+    // The stages' real extents, so a tap and the shading both resolve against
+    // what the brew did rather than against what it was told to do. Derived
+    // here from the same `samples` and `box` the lines are drawn from: handing
+    // them in as a prop would let the shading drift off the chart it shades.
+    const bounds = stageBounds(samples, stages ?? pours);
+    const selected = selectedIndex !== null ? bounds[selectedIndex] : undefined;
+    const band = selected && box.maxT > 0 ? {
+        x: (selected.start / box.maxT) * box.width,
+        width: Math.max(((selected.end - selected.start) / box.maxT) * box.width, 1)
+    } : undefined;
 
     // Only meaningful when there is an actual plan; a plan of nothing cannot be overrun.
     const overrun = plannedSeconds > 0 ? Math.round(ranTo - plannedSeconds) : 0;
@@ -149,16 +177,22 @@ export default function BrewTrace({
         );
     }
 
-    return (
-        <YStack width={width}>
-            <Svg width={width} height={svgHeight} accessibilityRole="image"
-                 accessibilityLabel="Brew trace">
+    const chart = (
+        <Svg width={width} height={svgHeight} accessibilityRole="image"
+             accessibilityLabel="Brew trace">
                 <Defs>
                     <LinearGradient id="waterFill" x1="0" y1="0" x2="0" y2="1">
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
                 </Defs>
+                {band && (
+                    <Rect
+                        testID="trace-band"
+                        x={band.x} y={0} width={band.width} height={svgHeight}
+                        fill={palette.raised}
+                    />
+                )}
                 {boundaries.map((x, i) => (
                     <Line
                         key={`gridline-${i}`}
@@ -216,7 +250,24 @@ export default function BrewTrace({
                         fill="none"
                     />
                 )}
-            </Svg>
+        </Svg>
+    );
+
+    return (
+        <YStack width={width}>
+            {onSelectStage ? (
+                <Pressable
+                    testID="trace-tap"
+                    accessibilityRole="button"
+                    accessibilityLabel="Brew trace, tap a stage"
+                    onPress={(e) => {
+                        const index = stageAtX(bounds, e.nativeEvent.locationX, width, box.maxT);
+                        if (index !== null) onSelectStage(index);
+                    }}
+                >
+                    {chart}
+                </Pressable>
+            ) : chart}
             <XStack height={LEGEND} alignItems="center" gap="$3">
                 <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
                 <LegendItem colour={cupColour} label="CUP" dotted />

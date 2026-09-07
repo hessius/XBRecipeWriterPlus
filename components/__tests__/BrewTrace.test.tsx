@@ -1,4 +1,5 @@
 import React from "react";
+import {fireEvent} from "@testing-library/react-native";
 import {processColor} from "react-native";
 
 import BrewTrace from "@/components/BrewTrace";
@@ -267,5 +268,83 @@ describe("the travelling head", () => {
         const period = Number(String(dash).trim().split(/[\s,]+/)[1]);
 
         expect(period).toBeGreaterThan(300);
+    });
+});
+
+describe("BrewTrace's stage selection", () => {
+    it("stays inert for a caller that passes no handler", async () => {
+        // The live screen and the export both draw this component and neither
+        // has a panel to answer a tap with, so neither may get a tap target.
+        const {queryByTestId} = await draw({selectedIndex: null});
+        expect(queryByTestId("trace-tap")).toBeNull();
+        expect(queryByTestId("trace-band")).toBeNull();
+    });
+
+    it("shades the selected stage across its own share of the axis", async () => {
+        // Stage one is 40 ml at 4 ml/s = 10 s, then a 20 s rest: 0-30 s of a
+        // 70 s axis on a 300 pt chart. So x = 0 and width = 300 * 30/70.
+        const {getByTestId} = await draw({selectedIndex: 0, onSelectStage: jest.fn()});
+        const band = getByTestId("trace-band");
+        expect(band.props.x).toBe(0);
+        expect(band.props.width).toBeCloseTo(128.57, 1);
+    });
+
+    it("shades a later stage away from the left edge", async () => {
+        // Stage two starts at 30 s: 300 * 30/70 across.
+        const {getByTestId} = await draw({selectedIndex: 1, onSelectStage: jest.fn()});
+        expect(getByTestId("trace-band").props.x).toBeCloseTo(128.57, 1);
+    });
+
+    it("names the stage under the finger, not the one under the plan", async () => {
+        // The run overran: stage one really ended at 50 s, not the planned 30.
+        // A tap at 40 s belongs to stage one, and resolving against the plan
+        // would blame stage two — the overrun being the very thing a user taps
+        // a late stage to ask about.
+        const onSelectStage = jest.fn();
+        const {getByTestId} = await draw({
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 50_000, water: 40, cup: 30, pour: 1},
+                {at: 51_000, water: 41, cup: 31, pour: 2},
+                {at: 90_000, water: 200, cup: 190, pour: 2}
+            ],
+            onSelectStage
+        });
+        // The axis now runs to 90 s, so 60 s is 300 * 60/90 = 200 pt across and
+        // lands in stage two. Read against the 70 s plan the same 200 pt would
+        // be 46.7 s, still inside stage one — so the two axes genuinely differ
+        // here, which a tap earlier in the chart would not have shown.
+        fireEvent.press(getByTestId("trace-tap"), {nativeEvent: {locationX: 200}});
+        expect(onSelectStage).toHaveBeenCalledWith(1);
+    });
+
+    it("shades where the stage really ran, not where it was meant to", async () => {
+        // Same overrun: stage one was planned to end at 30 s but ran to 50.
+        // On the 90 s axis of a 300 pt chart that is 300 * 50/90 = 166.7 pt of
+        // shading, against the 100 pt the plan alone would have given.
+        const {getByTestId} = await draw({
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 50_000, water: 40, cup: 30, pour: 1},
+                {at: 51_000, water: 41, cup: 31, pour: 2},
+                {at: 90_000, water: 200, cup: 190, pour: 2}
+            ],
+            selectedIndex: 0,
+            onSelectStage: jest.fn()
+        });
+        expect(getByTestId("trace-band").props.width).toBeCloseTo(166.67, 1);
+    });
+
+    it("names the last stage for a tap out in the overrun", async () => {
+        const onSelectStage = jest.fn();
+        const {getByTestId} = await draw({
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 20_000, water: 40, cup: 30, pour: 2}
+            ],
+            onSelectStage
+        });
+        fireEvent.press(getByTestId("trace-tap"), {nativeEvent: {locationX: 299}});
+        expect(onSelectStage).toHaveBeenCalledWith(1);
     });
 });

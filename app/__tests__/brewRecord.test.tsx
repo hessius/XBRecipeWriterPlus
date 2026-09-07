@@ -351,7 +351,11 @@ describe("brew record", () => {
         await fireEvent.press(getByLabelText("Save as image"));
         // Second press — isSharingImageRef is still true, so this returns early.
         await fireEvent.press(getByLabelText("Save as image"));
-        // Release the first press and let it finish.
+        // Release the first press and let it finish. Awaited, because the
+        // export now clears the stage highlight and waits a paint before it
+        // reaches `isAvailableAsync` — so the resolver does not exist yet at
+        // the moment the presses return.
+        await waitFor(() => expect(releaseFirst).toBeDefined());
         releaseFirst(true);
         await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledTimes(1));
         expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
@@ -369,9 +373,71 @@ describe("brew record", () => {
         await fireEvent.press(getByLabelText("Export the data"));
         // Second press — isSharingDataRef is still true, so this returns early.
         await fireEvent.press(getByLabelText("Export the data"));
-        // Release the first press and let it finish.
+        // Release the first press and let it finish. Awaited, because the
+        // export now clears the stage highlight and waits a paint before it
+        // reaches `isAvailableAsync` — so the resolver does not exist yet at
+        // the moment the presses return.
+        await waitFor(() => expect(releaseFirst).toBeDefined());
         releaseFirst(true);
         await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledTimes(1));
         expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("brew record's stage detail", () => {
+    // A lookup with real pours, so the ladder has rungs to press.
+    const lookup: RecipeLookup = {getRecipe: jest.fn(() => twoPours)};
+
+    beforeEach(() => {
+        mockPush.mockReset();
+        mockSetOptions.mockReset();
+        mockParams = {id: "brew-1"};
+        mockBrews  = [];
+        mockOpened = {
+            record,
+            samples: [{at: 0, water: 0, cup: 0, pour: 1},
+                      {at: 228_000, water: 250, cup: 244, pour: 2}]
+        };
+    });
+
+    it("shows nothing until a stage is asked about", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        expect(screen.queryByTestId("stage-detail")).toBeNull();
+    });
+
+    it("opens the detail for the rung that was pressed", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        expect(screen.getByTestId("stage-detail")).toBeTruthy();
+        // Named from one, as every rung is.
+        expect(screen.getByText("STAGE 2")).toBeTruthy();
+    });
+
+    it("closes the detail when the same rung is pressed again", async () => {
+        // The rung is the only affordance that opened it, so it has to be able
+        // to shut it too; otherwise the only way out is the CLOSE button and a
+        // second press on an open stage does nothing visible at all.
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        expect(screen.queryByTestId("stage-detail")).toBeNull();
+    });
+
+    it("switches to another stage rather than closing", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        await fireEvent.press(screen.getByTestId("rung-0"));
+        expect(screen.getByText("STAGE 1")).toBeTruthy();
+    });
+
+    it("takes the highlight off the screen before it photographs it", async () => {
+        // The band and the tint answer a tap, and a PNG cannot be tapped.
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        expect(screen.getByTestId("trace-band")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Save as image"));
+        await waitFor(() => expect(screen.queryByTestId("trace-band")).toBeNull());
+        await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
     });
 });

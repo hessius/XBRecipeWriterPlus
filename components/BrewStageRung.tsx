@@ -36,6 +36,17 @@ type Props = {
     /** Seconds into the planned rest. */
     pauseElapsed: number;
     stalls: Stall[];
+    /**
+     * Marks this rung as the one whose detail is open.
+     *
+     * Drawn as a tint on the rung's own row rather than by changing the bar's
+     * colour: the bar's colour already carries state (done, active, pending)
+     * and stalls, and overloading it would make a selected pending stage
+     * indistinguishable from an active one.
+     */
+    selected?: boolean;
+    /** Absent on a rung that is not selectable — the live screen's, and the export's. */
+    onPress?: () => void;
     testID?: string;
 };
 
@@ -154,7 +165,7 @@ function widestReadout(pour: Pour): string {
  */
 export default function BrewStageRung({
     pour, index, state, accent, laneSeconds, barHeight, delivered, pauseElapsed,
-    stalls, testID
+    stalls, selected = false, onPress, testID
 }: Props) {
     const segments = rungSegments({pour, delivered, pauseElapsed, stalls});
     const span = laneSeconds > 0 ? laneSeconds : 1;
@@ -173,8 +184,15 @@ export default function BrewStageRung({
             testID={testID}
             accessibilityLabel={buildLabel(pour, index, stalls, before, after)}
             accessible
+            accessibilityRole={onPress ? "button" : undefined}
+            accessibilityState={onPress ? {selected} : undefined}
+            onPress={onPress}
             alignItems="center"
             gap="$2"
+            paddingHorizontal="$2"
+            marginHorizontal="$-2"
+            borderRadius="$3"
+            backgroundColor={selected ? palette.raised : "transparent"}
             style={{opacity: state === "pending" ? PENDING_OPACITY : 1}}
         >
             <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}

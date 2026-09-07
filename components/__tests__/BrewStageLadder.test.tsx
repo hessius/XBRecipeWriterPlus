@@ -1,4 +1,5 @@
 import React from "react";
+import {fireEvent} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
@@ -145,5 +146,35 @@ describe("BrewStageLadder", () => {
         ) as Record<string, unknown>;
         expect(style?.flex).toBe(1);
         expect(style?.justifyContent).toBe("center");
+    });
+});
+
+describe("BrewStageLadder's stage selection", () => {
+    it("reports which rung was pressed", async () => {
+        const onSelectStage = jest.fn();
+        const {getByTestId} = await draw({onSelectStage});
+        fireEvent.press(getByTestId("rung-2"));
+        expect(onSelectStage).toHaveBeenCalledWith(2);
+    });
+
+    it("leaves the rungs inert without a handler", async () => {
+        // The live ladder has no detail panel to answer with, so its rungs must
+        // not announce themselves as buttons to a screen reader either.
+        const {getByTestId} = await draw();
+        expect(getByTestId("rung-2").props.accessibilityRole).toBeUndefined();
+    });
+
+    it("marks only the selected rung, and marks it as selected to a reader", async () => {
+        const {getByTestId} = await draw({selectedIndex: 2, onSelectStage: jest.fn()});
+        expect(getByTestId("rung-2").props.accessibilityState).toEqual({selected: true});
+        expect(getByTestId("rung-1").props.accessibilityState).toEqual({selected: false});
+    });
+
+    it("tints the selected rung and leaves the others clear", async () => {
+        const {getByTestId} = await draw({selectedIndex: 2, onSelectStage: jest.fn()});
+        expect(StyleSheet.flatten(getByTestId("rung-2").props.style).backgroundColor)
+            .toBe(palette.raised);
+        expect(StyleSheet.flatten(getByTestId("rung-1").props.style).backgroundColor)
+            .toBe("transparent");
     });
 });
