@@ -4,6 +4,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
+import DotMatrixText from "@/components/DotMatrixText";
 import ScreenTitle from "@/components/ScreenTitle";
 import {onAccent, palette} from "@/constants/colors";
 
@@ -17,6 +18,16 @@ type Props = {
      * list below holds. Hidden when absent or zero, which `ScreenTitle` decides.
      */
     count?: number;
+    /**
+     * A machine-derived line about this particular screen — the brew record
+     * uses the date and time of the brew — set flush right on the title's own
+     * row.
+     *
+     * On the row rather than beneath it because a second line cost a band of
+     * screen the size of the title itself, for one short string; and in Doto
+     * because a timestamp is a machine's fact, not prose.
+     */
+    meta?: string;
     onBack: () => void;
 };
 
@@ -37,7 +48,7 @@ type Props = {
  * it, a screen reader arriving on a pushed screen has nothing for the rotor to
  * land on and no announcement saying where it landed.
  */
-export default function ScreenHeader({title, count, onBack}: Props) {
+export default function ScreenHeader({title, count, meta, onBack}: Props) {
     const insets = useSafeAreaInsets();
 
     return (
@@ -53,6 +64,14 @@ export default function ScreenHeader({title, count, onBack}: Props) {
                     </YStack>
                 </Pressable>
                 <ScreenTitle title={title} count={count} heading/>
+                {meta !== undefined && (
+                    <DotMatrixText testID="screen-header-meta" fontSize={11}
+                                   weight="bold" letterSpacing={1.2}
+                                   color={palette.dim} numberOfLines={1}
+                                   style={{marginLeft: "auto", paddingLeft: 8}}>
+                        {meta}
+                    </DotMatrixText>
+                )}
             </XStack>
         </YStack>
     );

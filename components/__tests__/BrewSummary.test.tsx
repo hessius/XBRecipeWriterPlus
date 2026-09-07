@@ -8,6 +8,21 @@ import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
+// Captured so a test can see what the summary asks of the marquee. Spread from
+// the real module so the name still renders.
+let marqueeProps: Record<string, unknown> = {};
+jest.mock("@/components/MarqueeText", () => {
+    const actual = jest.requireActual("@/components/MarqueeText");
+    return {
+        __esModule: true,
+        ...actual,
+        default: (props: Record<string, unknown>) => {
+            marqueeProps = props;
+            return actual.default(props);
+        }
+    };
+});
+
 // The real ladder, wrapped so a test can see the band widths the summary hands
 // it. RNTL performs no layout, so the thickness is only ever a prop here — but
 // it is the prop that regressed: the summary drew #88's thin pre-caps.
@@ -117,5 +132,26 @@ describe("BrewSummary", () => {
         const r = await draw({});
 
         expect(r.queryByTestId("brew-summary-note")).toBeNull();
+    });
+});
+
+describe("BrewSummary's recipe name", () => {
+    it("can show its own end rather than ellipsising it", async () => {
+        // A long name in a fixed-width capture had no second line to fall to,
+        // so the only way to read the end of it was to let it travel.
+        const {getByTestId} = await draw({recipeName: "Yirgacheffe Konga Natural"});
+        expect(getByTestId("brew-summary-name")).toBeTruthy();
+    });
+
+    it("holds the name still while the screen is being photographed", async () => {
+        // A capture taken mid-travel freezes the name half-scrolled in a PNG
+        // that can never scroll back.
+        await draw({nameStill: true});
+        expect(marqueeProps.paused).toBe(true);
+    });
+
+    it("lets the name travel the rest of the time", async () => {
+        await draw();
+        expect(marqueeProps.paused).toBe(false);
     });
 });

@@ -1,6 +1,6 @@
 import {router, useLocalSearchParams} from "expo-router";
-import React, {useState} from "react";
-import {useWindowDimensions} from "react-native";
+import React, {useRef, useState} from "react";
+import {ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -76,13 +76,20 @@ export default function BrewRecord({recipeLookup}: Props) {
     // record and its samples are already in memory here.
     // The stage whose detail is open, or null for none.
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const scroller = useRef<ScrollView>(null);
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
     // read as the brew itself having done something odd at that stage.
     const {shotRef, shareImage, shareData, busy} = useBrewExport(
         () => opened,
-        async () => { setSelectedIndex(null); }
+        async () => {
+            setSelectedIndex(null);
+            // Back to the top as well: with the panel gone the summary fits
+            // again, and capturing it while scrolled part-way off the screen is
+            // how a capture comes out clipped.
+            scroller.current?.scrollTo({y: 0, animated: false});
+        }
     );
 
     // No "All brews" control. The list is the only way in here, so it sat
@@ -131,23 +138,26 @@ export default function BrewRecord({recipeLookup}: Props) {
         ?? stages.map((pour) => Math.max(pour.volume, 0));
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} gap="$3">
+        <YStack flex={1} backgroundColor={palette.base} gap="$2">
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
                 that name immediately below, and it has to, because the capture
                 needs it. A header repeating it would say the same word twice in
                 two fonts. The date says the thing the name cannot — which brew
                 of that recipe this is. */}
-            <YStack>
-                <ScreenHeader title="Brew" onBack={() => router.back()}/>
-                <Text testID="record-header-when" fontSize={13} color={palette.dim}
-                      paddingHorizontal="$4" paddingBottom="$2">
-                    {`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
-                </Text>
-            </YStack>
+            <ScreenHeader
+                title="Brew"
+                meta={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
+                onBack={() => router.back()}
+            />
             {/* Everything worth sharing sits inside the ViewShot: the recipe
                 name, the trace, the figures and the stage ladder. BrewSummary
                 owns its own background and padding, because a capture inherits
                 neither margin nor background from its ancestors. */}
+            {/* The screen scrolls, because an open stage detail is taller than
+                what is left below the figures and there was otherwise no way to
+                read the end of it. */}
+            <ScrollView ref={scroller} testID="record-scroll"
+                        contentContainerStyle={{paddingBottom: 24, gap: 8}}>
             <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                 <BrewSummary
                     recipeName={record.recipeName}
@@ -166,6 +176,10 @@ export default function BrewRecord({recipeLookup}: Props) {
                     note={record.outcome === "endedOnMachine"
                         ? ENDED_ON_MACHINE_NOTE : undefined}
                     stagesUnavailable={snapshot.length === 0 && recipe === null}
+                    // `busy` is set synchronously at the press, before the
+                    // paint the export waits for, so the name is already
+                    // parked at its start by the time the shutter falls.
+                    nameStill={busy}
                     selectedIndex={selectedIndex}
                     onSelectStage={(index) =>
                         setSelectedIndex((was) => (was === index ? null : index))}
@@ -195,6 +209,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                 <ExportButton label="Export the data" busy={busy}
                               onPress={() => void shareData()} />
             </XStack>
+            </ScrollView>
         </YStack>
     );
 }

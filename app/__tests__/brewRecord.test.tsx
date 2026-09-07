@@ -123,7 +123,17 @@ describe("brew record", () => {
         // brew of that recipe this one is.
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByText("Brew")).toBeTruthy();
-        expect(screen.getByTestId("record-header-when")).toBeTruthy();
+        expect(screen.getByTestId("screen-header-meta")).toBeTruthy();
+    });
+
+    it("dates the brew on the title's own row, not on a band beneath it", async () => {
+        // A second line cost a strip of screen as tall as the title itself for
+        // one short string, and pushed the recipe name down with it.
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(screen.queryByTestId("record-header-when")).toBeNull();
+        // The record's `startedAt` is 0, so the date is the epoch in whatever
+        // zone the test machine sits in — hence a shape, not a fixed day.
+        expect(screen.getByText(/^\d{4}-\d{2}-\d{2} · \d{2}:\d{2}$/)).toBeTruthy();
     });
 
     it("renders the stage ladder with every stage done when the recipe exists", async () => {
@@ -398,6 +408,15 @@ describe("brew record's stage detail", () => {
             samples: [{at: 0, water: 0, cup: 0, pour: 1},
                       {at: 228_000, water: 250, cup: 244, pour: 2}]
         };
+    });
+
+    it("puts the detail inside the screen's scroller so its end can be read", async () => {
+        // An open stage detail is taller than what is left below the figures.
+        // Outside the scroller the end of the breakdown was simply unreachable.
+        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
+        await fireEvent.press(screen.getByTestId("rung-1"));
+        expect(within(screen.getByTestId("record-scroll"))
+            .getByTestId("stage-detail")).toBeTruthy();
     });
 
     it("shows nothing until a stage is asked about", async () => {

@@ -5,6 +5,7 @@ import {Text, YStack} from "tamagui";
 import BrewFigures from "@/components/BrewFigures";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
+import MarqueeText from "@/components/MarqueeText";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -42,6 +43,13 @@ type Props = {
     stagesUnavailable: boolean;
     /** A short Doto line about how the brew ended, when there is one to make. */
     note?: string;
+    /**
+     * Holds the recipe name still at its resting position.
+     *
+     * Set while the screen is being photographed: a capture taken mid-travel
+     * freezes the name half-scrolled in a PNG that can never scroll back.
+     */
+    nameStill?: boolean;
     /** The stage whose detail is open. */
     selectedIndex?: number | null;
     /**
@@ -64,18 +72,24 @@ type Props = {
 export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
-    note, selectedIndex = null, onSelectStage
+    note, nameStill = false, selectedIndex = null, onSelectStage
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
 
     return (
         <View testID="brew-capture" style={styles.capture}>
-            <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.4}
-                           color={palette.dim} numberOfLines={1}
-                           style={{marginBottom: 12}}>
-                {recipeName}
-            </DotMatrixText>
+            {/* A truncated name is a name the user cannot read, and there is
+                nowhere here to put a second line. The line rests, travels to
+                its end, rests again and comes back — and does nothing at all
+                when it already fits. */}
+            <MarqueeText testID="brew-summary-name" paused={nameStill}>
+                <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.4}
+                               color={palette.dim}
+                               style={{marginBottom: 12}}>
+                    {recipeName}
+                </DotMatrixText>
+            </MarqueeText>
 
             {hasStream ? (
                 <BrewTrace
