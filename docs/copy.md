@@ -584,6 +584,12 @@ The card overlay (`components/NfcOverlay.tsx`), the write path
 | `nfc.write.error.generic` | `constants/copy.ts:56` (via `hooks/useCardWriter.ts:94`) | Error toast when the write fails. | `Could not write the recipe to the card. Please try again.` |
 | `nfc.write.error.tooSmall` | `constants/copy.ts` (`cardTooSmall()`, via `hooks/useCardWriter.ts`) | Error toast when the recipe has more stages than this particular card can hold. Card capacity varies by tag, so the number is the card's, not a fixed limit. | `This recipe has {n} stages, but this card has room for {max}. Remove a stage or use a card with more space.` |
 | `nfc.write.error.sizeUnknown` | `constants/copy.ts` (`CARD_SIZE_UNKNOWN`, via `hooks/useCardWriter.ts`) | Error toast when the card never reported its size, so the write was refused rather than attempted blind. | `The card did not report its size, so nothing was written. Please try again.` |
+| `nfc.write.bypass.title` | `components/BypassWriteSheet.tsx:20` | Doto title of the blocking warning shown before writing a bypass recipe to a card. | `BYPASS ON CARD` |
+| `nfc.write.bypass.body` | `components/BypassWriteSheet.tsx:23` | Warning body before writing a bypass recipe to a card. `${bypassVolume}` is the recipe's bypass volume in millilitres. | `Cards cannot store bypass water. The recipe written to the card will brew without the ${bypassVolume} ml bypass, but the saved recipe on this phone keeps it.` |
+| `nfc.write.bypass.confirm.a11y` | `components/BypassWriteSheet.tsx:28` (a11y) | (a11y) Explicit confirmation button. | `Write without bypass` |
+| `nfc.write.bypass.confirm` | `components/BypassWriteSheet.tsx:31` | Explicit confirmation button label. | `Write without bypass` |
+| `nfc.write.bypass.cancel.a11y` | `components/BypassWriteSheet.tsx:34` (a11y) | (a11y) Cancel button. | `Do not write to the card` |
+| `nfc.write.bypass.cancel` | `components/BypassWriteSheet.tsx:36` | Cancel button label. | `Do not write to the card` |
 | `nfc.ios.alert.writeError` | `library/NFC.ts:274` | Text written into the iOS NFC system sheet on a write error. | `Error writing to card` |
 
 ---

@@ -5,6 +5,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
 import BypassSection from "@/components/BypassSection";
+import BypassWriteSheet from "@/components/BypassWriteSheet";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
@@ -724,6 +725,7 @@ export default function EditRecipe() {
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
     // without changing what the next recipe opens on.
@@ -865,6 +867,26 @@ export default function EditRecipe() {
         }
     }
 
+    async function onWritePress() {
+        const currentRecipe = recipe;
+        if (!currentRecipe) return;
+        await flushDrafts();
+        if (currentRecipe.bypassEnabled) {
+            setBypassWriteOpen(true);
+            return;
+        }
+        await writeCard(currentRecipe);
+    }
+
+    function cancelBypassWrite() {
+        setBypassWriteOpen(false);
+    }
+
+    async function confirmBypassWrite() {
+        setBypassWriteOpen(false);
+        await writeCard(recipe);
+    }
+
     async function deleteRecipe() {
         await flushDrafts();
         try {
@@ -880,7 +902,7 @@ export default function EditRecipe() {
     // -- must also hide the screen from TalkBack, which an absolutely
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
-    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen;
+    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen || bypassWriteOpen;
 
     return (
         <>
@@ -976,7 +998,7 @@ export default function EditRecipe() {
                        canBrewAtAll={rememberedMachine !== ""}
                        canBrew={canWrite}
                        onBrew={onBrewPress}
-                       onWrite={async () => { await flushDrafts(); await writeCard(recipe); }}
+                       onWrite={onWritePress}
                        onSave={async () => {
                            await flushDrafts();
                            // `saveRecipe` navigates away on success, so a store
@@ -1012,6 +1034,11 @@ export default function EditRecipe() {
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
+
+            <BypassWriteSheet open={bypassWriteOpen}
+                              recipe={recipe}
+                              onCancel={cancelBypassWrite}
+                              onConfirm={confirmBypassWrite}/>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>

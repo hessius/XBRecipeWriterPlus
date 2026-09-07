@@ -40,6 +40,16 @@ jest.mock("@/hooks/useShareRecipe", () => ({
     })
 }));
 
+const mockWriteCard = jest.fn();
+jest.mock("@/hooks/useCardWriter", () => ({
+    useCardWriter: () => ({
+        writeCard:        mockWriteCard,
+        onNFCDialogClose: jest.fn(),
+        showNfcOverlay:   false,
+        writeProgress:    0
+    })
+}));
+
 // `useSetting` reaches for the shared SQLite-backed settings store, which
 // cannot open under jest. Held in a `mock`-prefixed `let` — Babel rejects any
 // other name read inside a hoisted factory — so a test can pick a setting the
@@ -121,6 +131,7 @@ beforeEach(() => {
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
+    mockWriteCard.mockReset();
 });
 
 /**
@@ -256,6 +267,54 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Write card").props.accessibilityState.disabled).toBe(true);
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+    });
+
+    it("does not write a bypass recipe until the card-loss warning is confirmed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+
+        expect(mockWriteCard).not.toHaveBeenCalled();
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(screen.getByText(/Cards cannot store bypass water/i)).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("writes nothing when the bypass card-loss warning is cancelled", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Do not write to the card"));
+
+        expect(mockWriteCard).not.toHaveBeenCalled();
+        jest.useRealTimers();
+    });
+
+    it("writes a bypass recipe once the warning is explicitly confirmed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Write without bypass"));
+
+        expect(mockWriteCard).toHaveBeenCalledTimes(1);
+        expect(mockWriteCard.mock.calls[0][0].bypassEnabled).toBe(true);
+        expect(mockWriteCard.mock.calls[0][0].bypassVolume).toBe(23);
+        expect(mockWriteCard.mock.calls[0][0].bypassTemp).toBe(91);
+        jest.useRealTimers();
+    });
+
+    it("writes a non-bypass recipe without showing the card-loss warning", async () => {
+        await renderEditor({bypassEnabled: false});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+
+        expect(mockWriteCard).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/Cards cannot store bypass water/i)).toBeNull();
     });
 
     it("dims the write action by its fill, never by the group's opacity", async () => {
