@@ -4,6 +4,7 @@ import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
+import BypassSection from "@/components/BypassSection";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
@@ -966,6 +967,7 @@ export default function EditRecipe() {
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
                                 temperatureUnit={temperatureUnit}/>
+                    <BypassSection recipe={recipe}/>
                     </View>
                 )}
             </ScrollView>

@@ -221,6 +221,14 @@ come from `hooks/useRecipeEditor.ts`.
 | `editor.tea.banner.title` | `components/TeaBanner.tsx:23` | Doto title of the tea explainer banner. | `TEA` |
 | `editor.tea.banner.body` | `components/TeaBanner.tsx:26` | Prose body of the tea explainer banner. | `Tea stages are capped at 90 ml each and the grinder is not used. The siphon draws roughly 30 ml more than the recipe asks for, so a cup finishes fuller than the numbers here.` |
 
+### Bypass water
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `editor.bypass.title` | `components/BypassSection.tsx:18` | Doto title of the read-only bypass water section. | `BYPASS WATER` |
+| `editor.bypass.value` | `components/BypassSection.tsx:22` | Doto readout of bypass water volume and temperature. `${...}` are millilitres and degrees Celsius. | `${recipe.bypassVolume} ML · ${recipe.bypassTemp} °C` |
+| `editor.bypass.body` | `components/BypassSection.tsx:26` | Prose body of the read-only bypass water section. | `Bypass water is extra water added straight to the cup to dilute the brew. It is not brewed through the coffee.` |
+
 ### Editor action bar
 
 | ID | Source | Context — when the user sees this | Current text |
