@@ -574,6 +574,8 @@ The card overlay (`components/NfcOverlay.tsx`), the write path
 | `nfc.write.toast.hold` | `constants/copy.ts:32` (via `hooks/useCardWriter.ts:67`) | Instruction toast shown while writing. | `Hold the card to the top of the phone.` |
 | `nfc.write.error.outOfRange` | `hooks/useCardWriter.ts:84` | Error toast when values cannot be written. | `The recipe cannot be written to the card. Check that all values are within range.` |
 | `nfc.write.error.generic` | `constants/copy.ts:56` (via `hooks/useCardWriter.ts:94`) | Error toast when the write fails. | `Could not write the recipe to the card. Please try again.` |
+| `nfc.write.error.tooSmall` | `constants/copy.ts` (`cardTooSmall()`, via `hooks/useCardWriter.ts`) | Error toast when the recipe has more stages than this particular card can hold. Card capacity varies by tag, so the number is the card's, not a fixed limit. | `This recipe has {n} stages, but this card has room for {max}. Remove a stage or use a card with more space.` |
+| `nfc.write.error.sizeUnknown` | `constants/copy.ts` (`CARD_SIZE_UNKNOWN`, via `hooks/useCardWriter.ts`) | Error toast when the card never reported its size, so the write was refused rather than attempted blind. | `The card did not report its size, so nothing was written. Please try again.` |
 | `nfc.ios.alert.writeError` | `library/NFC.ts:274` | Text written into the iOS NFC system sheet on a write error. | `Error writing to card` |
 
 ---

@@ -1,8 +1,9 @@
 import {useState} from "react";
 import {Platform} from "react-native";
 import {notify} from "@/components/XbrwToast";
-import {CARD_WRITE_FAILED, HOLD_CARD} from "@/constants/copy";
+import {CARD_SIZE_UNKNOWN, CARD_WRITE_FAILED, cardTooSmall, HOLD_CARD} from "@/constants/copy";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
 import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
@@ -89,8 +90,17 @@ export function useCardWriter(
         } catch (e) {
             console.log("Write error!:" + e);
             setShowNfcOverlay(false);
-            // A cancelled scan throws, and the user cancelling is not a failure.
-            if (!nfc.getIsClosed()) {
+            // A refusal we raised ourselves knows why it refused, and the generic
+            // failure could not tell the user which card to blame or what to change.
+            if (e instanceof CardCapacityError) {
+                notify({
+                    tone: "error",
+                    message: cardTooSmall(recipe?.pours.length ?? 0, e.maxStages())
+                });
+            } else if (e instanceof CardWriteError) {
+                notify({tone: "error", message: CARD_SIZE_UNKNOWN});
+            } else if (!nfc.getIsClosed()) {
+                // A cancelled scan throws, and the user cancelling is not a failure.
                 notify({tone: "error", message: CARD_WRITE_FAILED});
             }
         }

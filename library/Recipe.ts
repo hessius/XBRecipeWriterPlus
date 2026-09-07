@@ -1,4 +1,5 @@
 import NFC from "./NFC";
+import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
 import Pour from "./Pour";
 import uuid from 'react-native-uuid';
@@ -409,6 +410,12 @@ class Recipe {
                 await nfc.writeCard(data, progressCallBack);
             }
         } catch (e) {
+            // A capacity refusal already carries the explanation the user needs,
+            // so pass it through intact rather than flattening it into a generic
+            // write failure that could not name the problem.
+            if (e instanceof CardWriteError) {
+                throw e;
+            }
             if (!nfc.getIsClosed()) { //make sure NFC reading wasn't closed by user --really just an android problem
                 throw new Error("Error writing card: " + e);
             }

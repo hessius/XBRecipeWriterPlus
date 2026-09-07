@@ -6,6 +6,7 @@ import {useRecipeEditor} from "@/hooks/useRecipeEditor";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type NFC from "@/library/NFC";
+import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
@@ -149,6 +150,37 @@ describe("useCardWriter", () => {
 
         expect(result.current.writeProgress).toBe(60);
         Platform.OS = "android";
+    });
+
+    it("names the card's own limit when the recipe does not fit", async () => {
+        // Card capacity varies by tag, so the generic write failure could not tell
+        // the user whether to change the recipe or reach for a different card.
+        // A 96-byte card holds (96 - 12) / 8 = 10 stages.
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new CardCapacityError(116, 96));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: expect.stringContaining("room for 10")
+        });
+    });
+
+    it("says nothing was written when the card would not report its size", async () => {
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new CardWriteError("no size"));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: expect.stringMatching(/did not report its size/i)
+        });
     });
 
     it("gives the iOS sheet the placement copy, not a percentage", async () => {

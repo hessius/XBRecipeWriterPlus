@@ -1,6 +1,7 @@
 import {Platform} from 'react-native';
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import Recipe from "@/library/Recipe";
+import {CardCapacityError, CardWriteError} from "./cardWriteErrors";
 import {Buffer} from 'buffer';
 
 global.Buffer = Buffer;
@@ -28,6 +29,15 @@ export type NfcSystemInfo = {
     blockCount: number;
     dsfid: number;
 };
+
+/**
+ * The 32 bytes xBloom derives from the card's serial and writes ahead of the
+ * recipe. We never regenerate it — we read it off the card and put it back —
+ * which is why only genuine cards work, and why overrunning it is fatal.
+ */
+export const SIGNATURE_BYTES = 32;
+
+export {CardWriteError, CardCapacityError} from "./cardWriteErrors";
 
 class NFC {
     private isClosed = true;
@@ -302,21 +312,39 @@ class NFC {
         //await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
         try {
             let info = await this.getSystemInfo();
-            if (info) {
-                let totalBlocks = info.blockCount * info.blockSize;
-                let availableRecipeBlocks = totalBlocks - 32; //accounts for 32 byte hash
-                console.log("CardInfo:" + JSON.stringify(info));
-                console.log("Total Blocks:" + totalBlocks);
-                if (data.length < availableRecipeBlocks) {
-                    const padding = new Array(availableRecipeBlocks - data.length).fill(0);
-                    data = data.concat(padding);
-                }
-                // the resolved tag object will contain `ndefMessage` property
-                //const nfcTag = await NfcManager.getTag();
-                await this.writeBlocks(8, data, progressCallBack);
+            if (!info) {
+                // The tag never answered, so we do not know how big it is. Writing
+                // blind could run off the end; returning quietly is worse still,
+                // because the flow then looks like a success and the user walks
+                // away with an unwritten card.
+                throw new CardWriteError("The card did not report its size, so the recipe was not written.");
             }
+
+            const totalBytes = info.blockCount * info.blockSize;
+            const availableBytes = totalBytes - SIGNATURE_BYTES;
+            console.log("CardInfo:" + JSON.stringify(info));
+            console.log("Total bytes:" + totalBytes);
+
+            if (data.length > availableBytes) {
+                // Refuse before the first block goes down. A partial write leaves a
+                // genuine card holding half a recipe, and trampling the signature
+                // that follows would be unrecoverable — we cannot regenerate it.
+                throw new CardCapacityError(data.length, availableBytes);
+            }
+
+            if (data.length < availableBytes) {
+                const padding = new Array(availableBytes - data.length).fill(0);
+                data = data.concat(padding);
+            }
+            // the resolved tag object will contain `ndefMessage` property
+            //const nfcTag = await NfcManager.getTag();
+            await this.writeBlocks(SIGNATURE_BYTES / 4, data, progressCallBack);
         } catch (e) {
-            if (!this.isClosed) {
+            // Our own refusals are not tag faults and not user cancellations, so
+            // they surface even when the session has closed. Swallowing one would
+            // reproduce the very bug this guard exists to stop: a write that
+            // quietly does nothing while the flow reports success.
+            if (e instanceof CardWriteError || !this.isClosed) {
                 throw e;
             }
         }

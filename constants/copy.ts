@@ -57,6 +57,22 @@ export function grindTooFine(min: number): string {
 }
 
 /**
+ * A card too small for the recipe.
+ *
+ * Card capacity varies by tag — genuine cards have been read at both 128 and 160
+ * bytes — so this is a fact about the card in the user's hand, not about the
+ * recipe being wrong. It says which card is at fault and leaves the recipe alone.
+ */
+export function cardTooSmall(stages: number, maxStages: number): string {
+    return `This recipe has ${stages} stages, but this card has room for ${maxStages}. `
+         + "Remove a stage or use a card with more space.";
+}
+
+/** The tag would not tell us how big it is, so we refused to write blindly. */
+export const CARD_SIZE_UNKNOWN =
+    "The card did not report its size, so nothing was written. Please try again.";
+
+/**
  * The two card failures, kept side by side.
  *
  * They are the same event in opposite directions, and only the read one used
