@@ -162,6 +162,55 @@ export const PATTERN_SENTENCE: Record<GlyphKind, string> = {
 };
 
 /**
+ * The stage detail panel on a recorded brew — the chrome labels above each
+ * part of the story. Doto, so uppercase and terminal-full-stop-free.
+ *
+ * Kept apart from the prose below because these name what a value *is* (a
+ * machine label) where the prose *says* what happened (Inter). Splitting them
+ * is the two-register rule `DotMatrixText` exists to enforce.
+ */
+export const STAGE_DETAIL_LABEL = {
+    askedFor:  "ASKED FOR",
+    delivered: "DELIVERED",
+    held:      "HELD",
+    when:      "WHEN"
+} as const;
+
+/** The Doto note on a stage that landed short. `${shortfall}` is whole ml. */
+export function stageShortLine(shortfallMl: number): string {
+    return `STOPPED ${shortfallMl} ML SHORT`;
+}
+
+/**
+ * Why a stage came in short, said once the figure above has shown by how much.
+ *
+ * A cancelled brew is short because somebody stopped it, which is a different
+ * fact from a stage the machine under-delivered on its own, and the two must
+ * not borrow each other's sentence.
+ */
+export const STAGE_SHORT_CANCELLED =
+    "The brew was stopped before this stage finished.";
+export const STAGE_SHORT_UNDERDELIVERED =
+    "It delivered less water than the plan asked for.";
+
+/** The stage met its planned volume. */
+export const STAGE_POURED_IN_FULL = "It poured in full.";
+
+/** No stall in the stage: the water never stood still while it owed millilitres. */
+export const STAGE_NO_HOLD = "The water never stopped moving.";
+
+/**
+ * Said when the stream was swept by the retention setting.
+ *
+ * What the stage delivered and where it held live on the record itself and
+ * survive the sweep; only the second-by-second timing is gone. So the panel
+ * names exactly the missing part rather than printing zeros that would read as
+ * "it started and ended at the first drop".
+ */
+export const STAGE_TIMING_UNAVAILABLE =
+    "Detailed timing wasn't kept for this brew.";
+
+/**
  * The stirring, which the pour pattern cannot tell you about.
  *
  * `Pour.agitation` is its own field with its own four values, so a stage that

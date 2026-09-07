@@ -391,6 +391,23 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `It stirs the bed afterwards.` |
 | `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `It stirs the bed before and after.` |
 
+The stage detail panel on a recorded brew (`components/StageDetail.tsx`), opened
+by tapping a stage rung or trace segment. Doto labels head each part; the prose
+below them is Inter. `brew.stage.short.line` is a Doto note, whole ml.
+
+| ID | Source | Context | Current text |
+| --- | --- | --- | --- |
+| `brew.stage.label.askedFor` | `constants/brewCopy.ts:173` (`STAGE_DETAIL_LABEL.askedFor`) | Doto label above the stage's plan. | `ASKED FOR` |
+| `brew.stage.label.delivered` | `constants/brewCopy.ts:174` (`STAGE_DETAIL_LABEL.delivered`) | Doto label above what the stage delivered. | `DELIVERED` |
+| `brew.stage.label.held` | `constants/brewCopy.ts:175` (`STAGE_DETAIL_LABEL.held`) | Doto label above the stage's holds. | `HELD` |
+| `brew.stage.label.when` | `constants/brewCopy.ts:176` (`STAGE_DETAIL_LABEL.when`) | Doto label above the stage's timing. | `WHEN` |
+| `brew.stage.short.line` | `constants/brewCopy.ts:180` (`stageShortLine`) | Doto note on a stage that landed short. `${shortfallMl}` is whole ml. | `STOPPED ${shortfallMl} ML SHORT` |
+| `brew.stage.short.cancelled` | `constants/brewCopy.ts:191` (`STAGE_SHORT_CANCELLED`) | Prose reason a stage is short when the whole brew was cancelled. | `The brew was stopped before this stage finished.` |
+| `brew.stage.short.underdelivered` | `constants/brewCopy.ts:193` (`STAGE_SHORT_UNDERDELIVERED`) | Prose reason a stage is short when the machine under-delivered. | `It delivered less water than the plan asked for.` |
+| `brew.stage.pouredInFull` | `constants/brewCopy.ts:197` (`STAGE_POURED_IN_FULL`) | Prose when the stage met its planned volume. | `It poured in full.` |
+| `brew.stage.noHold` | `constants/brewCopy.ts:200` (`STAGE_NO_HOLD`) | Prose when the stage never stalled. | `The water never stopped moving.` |
+| `brew.stage.timingUnavailable` | `constants/brewCopy.ts:210` (`STAGE_TIMING_UNAVAILABLE`) | Prose when the sample stream was swept and per-second timing is gone. | `Detailed timing wasn't kept for this brew.` |
+
 | `glyph.centered.a11y` | `components/PourGlyph.tsx:27` (a11y, `LABELS`) | (a11y) Spoken where the centred-pour icon appears. | `Centred pour` |
 | `glyph.circular.a11y` | `components/PourGlyph.tsx:28` (a11y, `LABELS`) | (a11y) Spoken where the circular-pour icon appears. | `Circular pour` |
 | `glyph.spiral.a11y` | `components/PourGlyph.tsx:29` (a11y, `LABELS`) | (a11y) Spoken where the spiral-pour icon appears. | `Spiral pour` |
