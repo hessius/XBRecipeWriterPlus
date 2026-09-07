@@ -22,7 +22,7 @@ export function setNfcAlertIOS(message: string) {
     });
 }
 
-type NfcSystemInfo = {
+export type NfcSystemInfo = {
     afi: number;
     blockSize: number;
     blockCount: number;
@@ -42,6 +42,22 @@ class NFC {
      * together, which is the window the user is actually looking at.
      */
     private cancelled = false;
+
+    /**
+     * The system info from the most recent read, so the capture layer can
+     * report a card's true capacity without re-interrogating the tag.
+     *
+     * `readCard` already fetches it while the tag is open; a second fetch would
+     * need the session still live, which it is not by the time the caller has
+     * the data in hand. Cleared at the start of every read so a later read
+     * cannot report an earlier card's numbers.
+     */
+    private lastSystemInfo: NfcSystemInfo | null = null;
+
+    /** The system info seen by the last `readCard`, or null if none. */
+    public getLastSystemInfo(): NfcSystemInfo | null {
+        return this.lastSystemInfo;
+    }
 
     async init() {
         // A new ceremony, so a Cancel from the last one does not carry over.
@@ -208,8 +224,13 @@ class NFC {
     }
 
     async readCard(progressCallBack: (progress: number, id?: string) => Promise<string | undefined>): Promise<number[] | null> {
+        // Cleared before the read, not after: a read that fails partway must
+        // not leave the previous card's capacity behind for the capture to
+        // report as if it were this one's.
+        this.lastSystemInfo = null;
         try {
             let sysInfo = await this.getSystemInfo();
+            this.lastSystemInfo = sysInfo;
             await progressCallBack(30);
             console.log(sysInfo);
             const nfcTag = await NfcManager.getTag();

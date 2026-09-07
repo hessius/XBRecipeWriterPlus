@@ -644,6 +644,24 @@ machine card's error line).
 | `machine.section.forget.label` | `components/MachineSection.tsx:141` | Action row label. | `Forget this machine` |
 | `machine.section.forget.detail` | `components/MachineSection.tsx:142` | Action row detail. | `XBRW++ will scan again next time.` |
 
+### Card diagnostics (`components/CardReadDiagnostic.tsx`)
+
+Hidden until the machine console has been acknowledged — the same developer gate
+as the console — this hands the raw bytes of the last card read back as copyable
+text, so a crash on an unusual card can be diagnosed from a phone with no console.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `card.diag.title` | `components/CardReadDiagnostic.tsx` (section title) | Section title. | `Card diagnostics` |
+| `card.diag.empty` | `components/CardReadDiagnostic.tsx` | Shown when no card has been read. | `No card has been read yet.` |
+| `card.diag.lastRead` | `components/CardReadDiagnostic.tsx` | Row label; value is the read's timestamp. | `Last read` |
+| `card.diag.capacity` | `components/CardReadDiagnostic.tsx` | Row label; value is the card's total bytes. | `Card capacity` |
+| `card.diag.capacity.unknown` | `components/CardReadDiagnostic.tsx` | Capacity value when the card reported no system info. | `unknown` |
+| `card.diag.bytesRead` | `components/CardReadDiagnostic.tsx` | Row label; value is the byte count actually read. | `Bytes read` |
+| `card.diag.copy.label` | `components/CardReadDiagnostic.tsx` | Copy action label. | `Copy the raw bytes` |
+| `card.diag.copy.detail` | `components/CardReadDiagnostic.tsx` | Copy action detail. | `Puts the last card read on the clipboard as text.` |
+| `card.diag.copy.done` | `components/CardReadDiagnostic.tsx` | Toast after copying. | `Card read copied` |
+
 ### Header dot (`components/MachineDot.tsx`)
 
 | ID | Source | Context — when the user sees this | Current text |

@@ -4,6 +4,7 @@ import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
+import CardReadDiagnostic from "@/components/CardReadDiagnostic";
 import MachineSection from "@/components/MachineSection";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -295,6 +296,11 @@ export default function SettingsScreen({settings}: Props) {
                                        detail="Everything on this phone. There is no undo."
                                        onPress={() => setConfirmingDeleteAll(true)}/>
                 </SettingsSection>
+
+                {/* Gated behind the machine console's acknowledgement, so it is
+                    invisible until a user opens the developer area — see the
+                    component. */}
+                <CardReadDiagnostic settings={settings}/>
             </YStack>
 
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}

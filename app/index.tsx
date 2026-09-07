@@ -32,6 +32,7 @@ import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
+import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
@@ -82,6 +83,10 @@ export default function HomeScreen({db, settings}: Props) {
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
     const [shortcutShape] = useSetting("brewShortcut", settings);
+    // Written from the card-read sink below, never read here. The setter is the
+    // whole point: a diagnostic capture has to be persisted the instant it is
+    // taken, before `parseData` gets a chance to crash on a bypass card.
+    const [, setLastCardRead] = useSetting("lastCardRead", settings);
 
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
@@ -372,7 +377,12 @@ export default function HomeScreen({db, settings}: Props) {
         setReadProgress(0);
         try {
             const recipe = new Recipe();
-            const success = await recipe.readCard(nfc, progressCallback);
+            const success = await recipe.readCard(nfc, progressCallback, (capture) => {
+                // Persisted before `parseData` runs (the sink fires first), so a
+                // crash on a bypass card leaves the raw bytes recoverable from
+                // Settings → the card-read diagnostic rather than lost.
+                setLastCardRead(serialiseCapture(capture));
+            });
             setScanning(false);
             if (!success) {
                 return;

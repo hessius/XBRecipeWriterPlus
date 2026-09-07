@@ -143,7 +143,22 @@ export const DEFAULTS = {
      * are never swept: history stays complete, and only the detail behind it
      * expires. Zero is a real choice and means zero.
      */
-    brewTraceRetention: 50
+    brewTraceRetention: 50,
+    /**
+     * The raw bytes of the last card read, kept so a crash cannot lose them.
+     *
+     * Not a preference — a diagnostic. A genuine "bypass water" card read to
+     * apparent success and then took the app down, on a phone whose owner
+     * cannot see a console, and `parseData` is the suspect. So the bytes are
+     * captured *before* they are parsed and written here straight away: if the
+     * parse throws a millisecond later, the evidence is already on disk and the
+     * settings screen can hand it back as copyable text.
+     *
+     * A serialised `CardCapture` (see `library/cardDiagnostics.ts`), or empty
+     * until a card has been read. Held out of backups below: it is potentially
+     * large and it describes one scan on one phone, not a choice worth carrying.
+     */
+    lastCardRead: ""
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -163,8 +178,8 @@ export type SettingKey = keyof typeof DEFAULTS;
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
-export type BackupExcluded = "machineDeviceId";
-export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId"];
+export type BackupExcluded = "machineDeviceId" | "lastCardRead";
+export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId", "lastCardRead"];
 
 /**
  * Widen a literal type (as produced by `DEFAULTS`'s `as const`) back to its

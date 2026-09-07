@@ -1,4 +1,5 @@
 import NFC from "./NFC";
+import type {CardCapture} from "./cardDiagnostics";
 import Pour from "./Pour";
 import uuid from 'react-native-uuid';
 
@@ -417,7 +418,11 @@ class Recipe {
     }
 
 
-    public async readCard(nfc: NFC, progressCallBack: (progress: number, id?: string) => Promise<string | undefined>): Promise<boolean> {
+    public async readCard(
+        nfc: NFC,
+        progressCallBack: (progress: number, id?: string) => Promise<string | undefined>,
+        onRawRead?: (capture: CardCapture) => void
+    ): Promise<boolean> {
         console.log('Read Card')
         try {
             await nfc.init();
@@ -434,6 +439,25 @@ class Recipe {
                 console.log(Recipe.convertNumberArrayToHex(data));
                 this.uid = uid ?? [];
                 this.backup = data;
+                // Hand the raw bytes to the sink *before* parsing them. This is
+                // the whole reason the sink exists: `parseData` is the suspect
+                // for the bypass-card crash, so the evidence must be safely away
+                // first. The system info comes from the read that just happened,
+                // not a second interrogation of a now-closed tag. A sink that
+                // throws must not be the reason a scan fails — a diagnostic is
+                // never worth a lost card read — so its error is swallowed.
+                if (onRawRead) {
+                    try {
+                        onRawRead({
+                            at: new Date().toISOString(),
+                            uid: uid ?? [],
+                            data,
+                            systemInfo: nfc.getLastSystemInfo()
+                        });
+                    } catch (e) {
+                        console.log("Card capture sink threw: " + e);
+                    }
+                }
                 this.parseData(data);
                 console.log(this.toString());
                 return true;
