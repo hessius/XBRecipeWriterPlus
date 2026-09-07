@@ -191,7 +191,7 @@ describe("StageTile help", () => {
 
         await rerender(<StageTile {...OPEN} accent={accents.coffee[3]}/>);
         expect(shape()).toEqual([true, true, true, true]);
-        expect(screen.getByLabelText("CENTERED")).toBeTruthy();
+        expect(screen.getByLabelText("CENTRED")).toBeTruthy();
         expect(screen.getByLabelText("Agitate before")).toBeTruthy();
     });
 

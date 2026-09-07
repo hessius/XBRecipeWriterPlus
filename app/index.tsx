@@ -20,6 +20,7 @@ import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
+import {ALREADY_IN_LIBRARY, CARD_READ_FAILED, HOLD_CARD} from "@/constants/copy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useCardWriter} from "@/hooks/useCardWriter";
@@ -243,7 +244,7 @@ export default function HomeScreen({db, settings}: Props) {
                 // The same words a card read already uses when it turns out the
                 // library has this one. `resolveOnOpen` never makes a copy, so
                 // opening the existing recipe is the whole reveal.
-                notify({tone: "info", message: "Already in your library"});
+                notify({tone: "info", message: ALREADY_IN_LIBRARY});
             }
         }
     });
@@ -360,7 +361,7 @@ export default function HomeScreen({db, settings}: Props) {
             // and wrong, and the sheet already has its own spinner.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe read from card"
-                : "Hold the card to the top of the phone.");
+                : HOLD_CARD);
         }
         setReadProgress(progress);
         return undefined;
@@ -394,14 +395,14 @@ export default function HomeScreen({db, settings}: Props) {
                 return;
             }
             if (isExisting) {
-                notify({tone: "info", message: "Already in your library"});
+                notify({tone: "info", message: ALREADY_IN_LIBRARY});
             }
         } catch {
             setScanning(false);
             // A cancelled Android scan throws. That is the user getting what
             // they asked for, not a failure to report.
             if (!nfc.getIsClosed()) {
-                notify({tone: "error", message: "Could not read the card. Please try again."});
+                notify({tone: "error", message: CARD_READ_FAILED});
             }
         }
     }

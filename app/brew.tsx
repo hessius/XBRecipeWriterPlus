@@ -329,7 +329,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                                 onPress={() => start(recipe)} />
                     )}
                     {offerPro && (
-                        <Action label="Switch to PRO" color={palette.warn}
+                        <Action label="Switch to Pro" color={palette.warn}
                                 onPress={() => startInPro(recipe)} />
                     )}
                     {phase.name === "done" && (

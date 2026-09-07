@@ -79,7 +79,7 @@ describe("StageDetail", () => {
             const {getByText} = await renderPanel({
                 stage: stage(45, {pattern: POUR_PATTERN.SPIRAL})
             });
-            expect(getByText("Out from the centre and back.")).toBeTruthy();
+            expect(getByText("Spiral pour.")).toBeTruthy();
         });
 
         it("appends the stirring only when the stage stirs", async () => {
@@ -90,16 +90,16 @@ describe("StageDetail", () => {
                 })
             });
             expect(getByText(
-                "Straight down onto the middle of the bed. It stirs the bed first."
+                "Centre pour. Agitates the bed first."
             )).toBeTruthy();
-            expect(queryByText("Straight down onto the middle of the bed.")).toBeNull();
+            expect(queryByText("Centre pour.")).toBeNull();
         });
 
         it("says nothing about stirring for a stage that does not stir", async () => {
             const {getByText} = await renderPanel({
                 stage: stage(45, {agitation: AGITATION.ALL_OFF})
             });
-            expect(getByText("Straight down onto the middle of the bed.")).toBeTruthy();
+            expect(getByText("Centre pour.")).toBeTruthy();
         });
     });
 

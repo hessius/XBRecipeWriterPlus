@@ -167,7 +167,7 @@ class Pour {
     public static getPourPatternText(pattern: number) {
         switch (pattern) {
             case POUR_PATTERN.CENTERED:
-                return "Centered"
+                return "Centred"
             case POUR_PATTERN.CIRCULAR:
                 return "Circular"
             case POUR_PATTERN.SPIRAL:

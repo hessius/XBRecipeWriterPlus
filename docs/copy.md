@@ -675,7 +675,7 @@ re-pointed.
 | `machine.popover.grind.label` | `components/MachinePanel.tsx:144` | Doto row label. | `GRIND` |
 | `machine.popover.connecting` | `components/MachinePanel.tsx:156` | Doto status while connecting. | `CONNECTING…` |
 | `machine.panel.noReadings` | `components/MachinePanel.tsx:170` | Doto status when the machine is connected but has not yet reported its water, mode or grind. Offers refresh rather than reconnect — there is nothing to connect. | `CONNECTED. NO READINGS YET.` |
-| `machine.popover.notConnected` | `components/MachinePanel.tsx:183` | Prose when idle — no attempt made yet. Points at TRY NOW rather than promising automatic reconnection. | `Not connected. Press TRY NOW to connect.` |
+| `machine.popover.notConnected` | `components/MachinePanel.tsx:183` | Prose when idle — no attempt made yet. Points at TRY NOW rather than promising automatic reconnection. | `Not connected. Tap TRY NOW to connect.` |
 | `machine.popover.outOfRange` | `components/MachinePanel.tsx:203` | Prose when out of range (disconnected or failed, no previous vitals). | `Not in range. It will reconnect by itself when it is.` |
 | `machine.popover.lastSeen` | `components/MachinePanel.tsx:181` | Prose with last-seen age. `${age(...)}` is a human age; sentence continues on line 123. | `Last seen ${age(vitals.askedAt, now)}. It will reconnect by itself when it is in range.` |
 | `machine.popover.tryNow.a11y` | `components/MachinePanel.tsx:184` (a11y) | (a11y) Try-now button. | `Try now` |

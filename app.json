@@ -57,7 +57,7 @@
         {
           "neverForLocation": true,
           "modes": [],
-          "bluetoothAlwaysPermission": "XBRW++ uses Bluetooth to connect to your xBloom Studio coffee machine so it can send a recipe and start a brew."
+          "bluetoothAlwaysPermission": "XBRW++ uses Bluetooth to connect to your xBloom coffee machine so it can send a recipe and start a brew."
         }
       ],
       [

@@ -5,6 +5,8 @@ import {Text, XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {palette} from "@/constants/colors";
+import {ALREADY_IN_LIBRARY, alreadyInLibraryAs, alreadyInLibraryAsSpoken,
+        grindTooFine} from "@/constants/copy";
 import type {ImportPreview} from "@/hooks/useRecipeImport";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import {CUP_TYPE} from "@/library/Recipe";
@@ -146,19 +148,19 @@ export default function ImportResult({preview, onOpen}: Props) {
                           // label keeps the whole name; `numberOfLines` only
                           // clips the drawn line, so a long custom name cannot
                           // blow up the layout the way a long title once did.
-                          accessibilityLabel={`Already in your library as ${customName}`}>
-                        {`Already in your library as "${customName}"`}
+                          accessibilityLabel={alreadyInLibraryAsSpoken(customName)}>
+                        {alreadyInLibraryAs(customName)}
                     </Text>
                 ) : (
                     <Text color={palette.info} fontSize={13}>
-                        Already in your library
+                        {ALREADY_IN_LIBRARY}
                     </Text>
                 )
             )}
 
             {fineBand !== undefined && (
                 <Text testID="import-grind-notice" color={palette.info} fontSize={13}>
-                    {`Ground for ${fineBand.longLabel}. You will need to coarsen it to write a card.`}
+                    {`Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}`}
                 </Text>
             )}
 

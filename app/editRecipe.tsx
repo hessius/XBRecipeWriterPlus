@@ -19,6 +19,7 @@ import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
+import {grindTooFine} from "@/constants/copy";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
@@ -258,8 +259,8 @@ function BrewDeck({
                         </DotMatrixText>
                         <Text fontSize={12} lineHeight={16} color={palette.dim}>
                             {fineBand === undefined
-                                ? `A card cannot store a grind below ${CARD_GRIND_MIN}.`
-                                : `Ground for ${fineBand.longLabel}. A card cannot store a grind below ${CARD_GRIND_MIN}.`}
+                                ? grindTooFine(CARD_GRIND_MIN)
+                                : `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}`}
                         </Text>
                     </YStack>
                     <Pressable accessibilityRole="button"

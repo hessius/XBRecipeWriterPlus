@@ -28,7 +28,7 @@ describe("BrewNowCard", () => {
                          resting={false} />
         );
 
-        expect(getByText(/Out from the centre and back/)).toBeTruthy();
+        expect(getByText(/Spiral pour/)).toBeTruthy();
         expect(getByText(/rests 20 s/)).toBeTruthy();
     });
 
@@ -38,7 +38,7 @@ describe("BrewNowCard", () => {
                          resting={false} />
         );
 
-        expect(getByText(/Round the bed in a steady ring\.$/)).toBeTruthy();
+        expect(getByText(/Circular pour\.$/)).toBeTruthy();
     });
 
     it("says RESTING once the water is in", async () => {
@@ -57,7 +57,7 @@ describe("BrewNowCard", () => {
             <BrewNowCard pour={stirring} accent={palette.brand} resting={false} />
         );
 
-        expect(getByText(/It stirs the bed before and after\.$/)).toBeTruthy();
+        expect(getByText(/Agitates the bed before and after\.$/)).toBeTruthy();
     });
 
     it("shows nothing at all before a stage is live", async () => {

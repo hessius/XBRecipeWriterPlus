@@ -116,6 +116,14 @@ type Props = {
  * casing there — this component does not upper-case, callers do — so it is
  * still recognisably the name a person typed.
  *
+ * A register rule that follows from the above, stated because it looks like a
+ * bug and has been "fixed" by mistake before: units are lower case in Inter
+ * ("18 g", "250 ml") and upper case in Doto ("18 G", "250 ML"). They disagree
+ * on purpose. Doto is an all-caps readout standing in for a machine's own
+ * display, and a lone lower-case g in a run of capitals reads as a typo; in
+ * running prose an upper-case G is simply the wrong unit symbol. Do not unify
+ * them in one direction without changing both registers deliberately.
+ *
  * This is the only place in the app that names the Doto font family.
  */
 export default function DotMatrixText({

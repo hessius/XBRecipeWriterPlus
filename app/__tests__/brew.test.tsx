@@ -357,7 +357,7 @@ describe("brew route", () => {
         mockCanOfferPro = true;
         const {getByText, getByLabelText} = await renderWithProviders(<Brew />);
         expect(getByText(/easy mode.*switch it to pro/i)).toBeTruthy();
-        await fireEvent.press(getByLabelText("Switch to PRO"));
+        await fireEvent.press(getByLabelText("Switch to Pro"));
         // Through the provider, so the retry is a new run with a fresh
         // recorder rather than a second brew on a spent one.
         expect(mockStartInPro).toHaveBeenCalled();
@@ -367,7 +367,7 @@ describe("brew route", () => {
         mockPhase = {name: "failed", reason: "rejected"} as BrewPhase;
         mockCanOfferPro = false;
         const {queryByLabelText} = await renderWithProviders(<Brew />);
-        expect(queryByLabelText("Switch to PRO")).toBeNull();
+        expect(queryByLabelText("Switch to Pro")).toBeNull();
     });
 
 });

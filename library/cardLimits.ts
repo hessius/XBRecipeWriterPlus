@@ -1,6 +1,7 @@
 import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
 import {displayRange, toDisplay, type TemperatureUnit} from "./units";
+import {grindTooFine} from "@/constants/copy";
 
 /**
  * Whether a recipe can be written to a card, and why not.
@@ -88,7 +89,7 @@ export function cardWriteProblems(
         // recipe carries when it was ground for espresso, and "the range is
         // 40-80" alone does not explain how it got that way.
         const grindSizeMsg = recipe.grindSize < GRIND_SIZE.min
-            ? `The grind size is ${recipe.grindSize}. A card cannot store a grind below ${GRIND_SIZE.min}.`
+            ? `The grind size is ${recipe.grindSize}. ${grindTooFine(GRIND_SIZE.min)}`
             : `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`;
         if (outside(recipe.grindSize, GRIND_SIZE)) {
             problems.push(grindSizeMsg);

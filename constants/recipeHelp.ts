@@ -103,7 +103,7 @@ const ENTRIES = {
     },
     name: {
         title: "Name",
-        hint:  "For your own organization in this app. The xBloom name is " +
+        hint:  "For your own organisation in this app. The xBloom name is " +
                "kept separate, derived from the XID."
     },
     volume: {
@@ -140,7 +140,7 @@ const ENTRIES = {
         title:  "Pattern",
         hint:   "The path the water takes over the bed.",
         question: "What do the pour patterns do?",
-        detail: "Centered holds the stream in one place. Circular walks it " +
+        detail: "Centred holds the stream in one place. Circular walks it " +
                 "round the bed at a fixed radius. Spiral works outward from " +
                 "the middle."
     },

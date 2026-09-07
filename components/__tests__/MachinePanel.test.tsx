@@ -82,7 +82,7 @@ describe("MachinePanel", () => {
         // Idle means no attempt has been made. We do not know whether the
         // machine is nearby, so "not in range" would be false.
         const {getByText, queryByText} = await draw({status: "idle", vitals: null});
-        expect(getByText("Not connected. Press TRY NOW to connect.")).toBeTruthy();
+        expect(getByText("Not connected. Tap TRY NOW to connect.")).toBeTruthy();
         expect(queryByText(/reconnect by itself/i)).toBeNull();
         expect(queryByText(/not in range/i)).toBeNull();
     });

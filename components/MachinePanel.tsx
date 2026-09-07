@@ -180,7 +180,7 @@ export default function MachinePanel({
         body = (
             <YStack gap="$2">
                 <DotMatrixText fontSize={11} color={palette.dim}>
-                    Not connected. Press TRY NOW to connect.
+                    Not connected. Tap TRY NOW to connect.
                 </DotMatrixText>
                 <Pressable accessibilityRole="button" accessibilityLabel="Try now"
                            onPress={onConnect}>

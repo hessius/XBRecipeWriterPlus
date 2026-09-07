@@ -3,7 +3,7 @@ import {AGITATION} from "@/library/Pour";
 
 /** What each phase says. The wording is the feature. */
 export const PHASE_COPY: Record<string, string> = {
-    idle:        "Ready when you are.",
+    idle:        "Preparing recipe.",
     /**
      * Commanded, but the machine has not moved yet.
      *
@@ -15,7 +15,7 @@ export const PHASE_COPY: Record<string, string> = {
     connecting:  "Connecting to the machine…",
     // The machine loses the question rather than refusing it, and each retry
     // opens a fresh session, which beeps. Saying so explains the beeping.
-    waking:      "Waiting for the machine to answer…",
+    waking:      "Waking up machine…",
     // Deliberately slow: the frames are spaced two seconds apart, because the
     // machine drops a burst. Saying so stops this reading as a hang.
     sending:     "Sending the recipe… this takes a few seconds.",
@@ -31,7 +31,11 @@ export const PHASE_COPY: Record<string, string> = {
     // distinct, non-terminal status between the last pour and "Enjoy."
     settling:    "Letting the last of the coffee drain…",
     done:        "Enjoy.",
-    cancelled:   "Stopped.",
+    // Every other ending here is a sentence saying what happened --
+    // "The machine ran out of water.", "Lost contact. …". This one said
+    // only "Stopped.", so the mini bar's "Stopped: you stopped it" was
+    // explaining more than the full screen it stands in for.
+    cancelled:   "You stopped the brew.",
     lostContact: "Lost contact. The machine is still brewing."
 };
 
@@ -87,7 +91,7 @@ export const BLOCKED_HEADLINE: Record<string, string> = {
  * stating it every time would train people to stop reading it.
  */
 export const FIRST_BREW_REMINDER =
-    "Check there is a cup under the spout and a pod in the holder.";
+    "Check that there is a cup under the spout and a pod or brewer in the holder.";
 
 /** The offer to escape EASY mode, when a send has gone nowhere because of it. */
 export const PRO_MODE_PROMPT =
@@ -148,9 +152,9 @@ export const MINI_FAILURE_WHY: Record<string, string> = {
  * stage in front of the user was any of them. It names the live one instead.
  */
 export const PATTERN_SENTENCE: Record<GlyphKind, string> = {
-    centered: "Straight down onto the middle of the bed",
-    circular: "Round the bed in a steady ring",
-    spiral: "Out from the centre and back",
+    centered: "Centre pour",
+    circular: "Circular pour",
+    spiral: "Spiral pour",
     /**
      * Unreachable through `glyphForPattern`, which only ever returns the three
      * above -- agitation is a separate field on the pour, not a pattern, and
@@ -158,7 +162,7 @@ export const PATTERN_SENTENCE: Record<GlyphKind, string> = {
      * table is total over `GlyphKind` and an index can never come back
      * undefined and print "POURING · undefined · 92°".
      */
-    agitation: "It stirs the bed rather than pouring"
+    agitation: "Agitates the bed by shaking it slightly"
 };
 
 /**
@@ -219,7 +223,7 @@ export const STAGE_TIMING_UNAVAILABLE =
  * the right thing to say about a stage that does not stir.
  */
 export const AGITATION_SENTENCE: Record<number, string> = {
-    [AGITATION.BEFORE_ON_AFTER_OFF]: "It stirs the bed first.",
-    [AGITATION.BEFORE_OFF_AFTER_ON]: "It stirs the bed afterwards.",
-    [AGITATION.BEFORE_ON_AFTER_ON]:  "It stirs the bed before and after."
+    [AGITATION.BEFORE_ON_AFTER_OFF]: "Agitates the bed first.",
+    [AGITATION.BEFORE_OFF_AFTER_ON]: "Agitates the bed afterwards.",
+    [AGITATION.BEFORE_ON_AFTER_ON]:  "Agitates the bed before and after."
 };

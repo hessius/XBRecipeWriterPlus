@@ -3,6 +3,7 @@ import {View} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import DotBloom from "@/components/DotBloom";
+import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 
 const MARK_SIZE = 96;
@@ -25,11 +26,17 @@ export default function EmptyLibrary() {
                 <DotBloom progress={0} size={MARK_SIZE} dotSize={MARK_DOT_SIZE}/>
             </View>
 
+            {/* Doto, to match the empty states on its sibling screens: brew
+                history says NO BREWS YET and the brew record says NO TRACE
+                KEPT. This one was Inter sentence case, which made the same
+                moment look like two different apps depending on which list you
+                had emptied. */}
             <YStack alignItems="center" gap="$2">
-                <Text fontSize={18} fontWeight="700" color={palette.text}>
-                    No recipes yet
-                </Text>
-                <Text fontSize={14} textAlign="center" color={palette.dim}>
+                <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    NO RECIPES YET
+                </DotMatrixText>
+                <Text fontSize={13} textAlign="center" color={palette.muted}>
                     Read a card or import a recipe using the buttons above.
                 </Text>
             </YStack>

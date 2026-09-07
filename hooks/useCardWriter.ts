@@ -1,6 +1,7 @@
 import {useState} from "react";
 import {Platform} from "react-native";
 import {notify} from "@/components/XbrwToast";
+import {CARD_WRITE_FAILED, HOLD_CARD} from "@/constants/copy";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -63,7 +64,7 @@ export function useCardWriter(
             // copy, so this is the only place it appears on iOS.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe written to card"
-                : "Hold the card to the top of the phone.");
+                : HOLD_CARD);
         }
         return undefined;
     }
@@ -90,7 +91,7 @@ export function useCardWriter(
             setShowNfcOverlay(false);
             // A cancelled scan throws, and the user cancelling is not a failure.
             if (!nfc.getIsClosed()) {
-                notify({tone: "error", message: "Could not write the recipe to the card."});
+                notify({tone: "error", message: CARD_WRITE_FAILED});
             }
         }
     }

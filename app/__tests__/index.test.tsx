@@ -264,7 +264,7 @@ describe("HomeScreen", () => {
 
     it("shows the empty state instead of the list when there is nothing saved", async () => {
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
-        expect(screen.getByText("No recipes yet")).toBeTruthy();
+        expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
         expect(screen.queryByTestId("recipe-card")).toBeNull();
     });
 

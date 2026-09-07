@@ -309,9 +309,9 @@ class Recipe {
     private placeholderName(): string {
         const verb: Record<RecipeSource, string> = {
             read:      "Read",
-            import:    "Imported",
+            import:    "Imported Recipe",
             duplicate: "Copy",
-            manual:    "Untitled"
+            manual:    "Untitled Brew"
         };
 
         if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {
