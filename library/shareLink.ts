@@ -118,13 +118,14 @@ export function buildSharePayload(recipe: Recipe): SharePayload {
         isSetGrinderSize:    tea ? 2 : enabled(recipe.grinder),
         rpm:                 tea ? 60 : recipe.grindRPM,
         cupType:             cloudCupType(recipe.cupType),
-        bypassTemp:          85,
-        // Cosmetic while `isEnableBypassWater` is 2, but 0 is the honest value.
-        bypassVolume:        0,
+        // Tea does not support bypass; the machine ignores it and sending a live
+        // bypass with cupType 4 would produce an unbreakable share link.
+        bypassTemp:          tea ? 85 : recipe.bypassTemp,
+        bypassVolume:        tea ? 0  : (recipe.bypassEnabled ? recipe.bypassVolume : 0),
         subSetType:          2,
         appPlace:            [4],
         isShortcuts:         2,
-        isEnableBypassWater: 2,
+        isEnableBypassWater: tea ? 2  : enabled(recipe.bypassEnabled),
         // Load-bearing: this value partitions the account's library, and the
         // mint function looks the new row up in the `adaptedModel: 1` list.
         adaptedModel:        1,

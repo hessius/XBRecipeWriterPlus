@@ -74,6 +74,30 @@ export class XBloomRecipe {
                 ? this.xbRecipeJSON.recipeVo.rpm
                 : 120;
 
+            const rawBypassFlag   = this.xbRecipeJSON.recipeVo.isEnableBypassWater;
+            const rawBypassVolume = this.xbRecipeJSON.recipeVo.bypassVolume;
+            const rawBypassTemp   = this.xbRecipeJSON.recipeVo.bypassTemp;
+
+            // Accept volume/temp only when they are finite and within the real
+            // machine limits (api/_lib/payload.ts). An out-of-range value is
+            // far more likely to be a schema change than a real recipe, and
+            // silently applying it would brew someone an unexpected dilution.
+            const bypassVolumeValid = typeof rawBypassVolume === "number" && Number.isFinite(rawBypassVolume)
+                && rawBypassVolume >= 0 && rawBypassVolume <= 500;
+            const bypassTempValid = typeof rawBypassTemp === "number" && Number.isFinite(rawBypassTemp)
+                && rawBypassTemp >= 0 && rawBypassTemp <= 100;
+
+            if (bypassVolumeValid && bypassTempValid) {
+                recipe.bypassVolume = rawBypassVolume;
+                recipe.bypassTemp   = rawBypassTemp;
+                // isEnableBypassWater: 1 = ON, 2 = OFF — xBloom's inverted scheme.
+                // A non-zero volume is also required; flag-on with zero water
+                // means the machine dispenses nothing, so treat it as off.
+                recipe.bypassEnabled = rawBypassFlag === 1 && rawBypassVolume > 0;
+            }
+            // If either value is missing or implausible, leave bypass at its
+            // defaults (bypassEnabled: false, bypassVolume: 0, bypassTemp: 85).
+
             let cup = this.xbRecipeJSON.recipeVo.cupType ?? 1
 
             switch (cup) {
@@ -95,6 +119,11 @@ export class XBloomRecipe {
             }
 
             console.log('cup:', cup, 'cupType:', recipe.cupType);
+
+            // Tea is special-cased throughout the app; bypass is out of scope.
+            if (recipe.cupType === CUP_TYPE.TEA) {
+                recipe.bypassEnabled = false;
+            }
 
             for (let i = 0; i < pourCount; i++) {
                 let pourData = this.xbRecipeJSON.recipeVo.pourList[i];

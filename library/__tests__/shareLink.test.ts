@@ -137,6 +137,62 @@ describe("canonicalSnapshot", () => {
     });
 });
 
+describe("bypass water", () => {
+    it("sends bypass fields from the recipe when bypass is enabled", () => {
+        const r = drip();
+        r.bypassEnabled = true;
+        r.bypassVolume = 100;
+        r.bypassTemp = 90;
+        const p = buildSharePayload(r);
+        expect(p.isEnableBypassWater).toBe(1);
+        expect(p.bypassVolume).toBe(100);
+        expect(p.bypassTemp).toBe(90);
+    });
+
+    it("sends exactly {bypassTemp:85, bypassVolume:0, isEnableBypassWater:2} when bypass is off", () => {
+        // The no-churn guarantee: a recipe with bypass off must produce a
+        // payload byte-identical to the hardcoded constants it replaces, so
+        // existing share snapshots remain valid and no duplicate rows are minted.
+        const p = buildSharePayload(drip());
+        expect(p.bypassTemp).toBe(85);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.isEnableBypassWater).toBe(2);
+    });
+
+    it("sends volume 0 when bypass is off, even if bypassVolume is set", () => {
+        // The machine must not receive a bypass volume for a recipe with bypass
+        // disabled; suppressing it here avoids confusing the service.
+        const r = drip();
+        r.bypassEnabled = false;
+        r.bypassVolume = 120;
+        expect(buildSharePayload(r).bypassVolume).toBe(0);
+    });
+
+    it("preserves the canonical snapshot of a non-bypass recipe", () => {
+        // Pin the exact snapshot so any future drift in the no-churn guarantee
+        // is caught as an explicit regression.
+        const p = buildSharePayload(drip());
+        const snap = canonicalSnapshot(p);
+        expect(snap).toContain('"bypassTemp":85');
+        expect(snap).toContain('"bypassVolume":0');
+        expect(snap).toContain('"isEnableBypassWater":2');
+    });
+
+    it("forces bypass off for tea, regardless of what the recipe says", () => {
+        // Tea bypass is out of scope for the machine; sharing it bypass-on
+        // would send a recipe the machine cannot honour.
+        const r = drip();
+        r.cupType = CUP_TYPE.TEA;
+        r.bypassEnabled = true;
+        r.bypassVolume = 120;
+        r.bypassTemp = 80;
+        const p = buildSharePayload(r);
+        expect(p.isEnableBypassWater).toBe(2);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.bypassTemp).toBe(85);
+    });
+});
+
 describe("shareBlockReason", () => {
     it("allows a well-formed recipe", () => {
         expect(shareBlockReason(drip())).toBeNull();

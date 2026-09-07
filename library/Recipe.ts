@@ -130,6 +130,16 @@ class Recipe {
     public sharedTableId?: number;
     public shareUrl?: string;
     /**
+     * Bypass water is dispensed alongside the brew for dilution. It is NOT
+     * stored on the NFC card — it is a cloud/model-only concept. These defaults
+     * are load-bearing: the share-link payload builder reads them and compares
+     * against a stored snapshot; drifting the defaults would re-mint every
+     * already-shared recipe unnecessarily.
+     */
+    public bypassEnabled: boolean = false;
+    public bypassVolume: number = 0;   // millilitres
+    public bypassTemp: number = 85;    // degrees Celsius
+    /**
      * The canonical payload that produced `shareUrl`.
      *
      * Compared against a freshly built payload to decide whether the existing
@@ -220,6 +230,13 @@ class Recipe {
             this.sharedTableId = jsonRecipe.sharedTableId;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
+            // Records saved before bypass was introduced have no bypass keys;
+            // the defaults must match the field initialisers exactly so the
+            // share-link staleness check produces identical payloads for those
+            // old records.
+            this.bypassEnabled = jsonRecipe.bypassEnabled ?? false;
+            this.bypassVolume  = jsonRecipe.bypassVolume  ?? 0;
+            this.bypassTemp    = jsonRecipe.bypassTemp    ?? 85;
         }
 
     }
