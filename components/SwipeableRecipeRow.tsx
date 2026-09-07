@@ -60,15 +60,15 @@ const TILE_GLYPH_SIZE = 24;
 
 type TileProps = {
     /**
-     * The tile's glyph, or nothing.
+     * The tile's glyph. Required.
      *
-     * The management tray's tiles carry the two glyphs this app has bitmaps for
-     * (`duplicate`, `delete`). The action tray's are verbs the rest of the app
-     * already sets as words — the editor's action bar draws BREW and WRITE as
-     * text, not icons — so those tiles are captioned and glyphless, which also
-     * tells the two trays apart at a glance.
+     * The action tray was built glyphless on the argument that its verbs are set
+     * as words elsewhere, and the result simply read as unfinished beside the
+     * management tray: two marked, coloured tiles on one side and three
+     * near-identical white words on the other. The trays are told apart by which
+     * way the card slides, not by one of them being plainer.
      */
-    icon?: DotIconName;
+    icon: DotIconName;
     caption: string;
     tone: string;
     label: string;
@@ -90,11 +90,6 @@ type TileProps = {
 function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
     return (
         <YStack
-            // A glyphless tile has no `DotIcon` to carry the testID, and
-            // without this it would carry none at all -- so a query for it,
-            // including an absence assertion, would match nothing and pass
-            // whatever the tray had done.
-            testID={icon === undefined ? testID : undefined}
             accessible
             accessibilityRole="button"
             accessibilityLabel={label}
@@ -108,10 +103,8 @@ function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
             // objects of the same kind, rather than as chrome behind it.
             borderRadius="$8"
             backgroundColor={palette.surface}>
-            {icon !== undefined && (
-                <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
-            )}
-            <DotMatrixText fontSize={icon === undefined ? 13 : 11} weight="bold"
+            <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            <DotMatrixText fontSize={11} weight="bold"
                            letterSpacing={1.2} color={tone}>
                 {caption}
             </DotMatrixText>
@@ -209,7 +202,7 @@ export default function SwipeableRecipeRow({
                     // The one tile carrying the recipe's own accent: it is the
                     // act on this specific recipe. Same helper the card uses, so
                     // the tile and the card it slid off cannot disagree.
-                    <Tile caption="BREW" tone={resolveAccent(recipe)}
+                    <Tile icon="brew" caption="BREW" tone={resolveAccent(recipe)}
                           testID="row-action-brew"
                           label={`Brew ${recipe.displayName()}`}
                           onPress={() => {
@@ -220,7 +213,7 @@ export default function SwipeableRecipeRow({
                 {onShare !== undefined && (
                     // Recipe-agnostic verbs, so a neutral ink rather than the
                     // accent BREW earns.
-                    <Tile caption="SHARE" tone={palette.text}
+                    <Tile icon="share" caption="SHARE" tone={palette.info}
                           testID="row-action-share"
                           label={`Share ${recipe.displayName()}`}
                           onPress={() => {
@@ -229,7 +222,7 @@ export default function SwipeableRecipeRow({
                           }}/>
                 )}
                 {onWrite !== undefined && (
-                    <Tile caption="WRITE" tone={palette.text}
+                    <Tile icon="write" caption="WRITE" tone={palette.text}
                           testID="row-action-write"
                           label={`Write ${recipe.displayName()} to a card`}
                           onPress={() => {

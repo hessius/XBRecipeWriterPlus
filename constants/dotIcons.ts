@@ -60,6 +60,44 @@ export const DOT_ICONS = {
         ".#######.",
         "........."
     ],
+    /**
+     * A play triangle: run this recipe.
+     *
+     * Its hypotenuses are pure 45-degree diagonals, the one non-axis-aligned
+     * stroke this grid renders cleanly. That fixes the proportions — a 45-degree
+     * point over nine rows is five columns wide — so it reads narrower than a
+     * typographic play mark. Widening it means shallower slopes, which alias
+     * into the noise the note above describes.
+     */
+    brew: [
+        "..#......",
+        "..##.....",
+        "..###....",
+        "..####...",
+        "..#####..",
+        "..####...",
+        "..###....",
+        "..##.....",
+        "..#......"
+    ],
+    /**
+     * An arrow coming down into a card: put this recipe on it.
+     *
+     * Deliberately not `scan`, which already means READ CARD on the same screen.
+     * The arrow is what separates them: `scan` radiates outward from nothing,
+     * this one points inward at a card that is drawn.
+     */
+    write: [
+        "....#....",
+        "....#....",
+        "..#####..",
+        "...###...",
+        "....#....",
+        "#########",
+        "#.......#",
+        "#.......#",
+        "#########"
+    ],
     /** Two faders. See the note above on why this is not a gear. */
     settings: [
         ".........",
