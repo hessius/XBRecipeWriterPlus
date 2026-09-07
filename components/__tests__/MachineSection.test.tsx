@@ -12,7 +12,14 @@ const mockPush = jest.fn();
 jest.mock("expo-router", () => ({router: {push: (...args: unknown[]) => mockPush(...args)}}));
 
 const mockAsk = jest.fn().mockResolvedValue(true);
-const mockLink = {
+const mockLink: {
+    machine: {info: null | object; askHowItIsDoing: jest.Mock};
+    status: import("@/hooks/useMachine").LinkStatus;
+    error: string | null;
+    remembered: string;
+    connect: jest.Mock;
+    forget: jest.Mock;
+} = {
     machine: {info: null, askHowItIsDoing: mockAsk},
     status: "disconnected",
     error: null,
@@ -95,9 +102,28 @@ describe("the machine section", () => {
         await renderWithProviders(<MachineSection/>);
         expect(await screen.findByText(/no machine paired/i)).toBeTruthy();
 
+        mockLink.status = "idle";
         mockLink.remembered = "AA:BB1122";
         await renderWithProviders(<MachineSection/>);
         expect(await screen.findByText(/AA:BB1122/)).toBeTruthy();
+    });
+
+    it("says not connected when idle with a paired machine, not in range when out of range", async () => {
+        // "Not connected" = no attempt made; "Not in range" = attempt made but
+        // the machine was not reachable. Different facts, different words.
+        mockLink.remembered = "MY:MACHINE";
+
+        mockLink.status = "idle";
+        await renderWithProviders(<MachineSection/>);
+        expect(await screen.findByText("Not connected · MY:MACHINE")).toBeTruthy();
+
+        mockLink.status = "disconnected";
+        await renderWithProviders(<MachineSection/>);
+        expect(await screen.findByText("Not in range · MY:MACHINE")).toBeTruthy();
+
+        mockLink.status = "failed";
+        await renderWithProviders(<MachineSection/>);
+        expect(await screen.findByText("Not in range · MY:MACHINE")).toBeTruthy();
     });
 
     it("opens the console from the status line when there is no connection", async () => {

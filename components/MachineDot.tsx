@@ -30,6 +30,7 @@ const TOUCH_TARGET = 44;
 const LABELS: Record<LinkStatus, string> = {
     connected:    "Machine connected",
     connecting:   "Machine connecting",
+    idle:         "Machine not connected",
     disconnected: "Machine not in range",
     failed:       "Machine not in range"
 };
@@ -43,6 +44,7 @@ const LABELS: Record<LinkStatus, string> = {
 const LOOKS: Record<LinkStatus, {icon: DotIconName; lit: string; dim: string | null}> = {
     connected:    {icon: "link-on",   lit: palette.success, dim: palette.successMuted},
     connecting:   {icon: "link-wait", lit: palette.warn,    dim: palette.warnMuted},
+    idle:         {icon: "link-off",  lit: palette.muted,   dim: null},
     disconnected: {icon: "link-off",  lit: palette.muted,   dim: null},
     failed:       {icon: "link-off",  lit: palette.muted,   dim: null}
 };

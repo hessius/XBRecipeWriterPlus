@@ -64,16 +64,27 @@ describe("MachinePanel", () => {
         expect(getByText("FILL THE TANK, THEN REFRESH")).toBeTruthy();
     });
 
-    it("offers TRY NOW only when the machine is out of range", async () => {
+    it("offers TRY NOW only when the machine is not connected", async () => {
         const connected = await draw();
         expect(connected.queryByLabelText("Try now")).toBeNull();
         const away = await draw({status: "disconnected", vitals: null});
         expect(away.getByLabelText("Try now")).toBeTruthy();
+        const idle = await draw({status: "idle", vitals: null});
+        expect(idle.getByLabelText("Try now")).toBeTruthy();
     });
 
-    it("says it will reconnect by itself", async () => {
+    it("says it will reconnect by itself when out of range", async () => {
         const {getByText} = await draw({status: "disconnected", vitals: null});
         expect(getByText(/reconnect by itself/i)).toBeTruthy();
+    });
+
+    it("says not connected — without claiming out of range — when idle", async () => {
+        // Idle means no attempt has been made. We do not know whether the
+        // machine is nearby, so "not in range" would be false.
+        const {getByText, queryByText} = await draw({status: "idle", vitals: null});
+        expect(getByText("Not connected. Press TRY NOW to connect.")).toBeTruthy();
+        expect(queryByText(/reconnect by itself/i)).toBeNull();
+        expect(queryByText(/not in range/i)).toBeNull();
     });
 
     it("shows last-seen age when the machine has gone away but had answered (task 2)", async () => {

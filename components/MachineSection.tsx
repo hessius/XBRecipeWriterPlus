@@ -57,7 +57,8 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     /** What the section says when there is no live link. */
     const idleStatus = status === "connecting" ? "Connecting…"
         : remembered === "" ? "No machine paired"
-            : `Not connected · ${remembered}`;
+            : status === "idle" ? `Not connected · ${remembered}`
+                : `Not in range · ${remembered}`;
 
     // The vitals are a snapshot taken at connect. Left alone, a tank refilled
     // since then still reads Low here, and only a relaunch clears it.

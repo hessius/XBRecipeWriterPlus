@@ -7,7 +7,7 @@ import Machine from "@/library/machine/Machine";
 import type {Settings} from "@/library/Settings";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
-export type LinkStatus = "disconnected" | "connecting" | "connected" | "failed";
+export type LinkStatus = "idle" | "disconnected" | "connecting" | "connected" | "failed";
 
 /**
  * One machine for the whole app.
@@ -284,7 +284,10 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     const machine = injected ?? sharedMachine();
     const [remembered, setRemembered] = useSetting("machineDeviceId", options.settings);
     const [status, setStatus] = useState<LinkStatus>(
-        machine.isConnected() ? "connected" : "disconnected"
+        // If already connected (e.g. the hook remounts with a live machine),
+        // reflect that. Otherwise we genuinely do not know yet: no attempt has
+        // been made in this app session.
+        machine.isConnected() ? "connected" : "idle"
     );
     const [error, setError] = useState<string | null>(null);
 
@@ -298,7 +301,16 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         // dropping — produces no frame at all, so a frame subscription leaves
         // the view saying "Connected" about a machine that has gone away.
         return machine.onLink(() => {
-            setStatus(machine.isConnected() ? "connected" : "disconnected");
+            setStatus(prev =>
+                // A link event saying "connected" is always correct — take it.
+                // A link event saying "not connected" means the state changed:
+                // if we were connected, the link dropped → disconnected.
+                // Any other previous state (idle, connecting, failed) should
+                // not be overwritten here; connect()'s own path owns those.
+                machine.isConnected() ? "connected"
+                    : prev === "connected" ? "disconnected"
+                        : prev
+            );
             setLinkVersion((n) => n + 1);
         });
     }, [machine]);
@@ -327,7 +339,7 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         await machine.disconnect();
         setRemembered("");
         setError(null);
-        setStatus("disconnected");
+        setStatus("idle");
     }
 
     return {machine, status, error, remembered, connect, forget};

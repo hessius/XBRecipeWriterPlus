@@ -67,7 +67,7 @@ usually a mistake, but they are surfaced here so you can change them deliberatel
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `system.appName` | `app.json:3` (`expo.name`) | App name under the icon and in the app switcher. | `XBRW++` |
-| `system.permission.bluetooth` | `app.json:60` (`ios.infoPlist.NSBluetoothAlwaysUsageDescription` via `bluetoothAlwaysPermission`) | iOS system prompt the first time the app uses Bluetooth. | `XBRW++ uses Bluetooth to connect to your xBloom Studio coffee machine so it can send a recipe and start a brew.` |
+| `system.permission.bluetooth` | `app.json:60` (`ios.infoPlist.NSBluetoothAlwaysUsageDescription` via `bluetoothAlwaysPermission`) | iOS system prompt the first time the app uses Bluetooth. | `XBRW++ uses Bluetooth to connect to your xBloom coffee machine so it can send a recipe and start a brew.` |
 | `system.permission.nfc` | `app.json:67` (`nfcPermission`) | iOS system prompt the first time the app uses NFC. | `This app uses NFC to read and write xBloom coffee recipe cards held near your iPhone.` |
 | `system.toast.done` | `library/notify.ts:45` (`success`) | Label above a success toast. | `DONE` |
 | `system.toast.error` | `library/notify.ts:46` (`error`) | Label above an error toast. | `ERROR` |
@@ -83,14 +83,14 @@ tray, and the overflow sheet.
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `home.cta.readCard` | `app/index.tsx:474` (a11y) | (a11y) The circular "read a card" button on the home screen. | `Read a card` |
-| `home.toast.alreadyInLibrary.open` | `app/index.tsx:220` | Info toast when a shared/imported recipe is already saved and is simply reopened. | `Already in your library` |
+| `home.toast.alreadyInLibrary.open` | `constants/copy.ts:19` (via `app/index.tsx:247`) | Info toast when a shared/imported recipe is already saved and is simply reopened. | `Already in your library` |
 | `home.toast.cardRead` | `app/index.tsx:336` | Success toast after a card is read. | `Recipe read from card` |
-| `home.toast.holdCard` | `app/index.tsx:337` | Instruction toast shown while waiting for the card. | `Hold the card to the top of the phone.` |
-| `home.toast.alreadyInLibrary.read` | `app/index.tsx:371` | Info toast when a just-read card matches a recipe already saved. | `Already in your library` |
-| `home.toast.readFailed` | `app/index.tsx:378` | Error toast when a card cannot be read. | `Could not read the card. Please try again.` |
+| `home.toast.holdCard` | `constants/copy.ts:32` (via `app/index.tsx:364`) | Instruction toast shown while waiting for the card. | `Hold the card to the top of the phone.` |
+| `home.toast.alreadyInLibrary.read` | `constants/copy.ts:19` (via `app/index.tsx:398`) | Info toast when a just-read card matches a recipe already saved. | `Already in your library` |
+| `home.toast.readFailed` | `constants/copy.ts:55` (via `app/index.tsx:405`) | Error toast when a card cannot be read. | `Could not read the card. Please try again.` |
 | `home.toast.machineBusy` | `app/index.tsx:420` | Info toast when trying to brew while the machine is already brewing. `${...}` is the running recipe's display name. | `The machine is busy brewing ${liveRun.recipe.displayName()}.` |
-| `home.empty.title` | `components/EmptyLibrary.tsx:30` | Heading when the library has no recipes. | `No recipes yet` |
-| `home.empty.body` | `components/EmptyLibrary.tsx:33` | Sub-line under the empty-state heading. | `Read a card or import a recipe using the buttons above.` |
+| `home.empty.title` | `components/EmptyLibrary.tsx:37` | Heading when the library has no recipes. Doto, matching the empty states on the sibling list screens. | `NO RECIPES YET` |
+| `home.empty.body` | `components/EmptyLibrary.tsx:40` | Sub-line under the empty-state heading. | `Read a card or import a recipe using the buttons above.` |
 | `home.card.marker.tea` | `components/RecipeCard.tsx:151` | Doto marker on a recipe card for tea recipes. | `TEA` |
 | `home.card.marker.coffee` | `components/RecipeCard.tsx:151` | Doto marker on a recipe card for coffee recipes (toggleable in Settings). | `COFFEE` |
 | `home.card.willNotWrite` | `components/RecipeCard.tsx:263` (a11y) | (a11y) Warning glyph on a card whose grind is too fine to write. | `Will not write` |
@@ -157,9 +157,9 @@ from `library/Recipe.ts`.
 | `editor.hero.help.visible` | `components/RecipeHero.tsx:130` | Doto label on the help button. | `HELP` |
 | `editor.hero.more` | `components/RecipeHero.tsx:135` (a11y) | (a11y) Overflow ("More") button in the editor header. | `More` |
 | `recipe.name.read` | `library/Recipe.ts:311` (`read`) | Placeholder display name for a card-read recipe with no name, joined with a date (e.g. `Read 5 Jan`). | `Read` |
-| `recipe.name.import` | `library/Recipe.ts:312` (`import`) | Placeholder display name for an imported recipe with no name, joined with a date. | `Imported` |
+| `recipe.name.import` | `library/Recipe.ts:312` (`import`) | Placeholder display name for an imported recipe with no name, joined with a date. | `Imported Recipe` |
 | `recipe.name.duplicate` | `library/Recipe.ts:313` (`duplicate`) | Placeholder display name for a duplicated recipe. | `Copy` |
-| `recipe.name.manual` | `library/Recipe.ts:314` (`manual`) | Placeholder display name for a manually created recipe with no name. | `Untitled` |
+| `recipe.name.manual` | `library/Recipe.ts:314` (`manual`) | Placeholder display name for a manually created recipe with no name. | `Untitled Brew` |
 | `recipe.cup.xpod` | `library/Recipe.ts:365` | Cup-type name, xPod. | `xPod` |
 | `recipe.cup.omni` | `library/Recipe.ts:367` | Cup-type name, Omni ("overflow protection off"). | `Omni` |
 | `recipe.cup.tea` | `library/Recipe.ts:369` | Cup-type name, Tea. | `Tea` |
@@ -175,8 +175,8 @@ from `library/Recipe.ts`.
 | `editor.deck.stages.label` | `components/DeckSwitch.tsx:61` | Doto tab for the stages deck. `${...}` is the stage count. | `STAGES · ${stageCount}` |
 | `editor.deck.stages.a11y` | `components/DeckSwitch.tsx:61` (a11y) | (a11y) Stages tab. `${...}` is the stage count. | `Stages, ${stageCount}` |
 | `editor.field.grind.display` | `app/editRecipe.tsx:257` | Doto readout of the current grind size. `${...}` is the number. | `GRIND ${recipe.grindSize}` |
-| `editor.field.grind.tooFine` | `app/editRecipe.tsx:261` | Warning shown when the grind is below the minimum a card can store. `${CARD_GRIND_MIN}` is 40. | `A card cannot store a grind below ${CARD_GRIND_MIN}.` |
-| `editor.field.grind.tooFine.imported` | `app/editRecipe.tsx:262` | Variant shown for an imported recipe ground finer than a card allows. First `${...}` is a human band label; `${CARD_GRIND_MIN}` is 40. | `Ground for ${fineBand.longLabel}. A card cannot store a grind below ${CARD_GRIND_MIN}.` |
+| `editor.field.grind.tooFine` | `constants/copy.ts:43` (via `app/editRecipe.tsx:262`) | Warning shown when the grind is below the minimum a card can store. `${min}` is 40. Shared with the import sheet and the card-limit check, so all three now carry both the rule and the remedy. | `A card cannot store a grind below ${min}, so you will need to coarsen it to write one.` |
+| `editor.field.grind.tooFine.imported` | `app/editRecipe.tsx:263` | Variant shown for an imported recipe ground finer than a card allows. `${fineBand.longLabel}` is a human band label; the rest is `editor.field.grind.tooFine`. | `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}` |
 | `editor.field.grind.setTo.a11y` | `app/editRecipe.tsx:266` (a11y) | (a11y) Button that raises the grind to the minimum. `${CARD_GRIND_MIN}` is 40. | `Set grind size to ${CARD_GRIND_MIN}` |
 | `editor.field.grind.setTo` | `app/editRecipe.tsx:271` | Doto label on that button. `${CARD_GRIND_MIN}` is 40. | `SET TO ${CARD_GRIND_MIN}` |
 | `editor.field.mlTotal` | `app/editRecipe.tsx:232` | Doto caption under the target-volume figure. | `ML TOTAL` |
@@ -285,7 +285,7 @@ lines — the cited line is the property's first line.
 | `help.xid.question` | `constants/recipeHelp.ts:96` | Recipe ID help-sheet heading. | `What is the recipe ID for?` |
 | `help.xid.detail` | `constants/recipeHelp.ts:97` | Recipe ID long-form help. | `The recipe ID is how the app finds a recipe online. It is a three-letter vendor code, an optional T for tea, then two or three digits, like CGL12 or CGLT123. The card stores this ID and not the name, so a card written without one will read back nameless. Changing or clearing it stops the wrong recipe being shown in the app; the machine brews the same either way.` |
 | `help.name.title` | `constants/recipeHelp.ts:105` | Name field label. | `Name` |
-| `help.name.hint` | `constants/recipeHelp.ts:106` | Name field hint. | `For your own organization in this app. The xBloom name is kept separate, derived from the XID.` |
+| `help.name.hint` | `constants/recipeHelp.ts:106` | Name field hint. | `For your own organisation in this app. The xBloom name is kept separate, derived from the XID.` |
 | `help.volume.title` | `constants/recipeHelp.ts:110` | Stage volume field label. | `Stage volume` |
 | `help.volume.hint` | `constants/recipeHelp.ts:111` | Stage volume field hint. | `All stages together must equal the target.` |
 | `help.volume.question` | `constants/recipeHelp.ts:112` | Stage volume help-sheet heading. | `Why must the stage volumes add up?` |
@@ -301,7 +301,7 @@ lines — the cited line is the property's first line.
 | `help.pattern.title` | `constants/recipeHelp.ts:140` | Pattern field label. | `Pattern` |
 | `help.pattern.hint` | `constants/recipeHelp.ts:141` | Pattern field hint. | `The path the water takes over the bed.` |
 | `help.pattern.question` | `constants/recipeHelp.ts:142` | Pattern help-sheet heading. | `What do the pour patterns do?` |
-| `help.pattern.detail` | `constants/recipeHelp.ts:143` | Pattern long-form help. | `Centered holds the stream in one place. Circular walks it round the bed at a fixed radius. Spiral works outward from the middle.` |
+| `help.pattern.detail` | `constants/recipeHelp.ts:143` | Pattern long-form help. | `Centred holds the stream in one place. Circular walks it round the bed at a fixed radius. Spiral works outward from the middle.` |
 | `help.agitation.title` | `constants/recipeHelp.ts:148` | Agitation field label. | `Agitation` |
 | `help.agitation.hint` | `constants/recipeHelp.ts:149` | Agitation field hint. | `Shakes the basket, before this stage's pour or after it.` |
 | `help.agitation.question` | `constants/recipeHelp.ts:150` | Agitation help-sheet heading. | `What does agitation do?` |
@@ -333,8 +333,8 @@ The import sheet (`components/ImportSheet.tsx`), its result panel
 | `import.result.stat.stages` | `components/ImportResult.tsx:134` | Doto figure label. | `STAGES` |
 | `import.result.existing.named.a11y` | `components/ImportResult.tsx:149` (a11y) | (a11y) Note when the imported recipe already exists under a custom name. `${customName}` is that name. | `Already in your library as ${customName}` |
 | `import.result.existing.named` | `components/ImportResult.tsx:150` | Visible note when the recipe already exists under a custom name. `${customName}` is that name (quoted). | `Already in your library as "${customName}"` |
-| `import.result.existing.plain` | `components/ImportResult.tsx:154` | Visible note when the recipe already exists. | `Already in your library` |
-| `import.result.tooFine` | `components/ImportResult.tsx:161` | Note when the imported recipe is ground too fine to write to a card. `${...}` is a human band label. | `Ground for ${fineBand.longLabel}. You will need to coarsen it to write a card.` |
+| `import.result.existing.plain` | `constants/copy.ts:19` (via `components/ImportResult.tsx:155`) | Visible note when the recipe already exists. | `Already in your library` |
+| `import.result.tooFine` | `components/ImportResult.tsx:162` | Note when the imported recipe is ground too fine to write to a card. `${fineBand.longLabel}` is a human band label; the rest is `editor.field.grind.tooFine`. | `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}` |
 | `import.result.open.a11y` | `components/ImportResult.tsx:168` (a11y) | (a11y) The open/import action. `${name}` is the recipe name. | `Open ${name}` |
 | `import.result.button.open` | `components/ImportResult.tsx:182` | Doto label when the recipe already exists (opens it). | `OPEN` |
 | `import.result.button.import` | `components/ImportResult.tsx:182` | Doto label when the recipe is new (imports it). | `IMPORT` |
@@ -357,9 +357,9 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `brew.close.a11y` | `app/brew.tsx:148` (a11y) | (a11y) Close button on the brew screen. | `Close` |
-| `brew.phase.idle` | `constants/brewCopy.ts:6` (`idle`) | Phase line before anything starts. | `Ready when you are.` |
+| `brew.phase.idle` | `constants/brewCopy.ts:6` (`idle`) | Phase line before anything starts. | `Preparing recipe.` |
 | `brew.phase.connecting` | `constants/brewCopy.ts:15` (`connecting`) | Phase line while connecting. | `Connecting to the machine…` |
-| `brew.phase.waking` | `constants/brewCopy.ts:18` (`waking`) | Phase line while waiting for the machine to answer. | `Waiting for the machine to answer…` |
+| `brew.phase.waking` | `constants/brewCopy.ts:18` (`waking`) | Phase line while waiting for the machine to answer. | `Waking up machine…` |
 | `brew.phase.sending` | `constants/brewCopy.ts:21` (`sending`) | Phase line while the recipe uploads. | `Sending the recipe… this takes a few seconds.` |
 | `brew.phase.readyToStart` | `constants/brewCopy.ts:22` (`readyToStart`) | Phase line once the recipe is loaded and the machine waits for you. | `Recipe loaded. Ready when you are.` |
 | `brew.phase.armed` | `constants/brewCopy.ts:23` (`armed`) | Phase line once the recipe is loaded (auto-start on). | `Recipe loaded.` |
@@ -368,28 +368,28 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | `brew.phase.settling` | `constants/brewCopy.ts:32` (`settling`) | Phase line after the water stops but while coffee is still dripping from the brewer onto the scale. The brew is not over yet; the trace is still moving. | `Letting the last of the coffee drain…` |
 | `brew.phase.done` | `constants/brewCopy.ts:33` (`done`) | Phase line when the brew finishes. | `Enjoy.` |
 | `brew.endedOnMachine` | `constants/brewCopy.ts:112` (`ENDED_ON_MACHINE_NOTE`) | Doto note on a brew the machine reported complete but which came in more than 15 ml under its plan — typically the ratio or dose being changed on the machine, or the beans running out. Deliberately states only the observation: a mid-brew ratio change is not observable over BLE, so naming a cause would be a guess. | `ENDED ON THE MACHINE` |
-| `brew.phase.cancelled` | `constants/brewCopy.ts:30` (`cancelled`) | Phase line after cancelling. | `Stopped.` |
+| `brew.phase.cancelled` | `constants/brewCopy.ts:38` (`cancelled`) | Phase line after cancelling. Says what happened, like every other ending on this screen. | `You stopped the brew.` |
 | `brew.phase.lostContact` | `constants/brewCopy.ts:31` (`lostContact`) | Phase line when the link drops mid-brew. | `Lost contact. The machine is still brewing.` |
 | `brew.headline.fallback` | `app/brew.tsx:121` | Generic headline if no phase-specific copy applies. | `The brew did not start.` |
 | `brew.action.start` | `app/brew.tsx:239` | Button to start brewing. | `Start brewing` |
 | `brew.action.cancel` | `app/brew.tsx:242` | Button to cancel a running brew. | `Cancel` |
 | `brew.action.tryAgain` | `app/brew.tsx:257` | Button to retry after a failure. | `Try again` |
-| `brew.action.switchToPro` | `app/brew.tsx:261` | Button offered when the machine is in Easy mode. | `Switch to PRO` |
+| `brew.action.switchToPro` | `app/brew.tsx:332` | Button offered when the machine is in Easy mode. Title case at source: `Action` upper-cases for the Doto render, so this string is what a screen reader speaks. | `Switch to Pro` |
 | `brew.action.export` | `app/brew.tsx:265` | Button to export the finished brew. | `Export this brew` |
-| `brew.firstBrewReminder` | `constants/brewCopy.ts:85` (`FIRST_BREW_REMINDER`); shown `app/brew.tsx:221` | Shown once, on a user's first brew. | `Check there is a cup under the spout and a pod in the holder.` |
+| `brew.firstBrewReminder` | `constants/brewCopy.ts:85` (`FIRST_BREW_REMINDER`); shown `app/brew.tsx:221` | Shown once, on a user's first brew. | `Check that there is a cup under the spout and a pod or brewer in the holder.` |
 | `brew.proModePrompt` | `constants/brewCopy.ts:89` (`PRO_MODE_PROMPT`); shown `app/brew.tsx:224` | Shown when a send stalled because the machine is in Easy mode. | `Your machine is in Easy mode. Switch it to Pro and try again?` |
 | `brew.now.pattern.centered` | `components/BrewNowCard.tsx:25` (`PATTERN_WORD`) | Doto pattern word in the live stage heading. | `CENTRED` |
 | `brew.now.pattern.circular` | `components/BrewNowCard.tsx:26` (`PATTERN_WORD`) | Doto pattern word. | `CIRCULAR` |
 | `brew.now.pattern.spiral` | `components/BrewNowCard.tsx:27` (`PATTERN_WORD`) | Doto pattern word. | `SPIRAL` |
 | `brew.now.pattern.agitation` | `components/BrewNowCard.tsx:28` (`PATTERN_WORD`) | Doto pattern word. | `AGITATION` |
 | `brew.now.heading` | `components/BrewNowCard.tsx:43` | Doto heading for the live stage. `${...}` are RESTING/POURING, the pattern word and the temperature. | `${resting ? "RESTING" : "POURING"} · ${PATTERN_WORD[kind]} · ${temperature}°` |
-| `brew.pattern.centered` | `constants/brewCopy.ts:134` (`PATTERN_SENTENCE.centered`) | Prose clause describing the centred pour. | `Straight down onto the middle of the bed` |
-| `brew.pattern.circular` | `constants/brewCopy.ts:135` (`PATTERN_SENTENCE.circular`) | Prose clause describing the circular pour. | `Round the bed in a steady ring` |
-| `brew.pattern.spiral` | `constants/brewCopy.ts:136` (`PATTERN_SENTENCE.spiral`) | Prose clause describing the spiral pour. | `Out from the centre and back` |
-| `brew.pattern.agitation` | `constants/brewCopy.ts:145` (`PATTERN_SENTENCE.agitation`) | Prose clause (unreachable in normal use; kept for totality). | `It stirs the bed rather than pouring` |
-| `brew.agitation.before` | `constants/brewCopy.ts:157` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_OFF) | Appended to the stage description when it stirs first. | `It stirs the bed first.` |
-| `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `It stirs the bed afterwards.` |
-| `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `It stirs the bed before and after.` |
+| `brew.pattern.centered` | `constants/brewCopy.ts:134` (`PATTERN_SENTENCE.centered`) | Prose clause describing the centred pour. | `Centre pour` |
+| `brew.pattern.circular` | `constants/brewCopy.ts:135` (`PATTERN_SENTENCE.circular`) | Prose clause describing the circular pour. | `Circular pour` |
+| `brew.pattern.spiral` | `constants/brewCopy.ts:136` (`PATTERN_SENTENCE.spiral`) | Prose clause describing the spiral pour. | `Spiral pour` |
+| `brew.pattern.agitation` | `constants/brewCopy.ts:145` (`PATTERN_SENTENCE.agitation`) | Prose clause (unreachable in normal use; kept for totality). | `Agitates the bed by shaking it slightly` |
+| `brew.agitation.before` | `constants/brewCopy.ts:157` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_OFF) | Appended to the stage description when it stirs first. | `Agitates the bed first.` |
+| `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `Agitates the bed afterwards.` |
+| `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `Agitates the bed before and after.` |
 
 The stage detail panel on a recorded brew (`components/StageDetail.tsx`), opened
 by tapping a stage rung or trace segment. Doto labels head each part; the prose
@@ -412,7 +412,7 @@ below them is Inter. `brew.stage.short.line` is a Doto note, whole ml.
 | `glyph.circular.a11y` | `components/PourGlyph.tsx:28` (a11y, `LABELS`) | (a11y) Spoken where the circular-pour icon appears. | `Circular pour` |
 | `glyph.spiral.a11y` | `components/PourGlyph.tsx:29` (a11y, `LABELS`) | (a11y) Spoken where the spiral-pour icon appears. | `Spiral pour` |
 | `glyph.agitation.a11y` | `components/PourGlyph.tsx:33` (a11y, `LABELS`) | (a11y) Spoken where the agitation icon appears. The code comments that it is deliberately *agitation*, not *shake*: the card format, the editor and the help text all say agitation, and two words for one thing is one word too many. | `Agitation` |
-| `editor.stage.pattern.centered` | `library/Pour.ts:170` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site (`components/StageTile.tsx:237`). Note the American spelling here against `CENTRED` in the brew screen — see Inconsistencies. | `Centered` |
+| `editor.stage.pattern.centered` | `library/Pour.ts:170` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site (`components/StageTile.tsx:237`). Note the American spelling here against `CENTRED` in the brew screen — see Inconsistencies. | `Centred` |
 | `editor.stage.pattern.circular` | `library/Pour.ts:172` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site. | `Circular` |
 | `editor.stage.pattern.spiral` | `library/Pour.ts:174` (`getPourPatternText`) | Pattern word in the editor's stage tile, upper-cased at the call site. | `Spiral` |
 | `editor.stage.pattern.unknown` | `library/Pour.ts:176` (`getPourPatternText`) | Shown if a card carries a pattern byte we do not recognise. A bare `Error` is not much help to a reader; worth rewording. | `Error` |
@@ -567,13 +567,13 @@ The card overlay (`components/NfcOverlay.tsx`), the write path
 |----|--------|-----------------------------------|--------------|
 | `nfc.overlay.verb.read` | `components/NfcOverlay.tsx:59` | Doto verb shown while reading (uppercased to `READING`). | `Reading` |
 | `nfc.overlay.verb.write` | `components/NfcOverlay.tsx:59` | Doto verb shown while writing (uppercased; may show `WRITING 42%`). | `Writing` |
-| `nfc.overlay.hold` | `components/NfcOverlay.tsx:111` | Instruction under the overlay verb. | `Hold the card to the top of the phone.` |
+| `nfc.overlay.hold` | `constants/copy.ts:32` (via `components/NfcOverlay.tsx:112`) | Instruction under the overlay verb. | `Hold the card to the top of the phone.` |
 | `nfc.overlay.cancel.a11y` | `components/NfcOverlay.tsx:119` (a11y) | (a11y) Cancel button on the overlay. | `Cancel` |
 | `nfc.overlay.cancel` | `components/NfcOverlay.tsx:130` | Visible cancel button label. | `Cancel` |
 | `nfc.write.toast.done` | `hooks/useCardWriter.ts:65` | Success toast after a card is written. | `Recipe written to card` |
-| `nfc.write.toast.hold` | `hooks/useCardWriter.ts:66` | Instruction toast shown while writing. | `Hold the card to the top of the phone.` |
+| `nfc.write.toast.hold` | `constants/copy.ts:32` (via `hooks/useCardWriter.ts:67`) | Instruction toast shown while writing. | `Hold the card to the top of the phone.` |
 | `nfc.write.error.outOfRange` | `hooks/useCardWriter.ts:84` | Error toast when values cannot be written. | `The recipe cannot be written to the card. Check that all values are within range.` |
-| `nfc.write.error.generic` | `hooks/useCardWriter.ts:93` | Error toast when the write fails. | `Could not write the recipe to the card.` |
+| `nfc.write.error.generic` | `constants/copy.ts:56` (via `hooks/useCardWriter.ts:94`) | Error toast when the write fails. | `Could not write the recipe to the card. Please try again.` |
 | `nfc.ios.alert.writeError` | `library/NFC.ts:274` | Text written into the iOS NFC system sheet on a write error. | `Error writing to card` |
 
 ---
@@ -619,7 +619,8 @@ machine card's error line).
 | `machine.section.title` | `components/MachineSection.tsx:79` | Section title. | `Machine` |
 | `machine.section.idle.connecting` | `components/MachineSection.tsx:58` | Status while connecting. | `Connecting…` |
 | `machine.section.idle.none` | `components/MachineSection.tsx:59` | Status when no machine is paired. | `No machine paired` |
-| `machine.section.idle.notConnected` | `components/MachineSection.tsx:60` | Status when a machine is remembered but not connected. `${remembered}` is the machine name. | `Not connected · ${remembered}` |
+| `machine.section.idle.notConnected` | `components/MachineSection.tsx:60` | Status when a machine is remembered but no connection attempt has been made. `${remembered}` is the machine name. | `Not connected · ${remembered}` |
+| `machine.section.idle.notInRange` | `components/MachineSection.tsx:61` | Status when a machine is remembered and a connection attempt was made but failed, or the link dropped. `${remembered}` is the machine name. | `Not in range · ${remembered}` |
 | `machine.section.connect.connected` | `components/MachineSection.tsx:96` | Row label when connected. | `Connected` |
 | `machine.section.connect.connect` | `components/MachineSection.tsx:96` | Row label when not connected. | `Connect to my machine` |
 | `machine.section.connected.desc` | `components/MachineSection.tsx:98` | Sub-note when connected. | `The link is held while XBRW++ is open.` |
@@ -649,8 +650,9 @@ machine card's error line).
 |----|--------|-----------------------------------|--------------|
 | `machine.dot.connected.a11y` | `components/MachineDot.tsx:31` (a11y, `connected`) | (a11y) Header dot when connected. | `Machine connected` |
 | `machine.dot.connecting.a11y` | `components/MachineDot.tsx:32` (a11y, `connecting`) | (a11y) Header dot while connecting. | `Machine connecting` |
-| `machine.dot.disconnected.a11y` | `components/MachineDot.tsx:33` (a11y, `disconnected`) | (a11y) Header dot when out of range. | `Machine not in range` |
-| `machine.dot.failed.a11y` | `components/MachineDot.tsx:34` (a11y, `failed`) | (a11y) Header dot after a failed link. | `Machine not in range` |
+| `machine.dot.idle.a11y` | `components/MachineDot.tsx:33` (a11y, `idle`) | (a11y) Header dot when no connection attempt has been made. | `Machine not connected` |
+| `machine.dot.disconnected.a11y` | `components/MachineDot.tsx:34` (a11y, `disconnected`) | (a11y) Header dot when out of range. | `Machine not in range` |
+| `machine.dot.failed.a11y` | `components/MachineDot.tsx:35` (a11y, `failed`) | (a11y) Header dot after a failed link. | `Machine not in range` |
 
 ### The machine panel (`components/MachinePanel.tsx`)
 
@@ -673,7 +675,8 @@ re-pointed.
 | `machine.popover.grind.label` | `components/MachinePanel.tsx:144` | Doto row label. | `GRIND` |
 | `machine.popover.connecting` | `components/MachinePanel.tsx:156` | Doto status while connecting. | `CONNECTING…` |
 | `machine.panel.noReadings` | `components/MachinePanel.tsx:170` | Doto status when the machine is connected but has not yet reported its water, mode or grind. Offers refresh rather than reconnect — there is nothing to connect. | `CONNECTED. NO READINGS YET.` |
-| `machine.popover.outOfRange` | `components/MachinePanel.tsx:180` | Prose when out of range. | `Not in range. It will reconnect by itself when it is.` |
+| `machine.popover.notConnected` | `components/MachinePanel.tsx:183` | Prose when idle — no attempt made yet. Points at TRY NOW rather than promising automatic reconnection. | `Not connected. Press TRY NOW to connect.` |
+| `machine.popover.outOfRange` | `components/MachinePanel.tsx:203` | Prose when out of range (disconnected or failed, no previous vitals). | `Not in range. It will reconnect by itself when it is.` |
 | `machine.popover.lastSeen` | `components/MachinePanel.tsx:181` | Prose with last-seen age. `${age(...)}` is a human age; sentence continues on line 123. | `Last seen ${age(vitals.askedAt, now)}. It will reconnect by itself when it is in range.` |
 | `machine.popover.tryNow.a11y` | `components/MachinePanel.tsx:184` (a11y) | (a11y) Try-now button. | `Try now` |
 | `machine.popover.tryNow` | `components/MachinePanel.tsx:190` | Doto label on the try-now button. | `TRY NOW` |
@@ -854,7 +857,7 @@ A looping Doto joke ticker. All lines are uppercase, no full stops.
 | `about.ticker.17` | `app/about.tsx:51` | `BLOOM RESPONSIBLY` |
 | `about.ticker.18` | `app/about.tsx:52` | `TWO PLUSES BETTER THAN ONE PLUS: MATHEMATICS CONFIRMS` |
 | `about.ticker.19` | `app/about.tsx:53` | `EIGHT BLOCKS SKIPPED: NOBODY SAW ANYTHING` |
-| `about.ticker.20` | `app/about.tsx:54` | `OUR LAWYER IS A SINGLE PARAGRAPH FURTHER DOWN THIS PAGE` |
+| `about.ticker.20` | `app/about.tsx:54` | `DO YOU REALISE HOW MANY CUPS I DRANK IN ORDER TO TEST THIS` |
 | `about.ticker.21` | `app/about.tsx:55` | `TEA MODE EXISTS AND WE ARE NOT TAKING QUESTIONS` |
 | `about.ticker.22` | `app/about.tsx:56` | `THIS SCROLLER TOOK LONGER THAN THE CARD FORMAT` |
 | `about.ticker.23` | `app/about.tsx:57` | `HAND ROLLED BYTES: NO ARTIFICIAL FLAVOURS` |
@@ -862,7 +865,7 @@ A looping Doto joke ticker. All lines are uppercase, no full stops.
 | `about.ticker.25` | `app/about.tsx:59` | `CAFFEINE IS A CIRCLE AND SO IS THIS LIST` |
 | `about.ticker.26` | `app/about.tsx:60` | `GREETZ TO THE MACHINE THAT REFUSED SIX HUNDRED RECIPES` |
 | `about.ticker.27` | `app/about.tsx:61` | `OVERFLOW PROTECTION OFF: LIVE A LITTLE` |
-| `about.ticker.28` | `app/about.tsx:62` | `NO CLOUD NO ACCOUNT NO NEWSLETTER NO THANKS` |
+| `about.ticker.28` | `app/about.tsx:62` | `NO DATA COLLECTION BECAUSE NO ONE CARES ABOUT YOUR COFFEE` |
 
 ### Licences screen (`app/licences.tsx`)
 
@@ -1041,17 +1044,13 @@ Specific issues found while cataloguing. Each cites the IDs involved. These are
 exactly the kind of drift the owner asked to surface — none is a functional bug,
 but each is a wording decision worth making once, on purpose.
 
-1. **"Already in your library" is duplicated three times**, in two files, as
-   independent literals: `home.toast.alreadyInLibrary.open`
-   (`app/index.tsx:220`), `home.toast.alreadyInLibrary.read`
-   (`app/index.tsx:371`) and `import.result.existing.plain`
-   (`components/ImportResult.tsx:154`). If one is reworded the others will
-   silently drift. Candidate for a single shared constant.
+1. ~~**"Already in your library" is duplicated three times**~~ — **resolved.**
+   The three literals now come from `ALREADY_IN_LIBRARY` in
+   `constants/copy.ts`, with `alreadyInLibraryAs()` for the variant that quotes
+   the saved recipe's name back.
 
-2. **"Hold the card to the top of the phone." is duplicated three times**:
-   `nfc.overlay.hold` (`components/NfcOverlay.tsx:111`), `nfc.write.toast.hold`
-   (`hooks/useCardWriter.ts:66`) and `home.toast.holdCard`
-   (`app/index.tsx:337`). Same drift risk.
+2. ~~**"Hold the card to the top of the phone." is duplicated three times**~~ —
+   **resolved.** All now come from `HOLD_CARD` in `constants/copy.ts`.
 
 3. **PRO / Pro / EASY casing is inconsistent.** `brew.action.switchToPro` says
    "Switch to PRO" (all-caps PRO in an Inter button); `brew.proModePrompt` says
@@ -1059,6 +1058,16 @@ but each is a wording decision worth making once, on purpose.
    `console.cmd.switchToEasy.name` use "PRO"/"EASY"; the popover mode value
    (`machine.popover.mode.label` value) surfaces "EASY"/"PRO" from the machine.
    Pick one convention for the mode name in prose vs. as a Doto token.
+
+   **Resolved: title case in prose, all caps in Doto.** Only
+   `brew.action.switchToPro` needed changing, to "Switch to Pro" — worth
+   spelling out why, because the button still *reads* SWITCH TO PRO on screen.
+   `Action` upper-cases its own label for the Doto render (`app/brew.tsx:53`)
+   and passes the raw string to `accessibilityLabel`, so the source string is
+   the prose one and the capitals are the component's doing. The console names
+   and the popover value keep their capitals: `mode` is a `"PRO" | "EASY"`
+   union decoded from the machine (`library/machine/protocol.ts:173`), a
+   protocol token rather than prose, and it is drawn in Doto.
 
 4. **The grinder-off grind number contradicts itself.**
    `help.grinder.detail` says turning the grinder off writes grind size **81**;
@@ -1069,12 +1078,21 @@ but each is a wording decision worth making once, on purpose.
    internal value, but a reader cannot know that. At minimum the two should not
    sit in the same app disagreeing.)
 
+   **Resolved:** the ticker now says EIGHTY-ONE. The joke is told to a user, so
+   it uses the number the user can see on the dial, not the byte we store.
+
 5. **Grams register split: "g" vs "G".** The editor and card stats use lowercase
    "g" (`home.card.stat.dose` value suffix, help text "18 g"), while every
    dot-matrix readout uses uppercase "G" (`brew.mini.ready.detail`,
    `brew.mini.grinding.detail`, `brewHistory.row.cup`, `import.result` figures).
    This is defensible as a register rule (Doto is all-caps) but is worth stating
    explicitly so nobody "fixes" it in one place.
+
+   **Resolved as intentional, and now stated where it can be found:** the rule
+   is written into the `DotMatrixText` doc comment
+   (`components/DotMatrixText.tsx:105`), beside the component that enforces the
+   Doto register. Units are lower case in Inter and upper case in Doto, and the
+   two are not to be unified in one direction.
 
 6. **Three different phrasings for "not connected."**
    `machine.section.idle.notConnected` says "Not connected · {name}";
@@ -1083,14 +1101,30 @@ but each is a wording decision worth making once, on purpose.
    in range". "Not connected" and "not in range" are used interchangeably for
    the same state.
 
+   **Resolved by making the states distinct:** the owner ruled that the two
+   phrases describe genuinely different situations and should be kept apart.
+   "Not connected" = no attempt has been made in this app session; nothing is
+   known about whether the machine is reachable. "Not in range" = an attempt was
+   made and did not succeed, or a connection was established and then dropped —
+   positive evidence of absence. `LinkStatus` in `hooks/useMachine.ts` now has a
+   fifth value, `"idle"`, for the no-attempt state; `"disconnected"` is reserved
+   for a dropped link. All three call sites — `MachineSection`, `MachinePanel`,
+   and `MachineDot` — now distinguish the two, and the catalogue has been updated
+   with the new rows.
+
 7. **The same too-fine-grind condition is explained two ways.**
    `editor.field.grind.tooFine` says "A card cannot store a grind below 40.",
    while `import.result.tooFine` says "You will need to coarsen it to write a
    card." Both are correct; a user meeting both will not obviously connect them.
 
-8. **Read/write error asymmetry.** `home.toast.readFailed` ends "Please try
-   again." but `nfc.write.error.generic` ("Could not write the recipe to the
-   card.") does not. Parallel failures, non-parallel copy.
+   **Resolved:** one explanation carrying both facts — the rule and the remedy —
+   as `grindTooFine()` in `constants/copy.ts`, used by the editor, the import
+   sheet and the card-limit check.
+
+8. ~~**Read/write error asymmetry.**~~ — **resolved.** Both now end "Please try
+   again.", and both live in `constants/copy.ts` as `CARD_READ_FAILED` and
+   `CARD_WRITE_FAILED`, side by side, so the next rewording of one is done
+   looking at the other.
 
 9. **Empty-state register is split.** `home.empty.title` is Inter sentence case
    ("No recipes yet"), but `brewHistory.empty.title` ("NO BREWS YET"),
@@ -1098,10 +1132,22 @@ but each is a wording decision worth making once, on purpose.
    ("NO TRACE KEPT") are Doto all-caps. Two visually different empty-state
    treatments across sibling screens.
 
+   **Resolved:** the home empty state is Doto now — NO RECIPES YET, with the
+   sub-line in the same muted Inter the brew history uses.
+
 10. **"Stopped." vs "Stopped: {why}".** `brew.phase.cancelled` is "Stopped."
     (full stop) while `brew.mini.stopped.title` is "Stopped: {why}" (no full
     stop, colon list). Minor, but they read as two different voices for the same
     event.
+
+    **Resolved by making both explain**, rather than by switching them. The
+    mini bar was not the odd one out: on the full screen a failure already
+    reads as a sentence ("The machine ran out of water.") and a dropped link as
+    "Lost contact. The machine is still brewing." Cancelling was the only
+    ending that named itself without saying anything — so it now reads "You
+    stopped the brew." The colon form stays in the mini bar, where the titles
+    are short labels rather than sentences; that difference is register, not
+    drift.
 
 11. **Machine console command notes are developer English**, not product
     English: e.g. `console.cmd.brewerStart.note` ("FreeSolo water dispense."),

@@ -172,7 +172,30 @@ export default function MachinePanel({
                 <RefreshButton accent={accent} onRefresh={onRefreshWater} />
             </YStack>
         );
+    } else if (status === "idle") {
+        // No attempt has been made yet — we do not know whether the machine is
+        // nearby. Claiming "not in range" would be false; TRY NOW is the right
+        // offer and the text should point at it rather than promise
+        // an automatic reconnection that has not been set in motion.
+        body = (
+            <YStack gap="$2">
+                <DotMatrixText fontSize={11} color={palette.dim}>
+                    Not connected. Press TRY NOW to connect.
+                </DotMatrixText>
+                <Pressable accessibilityRole="button" accessibilityLabel="Try now"
+                           onPress={onConnect}>
+                    <YStack alignItems="center" paddingVertical="$2.5" borderRadius="$4"
+                            borderWidth={1} borderColor={accent}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={2}
+                                       color={accent}>
+                            TRY NOW
+                        </DotMatrixText>
+                    </YStack>
+                </Pressable>
+            </YStack>
+        );
     } else {
+        // disconnected or failed: we know the machine is out of reach.
         body = (
             <YStack gap="$2">
                 <DotMatrixText fontSize={11} color={palette.dim}>

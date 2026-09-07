@@ -39,6 +39,7 @@ describe("MachineDot", () => {
         it.each([
             ["connected", "link-on", palette.success],
             ["connecting", "link-wait", palette.warn],
+            ["idle", "link-off", palette.muted],
             ["disconnected", "link-off", palette.muted],
             ["failed", "link-off", palette.muted]
         ] as const)("draws %s as %s", async (status, icon, colour) => {
@@ -130,6 +131,25 @@ describe("MachineDot", () => {
             <MachineDot status="connected" collapsed={false} onPress={jest.fn()} />
         );
         expect(getByLabelText("Machine connected")).toBeTruthy();
+    });
+
+    it("labels idle as not connected, not not in range — nothing has been tried yet", async () => {
+        // "Not in range" would claim we looked and the machine was absent.
+        // In the idle state we genuinely do not know; the honest label is
+        // "not connected".
+        const {getByLabelText} = await renderWithProviders(
+            <MachineDot status="idle" collapsed={false} onPress={jest.fn()} />
+        );
+        expect(getByLabelText("Machine not connected")).toBeTruthy();
+    });
+
+    it("labels disconnected and failed as not in range — we know because we tried", async () => {
+        for (const status of ["disconnected", "failed"] as const) {
+            const {getByLabelText} = await renderWithProviders(
+                <MachineDot status={status} collapsed={false} onPress={jest.fn()} />
+            );
+            expect(getByLabelText("Machine not in range")).toBeTruthy();
+        }
     });
 
     it("opens on a press", async () => {
