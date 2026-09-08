@@ -29,16 +29,21 @@ const failed = (report.testResults ?? []).flatMap((suite) =>
         .map((test) => ({file: suite.name, name: test.fullName, why: test.failureMessages}))
 );
 
+// A suite can fail to load at all, in which case there are no assertions to
+// name and the suite's own message is the only thing that says why. Reported
+// alongside the named failures rather than only in their absence: a run that
+// both fails an assertion and cannot load a suite used to print the first and
+// swallow the second, which is the one case where the missing half is the
+// half that explains the other.
+const broken = (report.testResults ?? []).filter(
+    (suite) => suite.status === "failed" && (suite.assertionResults ?? []).length === 0
+);
+for (const suite of broken) console.log(`Suite failed to run: ${suite.name}\n${suite.message}`);
+
 if (failed.length === 0) {
-    // A suite can fail to load at all, in which case there are no assertions
-    // to name and the suite's own message is the only thing that says why.
-    const broken = (report.testResults ?? []).filter(
-        (suite) => suite.status === "failed" && (suite.assertionResults ?? []).length === 0
-    );
     if (broken.length === 0) {
         console.log("Jest reported no failing test. The build failed for another reason.");
     }
-    for (const suite of broken) console.log(`Suite failed to run: ${suite.name}\n${suite.message}`);
     process.exit(0);
 }
 
