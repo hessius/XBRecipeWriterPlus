@@ -93,8 +93,9 @@ it("falls back to bypass off when bypassVolume is out of range", () => {
     expect(recipe!.bypassEnabled).toBe(false);
 });
 
-it("falls back to bypass off when bypassTemp is out of range", () => {
-    // 101 exceeds the 0–100 limit — not a plausible temperature.
+it("falls back to 85 C when bypassTemp is out of range, but keeps the bypass", () => {
+    // 101 exceeds the 0–100 limit, but temperature has a safe default (85 C)
+    // so the bypass is kept rather than dropped entirely.
     const recipe = buildRecipe(makeRecipeVo({
         isEnableBypassWater: 1,
         bypassVolume:        50,
@@ -102,7 +103,8 @@ it("falls back to bypass off when bypassTemp is out of range", () => {
     }));
 
     expect(recipe).not.toBeNull();
-    expect(recipe!.bypassEnabled).toBe(false);
+    expect(recipe!.bypassEnabled).toBe(true);
+    expect(recipe!.bypassTemp).toBe(85);
 });
 
 it("falls back to bypass off when bypassVolume is not a finite number", () => {
@@ -144,4 +146,50 @@ it("forces bypass off for tea recipes regardless of cloud value", () => {
     expect(recipe).not.toBeNull();
     expect(recipe!.cupType).toBe(CUP_TYPE.TEA);
     expect(recipe!.bypassEnabled).toBe(false);
+});
+
+describe("bypass import, relaxed temperature", () => {
+    /** Convenience wrapper matching the helper already in this file. */
+    function importWithBypass(bypass: {
+        isEnableBypassWater: number | undefined;
+        bypassVolume: number | undefined;
+        bypassTemp: number | undefined;
+    }) {
+        const recipe = buildRecipe(makeRecipeVo({
+            isEnableBypassWater: bypass.isEnableBypassWater,
+            bypassVolume:        bypass.bypassVolume,
+            bypassTemp:          bypass.bypassTemp,
+        }));
+        return recipe!;
+    }
+
+    it("falls back to 85 C when the temperature is missing", () => {
+        const recipe = importWithBypass({
+            isEnableBypassWater: 1, bypassVolume: 45, bypassTemp: undefined
+        });
+
+        expect(recipe.bypassEnabled).toBe(true);
+        expect(recipe.bypassVolume).toBe(45);
+        expect(recipe.bypassTemp).toBe(85);
+    });
+
+    it("falls back to 85 C when the temperature is out of range", () => {
+        const recipe = importWithBypass({
+            isEnableBypassWater: 1, bypassVolume: 45, bypassTemp: 4000
+        });
+
+        expect(recipe.bypassEnabled).toBe(true);
+        expect(recipe.bypassTemp).toBe(85);
+    });
+
+    it("still refuses an implausible volume outright", () => {
+        // There is no safe default for volume: guessing would brew someone an
+        // unexpected dilution, which is the one failure worth being loud about.
+        const recipe = importWithBypass({
+            isEnableBypassWater: 1, bypassVolume: 9000, bypassTemp: 60
+        });
+
+        expect(recipe.bypassEnabled).toBe(false);
+        expect(recipe.bypassVolume).toBe(0);
+    });
 });

@@ -1,5 +1,6 @@
 import Pour, {POUR_PATTERN} from "./Pour";
 import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import {BYPASS_DEFAULT_TEMPERATURE} from "@/library/bypassLimits";
 import type {ImportSource} from "./importInput";
 
 export class XBloomRecipe {
@@ -87,16 +88,21 @@ export class XBloomRecipe {
             const bypassTempValid = typeof rawBypassTemp === "number" && Number.isFinite(rawBypassTemp)
                 && rawBypassTemp >= 0 && rawBypassTemp <= 100;
 
-            if (bypassVolumeValid && bypassTempValid) {
+            // Volume has no safe default: guessing one would brew someone an
+            // unexpected dilution, so an implausible volume drops the bypass
+            // entirely. Temperature does have one -- 85 C, the same value
+            // `Recipe` starts from -- so a missing or garbled temperature no
+            // longer costs the user their bypass. That asymmetry is deliberate.
+            if (bypassVolumeValid) {
                 recipe.bypassVolume = rawBypassVolume;
-                recipe.bypassTemp   = rawBypassTemp;
+                recipe.bypassTemp   = bypassTempValid ? rawBypassTemp : BYPASS_DEFAULT_TEMPERATURE;
                 // isEnableBypassWater: 1 = ON, 2 = OFF — xBloom's inverted scheme.
                 // A non-zero volume is also required; flag-on with zero water
                 // means the machine dispenses nothing, so treat it as off.
                 recipe.bypassEnabled = rawBypassFlag === 1 && rawBypassVolume > 0;
             }
-            // If either value is missing or implausible, leave bypass at its
-            // defaults (bypassEnabled: false, bypassVolume: 0, bypassTemp: 85).
+            // An implausible volume leaves bypass at its defaults
+            // (bypassEnabled: false, bypassVolume: 0, bypassTemp: 85).
 
             let cup = this.xbRecipeJSON.recipeVo.cupType ?? 1
 
