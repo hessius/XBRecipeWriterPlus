@@ -252,12 +252,6 @@ function clearTelemetryTimer(telemetryTimerRef: {current: ReturnType<typeof setT
     telemetryTimerRef.current = null;
 }
 
-/** The tea steep encoding is a two-way disagreement a single stopwatch settles. */
-const TEA_STEEP_OPTIONS = [
-    {value: "homoland", label: "HomoLand"},
-    {value: "saya6k",   label: "saya6k"}
-] as const;
-
 /** The bypass temperature scaling is unconfirmed; a thermometer settles it. */
 const BYPASS_TEMP_OPTIONS = [
     {value: "scaled", label: "x10"},
@@ -336,7 +330,6 @@ export default function MachineConsole() {
     const {machine, status, connect} = useMachine();
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
-    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding");
     const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding");
 
     const [log, setLog] = useState<LogEntry[]>([]);
@@ -498,12 +491,6 @@ export default function MachineConsole() {
                         description="Log the weight and tank-volume streams, and the info blob, instead of summarising them in place. The info blob is not a stream: it answers when asked, inside a fresh session."
                         value={showTelemetry}
                         onChange={changeShowTelemetry}/>
-                    <SettingsChoiceRow
-                        label="Tea steep encoding"
-                        description="The two sources disagree; a single stopwatched sixty-second steep settles which is right."
-                        value={teaSteepEncoding}
-                        options={TEA_STEEP_OPTIONS}
-                        onChange={(value) => setTeaSteepEncoding(value === "saya6k" ? "saya6k" : "homoland")}/>
                     <SettingsChoiceRow
                         label="Bypass temperature"
                         description="The command carries the bypass temperature multiplied by ten, or so the argument name suggests. A thermometer in the cup settles it."

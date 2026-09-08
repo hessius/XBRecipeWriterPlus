@@ -953,10 +953,6 @@ of the app and reviewed on those terms. The command table's `name`, `note` and
 | `console.confirm.desc` | `app/machine.tsx:465` | Toggle description. | `For the one session spent working through the hardware checklist, where confirming forty sends is its own hazard.` |
 | `console.telemetry.label` | `app/machine.tsx:469` | Toggle label. | `Show telemetry` |
 | `console.telemetry.desc` | `app/machine.tsx:470` | Toggle description. | `Log the weight and tank-volume streams, and the info blob, instead of summarising them in place. The info blob is not a stream: it answers when asked, inside a fresh session.` |
-| `console.teaSteep.label` | `app/machine.tsx:474` | Toggle label. | `Tea steep encoding` |
-| `console.teaSteep.desc` | `app/machine.tsx:475` | Toggle description. | `The two sources disagree; a single stopwatched sixty-second steep settles which is right.` |
-| `console.teaSteep.homoland` | `app/machine.tsx:242` (`TEA_STEEP_OPTIONS`) | Choice value. | `HomoLand` |
-| `console.teaSteep.saya6k` | `app/machine.tsx:243` (`TEA_STEEP_OPTIONS`) | Choice value. | `saya6k` |
 | `console.section.rawFrame` | `app/machine.tsx:481` | Section title. | `Raw frame` |
 | `console.rawFrame.prose` | `app/machine.tsx:484` | Prose above the raw-frame field. | `An undocumented code is a paste away. The checksum is sent exactly as typed, never recomputed.` |
 | `console.rawFrame.placeholder` | `app/machine.tsx:489` | Placeholder in the raw-frame field. | `58 01 01 …` |

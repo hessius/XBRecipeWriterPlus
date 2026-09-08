@@ -403,24 +403,15 @@ export function encodeCoffeeBlob(recipe: BlobRecipe): Uint8Array {
 }
 
 /**
- * Which reading of the tea steep encoding to send.
- *
- * Not a preference so much as an open question with a switch on it. See
- * contradiction C11 in `docs/machine-integration/ble-protocol.md`.
- */
-export type TeaSteepEncoding = "homoland" | "saya6k";
-
-/**
  * Bytes 4 and 5 of a tea segment — the two the coffee format spends on a
  * two's-complement wait and a zero.
+ *
+ * There used to be a second candidate reading behind a console switch. A
+ * stopwatched sixty-second steep on real hardware settled it on 2026-09-01: this
+ * is the right one. See contradiction C11 in
+ * `docs/machine-integration/ble-protocol.md`, now answered.
  */
-export function teaSteepBytes(seconds: number, encoding: TeaSteepEncoding): [number, number] {
-    if (encoding === "saya6k") {
-        // A soak byte in position 5, scaled because the firmware is understood
-        // to run it at about 1.67x. Clamped to at least 1: a zero soak is a
-        // steep that does not happen.
-        return [0, Math.max(1, Math.min(Math.round(seconds * 0.6), 255))];
-    }
+export function teaSteepBytes(seconds: number): [number, number] {
     const minutes = Math.floor(seconds / 60);
     const remainder = seconds % 60;
     return [(-remainder) & 0xFF, (minutes * 32) & 0xFF];
@@ -432,7 +423,7 @@ export function teaSteepBytes(seconds: number, encoding: TeaSteepEncoding): [num
  * Same chunked segment shape as coffee, different timing bytes, and the
  * grinder always off.
  */
-export function encodeTeaBlob(recipe: BlobRecipe, encoding: TeaSteepEncoding): Uint8Array {
+export function encodeTeaBlob(recipe: BlobRecipe): Uint8Array {
     const segments: number[] = [];
     recipe.pours.forEach((pour, index) => {
         let left = Math.round(pour.volume);
@@ -440,7 +431,7 @@ export function encodeTeaBlob(recipe: BlobRecipe, encoding: TeaSteepEncoding): U
             segments.push(MAX_SEGMENT_VOLUME, pour.temperature, pour.pourPattern, pour.agitation);
             left -= MAX_SEGMENT_VOLUME;
         }
-        const [wait, soak] = teaSteepBytes(Math.round(pour.pauseTime), encoding);
+        const [wait, soak] = teaSteepBytes(Math.round(pour.pauseTime));
         segments.push(
             left,
             Math.round(pour.temperature),

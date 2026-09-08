@@ -4,7 +4,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type Machine from "@/library/machine/Machine";
 import type {BrewPhase} from "@/library/machine/Machine";
-import type {BypassTempEncoding, TeaSteepEncoding} from "@/library/machine/protocol";
+import type {BypassTempEncoding} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 
 export type Brewer = {
@@ -37,20 +37,12 @@ export type Brewer = {
  */
 export function useBrew(injected?: Machine): Brewer {
     const {machine, connect} = useMachine(injected);
-    const [teaSteepEncoding] = useSetting("teaSteepEncoding");
     const [bypassTempEncoding] = useSetting("bypassTempEncoding");
     const [autoStart] = useSetting("machineAutoStart");
     const [phase, setPhase] = useState<BrewPhase>(machine.phase);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => machine.onPhase(setPhase), [machine]);
-    // The setting lives up here and the machine holds the value, so that
-    // `library/` never has to reach up into `hooks/` to read a preference.
-    useEffect(() => {
-        // `useSetting` widens the stored union to `string`, so it is narrowed
-        // back to the encoding the machine expects on the way in.
-        machine.setTeaSteepEncoding(teaSteepEncoding as TeaSteepEncoding);
-    }, [machine, teaSteepEncoding]);
     useEffect(() => {
         // `useSetting` widens the stored union to `string`, so it is narrowed
         // back to the encoding the machine expects on the way in.

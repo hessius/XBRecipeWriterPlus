@@ -23,7 +23,6 @@ import {
     type BypassTempEncoding,
     type MachineInfo,
     type Notification,
-    type TeaSteepEncoding
 } from "./protocol";
 import type {FoundMachine, MachineTransport} from "./Transport";
 
@@ -192,28 +191,6 @@ export default class Machine {
     private unsubscribe: (() => void)[] = [];
 
     public phase: BrewPhase = {name: "idle"};
-    /**
-     * Which reading of the tea steep encoding to send.
-     *
-     * A property rather than a settings lookup, so this file keeps its one-way
-     * dependency: `library/` does not reach up into `hooks/`. `useBrew` sets it
-     * from the console's switch.
-     */
-    private steepEncoding: TeaSteepEncoding = "homoland";
-
-    get teaSteepEncoding(): TeaSteepEncoding {
-        return this.steepEncoding;
-    }
-
-    /**
-     * A method rather than a settable field so that callers in `hooks/` are
-     * telling the machine something rather than mutating a value the React
-     * Compiler believes it owns.
-     */
-    setTeaSteepEncoding(encoding: TeaSteepEncoding): void {
-        this.steepEncoding = encoding;
-    }
-
     /**
      * Which reading of the bypass temperature to send.
      *
@@ -865,7 +842,7 @@ export default class Machine {
                         recipe.dosage
                     ),
                 ...(tea ? [
-                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
+                    buildType1Bytes(4513, encodeTeaBlob(recipe))
                 ] : [
                     setCupFrame(),
                     buildType1Bytes(

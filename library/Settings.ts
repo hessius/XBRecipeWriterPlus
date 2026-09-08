@@ -47,17 +47,6 @@ export const DEFAULTS = {
      */
     temperatureUnit: "C" as "C" | "F",
     /**
-     * Which of the two candidate tea steep encodings to send.
-     *
-     * The protocol's least-settled corner: HomoLand derives the encoding from
-     * the official app's own transform, saya6k derives it from two stopwatch
-     * readings and says so. They are not variants of one scheme, and a wrong
-     * choice produces no error at all — the tea simply steeps for the wrong
-     * length. HomoLand's wins on provenance and is the default; the other is
-     * reachable from the machine console so a stopwatch can settle it.
-     */
-    teaSteepEncoding: "homoland" as "homoland" | "saya6k",
-    /**
      * Which reading of the bypass temperature argument to send.
      *
      * The command descriptor calls the argument "bypass temp x10", which is

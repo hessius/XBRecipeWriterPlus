@@ -67,7 +67,6 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
-    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
     const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding", settings);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
     const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
@@ -104,7 +103,7 @@ export default function SettingsScreen({settings}: Props) {
     // a key someone forgot.
     function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
         return {
-            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
+            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, showBrewOnRecipeRows, brewShortcut, animateBrewChart, brewTraceRetention
@@ -156,9 +155,6 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.machineAutoStart === "boolean") {
             setMachineAutoStart(incoming.machineAutoStart);
-        }
-        if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
-            setTeaSteepEncoding(incoming.teaSteepEncoding);
         }
         if (incoming.bypassTempEncoding === "scaled" || incoming.bypassTempEncoding === "plain") {
             setBypassTempEncoding(incoming.bypassTempEncoding);

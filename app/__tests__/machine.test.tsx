@@ -257,13 +257,6 @@ describe("the machine console", () => {
         expect(send).not.toHaveBeenCalled();
     });
 
-    it("lets the tea steep encoding be switched, because a stopwatch settles it", async () => {
-        sharedSettings().set("machineConsoleAcknowledged", true);
-        await renderWithProviders(<Console/>);
-
-        expect(screen.getByLabelText(/tea steep encoding/i)).toBeTruthy();
-    });
-
     it("summarises weight telemetry instead of appending log entries while telemetry is hidden", async () => {
         jest.useFakeTimers();
         sharedSettings().set("machineConsoleAcknowledged", true);
