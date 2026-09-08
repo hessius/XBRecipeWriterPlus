@@ -179,7 +179,7 @@ from `library/Recipe.ts`.
 | `editor.field.grind.tooFine.imported` | `app/editRecipe.tsx:263` | Variant shown for an imported recipe ground finer than a card allows. `${fineBand.longLabel}` is a human band label; the rest is `editor.field.grind.tooFine`. | `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}` |
 | `editor.field.grind.setTo.a11y` | `app/editRecipe.tsx:266` (a11y) | (a11y) Button that raises the grind to the minimum. `${CARD_GRIND_MIN}` is 40. | `Set grind size to ${CARD_GRIND_MIN}` |
 | `editor.field.grind.setTo` | `app/editRecipe.tsx:271` | Doto label on that button. `${CARD_GRIND_MIN}` is 40. | `SET TO ${CARD_GRIND_MIN}` |
-| `editor.brew.total.label` | `app/editRecipe.tsx:238` | Doto caption under the target-volume figure on the BREW deck. | `ML BREW` |
+| `editor.brew.total.label` | `app/editRecipe.tsx:269` | Doto caption under the target-volume figure on the BREW deck. | `ML BREW` |
 | `editor.cup.xpod` | `app/editRecipe.tsx:45` (`CUP_OPTIONS`) | Doto segment for the xPod cup type. | `XPOD` |
 | `editor.cup.omni` | `app/editRecipe.tsx:46` (`CUP_OPTIONS`) | Doto segment for the Omni cup type. | `OMNI` |
 | `editor.cup.other` | `app/editRecipe.tsx:47` (`CUP_OPTIONS`) | Doto segment for the Other cup type. | `OTHER` |
@@ -213,14 +213,14 @@ come from `hooks/useRecipeEditor.ts`.
 | `editor.stage.agitate.after.label` | `components/StageTile.tsx:254` (`label`) | Doto label on the after-pour agitation toggle. | `AFTER` |
 | `editor.stage.delete.a11y` | `components/StageTile.tsx:266` (a11y) | (a11y) Delete-stage button. `${...}` is the stage index. | `Delete stage ${index + 1}` |
 | `editor.stage.delete.label` | `components/StageTile.tsx:273` | Doto label on the delete-stage button. | `REMOVE` |
-| `editor.stages.balance` | `app/editRecipe.tsx:545` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
-| `editor.stages.mismatch` | `app/editRecipe.tsx:548` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
-| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:552` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
-| `editor.stages.autoFix.label` | `app/editRecipe.tsx:557` | Doto label on the Auto fix button. | `AUTO FIX` |
-| `editor.stages.add.a11y` | `app/editRecipe.tsx:610` (a11y) | (a11y) The add-stage button. | `Add stage` |
-| `editor.stages.add.label` | `app/editRecipe.tsx:624` | Doto label on the add-stage button. | `+ ADD STAGE` |
-| `editor.stages.ceiling.count` | `app/editRecipe.tsx:577` | Doto headline of the stage-ceiling advisory. `${...}` is the stage count. | `${recipe.pours.length} STAGES` |
-| `editor.stages.ceiling.body` | `app/editRecipe.tsx:580` | Prose body of the stage-ceiling advisory, shown when a recipe has more stages than the last card read could hold. `${...}` is the card's capacity in stages. | `A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.` |
+| `editor.stages.balance` | `app/editRecipe.tsx:558` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
+| `editor.stages.mismatch` | `app/editRecipe.tsx:561` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
+| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:565` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
+| `editor.stages.autoFix.label` | `app/editRecipe.tsx:570` | Doto label on the Auto fix button. | `AUTO FIX` |
+| `editor.stages.add.a11y` | `app/editRecipe.tsx:623` (a11y) | (a11y) The add-stage button. | `Add stage` |
+| `editor.stages.add.label` | `app/editRecipe.tsx:637` | Doto label on the add-stage button. | `+ ADD STAGE` |
+| `editor.stages.ceiling.count` | `app/editRecipe.tsx:590` | Doto headline of the stage-ceiling advisory. `${...}` is the stage count. | `${recipe.pours.length} STAGES` |
+| `editor.stages.ceiling.body` | `app/editRecipe.tsx:593` | Prose body of the stage-ceiling advisory, shown when a recipe has more stages than the last card read could hold. `${...}` is the card's capacity in stages. | `A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.` |
 | `editor.tea.banner.title` | `components/TeaBanner.tsx:23` | Doto title of the tea explainer banner. | `TEA` |
 | `editor.tea.banner.body` | `components/TeaBanner.tsx:26` | Prose body of the tea explainer banner. | `Tea stages are capped at 90 ml each and the grinder is not used. The siphon draws roughly 30 ml more than the recipe asks for, so a cup finishes fuller than the numbers here.` |
 
@@ -236,7 +236,7 @@ come from `hooks/useRecipeEditor.ts`.
 | `editor.bypass.remove.a11y` | `components/BypassRung.tsx:159` (a11y) | (a11y) Turns bypass water off. | `Remove bypass water` |
 | `editor.bypass.remove.label` | `components/BypassRung.tsx:164` | Doto label on the remove button inside the open rung. | `REMOVE` |
 | `editor.bypass.profile.a11y` | `components/StageProfile.tsx:136` (a11y) | (a11y) The bypass band on the stage profile. | `Show bypass water` |
-| `editor.brew.bypass.split` | `app/editRecipe.tsx:246` | Doto addendum to the brew target, shown only while bypass is on. `${...}` is millilitres. | `+ ${recipe.bypassVolume} ML BYPASS` |
+| `editor.brew.bypass.split` | `app/editRecipe.tsx:277` | Doto addendum to the brew target, shown only while bypass is on. `${...}` is millilitres. | `+ ${recipe.bypassVolume} ML BYPASS` |
 | `help.bypass.title` | `constants/recipeHelp.ts:168` | Help sheet and control caption. | `Bypass water` |
 | `help.bypass.hint` | `constants/recipeHelp.ts:169` | One-line hint, shown with hints on. | `Extra water added straight to the cup.` |
 | `help.bypass.question` | `constants/recipeHelp.ts:170` | Help sheet heading. | `What is bypass water?` |
@@ -986,6 +986,10 @@ of the app and reviewed on those terms. The command table's `name`, `note` and
 | `console.tier.inert` | `app/machine.tsx:42` (`TIER_LABEL`) | Doto tier badge on a command. | `INERT` |
 | `console.tier.moves` | `app/machine.tsx:43` (`TIER_LABEL`) | Doto tier badge. | `MOVES HARDWARE` |
 | `console.tier.unresolved` | `app/machine.tsx:44` (`TIER_LABEL`) | Doto tier badge. | `UNRESOLVED` |
+| `console.bypassTemp.label` | `app/machine.tsx:495` | Label of the bypass temperature encoding picker. | `Bypass temperature` |
+| `console.bypassTemp.desc` | `app/machine.tsx:496` | Description under the bypass temperature picker. | `The command carries the bypass temperature multiplied by ten, or so the argument name suggests. A thermometer in the cup settles it.` |
+| `console.bypassTemp.scaled` | `app/machine.tsx:257` | Option: send the temperature multiplied by ten. | `x10` |
+| `console.bypassTemp.plain` | `app/machine.tsx:258` | Option: send the temperature as degrees. | `Degrees` |
 
 ### Command table (`library/machine/commands.ts`)
 
