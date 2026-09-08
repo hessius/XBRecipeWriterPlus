@@ -1,7 +1,7 @@
 import {Platform} from 'react-native';
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import Recipe from "@/library/Recipe";
-import {CardCapacityError, CardWriteError} from "./cardWriteErrors";
+import {CardCapacityError, CardWriteError, SIGNATURE_BYTES} from "./cardWriteErrors";
 import {Buffer} from 'buffer';
 
 global.Buffer = Buffer;
@@ -32,12 +32,10 @@ export type NfcSystemInfo = {
 
 /**
  * The 32 bytes xBloom derives from the card's serial and writes ahead of the
- * recipe. We never regenerate it — we read it off the card and put it back —
- * which is why only genuine cards work, and why overrunning it is fatal.
+ * recipe. Re-exported from `cardWriteErrors`, where it now lives so consumers
+ * can reason about capacity without importing a runtime value from `NFC`.
  */
-export const SIGNATURE_BYTES = 32;
-
-export {CardWriteError, CardCapacityError} from "./cardWriteErrors";
+export {SIGNATURE_BYTES, CardWriteError, CardCapacityError} from "./cardWriteErrors";
 
 class NFC {
     private isClosed = true;

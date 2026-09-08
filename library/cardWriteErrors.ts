@@ -8,6 +8,29 @@
  * them without that cost.
  */
 
+/**
+ * The 32 bytes xBloom derives from the card's serial and writes ahead of the
+ * recipe. We never regenerate it — we read it off the card and put it back —
+ * which is why only genuine cards work, and why overrunning it is fatal.
+ *
+ * It lives here rather than in `NFC` so that anything wanting to reason about
+ * capacity can have it without importing a runtime value from `NFC`, which
+ * would drag `react-native-nfc-manager` into every consumer and every test.
+ */
+export const SIGNATURE_BYTES = 32;
+
+/**
+ * The most stages a given number of usable bytes could hold.
+ *
+ * `available` is already net of the signature: it is what a recipe may spend.
+ */
+export function maxStagesForBytes(available: number): number {
+    return Math.max(
+        Math.floor((available - CARD_OVERHEAD_BYTES) / CARD_BYTES_PER_STAGE),
+        0
+    );
+}
+
 /** A write we refused to attempt, as opposed to one the tag rejected. */
 export class CardWriteError extends Error {
     constructor(message: string) {
@@ -39,7 +62,7 @@ export class CardCapacityError extends CardWriteError {
      * trailer (XID, cup type, count, grind, ratio, checksum) plus 8 per stage.
      */
     maxStages(): number {
-        return Math.floor((this.availableBytes - CARD_OVERHEAD_BYTES) / CARD_BYTES_PER_STAGE);
+        return maxStagesForBytes(this.availableBytes);
     }
 }
 

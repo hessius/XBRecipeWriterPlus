@@ -212,12 +212,14 @@ come from `hooks/useRecipeEditor.ts`.
 | `editor.stage.agitate.after.label` | `components/StageTile.tsx:254` (`label`) | Doto label on the after-pour agitation toggle. | `AFTER` |
 | `editor.stage.delete.a11y` | `components/StageTile.tsx:266` (a11y) | (a11y) Delete-stage button. `${...}` is the stage index. | `Delete stage ${index + 1}` |
 | `editor.stage.delete.label` | `components/StageTile.tsx:273` | Doto label on the delete-stage button. | `REMOVE` |
-| `editor.stages.balance` | `app/editRecipe.tsx:524` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
-| `editor.stages.mismatch` | `app/editRecipe.tsx:527` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
-| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:531` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
-| `editor.stages.autoFix.label` | `app/editRecipe.tsx:536` | Doto label on the Auto fix button. | `AUTO FIX` |
-| `editor.stages.add.a11y` | `app/editRecipe.tsx:566` (a11y) | (a11y) The add-stage button. | `Add stage` |
-| `editor.stages.add.label` | `app/editRecipe.tsx:580` | Doto label on the add-stage button. | `+ ADD STAGE` |
+| `editor.stages.balance` | `app/editRecipe.tsx:545` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
+| `editor.stages.mismatch` | `app/editRecipe.tsx:548` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
+| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:552` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
+| `editor.stages.autoFix.label` | `app/editRecipe.tsx:557` | Doto label on the Auto fix button. | `AUTO FIX` |
+| `editor.stages.add.a11y` | `app/editRecipe.tsx:610` (a11y) | (a11y) The add-stage button. | `Add stage` |
+| `editor.stages.add.label` | `app/editRecipe.tsx:624` | Doto label on the add-stage button. | `+ ADD STAGE` |
+| `editor.stages.ceiling.count` | `app/editRecipe.tsx:577` | Doto headline of the stage-ceiling advisory. `${...}` is the stage count. | `${recipe.pours.length} STAGES` |
+| `editor.stages.ceiling.body` | `app/editRecipe.tsx:580` | Prose body of the stage-ceiling advisory, shown when a recipe has more stages than the last card read could hold. `${...}` is the card's capacity in stages. | `A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.` |
 | `editor.tea.banner.title` | `components/TeaBanner.tsx:23` | Doto title of the tea explainer banner. | `TEA` |
 | `editor.tea.banner.body` | `components/TeaBanner.tsx:26` | Prose body of the tea explainer banner. | `Tea stages are capped at 90 ml each and the grinder is not used. The siphon draws roughly 30 ml more than the recipe asks for, so a cup finishes fuller than the numbers here.` |
 

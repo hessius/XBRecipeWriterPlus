@@ -31,6 +31,8 @@ import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
+import {parseCapture} from "@/library/cardDiagnostics";
+import {maxStagesForBytes, SIGNATURE_BYTES} from "@/library/cardWriteErrors";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -39,6 +41,23 @@ import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
+
+/**
+ * The most stages the last card read could hold.
+ *
+ * Genuine cards have been read at both 128 and 160 bytes, so the ceiling is a
+ * property of the card in the user's hand rather than of the format. Falling
+ * back to the smaller of the two is the conservative guess: advising a ceiling
+ * that turns out to be generous is a refusal at the write, which is the failure
+ * this is trying to save the user from.
+ */
+const FALLBACK_MAX_STAGES = 10;
+
+function maxStagesFromLastCard(lastCardRead: string): number {
+    const info = parseCapture(lastCardRead)?.systemInfo;
+    if (!info) return FALLBACK_MAX_STAGES;
+    return maxStagesForBytes(info.blockCount * info.blockSize - SIGNATURE_BYTES);
+}
 
 /**
  * The cup and grinder choices, as the segmented rows want them. Values are the
@@ -409,6 +428,8 @@ type StagesDeckProps = {
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
     temperatureUnit: TemperatureUnit;
+    /** The most stages the last card read could hold; advisory only. */
+    maxStages: number;
 };
 
 type StageProfileCardProps = {
@@ -494,7 +515,7 @@ function StageProfileCard({
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
     onBypassLayout, editStage, addPour, deletePour, autoAdjustPourVolumes,
-    temperatureUnit, setBypassEnabled, editBypass, showHint,
+    temperatureUnit, setBypassEnabled, editBypass, showHint, maxStages,
 }: StagesDeckProps) {
     "use no memo";
 
@@ -536,6 +557,29 @@ function StagesDeck({
                             AUTO FIX
                         </DotMatrixText>
                     </Pressable>
+                </XStack>
+            )}
+
+            {/* Advisory, not a gate. The add button stays live and the recipe
+                stays saveable: a recipe that is only ever brewed over BLE has
+                no ceiling at all, and refusing to let someone build one because
+                a card could not hold it would be the app inventing a limit the
+                machine does not have. `warn`, not `danger`: nothing is wrong
+                yet. */}
+            {recipe.pours.length > maxStages && (
+                <XStack testID="stage-ceiling" alignItems="center" gap="$2.5"
+                        marginTop="$2.5" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.warn}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.warn}>
+                            {`${recipe.pours.length} STAGES`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            {`A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.`}
+                        </Text>
+                    </YStack>
                 </XStack>
             )}
 
@@ -736,6 +780,7 @@ export default function EditRecipe() {
     const [showHint, setShowHint] = useSetting("showHints");
     const [rememberedMachine] = useSetting("machineDeviceId");
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
+    const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
     const [deck, setDeck] = useState<Deck>("brew");
@@ -1053,7 +1098,8 @@ export default function EditRecipe() {
                                 editBypass={editBypass} showHint={showHint}
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
-                                temperatureUnit={temperatureUnit}/>
+                                temperatureUnit={temperatureUnit}
+                                maxStages={maxStagesFromLastCard(lastCardRead)}/>
                     </View>
                 )}
             </ScrollView>

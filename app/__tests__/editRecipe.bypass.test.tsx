@@ -5,6 +5,7 @@ import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {serialiseCapture, type CardCapture} from "@/library/cardDiagnostics";
 
 // The harness mirrors app/__tests__/editRecipe.test.tsx — the same mock shapes,
 // the same `mock`-prefixed lets a hoisted factory is allowed to read, and the
@@ -99,6 +100,34 @@ function recipeWithStages(): Partial<Recipe> {
 /** A tea recipe, which has no bypass anywhere. */
 function teaRecipe(): Partial<Recipe> {
     return {cupType: CUP_TYPE.TEA};
+}
+
+/** A balanced coffee recipe with `n` stages, built like `fixture`. */
+function recipeWithStageCount(n: number): Partial<Recipe> {
+    const r = new Recipe();
+    r.dosage = 18;
+    r.ratio = 16;
+    r.grindSize = 60;
+    r.grindRPM = 90;
+    r.addPour(0, false);
+    for (let i = 1; i < n; i++) r.addPour(0);
+    r.autoFixPourVolumes();
+    r.pours.forEach(p => { p.flowRate = 30; });
+    return r;
+}
+
+/**
+ * A capture whose system info reports `blockCount × blockSize` bytes, modelled
+ * on the fixture in components/__tests__/CardReadDiagnostic.test.tsx. That total
+ * is the only field the stage ceiling reads.
+ */
+function captureWithBlocks(blockCount: number, blockSize: number): CardCapture {
+    return {
+        at: "2026-09-07T19:20:52.313Z",
+        uid: [0x04, 0xa1, 0xb2, 0xc3],
+        data: [],
+        systemInfo: {afi: 0, dsfid: 0, blockCount, blockSize}
+    };
 }
 
 let mockRecipeJSON = JSON.stringify(fixture());
@@ -214,5 +243,48 @@ describe("brew deck total", () => {
         await renderEditor({...teaRecipe(), bypassEnabled: true, bypassVolume: 45});
 
         expect(screen.queryByTestId("brew-bypass-split")).toBeNull();
+    });
+});
+
+describe("stage ceiling advisory", () => {
+    it("says nothing at ten stages on a 128-byte card", async () => {
+        mockSettings.lastCardRead = serialiseCapture(captureWithBlocks(32, 4));
+        await renderEditor(recipeWithStageCount(10));
+        await fireEvent.press(screen.getByLabelText(/^Stages,/));
+
+        expect(screen.queryByTestId("stage-ceiling")).toBeNull();
+    });
+
+    it("advises at eleven stages on a 128-byte card", async () => {
+        mockSettings.lastCardRead = serialiseCapture(captureWithBlocks(32, 4));
+        await renderEditor(recipeWithStageCount(11));
+        await fireEvent.press(screen.getByLabelText(/^Stages,/));
+
+        expect(screen.getByTestId("stage-ceiling"))
+            .toHaveTextContent(/A card holds 10 stages/);
+    });
+
+    it("uses the larger card when that is the one last read", async () => {
+        mockSettings.lastCardRead = serialiseCapture(captureWithBlocks(40, 4));
+        await renderEditor(recipeWithStageCount(11));
+        await fireEvent.press(screen.getByLabelText(/^Stages,/));
+
+        expect(screen.queryByTestId("stage-ceiling")).toBeNull();
+    });
+
+    it("falls back to ten when no card has ever been read", async () => {
+        mockSettings.lastCardRead = "";
+        await renderEditor(recipeWithStageCount(11));
+        await fireEvent.press(screen.getByLabelText(/^Stages,/));
+
+        expect(screen.getByTestId("stage-ceiling")).toBeTruthy();
+    });
+
+    it("still lets the recipe be saved", async () => {
+        mockSettings.lastCardRead = "";
+        await renderEditor(recipeWithStageCount(11));
+
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled)
+            .toBeFalsy();
     });
 });
