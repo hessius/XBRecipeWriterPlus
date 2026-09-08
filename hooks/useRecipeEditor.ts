@@ -1,6 +1,9 @@
 import {useCallback, useEffect, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
+import {
+    BYPASS_DEFAULT_TEMPERATURE, BYPASS_DEFAULT_VOLUME, clampBypassVolume
+} from "@/library/bypassLimits";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
 import Recipe from "@/library/Recipe";
@@ -11,6 +14,9 @@ import type {StageField} from "@/components/StageTile";
 import {REVERT_SOURCES} from "@/components/RevertSheet";
 import type {RevertSource, RevertSourceId} from "@/components/RevertSheet";
 import type {TemperatureUnit} from "@/library/units";
+
+/** The two bypass values the rung can edit. */
+export type BypassField = "volume" | "temperature";
 
 /** Labels shown next to each editable field. Also the key the edit callback dispatches on. */
 export const RECIPE_LABELS = {
@@ -408,6 +414,27 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         setKey((prev) => prev + 1);
     }
 
+    /**
+     * Turn bypass water on or off.
+     *
+     * Switching on seeds a recipe that has never had a bypass, so the rung
+     * opens on a usable number rather than on zero millilitres of water. A
+     * recipe that already carries values keeps them, so toggling off and back
+     * on is not destructive.
+     */
+    function setBypassEnabled(on: boolean) {
+        if (!recipe) return;
+        applyBypassEnabled(recipe, on);
+        setKey((prev) => prev + 1);
+    }
+
+    /** Edit one bypass value. */
+    function editBypass(field: BypassField, value: number) {
+        if (!recipe) return;
+        applyBypassField(recipe, field, value);
+        setKey((prev) => prev + 1);
+    }
+
     return {
         recipe,
         getRecipe,
@@ -431,6 +458,8 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         autoAdjustPourVolumes,
         coarsenGrindToMinimum,
         editStage,
+        setBypassEnabled,
+        editBypass,
         persistRecipe,
         saveRecipe,
         editInputComplete,
@@ -460,6 +489,27 @@ function applyStageField(pour: Pour, field: StageField, value: number) {
  */
 function applyGrindMinimum(recipe: Recipe, min: number) {
     recipe.grindSize = min;
+}
+
+/**
+ * Turn bypass on or off, seeding an unset bypass on the way on.
+ *
+ * At module scope for the same reason as `applyStageField`: the React
+ * Compiler's immutability check rejects a direct assignment to a value derived
+ * from state, even inside a narrowing guard.
+ */
+function applyBypassEnabled(recipe: Recipe, on: boolean) {
+    if (on && recipe.bypassVolume <= 0) {
+        recipe.bypassVolume = BYPASS_DEFAULT_VOLUME;
+        recipe.bypassTemp   = BYPASS_DEFAULT_TEMPERATURE;
+    }
+    recipe.bypassEnabled = on;
+}
+
+/** Write one bypass value. Module scope, as above. */
+function applyBypassField(recipe: Recipe, field: BypassField, value: number) {
+    if (field === "volume") recipe.bypassVolume = clampBypassVolume(value);
+    else recipe.bypassTemp = Math.round(value);
 }
 
 /** Whether a recipe has the material a given revert source needs. */
