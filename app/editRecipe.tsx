@@ -440,7 +440,15 @@ function StageProfileCard({
                               height={collapsed
                                   ? PROFILE_HEIGHT.compact
                                   : PROFILE_HEIGHT.full}
-                              selected={selected ?? undefined} onSelect={onSelect}/>
+                              selected={selected ?? undefined}
+                              // No bypass band is drawn here yet, so the sentinel
+                              // never arrives; narrow it away until a later task
+                              // teaches this card to open the bypass rung.
+                              onSelect={(index) => {
+                                  if (index !== "bypass") {
+                                      onSelect(index);
+                                  }
+                              }}/>
             </YStack>
         </YStack>
     );

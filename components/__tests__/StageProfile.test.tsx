@@ -163,3 +163,91 @@ describe("StageProfile", () => {
         expect(screen.queryByLabelText("Show stage 2 of 3")).toBeNull();
     });
 });
+
+describe("profileScale with bypass", () => {
+    it("ignores an absent bypass", () => {
+        expect(profileScale(260, 260)).toBe(260);
+        expect(profileScale(260, 260, 0)).toBe(260);
+    });
+
+    it("does not let a bypass taller than the brew overflow the box", () => {
+        expect(profileScale(100, 100, 400)).toBe(400);
+    });
+});
+
+describe("StageProfile bypass mark", () => {
+    it("draws nothing extra when bypass is off", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}/>
+        );
+
+        expect(screen.queryByTestId("stage-profile-bypass")).toBeNull();
+    });
+
+    it("draws the bypass band when a bypass volume is given", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        expect(screen.getByTestId("stage-profile-bypass")).toBeTruthy();
+    });
+
+    it("stops the target rule at the last stage", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        // Three stages plus one bypass band: the stages own three quarters.
+        expect(screen.getByTestId("stage-profile-target").props.x2).toBe(225);
+    });
+
+    it("runs the target rule the whole width without a bypass", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}/>
+        );
+
+        expect(screen.getByTestId("stage-profile-target").props.x2).toBe(300);
+    });
+
+    it("highlights the bypass band when it is the selection", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45} selected="bypass"/>
+        );
+
+        expect(screen.getByTestId("stage-profile-band").props.x).toBe(225);
+    });
+
+    it("offers the bypass band as a control of its own", async () => {
+        const onSelect = jest.fn();
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45} onSelect={onSelect}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Show bypass water"));
+
+        expect(onSelect).toHaveBeenCalledWith("bypass");
+    });
+
+    it("gives the bypass the whole width when there are no stages", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={0}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+
+        expect(rect.props.x).toBe(0);
+        expect(rect.props.width).toBe(300);
+    });
+});
