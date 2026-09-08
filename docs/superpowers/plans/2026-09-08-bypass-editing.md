@@ -2784,16 +2784,39 @@ Do this first. If anything here is wrong, do not waste a card or a brew on it.
   fixture update. Decide now, not after the App Store build.
 
 - [ ] **A3.** The profile above the ladder has gained a band at the right-hand
-  end: a dashed outline in blue with a faint fill.
+  end: a dashed outline in blue with a faint fill. **Its foot sits on the target
+  rule, not on the floor of the chart** — the box stands on top of the target
+  line to say that this water lands on top of the brew rather than replacing
+  part of it. Changed in `647443b`, after this plan was first written.
 
   **DECISION — is the bypass mark distinguishable from the target rule?**
-  This is the one the mockup could not settle. Both are dashed. The bypass is
-  `9 5` and blue, the target is `4 3` and grey (or red when short). Hold the
-  phone at normal reading distance. If they read as one kind of mark, the fix is
-  to make the bypass solid-outlined rather than dashed — the colour and the
-  band separation already carry most of the distinction. **Look at it both
-  balanced and unbalanced**, because the target rule turns red when short and
-  that changes the comparison.
+  This is the one the mockup could not settle, and the change above has made it
+  sharper rather than easier: the two dashed marks now **meet at the same
+  height** instead of being separated vertically, so the only things telling
+  them apart are colour (blue against grey), dash rhythm (`9 5` against `4 3`)
+  and the fact that one turns a corner and the other does not. Hold the phone at
+  normal reading distance.
+
+  If they read as one continuous mark, the fix is to make the bypass
+  solid-outlined rather than dashed — the colour and the corner already carry
+  most of the distinction. **Look at it both balanced and unbalanced**, because
+  the target rule turns red when short and that changes the comparison
+  completely.
+
+  **Also check the stacking is legible at all**, which is the new claim: does the
+  bypass read as sitting *on* the target, or just as a box that happens to start
+  high? If the latter, the fallback is a short leader from the end of the target
+  rule into the foot of the box.
+
+- [ ] **A3b.** Set a large bypass on a recipe whose stages already reach the
+  target — 200 ml of bypass on a 260 ml brew. The whole chart should rescale so
+  the top of the bypass box stays inside the frame, and the stage curve should
+  get correspondingly shorter.
+
+  The ceiling is now `max(pourTotal, target + bypass)` rather than the largest
+  of the three, precisely so a stacked bypass cannot push its own top out
+  through the frame. If any part of the box is clipped, that is a bug, not a
+  decision.
 
 - [ ] **A4.** Tap the bypass band on the profile. The rung below opens and
   scrolls into view, exactly as tapping a stage band does.
@@ -2859,12 +2882,44 @@ Do this first. If anything here is wrong, do not waste a card or a brew on it.
 
 ## Section B · Import
 
-- [ ] **B1.** Import the xBloom recipe that carries a bypass (the one from the
-  screenshot feedback). The bypass arrives, enabled, with the right volume and
-  temperature.
+> **Read this before Section B.** `XB0001` is *not* a bypass recipe and cannot be
+> used to test this. xBloom's own API returns it with `isEnableBypassWater: 2`
+> — off — and no bypass volume or temperature at all, so importing it without a
+> bypass is correct behaviour, not the bug it looks like. Bypass you set on a pod
+> in the official app lives in **your account**; the anonymous share endpoint
+> this app calls does not see it.
+>
+> So **B1 needs a share link to a recipe that genuinely has bypass switched on**,
+> and finding one is itself part of the test. If no share link ever carries an
+> enabled bypass, that is the finding — it would mean the import path is
+> unreachable in the field and only the editor can create a bypass.
+
+- [ ] **B1.** Import a recipe that carries a bypass, per the note above. The
+  bypass arrives, enabled, with the right volume and temperature.
 
 - [ ] **B2.** Import a recipe with no bypass. It arrives with bypass off and the
   ghost rung showing.
+
+- [ ] **B3.** **The bypass survives a same-card twin.** Import the bypass recipe
+  from B1, then edit the stored copy to turn bypass **off** and save. Import the
+  same link again.
+
+  It must arrive as a **second, separate recipe** with its bypass intact — not
+  open the one you just edited saying "already in your library".
+
+  This is what `c8d21d4` fixed. A card cannot store bypass, so the two recipes
+  have identical card bytes and de-duplication could not tell them apart; the
+  import used to hand you the stripped twin and call it the same recipe.
+
+- [ ] **B4.** **A card read still de-duplicates loosely.** Take a recipe that has
+  bypass on and that you have written to a card, and read that card back.
+
+  It must open the **stored** recipe — the one with the bypass — and say it is
+  already in your library. It must **not** create a second, bypass-less copy.
+
+  B3 and B4 pull in opposite directions on purpose: an import matches strictly,
+  a card read matches loosely. If B4 deposits a duplicate, the two identities
+  have been wired the wrong way round.
 
 ---
 
@@ -2958,6 +3013,33 @@ in the whole design lives here.
 - [ ] **D6.** Check the machine console: **Tea steep encoding is gone** and
   **Bypass temperature** is in its place.
 
+- [ ] **D7.** **If the app claims the machine ran out of water while it is
+  visibly still brewing — stop and capture it.** This is the one outstanding
+  bug with no root cause, and it has now cost two sessions precisely because the
+  evidence went with the reload.
+
+  Do this, in order, before touching anything else:
+
+  1. Do **not** reload the app. The frames are already on disk, but the running
+     link's context is not.
+  2. Go to Brew history, open that brew, and press **COPY THE FRAME LOG**
+     (`bc3a0e6` added it; it only appears when a brew actually has frames).
+  3. Paste it somewhere it will survive — a note, a message to yourself.
+  4. Say what the machine was physically doing at that instant: pouring,
+     between pours, or grinding.
+
+  What the log settles, none of which is currently knowable: whether the killer
+  was a **status** `0x0C` or an **event** `40522`, what payload byte it carried,
+  which phase the app was in, and — the decisive one — **whether water frames
+  kept arriving afterwards.** A genuinely dry tank stops pouring; a transient
+  does not. That single fact chooses the fix.
+
+  Note that the machine console no longer shows a tank reading. It never really
+  did: it displayed `tank n/a ×0` from the day it was written, because the
+  parser claims every 40523 as a water-weight frame before the tank branch can
+  see it. It was removed in `1608ebb` rather than left there implying we have a
+  tank level we have never once received.
+
 ---
 
 ## What to report back
@@ -2967,7 +3049,8 @@ For each **DECISION** above, one line with the answer. In particular:
 1. **D3 — the encoding, with two thermometer readings.** Everything else in this
    plan is reversible from a laptop; this is not.
 2. **A1 — does the ghost rung read as tappable.**
-3. **A3 — can you tell the bypass mark from the target rule.**
+3. **A3 — can you tell the bypass mark from the target rule**, now that they
+   meet at the same height, and does the stacking read as "on top of".
 4. **A8 — does `ML BREW` plus the split read clearly.**
 5. **A2 — are 30 ml / 85 °C the right seeds.**
 6. **A5 — does a dominant bypass still read correctly.**
