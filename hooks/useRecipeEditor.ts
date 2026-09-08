@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
 import {
@@ -81,6 +81,41 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     const [xidLookupFailed, setXidLookupFailed] = useState(false);
 
     /**
+     * Bumped only when the whole `Recipe` instance is swapped out from under the
+     * rows — a revert. The two text rows (Recipe ID, Name) are uncontrolled and
+     * key on this counter, so a genuine external replacement remounts them and
+     * their visible text, local `invalid` mark and reported validity are all
+     * recomputed from the new recipe. An ordinary edit or an XID lookup only
+     * bumps `key`, not this, so the field a user is typing in is never remounted
+     * mid-entry. See the row's comment in `editRecipe.tsx`.
+     */
+    const [externalEpoch, setExternalEpoch] = useState(0);
+
+    /**
+     * Whether the Recipe ID field currently holds focus.
+     *
+     * The XID lookup fires on mount and resolves hundreds of milliseconds later,
+     * often while the user is still editing the ID. Applying its outcome then
+     * re-renders the screen mid-typing, which on an uncontrolled `TextInput` can
+     * reset the native text to its `defaultValue` and silently undo keystrokes
+     * (#user-report). So the outcome is stashed while the field is focused and
+     * flushed on blur — the auto-fetch is preserved, only its visible effect is
+     * deferred.
+     */
+    const xidFocusedRef = useRef(false);
+    const pendingLookupRef = useRef<(() => void) | null>(null);
+
+    /** Told by the ID field when it gains or loses focus; flushes on blur. */
+    const setXidFocused = (focused: boolean) => {
+        xidFocusedRef.current = focused;
+        if (!focused && pendingLookupRef.current) {
+            const apply = pendingLookupRef.current;
+            pendingLookupRef.current = null;
+            apply();
+        }
+    };
+
+    /**
      * What the recipe pours against what the machine expects.
      *
      * Derived on every render rather than pushed into a child by hand. The
@@ -116,33 +151,45 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
 
     const fetchRecipeTitle = async (r: Recipe) => {
         setXidLookupFailed(false);
+        // Apply a lookup outcome now, or stash it until the ID field blurs: a
+        // render while that uncontrolled field is focused can reset its native
+        // text and swallow keystrokes. Inlined against the refs rather than
+        // pulled into a helper so the React Compiler's dependency check still
+        // sees this function as stable and the mount effect below needs no
+        // `fetchRecipeTitle` in its deps.
+        const applyOrDefer = (apply: () => void) => {
+            if (xidFocusedRef.current) pendingLookupRef.current = apply;
+            else apply();
+        };
         try {
             const xbRecipe = new XBloomRecipe({kind: "xid", xid: r.xid});
             await xbRecipe.fetchRecipeDetail();
 
             let recipeTitle = xbRecipe.getRecipeTitle();
             if (recipeTitle.length > 0) {
-                // Update the current recipe with the fetched xBloom name. The
-                // user's own `name` is left untouched, so a sync can no longer
-                // silently overwrite a name they typed.
-                r.xbloomName = recipeTitle;
-                // Also get shareID for restore feature if not already present
                 let xbr = xbRecipe.getRecipe();
-                if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
-                    r.shareId = xbr.shareId;
-                }
-                if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
-                    r.offline_backup = xbr.offline_backup;
-                }
-                // The recipe is mutated in place, so the change is published by
-                // bumping the key. `setRecipe(r)` would hand React the object
-                // it already holds and be bailed out of, leaving the fetched
-                // name invisible on the hero until some unrelated edit.
-                setKey((prev) => prev + 1);
+                applyOrDefer(() => {
+                    // Update the current recipe with the fetched xBloom name. The
+                    // user's own `name` is left untouched, so a sync can no longer
+                    // silently overwrite a name they typed.
+                    r.xbloomName = recipeTitle;
+                    // Also get shareID for restore feature if not already present
+                    if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
+                        r.shareId = xbr.shareId;
+                    }
+                    if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
+                        r.offline_backup = xbr.offline_backup;
+                    }
+                    // The recipe is mutated in place, so the change is published by
+                    // bumping the key. `setRecipe(r)` would hand React the object
+                    // it already holds and be bailed out of, leaving the fetched
+                    // name invisible on the hero until some unrelated edit.
+                    setKey((prev) => prev + 1);
+                });
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
-            setXidLookupFailed(true);
+            applyOrDefer(() => setXidLookupFailed(true));
         }
     };
 
@@ -242,6 +289,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
             }
         }
         setRecipe(restoredRecipe);
+        // The rows are uncontrolled and key on this counter, so bumping it here
+        // is what makes a revert reset the visible ID and name text and refresh
+        // their validity — the only place the recipe instance is replaced.
+        setExternalEpoch((prev) => prev + 1);
         // A restore replaces the brew parameters wholesale, so a write-time
         // volume complaint from the recipe that was here before no longer
         // describes anything on screen.
@@ -478,7 +529,9 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         editInputComplete,
         volumeError,
         setVolumeError,
-        xidLookupFailed
+        xidLookupFailed,
+        externalEpoch,
+        setXidFocused
     };
 }
 

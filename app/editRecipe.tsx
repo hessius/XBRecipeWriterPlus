@@ -98,9 +98,9 @@ type TextFieldRowProps = {
      *
      * A `Pressable` does not blur a focused `TextInput`, so WRITE, SAVE, More
      * and Back can all fire while this row still holds a value the recipe has
-     * never seen. The draft goes to a ref rather than to state: this row is
-     * keyed on the value it mirrors, so publishing per keystroke would remount
-     * it and take the cursor with it.
+     * never seen. The draft goes to a ref rather than to state: the recipe is
+     * mutated in place and published by a key bump, so routing per keystroke
+     * through state would re-render the row and fight the cursor for no gain.
      */
     onDraft?: (value: string) => void;
     /** Validates on every keystroke; false marks the field and reports up. */
@@ -109,6 +109,8 @@ type TextFieldRowProps = {
     invalidReason?: string;
     /** Reports the field's validity so the write and save gates can honour it. */
     onInvalidChange?: (invalid: boolean) => void;
+    /** Told when the input gains or loses focus, so a caller can defer work. */
+    onFocusChange?: (focused: boolean) => void;
     /**
      * A live annotation on the field's own label, e.g. that an online lookup
      * failed. Passed straight to `FieldRow`; unlike `error` it does not gate any
@@ -125,6 +127,11 @@ type TextFieldRowProps = {
  * cursor. It commits when editing ends, which is when the value is worth writing
  * back.
  *
+ * The row keys on an external-replacement epoch at its call site, not on the
+ * value it mirrors, so only a wholesale swap of the recipe (a revert) remounts
+ * it and resets the visible text; an ordinary edit leaves it mounted. See the
+ * key comment beside the call.
+ *
  * A field may validate live: `validate` runs on every keystroke, not only on
  * commit, so a bad value closes the write and save gates before the field
  * blurs. Validity is reported up rather than kept here alone, because the gate
@@ -136,19 +143,19 @@ type TextFieldRowProps = {
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
     showHint, onCommit, onDraft,
-    validate, invalidReason, onInvalidChange, note
+    validate, invalidReason, onInvalidChange, onFocusChange, note
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
     // The whole row focuses this, so a short or empty value no longer leaves a
     // wide strip of the row looking tappable while only the input responds.
     const inputRef = useRef<React.ElementRef<typeof Input>>(null);
 
-    // Reports validity on mount, and this row is keyed on the value it mirrors
-    // by its call sites — so an external change (a revert to a good ID, a
-    // refreshed name) remounts the whole row and both the local `invalid` mark
-    // and the screen's gate are recomputed from the new value. Keying only the
-    // inner input left this state behind: the danger colour and the reason
-    // stayed on a field that now held something valid.
+    // Reports validity on mount. The row is keyed on the external-replacement
+    // epoch by its call site, so a revert remounts the whole row and both the
+    // local `invalid` mark and the screen's gate are recomputed here from the
+    // restored value. Keying only the inner input left this state behind: the
+    // danger colour and the reason stayed on a field that now held something
+    // valid.
     useEffect(() => {
         if (validate) onInvalidChange?.(!validate(initialValue));
     }, [initialValue, validate, onInvalidChange]);
@@ -179,6 +186,8 @@ function TextFieldRow({
                 <Input ref={inputRef} unstyled accessibilityLabel={label}
                        defaultValue={initialValue} maxLength={maxLength}
                        autoCapitalize={autoCapitalize} onChangeText={onChangeText}
+                       onFocus={() => onFocusChange?.(true)}
+                       onBlur={() => onFocusChange?.(false)}
                        onEndEditing={(event) => onCommit(event.nativeEvent.text)}
                        textAlign="right" minWidth={110} fontSize={16}
                        color={invalid ? palette.danger : palette.text}/>
@@ -206,6 +215,15 @@ type BrewDeckProps = {
      * a looked-up name, so this never touches the save gate.
      */
     xidLookupFailed: boolean;
+    /**
+     * Counter bumped only when the recipe instance is swapped (a revert). The
+     * two text rows key on it, so a genuine external replacement remounts them
+     * and resets their visible text and validity, while an ordinary edit or an
+     * XID lookup leaves the field a user is typing in mounted.
+     */
+    externalEpoch: number;
+    /** The Recipe ID field reports focus so the hook can defer the XID lookup. */
+    onXidFocusChange: (focused: boolean) => void;
 };
 
 /**
@@ -232,7 +250,8 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum, xidLookupFailed
+    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum, xidLookupFailed,
+    externalEpoch, onXidFocusChange
 }: BrewDeckProps) {
     "use no memo";
 
@@ -379,29 +398,32 @@ function BrewDeck({
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
-            {/* Keyed on the value it mirrors, so an external change — a
-                revert, a refreshed xBloom name — remounts this one row and
-                nothing else. It sits on the row rather than the input because
-                the row owns the validity state. The key bump used to live on
-                the scroll container, which reset the scroll offset every time
-                a stepper was nudged.
+            {/* Keyed on the external-replacement epoch, not on the value it
+                mirrors. The counter bumps only when the whole recipe is swapped
+                out — a revert — so that one case still remounts the row and
+                resets its visible text, local `invalid` mark and the screen's
+                save gate to the restored ID. An ordinary keystroke or a
+                late-arriving XID lookup does not touch the epoch, so the field a
+                user is typing in is never remounted mid-entry: keying on
+                `recipe.xid` used to do exactly that, and a mid-typing render
+                (the XID lookup resolving) reset the uncontrolled input and ate
+                keystrokes.
 
-                The field name prefixes the key so two rows can never collide: a
-                share-link import arrives with `xid` and `name` both empty
-                strings, and bare `key={recipe.xid}` / `key={recipe.name}` would
-                then be the same key on sibling rows — React logs "two children
-                with the same key". The prefix keeps each row's key in its own
-                namespace. */}
-            <TextFieldRow key={`xid-${recipe.xid}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
+                The `xid-`/`name-` prefixes keep the two rows in separate key
+                namespaces, so a share-link import — which arrives with `xid`
+                and `name` both empty and now shares the same epoch — cannot land
+                two siblings on one key and draw React's duplicate-key warning. */}
+            <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
                           note={xidLookupFailed ? "not found" : undefined}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
+                          onFocusChange={onXidFocusChange}
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
-            <TextFieldRow key={`name-${recipe.name}`} topic="name" label="Name" initialValue={recipe.name}
+            <TextFieldRow key={`name-${externalEpoch}`} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                       showHint={showHint}
                           onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
@@ -850,7 +872,8 @@ export default function EditRecipe() {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
-        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed
+        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
+        setXidFocused
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -1064,6 +1087,22 @@ export default function EditRecipe() {
                             paddingBottom: actionBarHeight + 16
                         }}
                         stickyHeaderIndices={deck === "stages" ? [2] : undefined}
+                        // iOS grows the scroll view's own bottom inset by the
+                        // keyboard's height so a focused field low on the screen
+                        // — the Recipe ID and Name rows sit near the bottom of
+                        // the brew deck — scrolls clear of the software keyboard
+                        // instead of hiding behind it. It adds to the inset, so
+                        // the measured `paddingBottom` above still holds; and it
+                        // only ever touches the bottom inset, so the sticky
+                        // profile header on the stages deck is untouched. Android
+                        // resizes the window under Expo's default
+                        // `softwareKeyboardLayoutMode: "resize"`, so the same
+                        // field is pushed up there without an extra setting.
+                        automaticallyAdjustKeyboardInsets
+                        // A tap on WRITE/SAVE while the keyboard is up commits
+                        // the field and fires the button, rather than being
+                        // eaten by the keyboard-dismiss.
+                        keyboardShouldPersistTaps="handled"
                         onScroll={onScroll} scrollEventThrottle={16}>
                 {recipe.isTea() ? <TeaBanner accent={accent}/> : <YStack/>}
 
@@ -1083,16 +1122,19 @@ export default function EditRecipe() {
                                       }}/>
                 ) : <YStack/>}
 
-                {/* The deck is keyed on the counter, not the scroll container: the
-                    model is mutated in place, so `recipe` keeps its identity
-                    across an edit and the deck has to be told the value moved.
-                    The key used to sit on the ScrollView, which sent the user
-                    back to the top of the screen on every nudge. */}
+                {/* No `key` on the deck: the model is mutated in place, so
+                    `recipe` keeps its identity across an edit and a remount
+                    would drop the hold-to-repeat timer inside a `Stepper`. The
+                    redraw rides on the `key` counter threaded through the hook
+                    instead. (An earlier key on the ScrollView sent the user
+                    back to the top of the screen on every nudge.) */}
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
                               coarsenGrindToMinimum={coarsenGrindToMinimum}
                               xidLookupFailed={xidLookupFailed}
+                              externalEpoch={externalEpoch}
+                              onXidFocusChange={setXidFocused}
                               onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (

@@ -596,9 +596,10 @@ describe("the editor", () => {
 
     it("does not collide row keys when xid and name are both empty", async () => {
         // A share-link import arrives with `xid` and `name` both `""`. The two
-        // TextFieldRows are keyed on those values, so without namespacing the
-        // keys they would clash and React would log a duplicate-key warning.
-        // The suite does not silence `console.error`, so spy on it directly.
+        // TextFieldRows share one external-replacement epoch, so their keys
+        // reduce to `xid-0` and `name-0`; without the field-name prefix both
+        // would be `0` on sibling rows and React would log a duplicate-key
+        // warning. The suite does not silence `console.error`, so spy directly.
         const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
         try {
             await renderEditor({xid: "", name: ""});
@@ -610,6 +611,38 @@ describe("the editor", () => {
         } finally {
             errorSpy.mockRestore();
         }
+    });
+
+    it("reopens the save gate when a revert replaces a bad recipe ID", async () => {
+        // Typing an invalid ID closes the write and save gates. A revert then
+        // swaps the whole recipe out for one with a valid ID, which must reopen
+        // them. The rows key on an external-replacement epoch, not on the ID
+        // value: the reverted recipe here carries the same CGL12 it started
+        // with, so a value-based key would not change and the row would never
+        // remount to clear the stale `invalid` mark — the gate would stay shut.
+        //
+        // Fake timers because each sheet gates its open state on a
+        // `requestAnimationFrame`, and this opens two in turn.
+        jest.useFakeTimers();
+        const backing = fixture();
+        backing.xid = "CGL12";
+        await renderEditor({xid: "CGL12", offline_backup: backing.getData()});
+
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(true);
+
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Revert"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("THE SAVED COPY"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // The external replacement remounted the row, recomputed its validity
+        // from the restored CGL12 and reopened the gate.
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+        expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+        jest.useRealTimers();
     });
 });
 
