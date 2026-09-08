@@ -4,7 +4,7 @@
 
 **Goal:** Let the user turn bypass water on, set its volume and temperature, see it in the stage ladder and the profile graph, and send it to the machine over BLE — while keeping it out of the card format, out of the pour-sum invariant, and out of share-link churn.
 
-**Architecture:** Bypass is not a `Pour`. It stays as three fields on `Recipe` (`isEnableBypassWater`, `bypassWaterVolume`, `bypassWaterTemperature`) and is rendered as a closing rung on the stage ladder — a sibling of the stage tiles, never an entry in `recipe.pours`. Selection is modelled with a sentinel (`openStage: number | "bypass" | null`) so TypeScript forces every consumer that indexes `recipe.pours` to narrow. The graph gains one extra band. The card path is untouched.
+**Architecture:** Bypass is not a `Pour`. It stays as three fields on `Recipe` (`bypassEnabled`, `bypassVolume`, `bypassTemp` — note `isEnableBypassWater` is the *cloud wire* name only, where 1 = on and 2 = off) and is rendered as a closing rung on the stage ladder — a sibling of the stage tiles, never an entry in `recipe.pours`. Selection is modelled with a sentinel (`openStage: number | "bypass" | null`) so TypeScript forces every consumer that indexes `recipe.pours` to narrow. The graph gains one extra band. The card path is untouched.
 
 **Tech Stack:** Expo SDK 57, React Native 0.86, Tamagui, react-native-svg, expo-sqlite, jest + @testing-library/react-native v14, React Compiler (on in app, off under jest).
 
@@ -85,7 +85,7 @@ a reason to refuse a write.
 - Create: `library/bypassLimits.ts`
 - Test: `library/__tests__/bypassLimits.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import {
@@ -117,12 +117,12 @@ describe("bypass limits", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest library/__tests__/bypassLimits.test.ts`
 Expected: FAIL — `Cannot find module '@/library/bypassLimits'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `library/bypassLimits.ts`:
 
@@ -169,12 +169,12 @@ grep -n "export type Range\|type Range" library/cardLimits.ts
 
 If it is declared but not exported, add `export` to that declaration.
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [x] **Step 4: Run the test and watch it pass**
 
 Run: `npx jest library/__tests__/bypassLimits.test.ts`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/bypassLimits.ts library/__tests__/bypassLimits.test.ts library/cardLimits.ts
@@ -194,7 +194,7 @@ this comes before the component that needs it.
 - Modify: `constants/recipeHelp.ts`
 - Test: `constants/__tests__/recipeHelp.test.ts` (create it if it does not exist)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `constants/__tests__/recipeHelp.test.ts`:
 
@@ -214,13 +214,13 @@ describe("bypass help", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest constants/__tests__/recipeHelp.test.ts`
 Expected: FAIL — `Property 'bypass' does not exist` at typecheck, or
 `Cannot read properties of undefined` at runtime.
 
-- [ ] **Step 3: Add the entries**
+- [x] **Step 3: Add the entries**
 
 In `constants/recipeHelp.ts`, inside the `ENTRIES` object, after the `tea` entry:
 
@@ -248,12 +248,12 @@ Note the two control entries carry no `hint`, `question` or `detail`. A hint tha
 restates its own label is worse than none, and `DETAILED_TOPICS` only enforces
 that `question` and `detail` travel together — it does not demand them.
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [x] **Step 4: Run the test and watch it pass**
 
 Run: `npx jest constants/__tests__/recipeHelp.test.ts && npm run typecheck`
 Expected: PASS, and typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add constants/recipeHelp.ts constants/__tests__/recipeHelp.test.ts
@@ -274,7 +274,7 @@ assignment to a value derived from state, even inside a narrowing guard.
 - Modify: `hooks/useRecipeEditor.ts`
 - Test: `hooks/__tests__/useRecipeEditor.bypass.test.ts` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import {act, renderHook} from "@testing-library/react-native";
@@ -371,12 +371,12 @@ describe("useRecipeEditor bypass", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest hooks/__tests__/useRecipeEditor.bypass.test.ts`
 Expected: FAIL — `result.current.setBypassEnabled is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `hooks/useRecipeEditor.ts`, add the import at the top:
 
@@ -450,12 +450,12 @@ function applyBypassField(recipe: Recipe, field: BypassField, value: number) {
 }
 ```
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest hooks/__tests__/useRecipeEditor.bypass.test.ts && npm run typecheck`
 Expected: PASS, 6 tests; typecheck clean.
 
-- [ ] **Step 5: Prove the seed test is not tautological**
+- [x] **Step 5: Prove the seed test is not tautological**
 
 The second test would also pass if `applyBypassEnabled` seeded unconditionally,
 because `Recipe`'s own default temperature is already 85. Confirm the binding by
@@ -479,7 +479,7 @@ npx jest hooks/__tests__/useRecipeEditor.bypass.test.ts
 
 Expected: PASS again.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hooks/useRecipeEditor.ts hooks/__tests__/useRecipeEditor.bypass.test.ts
@@ -502,7 +502,7 @@ currently arrives with no bypass at all, silently.
 - Modify: `library/XBloomRecipe.ts:77-100`
 - Test: `library/__tests__/XBloomRecipe.bypass.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `library/__tests__/XBloomRecipe.bypass.test.ts` (match the fixture
 helper already in that file; the shape below is the payload the existing tests
@@ -545,12 +545,12 @@ describe("bypass import, relaxed temperature", () => {
 If the file has no `importWithBypass` helper, add one that builds the minimal
 `recipeVo` the existing tests use and runs the importer on it.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest library/__tests__/XBloomRecipe.bypass.test.ts`
 Expected: FAIL — the first two cases give `bypassEnabled: false`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the block at `library/XBloomRecipe.ts:84-100` with:
 
@@ -583,12 +583,12 @@ Add the import at the top of `library/XBloomRecipe.ts`:
 import {BYPASS_DEFAULT_TEMPERATURE} from "@/library/bypassLimits";
 ```
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest library/__tests__/XBloomRecipe`
 Expected: PASS, including every pre-existing case in the file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add library/XBloomRecipe.ts library/__tests__/XBloomRecipe.bypass.test.ts
@@ -609,7 +609,7 @@ this task exists so a later refactor cannot do it by accident.
 **Files:**
 - Modify: `library/__tests__/shareLink.test.ts`
 
-- [ ] **Step 1: Write the pinning test**
+- [x] **Step 1: Write the pinning test**
 
 ```ts
 describe("share payload churn", () => {
@@ -658,13 +658,13 @@ describe("share payload churn", () => {
 Use whatever import block `library/__tests__/shareLink.test.ts` already has;
 `buildSharePayload`, `Recipe` and `CUP_TYPE` are all it needs.
 
-- [ ] **Step 2: Run it and watch it pass immediately**
+- [x] **Step 2: Run it and watch it pass immediately**
 
 Run: `npx jest library/__tests__/shareLink.test.ts`
 Expected: PASS. This is the one test in the plan that is green on arrival — it
 pins existing behaviour rather than driving new behaviour.
 
-- [ ] **Step 3: Prove it is actually watching**
+- [x] **Step 3: Prove it is actually watching**
 
 ```bash
 sed -i '' 's/bypassTemp:          tea ? 85 : recipe.bypassTemp,/bypassTemp:          tea ? 90 : recipe.bypassTemp,/' library/shareLink.ts
@@ -682,7 +682,7 @@ git diff --stat library/shareLink.ts
 
 Expected: `git diff --stat` prints nothing — the file is back to HEAD.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add library/__tests__/shareLink.test.ts
@@ -705,7 +705,7 @@ the first test pins.
 - Modify: `components/StageProfile.tsx`
 - Test: `components/__tests__/StageProfile.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `components/__tests__/StageProfile.test.tsx`:
 
@@ -800,14 +800,14 @@ function pours(volumes: number[]): Pour[] {
 }
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `npx jest components/__tests__/StageProfile.test.tsx`
 Expected: FAIL — `bypassVolume` is not a prop, and `stage-profile-bypass` is not
 found. The two "no bypass" cases should already PASS; if either of them fails,
 stop — you have misread the current behaviour, not found a bug.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `components/StageProfile.tsx`, widen the three helpers:
 
@@ -949,12 +949,12 @@ Add to the target line's existing comment block:
                 would say the opposite of what it means.
 ```
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest components/__tests__/StageProfile.test.tsx components/__tests__/PourProfile.test.tsx`
 Expected: PASS, and every pre-existing case in both files still green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/StageProfile.tsx components/__tests__/StageProfile.test.tsx
@@ -974,7 +974,7 @@ changes the bypass rung stops matching the stages beside it.
 **Files:**
 - Modify: `components/StageTile.tsx`
 
-- [ ] **Step 1: Export the three components**
+- [x] **Step 1: Export the three components**
 
 Change the three declarations in `components/StageTile.tsx` from `function` to
 `export function`:
@@ -998,12 +998,12 @@ Add a line to the comment above `StageRow`:
  * of this pill would drift from this one the first time its padding changed.
 ```
 
-- [ ] **Step 2: Verify nothing else moved**
+- [x] **Step 2: Verify nothing else moved**
 
 Run: `npm run typecheck && npx jest components/__tests__/StageTile.test.tsx`
 Expected: typecheck clean, all StageTile tests PASS. No behaviour changed.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/StageTile.tsx
@@ -1035,7 +1035,7 @@ explanation's clothes.
 - Delete: `components/BypassSection.tsx`
 - Delete: `components/__tests__/BypassSection.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `components/__tests__/BypassRung.test.tsx`:
 
@@ -1152,12 +1152,12 @@ describe("BypassRung", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `npx jest components/__tests__/BypassRung.test.tsx`
 Expected: FAIL — `Cannot find module '@/components/BypassRung'`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `components/BypassRung.tsx`:
 
@@ -1356,12 +1356,12 @@ grep -n "export function \(toDisplay\|fromDisplay\|displayRange\|displayValues\|
 If `Collapsible` or `DotIcon` are named exports rather than default, adjust the
 imports to match — do not change those files.
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest components/__tests__/BypassRung.test.tsx`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Delete the component it replaces**
+- [x] **Step 5: Delete the component it replaces**
 
 ```bash
 git rm components/BypassSection.tsx components/__tests__/BypassSection.test.tsx
@@ -1372,7 +1372,7 @@ Expected: typecheck reports one error — `app/editRecipe.tsx` still imports
 `BypassSection`. That is the next task. **Do not commit yet**; a commit that does
 not typecheck is a commit nobody can bisect through.
 
-- [ ] **Step 6: Hold**
+- [x] **Step 6: Hold**
 
 Go straight to Task 9. The two tasks share a commit.
 
@@ -1388,7 +1388,7 @@ indexes `recipe.pours` to narrow, so a bypass selection cannot silently become
 - Modify: `app/editRecipe.tsx`
 - Test: `app/__tests__/editRecipe.bypass.test.tsx` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/__tests__/editRecipe.bypass.test.tsx`, following the setup the
 existing editor tests use (route params, providers, settings):
@@ -1461,13 +1461,13 @@ Reuse the existing file's `renderEditor` / recipe helpers if it has them; if the
 tests live in `app/__tests__/editRecipe.test.tsx`, copy that file's harness
 rather than inventing a second one.
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `npx jest app/__tests__/editRecipe.bypass.test.tsx`
 Expected: FAIL — `bypass-ghost` not found (the screen still renders the deleted
 `BypassSection`, so it will fail to compile first; that is the same failure).
 
-- [ ] **Step 3: Widen the selection type**
+- [x] **Step 3: Widen the selection type**
 
 In `app/editRecipe.tsx`, add near the other local types:
 
@@ -1511,7 +1511,7 @@ Widen `selectStage`:
     }
 ```
 
-- [ ] **Step 4: Thread it through the two prop types**
+- [x] **Step 4: Thread it through the two prop types**
 
 `StagesDeckProps`:
 
@@ -1559,7 +1559,7 @@ and remove:
 import BypassSection from "@/components/BypassSection";
 ```
 
-- [ ] **Step 5: Narrow inside `StagesDeck` and render the rung**
+- [x] **Step 5: Narrow inside `StagesDeck` and render the rung**
 
 In `StagesDeck`'s signature add the new props:
 
@@ -1613,7 +1613,7 @@ After the add-stage `Pressable`, and still inside the deck's `YStack`, add:
             </View>
 ```
 
-- [ ] **Step 6: Pass the new props from the screen body**
+- [x] **Step 6: Pass the new props from the screen body**
 
 Replace the deck render block (currently `app/editRecipe.tsx:958-994`) so that
 `StageProfileCard` gets the bypass volume, `StagesDeck` gets the new props, and
@@ -1668,13 +1668,13 @@ Pull the two new callbacks out of the hook, in the existing destructure:
 renders `false` shifts index 2 onto the wrong child and the profile stops
 pinning.
 
-- [ ] **Step 7: Run the tests and watch them pass**
+- [x] **Step 7: Run the tests and watch them pass**
 
 Run: `npx jest app/__tests__/editRecipe && npm run typecheck`
 Expected: PASS, and typecheck clean — including the `BypassSection` error from
 Task 8 Step 5, which this task resolves.
 
-- [ ] **Step 8: Commit Tasks 8 and 9 together**
+- [x] **Step 8: Commit Tasks 8 and 9 together**
 
 ```bash
 git add app/editRecipe.tsx components/BypassRung.tsx components/__tests__/BypassRung.test.tsx app/__tests__/editRecipe.bypass.test.tsx
@@ -1696,7 +1696,7 @@ Without it, the correct arithmetic reads as a bug.
 - Modify: `app/editRecipe.tsx` (`BrewDeck`, around line 229)
 - Test: `app/__tests__/editRecipe.bypass.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
 describe("brew deck total", () => {
@@ -1732,12 +1732,12 @@ describe("brew deck total", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `npx jest app/__tests__/editRecipe.bypass.test.tsx -t "brew deck total"`
 Expected: FAIL on the second case — `brew-bypass-split` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `BrewDeck`, replace the header `XStack` (currently at `app/editRecipe.tsx:225`)
 with:
@@ -1777,7 +1777,7 @@ claim, and a label that is right on one recipe and wrong on the next is worse
 than a slightly duller one. It reads `ML BREW` on every recipe, bypass or not,
 because a label that changes shape is a label the eye has to re-read.
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest app/__tests__/editRecipe`
 Expected: PASS. **Any pre-existing test asserting `ML TOTAL` will fail here** —
@@ -1787,7 +1787,7 @@ update it to `ML BREW` rather than reverting the label. Find them with:
 grep -rn "ML TOTAL" app components docs
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/editRecipe.tsx app/__tests__/editRecipe.bypass.test.tsx
@@ -1807,7 +1807,7 @@ No em dashes in app copy.
 **Files:**
 - Modify: `docs/copy.md`
 
-- [ ] **Step 1: Replace the Bypass water section**
+- [x] **Step 1: Replace the Bypass water section**
 
 Delete the three `components/BypassSection.tsx` rows under `### Bypass water`
 (currently lines 227-229) and put this in their place. **Read the real line
@@ -1842,7 +1842,7 @@ grep -n "ML BREW\|ML BYPASS" app/editRecipe.tsx
 | `help.bypassTemperature.title` | `constants/recipeHelp.ts:NN` | Caption above the bypass temperature stepper. | `Temperature` |
 ```
 
-- [ ] **Step 2: Update the stage rows whose line numbers moved**
+- [x] **Step 2: Update the stage rows whose line numbers moved**
 
 `app/editRecipe.tsx` has grown, so the `editor.stages.*` rows in the register now
 point at the wrong lines. Re-derive them:
@@ -1853,7 +1853,7 @@ grep -n "OF \${balance.target} ML\|The machine rejects a recipe\|Auto fix\|AUTO 
 
 Update each `editor.stages.*` row's Source cell to the number you just read.
 
-- [ ] **Step 3: Verify every line number in the section**
+- [x] **Step 3: Verify every line number in the section**
 
 For each row you touched, check that the cited line actually holds that string:
 
@@ -1861,7 +1861,7 @@ For each row you touched, check that the cited line actually holds that string:
 sed -n 'NNp' components/BypassRung.tsx
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/copy.md
@@ -1891,7 +1891,7 @@ guess baked into the binary.
 - Test: `library/machine/__tests__/protocol.bypass.test.ts` (create)
 - Test: `library/machine/__tests__/Machine.bypass.test.ts` (create)
 
-- [ ] **Step 1: Write the failing protocol test**
+- [x] **Step 1: Write the failing protocol test**
 
 Create `library/machine/__tests__/protocol.bypass.test.ts`:
 
@@ -1914,12 +1914,12 @@ describe("bypassTempValue", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest library/machine/__tests__/protocol.bypass.test.ts`
 Expected: FAIL — `bypassTempValue is not a function`.
 
-- [ ] **Step 3: Implement it**
+- [x] **Step 3: Implement it**
 
 Add to `library/machine/protocol.ts`:
 
@@ -1940,12 +1940,12 @@ export function bypassTempValue(celsius: number, encoding: BypassTempEncoding): 
 }
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `npx jest library/machine/__tests__/protocol.bypass.test.ts`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Write the failing Machine test**
+- [x] **Step 5: Write the failing Machine test**
 
 Create `library/machine/__tests__/Machine.bypass.test.ts`. Follow the harness the
 existing `Machine` tests use — they build a fake transport and read the frames it
@@ -2010,12 +2010,12 @@ float32 little-endian and the dose is an integer. If the existing test file has 
 frame decoder, reuse it; otherwise write one next to these tests using
 `DataView#getFloat32(offset, true)`.
 
-- [ ] **Step 6: Run it and watch it fail**
+- [x] **Step 6: Run it and watch it fail**
 
 Run: `npx jest library/machine/__tests__/Machine.bypass.test.ts`
 Expected: FAIL — the second case gets `[0, 0, 18]`.
 
-- [ ] **Step 7: Implement**
+- [x] **Step 7: Implement**
 
 In `library/machine/Machine.ts`, alongside the existing encoding property:
 
@@ -2073,7 +2073,7 @@ Update the descriptor note in `library/machine/commands.ts:86-88`:
      note: "Carries the dose even with bypass off. Skipping it makes the grind drift. The temperature argument's scaling is unconfirmed on hardware; see bypassTempValue."},
 ```
 
-- [ ] **Step 8: Add the setting**
+- [x] **Step 8: Add the setting**
 
 In `library/Settings.ts`, alongside `teaSteepEncoding`:
 
@@ -2134,12 +2134,12 @@ and the row in the same `SettingsSection`:
                         onChange={(value) => setBypassTempEncoding(value === "plain" ? "plain" : "scaled")}/>
 ```
 
-- [ ] **Step 9: Run the tests and watch them pass**
+- [x] **Step 9: Run the tests and watch them pass**
 
 Run: `npx jest library/machine hooks/__tests__/useBrew && npm run typecheck`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add library/machine app/machine.tsx hooks/useBrew.ts library/Settings.ts
@@ -2167,7 +2167,7 @@ behaviour.
 - Modify: `docs/copy.md:944-947`
 - Modify: the tea protocol tests
 
-- [ ] **Step 1: Find every site**
+- [x] **Step 1: Find every site**
 
 ```bash
 grep -rn "teaSteep\|TeaSteepEncoding\|TEA_STEEP\|saya6k\|homoland" library app hooks components docs
@@ -2178,7 +2178,7 @@ Expected: matches in the six source files above, in `docs/copy.md:944-947`, in
 record what was believed, and contradiction C11 is now answered, not deleted),
 and in the protocol tests.
 
-- [ ] **Step 2: Simplify `teaSteepBytes`**
+- [x] **Step 2: Simplify `teaSteepBytes`**
 
 In `library/machine/protocol.ts`, delete the `TeaSteepEncoding` type and reduce
 the function to HomoLand's branch:
@@ -2210,7 +2210,7 @@ export function encodeTeaBlob(recipe: BlobRecipe): Uint8Array {
         const [wait, soak] = teaSteepBytes(Math.round(pour.pauseTime));
 ```
 
-- [ ] **Step 3: Strip the machine, the hook, the setting and the console**
+- [x] **Step 3: Strip the machine, the hook, the setting and the console**
 
 In `library/machine/Machine.ts`, delete `private steepEncoding`, the
 `teaSteepEncoding` getter and `setTeaSteepEncoding`, and change the call:
@@ -2224,7 +2224,7 @@ In `hooks/useBrew.ts`, delete the `teaSteepEncoding` setting read and its
 comment. In `app/machine.tsx`, delete `TEA_STEEP_OPTIONS`, the setting hook and
 the `SettingsChoiceRow` for it.
 
-- [ ] **Step 4: Update the tests**
+- [x] **Step 4: Update the tests**
 
 Existing protocol tests call `teaSteepBytes(seconds, "homoland")` and
 `encodeTeaBlob(recipe, "homoland")`. Drop the second argument. **Delete the
@@ -2235,11 +2235,11 @@ exists.
 grep -rn "teaSteepBytes\|encodeTeaBlob" library/machine/__tests__ hooks/__tests__ app/__tests__
 ```
 
-- [ ] **Step 5: Remove the copy rows**
+- [x] **Step 5: Remove the copy rows**
 
 Delete `docs/copy.md:944-947` — the four `console.teaSteep.*` rows.
 
-- [ ] **Step 6: Verify it is all gone**
+- [x] **Step 6: Verify it is all gone**
 
 ```bash
 grep -rn "teaSteep\|TeaSteepEncoding\|TEA_STEEP\|saya6k" library app hooks components docs/copy.md
@@ -2253,7 +2253,7 @@ npm run typecheck && npx jest library/machine hooks app
 
 Expected: typecheck clean, all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -2285,7 +2285,7 @@ exists.
 - Test: `library/__tests__/cardWriteErrors.test.ts`
 - Test: `app/__tests__/editRecipe.bypass.test.tsx`
 
-- [ ] **Step 1: Write the failing capacity test**
+- [x] **Step 1: Write the failing capacity test**
 
 Add to `library/__tests__/cardWriteErrors.test.ts`:
 
@@ -2313,12 +2313,12 @@ describe("maxStagesForBytes", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest library/__tests__/cardWriteErrors.test.ts`
 Expected: FAIL — neither export exists there yet.
 
-- [ ] **Step 3: Move the constant and extract the arithmetic**
+- [x] **Step 3: Move the constant and extract the arithmetic**
 
 In `library/cardWriteErrors.ts`, add:
 
@@ -2368,13 +2368,13 @@ and add the value import `NFC.ts:324` needs:
 import {SIGNATURE_BYTES} from "./cardWriteErrors";
 ```
 
-- [ ] **Step 4: Run the capacity tests and the card suites**
+- [x] **Step 4: Run the capacity tests and the card suites**
 
 Run: `npx jest library/__tests__/cardWriteErrors.test.ts library/__tests__/Recipe`
 Expected: PASS. Watch the suite count — if suites start failing with
 `react-native-nfc-manager` in the trace, an import went the wrong way.
 
-- [ ] **Step 5: Write the failing advisory test**
+- [x] **Step 5: Write the failing advisory test**
 
 Add to `app/__tests__/editRecipe.bypass.test.tsx`:
 
@@ -2426,12 +2426,12 @@ describe("stage ceiling advisory", () => {
 `systemInfo` and any `uid`/`data`; model it on the fixture in
 `components/__tests__/CardReadDiagnostic.test.tsx`.
 
-- [ ] **Step 6: Run it and watch it fail**
+- [x] **Step 6: Run it and watch it fail**
 
 Run: `npx jest app/__tests__/editRecipe.bypass.test.tsx -t "stage ceiling"`
 Expected: FAIL — `stage-ceiling` not found.
 
-- [ ] **Step 7: Implement**
+- [x] **Step 7: Implement**
 
 At module scope in `app/editRecipe.tsx`:
 
@@ -2497,12 +2497,12 @@ Inside `StagesDeck`, after the stage-mismatch banner and before the tile map:
             )}
 ```
 
-- [ ] **Step 8: Run the tests and watch them pass**
+- [x] **Step 8: Run the tests and watch them pass**
 
 Run: `npx jest app/__tests__/editRecipe library/__tests__/cardWriteErrors.test.ts && npm run typecheck`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 9: Add the copy rows**
+- [x] **Step 9: Add the copy rows**
 
 In `docs/copy.md`, under `### Stages`, with line numbers read off the file:
 
@@ -2511,7 +2511,7 @@ In `docs/copy.md`, under `### Stages`, with line numbers read off the file:
 | `editor.stages.ceiling.body` | `app/editRecipe.tsx:NN` | Prose body of the stage-ceiling advisory, shown when a recipe has more stages than the last card read could hold. `${...}` is the card's capacity in stages. | `A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.` |
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -2532,7 +2532,7 @@ wrong code from a dead network.
 - Modify: `app/editRecipe.tsx` (the XID row)
 - Test: `hooks/__tests__/useRecipeEditor.xid.test.ts` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import {act, renderHook, waitFor} from "@testing-library/react-native";
@@ -2580,12 +2580,12 @@ describe("XID lookup failure", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx jest hooks/__tests__/useRecipeEditor.xid.test.ts`
 Expected: FAIL — `xidLookupFailed` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `hooks/useRecipeEditor.ts`, add the state next to `volumeError`:
 
@@ -2618,12 +2618,12 @@ and in `fetchRecipeTitle`:
 
 Add `xidLookupFailed` to the returned object next to `volumeError`.
 
-- [ ] **Step 4: Run the tests and watch them pass**
+- [x] **Step 4: Run the tests and watch them pass**
 
 Run: `npx jest hooks/__tests__/useRecipeEditor.xid.test.ts`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Show it on the XID row**
+- [x] **Step 5: Show it on the XID row**
 
 In `app/editRecipe.tsx`, pull `xidLookupFailed` out of the hook's return and pass
 it into `BrewDeck` as a prop (add `xidLookupFailed: boolean;` to `BrewDeckProps`),
@@ -2641,7 +2641,7 @@ then annotate the XID `FieldRow`:
 grep -n 'topic="xid"' app/editRecipe.tsx
 ```
 
-- [ ] **Step 6: Write the screen test**
+- [x] **Step 6: Write the screen test**
 
 ```tsx
 it("marks the XID row when the lookup fails", async () => {
@@ -2656,7 +2656,7 @@ it("marks the XID row when the lookup fails", async () => {
 Run: `npx jest app/__tests__/editRecipe`
 Expected: PASS.
 
-- [ ] **Step 7: Add the copy row and commit**
+- [x] **Step 7: Add the copy row and commit**
 
 In `docs/copy.md`, under the BREW deck section, with the real line number:
 
@@ -2674,7 +2674,7 @@ git -c commit.gpgsign=false commit -F /tmp/xbrw-commit.txt
 
 ## Task 16: The full gate
 
-- [ ] **Step 1: Re-check every copy line number**
+- [x] **Step 1: Re-check every copy line number**
 
 Line numbers drift with every edit above. Do this **last**, and do it for every
 row you touched:
@@ -2690,7 +2690,7 @@ claims:
 sed -n 'NNp' <file>
 ```
 
-- [ ] **Step 2: Run the whole gate**
+- [x] **Step 2: Run the whole gate**
 
 ```bash
 npm run typecheck
@@ -2707,7 +2707,7 @@ Expected:
 - tests: **all green**, suite count 149 or more, test count 2367 or more.
 - expo-doctor: 21/21. This is a hard CI failure, not advisory.
 
-- [ ] **Step 3: Confirm nothing dragged NFC into the world**
+- [x] **Step 3: Confirm nothing dragged NFC into the world**
 
 ```bash
 npx jest --listTests | wc -l
@@ -2717,14 +2717,14 @@ grep -rn "from \"@/library/NFC\"\|from \"./NFC\"" library app components hooks |
 Expected: the test count has not dropped, and every remaining `NFC` import is a
 `import type` or is in a file that genuinely talks to a card.
 
-- [ ] **Step 4: Push**
+- [x] **Step 4: Push**
 
 ```bash
 git push origin m4-watch-it-brew
 gh pr view 84 -R hessius/XBRecipeWriterPlus --json url,state
 ```
 
-- [ ] **Step 5: Hand over for device testing**
+- [x] **Step 5: Hand over for device testing**
 
 Everything up to here is verifiable on a laptop. The next section is not: it
 needs the machine, a real card, and a thermometer.
