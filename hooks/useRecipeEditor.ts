@@ -70,6 +70,17 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     const [volumeError, setVolumeError] = useState<string | null>(null);
 
     /**
+     * The XID lookup was tried and did not work.
+     *
+     * It used to go into a `console.log` and nowhere else, so a user who typed
+     * an XID saw nothing happen and could not tell a wrong code from a dead
+     * network. Not an error state on the field: the recipe is perfectly valid
+     * without a looked-up name, and the XID may simply not be one this account
+     * can see.
+     */
+    const [xidLookupFailed, setXidLookupFailed] = useState(false);
+
+    /**
      * What the recipe pours against what the machine expects.
      *
      * Derived on every render rather than pushed into a child by hand. The
@@ -104,6 +115,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     }
 
     const fetchRecipeTitle = async (r: Recipe) => {
+        setXidLookupFailed(false);
         try {
             const xbRecipe = new XBloomRecipe({kind: "xid", xid: r.xid});
             await xbRecipe.fetchRecipeDetail();
@@ -130,6 +142,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
+            setXidLookupFailed(true);
         }
     };
 
@@ -464,7 +477,8 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         saveRecipe,
         editInputComplete,
         volumeError,
-        setVolumeError
+        setVolumeError,
+        xidLookupFailed
     };
 }
 

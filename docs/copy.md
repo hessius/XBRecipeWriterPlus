@@ -187,6 +187,7 @@ from `library/Recipe.ts`.
 | `editor.grinder.off` | `app/editRecipe.tsx:52` (`GRINDER_OPTIONS`) | Doto segment, grinder off. | `OFF` |
 | `editor.field.recipeId.label` | `app/editRecipe.tsx:348` | Label of the Recipe ID field. | `Recipe ID` |
 | `editor.field.recipeId.invalid` | `app/editRecipe.tsx:352` | Validation message under the Recipe ID field. | `Not a valid ID: three letters, an optional T, then two or three digits, like CGL12.` |
+| `editor.xid.notFound` | `app/editRecipe.tsx:398` | Annotation on the XID label when the online lookup failed. | `not found` |
 | `editor.field.name.label` | `app/editRecipe.tsx:356` | Label of the Name field. | `Name` |
 
 ### Stepper fields (`components/Stepper.tsx`, `hooks/useRecipeEditor.ts`)

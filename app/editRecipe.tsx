@@ -109,6 +109,12 @@ type TextFieldRowProps = {
     invalidReason?: string;
     /** Reports the field's validity so the write and save gates can honour it. */
     onInvalidChange?: (invalid: boolean) => void;
+    /**
+     * A live annotation on the field's own label, e.g. that an online lookup
+     * failed. Passed straight to `FieldRow`; unlike `error` it does not gate any
+     * button and is not styled as a validation failure.
+     */
+    note?: string;
 };
 
 /**
@@ -130,7 +136,7 @@ type TextFieldRowProps = {
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
     showHint, onCommit, onDraft,
-    validate, invalidReason, onInvalidChange
+    validate, invalidReason, onInvalidChange, note
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
     // The whole row focuses this, so a short or empty value no longer leaves a
@@ -166,7 +172,7 @@ function TextFieldRow({
         // swallow the taps meant for the stepper's - and + controls.
         <Pressable accessible={false} testID={`field-row-${label}`}
                    onPress={() => (inputRef.current as TextInput | null)?.focus()}>
-            <FieldRow topic={topic} showHint={showHint}
+            <FieldRow topic={topic} showHint={showHint} note={note}
                       error={invalid ? invalidReason : undefined}>
                 {/* Not keyed here: the key belongs on the row, which is what owns
                     the `invalid` state this input feeds. */}
@@ -194,6 +200,12 @@ type BrewDeckProps = {
     onInputErrorChange: (invalid: boolean) => void;
     /** Raises a too-fine imported grind to the card minimum. */
     coarsenGrindToMinimum: () => void;
+    /**
+     * The xBloom name lookup for this recipe's XID was tried and failed. Shown
+     * as a quiet note on the XID row, not an error: the recipe is valid without
+     * a looked-up name, so this never touches the save gate.
+     */
+    xidLookupFailed: boolean;
 };
 
 /**
@@ -220,7 +232,7 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum
+    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum, xidLookupFailed
 }: BrewDeckProps) {
     "use no memo";
 
@@ -383,6 +395,7 @@ function BrewDeck({
             <TextFieldRow key={`xid-${recipe.xid}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
+                          note={xidLookupFailed ? "not found" : undefined}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
                           invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
@@ -837,7 +850,7 @@ export default function EditRecipe() {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
-        autoAdjustPourVolumes, coarsenGrindToMinimum
+        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -1079,6 +1092,7 @@ export default function EditRecipe() {
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
                               coarsenGrindToMinimum={coarsenGrindToMinimum}
+                              xidLookupFailed={xidLookupFailed}
                               onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (

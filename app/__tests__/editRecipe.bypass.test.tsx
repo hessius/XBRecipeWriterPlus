@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -17,6 +17,19 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/library/RecipeDatabase");
+
+// The XID row looks its bean's name up against xBloom on mount. Only the tests
+// that set `recipe.xid` reach it; the rest never construct this. Default it to
+// a resolved lookup with no name so the row stays plain, and let a test flip it
+// to a rejection to exercise the "not found" note.
+const mockFetchRecipeDetail = jest.fn(() => Promise.resolve());
+jest.mock("@/library/XBloomRecipe", () => ({
+    XBloomRecipe: jest.fn().mockImplementation(() => ({
+        fetchRecipeDetail: () => mockFetchRecipeDetail(),
+        getRecipeTitle:    () => "",
+        getRecipe:         () => null
+    }))
+}));
 
 const mockNotify = jest.fn();
 jest.mock("@/components/XbrwToast", () => ({
@@ -141,6 +154,8 @@ beforeEach(() => {
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
     mockWriteCard.mockReset();
+    mockFetchRecipeDetail.mockReset();
+    mockFetchRecipeDetail.mockResolvedValue(undefined);
 });
 
 async function renderEditor(overrides: Partial<Recipe> = {}) {
@@ -284,6 +299,26 @@ describe("stage ceiling advisory", () => {
         mockSettings.lastCardRead = "";
         await renderEditor(recipeWithStageCount(11));
 
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled)
+            .toBeFalsy();
+    });
+});
+
+describe("editor XID lookup", () => {
+    it("marks the XID row when the lookup fails", async () => {
+        mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
+        await renderEditor({xid: "XB0001"});
+
+        await waitFor(() =>
+            expect(screen.getByText(/not found/i)).toBeTruthy());
+    });
+
+    it("does not gate the save button on a failed lookup", async () => {
+        mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
+        await renderEditor({xid: "XB0001"});
+
+        await waitFor(() =>
+            expect(screen.getByText(/not found/i)).toBeTruthy());
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled)
             .toBeFalsy();
     });
