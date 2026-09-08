@@ -163,6 +163,23 @@ const ENTRIES = {
                 "siphon, so a steep lands at about 120 ml. If the siphon " +
                 "triggers early because the leaf has swollen, take volume off " +
                 "the later steeps. Tea recipes are also limited to 3 steeps."
+    },
+    bypass: {
+        title:    "Bypass water",
+        hint:     "Extra water added straight to the cup.",
+        question: "What is bypass water?",
+        detail:   "Bypass water is dispensed straight into the cup at the end of " +
+                  "the brew, without passing through the coffee. It dilutes a " +
+                  "concentrated brew without weakening the extraction, which is " +
+                  "how a strong small brew is turned into a full cup. It does " +
+                  "not count towards the stage volumes, and a card has no room " +
+                  "to store it, so a recipe written to a card loses it."
+    },
+    bypassVolume: {
+        title: "Volume"
+    },
+    bypassTemperature: {
+        title: "Temperature"
     }
 } as const satisfies Record<string, HelpEntry>;
 
