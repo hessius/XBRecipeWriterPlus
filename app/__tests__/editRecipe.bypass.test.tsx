@@ -192,3 +192,27 @@ describe("editor bypass rung", () => {
         expect(screen.queryByTestId("stage-mismatch")).toBeNull();
     });
 });
+
+describe("brew deck total", () => {
+    it("shows one total when bypass is off", async () => {
+        await renderEditor(recipeWithStages());
+
+        expect(screen.getByTestId("brew-target")).toHaveTextContent("288");
+        expect(screen.queryByTestId("brew-bypass-split")).toBeNull();
+    });
+
+    it("splits the total when bypass is on", async () => {
+        await renderEditor({...recipeWithStages(), bypassEnabled: true, bypassVolume: 45});
+
+        // The stage target is unchanged: the machine still checks 288.
+        expect(screen.getByTestId("brew-target")).toHaveTextContent("288");
+        expect(screen.getByTestId("brew-bypass-split"))
+            .toHaveTextContent("+ 45 ML BYPASS");
+    });
+
+    it("shows no split for tea", async () => {
+        await renderEditor({...teaRecipe(), bypassEnabled: true, bypassVolume: 45});
+
+        expect(screen.queryByTestId("brew-bypass-split")).toBeNull();
+    });
+});

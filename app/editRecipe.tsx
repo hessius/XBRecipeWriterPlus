@@ -222,18 +222,30 @@ function BrewDeck({
     // fix it that the stage mismatch has always had.
     const tooFine = showGrind && recipe.grindSize < CARD_GRIND_MIN;
     const fineBand = tooFine ? grindBand(recipe.grindSize) : undefined;
+    // Tea has no bypass anywhere in the app; the machine ignores it.
+    const showBypass = recipe.bypassEnabled && !isTea;
 
     return (
         <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
                 overflow="hidden">
-            <XStack alignItems="baseline" gap="$2"
+            <XStack alignItems="baseline" gap="$2" flexWrap="wrap"
                     paddingHorizontal="$4" paddingTop="$4" paddingBottom="$3">
                 <DotMatrixText testID="brew-target" fontSize={22} weight="bold" color={accent}>
                     {balanceTarget}
                 </DotMatrixText>
                 {/* `dim`, not `muted`: muted is 4.12:1 and the palette says in
                     as many words that it is not a text colour. */}
-                <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML TOTAL</Text>
+                <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML BREW</Text>
+                {/* Without this line the ladder adds up to more than the header
+                    and the app looks broken. It is not: the header is the
+                    volume the machine checks the stages against, and bypass is
+                    dispensed outside it. Doto, so the units are upper-case. */}
+                {showBypass && (
+                    <DotMatrixText testID="brew-bypass-split" fontSize={11} weight="bold"
+                                   letterSpacing={1.4} color={palette.info}>
+                        {`+ ${recipe.bypassVolume} ML BYPASS`}
+                    </DotMatrixText>
+                )}
             </XStack>
 
             <FieldRow topic="dose"
