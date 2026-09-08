@@ -316,7 +316,12 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
             return;
         }
 
-        const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate);
+        // "brew", not the card-bytes default: an imported recipe carries its
+        // bypass, and a card cannot. Matching on the card alone here hands the
+        // user the stored twin without the dilution and calls it the same
+        // recipe. A card read keeps the loose match, for the mirror-image
+        // reason -- see `Identity`.
+        const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate, "brew");
 
         // A paste into the field and a share intent both navigate on their own.
         // A shortcut navigates only for a recipe not already held: the tile's

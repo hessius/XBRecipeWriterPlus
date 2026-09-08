@@ -1,6 +1,21 @@
 import Recipe from "./Recipe";
 
 /**
+ * How much of a recipe counts as its identity.
+ *
+ * `"card"` is the card bytes: two recipes match when they would write the same
+ * card. `"brew"` adds the bypass, which no card can carry.
+ *
+ * Both are needed, and neither will do for both jobs. A card read can only ever
+ * produce a recipe with no bypass, so matching strictly there would deposit a
+ * stripped duplicate every time the user scans a recipe they already hold. An
+ * import, by contrast, carries the bypass from xBloom, and matching loosely
+ * there silently discards it: the user asks for the recipe with the dilution
+ * and is handed the twin without it, with nothing to say a difference existed.
+ */
+export type Identity = "card" | "brew";
+
+/**
  * The fingerprint of a recipe, or `null` if its bytes cannot be built.
  *
  * A recipe that throws here is malformed. It is treated as having no identity
@@ -8,12 +23,23 @@ import Recipe from "./Recipe";
  * import lands in the library to be inspected instead of disappearing into a
  * de-duplication branch.
  */
-function safeFingerprint(recipe: Recipe): string | null {
+function safeFingerprint(recipe: Recipe, identity: Identity = "card"): string | null {
+    let card: string;
     try {
-        return recipe.fingerprint();
+        card = recipe.fingerprint();
     } catch {
         return null;
     }
+    if (identity === "card") {
+        return card;
+    }
+    // A bypass that is switched off is not dispensed, so the volume and
+    // temperature still sitting behind the switch are not a difference in the
+    // brew -- only in what the recipe would remember if it were switched on.
+    const bypass = recipe.bypassEnabled
+        ? `${recipe.bypassVolume}@${recipe.bypassTemp}`
+        : "off";
+    return `${card}|${bypass}`;
 }
 
 /**
@@ -22,8 +48,9 @@ function safeFingerprint(recipe: Recipe): string | null {
  * A recipe with the candidate's own uuid is skipped: re-saving a recipe over
  * itself is an update, not a duplicate.
  */
-export function findDuplicate(stored: Recipe[], candidate: Recipe): Recipe | null {
-    const target = safeFingerprint(candidate);
+export function findDuplicate(stored: Recipe[], candidate: Recipe,
+                              identity: Identity = "card"): Recipe | null {
+    const target = safeFingerprint(candidate, identity);
     if (target === null) {
         return null;
     }
@@ -32,7 +59,7 @@ export function findDuplicate(stored: Recipe[], candidate: Recipe): Recipe | nul
         if (existing.uuid === candidate.uuid) {
             continue;
         }
-        if (safeFingerprint(existing) === target) {
+        if (safeFingerprint(existing, identity) === target) {
             return existing;
         }
     }
@@ -73,12 +100,16 @@ export function copyName(name: string, existing: string[]): string {
  *
  * Only for the automatic paths. Duplicating a recipe is an explicit request and
  * must always produce a copy.
+ *
+ * The default identity is the card, which is what a card read means. An import
+ * passes `"brew"`: see `Identity` for why one answer cannot serve both.
  */
 export function resolveOnOpen(
     stored: Recipe[],
-    candidate: Recipe
+    candidate: Recipe,
+    identity: Identity = "card"
 ): {recipe: Recipe; isExisting: boolean} {
-    const existing = findDuplicate(stored, candidate);
+    const existing = findDuplicate(stored, candidate, identity);
     return existing
         ? {recipe: existing, isExisting: true}
         : {recipe: candidate, isExisting: false};
