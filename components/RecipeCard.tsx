@@ -126,6 +126,15 @@ type Props = {
     brewShortcut?: BrewShortcutSetting;
     /** Called when the BREW capsule is pressed. */
     onBrew?: () => void;
+    /**
+     * The swipe tray's other two verbs.
+     *
+     * The card draws neither. They are here only so that the tray's tiles --
+     * which sit inside this card's accessibility group, behind a pan gesture --
+     * have a non-visual path; see the actions list below.
+     */
+    onShare?: () => void;
+    onWrite?: () => void;
 };
 
 /**
@@ -144,7 +153,9 @@ export default function RecipeCard({
     showCoffeeMarker = true,
     dottedProfile = false,
     brewShortcut,
-    onBrew
+    onBrew,
+    onShare,
+    onWrite
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -188,7 +199,13 @@ export default function RecipeCard({
         ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
         ...(brewShortcut !== undefined && onBrew !== undefined
             ? [{name: "brew", label: "Brew this recipe"}]
-            : [])
+            : []),
+        // Same reasoning as `brew`, and for the same tray: SHARE and WRITE are
+        // tiles revealed by a swipe, and a swipe is not something VoiceOver or
+        // TalkBack can perform. Without these two the only way to hand out a
+        // link or put a recipe on a card is a gesture those users do not have.
+        ...(onShare !== undefined ? [{name: "share", label: "Share recipe"}] : []),
+        ...(onWrite !== undefined ? [{name: "write", label: "Write recipe to card"}] : [])
     ];
 
     return (
@@ -208,6 +225,10 @@ export default function RecipeCard({
                     onDelete?.();
                 } else if (event.nativeEvent.actionName === "brew") {
                     onBrew?.();
+                } else if (event.nativeEvent.actionName === "share") {
+                    onShare?.();
+                } else if (event.nativeEvent.actionName === "write") {
+                    onWrite?.();
                 }
             }}
             onPress={onPress}

@@ -16,6 +16,7 @@ import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {ladderFrontier} from "@/library/brew/ladderState";
+import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -124,14 +125,22 @@ export default function BrewRecord({recipeLookup}: Props) {
     // short. Older rows have no `pouringAt` and fall back to the old meaning.
     const zero = (record.pouringAt ?? 0) > 0 ? record.pouringAt! : record.startedAt;
     const durationSeconds = (record.endedAt - zero) / 1000;
-    // Planned seconds is total minus the overrun the record saved.
-    const plannedSecs = Math.max(0, durationSeconds - record.heldSeconds);
 
     // The record's own plan, or the live recipe for rows written before brews
     // kept one. A snapshot is preferred even when the recipe still exists: it
     // is what was actually brewed, and the recipe may have been edited since.
     const snapshot = poursFromPlan(record.plan);
     const stages = snapshot.length > 0 ? snapshot : recipe?.pours ?? [];
+
+    // Read off the stages, not inferred from the clock. `heldSeconds` is only
+    // the overrun, and it is clamped at zero, so subtracting it from the run
+    // returns the plan's length for a brew that overran and the *run's* length
+    // for one that ended early, stalled, or merely drifted -- drawing the plan
+    // line short or long against stages that say otherwise. Only a row with
+    // neither a snapshot nor a surviving recipe still has to guess.
+    const plannedSecs = stages.length > 0
+        ? plannedSeconds(stages)
+        : Math.max(0, durationSeconds - record.heldSeconds);
     // Falling back to the plan means claiming every stage poured, which is
     // what it always did and is only ever right for a brew that finished.
     const delivered = record.stageWater

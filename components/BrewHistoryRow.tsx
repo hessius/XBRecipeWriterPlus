@@ -31,8 +31,24 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
     const stopped = STOPPED_OUTCOMES.has(brew.outcome);
     const endedEarly = brew.outcome === "endedOnMachine";
 
+    // The label has to carry everything the row draws. `Pressable` with an
+    // explicit label replaces the whole subtree for a screen reader, so with
+    // the name alone every brew of the same recipe is announced identically --
+    // and a history whose entries cannot be told apart cannot be navigated. In
+    // particular the two chips are the only warning that a brew did not run to
+    // plan, and reading them out is how a user decides whether to open it.
+    const label = [
+        brew.recipeName,
+        formatBrewDate(brew.startedAt),
+        `${Math.round(brew.cupTotal)} grams`,
+        formatBrewDuration(brew.startedAt, brew.endedAt),
+        endedEarly ? "ended early" : undefined,
+        stopped ? "stopped" : undefined,
+        brew.hasStream ? undefined : "no trace kept"
+    ].filter((part) => part !== undefined).join(", ");
+
     return (
-        <Pressable accessibilityRole="button" accessibilityLabel={brew.recipeName}
+        <Pressable accessibilityRole="button" accessibilityLabel={label}
                    onPress={onPress}>
             <XStack gap="$3" paddingVertical="$3" paddingHorizontal="$3"
                     alignItems="center">

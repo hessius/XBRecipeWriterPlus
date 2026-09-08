@@ -1,6 +1,6 @@
 import React from "react";
 import {PixelRatio, Text, type StyleProp, type TextStyle} from "react-native";
-import Animated, {useAnimatedStyle, useSharedValue, type SharedValue}
+import Animated, {useAnimatedStyle, type SharedValue}
     from "react-native-reanimated";
 
 import {palette} from "@/constants/colors";
@@ -126,7 +126,52 @@ type Props = {
  *
  * This is the only place in the app that names the Doto font family.
  */
-export default function DotMatrixText({
+export default function DotMatrixText(props: Props) {
+    // The animated path lives in its own component, because hooks cannot be
+    // called conditionally and this one is rendered by the hundred: every list
+    // row and every figure on a dense screen would otherwise allocate a shared
+    // value and register a worklet whose style is then thrown away.
+    if (props.animatedFontSize !== undefined) {
+        return <AnimatedDotMatrixText {...props} animatedFontSize={props.animatedFontSize}/>;
+    }
+    const {
+        children, fontSize = 14, weight = "bold", color = palette.text,
+        letterSpacing = 0.5, numberOfLines, style, testID
+    } = props;
+    return (
+        <Text
+            testID={testID}
+            numberOfLines={numberOfLines}
+            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+            style={staticStyle({color, letterSpacing, style, weight, fontSize})}>
+            {children}
+        </Text>
+    );
+}
+
+/** The style stack shared by both paths. Order is load-bearing; see below. */
+function staticStyle({color, letterSpacing, style, weight, fontSize}: {
+    color: string;
+    letterSpacing: number;
+    style: StyleProp<DotMatrixStyle>;
+    weight: DotoWeight;
+    fontSize: number;
+}) {
+    return [
+        {color, letterSpacing},
+        style,
+        // After the caller's style, not before. `style` carries layout —
+        // margins, line height — but must not reach the two properties
+        // that make this component the single enforcement point.
+        {
+            fontFamily: DOTO_FAMILIES[weight],
+            fontSize:   requestedSize(fontSize)
+        }
+    ];
+}
+
+/** The Reanimated path. Only mounted when a caller passed an animated size. */
+function AnimatedDotMatrixText({
     children,
     fontSize = 14,
     animatedFontSize,
@@ -136,40 +181,26 @@ export default function DotMatrixText({
     numberOfLines,
     style,
     testID
-}: Props) {
+}: Props & {animatedFontSize: SharedValue<number>}) {
     // `PixelRatio` cannot be read from the UI thread, so the floor is worked
     // out here and the worklet closes over the number.
     const floor = DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1);
-    // Hooks cannot be called conditionally, so an unused shared value stands in
-    // when no animated size was given.
-    const parked = useSharedValue(fontSize);
-    const source = animatedFontSize ?? parked;
     const animatedStyle = useAnimatedStyle(() => ({
-        fontSize: Math.max(source.value, floor)
+        fontSize: Math.max(animatedFontSize.value, floor)
     }));
 
-    const Component = animatedFontSize ? Animated.Text : Text;
-
     return (
-        <Component
+        <Animated.Text
             testID={testID}
             numberOfLines={numberOfLines}
             maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
             style={[
-                {color, letterSpacing},
-                style,
-                // After the caller's style, not before. `style` carries layout —
-                // margins, line height — but must not reach the two properties
-                // that make this component the single enforcement point.
-                {
-                    fontFamily: DOTO_FAMILIES[weight],
-                    fontSize:   requestedSize(fontSize)
-                },
+                ...staticStyle({color, letterSpacing, style, weight, fontSize}),
                 // Last of all, so the animated size wins over the static one it
                 // was laid out at.
-                animatedFontSize ? animatedStyle : null
+                animatedStyle
             ]}>
             {children}
-        </Component>
+        </Animated.Text>
     );
 }

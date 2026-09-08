@@ -26,6 +26,28 @@ describe("BrewHistoryRow", () => {
         expect(getByText(/244 G/)).toBeTruthy();
     });
 
+    it("announces everything the row draws, not just the recipe name", async () => {
+        // `Pressable` with an explicit label replaces the whole subtree for a
+        // screen reader. With the name alone every brew of the same recipe is
+        // announced identically, and the chips that say a brew did not run to
+        // plan -- the one thing that decides whether it is worth opening --
+        // are silent.
+        const {getByLabelText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({outcome: "cancelled", hasStream: false})}
+                            onPress={jest.fn()} />
+        );
+        const label = "Ethiopia Guji, 2026-09-03, 244 grams, 4:00, stopped, no trace kept";
+        expect(getByLabelText(label)).toBeTruthy();
+    });
+
+    it("says ended early rather than stopped for a brew the machine finished short", async () => {
+        const {getByLabelText, queryByLabelText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({outcome: "endedOnMachine"})} onPress={jest.fn()} />
+        );
+        expect(getByLabelText(/ended early/)).toBeTruthy();
+        expect(queryByLabelText(/stopped/)).toBeNull();
+    });
+
     it("shows the local date, not the UTC date", async () => {
         // The fixture timestamp is 2026-09-04T03:00:00Z — Sep 4 in UTC.
         // We mock the local accessors to return Sep 3 values so the test is

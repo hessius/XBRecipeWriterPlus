@@ -120,8 +120,15 @@ export function buildSharePayload(recipe: Recipe): SharePayload {
         cupType:             cloudCupType(recipe.cupType),
         // Tea does not support bypass; the machine ignores it and sending a live
         // bypass with cupType 4 would produce an unbreakable share link.
-        bypassTemp:          tea ? 85 : recipe.bypassTemp,
-        bypassVolume:        tea ? 0  : (recipe.bypassEnabled ? recipe.bypassVolume : 0),
+        //
+        // A bypass that is off sends the canonical 85, never the temperature the
+        // editor preserved while it was off. Those preserved values are there so
+        // that re-enabling bypass does not lose the user's setting, but they must
+        // not reach the wire: an off payload that varies with an invisible field
+        // makes an already-shared recipe read as stale and mints a duplicate row
+        // in the service account every time the link is shared again.
+        bypassTemp:          tea || !recipe.bypassEnabled ? 85 : recipe.bypassTemp,
+        bypassVolume:        tea || !recipe.bypassEnabled ? 0  : recipe.bypassVolume,
         subSetType:          2,
         appPlace:            [4],
         isShortcuts:         2,

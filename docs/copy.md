@@ -100,6 +100,8 @@ tray, and the overflow sheet.
 | `home.card.a11y.duplicate` | `components/RecipeCard.tsx:186,278` (a11y) | (a11y) Context action / button to duplicate a recipe. | `Duplicate recipe` |
 | `home.card.a11y.delete` | `components/RecipeCard.tsx:188,284` (a11y) | (a11y) Context action / button to delete a recipe. | `Delete recipe` |
 | `home.card.a11y.brew` | `components/RecipeCard.tsx:190` (a11y) | (a11y) Context action to brew a recipe. | `Brew this recipe` |
+| `home.card.a11y.share` | `components/RecipeCard.tsx:196` (a11y) | (a11y) Context action mirroring the swipe tray's SHARE tile, which a screen reader cannot reach. | `Share recipe` |
+| `home.card.a11y.write` | `components/RecipeCard.tsx:197` (a11y) | (a11y) Context action mirroring the swipe tray's WRITE tile. | `Write recipe to card` |
 | `home.swipe.brew.caption` | `components/SwipeableRecipeRow.tsx` (`caption="BREW"`) | Doto caption on the action-tray (swipe-right) brew tile. | `BREW` |
 | `home.swipe.brew.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Action-tray brew tile. `${...}` is the recipe name. | `Brew ${recipe.displayName()}` |
 | `home.swipe.share.caption` | `components/SwipeableRecipeRow.tsx` (`caption="SHARE"`) | Doto caption on the action-tray (swipe-right) share tile. | `SHARE` |
@@ -553,7 +555,7 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.confirm.delete` | `app/brewHistory.tsx:193` | Confirm-delete button label. | `Delete` |
 | `brewHistory.confirm.keep.a11y` | `app/brewHistory.tsx:197` (a11y) | (a11y) Cancel button. | `Keep this brew` |
 | `brewHistory.confirm.keep` | `app/brewHistory.tsx:200` | Cancel button label. | `Keep this brew` |
-| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:41` (a11y) | (a11y) / title of a brew-history row. `${...}` is the recipe name. | `${brew.recipeName}` |
+| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:51` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${duration}, ended early, stopped, no trace kept` |
 | `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:60` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
 | `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:77` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
 | `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:83` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |

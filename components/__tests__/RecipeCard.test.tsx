@@ -746,6 +746,44 @@ describe("RecipeCard", () => {
         expect(onBrew).toHaveBeenCalledTimes(1);
     });
 
+    it("offers the tray's share and write verbs to a screen reader", async () => {
+        // SHARE and WRITE live only in the swipe tray, whose tiles sit inside
+        // this card's accessibility group and behind a pan gesture. Without
+        // these two actions there is no way at all for a VoiceOver or TalkBack
+        // user to hand out a link or put a recipe on a card.
+        const onShare = jest.fn();
+        const onWrite = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onShare={onShare} onWrite={onWrite}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "share", label: "Share recipe"},
+                {name: "write", label: "Write recipe to card"}
+            ])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "share"}});
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "write"}});
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onWrite).toHaveBeenCalledTimes(1);
+    });
+
+    it("publishes no share or write action when the screen cannot perform them", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onDelete={jest.fn()}/>
+        );
+        const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
+            {name: string}[]).map((a) => a.name);
+        expect(names).toContain("delete");
+        expect(names).not.toContain("share");
+        expect(names).not.toContain("write");
+    });
+
     it("offers no brew action when there is nothing to brew on", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}

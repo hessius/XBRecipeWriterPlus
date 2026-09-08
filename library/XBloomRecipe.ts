@@ -1,6 +1,8 @@
 import Pour, {POUR_PATTERN} from "./Pour";
 import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
-import {BYPASS_DEFAULT_TEMPERATURE} from "@/library/bypassLimits";
+import {
+    BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
+} from "@/library/bypassLimits";
 import type {ImportSource} from "./importInput";
 
 export class XBloomRecipe {
@@ -79,14 +81,18 @@ export class XBloomRecipe {
             const rawBypassVolume = this.xbRecipeJSON.recipeVo.bypassVolume;
             const rawBypassTemp   = this.xbRecipeJSON.recipeVo.bypassTemp;
 
-            // Accept volume/temp only when they are finite and within the real
-            // machine limits (api/_lib/payload.ts). An out-of-range value is
-            // far more likely to be a schema change than a real recipe, and
-            // silently applying it would brew someone an unexpected dilution.
+            // Accept volume/temp only when they are finite and within the range
+            // the editor itself allows -- the shared `bypassLimits` constants,
+            // not a restatement of them. An imported value outside that range
+            // would otherwise walk straight past the editor's own constraint
+            // and reach `Machine.brew` as a command argument the hardware has
+            // no meaning for. An out-of-range value is far more likely to be a
+            // schema change than a real recipe, and silently applying it would
+            // brew someone an unexpected dilution.
             const bypassVolumeValid = typeof rawBypassVolume === "number" && Number.isFinite(rawBypassVolume)
-                && rawBypassVolume >= 0 && rawBypassVolume <= 500;
+                && rawBypassVolume >= BYPASS_VOLUME.min && rawBypassVolume <= BYPASS_VOLUME.max;
             const bypassTempValid = typeof rawBypassTemp === "number" && Number.isFinite(rawBypassTemp)
-                && rawBypassTemp >= 0 && rawBypassTemp <= 100;
+                && rawBypassTemp >= BYPASS_TEMPERATURE.min && rawBypassTemp <= BYPASS_TEMPERATURE.max;
 
             // Volume has no safe default: guessing one would brew someone an
             // unexpected dilution, so an implausible volume drops the bypass

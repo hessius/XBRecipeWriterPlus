@@ -259,6 +259,7 @@ export default function SwipeableRecipeRow({
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
                             brewShortcut={brewShortcut} onBrew={onBrew}
+                            onShare={onShare} onWrite={onWrite}
                             onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
         </View>

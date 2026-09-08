@@ -132,7 +132,9 @@ describe("brew history", () => {
         // side would produce a test failure rather than a silent 'brew not
         // found' screen.
         await renderWithProviders(<BrewHistory />);
-        await fireEvent.press(screen.getByLabelText("Ethiopia Guji"));
+        // The row's label carries the whole summary, not just the name, so
+        // that repeated brews of one recipe are distinguishable to a reader.
+        await fireEvent.press(screen.getByLabelText(/^Ethiopia Guji,/));
         expect(mockPush).toHaveBeenCalledWith("/brewRecord?id=a");
     });
 

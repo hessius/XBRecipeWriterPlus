@@ -149,6 +149,26 @@ describe("bypass water", () => {
         expect(p.bypassTemp).toBe(90);
     });
 
+    it("sends the canonical 85 C when bypass is off, whatever the recipe kept", () => {
+        // The editor preserves the last bypass values while bypass is off, so
+        // that re-enabling it does not lose the setting. Those values must not
+        // reach the wire: an "off" payload that varies with an invisible field
+        // makes an already-shared recipe compare unequal to its own snapshot
+        // and mints a duplicate row in the service account on every re-share.
+        const r = drip();
+        r.bypassEnabled = false;
+        r.bypassVolume  = 45;
+        r.bypassTemp    = 60;
+        const p = buildSharePayload(r);
+        expect(p.bypassTemp).toBe(85);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.isEnableBypassWater).toBe(2);
+        // The same recipe with a different preserved temperature must snapshot
+        // identically, which is the property the churn guarantee rests on.
+        r.bypassTemp = 90;
+        expect(canonicalSnapshot(buildSharePayload(r))).toBe(canonicalSnapshot(p));
+    });
+
     it("sends exactly {bypassTemp:85, bypassVolume:0, isEnableBypassWater:2} when bypass is off", () => {
         // The no-churn guarantee: a recipe with bypass off must produce a
         // payload byte-identical to the hardcoded constants it replaces, so

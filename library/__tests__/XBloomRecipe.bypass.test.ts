@@ -94,8 +94,8 @@ it("falls back to bypass off when bypassVolume is out of range", () => {
 });
 
 it("falls back to 85 C when bypassTemp is out of range, but keeps the bypass", () => {
-    // 101 exceeds the 0–100 limit, but temperature has a safe default (85 C)
-    // so the bypass is kept rather than dropped entirely.
+    // 101 exceeds the machine's range, but temperature has a safe default
+    // (85 C) so the bypass is kept rather than dropped entirely.
     const recipe = buildRecipe(makeRecipeVo({
         isEnableBypassWater: 1,
         bypassVolume:        50,
@@ -192,4 +192,46 @@ describe("bypass import, relaxed temperature", () => {
         expect(recipe.bypassEnabled).toBe(false);
         expect(recipe.bypassVolume).toBe(0);
     });
+});
+
+it("rejects a bypass temperature the editor itself would not allow", () => {
+    // The accepted range is `BYPASS_TEMPERATURE` (39-99 C), not 0-100. A cloud
+    // recipe carrying 20 C would otherwise walk past the editor's constraint
+    // and be handed to `Machine.brew` as an argument the kettle has no meaning
+    // for -- an imported recipe must not be able to do what an edited one
+    // cannot.
+    for (const temp of [0, 20, 38, 100]) {
+        const recipe = buildRecipe(makeRecipeVo({
+            isEnableBypassWater: 1,
+            bypassVolume:        50,
+            bypassTemp:          temp
+        }));
+
+        expect(recipe!.bypassEnabled).toBe(true);
+        expect(recipe!.bypassTemp).toBe(85);
+    }
+});
+
+it("accepts both ends of the allowed temperature range unchanged", () => {
+    for (const temp of [39, 99]) {
+        const recipe = buildRecipe(makeRecipeVo({
+            isEnableBypassWater: 1,
+            bypassVolume:        50,
+            bypassTemp:          temp
+        }));
+
+        expect(recipe!.bypassTemp).toBe(temp);
+    }
+});
+
+it("drops a bypass whose volume exceeds what the editor allows", () => {
+    // Volume has no safe default -- guessing one brews an unexpected dilution
+    // -- so an out-of-range volume drops the bypass rather than clamping it.
+    const recipe = buildRecipe(makeRecipeVo({
+        isEnableBypassWater: 1,
+        bypassVolume:        501,
+        bypassTemp:          60
+    }));
+
+    expect(recipe!.bypassEnabled).toBe(false);
 });

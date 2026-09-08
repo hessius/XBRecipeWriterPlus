@@ -13,6 +13,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
+import {planFromPours} from "@/library/brew/BrewRecord";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -104,6 +105,24 @@ describe("brew record", () => {
     it("names the time it held", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByText(/\+14 S/)).toBeTruthy();
+    });
+
+    it("takes the planned length from the stored plan, not from the clock", async () => {
+        // `heldSeconds` is the overrun and is clamped at zero, so run-minus-held
+        // returns the plan's length only for a brew that overran; for one that
+        // ended early or stalled it returns the *run's* length and the plan line
+        // is drawn against stages that say otherwise. The snapshot knows.
+        const stages = planFromPours(twoPours.pours);
+        // Two 40 ml pours at 4 ml/s with 10 s pauses: 2 x (10 + 10) = 40 s.
+        mockOpened = {
+            record: {...record, plan: stages},
+            samples: [{at: 0, water: 0, cup: 0, pour: 1},
+                      {at: 228_000, water: 250, cup: 244, pour: 2}]
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        // 228 s run against a 40 s plan, not the +14 S the clock arithmetic
+        // would have produced from the same record.
+        expect(screen.getByText(/\+188 S/)).toBeTruthy();
     });
 
     it("offers one way back, not two that go to the same place", async () => {
