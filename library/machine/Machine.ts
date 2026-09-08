@@ -1,12 +1,13 @@
 import {
-    BREW_INFO_ROUNDS, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS,
-    INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
+    BREW_INFO_ROUNDS, ECHO_FRAMES, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS,
+    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 import {RadioUnavailableError} from "./errors";
 
+import {frameLogText, historyLine} from "./frameLog";
 import {
     ascii,
     buildBypassDose,
@@ -659,8 +660,20 @@ export default class Machine {
         direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
     ): void {
         if (parsed.kind === "waterWeight" || parsed.kind === "cupWeight") return;
-        this.frameHistory.push({at: Date.now(), direction, frame: frame.slice(), parsed, source});
+        const entry = {at: Date.now(), direction, frame: frame.slice(), parsed, source};
+        this.frameHistory.push(entry);
         if (this.frameHistory.length > FRAME_HISTORY_LIMIT) this.frameHistory.shift();
+        if (ECHO_FRAMES) console.log(`[xbrw] ${historyLine(entry)}`);
+    }
+
+    /**
+     * The frames of this session since `from`, as text, oldest first.
+     *
+     * Taken by wall clock rather than by index because the caller is a brew,
+     * which knows when it started and nothing about the ring behind it.
+     */
+    public frameLogSince(from: number): string {
+        return frameLogText(this.frameHistory.filter((entry) => entry.at >= from));
     }
 
     onPhase(listener: (phase: BrewPhase) => void): () => void {

@@ -14,9 +14,11 @@ import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
-import type {FrameLogEntry} from "@/library/machine/Machine";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
-import {MACHINE_STATE, type MachineInfo, type Notification} from "@/library/machine/protocol";
+import {
+    frameLogText, readingOf, stateName, toHex, waterVolumeOf, WATER_VOLUME_CODE
+} from "@/library/machine/frameLog";
+import type {MachineInfo, Notification} from "@/library/machine/protocol";
 
 /**
  * The warning gate.
@@ -48,7 +50,6 @@ const TIER_LABEL: Record<Tier, string> = {
 /** Newest last. Telemetry is summarized, so 500 meaningful frames fits safely. */
 const LOG_LIMIT = 500;
 const TELEMETRY_FLUSH_MS = 250;
-const WATER_VOLUME_CODE = 40523;
 
 type LogEntry = {at: string; direction: string; hex: string; reading: string};
 type MachineStateReading = {value: number; changed: boolean; at: string};
@@ -66,23 +67,6 @@ type TelemetrySnapshot = {
 };
 
 const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, tankSeen: 0, infoSeen: 0};
-
-const STATE_NAMES = new Map<number, string>([
-    [MACHINE_STATE.IDLE, "idle"],
-    [MACHINE_STATE.NO_WATER, "no_water"],
-    [MACHINE_STATE.NO_BEANS, "no_beans"],
-    [MACHINE_STATE.BREWING, "brewing"],
-    [MACHINE_STATE.LOADING, "loading"],
-    [MACHINE_STATE.AWAITING_CONFIRM, "awaiting_confirm"],
-    [MACHINE_STATE.ARMED, "armed"],
-    [MACHINE_STATE.STARTING, "starting"],
-    [MACHINE_STATE.BREWING_SUB, "brewing (sub)"],
-    [MACHINE_STATE.READY, "ready"],
-    [MACHINE_STATE.BREWING_ALT, "brewing"],
-    [MACHINE_STATE.COMPLETE, "complete (Easy idle)"],
-    [MACHINE_STATE.SAVING_SLOTS, "saving_slots"],
-    [MACHINE_STATE.SLOTS_SAVED, "slots_saved"]
-]);
 
 /**
  * Parse a pasted frame, or null if it is not one.
@@ -102,37 +86,11 @@ export function parseRawFrame(input: string): Uint8Array | null {
     return bytes;
 }
 
-function readingOf(parsed: Notification): string {
-    switch (parsed.kind) {
-        case "status":      return `state 0x${parsed.state.toString(16).padStart(2, "0")} ${stateName(parsed.state)}`;
-        case "event":       return `event ${parsed.code}` +
-                                   (parsed.value === undefined ? "" : ` (${parsed.value})`);
-        case "waterWeight": return `water ${parsed.grams.toFixed(1)} g`;
-        case "cupWeight":   return `cup ${parsed.grams.toFixed(1)} g`;
-        case "info":        return `${parsed.model} ${parsed.firmware} ${parsed.mode}`;
-        default:            return "";
-    }
-}
-
-function stateName(state: number): string {
-    return STATE_NAMES.get(state) ?? "unknown";
-}
-
-function toHex(frame: Uint8Array): string {
-    return Array.from(frame, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
-}
-
 function isTelemetry(parsed: Notification): boolean {
     return parsed.kind === "waterWeight"
         || parsed.kind === "cupWeight"
         || parsed.kind === "info"
         || (parsed.kind === "event" && parsed.code === WATER_VOLUME_CODE);
-}
-
-function waterVolumeOf(frame: Uint8Array): number | undefined {
-    const payload = frame.subarray(10, Math.max(10, frame.length - 2));
-    if (payload.length < 4) return undefined;
-    return new DataView(payload.buffer, payload.byteOffset, 4).getFloat32(0, true);
 }
 
 function telemetryText(snapshot: TelemetrySnapshot): string {
@@ -152,20 +110,6 @@ function stateText(state: MachineStateReading | null): string {
     if (state === null) return "Machine state: none yet";
     const hex = `0x${state.value.toString(16).padStart(2, "0")}`;
     return `Machine state: ${hex} ${stateName(state.value)} · ${state.changed ? "changed" : "repeated"} ${state.at}`;
-}
-
-/**
- * One retained-history entry as a log line, in the same shape and clock as the
- * live frame log: `HH:MM:SS.mmm  arrow  hex  reading`. The channel is named on
- * the arrow, and a sent frame carries no decoded reading.
- */
-function historyLine(entry: FrameLogEntry): string {
-    const at = new Date(entry.at).toISOString().slice(11, 23);
-    const arrow = entry.direction === "sent"
-        ? "→"
-        : entry.source === undefined ? "←" : `←${entry.source}`;
-    const reading = entry.direction === "sent" ? "" : readingOf(entry.parsed);
-    return `${at}  ${arrow}  ${toHex(entry.frame)}  ${reading}`;
 }
 
 function appendLog(
@@ -424,7 +368,7 @@ export default function MachineConsole() {
         const block = [
             ...connectionLines,
             "",
-            ...machine.frameHistory.map(historyLine)
+            frameLogText(machine.frameHistory)
         ].join("\n");
         void Clipboard.setStringAsync(block).then(() => notify({
             tone:    "success",

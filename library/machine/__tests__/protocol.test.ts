@@ -112,6 +112,30 @@ describe("reading what the machine says", () => {
         frame[frame.length - 1] ^= 0xFF;
         expect(parseNotification(Uint8Array.from(frame)).kind).toBe("unknown");
     });
+
+    /**
+     * The water and cup streams are matched on their type byte alone, so the
+     * command byte above them is not consulted. Event 40523 is `0x9E4B`, whose
+     * low byte is the water stream's `0x4B`, and it therefore decodes as a
+     * weight rather than as an event 40523 — which is why the console's
+     * tank-level readout has never had anything to show.
+     *
+     * Recorded rather than fixed: on this firmware 40523 *is* the water
+     * stream, so the two readings are the same frame under two names, and
+     * "correcting" the parser would silently break the brew trace. The point
+     * of writing it down is the neighbour, 40522 `0x9E4A` — ERROR_NO_WATER —
+     * which is one bit away from the flow reading and is treated as a
+     * terminal fault.
+     */
+    it("decodes 40523 as a water weight, because the type byte alone selects the stream", () => {
+        const frame = Uint8Array.from(notification(40523 & 0xFF, 40523 >> 8, float32(104000)));
+        expect(parseNotification(frame)).toEqual({kind: "waterWeight", grams: 104});
+    });
+
+    it("still decodes its neighbour 40522 as the fault event it is", () => {
+        const frame = Uint8Array.from(notification(40522 & 0xFF, 40522 >> 8, [1]));
+        expect(parseNotification(frame)).toEqual({kind: "event", code: 40522, value: 1});
+    });
 });
 
 describe("more than one frame in a packet", () => {

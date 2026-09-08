@@ -12,7 +12,9 @@ import type {BrewPhase} from "@/library/machine/Machine";
 import type Recipe from "@/library/Recipe";
 
 /** The part of `BrewDatabase` a run writes to. Injected, so tests need no SQLite. */
-export type BrewStore = {insert: (record: BrewRecord, samples: BrewSample[]) => void};
+export type BrewStore = {
+    insert: (record: BrewRecord, samples: BrewSample[], frames?: string) => void;
+};
 
 /** Four times a second: smooth for a four-minute line, cheap for layout. */
 const PUBLISH_MS = 250;
@@ -112,7 +114,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         const active = new BrewRecorder({
             machine,
             recipe: started,
-            onRecord: (record, taken) => database.current?.insert(record, taken)
+            onRecord: (record, taken, frames) => database.current?.insert(record, taken, frames)
         });
         recorder.current = active;
         active.start();

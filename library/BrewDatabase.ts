@@ -76,6 +76,10 @@ class BrewDatabase {
             CREATE TABLE IF NOT EXISTS brew_samples (
                 brewId TEXT PRIMARY KEY NOT NULL,
                 stream TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS brew_frames (
+                brewId TEXT PRIMARY KEY NOT NULL,
+                frames TEXT NOT NULL
             );`);
         // Rows written before `pouringAt` existed keep the 0 default, which
         // reads as "no first drop recorded" and falls back to `startedAt`.
@@ -109,7 +113,14 @@ class BrewDatabase {
         }
     }
 
-    public insert(record: BrewRecord, samples: BrewSample[]): void {
+    /**
+     * @param frames the machine's frame log covering this brew, as text. Kept
+     * because `Machine.frameHistory` lives in memory and dies with a JS
+     * reload, which is how the first field capture of a false out-of-water
+     * report was lost — after the brew had already ended and there was nothing
+     * left to ask.
+     */
+    public insert(record: BrewRecord, samples: BrewSample[], frames = ""): void {
         // One transaction, so a brew never half-exists: a record with a
         // truncated stream would draw a trace that stops in mid-air.
         this.db.withTransactionSync(() => {
@@ -136,6 +147,12 @@ class BrewDatabase {
                 this.db.runSync(
                     "INSERT INTO brew_samples (brewId, stream) VALUES (?, ?);",
                     [record.id, JSON.stringify(samples)]
+                );
+            }
+            if (frames.length > 0) {
+                this.db.runSync(
+                    "INSERT INTO brew_frames (brewId, frames) VALUES (?, ?);",
+                    [record.id, frames]
                 );
             }
         });
@@ -168,8 +185,17 @@ class BrewDatabase {
         }
     }
 
+    /** The frame log covering a brew, or empty if none was kept or it expired. */
+    public frames(id: string): string {
+        const rows = this.db.getAllSync<{frames: string}>(
+            "SELECT frames FROM brew_frames WHERE brewId = ?;", [id]
+        );
+        return rows.length > 0 ? rows[0].frames : "";
+    }
+
     public remove(id: string): void {
         this.db.withTransactionSync(() => {
+            this.db.runSync("DELETE FROM brew_frames WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brew_samples WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brews WHERE id = ?;", [id]);
         });
@@ -179,6 +205,7 @@ class BrewDatabase {
         // One transaction, not a loop over remove(): a half-cleared history
         // (some brews gone, some still there) is worse than a failed clear.
         this.db.withTransactionSync(() => {
+            this.db.runSync("DELETE FROM brew_frames");
             this.db.runSync("DELETE FROM brew_samples");
             this.db.runSync("DELETE FROM brews");
         });
@@ -200,6 +227,7 @@ class BrewDatabase {
         if (expiring.length === 0) return;
         this.db.withTransactionSync(() => {
             expiring.forEach((brew) => {
+                this.db.runSync("DELETE FROM brew_frames WHERE brewId = ?;", [brew.id]);
                 this.db.runSync("DELETE FROM brew_samples WHERE brewId = ?;", [brew.id]);
                 this.db.runSync("UPDATE brews SET hasStream = 0 WHERE id = ?;", [brew.id]);
             });

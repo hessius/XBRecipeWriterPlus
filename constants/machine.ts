@@ -212,3 +212,14 @@ export const LIFT_DROP_G = 10;
  * arrays) that can never grow without bound.
  */
 export const FRAME_HISTORY_LIMIT = 256;
+
+/**
+ * Whether every retained frame is also echoed to the Metro console.
+ *
+ * On in development and off under test, where two thousand frames of echo
+ * would bury the assertions. It exists because the in-memory history dies with
+ * a JS reload, and the first field capture of a false out-of-water was lost
+ * exactly that way; the terminal's scrollback outlives the app.
+ */
+export const ECHO_FRAMES =
+    typeof __DEV__ !== "undefined" && __DEV__ && process.env.NODE_ENV !== "test";

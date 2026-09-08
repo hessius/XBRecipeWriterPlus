@@ -59,6 +59,7 @@ jest.mock("expo-file-system", () => {
 });
 
 jest.mock("expo-clipboard", () => ({
+    setStringAsync:         jest.fn(async () => true),
     hasStringAsync:         jest.fn(async () => false),
     getStringAsync:         jest.fn(async () => ""),
     isPasteButtonAvailable: false,

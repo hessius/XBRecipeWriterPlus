@@ -2,6 +2,7 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
 
@@ -18,7 +19,12 @@ import {planFromPours} from "@/library/brew/BrewRecord";
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
-type OpenResult = {record: StoredBrew; samples: BrewSample[]} | null;
+/**
+ * `frames` is optional here only: the real `open()` always returns one, but a
+ * test that is not about the frame log should not have to say so.
+ */
+type OpenResult =
+    {record: StoredBrew; samples: BrewSample[]; frames?: string} | null;
 let mockOpened: OpenResult = null;
 
 // Settable per test — defaults to the `id` case; set to `{latest: "1"}` for
@@ -477,5 +483,43 @@ describe("brew record's stage detail", () => {
         await fireEvent.press(screen.getByLabelText("Save as image"));
         await waitFor(() => expect(screen.queryByTestId("trace-band")).toBeNull());
         await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
+    });
+});
+
+/**
+ * The frame log is the only account of what the machine actually said, and it
+ * is kept per brew because the machine's own is in memory and dies with a JS
+ * reload. It is offered here rather than on the console because by the time
+ * anyone knows a brew went wrong, the brew is over and this is the screen they
+ * are looking at.
+ */
+describe("the frame log of a brew", () => {
+    const log = "18:51:44.123  ←  58 02 07 4A 9E  event 40522 (1)";
+
+    beforeEach(() => {
+        mockParams = {id: "brew-1"};
+        (Clipboard.setStringAsync as jest.Mock).mockClear();
+    });
+
+    it("copies what the machine said, for a brew that kept a log", async () => {
+        mockOpened = {record: {...record, outcome: "failed", failure: "noWater"},
+                      samples: [], frames: log};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Copy the frame log"));
+
+        expect(Clipboard.setStringAsync).toHaveBeenCalledWith(log);
+    });
+
+    /**
+     * Offering a copy that yields an empty clipboard reads as the app having
+     * lost the log rather than never having had one — a brew from before this
+     * existed, or one whose log the retention sweep has taken.
+     */
+    it("offers nothing to copy for a brew with no log", async () => {
+        mockOpened = {record, samples: [], frames: ""};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
     });
 });

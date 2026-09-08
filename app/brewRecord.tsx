@@ -7,7 +7,10 @@ import {Text, XStack, YStack} from "tamagui";
 import BrewSummary from "@/components/BrewSummary";
 import StageDetail from "@/components/StageDetail";
 import DotMatrixText from "@/components/DotMatrixText";
+import * as Clipboard from "expo-clipboard";
+
 import ExportButton from "@/components/ExportButton";
+import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
@@ -25,6 +28,21 @@ import {SCREEN_PADDING} from "@/constants/layout";
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
 
 let sharedLookup: RecipeLookup | undefined;
+/**
+ * Put the machine's own account of this brew on the clipboard.
+ *
+ * Raw frames rather than a summary: the whole point of keeping them is that
+ * nobody knew in advance which byte would matter, and a report of a machine
+ * that behaved impossibly is only worth anything if it carries what the
+ * machine actually said.
+ */
+function copyFrames(frames: string): void {
+    void Clipboard.setStringAsync(frames).then(() => notify({
+        tone:    "success",
+        message: "Frame log copied"
+    }));
+}
+
 function getSharedLookup(): RecipeLookup {
     if (sharedLookup === undefined) sharedLookup = new RecipeDatabase();
     return sharedLookup;
@@ -117,6 +135,10 @@ export default function BrewRecord({recipeLookup}: Props) {
     }
 
     const {record, samples} = opened;
+    // `?? ""` because a record opened before the frame log existed — and any
+    // stand-in for the store — simply has no log, which is a brew with nothing
+    // to copy rather than an error.
+    const frames = opened.frames ?? "";
     const accent = record.accent;
 
     // Measured from the first drop, because that is where the sample stream is
@@ -218,6 +240,17 @@ export default function BrewRecord({recipeLookup}: Props) {
                 <ExportButton label="Export the data" busy={busy}
                               onPress={() => void shareData()} />
             </XStack>
+            {/* Only when there is one to copy. A brew recorded before this
+                existed, or one whose log the retention sweep has taken, would
+                otherwise offer a copy that yields an empty clipboard — which
+                reads as the app having lost it rather than never having had
+                it. */}
+            {frames.length > 0 && (
+                <XStack paddingHorizontal={SCREEN_PADDING}>
+                    <ExportButton label="Copy the frame log" busy={false}
+                                  onPress={() => copyFrames(frames)} />
+                </XStack>
+            )}
             </ScrollView>
         </YStack>
     );

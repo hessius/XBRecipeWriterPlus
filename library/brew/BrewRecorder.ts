@@ -14,12 +14,20 @@ import {NOISE_FLOOR_ML} from "./stalls";
 export type RecorderMachine = {
     onNotification: (listener: (parsed: Notification) => void) => () => void;
     onPhase: (listener: (phase: BrewPhase) => void) => () => void;
+    /**
+     * The frames this machine has seen since a moment, as text.
+     *
+     * Optional so the narrow test literals above stay valid, and so a machine
+     * that keeps no history is simply a brew with no log rather than a crash
+     * at the one moment — the end of a brew — where a crash costs the record.
+     */
+    frameLogSince?: (from: number) => string;
 };
 
 export type RecorderOptions = {
     machine: RecorderMachine;
     recipe: Recipe;
-    onRecord: (record: BrewRecord, samples: BrewSample[]) => void;
+    onRecord: (record: BrewRecord, samples: BrewSample[], frames: string) => void;
     /** Injected so a test can advance time by hand rather than by waiting. */
     now?: () => number;
     newId?: () => string;
@@ -295,7 +303,10 @@ export default class BrewRecorder {
         // screen mid-pour with its sampling timer still running. Losing the
         // record is bad; losing the end of the brew is worse.
         try {
-            this.options.onRecord(record, [...this.collected]);
+            this.options.onRecord(
+                record, [...this.collected],
+                this.options.machine.frameLogSince?.(record.startedAt) ?? ""
+            );
         } catch (error) {
             console.warn("Could not keep this brew.", error);
         }

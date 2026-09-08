@@ -528,3 +528,81 @@ describe("BrewRecorder", () => {
         expect(records[0].record.stageWater).toEqual([25, 0]);
     });
 });
+
+/**
+ * A record is written when the brew ends, and by then the only account of what
+ * the machine actually said is the machine's own in-memory ring — which the
+ * next JS reload will empty. The recorder is the one thing that knows the
+ * brew's window, so it is the one thing that can take the log at the right
+ * moment.
+ */
+describe("the frame log a record carries", () => {
+    function machineWithLog(log: string) {
+        let notify: (n: Notification) => void = () => {};
+        let phase: (p: BrewPhase) => void = () => {};
+        const asked: number[] = [];
+        const machine: RecorderMachine = {
+            onNotification: (l) => { notify = l; return () => { notify = () => {}; }; },
+            onPhase: (l) => { phase = l; return () => { phase = () => {}; }; },
+            frameLogSince: (from) => { asked.push(from); return log; }
+        };
+        return {machine, asked, phase: (p: BrewPhase) => phase(p), notify};
+    }
+
+    it("is taken from the machine and handed to the store", () => {
+        const fake = machineWithLog("18:51:44.123  ←  58 02 07  event 40522 (1)");
+        const seen: string[] = [];
+        const recorder = new BrewRecorder({
+            machine: fake.machine,
+            recipe: recipe(),
+            now: () => 1_000_000,
+            newId: () => "brew-1",
+            onRecord: (_record, _samples, frames) => seen.push(frames ?? "")
+        });
+        recorder.start();
+        built.push(recorder);
+
+        fake.phase({name: "failed", reason: "noWater"});
+
+        expect(seen).toEqual(["18:51:44.123  ←  58 02 07  event 40522 (1)"]);
+    });
+
+    it("asks for the log from when the brew started, not from the link", () => {
+        const fake = machineWithLog("");
+        const recorder = new BrewRecorder({
+            machine: fake.machine,
+            recipe: recipe(),
+            now: () => 1_000_000,
+            newId: () => "brew-1",
+            onRecord: () => {}
+        });
+        recorder.start();
+        built.push(recorder);
+
+        fake.phase({name: "done"});
+
+        expect(fake.asked).toEqual([1_000_000]);
+    });
+
+    it("records a brew from a machine that keeps no log at all", () => {
+        let phase: (p: BrewPhase) => void = () => {};
+        const bare: RecorderMachine = {
+            onNotification: () => () => {},
+            onPhase: (l) => { phase = l; return () => {}; }
+        };
+        const seen: (string | undefined)[] = [];
+        const recorder = new BrewRecorder({
+            machine: bare,
+            recipe: recipe(),
+            now: () => 1_000_000,
+            newId: () => "brew-1",
+            onRecord: (_record, _samples, frames) => seen.push(frames)
+        });
+        recorder.start();
+        built.push(recorder);
+
+        phase({name: "done"});
+
+        expect(seen).toEqual([""]);
+    });
+});

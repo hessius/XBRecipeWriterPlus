@@ -20,6 +20,7 @@ function fakeStore(seed: StoredBrew[] = []) {
         all: () => rows,
         get: (id: string) => rows.find((r) => r.id === id) ?? null,
         samples: (_id: string): BrewSample[] => [{at: 0, water: 0, cup: 0, pour: 1}],
+        frames: (_id: string): string => "",
         remove: (id: string) => { rows = rows.filter((r) => r.id !== id); },
         clear: () => { rows = []; },
         insert: (_r: BrewRecord, _s: BrewSample[]) => {},

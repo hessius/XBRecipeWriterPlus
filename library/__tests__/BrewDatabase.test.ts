@@ -10,11 +10,13 @@ import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
  */
 type BrewRow = Record<string, string | number | null>;
 type SampleRow = {brewId: string; stream: string};
+type FrameRow = {brewId: string; frames: string};
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => {
         const brews: BrewRow[] = [];
         const samples: SampleRow[] = [];
+        const frames: FrameRow[] = [];
         return {
             execSync: () => {
                 // CREATE TABLE / PRAGMA only; in memory there is nothing to do.
@@ -22,6 +24,7 @@ jest.mock("expo-sqlite", () => ({
             withTransactionSync: (task: () => void) => {
                 const brewSnapshot = brews.map((row) => ({...row}));
                 const sampleSnapshot = samples.map((row) => ({...row}));
+                const frameSnapshot = frames.map((row) => ({...row}));
                 try {
                     task();
                 } catch (error) {
@@ -29,6 +32,8 @@ jest.mock("expo-sqlite", () => ({
                     brews.push(...brewSnapshot);
                     samples.length = 0;
                     samples.push(...sampleSnapshot);
+                    frames.length = 0;
+                    frames.push(...frameSnapshot);
                     throw error;
                 }
             },
@@ -41,6 +46,14 @@ jest.mock("expo-sqlite", () => ({
                     brews.push(row);
                 } else if (/^\s*INSERT INTO brew_samples/i.test(source)) {
                     samples.push({brewId: params[0] as string, stream: params[1] as string});
+                } else if (/^\s*INSERT INTO brew_frames/i.test(source)) {
+                    frames.push({brewId: params[0] as string, frames: params[1] as string});
+                } else if (/^\s*DELETE FROM brew_frames WHERE brewId/i.test(source)) {
+                    for (let i = frames.length - 1; i >= 0; i -= 1) {
+                        if (frames[i].brewId === params[0]) frames.splice(i, 1);
+                    }
+                } else if (/^\s*DELETE FROM brew_frames\s*$/i.test(source)) {
+                    frames.length = 0;
                 } else if (/^\s*UPDATE brews SET hasStream/i.test(source)) {
                     const row = brews.find((b) => b.id === params[0]);
                     if (row) row.hasStream = 0;
@@ -60,6 +73,9 @@ jest.mock("expo-sqlite", () => ({
             getAllSync: (source: string, params: (string | number)[] = []) => {
                 if (/FROM brew_samples/i.test(source)) {
                     return samples.filter((s) => s.brewId === params[0]);
+                }
+                if (/FROM brew_frames/i.test(source)) {
+                    return frames.filter((f) => f.brewId === params[0]);
                 }
                 const ordered = [...brews]
                     .sort((a, b) => (b.startedAt as number) - (a.startedAt as number));
@@ -244,5 +260,56 @@ describe("the plan and the delivered water", () => {
         const [back] = db.all();
         expect(back.plan).toBeUndefined();
         expect(back.stageWater).toBeUndefined();
+    });
+});
+
+/**
+ * The frame log is kept per brew because the machine's own history is in
+ * memory and dies with a JS reload — which is exactly how the first field
+ * capture of a false out-of-water report was lost, after the brew that
+ * produced it had already ended.
+ */
+describe("the frame log of a brew", () => {
+    const log = "18:51:44.123  ←  58 02 07 0C  state 0x0c no_water";
+
+    it("comes back with the brew it belongs to", () => {
+        const db = new BrewDatabase();
+        db.insert(record(), stream, log);
+        expect(db.frames("brew-1")).toBe(log);
+    });
+
+    it("is empty for a brew recorded without one", () => {
+        const db = new BrewDatabase();
+        db.insert(record(), stream);
+        expect(db.frames("brew-1")).toBe("");
+    });
+
+    it("goes when the brew it belongs to is deleted", () => {
+        const db = new BrewDatabase();
+        db.insert(record(), stream, log);
+        db.remove("brew-1");
+        expect(db.frames("brew-1")).toBe("");
+    });
+
+    it("goes when the history is cleared", () => {
+        const db = new BrewDatabase();
+        db.insert(record(), stream, log);
+        db.clear();
+        expect(db.frames("brew-1")).toBe("");
+    });
+
+    /**
+     * Swept with the stream rather than kept forever: a log is a few tens of
+     * kilobytes of hex, and the record it hangs off is the thing history is
+     * made of. The retention setting already says how much detail the user
+     * wants to keep.
+     */
+    it("expires with the stream it was recorded beside", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "old", startedAt: 1}), stream, log);
+        db.insert(record({id: "new", startedAt: 2}), stream, log);
+        db.sweep(1);
+        expect(db.frames("old")).toBe("");
+        expect(db.frames("new")).toBe(log);
     });
 });
