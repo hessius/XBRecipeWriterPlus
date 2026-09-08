@@ -36,7 +36,7 @@ usually a mistake, but they are surfaced here so you can change them deliberatel
    human typed — a recipe name, an error message — stays in Inter and must not be
    rendered through here."*
    - **Doto** (the dot-matrix font) is rendered UPPERCASE, with no trailing full
-     stop, for machine readouts and system labels: `ML TOTAL`, `AUTO FIX`,
+     stop, for machine readouts and system labels: `ML BREW`, `AUTO FIX`,
      `WATER`, `NO BREWS YET`, `BREW`, `WRITE`, `SAVE`, `SEND`, `POUR 2 OF 4`.
      When you edit a Doto string, keep it short and caption-like; a sentence with
      punctuation does not belong here.
@@ -179,7 +179,7 @@ from `library/Recipe.ts`.
 | `editor.field.grind.tooFine.imported` | `app/editRecipe.tsx:263` | Variant shown for an imported recipe ground finer than a card allows. `${fineBand.longLabel}` is a human band label; the rest is `editor.field.grind.tooFine`. | `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}` |
 | `editor.field.grind.setTo.a11y` | `app/editRecipe.tsx:266` (a11y) | (a11y) Button that raises the grind to the minimum. `${CARD_GRIND_MIN}` is 40. | `Set grind size to ${CARD_GRIND_MIN}` |
 | `editor.field.grind.setTo` | `app/editRecipe.tsx:271` | Doto label on that button. `${CARD_GRIND_MIN}` is 40. | `SET TO ${CARD_GRIND_MIN}` |
-| `editor.field.mlTotal` | `app/editRecipe.tsx:232` | Doto caption under the target-volume figure. | `ML TOTAL` |
+| `editor.brew.total.label` | `app/editRecipe.tsx:238` | Doto caption under the target-volume figure on the BREW deck. | `ML BREW` |
 | `editor.cup.xpod` | `app/editRecipe.tsx:45` (`CUP_OPTIONS`) | Doto segment for the xPod cup type. | `XPOD` |
 | `editor.cup.omni` | `app/editRecipe.tsx:46` (`CUP_OPTIONS`) | Doto segment for the Omni cup type. | `OMNI` |
 | `editor.cup.other` | `app/editRecipe.tsx:47` (`CUP_OPTIONS`) | Doto segment for the Other cup type. | `OTHER` |
@@ -212,12 +212,12 @@ come from `hooks/useRecipeEditor.ts`.
 | `editor.stage.agitate.after.label` | `components/StageTile.tsx:254` (`label`) | Doto label on the after-pour agitation toggle. | `AFTER` |
 | `editor.stage.delete.a11y` | `components/StageTile.tsx:266` (a11y) | (a11y) Delete-stage button. `${...}` is the stage index. | `Delete stage ${index + 1}` |
 | `editor.stage.delete.label` | `components/StageTile.tsx:273` | Doto label on the delete-stage button. | `REMOVE` |
-| `editor.stages.balance` | `app/editRecipe.tsx:489` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
-| `editor.stages.mismatch` | `app/editRecipe.tsx:492` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
-| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:496` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
-| `editor.stages.autoFix.label` | `app/editRecipe.tsx:501` | Doto label on the Auto fix button. | `AUTO FIX` |
-| `editor.stages.add.a11y` | `app/editRecipe.tsx:531` (a11y) | (a11y) The add-stage button. | `Add stage` |
-| `editor.stages.add.label` | `app/editRecipe.tsx:545` | Doto label on the add-stage button. | `+ ADD STAGE` |
+| `editor.stages.balance` | `app/editRecipe.tsx:524` | Doto readout of poured vs target volume. `${...}` are millilitre totals. | `${balance.poured} OF ${balance.target} ML` |
+| `editor.stages.mismatch` | `app/editRecipe.tsx:527` | Prose warning when stage volumes do not sum to the target. | `The machine rejects a recipe whose stages do not add up to the dose times the ratio.` |
+| `editor.stages.autoFix.a11y` | `app/editRecipe.tsx:531` (a11y) | (a11y) The Auto fix button. | `Auto fix` |
+| `editor.stages.autoFix.label` | `app/editRecipe.tsx:536` | Doto label on the Auto fix button. | `AUTO FIX` |
+| `editor.stages.add.a11y` | `app/editRecipe.tsx:566` (a11y) | (a11y) The add-stage button. | `Add stage` |
+| `editor.stages.add.label` | `app/editRecipe.tsx:580` | Doto label on the add-stage button. | `+ ADD STAGE` |
 | `editor.tea.banner.title` | `components/TeaBanner.tsx:23` | Doto title of the tea explainer banner. | `TEA` |
 | `editor.tea.banner.body` | `components/TeaBanner.tsx:26` | Prose body of the tea explainer banner. | `Tea stages are capped at 90 ml each and the grinder is not used. The siphon draws roughly 30 ml more than the recipe asks for, so a cup finishes fuller than the numbers here.` |
 
@@ -225,9 +225,21 @@ come from `hooks/useRecipeEditor.ts`.
 
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
-| `editor.bypass.title` | `components/BypassSection.tsx:18` | Doto title of the read-only bypass water section. | `BYPASS WATER` |
-| `editor.bypass.value` | `components/BypassSection.tsx:22` | Doto readout of bypass water volume and temperature. `${...}` are millilitres and degrees Celsius. | `${recipe.bypassVolume} ML · ${recipe.bypassTemp} °C` |
-| `editor.bypass.body` | `components/BypassSection.tsx:26` | Prose body of the read-only bypass water section. | `Bypass water is extra water added straight to the cup to dilute the brew. It is not brewed through the coffee.` |
+| `editor.bypass.ghost.a11y` | `components/BypassRung.tsx:69` (a11y) | (a11y) The dashed rung that turns bypass water on. | `Add bypass water` |
+| `editor.bypass.ghost.label` | `components/BypassRung.tsx:77` | Doto label on the dashed rung, shown when bypass is off. | `+ BYPASS WATER` |
+| `editor.bypass.rung.a11y` | `components/BypassRung.tsx:90` (a11y) | (a11y) The bypass rung header, which opens its controls. | `Bypass water` |
+| `editor.bypass.rung.marker` | `components/BypassRung.tsx:96` | Doto marker on the bypass rung, where a stage shows its number. | `BY` |
+| `editor.bypass.card.note` | `components/BypassRung.tsx:128` | Always shown while bypass is on, whatever the hint setting says: a card write silently drops it. | `A card cannot store bypass water. Writing this recipe to a card leaves it out.` |
+| `editor.bypass.remove.a11y` | `components/BypassRung.tsx:159` (a11y) | (a11y) Turns bypass water off. | `Remove bypass water` |
+| `editor.bypass.remove.label` | `components/BypassRung.tsx:164` | Doto label on the remove button inside the open rung. | `REMOVE` |
+| `editor.bypass.profile.a11y` | `components/StageProfile.tsx:136` (a11y) | (a11y) The bypass band on the stage profile. | `Show bypass water` |
+| `editor.brew.bypass.split` | `app/editRecipe.tsx:246` | Doto addendum to the brew target, shown only while bypass is on. `${...}` is millilitres. | `+ ${recipe.bypassVolume} ML BYPASS` |
+| `help.bypass.title` | `constants/recipeHelp.ts:168` | Help sheet and control caption. | `Bypass water` |
+| `help.bypass.hint` | `constants/recipeHelp.ts:169` | One-line hint, shown with hints on. | `Extra water added straight to the cup.` |
+| `help.bypass.question` | `constants/recipeHelp.ts:170` | Help sheet heading. | `What is bypass water?` |
+| `help.bypass.detail` | `constants/recipeHelp.ts:171` | Help sheet body, and the in-rung explanation with hints on. | `Bypass water is dispensed straight into the cup at the end of the brew, without passing through the coffee. It dilutes a concentrated brew without weakening the extraction, which is how a strong small brew is turned into a full cup. It does not count towards the stage volumes, and a card has no room to store it, so a recipe written to a card loses it.` |
+| `help.bypassVolume.title` | `constants/recipeHelp.ts:179` | Caption above the bypass volume stepper. | `Volume` |
+| `help.bypassTemperature.title` | `constants/recipeHelp.ts:182` | Caption above the bypass temperature stepper. | `Temperature` |
 
 ### Editor action bar
 
