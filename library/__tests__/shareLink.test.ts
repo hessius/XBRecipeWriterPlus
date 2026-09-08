@@ -334,3 +334,45 @@ describe("share fields survive serialisation", () => {
         expect(back.sharedTableId).toBe(1353046);
     });
 });
+
+describe("share payload churn", () => {
+    it("sends the same bypass fields for a recipe that has no bypass", () => {
+        // Load-bearing constants, not arbitrary. `shareLink` used to hardcode
+        // these three; the Recipe defaults were chosen to match, so that
+        // adding bypass fields to the model changed nothing on the wire. If
+        // this test fails, every already-shared recipe now reads as stale and
+        // re-mints a duplicate row in the shared service account.
+        const payload = buildSharePayload(new Recipe());
+
+        expect(payload.isEnableBypassWater).toBe(2);
+        expect(payload.bypassVolume).toBe(0);
+        expect(payload.bypassTemp).toBe(85);
+    });
+
+    it("sends a live bypass when one is enabled", () => {
+        const recipe = new Recipe();
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = 45;
+        recipe.bypassTemp    = 60;
+
+        const payload = buildSharePayload(recipe);
+
+        expect(payload.isEnableBypassWater).toBe(1);
+        expect(payload.bypassVolume).toBe(45);
+        expect(payload.bypassTemp).toBe(60);
+    });
+
+    it("suppresses bypass for tea, which the machine ignores", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = 45;
+        recipe.bypassTemp    = 60;
+
+        const payload = buildSharePayload(recipe);
+
+        expect(payload.isEnableBypassWater).toBe(2);
+        expect(payload.bypassVolume).toBe(0);
+        expect(payload.bypassTemp).toBe(85);
+    });
+});
