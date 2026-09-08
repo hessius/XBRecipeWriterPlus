@@ -258,6 +258,12 @@ const TEA_STEEP_OPTIONS = [
     {value: "saya6k",   label: "saya6k"}
 ] as const;
 
+/** The bypass temperature scaling is unconfirmed; a thermometer settles it. */
+const BYPASS_TEMP_OPTIONS = [
+    {value: "scaled", label: "x10"},
+    {value: "plain",  label: "Degrees"}
+] as const;
+
 type CommandRowProps = {
     command: Command;
     onSend: (command: Command, values: number[]) => void;
@@ -331,6 +337,7 @@ export default function MachineConsole() {
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
     const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding");
+    const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding");
 
     const [log, setLog] = useState<LogEntry[]>([]);
     const [telemetry, setTelemetry] = useState<TelemetrySnapshot>(INITIAL_TELEMETRY);
@@ -497,6 +504,12 @@ export default function MachineConsole() {
                         value={teaSteepEncoding}
                         options={TEA_STEEP_OPTIONS}
                         onChange={(value) => setTeaSteepEncoding(value === "saya6k" ? "saya6k" : "homoland")}/>
+                    <SettingsChoiceRow
+                        label="Bypass temperature"
+                        description="The command carries the bypass temperature multiplied by ten, or so the argument name suggests. A thermometer in the cup settles it."
+                        value={bypassTempEncoding}
+                        options={BYPASS_TEMP_OPTIONS}
+                        onChange={(value) => setBypassTempEncoding(value === "plain" ? "plain" : "scaled")}/>
                 </SettingsSection>
 
                 <SettingsSection title="Raw frame">

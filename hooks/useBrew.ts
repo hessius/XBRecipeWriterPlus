@@ -4,7 +4,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type Machine from "@/library/machine/Machine";
 import type {BrewPhase} from "@/library/machine/Machine";
-import type {TeaSteepEncoding} from "@/library/machine/protocol";
+import type {BypassTempEncoding, TeaSteepEncoding} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 
 export type Brewer = {
@@ -38,6 +38,7 @@ export type Brewer = {
 export function useBrew(injected?: Machine): Brewer {
     const {machine, connect} = useMachine(injected);
     const [teaSteepEncoding] = useSetting("teaSteepEncoding");
+    const [bypassTempEncoding] = useSetting("bypassTempEncoding");
     const [autoStart] = useSetting("machineAutoStart");
     const [phase, setPhase] = useState<BrewPhase>(machine.phase);
     const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,11 @@ export function useBrew(injected?: Machine): Brewer {
         // back to the encoding the machine expects on the way in.
         machine.setTeaSteepEncoding(teaSteepEncoding as TeaSteepEncoding);
     }, [machine, teaSteepEncoding]);
+    useEffect(() => {
+        // `useSetting` widens the stored union to `string`, so it is narrowed
+        // back to the encoding the machine expects on the way in.
+        machine.setBypassTempEncoding(bypassTempEncoding as BypassTempEncoding);
+    }, [machine, bypassTempEncoding]);
     useEffect(() => {
         machine.setAutoStart(autoStart);
     }, [machine, autoStart]);

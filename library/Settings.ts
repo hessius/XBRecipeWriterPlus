@@ -58,6 +58,17 @@ export const DEFAULTS = {
      */
     teaSteepEncoding: "homoland" as "homoland" | "saya6k",
     /**
+     * Which reading of the bypass temperature argument to send.
+     *
+     * The command descriptor calls the argument "bypass temp x10", which is
+     * either tenths of a degree or a scale factor nobody has confirmed. A wrong
+     * choice raises no error: the bypass simply arrives at the wrong
+     * temperature. The scaled reading is the one the descriptor implies and is
+     * the default; the other is reachable from the machine console so a
+     * thermometer can settle it.
+     */
+    bypassTempEncoding: "scaled" as "scaled" | "plain",
+    /**
      * The last machine that connected, so later sessions reconnect directly
      * rather than scanning. Empty until one has.
      *

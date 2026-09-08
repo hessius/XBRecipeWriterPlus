@@ -9,6 +9,8 @@ import {RadioUnavailableError} from "./errors";
 
 import {
     ascii,
+    buildBypassDose,
+    bypassTempValue,
     buildType1,
     buildType1Bytes,
     buildType2,
@@ -18,6 +20,7 @@ import {
     MACHINE_STATE,
     parseNotification,
     splitFrames,
+    type BypassTempEncoding,
     type MachineInfo,
     type Notification,
     type TeaSteepEncoding
@@ -209,6 +212,28 @@ export default class Machine {
      */
     setTeaSteepEncoding(encoding: TeaSteepEncoding): void {
         this.steepEncoding = encoding;
+    }
+
+    /**
+     * Which reading of the bypass temperature to send.
+     *
+     * A property rather than a settings lookup, so this file keeps its one-way
+     * dependency: `library/` does not reach up into `hooks/`. `useBrew` sets it
+     * from the console's switch.
+     */
+    private bypassEncoding: BypassTempEncoding = "scaled";
+
+    get bypassTempEncoding(): BypassTempEncoding {
+        return this.bypassEncoding;
+    }
+
+    /**
+     * A method rather than a settable field so that callers in `hooks/` are
+     * telling the machine something rather than mutating a value the React
+     * Compiler believes it owns.
+     */
+    setBypassTempEncoding(encoding: BypassTempEncoding): void {
+        this.bypassEncoding = encoding;
     }
 
     /**
@@ -825,11 +850,20 @@ export default class Machine {
                 // sent at connect may be many minutes old by now, and the
                 // reference re-sends it at the start of every brew.
                 buildType1(8100, [185, 1]),
-                // Bypass off, but the dose still has to travel: the machine
-                // needs it to grind correctly, and skipping it makes the grind
-                // drift. The two bypass arguments are float bits, which for
-                // zero are the same four zero bytes an integer would give.
-                buildType1(8102, [0, 0, Math.round(recipe.dosage)]),
+                // The dose has to travel whether or not there is a bypass: the
+                // machine needs it to grind correctly, and skipping this frame
+                // makes the grind drift. Tea sends no bypass at all -- the
+                // machine ignores it there, as `shareLink` already assumes.
+                // The two bypass arguments are float bits (see `buildBypassDose`
+                // and `ble-protocol.md`), so a live volume or temperature must
+                // be encoded as a float, not as the integer `buildType1` writes.
+                tea || !recipe.bypassEnabled
+                    ? buildBypassDose(0, 0, recipe.dosage)
+                    : buildBypassDose(
+                        Math.round(recipe.bypassVolume),
+                        bypassTempValue(recipe.bypassTemp, this.bypassEncoding),
+                        recipe.dosage
+                    ),
                 ...(tea ? [
                     buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
                 ] : [

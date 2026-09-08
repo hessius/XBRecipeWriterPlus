@@ -81,6 +81,40 @@ export function buildType1Bytes(cmd: number, payload: Uint8Array): Uint8Array {
     return frame(FUNC_TYPE_1, cmd, payload);
 }
 
+/**
+ * Which reading of the bypass temperature argument to send.
+ *
+ * The command descriptor names the argument "bypass temp x10", which is either
+ * tenths of a degree or a scale factor nobody has confirmed on hardware. A
+ * wrong choice produces no error at all -- the machine simply dispenses the
+ * bypass at the wrong temperature -- so it is a switch rather than a guess.
+ */
+export type BypassTempEncoding = "scaled" | "plain";
+
+/** The value to send for a bypass temperature in degrees Celsius. */
+export function bypassTempValue(celsius: number, encoding: BypassTempEncoding): number {
+    return encoding === "scaled" ? Math.round(celsius * 10) : Math.round(celsius);
+}
+
+/**
+ * Command 8102: the two bypass arguments carry IEEE-754 float bits, the dose an
+ * integer (see `ble-protocol.md` and the 8102 descriptor in `commands.ts`).
+ *
+ * `buildType1` writes every argument as a little-endian integer, which is right
+ * for the dose and for a disabled bypass — float `0.0` and the integer `0` are
+ * the same four zero bytes — but wrong for a live bypass volume or temperature,
+ * where int bits and float bits diverge. This builds the frame the machine
+ * actually reads: two float32 arguments, then the integer dose.
+ */
+export function buildBypassDose(bypassVolume: number, bypassTemp: number, doseG: number): Uint8Array {
+    const payload = new Uint8Array(12);
+    const view = new DataView(payload.buffer);
+    view.setFloat32(0, bypassVolume, true);
+    view.setFloat32(4, bypassTemp, true);
+    view.setUint32(8, Math.round(doseG), true);
+    return buildType1Bytes(8102, payload);
+}
+
 /** A type 2 command. Slot writes, mode switch, calibration. */
 export function buildType2(cmd: number, payload: Uint8Array): Uint8Array {
     return frame(FUNC_TYPE_2, cmd, payload);

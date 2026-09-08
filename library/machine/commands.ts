@@ -85,7 +85,7 @@ export const COMMANDS: Command[] = [
     // — Brewing a recipe ———————————————————————————————————————————
     {code: 8102, name: "Bypass and dose", packet: "type1",
      args: [float32("bypass volume"), float32("bypass temp x10"), int("dose g")], tier: "inert",
-     note: "Carries the dose even with bypass off. Skipping it makes the grind drift."},
+     note: "Carries the dose even with bypass off. Skipping it makes the grind drift. The temperature argument's scaling is unconfirmed on hardware; see bypassTempValue."},
     {code: 8002, name: "Commit", packet: "type1", args: [], tier: "moves",
      note: "Starts the brew. On hardware it goes straight to grinding rather than waiting for the button. Only useful once a recipe has been uploaded from a recipe screen."},
     {code: 40519, name: "Cancel", packet: "type1", args: [int("1")], tier: "moves"},
