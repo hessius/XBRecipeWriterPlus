@@ -1,5 +1,5 @@
 import type {FrameLogEntry} from "@/library/machine/Machine";
-import {frameLogText, historyLine, readingOf, stateName, toHex, waterVolumeOf}
+import {frameLogText, historyLine, readingOf, stateName, toHex}
     from "@/library/machine/frameLog";
 
 function entry(over: Partial<FrameLogEntry>): FrameLogEntry {
@@ -37,12 +37,6 @@ describe("readingOf", () => {
         expect(readingOf({kind: "event", code: 40522, value: 1})).toBe("event 40522 (1)");
     });
 
-});
-
-describe("waterVolumeOf", () => {
-    it("returns undefined for a frame too short to hold a float", () => {
-        expect(waterVolumeOf(new Uint8Array(11))).toBeUndefined();
-    });
 });
 
 describe("historyLine", () => {

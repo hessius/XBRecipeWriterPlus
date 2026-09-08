@@ -4,12 +4,16 @@ import {MACHINE_STATE, type Notification} from "./protocol";
 /**
  * The code the water stream carries: 40523, or `0x9E4B`.
  *
- * It never reaches `readingOf` as an event, because `parseNotification`
- * matches the water stream on its type byte alone — `0x4B` — and so decodes
- * every 40523 as a `waterWeight`. Kept named because the console still counts
- * the stream, and because the code one below it, 40522 `0x9E4A`, is
- * `ERROR_NO_WATER`: the fault and the flow reading are the same subsystem
- * speaking, which is worth remembering when the machine claims to be dry.
+ * Nothing reads it. It is kept named because it is the one piece of the water
+ * story that is easy to lose: `parseNotification` matches the stream on its
+ * type byte alone — `0x4B` — so every 40523 decodes as a `waterWeight` and no
+ * event 40523 exists to be handled. The console used to count them and always
+ * showed nought; the count and the tank readout behind it are gone.
+ *
+ * Worth remembering because the code one below it, 40522 `0x9E4A`, is
+ * `ERROR_NO_WATER`. The fault and the flow reading are the same subsystem
+ * speaking one number apart, which is the first thing to suspect when the
+ * machine claims to be dry while it is visibly still pouring.
  */
 export const WATER_VOLUME_CODE = 40523;
 
@@ -36,13 +40,6 @@ export function stateName(state: number): string {
 
 export function toHex(frame: Uint8Array): string {
     return Array.from(frame, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
-}
-
-/** The float32 of millilitres a tank-level frame carries, if it carries one. */
-export function waterVolumeOf(frame: Uint8Array): number | undefined {
-    const payload = frame.subarray(10, Math.max(10, frame.length - 2));
-    if (payload.length < 4) return undefined;
-    return new DataView(payload.buffer, payload.byteOffset, 4).getFloat32(0, true);
 }
 
 /** What a frame says, in words. */

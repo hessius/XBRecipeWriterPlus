@@ -16,7 +16,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
 import {
-    frameLogText, readingOf, stateName, toHex, waterVolumeOf, WATER_VOLUME_CODE
+    frameLogText, readingOf, stateName, toHex
 } from "@/library/machine/frameLog";
 import type {MachineInfo, Notification} from "@/library/machine/protocol";
 
@@ -57,16 +57,14 @@ type TelemetrySnapshot = {
     suppressed: number;
     waterWeight?: number;
     cupWeight?: number;
-    waterVolume?: number;
     info?: MachineInfo;
-    // Counted, not just kept. Whether the machine volunteers these or only
-    // answers when asked is an open question, and a reading on its own cannot
-    // tell the two apart — a count that stops at one can.
-    tankSeen: number;
+    // Counted, not just kept. Whether the machine volunteers the info blob or
+    // only answers when asked is an open question, and a reading on its own
+    // cannot tell the two apart — a count that stops at one can.
     infoSeen: number;
 };
 
-const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, tankSeen: 0, infoSeen: 0};
+const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, infoSeen: 0};
 
 /**
  * Parse a pasted frame, or null if it is not one.
@@ -89,16 +87,13 @@ export function parseRawFrame(input: string): Uint8Array | null {
 function isTelemetry(parsed: Notification): boolean {
     return parsed.kind === "waterWeight"
         || parsed.kind === "cupWeight"
-        || parsed.kind === "info"
-        || (parsed.kind === "event" && parsed.code === WATER_VOLUME_CODE);
+        || parsed.kind === "info";
 }
 
 function telemetryText(snapshot: TelemetrySnapshot): string {
     const parts = [`suppressed ${snapshot.suppressed}`];
     parts.push(`water ${snapshot.waterWeight === undefined ? "n/a" : `${snapshot.waterWeight.toFixed(1)} g`}`);
     parts.push(`cup ${snapshot.cupWeight === undefined ? "n/a" : `${snapshot.cupWeight.toFixed(1)} g`}`);
-    parts.push(`tank ${snapshot.waterVolume === undefined ? "n/a" : `${snapshot.waterVolume.toFixed(1)} ml`}`
-        + ` ×${snapshot.tankSeen}`);
     parts.push(`info ${snapshot.info === undefined
         ? "n/a"
         : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`
@@ -164,12 +159,6 @@ function recordTelemetry(
         case "info":
             next.info = parsed;
             next.infoSeen += 1;
-            break;
-        case "event":
-            if (parsed.code === WATER_VOLUME_CODE) {
-                next.waterVolume = waterVolumeOf(frame);
-                next.tankSeen += 1;
-            }
             break;
         default:
             break;
