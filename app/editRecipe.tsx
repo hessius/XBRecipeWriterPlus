@@ -4,7 +4,7 @@ import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
-import BypassSection from "@/components/BypassSection";
+import BypassRung from "@/components/BypassRung";
 import BypassWriteSheet from "@/components/BypassWriteSheet";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -26,6 +26,7 @@ import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
+import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
@@ -365,18 +366,33 @@ function BrewDeck({
     );
 }
 
+/**
+ * What the stages deck has open.
+ *
+ * A string sentinel rather than an index past the end, so that every consumer
+ * that reaches into `recipe.pours` has to narrow before it can. An out-of-range
+ * index would have compiled everywhere and been wrong at runtime in exactly one
+ * place.
+ */
+type OpenRung = number | "bypass" | null;
+
 type StagesDeckProps = {
     recipe: Recipe;
 
     balance: {poured: number; target: number; balanced: boolean};
     accent: string;
     isTea: boolean;
-    /** The open stage's index, or null. Held by the screen, not the tile. */
-    openStage: number | null;
-    setOpenStage: React.Dispatch<React.SetStateAction<number | null>>;
+    /** The open rung, or null. Held by the screen, not the tile. */
+    openStage: OpenRung;
+    setOpenStage: React.Dispatch<React.SetStateAction<OpenRung>>;
     /** Reports where a stage sits within the deck, so it can be scrolled to. */
     onStageLayout: (index: number, y: number) => void;
+    /** The same, for the bypass rung. */
+    onBypassLayout: (y: number) => void;
     editStage: (index: number, field: StageField, value: number) => void;
+    setBypassEnabled: (on: boolean) => void;
+    editBypass: (field: BypassField, value: number) => void;
+    showHint: boolean;
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
@@ -387,11 +403,13 @@ type StageProfileCardProps = {
     pours: Pour[];
     target: number;
     accent: string;
-    /** The stage the list has open, so the curve can highlight its band. */
-    selected: number | null;
+    /** The rung the list has open, so the curve can highlight its band. */
+    selected: OpenRung;
+    /** Bypass water in millilitres, or 0 when it is off. */
+    bypassVolume: number;
     /** The header has collapsed, so the screen is short of room. */
     collapsed: boolean;
-    onSelect: (index: number) => void;
+    onSelect: (index: number | "bypass") => void;
     /** Reports how much of the content the pinned card covers, once laid out. */
     onHeight: (height: number) => void;
 };
@@ -419,7 +437,7 @@ type StageProfileCardProps = {
 export const PROFILE_HEIGHT = {full: 92, compact: 52} as const;
 
 function StageProfileCard({
-    pours, target, accent, selected, collapsed, onSelect, onHeight
+    pours, target, accent, selected, bypassVolume, collapsed, onSelect, onHeight
 }: StageProfileCardProps) {
     "use no memo";
 
@@ -440,15 +458,8 @@ function StageProfileCard({
                               height={collapsed
                                   ? PROFILE_HEIGHT.compact
                                   : PROFILE_HEIGHT.full}
-                              selected={selected ?? undefined}
-                              // No bypass band is drawn here yet, so the sentinel
-                              // never arrives; narrow it away until a later task
-                              // teaches this card to open the bypass rung.
-                              onSelect={(index) => {
-                                  if (index !== "bypass") {
-                                      onSelect(index);
-                                  }
-                              }}/>
+                              bypassVolume={bypassVolume}
+                              selected={selected ?? undefined} onSelect={onSelect}/>
             </YStack>
         </YStack>
     );
@@ -470,7 +481,8 @@ function StageProfileCard({
  */
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
-    editStage, addPour, deletePour, autoAdjustPourVolumes, temperatureUnit,
+    onBypassLayout, editStage, addPour, deletePour, autoAdjustPourVolumes,
+    temperatureUnit, setBypassEnabled, editBypass, showHint,
 }: StagesDeckProps) {
     "use no memo";
 
@@ -557,6 +569,27 @@ function StagesDeck({
                     </DotMatrixText>
                 </XStack>
             </Pressable>
+
+            {/* The bypass rung closes the ladder, after the add button rather
+                than before it: adding a stage is an operation on the list, and
+                bypass is the last thing that happens in the cup. */}
+            <View onLayout={(event) => onBypassLayout(event.nativeEvent.layout.y)}>
+                <BypassRung recipe={recipe} isTea={isTea}
+                            open={openStage === "bypass"}
+                            showHint={showHint} temperatureUnit={temperatureUnit}
+                            onToggle={() =>
+                                setOpenStage((current) =>
+                                    current === "bypass" ? null : "bypass")}
+                            onEnabledChange={(on) => {
+                                setBypassEnabled(on);
+                                // Open it on the way on so the two controls are
+                                // there without a second tap, and close it on
+                                // the way off so nothing is selected pointing
+                                // at a rung that is no longer drawn.
+                                setOpenStage(on ? "bypass" : null);
+                            }}
+                            onChange={editBypass}/>
+            </View>
         </YStack>
     );
 }
@@ -694,7 +727,7 @@ export default function EditRecipe() {
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
     const [deck, setDeck] = useState<Deck>("brew");
-    const [openStage, setOpenStage] = useState<number | null>(null);
+    const [openStage, setOpenStage] = useState<OpenRung>(null);
     const [actionBarHeight, setActionBarHeight] = useState(0);
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
@@ -702,6 +735,7 @@ export default function EditRecipe() {
     // layout pass of every tile.
     const scrollRef = useRef<ScrollView>(null);
     const stageOffsets = useRef<number[]>([]);
+    const bypassOffset = useRef(0);
     const deckOffset = useRef(0);
     const profileHeight = useRef(0);
 
@@ -721,9 +755,11 @@ export default function EditRecipe() {
      * halfway down the list a tap on it would highlight and open a tile that
      * was off screen in either direction, and nothing appeared to happen.
      */
-    function selectStage(index: number) {
+    function selectStage(index: number | "bypass") {
         setOpenStage(index);
-        const tileY = stageOffsets.current[index];
+        const tileY = index === "bypass"
+            ? bypassOffset.current
+            : stageOffsets.current[index];
         if (tileY === undefined) return;
         scrollRef.current?.scrollTo({
             y:        stageScrollTarget(deckOffset.current, tileY, profileHeight.current),
@@ -743,7 +779,8 @@ export default function EditRecipe() {
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
-        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes, coarsenGrindToMinimum
+        setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
+        autoAdjustPourVolumes, coarsenGrindToMinimum
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -966,6 +1003,9 @@ export default function EditRecipe() {
                 {deck === "stages" ? (
                     <StageProfileCard pours={recipe.pours} target={balance.target}
                                       accent={accent} selected={openStage}
+                                      bypassVolume={recipe.bypassEnabled
+                                          ? recipe.bypassVolume
+                                          : 0}
                                       collapsed={collapsed}
                                       onSelect={selectStage}
                                       onHeight={(height) => {
@@ -994,10 +1034,14 @@ export default function EditRecipe() {
                                 onStageLayout={(index, y) => {
                                     stageOffsets.current[index] = y;
                                 }}
+                                onBypassLayout={(y) => {
+                                    bypassOffset.current = y;
+                                }}
+                                setBypassEnabled={setBypassEnabled}
+                                editBypass={editBypass} showHint={showHint}
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
                                 temperatureUnit={temperatureUnit}/>
-                    <BypassSection recipe={recipe}/>
                     </View>
                 )}
             </ScrollView>
