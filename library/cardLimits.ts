@@ -19,7 +19,7 @@ import {grindTooFine} from "@/constants/copy";
  */
 
 /** Inclusive bounds for one field, in the units the model stores. */
-type Range = {min: number; max: number};
+export type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
 /** Exported for the test that keeps `library/grindBands` in step with the card. */
@@ -199,3 +199,4 @@ export function cardWriteProblems(
 export function canWriteToCard(recipe: Recipe): boolean {
     return cardWriteProblems(recipe).length === 0;
 }
+
