@@ -290,8 +290,11 @@ export default function StageTile({
  * pills, and a paragraph inside one pushed its neighbour's stepper out of line.
  * The long form is in the help sheet now and this is layout, but the shape is
  * worth keeping -- it is the seam the tile is laid out along.
+ *
+ * Exported so the bypass rung can be built from the same parts. A second copy
+ * of this pill would drift from this one the first time its padding changed.
  */
-function StageRow({topics, row = true, children}: {
+export function StageRow({topics, row = true, children}: {
     topics: readonly HelpTopic[];
     /** False when the single child already lays itself out across the width. */
     row?: boolean;
@@ -311,7 +314,7 @@ function StageRow({topics, row = true, children}: {
  * the BREW deck follows: a control is identified by its topic, so a control
  * nobody wrote a note for cannot be drawn.
  */
-function StageLabel({topic}: {topic: HelpTopic}) {
+export function StageLabel({topic}: {topic: HelpTopic}) {
     return (
         <XStack alignItems="center" gap="$1.5">
             <Text fontSize={9.5} letterSpacing={1.4} textTransform="uppercase"
@@ -337,7 +340,7 @@ type StageValueProps = {
  * number in half — see the device screenshot that prompted this. Stacking gives
  * the stepper the pill's full width and costs one line of height.
  */
-function StageValue({topic, value, min, max, step, values, accent, onChange}: StageValueProps) {
+export function StageValue({topic, value, min, max, step, values, accent, onChange}: StageValueProps) {
     return (
         <YStack flex={1} alignItems="center" gap="$1"
                 backgroundColor={palette.raised} borderRadius="$3"
