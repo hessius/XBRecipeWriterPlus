@@ -87,7 +87,7 @@ tray, and the overflow sheet.
 | `home.toast.cardRead` | `app/index.tsx:336` | Success toast after a card is read. | `Recipe read from card` |
 | `home.toast.holdCard` | `constants/copy.ts:32` (via `app/index.tsx:364`) | Instruction toast shown while waiting for the card. | `Hold the card to the top of the phone.` |
 | `home.toast.alreadyInLibrary.read` | `constants/copy.ts:19` (via `app/index.tsx:398`) | Info toast when a just-read card matches a recipe already saved. | `Already in your library` |
-| `home.toast.readFailed` | `constants/copy.ts:55` (via `app/index.tsx:405`) | Error toast when a card cannot be read. | `Could not read the card. Please try again.` |
+| `home.toast.readFailed` | `constants/copy.ts:82` (via `app/index.tsx:420`) | Error toast when a card cannot be read. | `Could not read the card. Please try again.` |
 | `home.toast.machineBusy` | `app/index.tsx:420` | Info toast when trying to brew while the machine is already brewing. `${...}` is the running recipe's display name. | `The machine is busy brewing ${liveRun.recipe.displayName()}.` |
 | `home.empty.title` | `components/EmptyLibrary.tsx:37` | Heading when the library has no recipes. Doto, matching the empty states on the sibling list screens. | `NO RECIPES YET` |
 | `home.empty.body` | `components/EmptyLibrary.tsx:40` | Sub-line under the empty-state heading. | `Read a card or import a recipe using the buttons above.` |
@@ -596,7 +596,7 @@ The card overlay (`components/NfcOverlay.tsx`), the write path
 | `nfc.write.toast.done` | `hooks/useCardWriter.ts:65` | Success toast after a card is written. | `Recipe written to card` |
 | `nfc.write.toast.hold` | `constants/copy.ts:32` (via `hooks/useCardWriter.ts:67`) | Instruction toast shown while writing. | `Hold the card to the top of the phone.` |
 | `nfc.write.error.outOfRange` | `hooks/useCardWriter.ts:84` | Error toast when values cannot be written. | `The recipe cannot be written to the card. Check that all values are within range.` |
-| `nfc.write.error.generic` | `constants/copy.ts:56` (via `hooks/useCardWriter.ts:94`) | Error toast when the write fails. | `Could not write the recipe to the card. Please try again.` |
+| `nfc.write.error.generic` | `constants/copy.ts:83` (via `hooks/useCardWriter.ts:108`) | Error toast when the write fails. | `Could not write the recipe to the card. Please try again.` |
 | `nfc.write.error.tooSmall` | `constants/copy.ts` (`cardTooSmall()`, via `hooks/useCardWriter.ts`) | Error toast when the recipe has more stages than this particular card can hold. Card capacity varies by tag, so the number is the card's, not a fixed limit. | `This recipe has {n} stages, but this card has room for {max}. Remove a stage or use a card with more space.` |
 | `nfc.write.error.sizeUnknown` | `constants/copy.ts` (`CARD_SIZE_UNKNOWN`, via `hooks/useCardWriter.ts`) | Error toast when the card never reported its size, so the write was refused rather than attempted blind. | `The card did not report its size, so nothing was written. Please try again.` |
 | `nfc.write.bypass.title` | `components/BypassWriteSheet.tsx:20` | Doto title of the blocking warning shown before writing a bypass recipe to a card. | `BYPASS ON CARD` |

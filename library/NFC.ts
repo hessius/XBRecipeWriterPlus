@@ -85,11 +85,19 @@ class NFC {
         return this.isClosed;
     }
 
+    /** Whether the user cancelled this session (as opposed to it being torn down). */
+    public wasCancelled() {
+        return this.cancelled;
+    }
+
 
     async close() {
-        // Recorded even when there is nothing to cancel yet: a Cancel during
-        // `init()` has to be remembered until `open()` can honour it.
-        this.cancelled = true;
+        // Teardown only: this runs from every `finally` on the way out of a
+        // read or write, so it must not look like a Cancel. Reading it as one
+        // was the bug -- a genuine read failure closed the tag before parsing,
+        // and a `cancelled`-set-here made that failure indistinguishable from
+        // the user walking away, so the error vanished. `cancel()` is the
+        // user-initiated path; this is not it.
 
         // Callers close explicitly and again from a `finally`; cancelling a
         // session that has already ended rejects with "Not even registered".
@@ -104,10 +112,24 @@ class NFC {
         }
     }
 
+    /**
+     * The user-initiated teardown: dismissing our overlay or the Android NFC
+     * dialog. Records the cancellation -- so a fault raised on the way down is
+     * read as the user walking away rather than something to report -- then
+     * tears the session down exactly as `close()` does.
+     *
+     * Recorded even when there is nothing to cancel yet: a Cancel during
+     * `init()` has to be remembered until `open()` can honour it.
+     */
+    async cancel() {
+        this.cancelled = true;
+        await this.close();
+    }
+
     async open() {
         // Cancelled while init was still running. Throwing rather than
         // returning quietly keeps the caller's existing shape: `readCard` and
-        // `writeCard` already treat a throw with `getIsClosed()` true as the
+        // `writeCard` already treat a throw with `wasCancelled()` true as the
         // user having walked away, and report nothing.
         if (this.cancelled) {
             this.isClosed = true;
@@ -131,10 +153,15 @@ class NFC {
             }
         } catch (e) {
             // Back to closed, which is what a failed open always looked like:
-            // before this method set the flag eagerly, a rejection left it
-            // true. Callers read `getIsClosed()` to tell a user cancellation
-            // from a real fault, so restoring it keeps that judgement intact.
+            // before this method set the flag eagerly, a rejection left it true.
             this.isClosed = true;
+            // A session that never opened produced no card and nothing to
+            // report, so a failed open counts as a cancellation. That is what
+            // keeps an iOS Cancel silent -- the user tapping Cancel on Apple's
+            // system NFC sheet, and a scan that timed out without a tag, both
+            // reject `requestTechnology` here. Callers read `wasCancelled()` to
+            // tell that walk-away from a real fault, so this must be set.
+            this.cancelled = true;
             throw e;
         }
     }

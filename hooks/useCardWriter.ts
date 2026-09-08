@@ -48,7 +48,7 @@ export function useCardWriter(
     const [nfc] = useState(() => new NFC());
 
     async function onNFCDialogClose() {
-        await nfc.close();
+        await nfc.cancel();
         setShowNfcOverlay(false);
     }
 
@@ -99,8 +99,12 @@ export function useCardWriter(
                 });
             } else if (e instanceof CardWriteError) {
                 notify({tone: "error", message: CARD_SIZE_UNKNOWN});
-            } else if (!nfc.getIsClosed()) {
-                // A cancelled scan throws, and the user cancelling is not a failure.
+            } else if (!nfc.wasCancelled()) {
+                // A cancelled write is the user's choice, not a failure. Every
+                // real fault reaches here because `Recipe.writeCard` rethrows
+                // it, so this toast is no longer the dead code it was when the
+                // guard asked `getIsClosed()` -- always true once the session's
+                // `finally` had closed it.
                 notify({tone: "error", message: CARD_WRITE_FAILED});
             }
         }

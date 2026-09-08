@@ -385,6 +385,11 @@ export default function HomeScreen({db, settings}: Props) {
             });
             setScanning(false);
             if (!success) {
+                // A false result now means one thing only: the user cancelled.
+                // Every real failure -- a card `parseData` cannot handle, a read
+                // that yields no bytes -- throws out of `readCard` and lands in
+                // the catch below. So silence here is the user getting what they
+                // asked for, not a swallowed error.
                 return;
             }
 
@@ -409,16 +414,16 @@ export default function HomeScreen({db, settings}: Props) {
             }
         } catch {
             setScanning(false);
-            // A cancelled Android scan throws. That is the user getting what
-            // they asked for, not a failure to report.
-            if (!nfc.getIsClosed()) {
+            // A cancelled scan throws. That is the user getting what they
+            // asked for, not a failure to report.
+            if (!nfc.wasCancelled()) {
                 notify({tone: "error", message: CARD_READ_FAILED});
             }
         }
     }
 
     async function cancelScan() {
-        await nfc.close();
+        await nfc.cancel();
         setScanning(false);
     }
 

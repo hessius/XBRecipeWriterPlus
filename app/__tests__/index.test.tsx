@@ -8,6 +8,7 @@ import Recipe from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 import {Settings, type SettingsStorage} from "@/library/Settings";
+import {CARD_READ_FAILED} from "@/constants/copy";
 
 const mockPush = jest.fn();
 
@@ -169,9 +170,11 @@ jest.mock("@/hooks/useLiveBrew", () => ({
 jest.mock("@/library/NFC", () => ({
     __esModule:    true,
     default:       jest.fn().mockImplementation(() => ({
-        getIsClosed: jest.fn(() => true),
-        close:       jest.fn(),
-        readCard:    jest.fn()
+        getIsClosed:  jest.fn(() => true),
+        wasCancelled: jest.fn(() => false),
+        close:        jest.fn(),
+        cancel:       jest.fn(),
+        readCard:     jest.fn()
     })),
     setNfcAlertIOS: jest.fn()
 }));
@@ -352,6 +355,41 @@ describe("HomeScreen", () => {
             await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(
                 expect.objectContaining({tone: "info"})
             ));
+        });
+
+        it("tells the user when the card cannot be read", async () => {
+            // The user's report: a scan that succeeds at the NFC layer but whose
+            // bytes cannot be parsed used to close the overlay and then say
+            // nothing at all. A parse failure now throws out of `readCard` and
+            // reaches the screen, which reports it.
+            jest.spyOn(Recipe.prototype, "readCard").mockRejectedValue(
+                new Error("Error reading card: bypass card")
+            );
+            await renderWithProviders(
+                <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+            );
+
+            await fireEvent.press(screen.getByLabelText("Read a card"));
+
+            await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(
+                expect.objectContaining({tone: "error", message: CARD_READ_FAILED})
+            ));
+        });
+
+        it("says nothing when the user cancels the scan", async () => {
+            // A cancelled read returns false, which is the one thing it can now
+            // mean: the fix routes real failures through a throw instead. So a
+            // false result is silence, correctly.
+            jest.spyOn(Recipe.prototype, "readCard").mockResolvedValue(false);
+            await renderWithProviders(
+                <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+            );
+
+            await fireEvent.press(screen.getByLabelText("Read a card"));
+
+            await waitFor(() => expect(Recipe.prototype.readCard).toHaveBeenCalled());
+            expect(mockNotify).not.toHaveBeenCalled();
+            expect(mockPush).not.toHaveBeenCalled();
         });
     });
 

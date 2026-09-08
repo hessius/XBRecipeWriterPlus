@@ -433,7 +433,7 @@ class Recipe {
             if (e instanceof CardWriteError) {
                 throw e;
             }
-            if (!nfc.getIsClosed()) { //make sure NFC reading wasn't closed by user --really just an android problem
+            if (!nfc.wasCancelled()) { //make sure the user didn't cancel --really just an android problem
                 throw new Error("Error writing card: " + e);
             }
         } finally {
@@ -489,7 +489,7 @@ class Recipe {
                 throw new Error("No data read from card");
             }
         } catch (e) {
-            if (!nfc.getIsClosed()) {
+            if (!nfc.wasCancelled()) {
                 throw new Error("Error reading card: " + e);
             }
         } finally {
