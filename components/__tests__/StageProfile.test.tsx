@@ -170,8 +170,46 @@ describe("profileScale with bypass", () => {
         expect(profileScale(260, 260, 0)).toBe(260);
     });
 
-    it("does not let a bypass taller than the brew overflow the box", () => {
-        expect(profileScale(100, 100, 400)).toBe(400);
+    it("makes room for the bypass above the target rather than beside it", () => {
+        // The bypass now rests on the target line, so the box has to hold both
+        // stacked. Taking the larger of the two instead would put the top of
+        // the bypass above the ceiling.
+        expect(profileScale(100, 100, 400)).toBe(500);
+        expect(profileScale(260, 260, 30)).toBe(290);
+    });
+
+    it("still lets an over-poured brew set the ceiling", () => {
+        expect(profileScale(400, 100, 30)).toBe(400);
+    });
+});
+
+describe("the bypass sits on the target line", () => {
+    it("puts the foot of the bypass box exactly on the rule", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={30}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+        const line = screen.getByTestId("stage-profile-target");
+
+        // Bottom edge of the rect against the rule: the whole point of the
+        // change is that the bypass reads as sitting on top of the target,
+        // not as a second column rising from the floor.
+        expect(rect.props.y + rect.props.height).toBeCloseTo(line.props.y1, 5);
+    });
+
+    it("keeps the stacked bypass inside the box", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={400}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+
+        expect(rect.props.y).toBeGreaterThanOrEqual(0);
     });
 });
 

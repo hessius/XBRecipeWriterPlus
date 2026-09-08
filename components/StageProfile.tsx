@@ -9,13 +9,17 @@ import type Pour from "@/library/Pour";
 /**
  * The volume one full box height represents.
  *
- * Whichever of the two totals is larger, so both the curve and the target fit
- * and share one axis. `buildProfilePath` normalises a curve to its own total,
- * which would put the plateau at full height whatever the target was and make
- * the target line decorative.
+ * Whichever of the totals is larger, so the curve, the target and the bypass
+ * all fit and share one axis. `buildProfilePath` normalises a curve to its own
+ * total, which would put the plateau at full height whatever the target was and
+ * make the target line decorative.
+ *
+ * The bypass is added to the target rather than compared with it, because it is
+ * drawn standing on the target line: what has to fit is the two of them
+ * stacked. With no bypass this is the plain larger-of-two it always was.
  */
 export function profileScale(pourTotal: number, target: number, bypass = 0): number {
-    return Math.max(pourTotal, target, bypass, 1);
+    return Math.max(pourTotal, target + bypass, 1);
 }
 
 /** How tall the curve is drawn, inside the box. */
@@ -165,10 +169,16 @@ export default function StageProfile({
                 length is the only free variable once the colour is spoken for.
                 A continuous staircase was tried and rejected -- it climbs above
                 the target rule, which everywhere else in this app means too
-                much water. */}
+                much water.
+
+                It stands on the target line rather than on the floor. Bypass is
+                water added after the brew is made, so a box rising from the
+                baseline drew it as an alternative to the brew when it is an
+                addition to it; from the rule it reads as what it is, the volume
+                that lands on top. `profileScale` reserves the room. */}
             {hasBypass && (
                 <Rect testID="stage-profile-bypass"
-                      x={stageWidth} y={height - bypassHeight}
+                      x={stageWidth} y={line - bypassHeight}
                       width={width - stageWidth} height={bypassHeight}
                       fill={palette.info} fillOpacity={0.16}
                       stroke={palette.info} strokeWidth={1} strokeDasharray="9 5"/>
