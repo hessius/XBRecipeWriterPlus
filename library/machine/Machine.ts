@@ -166,6 +166,13 @@ export default class Machine {
      *
      * A warning, never a failure: the brew carries on. Cleared when a new brew
      * is asked for, so it always describes the run in front of the user.
+     *
+     * Nothing reads it yet, and that is deliberate — see #94. The consequence
+     * a user can act on is already covered by pre-flight refusing the *next*
+     * brew, and a mid-brew notice about something nobody can do anything about
+     * until it ends may be worse than silence. Kept because it is cheap, and
+     * because deciding to show it later should not mean re-deriving what 40522
+     * means from another ruined brew.
      */
     public waterLow = false;
     /** When `state` was last heard, as a wall clock. 0 means never. */

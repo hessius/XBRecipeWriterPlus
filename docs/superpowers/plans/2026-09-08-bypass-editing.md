@@ -3013,32 +3013,37 @@ in the whole design lives here.
 - [ ] **D6.** Check the machine console: **Tea steep encoding is gone** and
   **Bypass temperature** is in its place.
 
-- [ ] **D7.** **If the app claims the machine ran out of water while it is
-  visibly still brewing — stop and capture it.** This is the one outstanding
-  bug with no root cause, and it has now cost two sessions precisely because the
-  evidence went with the reload.
+- [x] **D7.** **Solved on 2026-09-09 — nothing left to test here.**
 
-  Do this, in order, before touching anything else:
+  The app claimed the machine had run out of water eleven seconds into the
+  first pour of a brew the machine went on to finish perfectly. The console
+  log settled every open question at once:
 
-  1. Do **not** reload the app. The frames are already on disk, but the running
-     link's context is not.
-  2. Go to Brew history, open that brew, and press **COPY THE FRAME LOG**
-     (`bc3a0e6` added it; it only appears when a brew actually has frames).
-  3. Paste it somewhere it will survive — a note, a message to yourself.
-  4. Say what the machine was physically doing at that instant: pouring,
-     between pours, or grinding.
+  - The killer was the **event**, 40522, not the `0x0C` status. No `0x0C`
+    appears anywhere in the session.
+  - It carried **value 0**, and arrived while the phase was `pouring`.
+  - Water did **not** stop: `POUR_START (1)`, `POUR_START (2)`, `BREWER_STOP`,
+    `ENJOY` and `COMPLETE` all followed, over the next three minutes.
+  - The info frame afterwards had `waterEnough` (`payload[33]`) flipped from
+    `1` to `0` — the tank crossing its low mark, which is exactly what a
+    warning at that moment would mean.
 
-  What the log settles, none of which is currently knowable: whether the killer
-  was a **status** `0x0C` or an **event** `40522`, what payload byte it carried,
-  which phase the app was in, and — the decisive one — **whether water frames
-  kept arriving afterwards.** A genuinely dry tank stops pouring; a transient
-  does not. That single fact chooses the fix.
+  So 40522 was misnamed. It is `EVENT.WATER_LOW`, it is out of
+  `FAILURE_EVENTS`, and it is now a per-run warning (`b68cc25`). Whether to
+  show that warning is deferred to #94.
 
-  Note that the machine console no longer shows a tank reading. It never really
-  did: it displayed `tank n/a ×0` from the day it was written, because the
-  parser claims every 40523 as a water-weight frame before the tank branch can
-  see it. It was removed in `1608ebb` rather than left there implying we have a
-  tank level we have never once received.
+  Two supporting fixes came out of it. The brew record's frame log had been
+  dropping the one frame worth having — `receiveFrame` acted on a frame before
+  retaining it, and `BrewRecorder` snapshots the log from a phase listener, so
+  the frame that ended a brew was never in that brew's log (`6e984c3`). And the
+  console's own history, which is not truncated that way, is what actually
+  cracked this: if a brew ever goes strange again, **COPY LOG from the machine
+  console** beats the per-brew log.
+
+  A water-stall watchdog was considered and rejected on this same evidence:
+  water genuinely stops between pours, and this brew steeped for nearly a
+  minute after the warning, so any window short enough to be useful would have
+  failed it too.
 
 ---
 
