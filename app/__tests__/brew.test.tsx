@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {fireEvent, waitFor} from "@testing-library/react-native";
+import {fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
@@ -290,6 +290,17 @@ describe("brew route", () => {
         // A finished brew is not a failed one — retry would invite a second brew
         // into a full cup, and there is nothing left to cancel.
         expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("puts the finished summary in a scroller, so a long ladder can be read", async () => {
+        // The summary is drawn at a fixed rung size, so its height grows with
+        // the stage count. Unscrolled it simply ran off the bottom of the
+        // modal: the last stages, and everything below them, were unreachable.
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {getByTestId} = await renderWithProviders(<Brew />);
+        expect(within(getByTestId("done-scroll")).getByTestId("ladder"))
+            .toBeTruthy();
     });
 
     it("captures and shares the brew in place, without pushing /brewRecord", async () => {

@@ -1,6 +1,6 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable, StyleSheet, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, StyleSheet, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -208,6 +208,18 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 // The finished brew is drawn once, by the shared component, and
                 // that same node is what the export captures — so what you see
                 // is exactly what leaves the phone. No second screen.
+                //
+                // Inside a scroller, because the summary draws its ladder at a
+                // fixed rung size and so grows with the stage count: a
+                // seventeen-stage brew is taller than the modal, and without
+                // this the last stages ran off the bottom with no way to reach
+                // them. The export buttons stay outside it, pinned below,
+                // rather than being scrolled away with the summary.
+                //
+                // The record screen has done exactly this from the start; only
+                // the live modal was missing it.
+                <ScrollView testID="done-scroll" style={{flex: 1}}
+                            contentContainerStyle={{flexGrow: 1}}>
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                     <BrewSummary
                         recipeName={recipe.displayName()}
@@ -228,6 +240,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         stagesUnavailable={false}
                     />
                 </ViewShot>
+                </ScrollView>
             ) : (
                 <>
                     <YStack flex={1} gap="$3"
