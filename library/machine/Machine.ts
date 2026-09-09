@@ -115,11 +115,12 @@ export type BrewPhase =
     | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
-    40522: "noWater",
     8203:  "gearPosition",
     8204:  "doseMismatch"
     // EVENT.ERROR_IDLING is deliberately absent: it means different things
     // depending on the phase it arrives in, and `onEvent` decides.
+    //
+    // EVENT.WATER_LOW (40522) was here, and was the bug: see `onEvent`.
 };
 
 /** States from which a brew may be started at all. */
@@ -160,6 +161,13 @@ const LINK_HISTORY_LIMIT = 200;
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
+    /**
+     * The machine has reported its tank low (event 40522) during this brew.
+     *
+     * A warning, never a failure: the brew carries on. Cleared when a new brew
+     * is asked for, so it always describes the run in front of the user.
+     */
+    public waterLow = false;
     /** When `state` was last heard, as a wall clock. 0 means never. */
     private stateAt = 0;
 
@@ -778,6 +786,8 @@ export default class Machine {
      * over — the brew's progress arrives as phases.
      */
     async brew(recipe: Recipe): Promise<void> {
+        // The tank warning belongs to one run, not to the session.
+        this.waterLow = false;
         // A fresh attempt: the PRO-mode offer is per-brew, and this was not
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
@@ -1056,9 +1066,12 @@ export default class Machine {
                 // The 0x57 status channel reports a water *level*, not a
                 // *fault*. While the pump draws hard during a pour, a tank
                 // sitting near the float sensor's threshold dips transiently
-                // below it and surfaces here as NO_WATER. The machine's
-                // explicit fault channel is the separate EVENT.ERROR_NO_WATER
-                // (40522), handled unchanged in `onEvent` for every phase.
+                // below it and surfaces here as NO_WATER.
+                //
+                // Its neighbour, event 40522, was once read as the explicit
+                // fault channel that justified this being only a level. That
+                // turned out to be a level warning too — see `EVENT.WATER_LOW`
+                // — so neither channel stops a running pour any more.
                 //
                 // In the field report that prompted this, the machine was
                 // observed pouring normally throughout — it never beeped, never
@@ -1070,10 +1083,9 @@ export default class Machine {
                 // reading would be strictly worse than the bug being fixed.
                 // Every other phase keeps the original fatal handling.
                 //
-                // This is a hypothesis about the hardware, not a verified fact,
-                // in the same spirit as the other unverified-hardware caveats
-                // here; the always-on frame buffer added alongside this exists
-                // so the next occurrence leaves proof to check it against.
+                // The frame buffer added alongside this did its job: the
+                // console log of 2026-09-09 caught the next occurrence and
+                // showed 40522, not 0x0C, ending a brew the machine completed.
                 if (this.phase.name === "pouring" || this.phase.name === "settling") break;
                 this.setPhase({name: "failed", reason: "noWater"});
                 break;
@@ -1092,6 +1104,22 @@ export default class Machine {
             this.setPhase(this.phase.name === "grinding"
                 ? {name: "failed", reason: "noBeans"}
                 : {name: "failed", reason: "idling"});
+            return;
+        }
+
+        if (code === EVENT.WATER_LOW) {
+            // Not a stop. 40522 is the tank crossing its low mark, and the
+            // machine keeps brewing straight through it — see the capture
+            // quoted on `EVENT.WATER_LOW`. Treating it as fatal is what threw
+            // away two perfectly good brews and told the user the machine had
+            // run out of water while it was visibly still pouring.
+            //
+            // The consequence the user actually needs is already handled: the
+            // machine's next info frame reports `waterEnough: false`, and the
+            // pre-flight `brewBlock` refuses the *next* brew with a message
+            // about filling the tank. This only remembers that it happened.
+            this.waterLow = true;
+            this.announceLink();
             return;
         }
 

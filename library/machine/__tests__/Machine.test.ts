@@ -808,7 +808,6 @@ describe("brewing", () => {
 
     it("ends on a terminal error with its own name", async () => {
         for (const [code, name] of [
-            [40522, "noWater"],
             [8203, "gearPosition"],
             [8204, "doseMismatch"],
             [40517, "idling"]
@@ -836,7 +835,7 @@ describe("brewing", () => {
         // 0x0C level reading ended a brew the machine went on to complete
         // perfectly, no beep and no on-machine warning. 0x0C on the 0x57 status
         // channel is a level dipping under the float sensor as the pump draws,
-        // not the machine's explicit fault (EVENT.ERROR_NO_WATER, 40522).
+        // not a fault. Its neighbour, event 40522, is only a warning too.
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
         transport.emit(status(0x22));      // starting -> grinding
@@ -859,18 +858,43 @@ describe("brewing", () => {
         expect(machine.phase.name).toBe("settling");
     });
 
-    it("still fails on a NO_WATER *event* while pouring, because the event channel is the real fault", async () => {
-        // The distinction that justifies ignoring the state: 40522 is the
-        // machine's own declaration of an empty tank and is honoured in every
-        // phase. Only the level *reading* on the status channel is ignored.
+    it("carries on through a water-low event mid-pour, because 40522 is a level warning", async () => {
+        // The capture that settles it (console log, 2026-09-09): 40522 arrived
+        // with value 0 eleven seconds into the first pour, and the machine then
+        // poured all three stages and finished — BREWER_STOP, ENJOY, COMPLETE,
+        // no beep, no warning on the machine. It had been read as the machine's
+        // own declaration of an empty tank, and it ended two good brews.
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
         transport.emit(status(0x22));      // starting -> grinding
         transport.emit(event(40507));      // grinder stop -> pouring
 
-        transport.emit(event(40522));      // NO_WATER *event* mid-pour
+        transport.emit(event(40522));      // water-low warning mid-pour
 
-        expect(machine.phase).toMatchObject({name: "failed", reason: "noWater"});
+        expect(machine.phase.name).toBe("pouring");
+    });
+
+    it("remembers a water-low warning for the run, so the brew can say the tank is low", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(status(0x22));
+        transport.emit(event(40507));
+        expect(machine.waterLow).toBe(false);
+
+        transport.emit(event(40522));
+
+        expect(machine.waterLow).toBe(true);
+    });
+
+    it("forgets the previous run's water-low warning when a new brew is asked for", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        transport.emit(event(40522));
+        expect(machine.waterLow).toBe(true);
+
+        await machine.brew(brewable());
+
+        expect(machine.waterLow).toBe(false);
     });
 
     it("still fails on a NO_WATER status while grinding, so the fix is not over-broad", async () => {
@@ -1645,10 +1669,10 @@ describe("the retained frame history", () => {
             if (phase.name === "failed") logAtFailure = machine.frameLogSince(from);
         });
 
-        transport.emit(event(40522));
+        transport.emit(event(8203));
 
-        expect(machine.phase).toMatchObject({name: "failed", reason: "noWater"});
-        expect(logAtFailure).toContain("40522");
+        expect(machine.phase).toMatchObject({name: "failed", reason: "gearPosition"});
+        expect(logAtFailure).toContain("8203");
     });
 
     it("survives a disconnect, so the log spanning the drop is the one that is kept", async () => {

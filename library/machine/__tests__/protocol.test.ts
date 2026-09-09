@@ -123,7 +123,7 @@ describe("reading what the machine says", () => {
      * Recorded rather than fixed: on this firmware 40523 *is* the water
      * stream, so the two readings are the same frame under two names, and
      * "correcting" the parser would silently break the brew trace. The point
-     * of writing it down is the neighbour, 40522 `0x9E4A` — ERROR_NO_WATER —
+     * of writing it down is the neighbour, 40522 `0x9E4A` — WATER_LOW —
      * which is one bit away from the flow reading and is treated as a
      * terminal fault.
      */

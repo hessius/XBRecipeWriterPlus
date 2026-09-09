@@ -153,7 +153,19 @@ export const EVENT = {
     ENJOY:            40512,
     ENJOY_2:          40513,
     ERROR_IDLING:     40517,
-    ERROR_NO_WATER:   40522,
+    /**
+     * 40522. Named for what a capture proves it to be, not for what it was
+     * assumed to be.
+     *
+     * It was `ERROR_NO_WATER`, and it ended brews. A full console log of
+     * 2026-09-09 settles it: the machine emitted 40522 with value 0 eleven
+     * seconds into the first pour, then went on to pour all three stages,
+     * `BREWER_STOP`, `ENJOY`, and `COMPLETE` — a flawless brew, no beep, no
+     * warning on the machine. The info frame it sent afterwards had
+     * `waterEnough` (payload[33]) flipped from 1 to 0, which is the tank
+     * crossing its low mark. So this is the level warning, not a stop.
+     */
+    WATER_LOW:        40522,
     ERROR_GEAR:       8203,
     ERROR_DOSE_WATER: 8204,
     MACHINE_INFO:     40521,

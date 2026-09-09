@@ -11,9 +11,10 @@ import {MACHINE_STATE, type Notification} from "./protocol";
  * showed nought; the count and the tank readout behind it are gone.
  *
  * Worth remembering because the code one below it, 40522 `0x9E4A`, is
- * `ERROR_NO_WATER`. The fault and the flow reading are the same subsystem
- * speaking one number apart, which is the first thing to suspect when the
- * machine claims to be dry while it is visibly still pouring.
+ * `WATER_LOW`. The warning and the flow reading are the same subsystem
+ * speaking one number apart — which is why 40522 was read as a fault for so
+ * long, and why the app claimed the machine was dry while it was still
+ * pouring. It is a level warning; the brew carries on.
  */
 export const WATER_VOLUME_CODE = 40523;
 
