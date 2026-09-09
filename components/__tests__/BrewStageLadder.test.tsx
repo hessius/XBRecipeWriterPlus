@@ -1,11 +1,17 @@
 import React from "react";
-import {fireEvent} from "@testing-library/react-native";
+import {act, fireEvent} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
 import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+/** What the scroll view centres or top-aligns its rungs with. */
+function contentStyle(view: {props: {contentContainerStyle?: unknown}}) {
+    return (StyleSheet.flatten(view.props.contentContainerStyle) ?? {}) as
+        Record<string, unknown>;
+}
 
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
@@ -109,6 +115,10 @@ describe("BrewStageLadder", () => {
         // At two or three stages the ceilings in `allocateBands` bite and there
         // is height left over. Top-aligned, that pools as black at the foot of
         // the screen and reads as a layout that ran out.
+        //
+        // The centring moved to the scroll view's content container when the
+        // ladder started measuring itself; it is the same intent in the place
+        // that can now express both it and scrolling.
         const {getByTestId} = await draw({
             pours: pours(2),
             fill: true,
@@ -116,10 +126,38 @@ describe("BrewStageLadder", () => {
             stalls: [[], []]
         });
 
-        const style = StyleSheet.flatten(
-            getByTestId("ladder").props.style
-        ) as {justifyContent?: string};
-        expect(style.justifyContent).toBe("center");
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+
+    it("does not scroll while the rungs fit, so the modal drag still works", async () => {
+        // A live ScrollView swallows the drag that dismisses the modal, so a
+        // ladder that fits must not be scrollable -- which is why this is
+        // `scrollEnabled` rather than simply always rendering a scroll view.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+    });
+
+    it("scrolls once the rungs are measured taller than the room", async () => {
+        // The bug this replaced: `allocateBands` predicts a rung as its bar plus
+        // its gap, but a rung also carries text that does not shrink, so past
+        // about a dozen stages the prediction said it fit when it did not. A
+        // centred flex child that overflows spills out of *both* ends, which is
+        // how stage bars came to be drawn over the trace above and the figures
+        // below at once.
+        //
+        // No layout runs under test, so the two measurements are delivered by
+        // hand -- which is the only way to reach the state at all.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+        const view = getByTestId("ladder-scroll");
+
+        await act(async () => {
+            fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+            fireEvent(view, "contentSizeChange", 320, 640);
+        });
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(true);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("flex-start");
     });
 
     it("fill=false: no flex, no justifyContent on the ladder root", async () => {
@@ -135,17 +173,18 @@ describe("BrewStageLadder", () => {
         expect(style?.justifyContent).toBeUndefined();
     });
 
-    it("fill=true: flex=1 and justifyContent=center on the ladder root", async () => {
+    it("fill=true: the scroll view takes the room and centres what is in it", async () => {
         // React Native Testing Library performs no layout; this test pins the
         // *intent* (which style props are set), not the visual result. Confirm
         // the actual rendering on a device.
         const {getByTestId} = await draw({fill: true, scrolls: false});
 
         const style = StyleSheet.flatten(
-            getByTestId("ladder").props.style
+            getByTestId("ladder-scroll").props.style
         ) as Record<string, unknown>;
         expect(style?.flex).toBe(1);
-        expect(style?.justifyContent).toBe("center");
+        expect(contentStyle(getByTestId("ladder-scroll")).flexGrow).toBe(1);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
     });
 });
 

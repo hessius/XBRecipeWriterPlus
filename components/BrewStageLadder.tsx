@@ -1,5 +1,5 @@
 // components/BrewStageLadder.tsx
-import React, {useEffect, useRef} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {ScrollView, View} from "react-native";
 import {YStack} from "tamagui";
 
@@ -62,6 +62,28 @@ export default function BrewStageLadder({
     // Maps rung index → measured y-offset relative to the ScrollView content.
     const rungY = useRef<Record<number, number>>({});
 
+    /**
+     * What the ladder was given, and what it actually needs.
+     *
+     * `scrolls` is a prediction made by `allocateBands` from stage count alone,
+     * and it under-counts: it models a rung as `barHeight + rungGap`, but a rung
+     * also carries a number and a volume, and text does not shrink with the bar.
+     * Past about a dozen stages the real content is taller than the arithmetic
+     * says, `scrolls` stays false, and the ladder is laid out centred in a box
+     * too small for it -- which overflows *both* ends at once and drew stage
+     * bars over the trace above and over the figures below.
+     *
+     * Measuring instead of predicting removes the whole class: whatever the
+     * rungs turn out to need, the ladder scrolls exactly when it does not fit.
+     * `scrolls` is kept as the opening guess so a ladder that is obviously too
+     * long does not render once un-scrollable before the measurement lands.
+     */
+    const [boxHeight, setBoxHeight] = useState(0);
+    const [contentHeight, setContentHeight] = useState(0);
+    // A tolerance, because a measured content height can land a fraction of a
+    // point above its container without a pixel being out of place.
+    const overflows = scrolls || (boxHeight > 0 && contentHeight > boxHeight + 1);
+
     // One scale for every rung, or a lane says nothing about its neighbours.
     // Stalls are in it: that is what makes a stage that struggled stick out
     // past the ones that did not, by exactly the time it lost.
@@ -117,26 +139,36 @@ export default function BrewStageLadder({
         );
     });
 
-    // Only a ladder that cannot fit is allowed to scroll. A ScrollView that
-    // never scrolls still swallows the drag that dismisses the modal.
-    // Centred, not top-aligned. `allocateBands` fills the screen exactly from
-    // four stages up, but at two or three the ceilings bite and there is height
-    // left over; pooled at the foot it reads as a layout that ran out, and
-    // split around the ladder it reads as margin.
-    if (!scrolls) {
-        return fill ? (
-            <YStack testID="ladder" flex={1} justifyContent="center">
-                {rows}
-            </YStack>
-        ) : (
+    // An unbounded parent, so there is nothing to scroll within and nothing to
+    // measure against: `flex: 1` inside an auto-height container collapses to
+    // zero. This is the share-card path, which is rendered at whatever size it
+    // needs and never seen at a fixed one.
+    if (!fill) {
+        return (
             <YStack testID="ladder">
                 {rows}
             </YStack>
         );
     }
 
+    // Only a ladder that cannot fit may actually scroll: a live ScrollView
+    // swallows the drag that dismisses the modal, so `scrollEnabled` is the
+    // measurement rather than a constant.
+    //
+    // Centred while it fits, top-aligned once it does not. `allocateBands`
+    // fills the screen exactly from four stages up, but at two or three the
+    // ceilings bite and there is height left over; pooled at the foot it reads
+    // as a layout that ran out, and split around the ladder it reads as margin.
+    // `flexGrow: 1` is what gives the centring something to centre in.
     return (
-        <ScrollView ref={scroller} style={{flex: 1}}>
+        <ScrollView testID="ladder-scroll" ref={scroller} style={{flex: 1}}
+                    scrollEnabled={overflows}
+                    onLayout={(e) => setBoxHeight(e.nativeEvent.layout.height)}
+                    onContentSizeChange={(_, height) => setContentHeight(height)}
+                    contentContainerStyle={{
+                        flexGrow:       1,
+                        justifyContent: overflows ? "flex-start" : "center"
+                    }}>
             <View testID="ladder">{rows}</View>
         </ScrollView>
     );
