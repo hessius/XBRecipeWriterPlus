@@ -60,6 +60,34 @@ type Params = {
  * operations call `setKey` instead of `setRecipe`.
  */
 export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) {
+    "use no memo";
+
+    // Opted out of the React Compiler, and it has to be.
+    //
+    // Everything this hook derives -- `balance`, `writeProblems`, and so the
+    // Write and Brew gates -- is computed by calling methods on `recipe`. The
+    // recipe is edited in place, so its reference never changes, and the
+    // compiler keys its cache on exactly that reference:
+    //
+    //     if ($[5] !== recipe) { t4 = recipe?.getTotalVolume() ?? 0; ... }
+    //
+    // which is false forever. The cached target, poured total, balance and
+    // write problems are then served for the life of the screen. On a device
+    // that read as: change the ratio and the target line does not move; press
+    // Auto fix and the recipe is corrected but the banner will not go and Brew
+    // stays disabled; save, close and reopen and everything is suddenly right,
+    // because reopening parses a *new* Recipe and finally changes the key.
+    //
+    // Bumping `key` cannot rescue it: `key` is not in the dependency set of a
+    // derivation that never mentions it.
+    //
+    // The components below this hook were opted out one at a time for the same
+    // reason -- see StagesDeck and StageProfile. This is that fix applied where
+    // the values are actually derived rather than where they are drawn, and
+    // jest cannot catch a repeat: the compiler does not run under jest. The
+    // guard is compilerOptOut.test.ts, which compiles this file and fails if a
+    // cache slot is ever keyed on the recipe again.
+
     // Derived from the route param, so it is an initial value rather than an
     // effect: parsing it in an effect would render once with a null recipe.
     const [recipe, setRecipe] = useState<Recipe | null>(
