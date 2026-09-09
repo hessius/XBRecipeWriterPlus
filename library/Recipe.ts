@@ -374,8 +374,38 @@ class Recipe {
         return totalVolume;
     }
 
+    /**
+     * The whole millilitres the stages are asked to add up to.
+     *
+     * `getTotalVolume` is dose times ratio and the ratio need not be whole:
+     * xBloom's own share links carry 1:15.5, and 15 g at 1:15.5 is 232.5 ml.
+     * Stage volumes are whole millilitres, so that target is unreachable by
+     * construction -- which is why the redistribution below works against this
+     * rounded figure instead. Left fractional, its correction loop subtracted 1
+     * from a remainder of 0.5 for ever and hung the app.
+     */
+    public getStageTargetVolume(): number {
+        return Math.round(this.getTotalVolume());
+    }
+
+    /**
+     * Whether the stages add up to what the machine expects.
+     *
+     * Within the rounding of one millilitre rather than exactly equal, because
+     * a fractional target cannot be hit exactly by whole-millilitre stages. The
+     * shared 1:15.5 recipe pours 60, 60, 60 and 52 against a target of 232.5,
+     * and the editor used to demand a correction that did not exist: every
+     * arrangement of whole numbers is wrong, so the banner could not be
+     * dismissed and the recipe could not be brewed.
+     *
+     * For the whole-number ratios almost every recipe uses, both sides are
+     * integers and this is exactly the old test -- a difference of less than one
+     * between two integers is a difference of none. So it is not a loosening of
+     * the invariant the machine enforces; it is the same invariant expressed so
+     * that a fractional target has an answer at all.
+     */
     public isPourVolumeValid(): boolean {
-        return this.getPourTotalVolume() === this.getTotalVolume();
+        return Math.abs(this.getPourTotalVolume() - this.getTotalVolume()) < 1;
     }
 
     public isTea(): boolean {
@@ -593,24 +623,28 @@ class Recipe {
             return;
         }
         if (this.pours.length === 1) { //if just 1 pour set to total volume
-            this.pours[0].volume = this.getTotalVolume();
+            this.pours[0].volume = this.getStageTargetVolume();
         } else if (this.pours.length > 1 && this.getPourTotalVolume() === 0) {
             //this is where pours have been added, but not volume has been set
             //set the bloom to double dosage, and disribute rest evenly
             this.pours[0].volume = this.dosage * 2;
             for (let i = 1; i < this.pours.length; i++) {
-                this.pours[i].volume = Math.round((this.getTotalVolume() - this.pours[0].volume) / (this.pours.length - 1));
+                this.pours[i].volume = Math.round((this.getStageTargetVolume() - this.pours[0].volume) / (this.pours.length - 1));
             }
             //tack on/remove any extra thst occurs because of rounding to last pour
-            if (this.getTotalVolume() - this.getPourTotalVolume() !== 0) {
-                let diff = this.getTotalVolume() - this.getPourTotalVolume();
+            if (this.getStageTargetVolume() - this.getPourTotalVolume() !== 0) {
+                let diff = this.getStageTargetVolume() - this.getPourTotalVolume();
                 this.pours[this.pours.length - 1].volume += diff;
             }
         } else if (this.pours.length > 1 && this.getPourTotalVolume() !== 0) {
             //this is auto adjusts each pour by scale factor
             //then to the extent due to rounding it doesn't add up to total, it adjusts intelligently
             let pourTotal = this.getPourTotalVolume();
-            let totalVolume = this.getTotalVolume();
+            // Whole millilitres, so `difference` below is a whole number and the
+            // correction loop terminates. Against the raw 232.5 of a 1:15.5
+            // recipe it subtracted 1 from a remainder of 0.5, flipped the sign,
+            // and spun on the JS thread for ever.
+            let totalVolume = this.getStageTargetVolume();
             // Calculate the scaling factor
             const scalingFactor = totalVolume / pourTotal;
 
