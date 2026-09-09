@@ -596,7 +596,14 @@ function applyGrindMinimum(recipe: Recipe, min: number) {
 function applyBypassEnabled(recipe: Recipe, on: boolean) {
     if (on && recipe.bypassVolume <= 0) {
         recipe.bypassVolume = BYPASS_DEFAULT_VOLUME;
-        recipe.bypassTemp   = BYPASS_DEFAULT_TEMPERATURE;
+        // The temperature the brew ended on, rather than a constant that has
+        // nothing to do with this recipe. Bypass water goes into the cup at the
+        // end, straight after the last stage, so that is the number already in
+        // mind -- and someone brewing a cool finish does not want the dilution
+        // arriving hotter than the coffee. The constant is the fallback for a
+        // recipe with no stages, which has no last temperature to copy.
+        recipe.bypassTemp   = recipe.pours.at(-1)?.temperature
+            ?? BYPASS_DEFAULT_TEMPERATURE;
     }
     recipe.bypassEnabled = on;
 }

@@ -23,8 +23,40 @@ function recipeWithBypass(): Recipe {
     return recipe;
 }
 
+/** Three stages ending at 88 C, so a seeded bypass has a last stage to copy. */
+function recipeEndingAt(temperature: number): Recipe {
+    const recipe = new Recipe();
+    recipe.dosage = 18;
+    recipe.ratio  = 16;
+    recipe.addPour(0, false);
+    recipe.addPour(0);
+    recipe.addPour(0);
+    recipe.autoFixPourVolumes();
+    recipe.pours.forEach((pour, index) => {
+        // A descending ramp, so copying the *last* stage is distinguishable
+        // from copying the first or from averaging them.
+        pour.temperature = temperature + (recipe.pours.length - 1 - index) * 4;
+    });
+    return recipe;
+}
+
 describe("useRecipeEditor bypass", () => {
+    it("seeds a bypass at the temperature the brew finished on", async () => {
+        // Bypass water is poured into the cup at the end, so the temperature
+        // that makes sense to start from is the one the brew just ended at --
+        // not a constant that has nothing to do with this recipe. A ramp is
+        // used so this cannot pass by copying the first stage or by averaging.
+        const {result} = await editorFor(recipeEndingAt(88));
+
+        await act(async () => { result.current.setBypassEnabled(true); });
+
+        expect(result.current.recipe?.bypassVolume).toBe(30);
+        expect(result.current.recipe?.bypassTemp).toBe(88);
+    });
+
     it("seeds volume and temperature when bypass is switched on from off", async () => {
+        // No stages at all, so there is no last temperature to copy and the
+        // constant is the only answer left.
         const {result} = await editorFor(new Recipe());
 
         await act(async () => { result.current.setBypassEnabled(true); });

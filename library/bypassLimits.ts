@@ -19,9 +19,14 @@ export const BYPASS_TEMPERATURE: Range = TEMPERATURE;
 /**
  * What a freshly enabled bypass starts at.
  *
- * 30 ml is roughly the smallest dilution anyone bothers with, and 85 C is what
- * `Recipe` already defaults an untouched bypass temperature to, so enabling
- * bypass on a recipe that has never had one does not move the number.
+ * 30 ml is roughly the smallest dilution anyone bothers with.
+ *
+ * The temperature is only a fallback. A seeded bypass copies the temperature of
+ * the last stage instead, because the water goes into the cup straight after
+ * that stage and a fixed constant would arrive hotter than a deliberately cool
+ * finish; see `applyBypassEnabled`. This constant is what is left for a recipe
+ * with no stages at all, and it is what `Recipe` already defaults an untouched
+ * bypass temperature to.
  */
 export const BYPASS_DEFAULT_VOLUME = 30;
 export const BYPASS_DEFAULT_TEMPERATURE = 85;
