@@ -1,3 +1,4 @@
+import {MACHINE_CARD_MAX_STAGES} from "./cardWriteErrors";
 import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
 import {displayRange, toDisplay, type TemperatureUnit} from "./units";
@@ -41,10 +42,19 @@ const AGITATION_RANGE: Range = {
 };
 
 /**
- * The pour count is written as `pours.length << 3` in a single byte, so 31 is
- * the last count that does not overflow it.
+ * The most stages a card may carry.
+ *
+ * The byte format allows 31 -- the count is written as `pours.length << 3` in a
+ * single byte, and 31 is the last value that does not overflow it. The machine
+ * is the tighter constraint: it rejects a card with eleven stages outright, and
+ * brews ten without complaint.
+ *
+ * This gates writing a card, and nothing else. A recipe may hold as many stages
+ * as it likes and brew them over BLE, where seventeen has been run successfully;
+ * refusing to let someone build one because a card could not carry it would be
+ * the medium dictating to the model.
  */
-const MAX_POURS = 31;
+const MAX_POURS = MACHINE_CARD_MAX_STAGES;
 /** The editor stops adding tea stages at three, and the card agrees. */
 const MAX_TEA_POURS = 3;
 

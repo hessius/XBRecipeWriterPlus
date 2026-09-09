@@ -20,14 +20,37 @@
 export const SIGNATURE_BYTES = 32;
 
 /**
+ * The most stages the machine will read off a card, whatever the card holds.
+ *
+ * Measured, not derived. A 160-byte card has room for fourteen stages by the
+ * byte arithmetic below, and the machine refuses the card outright at eleven --
+ * not a truncated brew, a rejected card. Ten loads and brews normally.
+ *
+ * So capacity is the *lower* of two unrelated ceilings: what the tag can hold,
+ * and what the firmware will accept. This is the second one, and on every card
+ * seen so far it is the binding one.
+ *
+ * It is a card limit only. The same recipe sent over BLE brews seventeen stages
+ * without complaint, which is why this is not a limit on the model or on the
+ * editor -- see `MAX_POURS` in cardLimits.
+ */
+export const MACHINE_CARD_MAX_STAGES = 10;
+
+/**
  * The most stages a given number of usable bytes could hold.
  *
  * `available` is already net of the signature: it is what a recipe may spend.
+ *
+ * Capped by what the firmware will accept, so a roomier card cannot advertise
+ * a ceiling the machine would then reject the card for.
  */
 export function maxStagesForBytes(available: number): number {
-    return Math.max(
-        Math.floor((available - CARD_OVERHEAD_BYTES) / CARD_BYTES_PER_STAGE),
-        0
+    return Math.min(
+        Math.max(
+            Math.floor((available - CARD_OVERHEAD_BYTES) / CARD_BYTES_PER_STAGE),
+            0
+        ),
+        MACHINE_CARD_MAX_STAGES
     );
 }
 

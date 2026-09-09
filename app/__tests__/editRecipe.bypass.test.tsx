@@ -279,9 +279,25 @@ describe("stage ceiling advisory", () => {
             .toHaveTextContent(/A card holds 10 stages/);
     });
 
-    it("uses the larger card when that is the one last read", async () => {
+    it("still advises at eleven on the larger card, because the machine refuses it", async () => {
+        // This used to assert the opposite. A 160-byte card has room for
+        // fourteen stages by the byte arithmetic, so the advisory was silenced
+        // for eleven -- and on device that card is then rejected outright by
+        // the machine, which will not load an eleven-stage card at all. Ten
+        // brews normally. The tag's capacity was never the only ceiling.
         mockSettings.lastCardRead = serialiseCapture(captureWithBlocks(40, 4));
         await renderEditor(recipeWithStageCount(11));
+        await fireEvent.press(screen.getByLabelText(/^Stages,/));
+
+        expect(screen.getByTestId("stage-ceiling"))
+            .toHaveTextContent(/A card holds 10 stages/);
+    });
+
+    it("says nothing at ten stages on the larger card either", async () => {
+        // The pair to the test above: ten is the machine's ceiling, not nine,
+        // so a recipe that sits exactly on it must not be nagged about it.
+        mockSettings.lastCardRead = serialiseCapture(captureWithBlocks(40, 4));
+        await renderEditor(recipeWithStageCount(10));
         await fireEvent.press(screen.getByLabelText(/^Stages,/));
 
         expect(screen.queryByTestId("stage-ceiling")).toBeNull();
