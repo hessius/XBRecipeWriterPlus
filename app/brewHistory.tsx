@@ -2,7 +2,7 @@ import {router, useFocusEffect, useLocalSearchParams} from "expo-router";
 import React, {useRef, useState} from "react";
 import {FlatList} from "react-native-gesture-handler";
 import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/ReanimatedSwipeable";
-import {Button, Text, YStack} from "tamagui";
+import {Button, Text, XStack, YStack} from "tamagui";
 
 import BrewHistoryRow from "@/components/BrewHistoryRow";
 import DotIcon from "@/components/DotIcon";
@@ -109,7 +109,16 @@ function SwipeableBrewRow({
             rightThreshold={40}
             overshootRight={false}
             renderRightActions={() => (
-                <DeleteTile onPress={() => onDeleteRequest(rowRef)} />
+                // The left padding is the gap between the row and the tile.
+                // Without it the tile butts against the row's edge and reads as
+                // part of it rather than as something the row slid off -- the
+                // same reasoning, and the same measurements, as the recipe
+                // list's trays in SwipeableRecipeRow.
+                <XStack testID="brew-row-actions" paddingLeft="$2"
+                        paddingRight="$2" paddingVertical="$2"
+                        alignItems="stretch">
+                    <DeleteTile onPress={() => onDeleteRequest(rowRef)} />
+                </XStack>
             )}>
             <BrewHistoryRow brew={brew} onPress={onPress} />
         </Swipeable>

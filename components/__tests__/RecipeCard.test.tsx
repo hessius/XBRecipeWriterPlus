@@ -60,6 +60,7 @@ function profilePath(): string {
 }
 
 const TOUCH = {
+    persist: () => undefined,
     nativeEvent: {
         touches:        [],
         changedTouches: [],
@@ -220,7 +221,7 @@ describe("RecipeCard", () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        const card = screen.getByTestId("recipe-card");
+        const card = screen.getByTestId("recipe-card-surface");
         expect(accents.coffee).toContain(card.props.style.backgroundColor);
     });
 
@@ -230,7 +231,7 @@ describe("RecipeCard", () => {
         const recipe = makeRecipe();
         recipe.accentIndex = 5;
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
-        expect(screen.getByTestId("recipe-card").props.style.backgroundColor)
+        expect(screen.getByTestId("recipe-card-surface").props.style.backgroundColor)
             .toBe(accents.coffee[5]);
     });
 
@@ -239,7 +240,7 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
                         onPress={jest.fn()}/>
         );
-        const card = screen.getByTestId("recipe-card");
+        const card = screen.getByTestId("recipe-card-surface");
         expect(accents.tea).toContain(card.props.style.backgroundColor);
     });
 
@@ -338,7 +339,7 @@ describe("RecipeCard", () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        const style = screen.getByTestId("recipe-card").props.style as
+        const style = screen.getByTestId("recipe-card-surface").props.style as
             Record<string, number | string>;
         // The profile is drawn oversized and flush to the corner; without the
         // clip it spills out of the card.
@@ -554,9 +555,42 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
         );
 
-        await press(screen.getByTestId("recipe-card"));
+        await fireEvent.press(screen.getByTestId("recipe-card"));
 
         expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not press from a bare responder release, because the card is not Tamagui-pressed", async () => {
+        // This is the swipe-opens-the-recipe bug, pinned at the one place a
+        // unit test can reach it.
+        //
+        // Swiping a row left or right opened the recipe as well as the tray.
+        // The card sits inside a Swipeable, so a pan and a tap compete for the
+        // same finger, and Tamagui's press lost the argument: it fires `onPress`
+        // from `onResponderRelease` unconditionally, with no test of how far the
+        // finger travelled. In gesture-handler mode -- which `index.js` turns on
+        // for the whole app -- it does check, but from a `runOnJS` callback, so
+        // on a busy JS thread the cancel loses the race to the release. That
+        // matches the report exactly: it happened while a brew was streaming and
+        // would not reproduce on an idle app.
+        //
+        // Brew history is the same Swipeable around an ordinary `Pressable` and
+        // has never done it, because RN's press is taken away natively the
+        // moment the pan claims the touch, with no JS in the path.
+        //
+        // So this asserts the negative that tells the two apart: a raw grant and
+        // release is a Tamagui press and is not a React Native one. If the card
+        // is ever given its `onPress` back as a Tamagui prop, this fails.
+        const onPress = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
+        );
+
+        const card = screen.getByTestId("recipe-card");
+        await fireEvent(card, "responderGrant", TOUCH);
+        await fireEvent(card, "responderRelease", TOUCH);
+
+        expect(onPress).not.toHaveBeenCalled();
     });
 
     it("hides the row actions by default", async () => {

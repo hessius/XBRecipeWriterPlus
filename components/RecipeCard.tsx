@@ -1,5 +1,5 @@
 import React from "react";
-import {View} from "react-native";
+import {Pressable, View} from "react-native";
 import {XStack, YStack, Text} from "tamagui";
 
 import BrewShortcut, {type CardShortcut, SHORTCUT_INSET} from "@/components/BrewShortcut";
@@ -209,15 +209,26 @@ export default function RecipeCard({
     ];
 
     return (
-        <YStack
+        // The press is React Native's, not Tamagui's, and that is the whole
+        // point of this wrapper.
+        //
+        // The card sits inside a Swipeable, so a pan and a tap compete for the
+        // same finger. Tamagui's press -- which this app puts in gesture-handler
+        // mode from `index.js` -- abandons itself after 12 pt of travel, but it
+        // decides that in a `runOnJS` callback, so on a busy JS thread the
+        // cancel loses to the release and a swipe opens the recipe. Brew
+        // history is the same Swipeable around an ordinary `Pressable` and has
+        // never done it: RN's press is taken away natively the moment the pan
+        // claims the touch, with no JS in the path.
+        //
+        // So the visuals stay Tamagui's and the touch does not.
+        <Pressable
             testID="recipe-card"
-            // React Native does not promote a View to an accessibility element
-            // implicitly, so without this the role and label are inert and the
-            // card is announced as a loose pile of numbers.
             accessible
             accessibilityRole="button"
             accessibilityLabel={summary}
             accessibilityActions={actions}
+            onPress={onPress}
             onAccessibilityAction={(event) => {
                 if (event.nativeEvent.actionName === "duplicate") {
                     onDuplicate?.();
@@ -231,84 +242,96 @@ export default function RecipeCard({
                     onWrite?.();
                 }
             }}
-            onPress={onPress}
-            pressStyle={{opacity: 0.85, scale: 0.99}}
-            // A minimum rather than a fixed height: the title and the Doto stats
-            // both grow with the OS text size, and a fixed height plus the clip
-            // below would crop the stats away for exactly those users.
-            minHeight={CARD_HEIGHT}
-            borderRadius="$8"
-            overflow="hidden"
-            justifyContent="space-between"
-            gap="$2"
-            padding="$3.5"
-            style={{backgroundColor: accent}}>
+            // The press feedback Tamagui's `pressStyle` used to draw. Kept
+            // identical in value so the card still answers a finger the same
+            // way; only what decides "pressed" has changed.
+            style={({pressed}) => ({
+                opacity:   pressed ? 0.85 : 1,
+                transform: [{scale: pressed ? 0.99 : 1}]
+            })}>
+            <YStack
+                testID="recipe-card-surface"
+                // React Native does not promote a View to an accessibility element
+                // implicitly, and the label lives on the Pressable above; this stack
+                // is the card's paint.
+                //
+                // A minimum rather than a fixed height: the title and the Doto stats
+                // both grow with the OS text size, and a fixed height plus the clip
+                // below would crop the stats away for exactly those users.
+                minHeight={CARD_HEIGHT}
+                borderRadius="$8"
+                overflow="hidden"
+                justifyContent="space-between"
+                gap="$2"
+                padding="$3.5"
+                style={{backgroundColor: accent}}>
 
-            <View pointerEvents="none"
-                  style={{
-                      position: "absolute",
-                      right:    -(PROFILE_BLEED + PROFILE_OVERHANG),
-                      bottom:   -(PROFILE_BLEED + PROFILE_OVERHANG)
-                  }}>
-                <PourProfile testID="recipe-card-profile" pours={recipe.pours}
-                             width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
-            </View>
+                <View pointerEvents="none"
+                      style={{
+                          position: "absolute",
+                          right:    -(PROFILE_BLEED + PROFILE_OVERHANG),
+                          bottom:   -(PROFILE_BLEED + PROFILE_OVERHANG)
+                      }}>
+                    <PourProfile testID="recipe-card-profile" pours={recipe.pours}
+                                 width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
+                </View>
 
-            {shortcut !== null && onBrew !== undefined && (
-                <BrewShortcut variant={shortcut} accent={accent}
-                              ink={onAccent.text} onPress={onBrew}/>
-            )}
+                {shortcut !== null && onBrew !== undefined && (
+                    <BrewShortcut variant={shortcut} accent={accent}
+                                  ink={onAccent.text} onPress={onBrew}/>
+                )}
 
-            <XStack testID="recipe-card-title-row"
-                    justifyContent="space-between" alignItems="flex-start" gap="$2"
-                    paddingRight={shortcut === null ? 0 : SHORTCUT_INSET[shortcut]}>
-                {/* Bounded to the same scale Doto is, so the two halves of the
-                    card grow together rather than the prose swamping the data. */}
-                <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
-                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                      color={recipe.hasName() ? onAccent.text : onAccent.label}>
-                    {recipe.displayName()}
-                </Text>
-                <XStack alignItems="center" gap="$1.5">
-                    {showMarker && (
-                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
-                                       color={onAccent.marker}>
-                            {marker}
-                        </DotMatrixText>
-                    )}
-                    {/* The same authority as the editor's WRITE gate. Asking
-                        only whether the volumes summed marked a recipe with a
-                        3100 ml stage as writable. */}
-                    {!canWriteToCard(recipe) && (
-                        <DotIcon name="error" size={12} color={onAccent.marker}
-                                 accessibilityLabel="Will not write"/>
-                    )}
-                </XStack>
-            </XStack>
-
-            <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
-                <XStack gap="$5">
-                    <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
-                    <Stat label="RATIO" value={recipe.ratio}/>
-                    {!isTea && <Stat label="GRIND" value={recipe.grindSize}/>}
-                </XStack>
-
-                {editing && (
-                    <XStack gap="$1">
-                        {onDuplicate !== undefined && (
-                            <Action label="Duplicate recipe" icon="duplicate"
-                                    tone={palette.success}
-                                    testID="recipe-card-duplicate"
-                                    onPress={onDuplicate}/>
+                <XStack testID="recipe-card-title-row"
+                        justifyContent="space-between" alignItems="flex-start" gap="$2"
+                        paddingRight={shortcut === null ? 0 : SHORTCUT_INSET[shortcut]}>
+                    {/* Bounded to the same scale Doto is, so the two halves of the
+                        card grow together rather than the prose swamping the data. */}
+                    <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
+                          maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                          color={recipe.hasName() ? onAccent.text : onAccent.label}>
+                        {recipe.displayName()}
+                    </Text>
+                    <XStack alignItems="center" gap="$1.5">
+                        {showMarker && (
+                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                                           color={onAccent.marker}>
+                                {marker}
+                            </DotMatrixText>
                         )}
-                        {onDelete !== undefined && (
-                            <Action label="Delete recipe" icon="delete"
-                                    tone={palette.danger}
-                                    testID="recipe-card-delete" onPress={onDelete}/>
+                        {/* The same authority as the editor's WRITE gate. Asking
+                            only whether the volumes summed marked a recipe with a
+                            3100 ml stage as writable. */}
+                        {!canWriteToCard(recipe) && (
+                            <DotIcon name="error" size={12} color={onAccent.marker}
+                                     accessibilityLabel="Will not write"/>
                         )}
                     </XStack>
-                )}
-            </XStack>
-        </YStack>
+                </XStack>
+
+                <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
+                    <XStack gap="$5">
+                        <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
+                        <Stat label="RATIO" value={recipe.ratio}/>
+                        {!isTea && <Stat label="GRIND" value={recipe.grindSize}/>}
+                    </XStack>
+
+                    {editing && (
+                        <XStack gap="$1">
+                            {onDuplicate !== undefined && (
+                                <Action label="Duplicate recipe" icon="duplicate"
+                                        tone={palette.success}
+                                        testID="recipe-card-duplicate"
+                                        onPress={onDuplicate}/>
+                            )}
+                            {onDelete !== undefined && (
+                                <Action label="Delete recipe" icon="delete"
+                                        tone={palette.danger}
+                                        testID="recipe-card-delete" onPress={onDelete}/>
+                            )}
+                        </XStack>
+                    )}
+                </XStack>
+            </YStack>
+        </Pressable>
     );
 }

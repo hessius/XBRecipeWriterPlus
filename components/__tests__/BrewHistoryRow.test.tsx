@@ -26,6 +26,19 @@ describe("BrewHistoryRow", () => {
         expect(getByText(/244 G/)).toBeTruthy();
     });
 
+    it("draws on an opaque background, so the row covers the tile it slides over", async () => {
+        // The delete tile sits behind the row, not beside it. With a transparent
+        // row the tile read straight through the words as the drawer closed --
+        // two things occupying one strip of screen. The recipe list never showed
+        // this because its cards are painted with the recipe's accent.
+        const {getByLabelText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew()} onPress={jest.fn()} />
+        );
+        const row = getByLabelText(/^Ethiopia Guji,/);
+        expect(StyleSheet.flatten(row.props.style).backgroundColor)
+            .toBe(palette.base);
+    });
+
     it("announces everything the row draws, not just the recipe name", async () => {
         // `Pressable` with an explicit label replaces the whole subtree for a
         // screen reader. With the name alone every brew of the same recipe is

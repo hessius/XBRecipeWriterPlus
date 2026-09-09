@@ -48,8 +48,13 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
     ].filter((part) => part !== undefined).join(", ");
 
     return (
+        // Opaque, because the delete tile sits *behind* the row rather than
+        // beside it: a transparent row let the tile read through its words as
+        // the drawer closed. The recipe list never showed this only because its
+        // cards are painted with the recipe's accent.
         <Pressable accessibilityRole="button" accessibilityLabel={label}
-                   onPress={onPress}>
+                   onPress={onPress}
+                   style={{backgroundColor: palette.base}}>
             <XStack gap="$3" paddingVertical="$3" paddingHorizontal="$3"
                     alignItems="center">
                 <View
