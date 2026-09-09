@@ -621,6 +621,12 @@ export default class Machine {
 
     private receiveFrame(frame: Uint8Array, source?: string): void {
         const parsed = parseNotification(frame);
+        // Retain and announce *before* acting on the frame. Handling it fires
+        // the phase listeners, and a phase listener — `BrewRecorder` — is what
+        // snapshots the log for a brew's record. Retaining afterwards meant the
+        // frame that ended a brew was the one frame missing from that brew's
+        // log, which is precisely the frame the record exists to preserve.
+        this.emitFrame("received", frame, parsed, source);
         if (parsed.kind === "status") {
             this.state = parsed.state;
             this.stateAt = Date.now();
@@ -631,7 +637,6 @@ export default class Machine {
             this.announceLink();
         }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
-        this.emitFrame("received", frame, parsed, source);
         this.notificationListeners.forEach((listener) => listener(parsed));
     }
 

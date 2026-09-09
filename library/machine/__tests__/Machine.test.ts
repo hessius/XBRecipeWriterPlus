@@ -1628,6 +1628,29 @@ describe("the retained frame history", () => {
         expect(entry ? Array.from(entry.frame) : null).toEqual(frame);
     });
 
+    it("retains a frame before acting on it, so the frame that ends a brew is in that brew's log", async () => {
+        // The evidence bug behind two false out-of-water reports. `receiveFrame`
+        // used to hand the frame to `onState`/`onEvent` first — those fire the
+        // phase listeners, and a phase listener is exactly where `BrewRecorder`
+        // snapshots `frameLogSince` — and only retain it afterwards. So the one
+        // frame of a brew worth having, the frame that ended it, was the one
+        // frame missing from that brew's log. Both field captures stopped dead
+        // at the last frame before the culprit, which is why neither could say
+        // whether a status or an event had killed the brew.
+        const {transport, machine} = await readyMachine();
+        await machine.brew(brewable());
+        const from = Date.now();
+        let logAtFailure = "";
+        machine.onPhase((phase) => {
+            if (phase.name === "failed") logAtFailure = machine.frameLogSince(from);
+        });
+
+        transport.emit(event(40522));
+
+        expect(machine.phase).toMatchObject({name: "failed", reason: "noWater"});
+        expect(logAtFailure).toContain("40522");
+    });
+
     it("survives a disconnect, so the log spanning the drop is the one that is kept", async () => {
         const {transport, machine} = await readyMachine();
         transport.emit(event(40507));
