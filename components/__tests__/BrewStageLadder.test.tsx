@@ -1,5 +1,5 @@
 import React from "react";
-import {act, fireEvent} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
@@ -185,6 +185,23 @@ describe("BrewStageLadder", () => {
         expect(style?.flex).toBe(1);
         expect(contentStyle(getByTestId("ladder-scroll")).flexGrow).toBe(1);
         expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+});
+
+describe("BrewStageLadder bypass rung", () => {
+    it("hangs a bypass rung below the stages when there is one", async () => {
+        await draw({
+            bypass: {
+                volume: 5, temperature: 85, delivered: 5,
+                startedAt: 183, state: "done"
+            }
+        });
+        expect(screen.getByTestId("rung-bypass")).toBeTruthy();
+    });
+
+    it("hangs no bypass rung when there is none", async () => {
+        await draw();
+        expect(screen.queryByTestId("rung-bypass")).toBeNull();
     });
 });
 

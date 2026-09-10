@@ -3,6 +3,8 @@ import React, {useEffect, useRef, useState} from "react";
 import {ScrollView, View} from "react-native";
 import {YStack} from "tamagui";
 
+import BrewBypassRung from "@/components/BrewBypassRung";
+import type {BypassView} from "@/library/brew/bypassState";
 import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {rungSegments} from "@/library/brew/rungGeometry";
@@ -45,6 +47,12 @@ type Props = {
     selectedIndex?: number | null;
     /** Absent makes the rungs inert, which is what the live screen and the export want. */
     onSelectStage?: (index: number) => void;
+    /**
+     * The bypass, if this brew has one. Absent means no closing rung — which
+     * is every recipe without a bypass and every record written before the
+     * bypass was drawn at all.
+     */
+    bypass?: BypassView;
 };
 
 /**
@@ -56,7 +64,7 @@ type Props = {
  */
 export default function BrewStageLadder({
     pours, accent, activeIndex, barHeight, rungGap, scrolls, fill, stageWater, stalls,
-    pauseElapsed, selectedIndex = null, onSelectStage
+    pauseElapsed, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured y-offset relative to the ScrollView content.
@@ -139,6 +147,25 @@ export default function BrewStageLadder({
         );
     });
 
+    // Below the stages, and outside the map, because it is not one of them: it
+    // has no pour, no agitation and no pause, and folding it into the loop
+    // would mean inventing a `Pour` that does not exist.
+    const closing = bypass === undefined ? null : (
+        <View key="row-bypass" testID="row-bypass"
+              style={{paddingVertical: rungGap / 2}}>
+            <BrewBypassRung
+                testID="rung-bypass"
+                volume={bypass.volume}
+                temperature={bypass.temperature}
+                delivered={bypass.delivered}
+                state={bypass.state}
+                accent={accent}
+                laneSeconds={laneSeconds}
+                barHeight={barHeight}
+            />
+        </View>
+    );
+
     // An unbounded parent, so there is nothing to scroll within and nothing to
     // measure against: `flex: 1` inside an auto-height container collapses to
     // zero. This is the share-card path, which is rendered at whatever size it
@@ -147,6 +174,7 @@ export default function BrewStageLadder({
         return (
             <YStack testID="ladder">
                 {rows}
+                {closing}
             </YStack>
         );
     }
@@ -169,7 +197,7 @@ export default function BrewStageLadder({
                         flexGrow:       1,
                         justifyContent: overflows ? "flex-start" : "center"
                     }}>
-            <View testID="ladder">{rows}</View>
+            <View testID="ladder">{rows}{closing}</View>
         </ScrollView>
     );
 }
