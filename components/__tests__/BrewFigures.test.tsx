@@ -1,4 +1,5 @@
 import React from "react";
+import {screen} from "@testing-library/react-native";
 
 import BrewFigures from "@/components/BrewFigures";
 import {accents} from "@/constants/colors";
@@ -39,5 +40,20 @@ describe("BrewFigures", () => {
             <BrewFigures water={0} cup={0} seconds={65} accent={TEST_ACCENT} />
         );
         expect(getByText("1:05")).toBeTruthy();
+    });
+
+    it("breaks the bypass out beside the water, rather than folding it in", async () => {
+        await renderWithProviders(
+            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" bypass={5} />
+        );
+        expect(screen.getByText("240")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
+    });
+
+    it("shows no badge without a bypass", async () => {
+        await renderWithProviders(
+            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
+        );
+        expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });
 });
