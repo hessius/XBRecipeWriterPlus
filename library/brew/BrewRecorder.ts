@@ -8,7 +8,7 @@ import type {BrewRecord, BrewSample} from "./BrewRecord";
 import {finalOutcome, planFromPours, stageWaterFromSamples, stallsFromSamples,
         summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
-import {NOISE_FLOOR_ML} from "./stalls";
+import {NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
 
 /** The part of `Machine` a recorder needs. Narrow, so a test can be a literal. */
 export type RecorderMachine = {
@@ -63,6 +63,13 @@ export default class BrewRecorder {
     private pourBaselineWater = 0;
     private pour = 0;
     private pours = 0;
+    /**
+     * Milliseconds into the brew that the bypass began, or null.
+     *
+     * On the samples' clock, not the wall clock, so a record replays against
+     * its own timeline the way every other figure on it does.
+     */
+    private bypassAt: number | null = null;
     private cup = 0;
     /** The most recent water reading, carried onto cup-driven settling samples. */
     private lastWater = 0;
@@ -193,6 +200,23 @@ export default class BrewRecorder {
             }
             return;
         }
+        // The bypass is stage n + 1, and this line is the whole fix.
+        //
+        // Every sample carries whichever pour index was last announced, and the
+        // machine announces no pour for the bypass — so its water was stamped
+        // with the last stage and counted as that stage's. Worse, its arrival
+        // was a *rise*, which closed the flat drawdown plateau before it and
+        // had it recorded as a 61-second stall: the target guard in
+        // `stallsInStage` only covers a plateau still open at the end of the
+        // stage. Moving the index moves both.
+        if (phase.name === "bypass") {
+            this.pour = (this.pours > 0 ? this.pours : this.options.recipe.pours.length) + 1;
+            // `pouringAt` is 0 if water never moved; `ensurePouringAt` is what
+            // the terminal path uses, and the same fallback applies here.
+            this.ensurePouringAt();
+            this.bypassAt = this.clock() - this.pouringAt;
+            return;
+        }
         // Non-terminal: water is done but coffee is still draining onto the
         // scale. Keep sampling and wait for the cup line to settle rather than
         // ending the record on the earliest of the machine's three end events.
@@ -274,6 +298,20 @@ export default class BrewRecorder {
         const figures = summarise(this.collected, plannedSeconds(recipe.pours));
         const failure: BrewFailure | null =
             phase.name === "failed" ? phase.reason : null;
+        const stages = this.pours > 0 ? this.pours : recipe.pours.length;
+        // Copied from the recipe, like `plan`: what was asked for is part of
+        // what happened, and it must not change when the recipe does.
+        const bypass = recipe.bypassEnabled && !recipe.isTea()
+                       && recipe.bypassVolume > 0
+            ? {
+                volume: Math.max(recipe.bypassVolume, 0),
+                temperature: recipe.bypassTemp,
+                delivered: this.bypassAt === null
+                    ? 0
+                    : stageWaterFrom(this.collected, stages + 1),
+                startedAt: this.bypassAt
+              }
+            : undefined;
         const record: BrewRecord = {
             id: (this.options.newId ?? defaultId)(),
             recipeUuid: recipe.uuid,
@@ -294,6 +332,9 @@ export default class BrewRecorder {
             // it said even after the recipe is edited or deleted.
             plan: planFromPours(recipe.pours),
             stageWater: stageWaterFromSamples(this.collected, recipe.pours.length),
+            // Spread rather than assigned, so a recipe with no bypass leaves
+            // the key off the row entirely and reads back as an old record.
+            ...(bypass === undefined ? {} : {bypass}),
             ...figures
         };
         // The machine hands a phase to every listener in turn, and this is one

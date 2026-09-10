@@ -606,3 +606,111 @@ describe("the frame log a record carries", () => {
         expect(seen).toEqual([""]);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Bypass tests
+// ---------------------------------------------------------------------------
+
+/** Simplified machine/recipe factories for the bypass suite. */
+function makeMachine() {
+    const fake = fakeMachine();
+    return {
+        machine: fake.machine,
+        emitPhase: (p: BrewPhase) => fake.phase(p),
+        emitWeight: (grams: number, _ms: number) => fake.water(grams)
+    };
+}
+
+function makeRecipe(pours: {volume: number}[]): Recipe {
+    const r = new Recipe();
+    r.name = "Bypass Test";
+    r.pours = pours.map(
+        (p, i) => new Pour(i + 1, p.volume, 93, 40, 0, 0, 0)
+    );
+    return r;
+}
+
+describe("the bypass", () => {
+    it("goes in its own lane rather than onto the last stage", () => {
+        const {machine, emitPhase, emitWeight} = makeMachine();
+        const recipe = makeRecipe([{volume: 40}, {volume: 115}, {volume: 85}]);
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume = 5;
+        recipe.bypassTemp = 85;
+
+        let saved: BrewRecord | undefined;
+        const recorder = new BrewRecorder({
+            machine, recipe, onRecord: (record) => { saved = record; }
+        });
+        recorder.start();
+        built.push(recorder);
+
+        emitPhase({name: "pouring", pour: 1, pours: 3});
+        emitWeight(40, 0);
+        emitPhase({name: "pouring", pour: 2, pours: 3});
+        emitWeight(155, 20);
+        emitPhase({name: "pouring", pour: 3, pours: 3});
+        emitWeight(240, 100);
+        // The drawdown: flat, at the last stage's target.
+        emitWeight(240, 150);
+        // The bypass.
+        emitPhase({name: "bypass"});
+        emitWeight(245, 155);
+        emitPhase({name: "settling"});
+        emitPhase({name: "done"});
+
+        expect(saved?.stageWater).toEqual([40, 115, 85]);
+        expect(saved?.bypass).toEqual({
+            volume: 5, temperature: 85, delivered: 5,
+            startedAt: expect.any(Number)
+        });
+    });
+
+    it("records no stall for the drawdown wait", () => {
+        // Same run as above; the 61-second flat stretch at the last stage's
+        // target used to be closed by the bypass's rise and recorded as a
+        // stall, because the target guard only covers a plateau that is still
+        // open when the stage ends.
+        const {machine, emitPhase, emitWeight} = makeMachine();
+        const recipe = makeRecipe([{volume: 40}, {volume: 115}, {volume: 85}]);
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume = 5;
+
+        let saved: BrewRecord | undefined;
+        const recorder = new BrewRecorder({
+            machine, recipe, onRecord: (record) => { saved = record; }
+        });
+        recorder.start();
+        built.push(recorder);
+
+        emitPhase({name: "pouring", pour: 1, pours: 3});
+        emitWeight(40, 0);
+        emitPhase({name: "pouring", pour: 2, pours: 3});
+        emitWeight(155, 20);
+        emitPhase({name: "pouring", pour: 3, pours: 3});
+        emitWeight(240, 100);
+        emitWeight(240, 150);
+        emitWeight(240, 161);
+        emitPhase({name: "bypass"});
+        emitWeight(245, 165);
+        emitPhase({name: "done"});
+
+        expect(saved?.stalls?.[2]).toEqual([]);
+    });
+
+    it("keeps no bypass on a recipe that has none", () => {
+        const {machine, emitPhase, emitWeight} = makeMachine();
+        const recipe = makeRecipe([{volume: 40}]);
+        let saved: BrewRecord | undefined;
+        const recorder = new BrewRecorder({
+            machine, recipe, onRecord: (record) => { saved = record; }
+        });
+        recorder.start();
+        built.push(recorder);
+        emitPhase({name: "pouring", pour: 1, pours: 1});
+        emitWeight(40, 10);
+        emitPhase({name: "done"});
+
+        expect(saved?.bypass).toBeUndefined();
+    });
+});
