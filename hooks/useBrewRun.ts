@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from "react";
 
 import {OVER} from "@/constants/brewCopy";
 import {useBrew} from "@/hooks/useBrew";
+import {bypassRungState, type BypassView} from "@/library/brew/bypassState";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
@@ -212,11 +213,44 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const holding = activeIndex !== null && pouring
         && stalledNow(samples, activeIndex + 1, liveTarget);
 
+    // The bypass, as one object for the three views that draw it.
+    //
+    // `pours.length + 1` is the lane the recorder stamps it into, so the live
+    // figure and the recorded one come from the same arithmetic and cannot
+    // disagree.
+    const wantsBypass = recipe !== null && recipe.bypassEnabled
+        && !recipe.isTea() && recipe.bypassVolume > 0;
+    const bypassDelivered = wantsBypass
+        ? stageWaterFrom(samples, pours.length + 1)
+        : 0;
+    const bypassSample = wantsBypass
+        ? samples.find((s) => s.pour === pours.length + 1)
+        : undefined;
+    const lastPour = pours[pours.length - 1];
+    const bypass: BypassView | undefined = !wantsBypass || recipe === null
+        ? undefined
+        : {
+            volume: Math.max(recipe.bypassVolume, 0),
+            temperature: recipe.bypassTemp,
+            delivered: bypassDelivered,
+            startedAt: bypassSample === undefined ? null : bypassSample.at / 1000,
+            state: bypassRungState({
+                phaseName: phase.name,
+                over,
+                settling,
+                activeIndex,
+                stages: pours.length,
+                lastPauseDone: lastPour !== undefined
+                    && pauseElapsed >= pauseSeconds(lastPour),
+                delivered: bypassDelivered
+            })
+          };
+
     return {
         // `phase` after the spread on purpose: the sanitised local reading, not
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, elapsed, stageElapsed, activeIndex, holding,
-        heldSeconds, stalls, stageWater, pauseElapsed
+        heldSeconds, stalls, stageWater, pauseElapsed, bypass
     };
 }
 

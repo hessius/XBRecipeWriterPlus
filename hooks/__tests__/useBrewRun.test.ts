@@ -339,6 +339,26 @@ describe("useBrewRun", () => {
         expect(result.current.phase).toEqual({name: "grinding"});
     });
 
+    it("publishes no bypass for a recipe without one", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        expect(result.current.bypass).toBeUndefined();
+    });
+
+    it("publishes a pending bypass before the brew reaches it", async () => {
+        const h = harness();
+        const r = recipe();
+        r.bypassEnabled = true;
+        r.bypassVolume = 5;
+        r.bypassTemp = 85;
+
+        const {result} = await renderHook(() => useBrewRun(r, h.store));
+        expect(result.current.bypass).toEqual({
+            volume: 5, temperature: 85, delivered: 0,
+            startedAt: null, state: "pending"
+        });
+    });
+
     it("forgets the old machine's phase when a new one arrives", async () => {
         // A reconnect hands us a fresh machine with a fresh recorder. The phase
         // the previous one was left in describes a brew that is no longer ours,
