@@ -99,21 +99,23 @@ function round2(n: number): number {
 }
 
 /**
- * How many seconds into the lane the water hands over to the wait.
+ * Which segment the wait begins at — where the water hands over to the rest.
  *
  * The agitation-after mark belongs at that crossover, not at the end of the
  * lane: agitating "after the pour" happens when the pouring stops, and putting
  * the mark past the rest made it read as though it happened at the end of the
  * wait instead.
  *
- * A stage with no rest has no crossover, so the mark sits at the end of its
- * water, which is the same moment.
+ * An index rather than a time because the rung draws the mark *in* the gap
+ * between those two segments. Positioning it by a fraction of the lane could
+ * not be made to land there: the gaps are fixed points taken out of the lane,
+ * so the seam's true position is a fraction of the width that is left after
+ * them, which drifts from the naive fraction by however many gaps precede it.
+ *
+ * A stage with no rest has no crossover, so the answer is one past the end,
+ * which is the end of its water — the same moment.
  */
-export function seamSeconds(segments: Segment[]): number {
-    let at = 0;
-    for (const segment of segments) {
-        if (segment.kind === "pause") return round1(at);
-        at += segment.seconds;
-    }
-    return round1(at);
+export function seamIndex(segments: Segment[]): number {
+    const found = segments.findIndex((segment) => segment.kind === "pause");
+    return found === -1 ? segments.length : found;
 }

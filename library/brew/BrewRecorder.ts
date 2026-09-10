@@ -2,7 +2,9 @@ import {resolveAccent} from "@/library/accent";
 import type {BrewFailure, BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
-import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_FLAT_MS} from "@/constants/machine";
+import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_CEILING_MS, SETTLE_FLAT_MS}
+    from "@/constants/machine";
+import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import type {BrewRecord, BrewSample} from "./BrewRecord";
 import {finalOutcome, planFromPours, stageWaterFromSamples, stallsFromSamples,
@@ -84,6 +86,19 @@ export default class BrewRecorder {
     private settleAnchorAt = 0;
     /** The backstop timer, so a machine that never flattens still ends. */
     private settleCap: ReturnType<typeof setTimeout> | null = null;
+    /** When settling opened, for the ceiling the backstop cannot be pushed past. */
+    private settleOpenedAt = 0;
+    /**
+     * Whether the machine itself has said the coffee is ready.
+     *
+     * ENJOY (40512) and the READY state arrive a good twenty seconds before
+     * ENJOY_2 stops the machine's timer, so they are not the end — but they are
+     * the machine's own opinion that the drawdown is over, and that is exactly
+     * the thing a flat cup line cannot tell on its own. Until one of them
+     * arrives, a cup that has stopped rising is a bed that has dammed, not a
+     * brew that has finished.
+     */
+    private machineReady = false;
 
     constructor(options: RecorderOptions) {
         this.options = options;
@@ -125,6 +140,16 @@ export default class BrewRecorder {
 
     private receive(parsed: Notification): void {
         if (this.emitted) return;
+        if (parsed.kind === "event" && parsed.code === EVENT.ENJOY) this.machineReady = true;
+        if (parsed.kind === "status"
+            && (parsed.state === MACHINE_STATE.READY
+                || parsed.state === MACHINE_STATE.COMPLETE)) {
+            this.machineReady = true;
+        }
+        // The machine is still talking, so the drawdown is still under way.
+        // Push the backstop out; it is there for a link that has gone silent,
+        // not for a brew that is taking its time.
+        if (this.settling) this.armSettleCap();
         if (parsed.kind === "cupWeight") {
             this.cup = parsed.grams;
             // During settling the water stream may have stopped at BREWER_STOP
@@ -247,10 +272,27 @@ export default class BrewRecorder {
         this.settlePeak = this.cup;
         this.settleAnchorCup = this.cup;
         this.settleAnchorAt = this.clock();
+        this.settleOpenedAt = this.clock();
         // Without this, a machine whose cup never quite stops weeping — or
         // whose weight stream simply stops after the pour — would leave a run
         // that never ends and a record that is never written.
-        this.settleCap = setTimeout(() => this.emit({name: "done"}), SETTLE_CAP_MS);
+        this.armSettleCap();
+    }
+
+    /**
+     * (Re)start the backstop that ends a record the machine never ends itself.
+     *
+     * Restarted by every frame, so it counts silence rather than elapsed time:
+     * a two-minute drawdown that the machine narrates the whole way through is
+     * a slow brew, not a lost one. The ceiling is what keeps a machine that
+     * chatters without ever finishing from leaving a record unwritten.
+     */
+    private armSettleCap(): void {
+        this.clearSettleCap();
+        const since = this.clock() - this.settleOpenedAt;
+        const wait = Math.max(0, Math.min(SETTLE_CAP_MS, SETTLE_CEILING_MS - since));
+        this.settleCap = setTimeout(() => this.emit({name: "done"}), wait);
+        this.settleCap.unref?.();
     }
 
     /**
@@ -276,6 +318,12 @@ export default class BrewRecorder {
             this.settleAnchorAt = this.clock();
             return;
         }
+        // A flat cup only means the end once the machine agrees the coffee is
+        // ready. Before that it means the water is sitting on the bed, which is
+        // an ordinary slow drawdown — and ending there truncated a real brew's
+        // record with eighty-five of its two hundred and forty millilitres
+        // still above the grounds.
+        if (!this.machineReady) return;
         // Flat for long enough: the drawdown has stopped, so the brew has.
         if (this.clock() - this.settleAnchorAt >= SETTLE_FLAT_MS) this.emit({name: "done"});
     }

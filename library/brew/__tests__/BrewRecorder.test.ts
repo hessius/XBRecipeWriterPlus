@@ -17,6 +17,8 @@ function fakeMachine() {
         machine,
         water: (grams: number) => notify({kind: "waterWeight", grams}),
         cup: (grams: number) => notify({kind: "cupWeight", grams}),
+        event: (code: number, value?: number) => notify({kind: "event", code, value}),
+        state: (state: number) => notify({kind: "status", state}),
         phase: (p: BrewPhase) => phase(p)
     };
 }
@@ -171,6 +173,9 @@ describe("BrewRecorder", () => {
         fake.water(200);
         fake.cup(240);
         fake.phase({name: "settling"});
+        // The machine's own "coffee is ready". Without it a flat cup is a
+        // dammed bed, not a finished brew — see the test below.
+        fake.event(40512);
         // A wobble under the noise floor is not a rise, and 3.9 s of flat is
         // not yet long enough.
         time.advance(3900);
@@ -183,6 +188,41 @@ describe("BrewRecorder", () => {
         fake.cup(240);
         expect(records).toHaveLength(1);
         expect(records[0].record.outcome).toBe("done");
+    });
+
+    it("will not call a flat cup the end before the machine says it is ready", () => {
+        // A slow drawdown on 2026-09-10: the bed dammed, the cup sat still, and
+        // four seconds of flatness ended the record with 85 of the recipe's 240
+        // ml still above the grounds. The machine went on brewing for another
+        // minute and a half and was right to.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(240);
+        fake.cup(155);
+        fake.phase({name: "settling"});
+        time.advance(60_000);
+        fake.cup(155);
+        expect(records).toHaveLength(0);
+
+        // ENJOY, and now the same flat line does mean the end.
+        fake.event(40512);
+        time.advance(4000);
+        fake.cup(155);
+        expect(records).toHaveLength(1);
+    });
+
+    it("takes the READY state as the machine saying it is ready too", () => {
+        // ENJOY can be dropped like any other notification; the 0x57 state
+        // frame carries the same news and arrives at about the same moment.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(240);
+        fake.cup(230);
+        fake.phase({name: "settling"});
+        fake.state(0x24);
+        time.advance(4000);
+        fake.cup(230);
+        expect(records).toHaveLength(1);
     });
 
     it("keeps waiting while the cup is still filling", () => {

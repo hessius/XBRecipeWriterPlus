@@ -136,8 +136,38 @@ describe("BrewStageRung", () => {
         expect(queryByTestId("rung-agitation-after")).toBeNull();
     });
 
-    it("puts the agitation notch at the water-to-wait seam", async () => {
-        // 70 ml at 4 ml/s is 17.5 s of water; the lane is 40 s wide.
+    it("cuts the before mark through the bar, exactly as the after mark", async () => {
+        // It used to be a bare glyph in a zero-width box, vertically centred
+        // inside the first segment: accent on accent fill, so a stage that had
+        // begun pouring hid it entirely and a recipe agitating before and after
+        // appeared to agitate only after.
+        const {getByTestId} = await draw({
+            state: "active", delivered: 70,
+            pour: new Pour(
+                1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_OFF, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        const style = StyleSheet.flatten(
+            getByTestId("rung-agitation-before-notch").props.style
+        );
+        expect(style.backgroundColor).toBe("#FF007F");
+        expect(style.width).toBe(2);
+    });
+
+    it("draws the two marks identically", async () => {
+        const {getByTestId} = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+
+        expect(StyleSheet.flatten(getByTestId("rung-agitation-before").props.style))
+            .toEqual(StyleSheet.flatten(getByTestId("rung-agitation-after").props.style));
+    });
+
+    it("centres the after mark in the gap between the water and the wait", async () => {
+        // Not a percentage of the lane. The gaps are fixed points taken out of
+        // the lane, so a fraction of the whole width lands beside the seam
+        // rather than on it, by however many gaps precede it.
         const {getByTestId} = await draw({pour: new Pour(
             1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
         )});
@@ -145,8 +175,10 @@ describe("BrewStageRung", () => {
         const style = StyleSheet.flatten(
             getByTestId("rung-agitation-after").props.style
         );
-        expect(style.left).toBe("43.75%");
         expect(style.position).toBe("absolute");
+        // A two-point notch centred in the three-point gap.
+        expect(style.left).toBe(0.5);
+        expect(style.width).toBe(2);
     });
 
     it("cuts the notch through the bar in the accent colour", async () => {
@@ -158,7 +190,7 @@ describe("BrewStageRung", () => {
         });
 
         const style = StyleSheet.flatten(
-            getByTestId("rung-agitation-notch").props.style
+            getByTestId("rung-agitation-after-notch").props.style
         );
         expect(style.backgroundColor).toBe("#FF007F");
         expect(style.width).toBe(2);
@@ -182,10 +214,20 @@ describe("BrewStageRung", () => {
             1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
         )});
 
-        const lane = getByTestId("rung-lane");
-        const ids = lane.props.children.flat(9)
-            .filter((child: {props?: {testID?: string}}) => child?.props?.testID)
-            .map((child: {props: {testID: string}}) => child.props.testID);
+        // Walk the rendered lane rather than the element's children: the
+        // segments and their gaps are wrapped, so reading `props.children`
+        // finds neither and the ordering would hold vacuously.
+        const ids: string[] = [];
+        const walk = (node: {props?: {testID?: string}; children?: unknown[]}) => {
+            if (node.props?.testID !== undefined) ids.push(node.props.testID);
+            (node.children ?? []).forEach((child) => {
+                if (typeof child === "object" && child !== null) {
+                    walk(child as {props?: {testID?: string}; children?: unknown[]});
+                }
+            });
+        };
+        walk(getByTestId("rung-lane") as unknown as {children?: unknown[]});
+        expect(ids).toContain("rung-agitation-after");
         expect(ids.indexOf("rung-agitation-after"))
             .toBeLessThan(ids.indexOf("rung-slack"));
     });
@@ -313,9 +355,11 @@ describe("BrewStageRung", () => {
         // margin against the very constant that sets it passes whatever that
         // constant is, including zero, which is the case worth catching.
         expect(SEGMENT_GAP).toBe(3);
-        const flat = (id: string) =>
-            StyleSheet.flatten(getByTestId(id).props.style) as {marginRight?: number};
-        expect(flat("segment-0").marginRight).toBe(3);
-        expect(flat("segment-1").marginRight).toBe(0);
+        // The gap is its own item now, not a margin: an agitation mark takes
+        // that slot when there is one, so the mark lands in the gap by
+        // construction rather than by arithmetic over the lane's width.
+        const gap = StyleSheet.flatten(getByTestId("gap-1").props.style) as {width?: number};
+        expect(gap.width).toBe(SEGMENT_GAP);
+        expect(SEGMENT_GAP).toBe(3);
     });
 });

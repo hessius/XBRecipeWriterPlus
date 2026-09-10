@@ -154,31 +154,58 @@ export const STATE_FRESH_MS = 15_000;
  * How long the cup weight must sit flat before a settling brew is called done.
  *
  * After the machine stops pouring, coffee keeps dripping from the brewer onto
- * the scale for several seconds; the brew is not actually over until that
- * drawdown stops and the cup line flattens. Four seconds of no meaningful rise
- * is long enough that a slow last drip does not cut the trace short, and short
- * enough that the record is stamped while the drawdown is still fresh.
+ * the scale; the brew is not over until that drawdown stops and the cup line
+ * flattens. Four seconds of no meaningful rise is long enough that a slow last
+ * drip does not cut the trace short, and short enough that the record is
+ * stamped while the drawdown is still fresh.
+ *
+ * Four seconds is only safe because this test is now gated on the machine
+ * having said the coffee is ready — see `BrewRecorder.watchSettle`. Ungated it
+ * was not: a bed that dams, drips nothing for five seconds and then releases is
+ * an ordinary slow drawdown, and calling that the end truncated the record with
+ * a third of the water still sitting above the grounds.
  */
 export const SETTLE_FLAT_MS = 4000;
 
 /**
- * The longest a brew may sit in settling before it is force-ended.
+ * How long the machine must say *nothing at all* before a settling brew is
+ * force-ended.
  *
- * Settling waits for a physical signal — the cup line flattening or the cup
- * being lifted. Neither is guaranteed: a machine left untouched with a cup that
- * never quite stops weeping, or a weight stream that simply stops after the
- * pour, would leave a run that never ends. Worse, `settling` is non-terminal
- * and only ENJOY_2 (40513) otherwise reaches `done`, so a single dropped BLE
- * notification would strand the run — the screen stuck on CANCEL, the mini bar
- * never finishing, the next brew refused as "machine busy".
+ * Settling waits for the machine's own end signal, ENJOY_2 (40513) — the event
+ * that stops its timer. That is the only thing that actually knows when the
+ * drawdown is finished, so nothing here should ever beat it to the conclusion.
+ * But `settling` is non-terminal, so a single dropped BLE notification would
+ * strand the run: the screen stuck on CANCEL, the mini bar never finishing, the
+ * next brew refused as "machine busy". Hence a backstop.
  *
- * So this bounds two separate things with two separate timers on the same
- * duration: `BrewRecorder` caps the *record* it writes, and `Machine` runs a
- * *settling watchdog* that promotes `settling` → `done` so the *run* itself
- * cannot hang. Ninety seconds is far longer than any real drawdown, so either
- * only ever fires on a stuck brew.
+ * This is a **silence** timer, not an elapsed one, and that distinction is the
+ * whole point. As a plain ninety seconds from the start of settling it fired on
+ * a real brew — a slow, well-behaved drawdown that took over two minutes, whose
+ * machine went on happily reporting the cup filling the entire time. The app
+ * declared it finished with a third of the water still in the dripper. A
+ * machine that is still talking is still brewing; only one that has gone quiet
+ * has lost its ENJOY_2. So every frame that arrives during settling starts this
+ * over.
+ *
+ * It bounds two things with two timers on the same duration: `BrewRecorder`
+ * caps the *record*, and `Machine` runs a *settling watchdog* over the *run*.
  */
 export const SETTLE_CAP_MS = 90_000;
+
+/**
+ * The longest a brew may sit in settling however talkative the machine is.
+ *
+ * `SETTLE_CAP_MS` restarts on every frame, which is right for a slow drawdown
+ * and wrong for a cup that never stops weeping: a scale nudging up and down at
+ * 10 Hz would re-arm the watchdog forever and hang the run — exactly the defect
+ * the watchdog exists to prevent, reintroduced through its own fix. This is the
+ * ceiling that cannot be pushed back.
+ *
+ * Ten minutes because it must not be reachable by any real brew. The slowest
+ * drawdown observed is a little over two, and the failure it guards against is
+ * a stuck run, which the user can already leave by dismissing the sheet.
+ */
+export const SETTLE_CEILING_MS = 600_000;
 
 /**
  * How far the cup weight must fall from its peak to read as the cup being

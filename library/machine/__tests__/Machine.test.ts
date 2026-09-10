@@ -646,6 +646,88 @@ describe("brewing", () => {
         }
     });
 
+    it("does not end a slow drawdown that the machine is still narrating", async () => {
+        // 2026-09-10: a drawdown that took over two minutes. The machine
+        // reported the cup filling the whole way and stopped its own timer,
+        // correctly, long after the app had declared the brew finished. The cap
+        // counts silence, so a machine that is still talking is still brewing.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0, settleCapMs: 90_000});
+            await machine.connect("AA:BB");
+            transport.emit(machineInfoFrame());
+            transport.emit(status(0x01));
+            await machine.brew(brewable());
+            transport.emit(status(0x22));
+            transport.emit(event(40507));
+            transport.emit(event(40511));  // settling
+
+            // Three minutes of drawdown, with the machine reporting throughout.
+            for (let i = 0; i < 6; i += 1) {
+                jest.advanceTimersByTime(30_000);
+                transport.emit(status(0x23));
+                expect(machine.phase.name).toBe("settling");
+            }
+            // Its own end signal, whenever it comes, is what finishes the brew.
+            transport.emit(event(40513));
+            expect(machine.phase.name).toBe("done");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("still gives up on a machine that goes quiet mid-drawdown", async () => {
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0, settleCapMs: 90_000});
+            await machine.connect("AA:BB");
+            transport.emit(machineInfoFrame());
+            transport.emit(status(0x01));
+            await machine.brew(brewable());
+            transport.emit(status(0x22));
+            transport.emit(event(40507));
+            transport.emit(event(40511));  // settling
+
+            jest.advanceTimersByTime(60_000);
+            transport.emit(status(0x23));   // one last word, then silence
+            jest.advanceTimersByTime(89_999);
+            expect(machine.phase.name).toBe("settling");
+            jest.advanceTimersByTime(1);
+            expect(machine.phase.name).toBe("done");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("caps a machine that chatters without ever finishing", async () => {
+        // The re-arm must not become its own hang: a cup that never stops
+        // weeping would otherwise push the backstop out forever.
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0, settleCapMs: 90_000});
+            await machine.connect("AA:BB");
+            transport.emit(machineInfoFrame());
+            transport.emit(status(0x01));
+            await machine.brew(brewable());
+            transport.emit(status(0x22));
+            transport.emit(event(40507));
+            transport.emit(event(40511));  // settling
+
+            // Ten minutes of chatter, a frame every ten seconds.
+            for (let i = 0; i < 60; i += 1) {
+                jest.advanceTimersByTime(10_000);
+                transport.emit(status(0x23));
+            }
+            jest.advanceTimersByTime(1);
+            expect(machine.phase.name).toBe("done");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("does not let the settling watchdog fire into a later state after the link drops", async () => {
         // The watchdog must be torn down with the link, or a promotion to
         // `done` would land on whatever the machine is doing next time.

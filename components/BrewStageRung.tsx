@@ -7,7 +7,7 @@ import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
 import HatchFill from "@/components/HatchFill";
 import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
-import {NOTCH_OVERHANG, rungSegments, seamSeconds, type Segment}
+import {NOTCH_OVERHANG, rungSegments, seamIndex, type Segment}
     from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
@@ -68,6 +68,47 @@ const NOTCH_WIDTH = 2;
 
 /** The size of the spiral sitting on top of the notch, in points. */
 const NOTCH_GLYPH = 11;
+
+/**
+ * One agitation mark: a notch through the lane with its glyph above it.
+ *
+ * It lives in a gap between two segments rather than on top of one. Both marks
+ * are drawn the same way, which they were not: "before" used to be a bare
+ * glyph, vertically centred, in a zero-width box at the head of the lane — so
+ * it sat *inside* the first segment, in the accent colour, on top of accent
+ * fill. On a stage that had begun pouring it was invisible, which is why a
+ * recipe agitating before and after appeared to agitate only after.
+ *
+ * The mark is centred on the gap by construction. Positioning it as a
+ * percentage of the lane put it about four points to the right of the seam:
+ * the container had no width, so `alignItems: "center"` centred the notch on
+ * the glyph's width instead of the other way round.
+ */
+function AgitationMark({colour, barHeight, testID}:
+                       {colour: string; barHeight: number; testID: string}) {
+    return (
+        <View style={{width: SEGMENT_GAP, height: barHeight}}>
+            <View
+                testID={testID}
+                pointerEvents="none"
+                style={{
+                    position: "absolute",
+                    left: (SEGMENT_GAP - NOTCH_WIDTH) / 2,
+                    width: NOTCH_WIDTH,
+                    top: -(NOTCH_OVERHANG + NOTCH_GLYPH),
+                    bottom: -NOTCH_OVERHANG,
+                    alignItems: "center"
+                }}
+            >
+                <PourGlyph kind="agitation" accent={colour} size={NOTCH_GLYPH} />
+                <View
+                    testID={`${testID}-notch`}
+                    style={{width: NOTCH_WIDTH, flex: 1, backgroundColor: colour}}
+                />
+            </View>
+        </View>
+    );
+}
 
 /** How far a faint stripe is mixed back toward the background. */
 const HATCH_DIM = 0.62;
@@ -178,6 +219,16 @@ export default function BrewStageRung({
     const before = pour.getAgitationBefore();
     const after = pour.getAgitationAfter();
     const markColour = done ? palette.muted : accent;
+    // Which gap the after-mark lives in. A stage with no rest has no seam
+    // inside the lane, so its mark goes in a gap added past the last segment —
+    // and a lane whose very first segment is the rest (a stage that pours no
+    // water at all) has no gap before it, so the mark falls back to the head of
+    // the lane, which is the same instant.
+    const seam = seamIndex(segments);
+    const tailMark = after && seam >= segments.length;
+    const leadMark = before ? "rung-agitation-before"
+                   : after && seam === 0 ? "rung-agitation-after"
+                   : null;
 
     return (
         <XStack
@@ -212,30 +263,27 @@ export default function BrewStageRung({
 
             <XStack testID="rung-lane" style={{flex: 1}} height={barHeight}
                     alignItems="center">
-                {before && (
-                    <View
-                        testID="rung-agitation-before"
-                        style={{
-                            width: 0,
-                            height: barHeight,
-                            overflow: "visible",
-                            justifyContent: "center"
-                        }}
-                    >
-                        <PourGlyph kind="agitation" accent={markColour} size={NOTCH_GLYPH} />
-                    </View>
+                {leadMark && (
+                    <AgitationMark colour={markColour} barHeight={barHeight}
+                                   testID={leadMark} />
                 )}
                 {segments.map((segment, i) => {
                     const fraction = Math.max(0, Math.min(1, segment.fill));
                     const hatch = hatchColours(accent, done);
                     return (
+                        <React.Fragment key={`segment-${i}`}>
+                        {i > 0 && (
+                            after && seam === i
+                                ? <AgitationMark colour={markColour} barHeight={barHeight}
+                                                 testID="rung-agitation-after" />
+                                : <View testID={`gap-${i}`}
+                                        style={{width: SEGMENT_GAP, height: barHeight}} />
+                        )}
                         <View
-                            key={`segment-${i}`}
                             testID={`segment-${i}`}
                             style={{
                                 flex: Math.max(segment.seconds, 0.001),
                                 height: barHeight,
-                                marginRight: i < segments.length - 1 ? SEGMENT_GAP : 0,
                                 borderRadius: radius,
                                 borderWidth: segment.kind === "pause" ? 1 : 0,
                                 borderStyle: segment.kind === "pause" ? "dashed" : "solid",
@@ -270,32 +318,12 @@ export default function BrewStageRung({
                                 </>
                             )}
                         </View>
+                        </React.Fragment>
                     );
                 })}
-                {after && (
-                    <View
-                        testID="rung-agitation-after"
-                        pointerEvents="none"
-                        style={{
-                            position: "absolute",
-                            left: `${(seamSeconds(segments) / span) * 100}%`,
-                            top: -(NOTCH_OVERHANG + NOTCH_GLYPH),
-                            bottom: -NOTCH_OVERHANG,
-                            alignItems: "center",
-                            transform: [{translateX: -NOTCH_WIDTH / 2}]
-                        }}
-                    >
-                        <PourGlyph kind="agitation" accent={markColour}
-                                   size={NOTCH_GLYPH} />
-                        <View
-                            testID="rung-agitation-notch"
-                            style={{
-                                width: NOTCH_WIDTH,
-                                flex: 1,
-                                backgroundColor: markColour
-                            }}
-                        />
-                    </View>
+                {tailMark && (
+                    <AgitationMark colour={markColour} barHeight={barHeight}
+                                   testID="rung-agitation-after" />
                 )}
                 {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}
             </XStack>

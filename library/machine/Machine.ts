@@ -1,6 +1,7 @@
 import {
     BREW_INFO_ROUNDS, ECHO_FRAMES, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS,
-    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS, STATE_FRESH_MS
+    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS,
+    SETTLE_CEILING_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -274,6 +275,8 @@ export default class Machine {
      * separate from the recorder's cap on the record.
      */
     private settleTimer: ReturnType<typeof setTimeout> | null = null;
+    /** When the current settle began, for the ceiling the watchdog cannot pass. */
+    private settleOpenedAt = 0;
     private retriedInPro = false;
     /**
      * The commit frame of an uploaded recipe that has not been started yet.
@@ -661,6 +664,10 @@ export default class Machine {
             this.announceLink();
         }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
+        // Proof of life during the drawdown. Handled after the frame, so an
+        // ENJOY_2 that has just ended the brew does not re-arm a watchdog for a
+        // phase the run has already left.
+        if (this.phase.name === "settling") this.armSettleTimer();
         this.notificationListeners.forEach((listener) => listener(parsed));
     }
 
@@ -723,7 +730,10 @@ export default class Machine {
         this.phase = phase;
         this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
             .includes(phase.name);
-        if (phase.name === "settling") this.armSettleTimer();
+        if (phase.name === "settling") {
+            this.settleOpenedAt = Date.now();
+            this.armSettleTimer();
+        }
         // A brew that has ended takes its uncommitted recipe with it. Left
         // behind, START on a later screen would commit a recipe the user has
         // already cancelled or watched fail.
@@ -997,13 +1007,24 @@ export default class Machine {
         this.ackTimer = null;
     }
 
+    /**
+     * (Re)start the silence watchdog over settling.
+     *
+     * Called once when settling opens and again on every frame that arrives
+     * during it, so the countdown measures how long the machine has been quiet
+     * rather than how long the drawdown has taken. A drawdown may take as long
+     * as it likes; ENJOY_2 ends it. The ceiling is what stops a machine that
+     * chatters without ever finishing from hanging the run.
+     */
     private armSettleTimer(): void {
         this.clearSettleTimer();
+        const since = Date.now() - this.settleOpenedAt;
+        const wait = Math.max(0, Math.min(this.settleCapMs, SETTLE_CEILING_MS - since));
         this.settleTimer = setTimeout(() => {
             // Only if nothing else moved the run on. A dropped ENJOY_2 must not
             // strand it in a non-terminal phase forever.
             if (this.phase.name === "settling") this.setPhase({name: "done"});
-        }, this.settleCapMs);
+        }, wait);
         this.settleTimer.unref?.();
     }
 
