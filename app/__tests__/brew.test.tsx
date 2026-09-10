@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {fireEvent, waitFor, within} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
@@ -8,6 +8,7 @@ import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import Pour from "@/library/Pour";
+import type {BypassView} from "@/library/brew/bypassState";
 import Recipe from "@/library/Recipe";
 
 // The record the provider writes when a brew finishes; the in-place export
@@ -29,6 +30,7 @@ let mockHolding = false;
 let mockCanOfferPro = false;
 let mockFirstBrewDone = true;
 let mockError: string | null = null;
+let mockBypass: BypassView | undefined = undefined;
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
@@ -82,6 +84,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             activeIndex: mockActiveIndex,
             holding: mockHolding,
             heldSeconds: 0,
+            bypass: mockBypass,
         },
         start: mockStart,
         startInPro: mockStartInPro,
@@ -155,6 +158,7 @@ beforeEach(() => {
     mockFirstBrewDone = true;
     mockError = null;
     traceAnimationArgs = [];
+    mockBypass = undefined;
 });
 
 describe("brew route", () => {
@@ -453,5 +457,38 @@ describe("the brew screen says true things", () => {
         const style = StyleSheet.flatten(getByTestId("brew-recipe-title").props.style);
         expect(style.fontFamily).toBe("Doto-Bold");
         expect(style.fontSize).toBe(13);
+    });
+});
+
+async function renderBrew(overrides: {
+    phase?: BrewPhase;
+    samples?: unknown[];
+    bypass?: BypassView;
+} = {}) {
+    if (overrides.phase !== undefined) mockPhase = overrides.phase;
+    if (overrides.samples !== undefined) mockSamples = overrides.samples;
+    if (overrides.bypass !== undefined) mockBypass = overrides.bypass;
+    return renderWithProviders(<Brew />);
+}
+
+describe("bypass on the live brew screen", () => {
+    it("shows the bypass rung while a bypass brew is running", async () => {
+        await renderBrew({
+            phase: {name: "pouring", pour: 3, pours: 3},
+            bypass: {volume: 5, temperature: 85, delivered: 0,
+                     startedAt: null, state: "waiting"}
+        });
+        expect(screen.getByTestId("rung-bypass")).toBeTruthy();
+    });
+
+    it("does not count bypass water into the WATER figure", async () => {
+        await renderBrew({
+            phase: {name: "settling"},
+            samples: [{at: 190_000, water: 245, cup: 200, pour: 4}],
+            bypass: {volume: 5, temperature: 85, delivered: 5,
+                     startedAt: 183, state: "done"}
+        });
+        expect(screen.getByText("240")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
     });
 });

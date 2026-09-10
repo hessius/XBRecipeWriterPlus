@@ -131,6 +131,14 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const total = recipe.pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
     const last = samples[samples.length - 1];
 
+    const bypass = run?.bypass;
+    // The scale reports one running total, and the bypass goes onto the same
+    // scale — so the last reading is brew water *plus* bypass. The figure has
+    // to name the brew water, with the bypass beside it, or a 240 ml recipe
+    // reads as having used 245.
+    const scaleTotal = last?.water ?? 0;
+    const brewWater = Math.max(0, scaleTotal - (bypass?.delivered ?? 0));
+
     // Only a refusal for water gets the water copy. `block` names which of the
     // pre-flight checks said no, so a busy machine is no longer told to go and
     // fill a tank that is already full.
@@ -229,7 +237,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         accent={accent}
                         width={width}
                         plannedSeconds={plannedSeconds(recipe.pours)}
-                        water={last?.water ?? 0}
+                        water={brewWater}
                         cup={last?.cup ?? 0}
                         seconds={elapsed}
                         activeIndex={activeIndex}
@@ -238,6 +246,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         note={finalOutcome("done", last?.water ?? 0, plannedWater)
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
+                        bypass={bypass}
                     />
                 </ViewShot>
                 </ScrollView>
@@ -257,6 +266,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             planColor={planColor}
                             planDashed={motion.dashed}
                             planHeadAt={motion.headAt}
+                            bypass={bypass}
                         />
 
                         <BrewStageLadder
@@ -270,14 +280,16 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             stageWater={stageWater}
                             stalls={stalls}
                             pauseElapsed={pauseElapsed}
+                            bypass={bypass}
                         />
                     </YStack>
 
                     <BrewFigures
-                        water={last?.water ?? 0}
+                        water={brewWater}
                         cup={last?.cup ?? 0}
                         seconds={elapsed}
                         accent={accent}
+                        bypass={bypass?.delivered}
                     />
 
                     <BrewNowCard pour={livePour} accent={accent} resting={resting} />
