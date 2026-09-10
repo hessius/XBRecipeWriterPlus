@@ -102,6 +102,17 @@ function say(props: Props): {title: string; detail: string; line: string} {
         };
     }
 
+    // Between the last pour and the settle. Without its own branch this fell
+    // through to the grinding default and flipped the bar back to "Grinding"
+    // at the very end of the brew.
+    if (phase.name === "bypass") {
+        return {
+            title: "Bypass",
+            detail: `ADDING WATER · ${clock(elapsed)}`,
+            line: props.accent
+        };
+    }
+
     // Settling: the last pour is done but coffee is still draining onto the
     // scale. A phase *after* the pours, so it must not fall through to the
     // grinding default below and flip the bar back to "Grinding" while the

@@ -26,6 +26,10 @@ export const PHASE_COPY: Record<string, string> = {
     // one used to look pressable while doing nothing.
     pressPlay:   "PRESS ▶ ON THE MACHINE",
     grinding:    "Grinding…",
+    // After the last stage. The machine waits for the dripper to finish before
+    // it dispenses, and that wait is not a fault — the copy has to say so, or
+    // a legitimate minute of silence reads as a hang.
+    bypass:      "Adding bypass water…",
     // Water is done, but coffee is still dripping from the brewer onto the
     // scale. The brew is not over until that drawdown stops, so this is a
     // distinct, non-terminal status between the last pour and "Enjoy."
@@ -100,6 +104,9 @@ export const PRO_MODE_PROMPT =
 /** The phases during which stopping the machine is still a meaningful thing. */
 export const RUNNING = new Set([
     "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring",
+    // The pour is done but the brew is not: the bypass still has to go in, and
+    // stopping the machine is still a meaningful thing to offer.
+    "bypass",
     // The pour is done but the brew is not: coffee is still draining and the
     // trace is still live, so the run's controls stay on screen.
     "settling"

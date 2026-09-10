@@ -158,6 +158,15 @@ describe("BrewMiniBar", () => {
         });
     });
 
+    it("names the bypass rather than falling back to grinding", async () => {
+        const {getByText, queryByText} = await draw({
+            phase: {name: "bypass"},
+            elapsed: 190
+        });
+        expect(getByText("Bypass")).toBeTruthy();
+        expect(queryByText("Grinding")).toBeNull();
+    });
+
     it("clears the rounded corners at the foot of the display", async () => {
         // The bar is mounted beside the navigator, so it sits on the very edge
         // of the screen and the corner radius was cutting the close control in
