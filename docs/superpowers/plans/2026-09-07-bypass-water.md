@@ -206,4 +206,6 @@ writes nothing; confirming writes; a non-bypass recipe writes with no dialog.
 - Editing bypass in the editor.
 - Sending bypass over BLE, and resolving what `bypass_temp × 10` means.
 - Event 40520 (`RD_Bypass`) during a brew, which would let the brew screen show
-  the bypass pour. Single-source and unverified.
+  the bypass pour. Single-source and unverified when this was written.
+  *Since verified:* a frame log of 2026-09-10 caught 40520 firing after the
+  drawdown, with no fourth 40510. See `docs/machine-integration/ble-protocol.md`.

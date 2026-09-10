@@ -3077,7 +3077,9 @@ cosmetic findings from this round into that round's scope — write them down an
 let them be planned.
 
 Also still open and **not** addressed here:
-- Event 40520 `RD_Bypass` is single-source and unverified. Nothing in this plan
-  relies on it.
+- Event 40520 `RD_Bypass` was single-source and unverified when this was
+  written. Nothing in this plan relies on it.
+  *Since verified:* a frame log of 2026-09-10 caught 40520 firing after the
+  drawdown, with no fourth 40510. See `docs/machine-integration/ble-protocol.md`.
 - Whether the machine reports bypass progress during a brew at all. The brew
   screen shows nothing for it, which is honest until D2 says otherwise.

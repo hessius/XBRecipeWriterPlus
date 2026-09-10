@@ -408,4 +408,7 @@ exercised in a simulator at all.
 - Teaching `autoFixPourVolumes` or `getTotalVolume` about bypass.
 - The visual polish pass itself (section 12).
 - Open bug issues, which the user excluded from this round.
-- Event 40520 `RD_Bypass` — single-source and unverified. Not relied upon.
+- Event 40520 `RD_Bypass` — single-source and unverified when this was
+  written, and not relied upon here.
+  *Since verified:* a frame log of 2026-09-10 caught 40520 firing after the
+  drawdown, with no fourth 40510. See `docs/machine-integration/ble-protocol.md`.

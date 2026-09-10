@@ -154,9 +154,21 @@
 | 40515 | 0x9E43 | Pour Volume ACK | — | May be firmware-version dependent | `single-source` (brAzzi64) |
 | 40516 | 0x9E44 | Pour Transition | — | May be firmware-version dependent | `single-source` (brAzzi64) |
 | 40517 | 0x9E45 | Error: Idling | — | | `spec` |
-| 40520 | 0x9E48 | RD_Bypass | — | Bypass/dilution pour event | `single-source` (Alshekhi) |
+| 40520 | 0x9E48 | RD_Bypass | — | The bypass firing, after the drawdown | **`verified`** (capture 2026-09-10) |
 | 40522 | 0x9E4A | Error: No Water | — | Tank empty | `spec` |
 | 8203 | 0x200B | Error: Gear Position | — | Grinder gear error | `spec` |
+
+### Event 40520 is the bypass, and there is no pour start for it `verified`
+
+Verified by a full frame log of 2026-09-10: a three-stage recipe with a 5 ml
+bypass emitted 40510(0), 40510(1), 40510(2) — and then 40520, 61 s after the
+last pour began and 8 s before `BREWER_STOP`. **There is no fourth 40510.**
+
+That matters more than naming the event. Anything that buckets scale readings
+by the last announced `pour_index` will fold the bypass's water onto the last
+stage, and the long drawdown wait before it will look like a stalled pour. The
+app therefore enters a `bypass` phase on 40520 and gives it a lane of its own;
+see `docs/superpowers/specs/2026-09-10-brew-bypass-display-design.md`.
 
 ### `pour_index` is zero-based
 
