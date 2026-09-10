@@ -60,6 +60,25 @@ export function finalOutcome(
 }
 
 /**
+ * The bypass, as a brew remembers it.
+ *
+ * The asked-for figures are copied at brew time rather than joined to the
+ * recipe, for the same reason `recipeName`, `accent` and `plan` are: a brew is
+ * a record of an event, and editing the recipe afterwards must not rewrite it.
+ *
+ * `startedAt` is milliseconds into the brew, on the same clock as
+ * `BrewSample.at`, and `null` when the machine never dispensed — older
+ * firmware, or a brew that ended first. `delivered` is then 0, and the rung
+ * says so rather than claiming a completed bypass of nothing.
+ */
+export type BypassRecord = {
+    volume: number;
+    temperature: number;
+    delivered: number;
+    startedAt: number | null;
+};
+
+/**
  * One brew that happened.
  *
  * `recipeName` and `accent` are **copied, not joined**. A brew is a record of
@@ -118,6 +137,18 @@ export type BrewRecord = {
      * silently go back to drawing the plan as though it had all poured.
      */
     stageWater?: number[];
+    /**
+     * The bypass, if the recipe had one.
+     *
+     * Absent on rows written before it existed and on every recipe without a
+     * bypass, exactly like `pouringAt`, `stalls`, `plan` and `stageWater` — so
+     * an old record draws precisely as it always did.
+     *
+     * Kept out of `stageWater`, which stays index-aligned with `plan`. The
+     * bypass is not a stage, and widening that array by one would have made
+     * every existing reader of it wrong by one.
+     */
+    bypass?: BypassRecord;
 };
 
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;

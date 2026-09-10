@@ -1,6 +1,6 @@
 import Pour from "@/library/Pour";
 import {finalOutcome, planFromPours, poursFromPlan, stageWaterFromSamples,
-        stallsFromSamples, summarise, type BrewSample, type PlanStage} from "@/library/brew/BrewRecord";
+        stallsFromSamples, summarise, type BrewSample, type BypassRecord, type PlanStage} from "@/library/brew/BrewRecord";
 
 function samples(rows: [number, number, number][]): BrewSample[] {
     return rows.map(([at, water, cup]) => ({at, water, cup, pour: 1}));
@@ -202,5 +202,21 @@ describe("the outcome of a finished brew", () => {
 
     it("does not call a brew short when there was no plan to be short of", () => {
         expect(finalOutcome("done", 0, 0)).toBe("done");
+    });
+});
+
+describe("BypassRecord", () => {
+    it("survives a round trip through JSON, the way the column stores it", () => {
+        const bypass: BypassRecord = {
+            volume: 5, temperature: 85, delivered: 5, startedAt: 183_000
+        };
+        expect(JSON.parse(JSON.stringify(bypass))).toEqual(bypass);
+    });
+
+    it("keeps null for a bypass that never fired", () => {
+        const bypass: BypassRecord = {
+            volume: 5, temperature: 85, delivered: 0, startedAt: null
+        };
+        expect(JSON.parse(JSON.stringify(bypass)).startedAt).toBeNull();
     });
 });
