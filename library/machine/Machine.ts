@@ -95,6 +95,15 @@ export type BrewPhase =
     | {name: "grinding"}
     | {name: "pouring"; pour: number; pours: number}
     /**
+     * The bypass is dispensing into the cup.
+     *
+     * A phase of its own rather than a fourth pour, because it is not a pour:
+     * it does not go through the dripper, it is not in `recipe.pours`, and the
+     * machine gives it its own event. Making it look like a pour is exactly
+     * what folded its water onto the last stage.
+     */
+    | {name: "bypass"}
+    /**
      * Water has stopped, but coffee is still draining from the brewer onto the
      * scale. **Non-terminal**: the brew is not over until the cup line goes
      * flat (or the cup is lifted). Ending the record at BREWER_STOP threw away
@@ -1093,7 +1102,8 @@ export default class Machine {
                 // The frame buffer added alongside this did its job: the
                 // console log of 2026-09-09 caught the next occurrence and
                 // showed 40522, not 0x0C, ending a brew the machine completed.
-                if (this.phase.name === "pouring" || this.phase.name === "settling") break;
+                if (this.phase.name === "pouring" || this.phase.name === "bypass"
+                    || this.phase.name === "settling") break;
                 this.setPhase({name: "failed", reason: "noWater"});
                 break;
             default:
@@ -1154,6 +1164,11 @@ export default class Machine {
                     pour: Math.min((value ?? 0) + 1, this.pourCount),
                     pours: this.pourCount
                 });
+                break;
+            case EVENT.RD_BYPASS:
+                // Deliberately not clamped into the pours, the way POUR_START
+                // is. The bypass is after them.
+                this.setPhase({name: "bypass"});
                 break;
             case EVENT.BREWER_STOP:
                 // Water is done, drawdown is not. Enter settling so the

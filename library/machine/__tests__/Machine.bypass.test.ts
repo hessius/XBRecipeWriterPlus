@@ -1,9 +1,10 @@
 import Machine from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
-import {status} from "./protocolFixtures";
+import {event, notification, status} from "./protocolFixtures";
 
 /** A machine that is connected, idle and has water, its writes cleared. */
 async function readyMachine() {
@@ -107,5 +108,30 @@ describe("Machine bypass", () => {
         await machine.brew(recipe);
 
         expect(argsOf(transport.written, 8102)).toEqual([0, 0, 5]);
+    });
+});
+
+describe("Machine bypass phase", () => {
+    it("enters the bypass phase on 40520, without clamping into the last pour", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(coffeeRecipe());
+        transport.emit(status(0x22));                                                        // starting
+        transport.emit(event(EVENT.GRINDER_STOP));                                           // grinding -> pouring
+        transport.emit(notification(EVENT.POUR_START & 0xFF, EVENT.POUR_START >> 8, [2]));  // pour index 2 (zero-based)
+        transport.emit(event(EVENT.RD_BYPASS));                                              // bypass
+
+        expect(machine.phase).toEqual({name: "bypass"});
+    });
+
+    it("does not end a brew on a no-water state while the bypass is running", async () => {
+        const {transport, machine} = await readyMachine();
+        await machine.brew(coffeeRecipe());
+        transport.emit(status(0x22));
+        transport.emit(event(EVENT.GRINDER_STOP));
+        transport.emit(event(EVENT.RD_BYPASS));
+
+        transport.emit(status(MACHINE_STATE.NO_WATER));
+
+        expect(machine.phase).toEqual({name: "bypass"});
     });
 });
