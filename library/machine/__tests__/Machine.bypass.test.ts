@@ -4,7 +4,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
-import {event, notification, status} from "./protocolFixtures";
+import {event, status} from "./protocolFixtures";
 
 /** A machine that is connected, idle and has water, its writes cleared. */
 async function readyMachine() {
@@ -117,7 +117,7 @@ describe("Machine bypass phase", () => {
         await machine.brew(coffeeRecipe());
         transport.emit(status(0x22));                                                        // starting
         transport.emit(event(EVENT.GRINDER_STOP));                                           // grinding -> pouring
-        transport.emit(notification(EVENT.POUR_START & 0xFF, EVENT.POUR_START >> 8, [2]));  // pour index 2 (zero-based)
+        transport.emit(event(EVENT.POUR_START, 2));                                          // pour index 2 (zero-based)
         transport.emit(event(EVENT.RD_BYPASS));                                              // bypass
 
         expect(machine.phase).toEqual({name: "bypass"});
