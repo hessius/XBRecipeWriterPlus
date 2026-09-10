@@ -1,8 +1,9 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
-import {processColor} from "react-native";
+import {processColor, StyleSheet} from "react-native";
 
 import BrewTrace from "@/components/BrewTrace";
+import {drawnFontSize} from "@/components/DotMatrixText";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import {accents, cupLineFor, palette} from "@/constants/colors";
@@ -121,13 +122,36 @@ describe("BrewTrace", () => {
         expect(queryByText(/^\+/)).toBeNull();
     });
 
+    it("gives the overrun label a row tall enough to hold it", async () => {
+        // A 16 pt row cropped the descenders off "+96 S" on a real brew. Doto's
+        // line box is about 1.35em, so twelve-point text needs seventeen — and
+        // more again for a user with text sizing turned up, which is why the
+        // row measures the size the glyphs are *drawn* at rather than the size
+        // it asked for.
+        const {getByTestId} = await draw({samples: samples([0, 0, 0], [84_000, 200, 190])});
+        const row = StyleSheet.flatten(getByTestId("trace-overrun-row").props.style);
+        expect(row.height).toBeGreaterThanOrEqual(drawnFontSize(12) * 1.35);
+    });
+
+    it("gives the legend a row tall enough to hold it", async () => {
+        // The legend asks for nine point, but DotMatrixText will not draw Doto
+        // below eleven, so a row sized from the nine crops it.
+        const {getByTestId} = await draw({});
+        const row = StyleSheet.flatten(getByTestId("trace-legend-row").props.style);
+        expect(row.height).toBeGreaterThanOrEqual(drawnFontSize(9) * 1.35);
+    });
+
     it("the plot fits inside the height it was given", async () => {
         const knownHeight = 140;
-        // Non-compact: SVG height = height - 30 (legend plus overrun rows).
+        // Non-compact, the legend and overrun rows take their height first.
+        // Not pinned to a literal: both rows scale with the OS text size, and
+        // jest-expo does not run at the device default.
+        const chrome = Math.ceil(drawnFontSize(12) * 1.35)
+                     + Math.ceil(drawnFontSize(9) * 1.35);
         const {getByLabelText: getLabelA} = await draw({height: knownHeight, compact: false});
         const {getByLabelText: getLabelB} = await draw({height: knownHeight, compact: true});
 
-        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - 30);
+        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - chrome);
         expect(getLabelB("Brew trace").props.height).toBe(knownHeight);
     });
 

@@ -3,7 +3,7 @@ import {Pressable} from "react-native";
 import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText from "@/components/DotMatrixText";
+import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
 import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
@@ -56,11 +56,25 @@ type Props = {
     bypass?: BypassView;
 };
 
-/** Height of the overrun row. */
-const CHROME = 16;
+/** Point size of the overrun label, and of the legend's labels. */
+const OVERRUN_SIZE = 12;
+const LEGEND_SIZE = 9;
 
-/** Height of the legend row beneath the graph. */
-const LEGEND = 14;
+/**
+ * The height a row of dot-matrix text needs.
+ *
+ * Doto's line box is close to 1.35em, the same ratio `DigitRoll` uses, applied
+ * to the size the glyphs are actually *drawn* at rather than the size asked
+ * for. Both halves matter here. Sixteen points was a point short of twelve
+ * point text even at the default text size, so a real brew's `+96 S` lost its
+ * descenders; and `DotMatrixText` will not draw Doto below eleven points
+ * however small a size a call site asks for, so the nine-point legend needs a
+ * fifteen-point row rather than a fourteen-point one. Accessibility text
+ * sizing widens both gaps.
+ */
+function rowHeight(fontSize: number): number {
+    return Math.ceil(drawnFontSize(fontSize) * 1.35);
+}
 
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
@@ -109,7 +123,7 @@ export default function BrewTrace({
     // and the overrun row take theirs first.
     const svgHeight = compact
         ? height
-        : Math.max(height - CHROME - LEGEND, PLOT_FLOOR);
+        : Math.max(height - rowHeight(OVERRUN_SIZE) - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
     const box: Box = {
         width,
         height: svgHeight,
@@ -312,16 +326,18 @@ export default function BrewTrace({
                     {chart}
                 </Pressable>
             ) : chart}
-            <XStack height={LEGEND} alignItems="center" gap="$3">
+            <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
+                    alignItems="center" gap="$3">
                 <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
                 <LegendItem colour={cupColour} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
                     <LegendItem colour={planColor} label="PLAN" dashed />
                 )}
             </XStack>
-            <XStack justifyContent="flex-end" height={CHROME}>
+            <XStack testID="trace-overrun-row" justifyContent="flex-end"
+                    alignItems="center" height={rowHeight(OVERRUN_SIZE)}>
                 {overrun >= GAP_FLOOR_SECONDS && (
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}
+                    <DotMatrixText fontSize={OVERRUN_SIZE} weight="bold" letterSpacing={1.4}
                                    color={palette.warn}>
                         {`+${overrun} S`}
                     </DotMatrixText>
@@ -357,7 +373,7 @@ function LegendItem({colour, label, dashed = false, dotted = false}: {
                     strokeDasharray={dashed ? "3 3" : dotted ? "1 3" : undefined}
                 />
             </Svg>
-            <DotMatrixText fontSize={9} weight="bold" letterSpacing={1.2}
+            <DotMatrixText fontSize={LEGEND_SIZE} weight="bold" letterSpacing={1.2}
                            color={palette.dim}>
                 {label}
             </DotMatrixText>
