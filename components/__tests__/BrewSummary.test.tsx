@@ -155,3 +155,29 @@ describe("BrewSummary's recipe name", () => {
         expect(marqueeProps.paused).toBe(false);
     });
 });
+
+it("carries the bypass into the ladder, the trace and the figures", async () => {
+    await renderWithProviders(
+        <BrewSummary
+            recipeName="Ethiopia Guji"
+            hasStream={true}
+            samples={samples}
+            stages={pours(2)}
+            accent={palette.brand}
+            width={390}
+            plannedSeconds={120}
+            water={240}
+            cup={244}
+            seconds={126}
+            activeIndex={2}
+            stageWater={[40, 40]}
+            stalls={[[], []]}
+            stagesUnavailable={false}
+            bypass={{volume: 5, temperature: 85, delivered: 5,
+                     startedAt: 183, state: "done"}}
+        />
+    );
+    expect(screen.getByTestId("rung-bypass")).toBeTruthy();
+    expect(screen.getByTestId("trace-bypass")).toBeTruthy();
+    expect(screen.getByText("+5")).toBeTruthy();
+});

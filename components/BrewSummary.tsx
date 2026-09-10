@@ -11,6 +11,7 @@ import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
 import {SUMMARY_BANDS} from "@/library/brew/bands";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {BypassView} from "@/library/brew/bypassState";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -57,6 +58,8 @@ type Props = {
      * captured PNG cannot be tapped and a shaded band in it would only puzzle.
      */
     onSelectStage?: (index: number) => void;
+    /** The bypass this brew had, if any. Absent on every record without one. */
+    bypass?: BypassView;
 };
 
 /**
@@ -72,7 +75,7 @@ type Props = {
 export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
-    note, nameStill = false, selectedIndex = null, onSelectStage
+    note, nameStill = false, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -105,6 +108,7 @@ export default function BrewSummary({
                     stages={stages}
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
+                    bypass={bypass}
                 />
             ) : (
                 <YStack height={TRACE_HEIGHT} alignItems="center"
@@ -133,6 +137,7 @@ export default function BrewSummary({
                 cup={cup}
                 seconds={seconds}
                 accent={accent}
+                bypass={bypass?.delivered}
             />
             {/* Spaced by hand: the capture has no gap, so the trace and the
                 figures stay flush the way they were on screen. */}
@@ -160,6 +165,7 @@ export default function BrewSummary({
                     pauseElapsed={0}
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
+                    bypass={bypass}
                 />
             )}
             </YStack>

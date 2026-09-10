@@ -70,3 +70,29 @@ export type BypassView = {
     startedAt: number | null;
     state: BypassRungState;
 };
+
+/**
+ * A stored record's bypass, as the views want it.
+ *
+ * Absent on every row written before the field existed and on every recipe
+ * without a bypass, which is exactly the fallback `plan` and `stageWater`
+ * already use — an old record draws as it always did.
+ *
+ * The state is always terminal: a record is a brew that has ended. It is
+ * `waiting` rather than `done` when nothing was delivered, so a machine that
+ * never dispensed is not drawn as though it had.
+ */
+export function bypassViewFromRecord(
+    bypass: {volume: number; temperature: number; delivered: number;
+             startedAt: number | null} | undefined
+): BypassView | undefined {
+    if (bypass === undefined || bypass.volume <= 0) return undefined;
+    return {
+        volume: bypass.volume,
+        temperature: bypass.temperature,
+        delivered: bypass.delivered,
+        // Milliseconds on the record, seconds on the trace's axis.
+        startedAt: bypass.startedAt === null ? null : bypass.startedAt / 1000,
+        state: bypass.delivered > 0 ? "done" : "waiting"
+    };
+}

@@ -16,6 +16,7 @@ import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {ladderFrontier} from "@/library/brew/ladderState";
@@ -168,6 +169,11 @@ export default function BrewRecord({recipeLookup}: Props) {
     const delivered = record.stageWater
         ?? stages.map((pour) => Math.max(pour.volume, 0));
 
+    const bypass = bypassViewFromRecord(record.bypass);
+    // The scale's running total includes the bypass, so the brew water is the
+    // total less what the bypass put in. Same reasoning as the live screen.
+    const brewWater = Math.max(0, record.waterTotal - (bypass?.delivered ?? 0));
+
     return (
         <YStack flex={1} backgroundColor={palette.base} gap="$2">
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
@@ -198,7 +204,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     accent={accent}
                     width={width}
                     plannedSeconds={plannedSecs}
-                    water={record.waterTotal}
+                    water={brewWater}
                     cup={record.cupTotal}
                     seconds={durationSeconds}
                     activeIndex={ladderFrontier(record.outcome, delivered)}
@@ -214,6 +220,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     selectedIndex={selectedIndex}
                     onSelectStage={(index) =>
                         setSelectedIndex((was) => (was === index ? null : index))}
+                    bypass={bypass}
                 />
             </ViewShot>
 

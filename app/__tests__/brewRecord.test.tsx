@@ -523,3 +523,38 @@ describe("the frame log of a brew", () => {
         expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
     });
 });
+
+describe("bypass on the record screen", () => {
+    const aRecord: StoredBrew = {
+        id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
+        accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
+        failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
+        hasStream: true
+    };
+
+    async function renderRecord(r: StoredBrew) {
+        mockParams = {id: r.id};
+        mockOpened = {
+            record: r,
+            samples: [{at: 0, water: 0, cup: 0, pour: 1},
+                      {at: 228_000, water: r.waterTotal, cup: r.cupTotal, pour: 2}]
+        };
+        return renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+    }
+
+    it("draws the bypass a record kept", async () => {
+        await renderRecord({
+            ...aRecord,
+            waterTotal: 245,
+            bypass: {volume: 5, temperature: 85, delivered: 5, startedAt: 183_000}
+        } as StoredBrew);
+        expect(screen.getByTestId("rung-bypass")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
+    });
+
+    it("draws an old record exactly as before", async () => {
+        await renderRecord(aRecord);
+        expect(screen.queryByTestId("rung-bypass")).toBeNull();
+        expect(screen.queryByTestId("figures-bypass")).toBeNull();
+    });
+});
