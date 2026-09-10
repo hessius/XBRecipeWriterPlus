@@ -1,6 +1,6 @@
 import Pour from "@/library/Pour";
 import {
-    livePoints, pathLength, planPoints, plannedSeconds, pourSeconds, stageSpans,
+    bypassSeconds, livePoints, pathLength, planPoints, plannedSeconds, pourSeconds, stageSpans,
     toPath
 } from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -111,5 +111,17 @@ describe("pathLength", () => {
 
     it("is zero when there is nothing to draw", () => {
         expect(pathLength([{t: 0, v: 0}], box)).toBe(0);
+    });
+});
+
+describe("bypassSeconds", () => {
+    it("is the volume at the default flow", () => {
+        // 5 ml at 3.2 ml/s.
+        expect(bypassSeconds(5)).toBeCloseTo(1.5625);
+    });
+
+    it("is zero for no bypass", () => {
+        expect(bypassSeconds(0)).toBe(0);
+        expect(bypassSeconds(-4)).toBe(0);
     });
 });

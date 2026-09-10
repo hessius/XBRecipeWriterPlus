@@ -26,6 +26,23 @@ export function pauseSeconds(pour: Pour): number {
     return Math.max(pour.pauseTime, 0);
 }
 
+/**
+ * How long the bypass takes to dispense.
+ *
+ * At the default flow, because a bypass has no flow rate of its own: it is not
+ * a `Pour` and the machine is not told one. The figure is only ever used to
+ * give the dashed box on the trace and the bar on the rung a width, and at a
+ * typical 5 ml that is under two seconds either way.
+ *
+ * What it deliberately does *not* model is the drawdown wait before it. That
+ * wait is however long the dripper takes and cannot be known in advance, so
+ * the plan places the bypass immediately after the last stage and the live
+ * drawing slides right if the machine takes longer.
+ */
+export function bypassSeconds(volume: number): number {
+    return Math.max(volume, 0) / DEFAULT_FLOW_ML_S;
+}
+
 /** How long the recipe says the whole brew should take. */
 export function plannedSeconds(pours: Pour[]): number {
     return pours.reduce((total, pour) => total + pourSeconds(pour) + pauseSeconds(pour), 0);
