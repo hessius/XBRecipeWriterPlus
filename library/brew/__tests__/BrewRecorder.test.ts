@@ -614,10 +614,17 @@ describe("the frame log a record carries", () => {
 /** Simplified machine/recipe factories for the bypass suite. */
 function makeMachine() {
     const fake = fakeMachine();
+    const time = clock();
+    let lastSeconds = 0;
     return {
         machine: fake.machine,
+        time,
         emitPhase: (p: BrewPhase) => fake.phase(p),
-        emitWeight: (grams: number, _ms: number) => fake.water(grams)
+        emitWeight: (grams: number, seconds: number) => {
+            time.advance((seconds - lastSeconds) * 1000);
+            lastSeconds = seconds;
+            fake.water(grams);
+        }
     };
 }
 
@@ -632,7 +639,7 @@ function makeRecipe(pours: {volume: number}[]): Recipe {
 
 describe("the bypass", () => {
     it("goes in its own lane rather than onto the last stage", () => {
-        const {machine, emitPhase, emitWeight} = makeMachine();
+        const {machine, time, emitPhase, emitWeight} = makeMachine();
         const recipe = makeRecipe([{volume: 40}, {volume: 115}, {volume: 85}]);
         recipe.bypassEnabled = true;
         recipe.bypassVolume = 5;
@@ -640,7 +647,7 @@ describe("the bypass", () => {
 
         let saved: BrewRecord | undefined;
         const recorder = new BrewRecorder({
-            machine, recipe, onRecord: (record) => { saved = record; }
+            machine, recipe, now: time.now, onRecord: (record) => { saved = record; }
         });
         recorder.start();
         built.push(recorder);
@@ -671,14 +678,14 @@ describe("the bypass", () => {
         // target used to be closed by the bypass's rise and recorded as a
         // stall, because the target guard only covers a plateau that is still
         // open when the stage ends.
-        const {machine, emitPhase, emitWeight} = makeMachine();
+        const {machine, time, emitPhase, emitWeight} = makeMachine();
         const recipe = makeRecipe([{volume: 40}, {volume: 115}, {volume: 85}]);
         recipe.bypassEnabled = true;
         recipe.bypassVolume = 5;
 
         let saved: BrewRecord | undefined;
         const recorder = new BrewRecorder({
-            machine, recipe, onRecord: (record) => { saved = record; }
+            machine, recipe, now: time.now, onRecord: (record) => { saved = record; }
         });
         recorder.start();
         built.push(recorder);
@@ -699,11 +706,11 @@ describe("the bypass", () => {
     });
 
     it("keeps no bypass on a recipe that has none", () => {
-        const {machine, emitPhase, emitWeight} = makeMachine();
+        const {machine, time, emitPhase, emitWeight} = makeMachine();
         const recipe = makeRecipe([{volume: 40}]);
         let saved: BrewRecord | undefined;
         const recorder = new BrewRecorder({
-            machine, recipe, onRecord: (record) => { saved = record; }
+            machine, recipe, now: time.now, onRecord: (record) => { saved = record; }
         });
         recorder.start();
         built.push(recorder);
