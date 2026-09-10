@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 import {processColor} from "react-native";
 
 import BrewTrace from "@/components/BrewTrace";
@@ -346,5 +346,52 @@ describe("BrewTrace's stage selection", () => {
         });
         fireEvent.press(getByTestId("trace-tap"), {nativeEvent: {locationX: 299}});
         expect(onSelectStage).toHaveBeenCalledWith(1);
+    });
+});
+
+const traceProps = {
+    pours,
+    samples: [] as BrewSample[],
+    accent: TEST_ACCENT,
+    width: 300,
+    height: 140,
+    plannedSeconds: 70,
+};
+
+describe("the bypass box", () => {
+    it("draws a dashed box above the target for a bypass", async () => {
+        await renderWithProviders(
+            <BrewTrace
+                {...traceProps}
+                bypass={{volume: 5, temperature: 85, delivered: 5,
+                         startedAt: 120, state: "done"}}
+            />
+        );
+        const box = screen.getByTestId("trace-bypass");
+        expect(box.props.fill).toBeNull();  // react-native-svg processes "none" → null
+        expect(box.props.strokeDasharray).toEqual(["4", "4"]);
+    });
+
+    it("draws no box when there is no bypass", async () => {
+        await renderWithProviders(<BrewTrace {...traceProps} />);
+        expect(screen.queryByTestId("trace-bypass")).toBeNull();
+    });
+
+    it("slides the box to now while the machine is still waiting", async () => {
+        // startedAt null and the run already past its plan: the box has no real
+        // time to sit at, so it tracks the right-hand edge rather than pinning
+        // itself to a plan time that has already gone by.
+        await renderWithProviders(
+            <BrewTrace
+                {...traceProps}
+                plannedSeconds={100}
+                samples={[{at: 160_000, water: 240, cup: 200, pour: 3}]}
+                bypass={{volume: 5, temperature: 85, delivered: 0,
+                         startedAt: null, state: "waiting"}}
+            />
+        );
+        const box = screen.getByTestId("trace-bypass");
+        const pinned = Number(box.props.x);
+        expect(pinned).toBeGreaterThan(0);
     });
 });

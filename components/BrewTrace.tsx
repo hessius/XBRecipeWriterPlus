@@ -6,8 +6,9 @@ import {XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {livePoints, pathLength, planPoints, stageSpans, toPath, type Box}
-    from "@/library/brew/brewShape";
+import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
+        type Box} from "@/library/brew/brewShape";
+import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import type Pour from "@/library/Pour";
 
@@ -45,6 +46,14 @@ type Props = {
      * nothing, so neither gains a tap target it has no panel to answer with.
      */
     onSelectStage?: (index: number) => void;
+    /**
+     * The bypass, drawn as a dashed box sitting **on top of** the target.
+     *
+     * On top, not inside: the water target stays at the sum of the pours, and
+     * the box rises above it. That is the same story the editor tells, so the
+     * two screens do not disagree about what a bypass is.
+     */
+    bypass?: BypassView;
 };
 
 /** Height of the overrun row. */
@@ -78,13 +87,24 @@ export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
     holding = false, planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
-    compact = false, stages, selectedIndex = null, onSelectStage
+    compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
 
     const ranTo = water.length > 0 ? water[water.length - 1].t : 0;
+    // The plan's final water level: where the target line ends, and the floor
+    // the bypass box is stacked on.
+    const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
+    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
+    const bypassWide = bypassSeconds(bypassMl);
+    // With no real start time the box tracks the later of the plan and now, so
+    // it visibly slides right while the machine waits for the dripper instead
+    // of sitting at a plan time that has already gone past.
+    const bypassFrom = bypass === undefined ? 0
+        : bypass.startedAt !== null ? bypass.startedAt
+        : Math.max(plannedSeconds, ranTo);
     // In compact mode the SVG fills the full height; otherwise the legend row
     // and the overrun row take theirs first.
     const svgHeight = compact
@@ -93,10 +113,11 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: Math.max(plannedSeconds, ranTo),
+        maxT: Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
         maxV: Math.max(
-            plan.length > 0 ? plan[plan.length - 1].v : 0,
-            water.length > 0 ? water[water.length - 1].v : 0
+            planTop,
+            water.length > 0 ? water[water.length - 1].v : 0,
+            planTop + bypassMl
         )
     };
 
@@ -135,6 +156,18 @@ export default function BrewTrace({
 
     // Only meaningful when there is an actual plan; a plan of nothing cannot be overrun.
     const overrun = plannedSeconds > 0 ? Math.round(ranTo - plannedSeconds) : 0;
+
+    // Sized in the box's own units, so it moves with the axis rather than
+    // needing its own scale.
+    const bypassBox = bypass === undefined || bypassMl <= 0 || box.maxT <= 0
+                      || box.maxV <= 0
+        ? undefined
+        : {
+            x: (bypassFrom / box.maxT) * box.width,
+            width: Math.max((bypassWide / box.maxT) * box.width, 2),
+            y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
+            height: Math.max((bypassMl / box.maxV) * svgHeight, 2)
+          };
 
     if (compact) {
         return (
@@ -248,6 +281,17 @@ export default function BrewTrace({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         fill="none"
+                    />
+                )}
+                {bypassBox && (
+                    <Rect
+                        testID="trace-bypass"
+                        x={bypassBox.x} y={bypassBox.y}
+                        width={bypassBox.width} height={bypassBox.height}
+                        fill="none"
+                        stroke={bypass?.state === "pending" ? palette.line : accent}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 4"
                     />
                 )}
         </Svg>
