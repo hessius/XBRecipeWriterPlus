@@ -720,4 +720,34 @@ describe("the bypass", () => {
 
         expect(saved?.bypass).toBeUndefined();
     });
+
+    it("scores endedOnMachine even when the bypass masks the shortfall", () => {
+        // A brew that ends 40 ml short but delivers a 30 ml bypass reads on
+        // the scale as only 10 ml short — under ENDED_EARLY_ML — so a naive
+        // comparison forgives the short brew. The outcome must subtract the
+        // bypass water before comparing with the plan.
+        const {machine, time, emitPhase, emitWeight} = makeMachine();
+        // Plan: 200 ml. Brew ends 40 ml short (160 ml), then 30 ml bypass.
+        const recipe = makeRecipe([{volume: 100}, {volume: 100}]);
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume = 30;
+        recipe.bypassTemp = 85;
+
+        let saved: BrewRecord | undefined;
+        const recorder = new BrewRecorder({
+            machine, recipe, now: time.now, onRecord: (record) => { saved = record; }
+        });
+        recorder.start();
+        built.push(recorder);
+
+        emitPhase({name: "pouring", pour: 1, pours: 2});
+        emitWeight(100, 10);
+        emitPhase({name: "pouring", pour: 2, pours: 2});
+        emitWeight(160, 40);    // 40 ml short of 200 ml planned
+        emitPhase({name: "bypass"});
+        emitWeight(190, 45);    // bypass adds 30 ml → scale shows only 10 ml short
+        emitPhase({name: "done"});
+
+        expect(saved?.outcome).toBe("endedOnMachine");
+    });
 });

@@ -243,7 +243,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         activeIndex={activeIndex}
                         stageWater={stageWater}
                         stalls={stalls}
-                        note={finalOutcome("done", last?.water ?? 0, plannedWater)
+                        note={finalOutcome("done", brewWater, plannedWater)
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
                         bypass={bypass}

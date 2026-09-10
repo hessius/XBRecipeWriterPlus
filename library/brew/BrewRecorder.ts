@@ -320,7 +320,7 @@ export default class BrewRecorder {
             startedAt: this.startedAt,
             pouringAt: this.pouringAt,
             endedAt: this.clock(),
-            outcome: finalOutcome(phase.name, figures.waterTotal, plannedWater),
+            outcome: finalOutcome(phase.name, figures.waterTotal - (bypass?.delivered ?? 0), plannedWater),
             failure,
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
             stalls: stallsFromSamples(

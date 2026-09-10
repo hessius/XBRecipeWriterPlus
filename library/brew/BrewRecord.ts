@@ -49,6 +49,9 @@ export const ENDED_EARLY_ML = 15;
  * or failed brew is already described by how it stopped, and is short for a
  * reason that is already known.
  *
+ * @param waterTotal brew water only, ml — must exclude any bypass water that
+ *   the scale captured alongside the pour water, or the bypass will silently
+ *   forgive a brew that ended short
  * @param plannedWater the sum of the plan's pour volumes, ml
  */
 export function finalOutcome(
