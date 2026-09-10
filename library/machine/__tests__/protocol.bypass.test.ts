@@ -1,4 +1,4 @@
-import {bypassTempValue} from "@/library/machine/protocol";
+import {bypassTempValue, EVENT} from "@/library/machine/protocol";
 
 describe("bypassTempValue", () => {
     it("scales by ten under the scaled reading", () => {
@@ -12,5 +12,11 @@ describe("bypassTempValue", () => {
     it("rounds rather than truncating", () => {
         expect(bypassTempValue(60.06, "scaled")).toBe(601);
         expect(bypassTempValue(60.6, "plain")).toBe(61);
+    });
+});
+
+describe("RD_BYPASS", () => {
+    it("is 40520", () => {
+        expect(EVENT.RD_BYPASS).toBe(40520);
     });
 });

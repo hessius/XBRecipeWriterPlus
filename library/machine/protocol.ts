@@ -149,6 +149,19 @@ export const EVENT = {
     BREWER_START:     40506,
     GRINDER_STOP:     40507,
     POUR_START:       40510,
+    /**
+     * 40520. The bypass firing.
+     *
+     * Verified from a full frame log of 2026-09-10: a three-stage recipe with
+     * a 5 ml bypass emitted 40510(0), 40510(1), 40510(2) and then this, 61 s
+     * after the last pour began and 8 s before BREWER_STOP. There is no fourth
+     * POUR_START, so this is the only announcement the bypass ever makes.
+     *
+     * The gap is the drawdown: the machine lets the dripper finish before it
+     * dispenses into the cup, and how long that takes is not knowable in
+     * advance.
+     */
+    RD_BYPASS:        40520,
     BREWER_STOP:      40511,
     ENJOY:            40512,
     ENJOY_2:          40513,
