@@ -106,7 +106,7 @@ export default function HomeScreen({db, settings}: Props) {
     const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(() => {
         const info = machine.info;
         if (info === null) return null;
-        return {waterEnough: info.waterEnough, mode: info.mode,
+        return {waterEnough: info.waterEnough, waterFeed: info.waterFeed, mode: info.mode,
                 grindSize: info.grindSize, askedAt: Date.now()};
     });
 
@@ -139,6 +139,7 @@ export default function HomeScreen({db, settings}: Props) {
         if (info !== null) {
             setMachineVitals({
                 waterEnough: info.waterEnough,
+                waterFeed:   info.waterFeed,
                 mode:        info.mode,
                 grindSize:   info.grindSize,
                 askedAt:     Date.now()
@@ -436,8 +437,8 @@ export default function HomeScreen({db, settings}: Props) {
         // beep — only do it when the user explicitly asks.
         const answered = await machine.askHowItIsDoing();
         if (answered && machine.info !== null) {
-            const {waterEnough, mode, grindSize} = machine.info;
-            setMachineVitals({waterEnough, mode, grindSize, askedAt: Date.now()});
+            const {waterEnough, waterFeed, mode, grindSize} = machine.info;
+            setMachineVitals({waterEnough, waterFeed, mode, grindSize, askedAt: Date.now()});
         }
         return answered;
     }

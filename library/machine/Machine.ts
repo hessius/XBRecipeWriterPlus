@@ -787,7 +787,9 @@ export default class Machine {
                     "The machine has not said how it is doing yet. Reconnect and try again."
             };
         }
-        if (!this.info.waterEnough) {
+        // `waterEnough` is the reservoir sensor. A tap-fed machine reports the
+        // unused tank as low even though its configured supply is available.
+        if (this.info.waterFeed === "tank" && !this.info.waterEnough) {
             return {kind: "notEnoughWater", message: "The machine's water tank is low."};
         }
         const state = this.freshState();

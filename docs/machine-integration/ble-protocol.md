@@ -263,7 +263,7 @@ document's `single-source` marking on those two comes from.
 | 13–18 | theModel | ASCII (0xFF = blank) |
 | 19–28 | theVersion | ASCII firmware string |
 | 29–32 | areaAp | LE float |
-| 33 | waterEnough | uint8 (0=low, 1=ok) |
+| 33 | waterEnough | uint8 (0=low, 1=ok); reservoir sensor only, ignore for brew preflight when `waterFeed=1` |
 | 34 | systemStatus | uint8 |
 | 35 | userCount | uint8 |
 | 36 | waterFeed | uint8 (0=tank, 1=tap) |

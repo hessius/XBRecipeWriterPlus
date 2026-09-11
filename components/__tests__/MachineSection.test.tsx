@@ -91,6 +91,21 @@ describe("the machine section", () => {
         expect(screen.getByText("V12.0D.500")).toBeTruthy();
     });
 
+    it("shows a tap-fed machine as plumbed rather than low on water", async () => {
+        mockLink.status = "connected";
+        mockLink.remembered = "AA:BB";
+        mockLink.machine = {askHowItIsDoing: mockAsk, info: {
+            kind: "info", serial: "J15ABC123456", model: "J15",
+            firmware: "V12.0D.500", waterEnough: false, waterFeed: "tap",
+            grindSize: 62, mode: "PRO"
+        }} as never;
+
+        await renderWithProviders(<MachineSection/>);
+
+        expect(screen.getByText("Plumbed")).toBeTruthy();
+        expect(screen.queryByText("Low")).toBeNull();
+    });
+
     it("says whether a machine is paired at all, not only whether it is connected", async () => {
         // "Not connected" was true of both a phone that has never seen a
         // machine and one that has paired with a machine and lost it, and the

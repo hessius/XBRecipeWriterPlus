@@ -6,7 +6,10 @@ import MachinePanel from "@/components/MachinePanel";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
-const vitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 0};
+const vitals = {
+    waterEnough: true, waterFeed: "tank" as const,
+    mode: "PRO" as const, grindSize: 62, askedAt: 0
+};
 /**
  * A request that never settles, so the control stays in its asking state for
  * the duration of the test. The hook is driven by the promise now, so a mock
@@ -16,7 +19,10 @@ function pending() {
     return jest.fn(() => new Promise<boolean>(() => undefined));
 }
 
-const someVitals = {waterEnough: true, mode: "PRO" as const, grindSize: 62, askedAt: 1000};
+const someVitals = {
+    waterEnough: true, waterFeed: "tank" as const,
+    mode: "PRO" as const, grindSize: 62, askedAt: 1000
+};
 
 async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = {}) {
     return renderWithProviders(
@@ -62,6 +68,16 @@ describe("MachinePanel", () => {
     it("warns when the tank is low, and says what to do", async () => {
         const {getByText} = await draw({vitals: {...vitals, waterEnough: false}});
         expect(getByText("FILL THE TANK, THEN REFRESH")).toBeTruthy();
+    });
+
+    it("identifies a tap-fed machine instead of warning about its unused tank", async () => {
+        const {getByText, queryByText} = await draw({
+            vitals: {...vitals, waterEnough: false, waterFeed: "tap"}
+        });
+
+        expect(getByText("PLUMBED")).toBeTruthy();
+        expect(queryByText("LOW")).toBeNull();
+        expect(queryByText("FILL THE TANK, THEN REFRESH")).toBeNull();
     });
 
     it("offers TRY NOW only when the machine is not connected", async () => {

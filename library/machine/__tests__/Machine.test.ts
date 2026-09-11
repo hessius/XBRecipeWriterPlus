@@ -1377,6 +1377,20 @@ describe("asking how the machine is doing now", () => {
         expect(brewFrames(transport)).toContain(8002);
     });
 
+    it("does not block a tap-fed machine because its unused tank is low", async () => {
+        const transport = new FakeTransport();
+        transport.infoReply = machineInfoFrame({waterEnough: 0, waterFeed: 1});
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+
+        expect(machine.info).toMatchObject({waterEnough: false, waterFeed: "tap"});
+        expect(machine.brewBlock(brewable())).toBeNull();
+
+        await machine.brew(brewable());
+        expect(brewFrames(transport)).toContain(8002);
+    });
+
     it("names each kind of block", async () => {
         // One case per branch, so a reordering of the checks cannot silently
         // change which reason a user is given. The brew screen draws these

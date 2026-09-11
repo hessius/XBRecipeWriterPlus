@@ -11,6 +11,7 @@ import type {LinkStatus} from "@/hooks/useMachine";
 /** What the panel shows, copied out of the machine's info blob. */
 export type MachineVitals = {
     waterEnough: boolean;
+    waterFeed: "tank" | "tap";
     mode: "PRO" | "EASY";
     grindSize: number;
     /** When the blob was asked for, in wall-clock milliseconds. */
@@ -118,18 +119,21 @@ export default function MachinePanel({
     let body: React.ReactNode;
 
     if (status === "connected" && vitals !== null) {
+        const plumbed = vitals.waterFeed === "tap";
         body = (
             <YStack gap="$1">
                 <Row label="WATER">
                     <DotMatrixText testID="machine-water-value" fontSize={18} weight="bold"
-                                   color={vitals.waterEnough ? palette.text : palette.warn}>
-                        {vitals.waterEnough ? "OK" : "LOW"}
+                                   color={plumbed || vitals.waterEnough
+                                       ? palette.text
+                                       : palette.warn}>
+                        {plumbed ? "PLUMBED" : vitals.waterEnough ? "OK" : "LOW"}
                     </DotMatrixText>
                     <DotMatrixText fontSize={11} color={palette.muted}>
                         {age(vitals.askedAt, now)}
                     </DotMatrixText>
                 </Row>
-                {!vitals.waterEnough && (
+                {!plumbed && !vitals.waterEnough && (
                     <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
                                    color={palette.warn}>
                         FILL THE TANK, THEN REFRESH

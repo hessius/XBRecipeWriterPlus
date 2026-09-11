@@ -113,7 +113,9 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                                onPress={onSecretPress}>
                         <Vital label="Firmware" value={info.firmware}/>
                     </Pressable>
-                    <Vital label="Water" value={info.waterEnough ? "OK" : "Low"}/>
+                    <Vital label="Water" value={info.waterFeed === "tap"
+                        ? "Plumbed"
+                        : info.waterEnough ? "OK" : "Low"}/>
                     <Vital label="Grind size" value={String(info.grindSize)}/>
                     <Vital label="Mode" value={info.mode}/>
                 </YStack>

@@ -97,7 +97,9 @@ function telemetryText(snapshot: TelemetrySnapshot): string {
     parts.push(`info ${snapshot.info === undefined
         ? "n/a"
         : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`
-          + ` water ${snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
+          + ` water ${snapshot.info.waterFeed === "tap"
+              ? "plumbed"
+              : snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
     return parts.join(" · ");
 }
 
