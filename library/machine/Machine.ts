@@ -106,10 +106,10 @@ export type BrewPhase =
     | {name: "bypass"}
     /**
      * Water has stopped, but coffee is still draining from the brewer onto the
-     * scale. **Non-terminal**: the brew is not over until the cup line goes
-     * flat (or the cup is lifted). Ending the record at BREWER_STOP threw away
-     * the last several seconds of the cup filling — the part that says how much
-     * coffee actually landed and when the timer really stops.
+     * scale. **Non-terminal**: the brew is not over until the machine's first
+     * ENJOY signal, the cup line goes flat, or the cup is lifted. Ending the
+     * record at BREWER_STOP threw away the last several seconds of the cup
+     * filling — the part that says how much coffee actually landed.
      */
     | {name: "settling"}
     | {name: "done"}
@@ -493,6 +493,7 @@ export default class Machine {
     }
 
     async askHowItIsDoing(): Promise<boolean> {
+        const infoBeforeRequest = this.info;
         // The machine will not answer a question asked outside a session, and
         // the session goes stale on its own — settled on hardware, where a
         // 40521 six minutes into a live link was ignored and the same frame
@@ -504,6 +505,10 @@ export default class Machine {
         }
         for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
             if (attempt > 0) await this.gap();
+            // A late answer to the previous attempt can land in the gap, when
+            // no per-attempt listener is mounted. It is still an answer to this
+            // refresh and must not leave the control waiting for another frame.
+            if (this.info !== infoBeforeRequest) return true;
             // Listening before asking, not after. The answer can arrive inside
             // the write — the radio delivers on its own thread — and a listener
             // attached afterwards would miss it and wait out the whole window
@@ -519,7 +524,7 @@ export default class Machine {
                 // business setting.
                 return false;
             }
-            if (await answered) return true;
+            if (await answered || this.info !== infoBeforeRequest) return true;
         }
         // Silence is evidence, and it outranks the clock. The session is
         // renewed on a timer because renewing beeps -- but a machine that has
@@ -1015,7 +1020,7 @@ export default class Machine {
      * Called once when settling opens and again on every frame that arrives
      * during it, so the countdown measures how long the machine has been quiet
      * rather than how long the drawdown has taken. A drawdown may take as long
-     * as it likes; ENJOY_2 ends it. The ceiling is what stops a machine that
+     * as it likes; ENJOY ends it. The ceiling is what stops a machine that
      * chatters without ever finishing from hanging the run.
      */
     private armSettleTimer(): void {
@@ -1023,7 +1028,7 @@ export default class Machine {
         const since = Date.now() - this.settleOpenedAt;
         const wait = Math.max(0, Math.min(this.settleCapMs, SETTLE_CEILING_MS - since));
         this.settleTimer = setTimeout(() => {
-            // Only if nothing else moved the run on. A dropped ENJOY_2 must not
+            // Only if nothing else moved the run on. A dropped ENJOY must not
             // strand it in a non-terminal phase forever.
             if (this.phase.name === "settling") this.setPhase({name: "done"});
         }, wait);
@@ -1200,12 +1205,10 @@ export default class Machine {
                 this.setPhase({name: "settling"});
                 break;
             case EVENT.ENJOY:
-                // The "coffee is ready" beep. Only a fallback into settling if
-                // BREWER_STOP was somehow missed: while pouring it is the next
-                // best entry, but once settling it is not a state change.
-                if (this.phase.name === "pouring") this.setPhase({name: "settling"});
-                break;
             case EVENT.ENJOY_2:
+                // The first ENJOY is the machine's coffee-ready signal and the
+                // point where its own UI considers the brew complete. ENJOY_2
+                // remains a fallback for firmware that omits the first event.
                 this.setPhase({name: "done"});
                 break;
             default:

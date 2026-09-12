@@ -195,6 +195,28 @@ describe("connecting", () => {
 });
 
 describe("a machine that will not say how it is doing", () => {
+    it("counts an info frame that arrives between retry windows as an answer", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 20, infoWaitMs: 5});
+        await machine.connect("AA:BB");
+        transport.infoReply = null;
+        transport.written = [];
+
+        const realWrite = transport.write.bind(transport);
+        let firstRequest = true;
+        transport.write = async (frame: Uint8Array) => {
+            await realWrite(frame);
+            const code = frame[3] | (frame[4] << 8);
+            if (code === 40521 && firstRequest) {
+                firstRequest = false;
+                setTimeout(() => transport.emit(machineInfoFrame()), 10);
+            }
+        };
+
+        expect(await machine.askHowItIsDoing()).toBe(true);
+        expect(machine.info).not.toBeNull();
+    });
+
     it("stops believing the session is live when the machine goes quiet", async () => {
         // The root cause of a brew that would not start. The session is
         // renewed on a clock, and renewing beeps, so a renewal inside the
@@ -557,8 +579,8 @@ describe("brewing", () => {
         expect(phases).toContain("armed");
         expect(phases).toContain("grinding");
         expect(phases).toContain("pouring");
-        // Water stops at BREWER_STOP, but the brew is not over until the second
-        // ENJOY: the drawdown in between is now kept rather than discarded.
+        // Water stops at BREWER_STOP, but the brew is not over until the first
+        // ENJOY: the drawdown in between is kept rather than discarded.
         expect(phases).toContain("settling");
         expect(phases.at(-1)).toBe("done");
     });
@@ -578,37 +600,31 @@ describe("brewing", () => {
         expect(machine.phase.name).toBe("settling");
     });
 
-    it("falls into settling on ENJOY when BREWER_STOP was missed", async () => {
-        // ENJOY (40512) is the "coffee is ready" beep. If the earlier
-        // BREWER_STOP was dropped, ENJOY arriving while still pouring is the
-        // next best entry into settling.
+    it("ends the brew on the first ENJOY when BREWER_STOP was missed", async () => {
+        // ENJOY (40512) is the first "coffee is ready" beep and is the point
+        // where the live screen should reveal the summary, even if the earlier
+        // BREWER_STOP notification was dropped.
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
         transport.emit(status(0x22));
         transport.emit(event(40507));      // grinder stop -> pouring
         transport.emit(event(40512));      // enjoy, with no brewer stop before it
 
-        expect(machine.phase.name).toBe("settling");
+        expect(machine.phase.name).toBe("done");
     });
 
-    it("lets ENJOY change nothing once already settling", async () => {
-        // ENJOY is a beep, not a state change. Arriving after BREWER_STOP has
-        // begun settling it must not restart or disturb the settle.
+    it("ends settling on the first ENJOY", async () => {
         const {transport, machine} = await readyMachine();
-        const phases: string[] = [];
-        machine.onPhase((phase) => phases.push(phase.name));
         await machine.brew(brewable());
         transport.emit(status(0x22));
         transport.emit(event(40507));      // grinder stop -> pouring
         transport.emit(event(40511));      // brewer stop -> settling
-        const before = phases.length;
-        transport.emit(event(40512));      // enjoy
+        transport.emit(event(40512));      // first enjoy -> done
 
-        expect(phases.length).toBe(before);
-        expect(machine.phase.name).toBe("settling");
+        expect(machine.phase.name).toBe("done");
     });
 
-    it("ends the brew on ENJOY_2", async () => {
+    it("uses ENJOY_2 as a fallback when the first ENJOY is missed", async () => {
         const {transport, machine} = await readyMachine();
         await machine.brew(brewable());
         transport.emit(status(0x22));
@@ -619,8 +635,8 @@ describe("brewing", () => {
         expect(machine.phase.name).toBe("done");
     });
 
-    it("promotes a stranded settling to done after the cap, so a dropped ENJOY_2 cannot hang the run", async () => {
-        // `settling` is non-terminal and only ENJOY_2 otherwise reaches `done`.
+    it("promotes a stranded settling to done after the cap, so a dropped ENJOY cannot hang the run", async () => {
+        // `settling` is non-terminal and ENJOY normally reaches `done`.
         // Losing that one notification would leave the run stuck — CANCEL on
         // screen, the next brew refused as busy. The watchdog is the backstop.
         jest.useFakeTimers();
@@ -633,7 +649,7 @@ describe("brewing", () => {
             await machine.brew(brewable());
             transport.emit(status(0x22));
             transport.emit(event(40507));  // grinder stop -> pouring
-            transport.emit(event(40511));  // brewer stop -> settling; ENJOY_2 never comes
+            transport.emit(event(40511));  // brewer stop -> settling; ENJOY never comes
 
             expect(machine.phase.name).toBe("settling");
             // Just short of the 90 000 ms cap (pinned to the literal): still stuck.

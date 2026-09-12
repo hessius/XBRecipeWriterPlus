@@ -91,12 +91,10 @@ export default class BrewRecorder {
     /**
      * Whether the machine itself has said the coffee is ready.
      *
-     * ENJOY (40512) and the READY state arrive a good twenty seconds before
-     * ENJOY_2 stops the machine's timer, so they are not the end — but they are
-     * the machine's own opinion that the drawdown is over, and that is exactly
-     * the thing a flat cup line cannot tell on its own. Until one of them
-     * arrives, a cup that has stopped rising is a bed that has dammed, not a
-     * brew that has finished.
+     * ENJOY (40512) and the READY state are the machine's own opinion that the
+     * drawdown is over, which is exactly the thing a flat cup line cannot tell
+     * on its own. Until one of them arrives, a cup that has stopped rising is a
+     * bed that has dammed, not a brew that has finished.
      */
     private machineReady = false;
 
