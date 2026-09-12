@@ -247,6 +247,36 @@ describe("BrewStageLadder", () => {
         expect(mockScrollTo).toHaveBeenCalledWith({y: target, animated: true});
     });
 
+    it("reveals the initial active rung after its row layout arrives late", async () => {
+        const {getByTestId} = await draw({activeIndex: 1});
+        const view = getByTestId("ladder-scroll");
+
+        await fireEvent(view, "scroll", {
+            nativeEvent: {contentOffset: {x: 0, y: 100}}
+        });
+        await fireEvent(view, "layout", {
+            nativeEvent: {layout: {height: 300}}
+        });
+        await fireEvent(view, "contentSizeChange", 320, 600);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 90,
+            rowHeight: 40
+        });
+
+        await fireEvent(getByTestId("row-1"), "layout", {
+            nativeEvent: {layout: {x: 0, y: 90, width: 240, height: 40}}
+        });
+
+        expect(target).toBe(82);
+        expect(mockScrollTo).toHaveBeenCalledWith({y: target, animated: true});
+    });
+
     it("does not scroll when the active rung is already fully visible", async () => {
         const rendered = await draw({activeIndex: 0});
 

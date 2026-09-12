@@ -92,6 +92,7 @@ export default function BrewStageLadder({
      */
     const [boxHeight, setBoxHeight] = useState(0);
     const [contentHeight, setContentHeight] = useState(0);
+    const [activeRowLayoutVersion, setActiveRowLayoutVersion] = useState(0);
     // A tolerance, because a measured content height can land a fraction of a
     // point above its container without a pixel being out of place.
     const measured = boxHeight > 0 && contentHeight > 0;
@@ -124,7 +125,7 @@ export default function BrewStageLadder({
         });
         if (target === null) return;
         scroller.current?.scrollTo({y: target, animated: true});
-    }, [activeIndex, boxHeight, contentHeight, overflows, pours.length]);
+    }, [activeIndex, activeRowLayoutVersion, boxHeight, contentHeight, overflows, pours.length]);
 
     const rows = pours.map((pour, index) => {
         const state: RungState =
@@ -140,7 +141,12 @@ export default function BrewStageLadder({
                 style={{paddingVertical: rungGap / 2}}
                 onLayout={(e) => {
                     const {height, y} = e.nativeEvent.layout;
+                    const previous = rungLayouts.current[index];
+                    if (previous?.y === y && previous?.height === height) return;
                     rungLayouts.current[index] = {y, height};
+                    if (index === activeIndex) {
+                        setActiveRowLayoutVersion((version) => version + 1);
+                    }
                 }}
             >
                 <BrewStageRung
