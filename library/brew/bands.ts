@@ -1,5 +1,3 @@
-import {NOTCH_OVERHANG} from "./rungGeometry";
-
 /**
  * How the brew screen's flexible height is shared out.
  *
@@ -24,18 +22,10 @@ export const BAR_MAX = 44;
 /**
  * Then the rungs spread out.
  *
- * The floor is the notch's clearance rather than a chosen number: the
- * agitation mark overhangs its bar top and bottom, so any thinner gap and two
- * neighbouring rungs cut into each other's marks. It costs at most three
- * points of bar height on the tallest recipes.
- *
- * It does move the point at which a ladder starts to scroll, by three points
- * per stage: nine stages now scroll at a flexible height of 228-254, and
- * twelve at 264-299, where before they just fit. That is the price of drawing
- * the mark at all, and it is paid in a narrow band of window heights rather
- * than in bar height everywhere -- but it is a real change, not a free one.
+ * Decorations are contained within `barHeight`, so this floor is visual
+ * separation only. Three points is the original pre-notch floor.
  */
-export const GAP_FLOOR = 2 * NOTCH_OVERHANG;
+export const GAP_FLOOR = 3;
 export const GAP_CAP = 20;
 export const GAP_MAX = 34;
 

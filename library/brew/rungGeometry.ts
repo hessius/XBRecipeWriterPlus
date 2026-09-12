@@ -4,15 +4,6 @@ import {pauseSeconds, pourSeconds} from "./brewShape";
 import type {Stall} from "./stalls";
 
 /**
- * How far the agitation notch stands proud of the bar, above and below.
- *
- * It lives here rather than with the rung that draws it because the ladder has
- * to reserve the clearance: two rungs whose gap is thinner than this would cut
- * into each other's marks.
- */
-export const NOTCH_OVERHANG = 3;
-
-/**
  * What a piece of a rung's lane is.
  *
  * `water` is solid and fills by millilitres; `stall` is amber and always full,
