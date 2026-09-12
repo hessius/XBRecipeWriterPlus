@@ -4,8 +4,31 @@ import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
 import {palette} from "@/constants/colors";
+import {minimalRevealOffset} from "@/library/brew/ladderScroll";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+const mockScrollTo = jest.fn();
+
+jest.mock("react-native/Libraries/Components/ScrollView/ScrollView", () => {
+    const React = jest.requireActual("react");
+    const View = jest.requireActual("react-native/Libraries/Components/View/View").default;
+
+    /**
+     * RNTL v14 removed `createNodeMock`, so React Native's ScrollView ref lands
+     * as `null` under Jest unless a test supplies its own imperative handle.
+     * Keep the real props/events, and replace only the ref surface we need to
+     * observe.
+     */
+    const MockScrollView = React.forwardRef(function MockScrollView(props: any, ref: any) {
+        const {children, ...rest} = props;
+        React.useImperativeHandle(ref, () => ({scrollTo: mockScrollTo}), []);
+        return React.createElement(View, rest, children);
+    });
+    MockScrollView.displayName = "ScrollView";
+
+    return {__esModule: true, default: MockScrollView};
+});
 
 /** What the scroll view centres or top-aligns its rungs with. */
 function contentStyle(view: {props: {contentContainerStyle?: unknown}}) {
@@ -13,28 +36,55 @@ function contentStyle(view: {props: {contentContainerStyle?: unknown}}) {
         Record<string, unknown>;
 }
 
+type LadderProps = React.ComponentProps<typeof BrewStageLadder>;
+type FireEventTarget = Parameters<typeof fireEvent>[0];
+
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
         new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
 }
 
-async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageLadder>> = {}) {
+function ladderProps(overrides: Partial<LadderProps> = {}): LadderProps {
+    return {
+        pours: pours(4),
+        accent: palette.brand,
+        activeIndex: 1,
+        barHeight: 11,
+        rungGap: 8,
+        scrolls: false,
+        fill: true,
+        stageWater: [40, 20, 0, 0],
+        stalls: [[], [], [], []],
+        pauseElapsed: 0,
+        ...overrides
+    };
+}
+
+async function draw(overrides: Partial<LadderProps> = {}) {
     return renderWithProviders(
-        <BrewStageLadder
-            pours={pours(4)}
-            accent={palette.brand}
-            activeIndex={1}
-            barHeight={11}
-            rungGap={8}
-            scrolls={false}
-            fill={true}
-            stageWater={[40, 20, 0, 0]}
-            stalls={[[], [], [], []]}
-            pauseElapsed={0}
-            {...overrides}
-        />
+        <BrewStageLadder {...ladderProps(overrides)} />
     );
 }
+
+async function measureOverflow(
+    getByTestId: (id: string) => FireEventTarget,
+    rowTop: number
+) {
+    await fireEvent(getByTestId("row-1"), "layout", {
+        nativeEvent: {layout: {x: 0, y: rowTop, width: 240, height: 40}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "scroll", {
+        nativeEvent: {contentOffset: {x: 0, y: 100}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "layout", {
+        nativeEvent: {layout: {height: 300}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "contentSizeChange", 320, 600);
+}
+
+beforeEach(() => {
+    mockScrollTo.mockClear();
+});
 
 describe("BrewStageLadder", () => {
     it("draws one rung per stage", async () => {
@@ -174,6 +224,48 @@ describe("BrewStageLadder", () => {
 
         expect(typeof getByTestId("ladder-scroll").props.onScroll).toBe("function");
         expect(getByTestId("ladder-scroll").props.scrollEventThrottle).toBe(16);
+    });
+
+    it("scrolls the clipped active rung to the helper's minimal reveal target", async () => {
+        const rendered = await draw({activeIndex: 0});
+
+        await measureOverflow(rendered.getByTestId, 90);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 90,
+            rowHeight: 40
+        });
+
+        await rendered.rerender(<BrewStageLadder {...ladderProps({activeIndex: 1})} />);
+
+        expect(target).toBe(82);
+        expect(mockScrollTo).toHaveBeenCalledWith({y: target, animated: true});
+    });
+
+    it("does not scroll when the active rung is already fully visible", async () => {
+        const rendered = await draw({activeIndex: 0});
+
+        await measureOverflow(rendered.getByTestId, 120);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 120,
+            rowHeight: 40
+        });
+
+        await rendered.rerender(<BrewStageLadder {...ladderProps({activeIndex: 1})} />);
+
+        expect(target).toBeNull();
+        expect(mockScrollTo).not.toHaveBeenCalled();
     });
 
     it("accepts the full row layout payload React Native sends", async () => {

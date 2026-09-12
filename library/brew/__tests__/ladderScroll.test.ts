@@ -1,7 +1,14 @@
 import {minimalRevealOffset} from "@/library/brew/ladderScroll";
 
 describe("minimalRevealOffset", () => {
-    const base = {viewportHeight: 300, contentHeight: 600, offset: 100, rowHeight: 40, inset: 8};
+    const base = {
+        viewportHeight: 300,
+        contentHeight: 600,
+        offset: 100,
+        rowTop: 120,
+        rowHeight: 40,
+        inset: 8
+    };
 
     it("returns null when all content fits", () => {
         expect(minimalRevealOffset({...base, contentHeight: 300})).toBeNull();
