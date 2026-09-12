@@ -91,6 +91,7 @@ function AgitationMark({colour, barHeight, testID}:
                 width={AGITATION_WIDTH}
                 height={barHeight}
                 viewBox={`0 0 ${AGITATION_WIDTH} ${AGITATION_VIEWBOX_HEIGHT}`}
+                preserveAspectRatio="none"
             >
                 <Path
                     testID={`${testID}-path`}

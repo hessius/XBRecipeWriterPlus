@@ -176,8 +176,24 @@ describe("BrewStageRung", () => {
         expect(style.height).toBe(11);
         expect(style.width).toBe(AGITATION_WIDTH);
         expect(style.position).toBeUndefined();
+        expect(getByTestId("rung-agitation-after").props.pointerEvents).toBe("none");
         expect(getByTestId("rung-agitation-after-wave").props.height).toBe(11);
     });
+
+    it.each([11, 28, 44])(
+        "scales the approved wave to fill a %i point bar height",
+        async (barHeight) => {
+            const {getByTestId} = await draw({
+                barHeight,
+                pour: new Pour(
+                    1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+                )
+            });
+
+            expect(getByTestId("rung-agitation-after-wave").props.height).toBe(barHeight);
+            expect(getByTestId("rung-agitation-after-wave").props.align).toBe("none");
+        }
+    );
 
     it("draws the approved compact wave", async () => {
         const {getByTestId} = await draw({
@@ -190,7 +206,7 @@ describe("BrewStageRung", () => {
             .toBe("M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14");
     });
 
-    it("draws the notch before the slack, not past it", async () => {
+    it("draws the wave before the slack, not past it", async () => {
         const {getByTestId} = await draw({pour: new Pour(
             1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
         )});
