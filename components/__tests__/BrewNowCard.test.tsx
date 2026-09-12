@@ -2,6 +2,7 @@ import React from "react";
 import {cleanup} from "@testing-library/react-native";
 
 import BrewNowCard from "@/components/BrewNowCard";
+import {AGITATION_SENTENCE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
@@ -57,7 +58,9 @@ describe("BrewNowCard", () => {
             <BrewNowCard pour={stirring} accent={palette.brand} resting={false} />
         );
 
-        expect(getByText(/Agitates the bed before and after\.$/)).toBeTruthy();
+        expect(getByText(
+            `Circular pour. ${AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_ON]}`
+        )).toBeTruthy();
     });
 
     it("shows nothing at all before a stage is live", async () => {

@@ -4,6 +4,7 @@ import {StyleSheet} from "react-native";
 
 import StageDetail from "@/components/StageDetail";
 import {
+    AGITATION_SENTENCE,
     STAGE_NO_HOLD,
     STAGE_POURED_IN_FULL,
     STAGE_SHORT_CANCELLED,
@@ -90,7 +91,7 @@ describe("StageDetail", () => {
                 })
             });
             expect(getByText(
-                "Centre pour. Agitates the bed first."
+                `Centre pour. ${AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_OFF]}`
             )).toBeTruthy();
             expect(queryByText("Centre pour.")).toBeNull();
         });
