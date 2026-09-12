@@ -29,6 +29,24 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewStageRung
     );
 }
 
+function widthOf(node: {props: {style?: unknown}} | null): number {
+    if (node === null) return 0;
+    const style = StyleSheet.flatten(node.props.style) as {width?: number};
+    return style.width ?? 0;
+}
+
+function segmentFlexes(
+    getByTestId: (id: string) => {props: {style?: unknown}},
+    count: number
+): Array<number | undefined> {
+    return Array.from({length: count}, (_, i) => {
+        const style = StyleSheet.flatten(
+            getByTestId(`segment-${i}`).props.style
+        ) as {flex?: number};
+        return style.flex;
+    });
+}
+
 describe("BrewStageRung", () => {
     it("numbers the stage from one, padded", async () => {
         const {getByText} = await draw({index: 8});
@@ -136,7 +154,7 @@ describe("BrewStageRung", () => {
         expect(queryByTestId("rung-agitation-after")).toBeNull();
     });
 
-    it("cuts the before mark through the bar, exactly as the after mark", async () => {
+    it("anchors the before mark on a zero-width lead slot while keeping the wave full width", async () => {
         // It used to be a bare glyph in a zero-width box, vertically centred
         // inside the first segment: accent on accent fill, so a stage that had
         // begun pouring hid it entirely and a recipe agitating before and after
@@ -148,37 +166,51 @@ describe("BrewStageRung", () => {
             )
         });
 
+        const style = StyleSheet.flatten(
+            getByTestId("rung-agitation-before").props.style
+        ) as {zIndex?: number};
+        expect(widthOf(getByTestId("rung-agitation-before"))).toBe(0);
+        expect(style.zIndex).toBe(1);
         expect(getByTestId("rung-agitation-before-wave").props.height).toBe(11);
+        expect(getByTestId("rung-agitation-before-wave").props.width).toBe(AGITATION_WIDTH);
         expect(getByTestId("rung-agitation-before-path").props.stroke).toEqual(
             expect.objectContaining({payload: processColor(ACCENT)})
         );
     });
 
-    it("draws the two marks identically", async () => {
+    it("draws the two waves identically even though their layout slots differ", async () => {
         const {getByTestId} = await draw({pour: new Pour(
             1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_ON, POUR_PATTERN.CENTERED, 20
         )});
 
-        expect(StyleSheet.flatten(getByTestId("rung-agitation-before").props.style))
-            .toEqual(StyleSheet.flatten(getByTestId("rung-agitation-after").props.style));
+        expect(widthOf(getByTestId("rung-agitation-before"))).toBe(0);
+        expect(widthOf(getByTestId("rung-agitation-after"))).toBe(SEGMENT_GAP);
+        expect(getByTestId("rung-agitation-before-wave").props.width)
+            .toBe(getByTestId("rung-agitation-after-wave").props.width);
         expect(getByTestId("rung-agitation-before-wave").props.height)
             .toBe(getByTestId("rung-agitation-after-wave").props.height);
+        expect(getByTestId("rung-agitation-before-path").props.d)
+            .toBe(getByTestId("rung-agitation-after-path").props.d);
     });
 
-    it("contains the after mark within its own slot", async () => {
-        const {getByTestId} = await draw({pour: new Pour(
-            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
-        )});
+    it(
+        "keeps the internal seam slot at the ordinary gap while the wave stays 11 points wide",
+        async () => {
+            const {getByTestId} = await draw({pour: new Pour(
+                1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )});
 
-        const style = StyleSheet.flatten(
-            getByTestId("rung-agitation-after").props.style
-        );
-        expect(style.height).toBe(11);
-        expect(style.width).toBe(AGITATION_WIDTH);
-        expect(style.position).toBeUndefined();
-        expect(getByTestId("rung-agitation-after").props.pointerEvents).toBe("none");
-        expect(getByTestId("rung-agitation-after-wave").props.height).toBe(11);
-    });
+            const style = StyleSheet.flatten(
+                getByTestId("rung-agitation-after").props.style
+            );
+            expect(style.height).toBe(11);
+            expect(style.width).toBe(SEGMENT_GAP);
+            expect(style.zIndex).toBe(1);
+            expect(getByTestId("rung-agitation-after").props.pointerEvents).toBe("none");
+            expect(getByTestId("rung-agitation-after-wave").props.width).toBe(AGITATION_WIDTH);
+            expect(getByTestId("rung-agitation-after-wave").props.height).toBe(11);
+        }
+    );
 
     it.each([11, 28, 44])(
         "scales the approved wave to fill a %i point bar height",
@@ -206,9 +238,9 @@ describe("BrewStageRung", () => {
             .toBe("M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14");
     });
 
-    it("draws the wave before the slack, not past it", async () => {
+    it("draws a tail after-mark on a zero-width slot before the slack", async () => {
         const {getByTestId} = await draw({pour: new Pour(
-            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 0
         )});
 
         // Walk the rendered lane rather than the element's children: the
@@ -224,6 +256,8 @@ describe("BrewStageRung", () => {
             });
         };
         walk(getByTestId("rung-lane") as unknown as {children?: unknown[]});
+        expect(widthOf(getByTestId("rung-agitation-after"))).toBe(0);
+        expect(getByTestId("rung-agitation-after-wave").props.width).toBe(AGITATION_WIDTH);
         expect(ids).toContain("rung-agitation-after");
         expect(ids.indexOf("rung-agitation-after"))
             .toBeLessThan(ids.indexOf("rung-slack"));
@@ -355,8 +389,26 @@ describe("BrewStageRung", () => {
         expect(gap.width).toBe(SEGMENT_GAP);
     });
 
-    it("keeps the ordinary seam gap while giving agitation its own width", async () => {
-        expect(AGITATION_WIDTH).toBe(11);
-        expect(SEGMENT_GAP).toBe(3);
+    it("keeps the same timed budget as equivalent rows without agitation", async () => {
+        const plain = await draw({pour: stage(70, 20)});
+        const both = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_ON_AFTER_ON, POUR_PATTERN.CENTERED, 20
+        )});
+        const plainNoWait = await draw({pour: stage(70, 0)});
+        const tail = await draw({pour: new Pour(
+            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 0
+        )});
+
+        expect(segmentFlexes(plain.getByTestId, 2)).toEqual(segmentFlexes(both.getByTestId, 2));
+        expect(widthOf(plain.getByTestId("gap-1"))).toBe(SEGMENT_GAP);
+        expect(
+            widthOf(both.getByTestId("rung-agitation-before"))
+            + widthOf(both.getByTestId("rung-agitation-after"))
+        ).toBe(SEGMENT_GAP);
+
+        expect(segmentFlexes(plainNoWait.getByTestId, 1))
+            .toEqual(segmentFlexes(tail.getByTestId, 1));
+        expect(widthOf(plainNoWait.queryByTestId("rung-agitation-after"))).toBe(0);
+        expect(widthOf(tail.getByTestId("rung-agitation-after"))).toBe(0);
     });
 });

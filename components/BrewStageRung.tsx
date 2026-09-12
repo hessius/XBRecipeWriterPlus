@@ -68,40 +68,56 @@ const AGITATION_VIEWBOX_HEIGHT = 14;
 const AGITATION_PATH = "M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14";
 
 /**
- * One agitation mark: a compact wave in the lane's own flow.
+ * One agitation mark: a compact wave centred over a seam.
  *
- * It owns its whole slot, 11 points wide, so the wave never changes the rung's
- * height and never hangs over the lane's top or bottom edge.
+ * The slot spends only the lane width the mark is allowed to own; the 11 point
+ * wave is centred over that slot so the mark stays legible without stealing
+ * time from the neighbouring segments.
  */
-function AgitationMark({colour, barHeight, testID}:
-                       {colour: string; barHeight: number; testID: string}) {
+function AgitationMark({colour, barHeight, slotWidth, testID}: {
+    colour: string;
+    barHeight: number;
+    slotWidth: number;
+    testID: string;
+}) {
     return (
         <View
             testID={testID}
             pointerEvents="none"
             style={{
-                width: AGITATION_WIDTH,
+                width: slotWidth,
                 height: barHeight,
-                alignItems: "center",
-                justifyContent: "center"
+                overflow: "visible",
+                zIndex: 1
             }}
         >
-            <Svg
-                testID={`${testID}-wave`}
-                width={AGITATION_WIDTH}
-                height={barHeight}
-                viewBox={`0 0 ${AGITATION_WIDTH} ${AGITATION_VIEWBOX_HEIGHT}`}
-                preserveAspectRatio="none"
+            <View
+                pointerEvents="none"
+                style={{
+                    position: "absolute",
+                    left: (slotWidth - AGITATION_WIDTH) / 2,
+                    top: 0,
+                    width: AGITATION_WIDTH,
+                    height: barHeight
+                }}
             >
-                <Path
-                    testID={`${testID}-path`}
-                    d={AGITATION_PATH}
-                    fill="none"
-                    stroke={colour}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                />
-            </Svg>
+                <Svg
+                    testID={`${testID}-wave`}
+                    width={AGITATION_WIDTH}
+                    height={barHeight}
+                    viewBox={`0 0 ${AGITATION_WIDTH} ${AGITATION_VIEWBOX_HEIGHT}`}
+                    preserveAspectRatio="none"
+                >
+                    <Path
+                        testID={`${testID}-path`}
+                        d={AGITATION_PATH}
+                        fill="none"
+                        stroke={colour}
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                    />
+                </Svg>
+            </View>
         </View>
     );
 }
@@ -260,7 +276,7 @@ export default function BrewStageRung({
             <XStack testID="rung-lane" style={{flex: 1}} height={barHeight}
                     alignItems="center">
                 {leadMark && (
-                    <AgitationMark colour={markColour} barHeight={barHeight}
+                    <AgitationMark colour={markColour} barHeight={barHeight} slotWidth={0}
                                    testID={leadMark} />
                 )}
                 {segments.map((segment, i) => {
@@ -271,6 +287,7 @@ export default function BrewStageRung({
                         {i > 0 && (
                             after && seam === i
                                 ? <AgitationMark colour={markColour} barHeight={barHeight}
+                                                 slotWidth={SEGMENT_GAP}
                                                  testID="rung-agitation-after" />
                                 : <View testID={`gap-${i}`}
                                         style={{width: SEGMENT_GAP, height: barHeight}} />
@@ -318,7 +335,7 @@ export default function BrewStageRung({
                     );
                 })}
                 {tailMark && (
-                    <AgitationMark colour={markColour} barHeight={barHeight}
+                    <AgitationMark colour={markColour} barHeight={barHeight} slotWidth={0}
                                    testID="rung-agitation-after" />
                 )}
                 {slack > 0 && <View testID="rung-slack" style={{flex: slack}} />}

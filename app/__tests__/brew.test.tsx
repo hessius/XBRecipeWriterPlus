@@ -181,7 +181,8 @@ describe("brew route", () => {
     ])("keeps the screen awake during %s", async (phaseName) => {
         mockPhase = namedPhase(phaseName);
         await renderWithProviders(<Brew />);
-        expect(mockUseKeepAwake).toHaveBeenCalledWith("active-brew");
+        expect(mockUseKeepAwake).toHaveBeenCalled();
+        expect(mockUseKeepAwake.mock.calls.every((call) => call.length === 0)).toBe(true);
     });
 
     it.each(["idle", "done", "cancelled", "failed", "lostContact"])(
