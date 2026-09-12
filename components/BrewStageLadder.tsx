@@ -5,11 +5,14 @@ import {YStack} from "tamagui";
 
 import BrewBypassRung from "@/components/BrewBypassRung";
 import type {BypassView} from "@/library/brew/bypassState";
+import {minimalRevealOffset} from "@/library/brew/ladderScroll";
 import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {rungSegments} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
+
+type RungLayout = {y: number; height: number};
 
 type Props = {
     pours: Pour[];
@@ -67,8 +70,9 @@ export default function BrewStageLadder({
     pauseElapsed, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     const scroller = useRef<ScrollView>(null);
-    // Maps rung index → measured y-offset relative to the ScrollView content.
-    const rungY = useRef<Record<number, number>>({});
+    // Maps rung index → measured layout relative to the ScrollView content.
+    const rungLayouts = useRef<Record<number, RungLayout>>({});
+    const scrollOffset = useRef(0);
 
     /**
      * What the ladder was given, and what it actually needs.
@@ -90,7 +94,8 @@ export default function BrewStageLadder({
     const [contentHeight, setContentHeight] = useState(0);
     // A tolerance, because a measured content height can land a fraction of a
     // point above its container without a pixel being out of place.
-    const overflows = scrolls || (boxHeight > 0 && contentHeight > boxHeight + 1);
+    const measured = boxHeight > 0 && contentHeight > 0;
+    const overflows = measured ? contentHeight > boxHeight + 1 : scrolls;
 
     // One scale for every rung, or a lane says nothing about its neighbours.
     // Stalls are in it: that is what makes a stage that struggled stick out
@@ -106,14 +111,20 @@ export default function BrewStageLadder({
     }, 0);
 
     useEffect(() => {
-        // Sentinels: null = not yet started, pours.length = brew finished.
-        // Only scroll for a genuinely live stage.
+        if (!overflows) return;
         if (activeIndex === null || activeIndex < 0 || activeIndex >= pours.length) return;
-        const y = rungY.current[activeIndex];
-        if (y === undefined) return;
-        // A small lead keeps the active rung from sitting flush at the top edge.
-        scroller.current?.scrollTo({y: Math.max(0, y - 8), animated: true});
-    }, [activeIndex, pours.length]);
+        const row = rungLayouts.current[activeIndex];
+        if (row === undefined) return;
+        const target = minimalRevealOffset({
+            viewportHeight: boxHeight,
+            contentHeight,
+            offset: scrollOffset.current,
+            rowTop: row.y,
+            rowHeight: row.height
+        });
+        if (target === null) return;
+        scroller.current?.scrollTo({y: target, animated: true});
+    }, [activeIndex, boxHeight, contentHeight, overflows, pours.length]);
 
     const rows = pours.map((pour, index) => {
         const state: RungState =
@@ -127,7 +138,10 @@ export default function BrewStageLadder({
                 key={`row-${index}`}
                 testID={`row-${index}`}
                 style={{paddingVertical: rungGap / 2}}
-                onLayout={(e) => { rungY.current[index] = e.nativeEvent.layout.y; }}
+                onLayout={(e) => {
+                    const {height, y} = e.nativeEvent.layout;
+                    rungLayouts.current[index] = {y, height};
+                }}
             >
                 <BrewStageRung
                     testID={`rung-${index}`}
@@ -193,6 +207,8 @@ export default function BrewStageLadder({
                     scrollEnabled={overflows}
                     onLayout={(e) => setBoxHeight(e.nativeEvent.layout.height)}
                     onContentSizeChange={(_, height) => setContentHeight(height)}
+                    onScroll={(e) => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
+                    scrollEventThrottle={16}
                     contentContainerStyle={{
                         flexGrow:       1,
                         justifyContent: overflows ? "flex-start" : "center"

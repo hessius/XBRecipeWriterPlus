@@ -1,5 +1,5 @@
 import React from "react";
-import {act, fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
@@ -138,6 +138,17 @@ describe("BrewStageLadder", () => {
         expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
     });
 
+    it("lets measurements override an initial overflow prediction", async () => {
+        const {getByTestId} = await draw({scrolls: true});
+        const view = getByTestId("ladder-scroll");
+
+        await fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+        await fireEvent(view, "contentSizeChange", 320, 280);
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+
     it("scrolls once the rungs are measured taller than the room", async () => {
         // The bug this replaced: `allocateBands` predicts a rung as its bar plus
         // its gap, but a rung also carries text that does not shrink, so past
@@ -151,13 +162,28 @@ describe("BrewStageLadder", () => {
         const {getByTestId} = await draw({fill: true, scrolls: false});
         const view = getByTestId("ladder-scroll");
 
-        await act(async () => {
-            fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
-            fireEvent(view, "contentSizeChange", 320, 640);
-        });
+        await fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+        await fireEvent(view, "contentSizeChange", 320, 640);
 
         expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(true);
         expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("flex-start");
+    });
+
+    it("tracks live scroll position on every frame", async () => {
+        const {getByTestId} = await draw();
+
+        expect(typeof getByTestId("ladder-scroll").props.onScroll).toBe("function");
+        expect(getByTestId("ladder-scroll").props.scrollEventThrottle).toBe(16);
+    });
+
+    it("accepts the full row layout payload React Native sends", async () => {
+        const {getByTestId} = await draw();
+
+        await fireEvent(getByTestId("row-1"), "layout", {
+            nativeEvent: {layout: {x: 0, y: 96, width: 240, height: 40}}
+        });
+
+        expect(getByTestId("row-1")).toBeTruthy();
     });
 
     it("fill=false: no flex, no justifyContent on the ladder root", async () => {
@@ -209,7 +235,7 @@ describe("BrewStageLadder's stage selection", () => {
     it("reports which rung was pressed", async () => {
         const onSelectStage = jest.fn();
         const {getByTestId} = await draw({onSelectStage});
-        fireEvent.press(getByTestId("rung-2"));
+        await fireEvent.press(getByTestId("rung-2"));
         expect(onSelectStage).toHaveBeenCalledWith(2);
     });
 
