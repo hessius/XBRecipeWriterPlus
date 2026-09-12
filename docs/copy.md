@@ -412,9 +412,9 @@ The brew screen (`app/brew.tsx`) and the phase copy it draws from
 | `brew.pattern.circular` | `constants/brewCopy.ts:135` (`PATTERN_SENTENCE.circular`) | Prose clause describing the circular pour. | `Circular pour` |
 | `brew.pattern.spiral` | `constants/brewCopy.ts:136` (`PATTERN_SENTENCE.spiral`) | Prose clause describing the spiral pour. | `Spiral pour` |
 | `brew.pattern.agitation` | `constants/brewCopy.ts:145` (`PATTERN_SENTENCE.agitation`) | Prose clause (unreachable in normal use; kept for totality). | `Agitates the bed by shaking it slightly` |
-| `brew.agitation.before` | `constants/brewCopy.ts:157` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_OFF) | Appended to the stage description when it stirs first. | `Agitates the bed first.` |
-| `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `Agitates the bed afterwards.` |
-| `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `Agitates the bed before and after.` |
+| `brew.agitation.before` | `constants/brewCopy.ts:157` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_OFF) | Appended to the stage description when it stirs first. | `Agitates the bed before pouring.` |
+| `brew.agitation.after` | `constants/brewCopy.ts:158` (`AGITATION_SENTENCE`, BEFORE_OFF_AFTER_ON) | Appended when it stirs afterwards. | `Agitates the bed after pouring.` |
+| `brew.agitation.both` | `constants/brewCopy.ts:159` (`AGITATION_SENTENCE`, BEFORE_ON_AFTER_ON) | Appended when it stirs before and after. | `Agitates the bed before and after pouring.` |
 
 The stage detail panel on a recorded brew (`components/StageDetail.tsx`), opened
 by tapping a stage rung or trace segment. Doto labels head each part; the prose

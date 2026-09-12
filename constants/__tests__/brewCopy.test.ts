@@ -10,6 +10,7 @@ import {
     PRO_MODE_PROMPT,
     blockedWaterCopy
 } from "@/constants/brewCopy";
+import {AGITATION} from "@/library/Pour";
 
 /** Every string the user can read, flattened. */
 const ALL: string[] = [
@@ -48,5 +49,14 @@ describe("brew copy", () => {
         // still in progress rather than finished.
         expect(PHASE_COPY.settling).toBe("Letting the last of the coffee drain…");
         expect(PHASE_COPY.settling).not.toBe(PHASE_COPY.done);
+    });
+
+    it("describes agitation relative to the pour", () => {
+        expect(AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_OFF])
+            .toBe("Agitates the bed before pouring.");
+        expect(AGITATION_SENTENCE[AGITATION.BEFORE_OFF_AFTER_ON])
+            .toBe("Agitates the bed after pouring.");
+        expect(AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_ON])
+            .toBe("Agitates the bed before and after pouring.");
     });
 });

@@ -230,7 +230,7 @@ export const STAGE_TIMING_UNAVAILABLE =
  * the right thing to say about a stage that does not stir.
  */
 export const AGITATION_SENTENCE: Record<number, string> = {
-    [AGITATION.BEFORE_ON_AFTER_OFF]: "Agitates the bed first.",
-    [AGITATION.BEFORE_OFF_AFTER_ON]: "Agitates the bed afterwards.",
-    [AGITATION.BEFORE_ON_AFTER_ON]:  "Agitates the bed before and after."
+    [AGITATION.BEFORE_ON_AFTER_OFF]: "Agitates the bed before pouring.",
+    [AGITATION.BEFORE_OFF_AFTER_ON]: "Agitates the bed after pouring.",
+    [AGITATION.BEFORE_ON_AFTER_ON]:  "Agitates the bed before and after pouring."
 };
