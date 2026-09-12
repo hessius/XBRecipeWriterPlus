@@ -30,4 +30,32 @@ describe("minimalRevealOffset", () => {
     it("returns null when the viewport height is zero", () => {
         expect(minimalRevealOffset({...base, viewportHeight: 0})).toBeNull();
     });
+
+    it("returns null for non-finite or malformed numeric measurements", () => {
+        expect(minimalRevealOffset({...base, viewportHeight: Number.NaN})).toBeNull();
+        expect(minimalRevealOffset({...base, contentHeight: Number.POSITIVE_INFINITY})).toBeNull();
+        expect(minimalRevealOffset({...base, offset: Number.NaN})).toBeNull();
+        expect(minimalRevealOffset({...base, rowTop: Number.NaN})).toBeNull();
+        expect(minimalRevealOffset({...base, rowHeight: Number.NEGATIVE_INFINITY})).toBeNull();
+        expect(minimalRevealOffset({...base, inset: Number.NaN})).toBeNull();
+    });
+
+    it("returns null when the row height is not positive", () => {
+        expect(minimalRevealOffset({...base, rowHeight: 0})).toBeNull();
+        expect(minimalRevealOffset({...base, rowHeight: -10})).toBeNull();
+    });
+
+    it("uses a stable top alignment for oversized rows", () => {
+        const oversized = {
+            viewportHeight: 100,
+            contentHeight: 500,
+            offset: 0,
+            rowTop: 180,
+            rowHeight: 120,
+            inset: 8
+        };
+
+        expect(minimalRevealOffset(oversized)).toBe(172);
+        expect(minimalRevealOffset({...oversized, offset: 172})).toBeNull();
+    });
 });

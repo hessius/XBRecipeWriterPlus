@@ -19,13 +19,29 @@ export function minimalRevealOffset({
     rowHeight,
     inset = 8
 }: RevealInput): number | null {
-    if (viewportHeight <= 0 || contentHeight <= viewportHeight) return null;
-
-    const rowBottom = rowTop + rowHeight;
-    const visibleBottom = offset + viewportHeight;
-    if (rowTop >= offset && rowBottom <= visibleBottom) return null;
+    if (
+        ![viewportHeight, contentHeight, offset, rowTop, rowHeight, inset].every(Number.isFinite) ||
+        viewportHeight <= 0 ||
+        contentHeight <= 0 ||
+        rowHeight <= 0 ||
+        inset < 0 ||
+        contentHeight <= viewportHeight
+    ) {
+        return null;
+    }
 
     const maxOffset = Math.max(0, contentHeight - viewportHeight);
-    const target = rowTop < offset ? rowTop - inset : rowBottom + inset - viewportHeight;
+    const normalizedOffset = clamp(offset, 0, maxOffset);
+
+    const rowBottom = rowTop + rowHeight;
+    if (rowHeight >= viewportHeight) {
+        const target = clamp(rowTop - inset, 0, maxOffset);
+        return target === normalizedOffset ? null : target;
+    }
+
+    const visibleBottom = normalizedOffset + viewportHeight;
+    if (rowTop >= normalizedOffset && rowBottom <= visibleBottom) return null;
+
+    const target = rowTop < normalizedOffset ? rowTop - inset : rowBottom + inset - viewportHeight;
     return clamp(target, 0, maxOffset);
 }
