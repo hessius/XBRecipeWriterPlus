@@ -111,8 +111,15 @@ export default function Collapsible({open, children}: Props) {
                 flow, so that it is measured against the screen rather than
                 against a parent that is clipped to nothing. It goes back into
                 the flow for good on the next render: from then on the row has a
-                height to animate, and the child fills it. */}
-            <View testID="collapsible-content"
+                height to animate, and the child fills it.
+
+                Opening changes the key only while no usable measurement exists.
+                That remount asks native layout for a fresh pass if the first one
+                reported zero while fonts or the surrounding screen were still
+                settling; otherwise the row could remain at height zero until
+                the app was restarted. */}
+            <View key={contentHeight === null ? (open ? "open" : "closed") : "measured"}
+                  testID="collapsible-content"
                   style={contentHeight === null ? MEASURING : undefined}
                   onLayout={(event) => {
                       // `nextHeight` returns the current value unchanged when

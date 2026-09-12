@@ -54,6 +54,22 @@ describe("Collapsible", () => {
         expect(screen.getByText("TILES", includeHidden)).toBeTruthy();
     });
 
+    it("asks for a fresh layout pass when an unmeasured closed row opens", async () => {
+        const rendered = await renderWithProviders(
+            <Collapsible open={false}>{body()}</Collapsible>
+        );
+        const first = screen.getByTestId("collapsible-content", includeHidden);
+
+        // A native first pass can report zero while fonts and the surrounding
+        // layout are settling. Zero is correctly rejected, but if the same
+        // native view stays mounted it may never emit another layout event and
+        // the row remains at height zero for the rest of the app session.
+        await measure(0);
+        await rendered.rerender(<Collapsible open>{body()}</Collapsible>);
+
+        expect(screen.getByTestId("collapsible-content", includeHidden)).not.toBe(first);
+    });
+
     it("puts the hidden content out of reach", async () => {
         // Zero height is a visual fact. Without this the tiles would still be
         // focusable by a screen reader and would still take a tap at the seam.
