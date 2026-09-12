@@ -38,7 +38,7 @@ function widthOf(node: {props: {style?: unknown}} | null): number {
 function segmentFlexes(
     getByTestId: (id: string) => {props: {style?: unknown}},
     count: number
-): Array<number | undefined> {
+): (number | undefined)[] {
     return Array.from({length: count}, (_, i) => {
         const style = StyleSheet.flatten(
             getByTestId(`segment-${i}`).props.style
