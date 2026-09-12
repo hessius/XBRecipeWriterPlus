@@ -1,7 +1,7 @@
 import React from "react";
 import {processColor, StyleSheet} from "react-native";
 
-import BrewStageRung, {SEGMENT_GAP} from "@/components/BrewStageRung";
+import BrewStageRung, {AGITATION_WIDTH, SEGMENT_GAP} from "@/components/BrewStageRung";
 import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
@@ -148,11 +148,10 @@ describe("BrewStageRung", () => {
             )
         });
 
-        const style = StyleSheet.flatten(
-            getByTestId("rung-agitation-before-notch").props.style
+        expect(getByTestId("rung-agitation-before-wave").props.height).toBe(11);
+        expect(getByTestId("rung-agitation-before-path").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(ACCENT)})
         );
-        expect(style.backgroundColor).toBe("#FF007F");
-        expect(style.width).toBe(2);
     });
 
     it("draws the two marks identically", async () => {
@@ -162,12 +161,11 @@ describe("BrewStageRung", () => {
 
         expect(StyleSheet.flatten(getByTestId("rung-agitation-before").props.style))
             .toEqual(StyleSheet.flatten(getByTestId("rung-agitation-after").props.style));
+        expect(getByTestId("rung-agitation-before-wave").props.height)
+            .toBe(getByTestId("rung-agitation-after-wave").props.height);
     });
 
-    it("centres the after mark in the gap between the water and the wait", async () => {
-        // Not a percentage of the lane. The gaps are fixed points taken out of
-        // the lane, so a fraction of the whole width lands beside the seam
-        // rather than on it, by however many gaps precede it.
+    it("contains the after mark within its own slot", async () => {
         const {getByTestId} = await draw({pour: new Pour(
             1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
         )});
@@ -175,38 +173,21 @@ describe("BrewStageRung", () => {
         const style = StyleSheet.flatten(
             getByTestId("rung-agitation-after").props.style
         );
-        expect(style.position).toBe("absolute");
-        // A two-point notch centred in the three-point gap.
-        expect(style.left).toBe(0.5);
-        expect(style.width).toBe(2);
+        expect(style.height).toBe(11);
+        expect(style.width).toBe(AGITATION_WIDTH);
+        expect(style.position).toBeUndefined();
+        expect(getByTestId("rung-agitation-after-wave").props.height).toBe(11);
     });
 
-    it("cuts the notch through the bar in the accent colour", async () => {
+    it("draws the approved compact wave", async () => {
         const {getByTestId} = await draw({
-            state: "active",
             pour: new Pour(
                 1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
             )
         });
 
-        const style = StyleSheet.flatten(
-            getByTestId("rung-agitation-after-notch").props.style
-        );
-        expect(style.backgroundColor).toBe("#FF007F");
-        expect(style.width).toBe(2);
-    });
-
-    it("stands the notch three points proud of the bar", async () => {
-        const {getByTestId} = await draw({pour: new Pour(
-            1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
-        )});
-
-        const style = StyleSheet.flatten(
-            getByTestId("rung-agitation-after").props.style
-        );
-        expect(style.bottom).toBe(-3);
-        // The glyph sits on top of the notch, so the mark reaches further up.
-        expect(style.top).toBe(-14);
+        expect(getByTestId("rung-agitation-after-path").props.d)
+            .toBe("M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14");
     });
 
     it("draws the notch before the slack, not past it", async () => {
@@ -351,15 +332,15 @@ describe("BrewStageRung", () => {
         const {getByTestId} =
             await draw({state: "active", delivered: 40, pauseElapsed: 0});
 
-        // Pinned to the literal rather than to SEGMENT_GAP: comparing the
-        // margin against the very constant that sets it passes whatever that
-        // constant is, including zero, which is the case worth catching.
-        expect(SEGMENT_GAP).toBe(3);
         // The gap is its own item now, not a margin: an agitation mark takes
         // that slot when there is one, so the mark lands in the gap by
         // construction rather than by arithmetic over the lane's width.
         const gap = StyleSheet.flatten(getByTestId("gap-1").props.style) as {width?: number};
         expect(gap.width).toBe(SEGMENT_GAP);
+    });
+
+    it("keeps the ordinary seam gap while giving agitation its own width", async () => {
+        expect(AGITATION_WIDTH).toBe(11);
         expect(SEGMENT_GAP).toBe(3);
     });
 });

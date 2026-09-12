@@ -1,5 +1,6 @@
 import React from "react";
 import {View} from "react-native";
+import Svg, {Path} from "react-native-svg";
 import {XStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -7,8 +8,7 @@ import PourGlyph, {glyphForPattern} from "@/components/PourGlyph";
 import HatchFill from "@/components/HatchFill";
 import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
-import {NOTCH_OVERHANG, rungSegments, seamIndex, type Segment}
-    from "@/library/brew/rungGeometry";
+import {rungSegments, seamIndex, type Segment} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -63,49 +63,44 @@ const PENDING_OPACITY = 0.45;
  */
 export const SEGMENT_GAP = 3;
 
-/** The width of the notch, in points. */
-const NOTCH_WIDTH = 2;
-
-/** The size of the spiral sitting on top of the notch, in points. */
-const NOTCH_GLYPH = 11;
+export const AGITATION_WIDTH = 11;
+const AGITATION_VIEWBOX_HEIGHT = 14;
+const AGITATION_PATH = "M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14";
 
 /**
- * One agitation mark: a notch through the lane with its glyph above it.
+ * One agitation mark: a compact wave in the lane's own flow.
  *
- * It lives in a gap between two segments rather than on top of one. Both marks
- * are drawn the same way, which they were not: "before" used to be a bare
- * glyph, vertically centred, in a zero-width box at the head of the lane — so
- * it sat *inside* the first segment, in the accent colour, on top of accent
- * fill. On a stage that had begun pouring it was invisible, which is why a
- * recipe agitating before and after appeared to agitate only after.
- *
- * The mark is centred on the gap by construction. Positioning it as a
- * percentage of the lane put it about four points to the right of the seam:
- * the container had no width, so `alignItems: "center"` centred the notch on
- * the glyph's width instead of the other way round.
+ * It owns its whole slot, 11 points wide, so the wave never changes the rung's
+ * height and never hangs over the lane's top or bottom edge.
  */
 function AgitationMark({colour, barHeight, testID}:
                        {colour: string; barHeight: number; testID: string}) {
     return (
-        <View style={{width: SEGMENT_GAP, height: barHeight}}>
-            <View
-                testID={testID}
-                pointerEvents="none"
-                style={{
-                    position: "absolute",
-                    left: (SEGMENT_GAP - NOTCH_WIDTH) / 2,
-                    width: NOTCH_WIDTH,
-                    top: -(NOTCH_OVERHANG + NOTCH_GLYPH),
-                    bottom: -NOTCH_OVERHANG,
-                    alignItems: "center"
-                }}
+        <View
+            testID={testID}
+            pointerEvents="none"
+            style={{
+                width: AGITATION_WIDTH,
+                height: barHeight,
+                alignItems: "center",
+                justifyContent: "center"
+            }}
+        >
+            <Svg
+                testID={`${testID}-wave`}
+                width={AGITATION_WIDTH}
+                height={barHeight}
+                viewBox={`0 0 ${AGITATION_WIDTH} ${AGITATION_VIEWBOX_HEIGHT}`}
             >
-                <PourGlyph kind="agitation" accent={colour} size={NOTCH_GLYPH} />
-                <View
-                    testID={`${testID}-notch`}
-                    style={{width: NOTCH_WIDTH, flex: 1, backgroundColor: colour}}
+                <Path
+                    testID={`${testID}-path`}
+                    d={AGITATION_PATH}
+                    fill="none"
+                    stroke={colour}
+                    strokeWidth={2}
+                    strokeLinecap="round"
                 />
-            </View>
+            </Svg>
         </View>
     );
 }
