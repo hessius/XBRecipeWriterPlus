@@ -8,6 +8,7 @@ import BrewFigures from "@/components/BrewFigures";
 import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewSummary from "@/components/BrewSummary";
+import BrewWakeLock from "@/components/BrewWakeLock";
 import ExportButton from "@/components/ExportButton";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
@@ -190,6 +191,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
 
     return (
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
+            {running && <BrewWakeLock />}
             {/* The nav row the mockup drew. `brew` is declared in the navigator
                 with `headerShown: false`, so this is the only bar. */}
             <XStack alignItems="center" gap="$2">

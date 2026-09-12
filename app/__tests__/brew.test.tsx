@@ -11,6 +11,12 @@ import Pour from "@/library/Pour";
 import type {BypassView} from "@/library/brew/bypassState";
 import Recipe from "@/library/Recipe";
 
+const mockUseKeepAwake = jest.fn();
+
+jest.mock("expo-keep-awake", () => ({
+    useKeepAwake: (...args: unknown[]) => mockUseKeepAwake(...args)
+}));
+
 // The record the provider writes when a brew finishes; the in-place export
 // sources it from the injected store on press.
 const record: StoredBrew = {
@@ -38,6 +44,12 @@ const mockSwitchToProAndRetry = jest.fn();
 const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
+
+function namedPhase(name: string): BrewPhase {
+    if (name === "pouring") return {name: "pouring", pour: 1, pours: 1};
+    if (name === "failed") return {name: "failed", reason: "blocked"};
+    return {name} as BrewPhase;
+}
 
 // The mini bar opens this screen as `/brew?view=1`, with no recipe on the
 // route -- the run already holds one. Settable so a test can be that case.
@@ -133,6 +145,7 @@ jest.mock("expo-router", () => ({
 }));
 
 beforeEach(() => {
+    mockUseKeepAwake.mockClear();
     mockView = undefined;
     mockRecipeJSON = JSON.stringify({
         name: "Ethiopia Guji",
@@ -162,6 +175,24 @@ beforeEach(() => {
 });
 
 describe("brew route", () => {
+    it.each([
+        "waking", "sending", "readyToStart", "armed", "pressPlay",
+        "grinding", "pouring", "bypass", "settling"
+    ])("keeps the screen awake during %s", async (phaseName) => {
+        mockPhase = namedPhase(phaseName);
+        await renderWithProviders(<Brew />);
+        expect(mockUseKeepAwake).toHaveBeenCalledWith("active-brew");
+    });
+
+    it.each(["idle", "done", "cancelled", "failed", "lostContact"])(
+        "releases the wake lock during %s",
+        async (phaseName) => {
+            mockPhase = namedPhase(phaseName);
+            await renderWithProviders(<Brew />);
+            expect(mockUseKeepAwake).not.toHaveBeenCalled();
+        }
+    );
+
     it("draws the trace, the figures and the ladder", async () => {
         const {getByLabelText, getAllByText, getByTestId} = await renderWithProviders(<Brew />);
         expect(getByLabelText("Brew trace")).toBeTruthy();
