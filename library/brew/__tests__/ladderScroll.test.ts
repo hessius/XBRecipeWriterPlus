@@ -23,6 +23,10 @@ describe("minimalRevealOffset", () => {
         expect(minimalRevealOffset({...base, rowTop: 0, offset: 20})).toBe(0);
     });
 
+    it("normalizes negative bounce offsets before checking visibility", () => {
+        expect(minimalRevealOffset({...base, rowTop: 0, offset: -20})).toBeNull();
+    });
+
     it("clamps the last valid rung to the bottom", () => {
         expect(minimalRevealOffset({...base, rowTop: 560, offset: 250})).toBe(300);
     });
@@ -45,6 +49,20 @@ describe("minimalRevealOffset", () => {
         expect(minimalRevealOffset({...base, rowHeight: -10})).toBeNull();
     });
 
+    it("uses top alignment without inset for rows that cannot satisfy both insets", () => {
+        const nearlyViewportTall = {
+            viewportHeight: 100,
+            contentHeight: 500,
+            offset: 172,
+            rowTop: 180,
+            rowHeight: 95,
+            inset: 8
+        };
+
+        expect(minimalRevealOffset(nearlyViewportTall)).toBe(180);
+        expect(minimalRevealOffset({...nearlyViewportTall, offset: 180})).toBeNull();
+    });
+
     it("uses a stable top alignment for oversized rows", () => {
         const oversized = {
             viewportHeight: 100,
@@ -55,7 +73,7 @@ describe("minimalRevealOffset", () => {
             inset: 8
         };
 
-        expect(minimalRevealOffset(oversized)).toBe(172);
-        expect(minimalRevealOffset({...oversized, offset: 172})).toBeNull();
+        expect(minimalRevealOffset(oversized)).toBe(180);
+        expect(minimalRevealOffset({...oversized, offset: 180})).toBeNull();
     });
 });

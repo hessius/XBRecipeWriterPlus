@@ -32,15 +32,15 @@ export function minimalRevealOffset({
 
     const maxOffset = Math.max(0, contentHeight - viewportHeight);
     const normalizedOffset = clamp(offset, 0, maxOffset);
-
     const rowBottom = rowTop + rowHeight;
-    if (rowHeight >= viewportHeight) {
-        const target = clamp(rowTop - inset, 0, maxOffset);
-        return target === normalizedOffset ? null : target;
-    }
-
     const visibleBottom = normalizedOffset + viewportHeight;
     if (rowTop >= normalizedOffset && rowBottom <= visibleBottom) return null;
+
+    const needsTopAlignment = rowHeight >= viewportHeight || rowHeight + inset * 2 > viewportHeight;
+    if (needsTopAlignment) {
+        const target = clamp(rowTop, 0, maxOffset);
+        return target === normalizedOffset ? null : target;
+    }
 
     const target = rowTop < normalizedOffset ? rowTop - inset : rowBottom + inset - viewportHeight;
     return clamp(target, 0, maxOffset);
