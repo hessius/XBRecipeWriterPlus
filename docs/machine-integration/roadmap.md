@@ -150,6 +150,7 @@ treats that gap as a stall will report a failure that did not happen.
 |---|---|
 | #55 | Post-brew notes and rating *(moved out of deferred)* |
 | #72 | Library management: tags, filtering and search |
+| #106 | Library groups: manual shelves and automatic ones |
 | #73 | Browse the community recipe hub |
 
 All local, all offline, all available to someone who never logs in. This is the
@@ -159,6 +160,11 @@ xBloom's own library management is thin.
 The community hub at `collective.xbloom.com` is **unauthenticated**, so browsing
 and importing public recipes needs no account and belongs here rather than in
 M6.
+
+#106 is the tester-suggested extension of #72: groups as playlists, manual and
+automatic. It shares #72's refactor and its surface, and it borrows the media
+player's *organisation* without its *transport* — a playlist plays in sequence
+and a recipe group does not.
 
 M5 also carries the one refactor on this roadmap. `RecipeDatabase.ts` stores
 each recipe as an opaque JSON blob keyed by uuid, which cannot support filtering
