@@ -101,3 +101,15 @@ describe("the shape of an entry", () => {
         expect(DETAILED_TOPICS).not.toContain("dose");
     });
 });
+
+describe("bypass help", () => {
+    it("has a topic for the rung and for each of its two controls", () => {
+        expect(RECIPE_HELP.bypass.title).toBe("Bypass water");
+        expect(RECIPE_HELP.bypassVolume.title).toBe("Volume");
+        expect(RECIPE_HELP.bypassTemperature.title).toBe("Temperature");
+    });
+
+    it("says in the long form that a card cannot hold it", () => {
+        expect(RECIPE_HELP.bypass.detail).toContain("card");
+    });
+});

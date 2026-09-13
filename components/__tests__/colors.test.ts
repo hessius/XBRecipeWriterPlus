@@ -1,4 +1,4 @@
-import {accents, onAccent, palette} from "@/constants/colors";
+import {accents, mix, onAccent, palette} from "@/constants/colors";
 import {contrast, over} from "@/test-utils/contrast";
 
 const everyAccent = [...accents.coffee, ...accents.tea];
@@ -98,5 +98,29 @@ describe("palette inks on the base background", () => {
         // A guard against someone "fixing" the divider by brightening it into
         // something that reads as text.
         expect(contrast(palette.line, palette.base)).toBeLessThan(4.5);
+    });
+});
+
+describe("mix", () => {
+    it("returns each end at the ends", () => {
+        expect(mix("#000000", "#ffffff", 0)).toBe("#000000");
+        expect(mix("#000000", "#ffffff", 1)).toBe("#ffffff");
+    });
+
+    it("blends halfway", () => {
+        expect(mix("#000000", "#ffffff", 0.5)).toBe("#808080");
+    });
+
+    it("clamps rather than extrapolating past either end", () => {
+        expect(mix("#000000", "#ffffff", -3)).toBe("#000000");
+        expect(mix("#000000", "#ffffff", 9)).toBe("#ffffff");
+    });
+
+    it("blends each channel independently", () => {
+        expect(mix("#ff0000", "#0000ff", 0.5)).toBe("#800080");
+    });
+
+    it("always returns a six-digit hex, padding a small channel", () => {
+        expect(mix("#000000", "#0f0f0f", 0.5)).toBe("#080808");
     });
 });

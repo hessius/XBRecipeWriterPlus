@@ -1,5 +1,6 @@
 import React from "react";
 import {act, fireEvent, screen} from "@testing-library/react-native";
+import * as Clipboard from "expo-clipboard";
 
 import Console from "@/app/machine";
 import {sharedSettings} from "@/hooks/useSetting";
@@ -23,6 +24,10 @@ const mockMachine = {
     scan: jest.fn(),
     connect: jest.fn(),
     linkHistory: [] as {at: number; text: string}[],
+    frameHistory: [] as {
+        at: number; direction: "sent" | "received"; frame: Uint8Array;
+        parsed: unknown; source?: string;
+    }[],
     describeRadio: jest.fn().mockResolvedValue(undefined)
 };
 const send = mockSend;
@@ -33,13 +38,6 @@ function emitFrame(
 ) {
     if (frameListener === null) throw new Error("No frame listener registered");
     frameListener(direction, frame, parsed, source);
-}
-
-/** A 40523 frame carrying a tank reading where `waterVolumeOf` looks for it. */
-function tankFrame(ml: number): Uint8Array<ArrayBuffer> {
-    const buffer = new ArrayBuffer(16);
-    new DataView(buffer).setFloat32(10, ml, true);
-    return new Uint8Array(buffer);
 }
 
 const someInfo = {
@@ -96,6 +94,10 @@ jest.mock("expo-router", () => ({
     useNavigation: () => ({setOptions: jest.fn()})
 }));
 
+jest.mock("expo-clipboard", () => ({
+    setStringAsync: jest.fn().mockResolvedValue(true)
+}));
+
 describe("the machine console", () => {
     beforeEach(() => {
         send.mockClear();
@@ -103,6 +105,7 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
         mockMachine.linkHistory.length = 0;
+        mockMachine.frameHistory.length = 0;
         mockStatus = "connected";
         mockConnect.mockClear();
     });
@@ -137,12 +140,12 @@ describe("the machine console", () => {
         // say nothing about a connection that never came up — there is no
         // screen open to log it and no frame to log.
         sharedSettings().set("machineConsoleAcknowledged", true);
-        mockMachine.linkHistory.push({at: Date.now(), text: "refused — connection failed"});
+        mockMachine.linkHistory.push({at: Date.now(), text: "refused: connection failed"});
 
         await renderWithProviders(<Console/>);
 
         expect(screen.getByLabelText("Connection log").props.value)
-            .toMatch(/refused — connection failed/);
+            .toMatch(/refused: connection failed/);
     });
 
     it("makes you read the warning once before it will do anything", async () => {
@@ -218,9 +221,9 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
 
-        expect(screen.getByLabelText("Bypass and dose — bypass volume").props.keyboardType)
+        expect(screen.getByLabelText("Bypass and dose, bypass volume").props.keyboardType)
             .toBe("decimal-pad");
-        expect(screen.getByLabelText("Bypass and dose — dose g").props.keyboardType)
+        expect(screen.getByLabelText("Bypass and dose, dose g").props.keyboardType)
             .toBe("numeric");
     });
 
@@ -245,13 +248,6 @@ describe("the machine console", () => {
         await fireEvent.press(screen.getByLabelText("Send raw frame"));
 
         expect(send).not.toHaveBeenCalled();
-    });
-
-    it("lets the tea steep encoding be switched, because a stopwatch settles it", async () => {
-        sharedSettings().set("machineConsoleAcknowledged", true);
-        await renderWithProviders(<Console/>);
-
-        expect(screen.getByLabelText(/tea steep encoding/i)).toBeTruthy();
     });
 
     it("summarises weight telemetry instead of appending log entries while telemetry is hidden", async () => {
@@ -301,24 +297,28 @@ describe("the machine console", () => {
         expect(mockMachine.describeRadio).toHaveBeenCalled();
     });
 
-    it("counts the tank and info frames, to show whether either arrives unasked", async () => {
-        // The open question is whether the machine volunteers its tank level
-        // and its info blob, or only answers when asked. A count that stays at
-        // one while the summary is on screen settles it either way, and a
-        // reading with no count behind it cannot.
+    it("counts the info frames, to show whether the blob arrives unasked", async () => {
+        // The open question is whether the machine volunteers its info blob or
+        // only answers when asked. A count that stays at one while the summary
+        // is on screen settles it either way, and a reading with no count
+        // behind it cannot.
+        //
+        // There is deliberately no tank counterpart. The console used to carry
+        // one, fed by an `{kind: "event", code: 40523}` that `parseNotification`
+        // cannot produce -- it matches the water stream on the type byte `0x4B`
+        // first -- so the readout was dead in the field while a test that hand
+        // built that shape kept it looking alive. See `protocol.test.ts`.
         jest.useFakeTimers();
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
 
         await act(async () => {
-            emitFrame("received", {kind: "event", code: 40523}, tankFrame(742));
-            emitFrame("received", {kind: "event", code: 40523}, tankFrame(510));
             emitFrame("received", {...someInfo, waterEnough: false});
             jest.advanceTimersByTime(250);
         });
 
         const summary = screen.getByLabelText("Telemetry summary").props.children;
-        expect(summary).toEqual(expect.stringContaining("tank 510.0 ml ×2"));
+        expect(summary).not.toEqual(expect.stringContaining("tank"));
         expect(summary).toEqual(expect.stringContaining("×1"));
         expect(summary).toEqual(expect.stringContaining("water low"));
     });
@@ -337,6 +337,27 @@ describe("the machine console", () => {
         expect(value).toContain("←  57 1F  state 0x1f armed");
         expect(value).toContain("→  58 01");
         expect(value).not.toContain("cup 9.1 g");
+    });
+
+    it("copies the machine's retained history, so a log covers a brew this screen missed", async () => {
+        // The point of the buffer: a brew is watched from the brew sheet with
+        // the console closed, so its frames never reach the live `log`. Copy
+        // must draw on the machine's always-on history instead, which spans the
+        // brew even when nothing on this screen saw it arrive.
+        (Clipboard.setStringAsync as jest.Mock).mockClear();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        mockMachine.frameHistory.push({
+            at:        Date.parse("2026-09-06T13:00:00.000Z"),
+            direction: "received",
+            frame:     Uint8Array.from([0x58, 0x02, 0x07, 0x57]),
+            parsed:    {kind: "status", state: 0x22}
+        });
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Copy log"));
+
+        const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
+        expect(copied).toContain("13:00:00.000  ←  58 02 07 57  state 0x22 starting");
     });
 
     it("shows no machine state until a status frame arrives, then decodes the state name", async () => {

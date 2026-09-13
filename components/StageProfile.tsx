@@ -9,23 +9,29 @@ import type Pour from "@/library/Pour";
 /**
  * The volume one full box height represents.
  *
- * Whichever of the two totals is larger, so both the curve and the target fit
- * and share one axis. `buildProfilePath` normalises a curve to its own total,
- * which would put the plateau at full height whatever the target was and make
- * the target line decorative.
+ * Whichever of the totals is larger, so the curve, the target and the bypass
+ * all fit and share one axis. `buildProfilePath` normalises a curve to its own
+ * total, which would put the plateau at full height whatever the target was and
+ * make the target line decorative.
+ *
+ * The bypass is added to the target rather than compared with it, because it is
+ * drawn standing on the target line: what has to fit is the two of them
+ * stacked. With no bypass this is the plain larger-of-two it always was.
  */
-export function profileScale(pourTotal: number, target: number): number {
-    return Math.max(pourTotal, target, 1);
+export function profileScale(pourTotal: number, target: number, bypass = 0): number {
+    return Math.max(pourTotal, target + bypass, 1);
 }
 
 /** How tall the curve is drawn, inside the box. */
-export function curveHeight(pourTotal: number, target: number, height: number): number {
-    return (pourTotal / profileScale(pourTotal, target)) * height;
+export function curveHeight(pourTotal: number, target: number, height: number,
+                            bypass = 0): number {
+    return (pourTotal / profileScale(pourTotal, target, bypass)) * height;
 }
 
 /** Where the target line sits, measured from the top of the box. */
-export function targetY(pourTotal: number, target: number, height: number): number {
-    return height - (target / profileScale(pourTotal, target)) * height;
+export function targetY(pourTotal: number, target: number, height: number,
+                        bypass = 0): number {
+    return height - (target / profileScale(pourTotal, target, bypass)) * height;
 }
 
 /** The horizontal span belonging to one stage. */
@@ -41,15 +47,24 @@ type Props = {
     accent: string;
     width: number;
     height: number;
-    /** Index of the open stage, if one is open. */
-    selected?: number;
+    /** Index of the open stage, or the sentinel for the bypass rung. */
+    selected?: number | "bypass";
     /**
-     * Called with the stage whose part of the curve was tapped.
+     * Called with the stage whose part of the curve was tapped, or with the
+     * bypass sentinel.
      *
      * Omit it and the profile is a readout, which is what it is on any screen
      * that has no stage list to move.
      */
-    onSelect?: (index: number) => void;
+    onSelect?: (index: number | "bypass") => void;
+    /**
+     * Bypass water, in millilitres, or nothing.
+     *
+     * Zero and undefined mean the same thing here on purpose: the caller passes
+     * `recipe.bypassEnabled ? recipe.bypassVolume : 0` and does not have to
+     * think about which of the two absences it is holding.
+     */
+    bypassVolume?: number;
     testID?: string;
 };
 
@@ -65,7 +80,7 @@ type Props = {
  * manipulation is an authoring gesture, and every recipe here arrives formed.
  */
 export default function StageProfile({
-    pours, target, accent, width, height, selected, onSelect, testID
+    pours, target, accent, width, height, selected, onSelect, bypassVolume, testID
 }: Props) {
     "use no memo";
 
@@ -77,22 +92,36 @@ export default function StageProfile({
     // on a stage volume that ranges to 240 ml, that is the whole feature.
 
     const pourTotal = pours.reduce((sum, pour) => sum + Math.max(pour.volume, 0), 0);
-    const drawn = curveHeight(pourTotal, target, height);
-    const line = targetY(pourTotal, target, height);
+    const bypass = Math.max(bypassVolume ?? 0, 0);
+    const hasBypass = bypass > 0;
+
+    // The bypass gets a band of its own at the end, so the stage curve is drawn
+    // into a narrower box. Same band width for every band, stage or bypass:
+    // `bandFor` divides by the same count, so the highlight always lines up
+    // with what is drawn under it.
+    const bandCount = pours.length + (hasBypass ? 1 : 0);
+    // `bandCount` is at least 1 whenever there is a bypass, so the division is
+    // always defined; a recipe with no stages simply gives the bypass the whole
+    // width.
+    const stageWidth = hasBypass ? (width * pours.length) / bandCount : width;
+
+    const drawn = curveHeight(pourTotal, target, height, bypass);
+    const line = targetY(pourTotal, target, height, bypass);
     const short = pourTotal < target;
+    const bypassHeight = (bypass / profileScale(pourTotal, target, bypass)) * height;
 
     const stroke = PROFILE_STROKE_WIDTH;
     const bleed = stroke / 2;
-    const path = buildProfilePath(pours, width, drawn);
-    const band = selected !== undefined && pours.length > 0
-        ? bandFor(selected, pours.length, width)
+    const path = buildProfilePath(pours, stageWidth, drawn);
+    const band = selected !== undefined && bandCount > 0
+        ? bandFor(selected === "bypass" ? pours.length : selected, bandCount, width)
         : null;
 
     // The tap targets are laid out rather than computed from the tap's x. One
     // flexed child per stage divides the width exactly as `bandFor` does, and
     // unlike a coordinate test each one is a control a screen reader can find
     // and name -- which an SVG path is not.
-    const bands = onSelect && pours.length > 0 && (
+    const bands = onSelect && bandCount > 0 && (
         <View style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
                       flexDirection: "row"}}>
             {pours.map((pour, index) => (
@@ -106,6 +135,12 @@ export default function StageProfile({
                            accessibilityState={{selected: selected === index}}
                            onPress={() => onSelect(index)}/>
             ))}
+            {hasBypass && (
+                <Pressable style={{flex: 1}} accessibilityRole="button"
+                           accessibilityLabel="Show bypass water"
+                           accessibilityState={{selected: selected === "bypass"}}
+                           onPress={() => onSelect("bypass")}/>
+            )}
         </View>
     );
 
@@ -120,11 +155,34 @@ export default function StageProfile({
 
             {/* Translated to the bottom of the box: buildProfilePath draws from
                 y=0 to y=drawn, and the baseline belongs on the floor. */}
-            <Path d={`${path} L${width} ${drawn} Z`} fill={accent} opacity={0.16}
+            <Path d={`${path} L${stageWidth} ${drawn} Z`} fill={accent} opacity={0.16}
                   transform={`translate(0 ${height - drawn})`}/>
             <Path d={path} fill="none" stroke={accent} strokeWidth={stroke}
                   strokeLinejoin="round" strokeLinecap="round"
                   transform={`translate(0 ${height - drawn})`}/>
+
+            {/* Bypass, in its own band and in its own colour. Outlined rather
+                than filled solid, and dashed rather than continuous, because it
+                is not brewed water and should not read as another stage. The
+                dash is 9 5 and the target rule below is 4 3: two dashed marks
+                on one small chart need to be told apart at arm's length, and
+                length is the only free variable once the colour is spoken for.
+                A continuous staircase was tried and rejected -- it climbs above
+                the target rule, which everywhere else in this app means too
+                much water.
+
+                It stands on the target line rather than on the floor. Bypass is
+                water added after the brew is made, so a box rising from the
+                baseline drew it as an alternative to the brew when it is an
+                addition to it; from the rule it reads as what it is, the volume
+                that lands on top. `profileScale` reserves the room. */}
+            {hasBypass && (
+                <Rect testID="stage-profile-bypass"
+                      x={stageWidth} y={line - bypassHeight}
+                      width={width - stageWidth} height={bypassHeight}
+                      fill={palette.info} fillOpacity={0.16}
+                      stroke={palette.info} strokeWidth={1} strokeDasharray="9 5"/>
+            )}
 
             {/* Red is the whole of the shortfall signal here. There used to be
                 a diagonal hatch over the gap as well, which read as the dashes
@@ -133,8 +191,13 @@ export default function StageProfile({
                 Nothing is lost by dropping it: the line's position above the
                 curve is itself a signal that owes nothing to colour, and the
                 banner directly beneath states the mismatch in prose and gives
-                both numbers. */}
-            <Line testID="stage-profile-target" x1={0} y1={line} x2={width} y2={line}
+                both numbers.
+
+                The rule stops at the last stage rather than running the full
+                width. It means "the volume the stages have to reach", and
+                bypass is not stage water -- carrying it under the bypass band
+                would say the opposite of what it means. */}
+            <Line testID="stage-profile-target" x1={0} y1={line} x2={stageWidth} y2={line}
                   stroke={short ? palette.danger : palette.dim}
                   strokeWidth={1} strokeDasharray="4 3"/>
         </Svg>

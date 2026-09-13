@@ -14,7 +14,7 @@
  */
 import {createHash} from "node:crypto";
 import {deflateSync} from "node:zlib";
-import {mkdirSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, writeFileSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -30,7 +30,9 @@ const SLOTS = [
     {name: "import", tint: [0x12, 0x16, 0x1c]},
     {name: "stages", tint: [0x1c, 0x18, 0x0f]},
     {name: "read", tint: [0x0f, 0x1a, 0x16]},
-    {name: "hero", tint: [0x1a, 0x12, 0x1c]}
+    {name: "hero", tint: [0x1a, 0x12, 0x1c]},
+    {name: "brew", tint: [0x1c, 0x0f, 0x18]},
+    {name: "history", tint: [0x14, 0x14, 0x10]}
 ];
 
 const MAGENTA = [0xff, 0x00, 0x7f];
@@ -88,6 +90,13 @@ function png(width, height, pixelAt) {
 
 mkdirSync(OUT, {recursive: true});
 
+/**
+ * A real device capture in this directory is expensive to retake -- it needs a
+ * phone, and for some slots a card or a machine -- so an existing file is left
+ * alone. `--force` is there for when a placeholder itself needs regenerating.
+ */
+const force = process.argv.includes("--force");
+
 SLOTS.forEach((slot, index) => {
     const pips = index + 1;
     const pipSize = Math.round(W * 0.06);
@@ -107,6 +116,10 @@ SLOTS.forEach((slot, index) => {
     });
 
     const file = resolve(OUT, `${slot.name}.png`);
+    if (existsSync(file) && !force) {
+        console.log(`${slot.name}.png  kept (already there; --force to replace)`);
+        return;
+    }
     writeFileSync(file, data);
     console.log(`${slot.name}.png  ${W}x${H}  ${createHash("sha1").update(data).digest("hex").slice(0, 8)}`);
 });

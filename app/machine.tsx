@@ -15,7 +15,10 @@ import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
-import {MACHINE_STATE, type MachineInfo, type Notification} from "@/library/machine/protocol";
+import {
+    frameLogText, readingOf, stateName, toHex
+} from "@/library/machine/frameLog";
+import type {MachineInfo, Notification} from "@/library/machine/protocol";
 
 /**
  * The warning gate.
@@ -47,7 +50,6 @@ const TIER_LABEL: Record<Tier, string> = {
 /** Newest last. Telemetry is summarized, so 500 meaningful frames fits safely. */
 const LOG_LIMIT = 500;
 const TELEMETRY_FLUSH_MS = 250;
-const WATER_VOLUME_CODE = 40523;
 
 type LogEntry = {at: string; direction: string; hex: string; reading: string};
 type MachineStateReading = {value: number; changed: boolean; at: string};
@@ -55,33 +57,14 @@ type TelemetrySnapshot = {
     suppressed: number;
     waterWeight?: number;
     cupWeight?: number;
-    waterVolume?: number;
     info?: MachineInfo;
-    // Counted, not just kept. Whether the machine volunteers these or only
-    // answers when asked is an open question, and a reading on its own cannot
-    // tell the two apart — a count that stops at one can.
-    tankSeen: number;
+    // Counted, not just kept. Whether the machine volunteers the info blob or
+    // only answers when asked is an open question, and a reading on its own
+    // cannot tell the two apart — a count that stops at one can.
     infoSeen: number;
 };
 
-const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, tankSeen: 0, infoSeen: 0};
-
-const STATE_NAMES = new Map<number, string>([
-    [MACHINE_STATE.IDLE, "idle"],
-    [MACHINE_STATE.NO_WATER, "no_water"],
-    [MACHINE_STATE.NO_BEANS, "no_beans"],
-    [MACHINE_STATE.BREWING, "brewing"],
-    [MACHINE_STATE.LOADING, "loading"],
-    [MACHINE_STATE.AWAITING_CONFIRM, "awaiting_confirm"],
-    [MACHINE_STATE.ARMED, "armed"],
-    [MACHINE_STATE.STARTING, "starting"],
-    [MACHINE_STATE.BREWING_SUB, "brewing (sub)"],
-    [MACHINE_STATE.READY, "ready"],
-    [MACHINE_STATE.BREWING_ALT, "brewing"],
-    [MACHINE_STATE.COMPLETE, "complete (Easy idle)"],
-    [MACHINE_STATE.SAVING_SLOTS, "saving_slots"],
-    [MACHINE_STATE.SLOTS_SAVED, "slots_saved"]
-]);
+const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, infoSeen: 0};
 
 /**
  * Parse a pasted frame, or null if it is not one.
@@ -101,49 +84,22 @@ export function parseRawFrame(input: string): Uint8Array | null {
     return bytes;
 }
 
-function readingOf(parsed: Notification): string {
-    switch (parsed.kind) {
-        case "status":      return `state 0x${parsed.state.toString(16).padStart(2, "0")} ${stateName(parsed.state)}`;
-        case "event":       return `event ${parsed.code}` +
-                                   (parsed.value === undefined ? "" : ` (${parsed.value})`);
-        case "waterWeight": return `water ${parsed.grams.toFixed(1)} g`;
-        case "cupWeight":   return `cup ${parsed.grams.toFixed(1)} g`;
-        case "info":        return `${parsed.model} ${parsed.firmware} ${parsed.mode}`;
-        default:            return "";
-    }
-}
-
-function stateName(state: number): string {
-    return STATE_NAMES.get(state) ?? "unknown";
-}
-
-function toHex(frame: Uint8Array): string {
-    return Array.from(frame, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
-}
-
 function isTelemetry(parsed: Notification): boolean {
     return parsed.kind === "waterWeight"
         || parsed.kind === "cupWeight"
-        || parsed.kind === "info"
-        || (parsed.kind === "event" && parsed.code === WATER_VOLUME_CODE);
-}
-
-function waterVolumeOf(frame: Uint8Array): number | undefined {
-    const payload = frame.subarray(10, Math.max(10, frame.length - 2));
-    if (payload.length < 4) return undefined;
-    return new DataView(payload.buffer, payload.byteOffset, 4).getFloat32(0, true);
+        || parsed.kind === "info";
 }
 
 function telemetryText(snapshot: TelemetrySnapshot): string {
     const parts = [`suppressed ${snapshot.suppressed}`];
-    parts.push(`water ${snapshot.waterWeight === undefined ? "—" : `${snapshot.waterWeight.toFixed(1)} g`}`);
-    parts.push(`cup ${snapshot.cupWeight === undefined ? "—" : `${snapshot.cupWeight.toFixed(1)} g`}`);
-    parts.push(`tank ${snapshot.waterVolume === undefined ? "—" : `${snapshot.waterVolume.toFixed(1)} ml`}`
-        + ` ×${snapshot.tankSeen}`);
+    parts.push(`water ${snapshot.waterWeight === undefined ? "n/a" : `${snapshot.waterWeight.toFixed(1)} g`}`);
+    parts.push(`cup ${snapshot.cupWeight === undefined ? "n/a" : `${snapshot.cupWeight.toFixed(1)} g`}`);
     parts.push(`info ${snapshot.info === undefined
-        ? "—"
+        ? "n/a"
         : `${snapshot.info.model} ${snapshot.info.firmware} ${snapshot.info.mode}`
-          + ` water ${snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
+          + ` water ${snapshot.info.waterFeed === "tap"
+              ? "plumbed"
+              : snapshot.info.waterEnough ? "ok" : "low"}`} ×${snapshot.infoSeen}`);
     return parts.join(" · ");
 }
 
@@ -206,12 +162,6 @@ function recordTelemetry(
             next.info = parsed;
             next.infoSeen += 1;
             break;
-        case "event":
-            if (parsed.code === WATER_VOLUME_CODE) {
-                next.waterVolume = waterVolumeOf(frame);
-                next.tankSeen += 1;
-            }
-            break;
         default:
             break;
     }
@@ -237,10 +187,10 @@ function clearTelemetryTimer(telemetryTimerRef: {current: ReturnType<typeof setT
     telemetryTimerRef.current = null;
 }
 
-/** The tea steep encoding is a two-way disagreement a single stopwatch settles. */
-const TEA_STEEP_OPTIONS = [
-    {value: "homoland", label: "HomoLand"},
-    {value: "saya6k",   label: "saya6k"}
+/** The bypass temperature scaling is unconfirmed; a thermometer settles it. */
+const BYPASS_TEMP_OPTIONS = [
+    {value: "scaled", label: "x10"},
+    {value: "plain",  label: "Degrees"}
 ] as const;
 
 type CommandRowProps = {
@@ -287,7 +237,7 @@ function CommandRow({command, onSend}: CommandRowProps) {
                        color={palette.text} placeholderTextColor={palette.muted as ColorTokens}
                        keyboardType={arg.kind === "float32" ? "decimal-pad" : "numeric"}
                        placeholder={arg.label}
-                       accessibilityLabel={`${command.name} — ${arg.label}`}
+                       accessibilityLabel={`${command.name}, ${arg.label}`}
                        value={values[index]}
                        onChangeText={(text) => setArg(index, text)}/>
             ))}
@@ -315,7 +265,7 @@ export default function MachineConsole() {
     const {machine, status, connect} = useMachine();
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
-    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding");
+    const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding");
 
     const [log, setLog] = useState<LogEntry[]>([]);
     const [telemetry, setTelemetry] = useState<TelemetrySnapshot>(INITIAL_TELEMETRY);
@@ -359,7 +309,7 @@ export default function MachineConsole() {
         try {
             await machine.send(frame);
         } catch (e) {
-            appendLog(setLog, "→", frame, `not sent — ${(e as Error).message}`);
+            appendLog(setLog, "→", frame, `not sent: ${(e as Error).message}`);
         }
     }
 
@@ -400,10 +350,16 @@ export default function MachineConsole() {
     );
 
     function copyLog() {
+        // Built from the machine's always-on history, not the live `log`: the
+        // live log only holds what arrived while this screen was mounted, but a
+        // brew is watched from the brew sheet with the console closed, so its
+        // frames are only here. The weight stream is absent by design (see
+        // `retainFrame`); everything diagnostic — states, events, the recipe
+        // send, anything unknown — is present and spans the whole session.
         const block = [
-            ...connectionLines.map((line) => `${line}`),
+            ...connectionLines,
             "",
-            ...log.map((entry) => `${entry.at}  ${entry.direction}  ${entry.hex}  ${entry.reading}`)
+            frameLogText(machine.frameHistory)
         ].join("\n");
         void Clipboard.setStringAsync(block).then(() => notify({
             tone:    "success",
@@ -471,18 +427,18 @@ export default function MachineConsole() {
                         value={showTelemetry}
                         onChange={changeShowTelemetry}/>
                     <SettingsChoiceRow
-                        label="Tea steep encoding"
-                        description="The two sources disagree; a single stopwatched sixty-second steep settles which is right."
-                        value={teaSteepEncoding}
-                        options={TEA_STEEP_OPTIONS}
-                        onChange={(value) => setTeaSteepEncoding(value === "saya6k" ? "saya6k" : "homoland")}/>
+                        label="Bypass temperature"
+                        description="The command carries the bypass temperature multiplied by ten, or so the argument name suggests. A thermometer in the cup settles it."
+                        value={bypassTempEncoding}
+                        options={BYPASS_TEMP_OPTIONS}
+                        onChange={(value) => setBypassTempEncoding(value === "plain" ? "plain" : "scaled")}/>
                 </SettingsSection>
 
                 <SettingsSection title="Raw frame">
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
                         <Text fontSize={12} color={palette.dim}>
                             An undocumented code is a paste away. The checksum is sent exactly
-                            as typed — never recomputed.
+                            as typed, never recomputed.
                         </Text>
                         <Input size="$3" backgroundColor={palette.raised} color={palette.text}
                                placeholderTextColor={palette.muted as ColorTokens} autoCapitalize="none"

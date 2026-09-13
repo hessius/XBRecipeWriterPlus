@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-22
 **Status:** approved
-**Part of:** [XBRW++ overhaul roadmap](./2026-08-22-ui-overhaul-roadmap.md)
+**Part of:** [XBRW++ overhaul roadmap](./2026-08-22-programme-roadmap.md)
 
 ## Goal
 

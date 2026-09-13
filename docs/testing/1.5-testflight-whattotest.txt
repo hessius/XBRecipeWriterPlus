@@ -1,0 +1,71 @@
+XBRW++ 1.5 — the first build since 1.0.0, and a much bigger app.
+
+1.0.0 was a card writer: read an xBloom card over NFC, edit, write it back.
+1.5 also talks to the machine over Bluetooth. It sends a recipe, starts the
+brew, draws it while it happens, and keeps a record afterwards.
+
+Most of what is new needs the hardware. If you have an xBloom Studio, points
+3-6 are where the value is. If not, 1, 2 and 7 still need eyes.
+
+WHAT'S NEW
+• Brew over Bluetooth — BREW on any recipe, no card needed
+• A live brew screen: water against time, a rung per stage, running figures
+• A mini bar that keeps the brew in view when you dismiss it
+• Brew history, with per-stage detail and export as image or JSON
+• Bypass water — extra water straight to the cup, editable and brewable
+• Share a recipe as an xBloom link
+• Grind size guidance
+• A machine status dot in the home header
+• Card limits made honest: ten stages, and no write that overruns
+
+PLEASE CHECK
+
+1. Nothing old broke. Read a card, edit a recipe, write the card back, import a
+share link, back up and restore. Use a card you can afford to lose — a bad
+write is not easily undone.
+
+2. Ratios and card limits. A recipe with 11+ stages should say a card holds ten
+and offer Bluetooth instead. Import
+https://share-h5.xbloom.com/?id=Wr8X9ShLh53zxRv%2FIOdvAw%3D%3D — a 1:15.5
+recipe — and it should just work. Change a ratio: the target line should move
+straight away and Auto fix should clear its own banner.
+
+3. Connecting. Connect from Settings. The header dot goes live; its panel shows
+state and water. Restart the app — it should reconnect on its own. Out of
+range should say "not in range", not "not connected".
+
+4. Brewing. Brew a three-stage recipe. The line should track the plan and the
+ladder should scroll to the live stage. Dismiss mid-brew: the mini bar keeps
+drawing. Try a low tank (should refuse cleanly, no history row) and a
+twelve-stage recipe (the ladder should scroll, not overlap).
+IMPORTANT: if a brew that finished normally claims you ran out of water, that
+is a bug we have fixed twice. Send the frame log.
+
+5. Bypass water — newest and least proven. Turn it on in the editor: the target
+should read the stage total plus "+ N ML BYPASS", and the profile should draw
+it as its own band. A card write must warn you it will be dropped. Then brew
+it and watch:
+ • before it fires: a dashed, dimmed rung showing the volume
+ • during the drawdown wait (up to a minute): WAITING, and NOT amber
+ • after: the last stage reads 85/85, not 90/85
+ • the summary reads brew water with a dashed "+5" beside it
+Open it again from history — it should match. Open an older brew — unchanged.
+
+6. History and export. Export a brew as an image: check the PNG is legible and
+not blank, especially on a long brew, and that every stage is in it.
+
+7. A question, not a test: Settings → Recipe list → BREW shortcut shape offers
+five shapes (EDGE, TAB, CHIP, GLYPH, SWIPE). Four are going to be deleted.
+Live with them and tell us which to keep. Also: swiping a row should never
+open the recipe.
+
+KNOWN AND DELIBERATE
+Dark mode only. Bypass water and 11+ stages cannot be stored on a card — that
+is xBloom's card format, not us. Card ratios are whole numbers. Only genuine
+xBloom cards can be written; blank tags cannot. No Lock Screen live activity
+yet. The machine console in Settings is a raw developer tool.
+
+REPORTING
+The app keeps a frame log per brew. Open the brew in history, export it, and
+send that with a screenshot. A Bluetooth bug without the log usually cannot be
+diagnosed.

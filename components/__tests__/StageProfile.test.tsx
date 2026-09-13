@@ -163,3 +163,129 @@ describe("StageProfile", () => {
         expect(screen.queryByLabelText("Show stage 2 of 3")).toBeNull();
     });
 });
+
+describe("profileScale with bypass", () => {
+    it("ignores an absent bypass", () => {
+        expect(profileScale(260, 260)).toBe(260);
+        expect(profileScale(260, 260, 0)).toBe(260);
+    });
+
+    it("makes room for the bypass above the target rather than beside it", () => {
+        // The bypass now rests on the target line, so the box has to hold both
+        // stacked. Taking the larger of the two instead would put the top of
+        // the bypass above the ceiling.
+        expect(profileScale(100, 100, 400)).toBe(500);
+        expect(profileScale(260, 260, 30)).toBe(290);
+    });
+
+    it("still lets an over-poured brew set the ceiling", () => {
+        expect(profileScale(400, 100, 30)).toBe(400);
+    });
+});
+
+describe("the bypass sits on the target line", () => {
+    it("puts the foot of the bypass box exactly on the rule", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={30}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+        const line = screen.getByTestId("stage-profile-target");
+
+        // Bottom edge of the rect against the rule: the whole point of the
+        // change is that the bypass reads as sitting on top of the target,
+        // not as a second column rising from the floor.
+        expect(rect.props.y + rect.props.height).toBeCloseTo(line.props.y1, 5);
+    });
+
+    it("keeps the stacked bypass inside the box", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={400}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+
+        expect(rect.props.y).toBeGreaterThanOrEqual(0);
+    });
+});
+
+describe("StageProfile bypass mark", () => {
+    it("draws nothing extra when bypass is off", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}/>
+        );
+
+        expect(screen.queryByTestId("stage-profile-bypass")).toBeNull();
+    });
+
+    it("draws the bypass band when a bypass volume is given", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        expect(screen.getByTestId("stage-profile-bypass")).toBeTruthy();
+    });
+
+    it("stops the target rule at the last stage", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        // Three stages plus one bypass band: the stages own three quarters.
+        expect(screen.getByTestId("stage-profile-target").props.x2).toBe(225);
+    });
+
+    it("runs the target rule the whole width without a bypass", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}/>
+        );
+
+        expect(screen.getByTestId("stage-profile-target").props.x2).toBe(300);
+    });
+
+    it("highlights the bypass band when it is the selection", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45} selected="bypass"/>
+        );
+
+        expect(screen.getByTestId("stage-profile-band").props.x).toBe(225);
+    });
+
+    it("offers the bypass band as a control of its own", async () => {
+        const onSelect = jest.fn();
+        await renderWithProviders(
+            <StageProfile pours={pours(60, 100, 100)} target={260}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45} onSelect={onSelect}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Show bypass water"));
+
+        expect(onSelect).toHaveBeenCalledWith("bypass");
+    });
+
+    it("gives the bypass the whole width when there are no stages", async () => {
+        await renderWithProviders(
+            <StageProfile pours={pours()} target={0}
+                          accent={palette.brand} width={300} height={92}
+                          bypassVolume={45}/>
+        );
+
+        const rect = screen.getByTestId("stage-profile-bypass");
+
+        expect(rect.props.x).toBe(0);
+        expect(rect.props.width).toBe(300);
+    });
+});

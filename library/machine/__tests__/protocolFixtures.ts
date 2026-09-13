@@ -87,9 +87,17 @@ export function status(state: number): number[] {
     return notification(0x57, 0x00, [state]);
 }
 
-/** An event frame: the type/sub pair is the command code, little-endian. */
-export function event(code: number): number[] {
-    return notification(code & 0xFF, (code >> 8) & 0xFF, []);
+/**
+ * An event frame: the type/sub pair is the command code, little-endian.
+ *
+ * A value, where one is given, is written as a 32-bit little-endian integer,
+ * the way the captured frames carry it. The parser only reads the first byte,
+ * but a fixture that matches the wire is worth more than one that matches the
+ * parser.
+ */
+export function event(code: number, value?: number): number[] {
+    return notification(code & 0xFF, (code >> 8) & 0xFF,
+        value === undefined ? [] : littleEndian32(value));
 }
 
 /** A float32 little-endian, as four bytes. */

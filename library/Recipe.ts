@@ -1,4 +1,6 @@
 import NFC from "./NFC";
+import {CardWriteError} from "./cardWriteErrors";
+import type {CardCapture} from "./cardDiagnostics";
 import Pour from "./Pour";
 import uuid from 'react-native-uuid';
 
@@ -17,16 +19,25 @@ export const GRIND_SIZE_OFFSET = 40;
 export const XID_LENGTH = 7;
 
 /**
- * xBloom XIDs look like `<VENDOR>[T]<NUM>`: a three-letter vendor code, an optional
- * `T` for tea, then two or three digits. An empty XID is allowed — the machine
- * brews fine without one, it just means the app cannot look the recipe up online.
+ * xBloom XIDs look like `<VENDOR>[T]<NUM>`: a vendor code of at least two
+ * letters, an optional `T` for tea, then at least two digits, within the seven
+ * characters the card field holds. An empty XID is allowed — the machine brews
+ * fine without one, it just means the app cannot look the recipe up online.
+ *
+ * The rule used to demand exactly three letters and at most three digits,
+ * which was an inference from the codes we happened to have seen. `XB0001` —
+ * xBloom's own house code, on the generic "Recipe Card" pod — breaks it in
+ * both directions at once, and was being refused by the same app that had just
+ * imported a recipe carrying it. The bound that is real is the field width;
+ * the shape is deliberately loose now, because the server is the only thing
+ * that actually knows whether a code exists.
  */
 export function isValidXID(xid: string): boolean {
     const trimmed = xid.trim();
     if (trimmed.length === 0) {
         return true;
     }
-    return trimmed.length <= XID_LENGTH && /^[A-Za-z]{3}T?[0-9]{2,3}$/.test(trimmed);
+    return trimmed.length <= XID_LENGTH && /^[A-Za-z]{2,}T?[0-9]{2,}$/.test(trimmed);
 }
 export const DEFAULT_GRIND_SIZE = 50;
 
@@ -119,6 +130,16 @@ class Recipe {
     public sharedTableId?: number;
     public shareUrl?: string;
     /**
+     * Bypass water is dispensed alongside the brew for dilution. It is NOT
+     * stored on the NFC card — it is a cloud/model-only concept. These defaults
+     * are load-bearing: the share-link payload builder reads them and compares
+     * against a stored snapshot; drifting the defaults would re-mint every
+     * already-shared recipe unnecessarily.
+     */
+    public bypassEnabled: boolean = false;
+    public bypassVolume: number = 0;   // millilitres
+    public bypassTemp: number = 85;    // degrees Celsius
+    /**
      * The canonical payload that produced `shareUrl`.
      *
      * Compared against a freshly built payload to decide whether the existing
@@ -209,6 +230,13 @@ class Recipe {
             this.sharedTableId = jsonRecipe.sharedTableId;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
+            // Records saved before bypass was introduced have no bypass keys;
+            // the defaults must match the field initialisers exactly so the
+            // share-link staleness check produces identical payloads for those
+            // old records.
+            this.bypassEnabled = jsonRecipe.bypassEnabled ?? false;
+            this.bypassVolume  = jsonRecipe.bypassVolume  ?? 0;
+            this.bypassTemp    = jsonRecipe.bypassTemp    ?? 85;
         }
 
     }
@@ -309,9 +337,9 @@ class Recipe {
     private placeholderName(): string {
         const verb: Record<RecipeSource, string> = {
             read:      "Read",
-            import:    "Imported",
+            import:    "Imported Recipe",
             duplicate: "Copy",
-            manual:    "Untitled"
+            manual:    "Untitled Brew"
         };
 
         if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {
@@ -346,8 +374,38 @@ class Recipe {
         return totalVolume;
     }
 
+    /**
+     * The whole millilitres the stages are asked to add up to.
+     *
+     * `getTotalVolume` is dose times ratio and the ratio need not be whole:
+     * xBloom's own share links carry 1:15.5, and 15 g at 1:15.5 is 232.5 ml.
+     * Stage volumes are whole millilitres, so that target is unreachable by
+     * construction -- which is why the redistribution below works against this
+     * rounded figure instead. Left fractional, its correction loop subtracted 1
+     * from a remainder of 0.5 for ever and hung the app.
+     */
+    public getStageTargetVolume(): number {
+        return Math.round(this.getTotalVolume());
+    }
+
+    /**
+     * Whether the stages add up to what the machine expects.
+     *
+     * Within the rounding of one millilitre rather than exactly equal, because
+     * a fractional target cannot be hit exactly by whole-millilitre stages. The
+     * shared 1:15.5 recipe pours 60, 60, 60 and 52 against a target of 232.5,
+     * and the editor used to demand a correction that did not exist: every
+     * arrangement of whole numbers is wrong, so the banner could not be
+     * dismissed and the recipe could not be brewed.
+     *
+     * For the whole-number ratios almost every recipe uses, both sides are
+     * integers and this is exactly the old test -- a difference of less than one
+     * between two integers is a difference of none. So it is not a loosening of
+     * the invariant the machine enforces; it is the same invariant expressed so
+     * that a fractional target has an answer at all.
+     */
     public isPourVolumeValid(): boolean {
-        return this.getPourTotalVolume() === this.getTotalVolume();
+        return Math.abs(this.getPourTotalVolume() - this.getTotalVolume()) < 1;
     }
 
     public isTea(): boolean {
@@ -399,7 +457,13 @@ class Recipe {
                 await nfc.writeCard(data, progressCallBack);
             }
         } catch (e) {
-            if (!nfc.getIsClosed()) { //make sure NFC reading wasn't closed by user --really just an android problem
+            // A capacity refusal already carries the explanation the user needs,
+            // so pass it through intact rather than flattening it into a generic
+            // write failure that could not name the problem.
+            if (e instanceof CardWriteError) {
+                throw e;
+            }
+            if (!nfc.wasCancelled()) { //make sure the user didn't cancel --really just an android problem
                 throw new Error("Error writing card: " + e);
             }
         } finally {
@@ -408,7 +472,11 @@ class Recipe {
     }
 
 
-    public async readCard(nfc: NFC, progressCallBack: (progress: number, id?: string) => Promise<string | undefined>): Promise<boolean> {
+    public async readCard(
+        nfc: NFC,
+        progressCallBack: (progress: number, id?: string) => Promise<string | undefined>,
+        onRawRead?: (capture: CardCapture) => void
+    ): Promise<boolean> {
         console.log('Read Card')
         try {
             await nfc.init();
@@ -425,6 +493,25 @@ class Recipe {
                 console.log(Recipe.convertNumberArrayToHex(data));
                 this.uid = uid ?? [];
                 this.backup = data;
+                // Hand the raw bytes to the sink *before* parsing them. This is
+                // the whole reason the sink exists: `parseData` is the suspect
+                // for the bypass-card crash, so the evidence must be safely away
+                // first. The system info comes from the read that just happened,
+                // not a second interrogation of a now-closed tag. A sink that
+                // throws must not be the reason a scan fails — a diagnostic is
+                // never worth a lost card read — so its error is swallowed.
+                if (onRawRead) {
+                    try {
+                        onRawRead({
+                            at: new Date().toISOString(),
+                            uid: uid ?? [],
+                            data,
+                            systemInfo: nfc.getLastSystemInfo()
+                        });
+                    } catch (e) {
+                        console.log("Card capture sink threw: " + e);
+                    }
+                }
                 this.parseData(data);
                 console.log(this.toString());
                 return true;
@@ -432,7 +519,7 @@ class Recipe {
                 throw new Error("No data read from card");
             }
         } catch (e) {
-            if (!nfc.getIsClosed()) {
+            if (!nfc.wasCancelled()) {
                 throw new Error("Error reading card: " + e);
             }
         } finally {
@@ -536,24 +623,28 @@ class Recipe {
             return;
         }
         if (this.pours.length === 1) { //if just 1 pour set to total volume
-            this.pours[0].volume = this.getTotalVolume();
+            this.pours[0].volume = this.getStageTargetVolume();
         } else if (this.pours.length > 1 && this.getPourTotalVolume() === 0) {
             //this is where pours have been added, but not volume has been set
             //set the bloom to double dosage, and disribute rest evenly
             this.pours[0].volume = this.dosage * 2;
             for (let i = 1; i < this.pours.length; i++) {
-                this.pours[i].volume = Math.round((this.getTotalVolume() - this.pours[0].volume) / (this.pours.length - 1));
+                this.pours[i].volume = Math.round((this.getStageTargetVolume() - this.pours[0].volume) / (this.pours.length - 1));
             }
             //tack on/remove any extra thst occurs because of rounding to last pour
-            if (this.getTotalVolume() - this.getPourTotalVolume() !== 0) {
-                let diff = this.getTotalVolume() - this.getPourTotalVolume();
+            if (this.getStageTargetVolume() - this.getPourTotalVolume() !== 0) {
+                let diff = this.getStageTargetVolume() - this.getPourTotalVolume();
                 this.pours[this.pours.length - 1].volume += diff;
             }
         } else if (this.pours.length > 1 && this.getPourTotalVolume() !== 0) {
             //this is auto adjusts each pour by scale factor
             //then to the extent due to rounding it doesn't add up to total, it adjusts intelligently
             let pourTotal = this.getPourTotalVolume();
-            let totalVolume = this.getTotalVolume();
+            // Whole millilitres, so `difference` below is a whole number and the
+            // correction loop terminates. Against the raw 232.5 of a 1:15.5
+            // recipe it subtracted 1 from a remainder of 0.5, flipped the sign,
+            // and spun on the JS thread for ever.
+            let totalVolume = this.getStageTargetVolume();
             // Calculate the scaling factor
             const scalingFactor = totalVolume / pourTotal;
 

@@ -1,6 +1,9 @@
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
+import {
+    BYPASS_DEFAULT_TEMPERATURE, BYPASS_DEFAULT_VOLUME, clampBypassVolume
+} from "@/library/bypassLimits";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
 import Recipe from "@/library/Recipe";
@@ -11,6 +14,9 @@ import type {StageField} from "@/components/StageTile";
 import {REVERT_SOURCES} from "@/components/RevertSheet";
 import type {RevertSource, RevertSourceId} from "@/components/RevertSheet";
 import type {TemperatureUnit} from "@/library/units";
+
+/** The two bypass values the rung can edit. */
+export type BypassField = "volume" | "temperature";
 
 /** Labels shown next to each editable field. Also the key the edit callback dispatches on. */
 export const RECIPE_LABELS = {
@@ -54,6 +60,34 @@ type Params = {
  * operations call `setKey` instead of `setRecipe`.
  */
 export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) {
+    "use no memo";
+
+    // Opted out of the React Compiler, and it has to be.
+    //
+    // Everything this hook derives -- `balance`, `writeProblems`, and so the
+    // Write and Brew gates -- is computed by calling methods on `recipe`. The
+    // recipe is edited in place, so its reference never changes, and the
+    // compiler keys its cache on exactly that reference:
+    //
+    //     if ($[5] !== recipe) { t4 = recipe?.getTotalVolume() ?? 0; ... }
+    //
+    // which is false forever. The cached target, poured total, balance and
+    // write problems are then served for the life of the screen. On a device
+    // that read as: change the ratio and the target line does not move; press
+    // Auto fix and the recipe is corrected but the banner will not go and Brew
+    // stays disabled; save, close and reopen and everything is suddenly right,
+    // because reopening parses a *new* Recipe and finally changes the key.
+    //
+    // Bumping `key` cannot rescue it: `key` is not in the dependency set of a
+    // derivation that never mentions it.
+    //
+    // The components below this hook were opted out one at a time for the same
+    // reason -- see StagesDeck and StageProfile. This is that fix applied where
+    // the values are actually derived rather than where they are drawn, and
+    // jest cannot catch a repeat: the compiler does not run under jest. The
+    // guard is compilerOptOut.test.ts, which compiles this file and fails if a
+    // cache slot is ever keyed on the recipe again.
+
     // Derived from the route param, so it is an initial value rather than an
     // effect: parsing it in an effect would render once with a null recipe.
     const [recipe, setRecipe] = useState<Recipe | null>(
@@ -62,6 +96,52 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     const [inputError, setInputError] = useState(false);
     const [key, setKey] = useState(0);
     const [volumeError, setVolumeError] = useState<string | null>(null);
+
+    /**
+     * The XID lookup was tried and did not work.
+     *
+     * It used to go into a `console.log` and nowhere else, so a user who typed
+     * an XID saw nothing happen and could not tell a wrong code from a dead
+     * network. Not an error state on the field: the recipe is perfectly valid
+     * without a looked-up name, and the XID may simply not be one this account
+     * can see.
+     */
+    const [xidLookupFailed, setXidLookupFailed] = useState(false);
+
+    /**
+     * Bumped only when the whole `Recipe` instance is swapped out from under the
+     * rows — a revert. The two text rows (Recipe ID, Name) are uncontrolled and
+     * key on this counter, so a genuine external replacement remounts them and
+     * their visible text, local `invalid` mark and reported validity are all
+     * recomputed from the new recipe. An ordinary edit or an XID lookup only
+     * bumps `key`, not this, so the field a user is typing in is never remounted
+     * mid-entry. See the row's comment in `editRecipe.tsx`.
+     */
+    const [externalEpoch, setExternalEpoch] = useState(0);
+
+    /**
+     * Whether the Recipe ID field currently holds focus.
+     *
+     * The XID lookup fires on mount and resolves hundreds of milliseconds later,
+     * often while the user is still editing the ID. Applying its outcome then
+     * re-renders the screen mid-typing, which on an uncontrolled `TextInput` can
+     * reset the native text to its `defaultValue` and silently undo keystrokes
+     * (#user-report). So the outcome is stashed while the field is focused and
+     * flushed on blur — the auto-fetch is preserved, only its visible effect is
+     * deferred.
+     */
+    const xidFocusedRef = useRef(false);
+    const pendingLookupRef = useRef<(() => void) | null>(null);
+
+    /** Told by the ID field when it gains or loses focus; flushes on blur. */
+    const setXidFocused = (focused: boolean) => {
+        xidFocusedRef.current = focused;
+        if (!focused && pendingLookupRef.current) {
+            const apply = pendingLookupRef.current;
+            pendingLookupRef.current = null;
+            apply();
+        }
+    };
 
     /**
      * What the recipe pours against what the machine expects.
@@ -98,32 +178,46 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     }
 
     const fetchRecipeTitle = async (r: Recipe) => {
+        setXidLookupFailed(false);
+        // Apply a lookup outcome now, or stash it until the ID field blurs: a
+        // render while that uncontrolled field is focused can reset its native
+        // text and swallow keystrokes. Inlined against the refs rather than
+        // pulled into a helper so the React Compiler's dependency check still
+        // sees this function as stable and the mount effect below needs no
+        // `fetchRecipeTitle` in its deps.
+        const applyOrDefer = (apply: () => void) => {
+            if (xidFocusedRef.current) pendingLookupRef.current = apply;
+            else apply();
+        };
         try {
             const xbRecipe = new XBloomRecipe({kind: "xid", xid: r.xid});
             await xbRecipe.fetchRecipeDetail();
 
             let recipeTitle = xbRecipe.getRecipeTitle();
             if (recipeTitle.length > 0) {
-                // Update the current recipe with the fetched xBloom name. The
-                // user's own `name` is left untouched, so a sync can no longer
-                // silently overwrite a name they typed.
-                r.xbloomName = recipeTitle;
-                // Also get shareID for restore feature if not already present
                 let xbr = xbRecipe.getRecipe();
-                if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
-                    r.shareId = xbr.shareId;
-                }
-                if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
-                    r.offline_backup = xbr.offline_backup;
-                }
-                // The recipe is mutated in place, so the change is published by
-                // bumping the key. `setRecipe(r)` would hand React the object
-                // it already holds and be bailed out of, leaving the fetched
-                // name invisible on the hero until some unrelated edit.
-                setKey((prev) => prev + 1);
+                applyOrDefer(() => {
+                    // Update the current recipe with the fetched xBloom name. The
+                    // user's own `name` is left untouched, so a sync can no longer
+                    // silently overwrite a name they typed.
+                    r.xbloomName = recipeTitle;
+                    // Also get shareID for restore feature if not already present
+                    if (xbr && xbr.shareId.length > 0 && r.shareId.length === 0) {
+                        r.shareId = xbr.shareId;
+                    }
+                    if (xbr && xbr.offline_backup.length > 0 && r.offline_backup.length === 0) {
+                        r.offline_backup = xbr.offline_backup;
+                    }
+                    // The recipe is mutated in place, so the change is published by
+                    // bumping the key. `setRecipe(r)` would hand React the object
+                    // it already holds and be bailed out of, leaving the fetched
+                    // name invisible on the hero until some unrelated edit.
+                    setKey((prev) => prev + 1);
+                });
             }
         } catch (error) {
             console.log("Failed to fetch recipe title:", error);
+            applyOrDefer(() => setXidLookupFailed(true));
         }
     };
 
@@ -223,6 +317,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
             }
         }
         setRecipe(restoredRecipe);
+        // The rows are uncontrolled and key on this counter, so bumping it here
+        // is what makes a revert reset the visible ID and name text and refresh
+        // their validity — the only place the recipe instance is replaced.
+        setExternalEpoch((prev) => prev + 1);
         // A restore replaces the brew parameters wholesale, so a write-time
         // volume complaint from the recipe that was here before no longer
         // describes anything on screen.
@@ -408,6 +506,27 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         setKey((prev) => prev + 1);
     }
 
+    /**
+     * Turn bypass water on or off.
+     *
+     * Switching on seeds a recipe that has never had a bypass, so the rung
+     * opens on a usable number rather than on zero millilitres of water. A
+     * recipe that already carries values keeps them, so toggling off and back
+     * on is not destructive.
+     */
+    function setBypassEnabled(on: boolean) {
+        if (!recipe) return;
+        applyBypassEnabled(recipe, on);
+        setKey((prev) => prev + 1);
+    }
+
+    /** Edit one bypass value. */
+    function editBypass(field: BypassField, value: number) {
+        if (!recipe) return;
+        applyBypassField(recipe, field, value);
+        setKey((prev) => prev + 1);
+    }
+
     return {
         recipe,
         getRecipe,
@@ -431,11 +550,16 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         autoAdjustPourVolumes,
         coarsenGrindToMinimum,
         editStage,
+        setBypassEnabled,
+        editBypass,
         persistRecipe,
         saveRecipe,
         editInputComplete,
         volumeError,
-        setVolumeError
+        setVolumeError,
+        xidLookupFailed,
+        externalEpoch,
+        setXidFocused
     };
 }
 
@@ -460,6 +584,34 @@ function applyStageField(pour: Pour, field: StageField, value: number) {
  */
 function applyGrindMinimum(recipe: Recipe, min: number) {
     recipe.grindSize = min;
+}
+
+/**
+ * Turn bypass on or off, seeding an unset bypass on the way on.
+ *
+ * At module scope for the same reason as `applyStageField`: the React
+ * Compiler's immutability check rejects a direct assignment to a value derived
+ * from state, even inside a narrowing guard.
+ */
+function applyBypassEnabled(recipe: Recipe, on: boolean) {
+    if (on && recipe.bypassVolume <= 0) {
+        recipe.bypassVolume = BYPASS_DEFAULT_VOLUME;
+        // The temperature the brew ended on, rather than a constant that has
+        // nothing to do with this recipe. Bypass water goes into the cup at the
+        // end, straight after the last stage, so that is the number already in
+        // mind -- and someone brewing a cool finish does not want the dilution
+        // arriving hotter than the coffee. The constant is the fallback for a
+        // recipe with no stages, which has no last temperature to copy.
+        recipe.bypassTemp   = recipe.pours.at(-1)?.temperature
+            ?? BYPASS_DEFAULT_TEMPERATURE;
+    }
+    recipe.bypassEnabled = on;
+}
+
+/** Write one bypass value. Module scope, as above. */
+function applyBypassField(recipe: Recipe, field: BypassField, value: number) {
+    if (field === "volume") recipe.bypassVolume = clampBypassVolume(value);
+    else recipe.bypassTemp = Math.round(value);
 }
 
 /** Whether a recipe has the material a given revert source needs. */

@@ -137,6 +137,82 @@ describe("canonicalSnapshot", () => {
     });
 });
 
+describe("bypass water", () => {
+    it("sends bypass fields from the recipe when bypass is enabled", () => {
+        const r = drip();
+        r.bypassEnabled = true;
+        r.bypassVolume = 100;
+        r.bypassTemp = 90;
+        const p = buildSharePayload(r);
+        expect(p.isEnableBypassWater).toBe(1);
+        expect(p.bypassVolume).toBe(100);
+        expect(p.bypassTemp).toBe(90);
+    });
+
+    it("sends the canonical 85 C when bypass is off, whatever the recipe kept", () => {
+        // The editor preserves the last bypass values while bypass is off, so
+        // that re-enabling it does not lose the setting. Those values must not
+        // reach the wire: an "off" payload that varies with an invisible field
+        // makes an already-shared recipe compare unequal to its own snapshot
+        // and mints a duplicate row in the service account on every re-share.
+        const r = drip();
+        r.bypassEnabled = false;
+        r.bypassVolume  = 45;
+        r.bypassTemp    = 60;
+        const p = buildSharePayload(r);
+        expect(p.bypassTemp).toBe(85);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.isEnableBypassWater).toBe(2);
+        // The same recipe with a different preserved temperature must snapshot
+        // identically, which is the property the churn guarantee rests on.
+        r.bypassTemp = 90;
+        expect(canonicalSnapshot(buildSharePayload(r))).toBe(canonicalSnapshot(p));
+    });
+
+    it("sends exactly {bypassTemp:85, bypassVolume:0, isEnableBypassWater:2} when bypass is off", () => {
+        // The no-churn guarantee: a recipe with bypass off must produce a
+        // payload byte-identical to the hardcoded constants it replaces, so
+        // existing share snapshots remain valid and no duplicate rows are minted.
+        const p = buildSharePayload(drip());
+        expect(p.bypassTemp).toBe(85);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.isEnableBypassWater).toBe(2);
+    });
+
+    it("sends volume 0 when bypass is off, even if bypassVolume is set", () => {
+        // The machine must not receive a bypass volume for a recipe with bypass
+        // disabled; suppressing it here avoids confusing the service.
+        const r = drip();
+        r.bypassEnabled = false;
+        r.bypassVolume = 120;
+        expect(buildSharePayload(r).bypassVolume).toBe(0);
+    });
+
+    it("preserves the canonical snapshot of a non-bypass recipe", () => {
+        // Pin the exact snapshot so any future drift in the no-churn guarantee
+        // is caught as an explicit regression.
+        const p = buildSharePayload(drip());
+        const snap = canonicalSnapshot(p);
+        expect(snap).toContain('"bypassTemp":85');
+        expect(snap).toContain('"bypassVolume":0');
+        expect(snap).toContain('"isEnableBypassWater":2');
+    });
+
+    it("forces bypass off for tea, regardless of what the recipe says", () => {
+        // Tea bypass is out of scope for the machine; sharing it bypass-on
+        // would send a recipe the machine cannot honour.
+        const r = drip();
+        r.cupType = CUP_TYPE.TEA;
+        r.bypassEnabled = true;
+        r.bypassVolume = 120;
+        r.bypassTemp = 80;
+        const p = buildSharePayload(r);
+        expect(p.isEnableBypassWater).toBe(2);
+        expect(p.bypassVolume).toBe(0);
+        expect(p.bypassTemp).toBe(85);
+    });
+});
+
 describe("shareBlockReason", () => {
     it("allows a well-formed recipe", () => {
         expect(shareBlockReason(drip())).toBeNull();
@@ -276,5 +352,47 @@ describe("share fields survive serialisation", () => {
         const back = new Recipe(undefined, JSON.stringify(r));
         expect(back.shareId).toBe("hmFKjxldtOFbZ2Kve+lxKw==");
         expect(back.sharedTableId).toBe(1353046);
+    });
+});
+
+describe("share payload churn", () => {
+    it("sends the same bypass fields for a recipe that has no bypass", () => {
+        // Load-bearing constants, not arbitrary. `shareLink` used to hardcode
+        // these three; the Recipe defaults were chosen to match, so that
+        // adding bypass fields to the model changed nothing on the wire. If
+        // this test fails, every already-shared recipe now reads as stale and
+        // re-mints a duplicate row in the shared service account.
+        const payload = buildSharePayload(new Recipe());
+
+        expect(payload.isEnableBypassWater).toBe(2);
+        expect(payload.bypassVolume).toBe(0);
+        expect(payload.bypassTemp).toBe(85);
+    });
+
+    it("sends a live bypass when one is enabled", () => {
+        const recipe = new Recipe();
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = 45;
+        recipe.bypassTemp    = 60;
+
+        const payload = buildSharePayload(recipe);
+
+        expect(payload.isEnableBypassWater).toBe(1);
+        expect(payload.bypassVolume).toBe(45);
+        expect(payload.bypassTemp).toBe(60);
+    });
+
+    it("suppresses bypass for tea, which the machine ignores", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = 45;
+        recipe.bypassTemp    = 60;
+
+        const payload = buildSharePayload(recipe);
+
+        expect(payload.isEnableBypassWater).toBe(2);
+        expect(payload.bypassVolume).toBe(0);
+        expect(payload.bypassTemp).toBe(85);
     });
 });

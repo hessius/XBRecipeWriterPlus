@@ -4,6 +4,7 @@ import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
+import CardReadDiagnostic from "@/components/CardReadDiagnostic";
 import MachineSection from "@/components/MachineSection";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -18,6 +19,7 @@ import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
+import {asBrewShortcut} from "@/library/brewShortcut";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -28,6 +30,14 @@ type Props = {
 const TEMPERATURE_OPTIONS = [
     {value: "C", label: "°C"},
     {value: "F", label: "°F"}
+] as const;
+
+const BREW_SHORTCUT_OPTIONS = [
+    {value: "edge", label: "EDGE"},
+    {value: "tab", label: "TAB"},
+    {value: "chip", label: "CHIP"},
+    {value: "glyph", label: "GLYPH"},
+    {value: "swipe", label: "SWIPE"}
 ] as const;
 
 const VERSION = Application.nativeApplicationVersion ?? "unknown";
@@ -57,7 +67,7 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
-    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
+    const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding", settings);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
     const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
         useSetting("machineConsoleAcknowledged", settings);
@@ -66,6 +76,12 @@ export default function SettingsScreen({settings}: Props) {
     // Shown as a row inside MachineSection, not here. Read anyway, because a
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
+    const [showBrewOnRecipeRows, setShowBrewOnRecipeRows] =
+        useSetting("showBrewOnRecipeRows", settings);
+    const [brewShortcut, setBrewShortcut] = useSetting("brewShortcut", settings);
+    const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [brewTraceRetention, setBrewTraceRetention] =
+        useSetting("brewTraceRetention", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -87,9 +103,10 @@ export default function SettingsScreen({settings}: Props) {
     // a key someone forgot.
     function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
         return {
-            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
+            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
+            bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart
+            machineAutoStart, showBrewOnRecipeRows, brewShortcut, animateBrewChart, brewTraceRetention
         };
     }
 
@@ -139,8 +156,20 @@ export default function SettingsScreen({settings}: Props) {
         if (typeof incoming.machineAutoStart === "boolean") {
             setMachineAutoStart(incoming.machineAutoStart);
         }
-        if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
-            setTeaSteepEncoding(incoming.teaSteepEncoding);
+        if (incoming.bypassTempEncoding === "scaled" || incoming.bypassTempEncoding === "plain") {
+            setBypassTempEncoding(incoming.bypassTempEncoding);
+        }
+        if (typeof incoming.showBrewOnRecipeRows === "boolean") {
+            setShowBrewOnRecipeRows(incoming.showBrewOnRecipeRows);
+        }
+        if (typeof incoming.brewShortcut === "string") {
+            setBrewShortcut(asBrewShortcut(incoming.brewShortcut));
+        }
+        if (typeof incoming.animateBrewChart === "boolean") {
+            setAnimateBrewChart(incoming.animateBrewChart);
+        }
+        if (typeof incoming.brewTraceRetention === "number") {
+            setBrewTraceRetention(incoming.brewTraceRetention);
         }
     }
 
@@ -227,6 +256,20 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
+                    <SettingsToggleRow
+                        label="Show BREW on recipe rows"
+                        description="Add a BREW shortcut to every recipe card. Turn it off if you brew rarely and prefer a quieter list."
+                        value={showBrewOnRecipeRows}
+                        onChange={setShowBrewOnRecipeRows}/>
+                    {showBrewOnRecipeRows && (
+                        <SettingsChoiceRow
+                            stacked
+                            label="BREW shortcut shape"
+                            description="Five shapes to try on the device. One of them will win and the rest will go."
+                            value={brewShortcut}
+                            options={BREW_SHORTCUT_OPTIONS}
+                            onChange={(value) => setBrewShortcut(asBrewShortcut(value))}/>
+                    )}
                 </SettingsSection>
 
                 <SettingsSection title="Units">
@@ -241,6 +284,9 @@ export default function SettingsScreen({settings}: Props) {
                 <MachineSection settings={settings}/>
 
                 <SettingsSection title="Library">
+                    <SettingsActionRow label="Brew history"
+                                       detail="Every brew you have recorded."
+                                       onPress={() => router.push("/brewHistory")}/>
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
                                        onPress={onBackUp}/>
@@ -251,6 +297,11 @@ export default function SettingsScreen({settings}: Props) {
                                        detail="Everything on this phone. There is no undo."
                                        onPress={() => setConfirmingDeleteAll(true)}/>
                 </SettingsSection>
+
+                {/* Gated behind the machine console's acknowledgement, so it is
+                    invisible until a user opens the developer area — see the
+                    component. */}
+                <CardReadDiagnostic settings={settings}/>
             </YStack>
 
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
@@ -268,4 +319,3 @@ export default function SettingsScreen({settings}: Props) {
         </YStack>
     );
 }
-

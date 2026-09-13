@@ -1,0 +1,384 @@
+import React from "react";
+import {fireEvent, screen} from "@testing-library/react-native";
+import {StyleSheet} from "react-native";
+
+import BrewStageLadder from "@/components/BrewStageLadder";
+import {palette} from "@/constants/colors";
+import {minimalRevealOffset} from "@/library/brew/ladderScroll";
+import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
+import {renderWithProviders} from "@/test-utils/render";
+
+const mockScrollTo = jest.fn();
+
+jest.mock("react-native/Libraries/Components/ScrollView/ScrollView", () => {
+    const React = jest.requireActual("react");
+    const View = jest.requireActual("react-native/Libraries/Components/View/View").default;
+
+    /**
+     * RNTL v14 removed `createNodeMock`, so React Native's ScrollView ref lands
+     * as `null` under Jest unless a test supplies its own imperative handle.
+     * Keep the real props/events, and replace only the ref surface we need to
+     * observe.
+     */
+    const MockScrollView = React.forwardRef(function MockScrollView(props: any, ref: any) {
+        const {children, ...rest} = props;
+        React.useImperativeHandle(ref, () => ({scrollTo: mockScrollTo}), []);
+        return React.createElement(View, rest, children);
+    });
+    MockScrollView.displayName = "ScrollView";
+
+    return {__esModule: true, default: MockScrollView};
+});
+
+/** What the scroll view centres or top-aligns its rungs with. */
+function contentStyle(view: {props: {contentContainerStyle?: unknown}}) {
+    return (StyleSheet.flatten(view.props.contentContainerStyle) ?? {}) as
+        Record<string, unknown>;
+}
+
+type LadderProps = React.ComponentProps<typeof BrewStageLadder>;
+type FireEventTarget = Parameters<typeof fireEvent>[0];
+
+function pours(count: number): Pour[] {
+    return Array.from({length: count}, (_, i) =>
+        new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
+}
+
+function ladderProps(overrides: Partial<LadderProps> = {}): LadderProps {
+    return {
+        pours: pours(4),
+        accent: palette.brand,
+        activeIndex: 1,
+        barHeight: 11,
+        rungGap: 8,
+        scrolls: false,
+        fill: true,
+        stageWater: [40, 20, 0, 0],
+        stalls: [[], [], [], []],
+        pauseElapsed: 0,
+        ...overrides
+    };
+}
+
+async function draw(overrides: Partial<LadderProps> = {}) {
+    return renderWithProviders(
+        <BrewStageLadder {...ladderProps(overrides)} />
+    );
+}
+
+async function measureOverflow(
+    getByTestId: (id: string) => FireEventTarget,
+    rowTop: number
+) {
+    await fireEvent(getByTestId("row-1"), "layout", {
+        nativeEvent: {layout: {x: 0, y: rowTop, width: 240, height: 40}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "scroll", {
+        nativeEvent: {contentOffset: {x: 0, y: 100}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "layout", {
+        nativeEvent: {layout: {height: 300}}
+    });
+    await fireEvent(getByTestId("ladder-scroll"), "contentSizeChange", 320, 600);
+}
+
+beforeEach(() => {
+    mockScrollTo.mockClear();
+});
+
+describe("BrewStageLadder", () => {
+    it("draws one rung per stage", async () => {
+        const {getByTestId} = await draw();
+
+        for (const i of [0, 1, 2, 3]) expect(getByTestId(`rung-${i}`)).toBeTruthy();
+    });
+
+    it("no longer lists every pour pattern that is not in use", async () => {
+        const {queryByText} = await draw();
+
+        expect(queryByText("AGITATION")).toBeNull();
+        expect(queryByText("CIRCULAR")).toBeNull();
+    });
+
+    it("shares one time scale across every rung", async () => {
+        // Stage 2 stalled for 30 s, so the scale must grow for all of them.
+        const {getByTestId} = await draw({
+            stalls: [[], [{atMl: 10, seconds: 30}], [], []]
+        });
+
+        // 40 ml at 4 ml/s is 10 s of pour plus a 10 s rest: a clean stage is
+        // 20 s. The stalled one is 50, so a clean rung must leave 30 s of slack.
+        expect(getByTestId("rung-0")).toBeTruthy();
+        expect(getByTestId("rung-1")).toBeTruthy();
+    });
+
+    it("gives each rung its own water", async () => {
+        const {getByText} = await draw({stageWater: [40, 22, 0, 0]});
+
+        expect(getByText("22/40 ml")).toBeTruthy();
+    });
+
+    it("marks everything done once the brew is over", async () => {
+        const {getByTestId} = await draw({
+            activeIndex: 4, stageWater: [40, 40, 40, 40]
+        });
+
+        expect(getByTestId("rung-3").props.style).not.toEqual(
+            expect.objectContaining({opacity: 0.45})
+        );
+    });
+
+    it("dims the stages still to come and not the ones already poured", async () => {
+        // The mid-brew case, which is the only one where the boundary matters:
+        // the all-done and not-yet-started tests either side of this one are
+        // both satisfied by a component that ignores `activeIndex` entirely.
+        const {getByTestId} = await draw({activeIndex: 1, stageWater: [40, 20, 0, 0]});
+
+        const dim = expect.objectContaining({opacity: 0.45});
+        expect(getByTestId("rung-0").props.style).not.toEqual(dim);
+        expect(getByTestId("rung-1").props.style).not.toEqual(dim);
+        expect(getByTestId("rung-2").props.style).toEqual(dim);
+        expect(getByTestId("rung-3").props.style).toEqual(dim);
+    });
+
+    it("survives a recipe with no pours", async () => {
+        // A ladder with nothing to draw still has to lay itself out. This is a
+        // crash guard, not a rendering assertion.
+        const {queryByTestId} = await draw({
+            pours: [], activeIndex: null, stageWater: [], stalls: []
+        });
+
+        expect(queryByTestId("rung-0")).toBeNull();
+    });
+
+    it("marks everything pending before it starts", async () => {
+        const {getByTestId} = await draw({
+            activeIndex: null, stageWater: [0, 0, 0, 0]
+        });
+
+        expect(getByTestId("rung-0").props.style).toEqual(
+            expect.objectContaining({opacity: 0.45})
+        );
+    });
+
+    it("centres the rungs in the room it is given", async () => {
+        // At two or three stages the ceilings in `allocateBands` bite and there
+        // is height left over. Top-aligned, that pools as black at the foot of
+        // the screen and reads as a layout that ran out.
+        //
+        // The centring moved to the scroll view's content container when the
+        // ladder started measuring itself; it is the same intent in the place
+        // that can now express both it and scrolling.
+        const {getByTestId} = await draw({
+            pours: pours(2),
+            fill: true,
+            stageWater: [40, 0],
+            stalls: [[], []]
+        });
+
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+
+    it("does not scroll while the rungs fit, so the modal drag still works", async () => {
+        // A live ScrollView swallows the drag that dismisses the modal, so a
+        // ladder that fits must not be scrollable -- which is why this is
+        // `scrollEnabled` rather than simply always rendering a scroll view.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+    });
+
+    it("lets measurements override an initial overflow prediction", async () => {
+        const {getByTestId} = await draw({scrolls: true});
+        const view = getByTestId("ladder-scroll");
+
+        await fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+        await fireEvent(view, "contentSizeChange", 320, 280);
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+
+    it("scrolls once the rungs are measured taller than the room", async () => {
+        // The bug this replaced: `allocateBands` predicts a rung as its bar plus
+        // its gap, but a rung also carries text that does not shrink, so past
+        // about a dozen stages the prediction said it fit when it did not. A
+        // centred flex child that overflows spills out of *both* ends, which is
+        // how stage bars came to be drawn over the trace above and the figures
+        // below at once.
+        //
+        // No layout runs under test, so the two measurements are delivered by
+        // hand -- which is the only way to reach the state at all.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+        const view = getByTestId("ladder-scroll");
+
+        await fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+        await fireEvent(view, "contentSizeChange", 320, 640);
+
+        expect(getByTestId("ladder-scroll").props.scrollEnabled).toBe(true);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("flex-start");
+    });
+
+    it("tracks live scroll position on every frame", async () => {
+        const {getByTestId} = await draw();
+
+        expect(typeof getByTestId("ladder-scroll").props.onScroll).toBe("function");
+        expect(getByTestId("ladder-scroll").props.scrollEventThrottle).toBe(16);
+    });
+
+    it("scrolls the clipped active rung to the helper's minimal reveal target", async () => {
+        const rendered = await draw({activeIndex: 0});
+
+        await measureOverflow(rendered.getByTestId, 90);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 90,
+            rowHeight: 40
+        });
+
+        await rendered.rerender(<BrewStageLadder {...ladderProps({activeIndex: 1})} />);
+
+        expect(target).toBe(82);
+        expect(mockScrollTo).toHaveBeenCalledWith({y: target, animated: true});
+    });
+
+    it("reveals the initial active rung after its row layout arrives late", async () => {
+        const {getByTestId} = await draw({activeIndex: 1});
+        const view = getByTestId("ladder-scroll");
+
+        await fireEvent(view, "scroll", {
+            nativeEvent: {contentOffset: {x: 0, y: 100}}
+        });
+        await fireEvent(view, "layout", {
+            nativeEvent: {layout: {height: 300}}
+        });
+        await fireEvent(view, "contentSizeChange", 320, 600);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 90,
+            rowHeight: 40
+        });
+
+        await fireEvent(getByTestId("row-1"), "layout", {
+            nativeEvent: {layout: {x: 0, y: 90, width: 240, height: 40}}
+        });
+
+        expect(target).toBe(82);
+        expect(mockScrollTo).toHaveBeenCalledWith({y: target, animated: true});
+    });
+
+    it("does not scroll when the active rung is already fully visible", async () => {
+        const rendered = await draw({activeIndex: 0});
+
+        await measureOverflow(rendered.getByTestId, 120);
+
+        expect(mockScrollTo).not.toHaveBeenCalled();
+
+        const target = minimalRevealOffset({
+            viewportHeight: 300,
+            contentHeight: 600,
+            offset: 100,
+            rowTop: 120,
+            rowHeight: 40
+        });
+
+        await rendered.rerender(<BrewStageLadder {...ladderProps({activeIndex: 1})} />);
+
+        expect(target).toBeNull();
+        expect(mockScrollTo).not.toHaveBeenCalled();
+    });
+
+    it("accepts the full row layout payload React Native sends", async () => {
+        const {getByTestId} = await draw();
+
+        await fireEvent(getByTestId("row-1"), "layout", {
+            nativeEvent: {layout: {x: 0, y: 96, width: 240, height: 40}}
+        });
+
+        expect(getByTestId("row-1")).toBeTruthy();
+    });
+
+    it("fill=false: no flex, no justifyContent on the ladder root", async () => {
+        // React Native Testing Library performs no layout; this test pins the
+        // *intent* (which style props are set), not the visual result. Confirm
+        // the actual rendering on a device.
+        const {getByTestId} = await draw({fill: false, scrolls: false});
+
+        const style = StyleSheet.flatten(
+            getByTestId("ladder").props.style
+        ) as Record<string, unknown>;
+        expect(style?.flex).toBeUndefined();
+        expect(style?.justifyContent).toBeUndefined();
+    });
+
+    it("fill=true: the scroll view takes the room and centres what is in it", async () => {
+        // React Native Testing Library performs no layout; this test pins the
+        // *intent* (which style props are set), not the visual result. Confirm
+        // the actual rendering on a device.
+        const {getByTestId} = await draw({fill: true, scrolls: false});
+
+        const style = StyleSheet.flatten(
+            getByTestId("ladder-scroll").props.style
+        ) as Record<string, unknown>;
+        expect(style?.flex).toBe(1);
+        expect(contentStyle(getByTestId("ladder-scroll")).flexGrow).toBe(1);
+        expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
+    });
+});
+
+describe("BrewStageLadder bypass rung", () => {
+    it("hangs a bypass rung below the stages when there is one", async () => {
+        await draw({
+            bypass: {
+                volume: 5, temperature: 85, delivered: 5,
+                startedAt: 183, state: "done"
+            }
+        });
+        expect(screen.getByTestId("rung-bypass")).toBeTruthy();
+    });
+
+    it("hangs no bypass rung when there is none", async () => {
+        await draw();
+        expect(screen.queryByTestId("rung-bypass")).toBeNull();
+    });
+});
+
+describe("BrewStageLadder's stage selection", () => {
+    it("reports which rung was pressed", async () => {
+        const onSelectStage = jest.fn();
+        const {getByTestId} = await draw({onSelectStage});
+        await fireEvent.press(getByTestId("rung-2"));
+        expect(onSelectStage).toHaveBeenCalledWith(2);
+    });
+
+    it("leaves the rungs inert without a handler", async () => {
+        // The live ladder has no detail panel to answer with, so its rungs must
+        // not announce themselves as buttons to a screen reader either.
+        const {getByTestId} = await draw();
+        expect(getByTestId("rung-2").props.accessibilityRole).toBeUndefined();
+    });
+
+    it("marks only the selected rung, and marks it as selected to a reader", async () => {
+        const {getByTestId} = await draw({selectedIndex: 2, onSelectStage: jest.fn()});
+        expect(getByTestId("rung-2").props.accessibilityState).toEqual({selected: true});
+        expect(getByTestId("rung-1").props.accessibilityState).toEqual({selected: false});
+    });
+
+    it("tints the selected rung and leaves the others clear", async () => {
+        const {getByTestId} = await draw({selectedIndex: 2, onSelectStage: jest.fn()});
+        expect(StyleSheet.flatten(getByTestId("rung-2").props.style).backgroundColor)
+            .toBe(palette.raised);
+        expect(StyleSheet.flatten(getByTestId("rung-1").props.style).backgroundColor)
+            .toBe("transparent");
+    });
+});

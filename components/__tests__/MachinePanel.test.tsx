@@ -1,0 +1,235 @@
+import React from "react";
+import {StyleSheet} from "react-native";
+import {fireEvent} from "@testing-library/react-native";
+
+import MachinePanel from "@/components/MachinePanel";
+import {palette} from "@/constants/colors";
+import {renderWithProviders} from "@/test-utils/render";
+
+const vitals = {
+    waterEnough: true, waterFeed: "tank" as const,
+    mode: "PRO" as const, grindSize: 62, askedAt: 0
+};
+/**
+ * A request that never settles, so the control stays in its asking state for
+ * the duration of the test. The hook is driven by the promise now, so a mock
+ * returning undefined would have nothing to await.
+ */
+function pending() {
+    return jest.fn(() => new Promise<boolean>(() => undefined));
+}
+
+const someVitals = {
+    waterEnough: true, waterFeed: "tank" as const,
+    mode: "PRO" as const, grindSize: 62, askedAt: 1000
+};
+
+async function draw(props: Partial<React.ComponentProps<typeof MachinePanel>> = {}) {
+    return renderWithProviders(
+        <MachinePanel
+            open
+            status="connected"
+            accent="#C86A3B"
+            vitals={vitals}
+            now={4 * 60 * 1000}
+            onRefreshWater={pending()}
+            onConnect={jest.fn()}
+            {...props}
+        />
+    );
+}
+
+describe("MachinePanel", () => {
+    it("shows water, mode and grind size", async () => {
+        const {getByText} = await draw();
+        expect(getByText("WATER")).toBeTruthy();
+        expect(getByText("PRO")).toBeTruthy();
+        expect(getByText("62")).toBeTruthy();
+    });
+
+    it("draws EASY in warn, because it will refuse a brew", async () => {
+        // DotMatrixText puts color in style[0], not as a direct prop.
+        const {getByText} = await draw({vitals: {...vitals, mode: "EASY"}});
+        const styleArr = getByText("EASY").props.style as {color?: string}[];
+        expect(styleArr[0]?.color).toBe(palette.warn);
+    });
+
+    it("ages the water reading", async () => {
+        const {getByText} = await draw();
+        expect(getByText("4 MIN AGO")).toBeTruthy();
+    });
+
+    it("offers a refresh button with the readings label", async () => {
+        const {getByTestId, getByLabelText} = await draw();
+        expect(getByTestId("machine-refresh")).toBeTruthy();
+        expect(getByLabelText("Refresh the machine readings")).toBeTruthy();
+    });
+
+    it("warns when the tank is low, and says what to do", async () => {
+        const {getByText} = await draw({vitals: {...vitals, waterEnough: false}});
+        expect(getByText("FILL THE TANK, THEN REFRESH")).toBeTruthy();
+    });
+
+    it("identifies a tap-fed machine instead of warning about its unused tank", async () => {
+        const {getByText, queryByText} = await draw({
+            vitals: {...vitals, waterEnough: false, waterFeed: "tap"}
+        });
+
+        expect(getByText("PLUMBED")).toBeTruthy();
+        expect(queryByText("LOW")).toBeNull();
+        expect(queryByText("FILL THE TANK, THEN REFRESH")).toBeNull();
+    });
+
+    it("offers TRY NOW only when the machine is not connected", async () => {
+        const connected = await draw();
+        expect(connected.queryByLabelText("Try now")).toBeNull();
+        const away = await draw({status: "disconnected", vitals: null});
+        expect(away.getByLabelText("Try now")).toBeTruthy();
+        const idle = await draw({status: "idle", vitals: null});
+        expect(idle.getByLabelText("Try now")).toBeTruthy();
+    });
+
+    it("says it will reconnect by itself when out of range", async () => {
+        const {getByText} = await draw({status: "disconnected", vitals: null});
+        expect(getByText(/reconnect by itself/i)).toBeTruthy();
+    });
+
+    it("says not connected — without claiming out of range — when idle", async () => {
+        // Idle means no attempt has been made. We do not know whether the
+        // machine is nearby, so "not in range" would be false.
+        const {getByText, queryByText} = await draw({status: "idle", vitals: null});
+        expect(getByText("Not connected. Tap TRY NOW to connect.")).toBeTruthy();
+        expect(queryByText(/reconnect by itself/i)).toBeNull();
+        expect(queryByText(/not in range/i)).toBeNull();
+    });
+
+    it("shows last-seen age when the machine has gone away but had answered (task 2)", async () => {
+        // This branch was previously unreachable because the disconnect handler
+        // cleared vitals to null — the same code path that made the "last seen"
+        // copy unrenderable.  With vitals preserved on disconnect, the age can
+        // now appear.
+        const {getByText, queryByText} = await draw({
+            status: "disconnected",
+            vitals:  {...vitals, askedAt: 5 * 60 * 1000},
+            now:     10 * 60 * 1000
+        });
+        expect(getByText(/last seen/i)).toBeTruthy();
+        expect(getByText(/5 min ago/i)).toBeTruthy();
+        // The full vitals panel must not appear — the machine is away.
+        expect(queryByText("WATER")).toBeNull();
+    });
+
+    it("has no machine settings button", async () => {
+        const {queryByLabelText} = await draw();
+        expect(queryByLabelText(/machine settings/i)).toBeNull();
+    });
+
+    it("shows nothing when closed", async () => {
+        const {queryByText} = await draw({open: false});
+        expect(queryByText("WATER")).toBeNull();
+        expect(queryByText("OK")).toBeNull();
+    });
+
+    it("shows content when open", async () => {
+        const {getByText} = await draw({open: true});
+        expect(getByText("WATER")).toBeTruthy();
+    });
+
+    it("shows nothing but the state while connecting", async () => {
+        const {queryByText} = await draw({status: "connecting", vitals: null});
+        expect(queryByText("WATER")).toBeNull();
+    });
+
+    it("offers a refresh button, not a twelve-point icon", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        const button = r.getByTestId("machine-refresh");
+        expect(button.props.accessibilityRole).toBe("button");
+        const style = StyleSheet.flatten(button.props.style) as {minHeight?: number};
+        expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    });
+
+    it("says REFRESH when it is not doing anything", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        expect(r.getByTestId("machine-refresh-label").props.children).toBe("REFRESH");
+    });
+
+    it("says so while it is asking", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(r.getByTestId("machine-refresh-label").props.children)
+            .toBe("CHECKING…");
+    });
+
+    it("asks the machine when pressed", async () => {
+        const onRefreshWater = pending();
+        const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(onRefreshWater).toHaveBeenCalledTimes(1);
+    });
+
+    it("will not ask twice while it is already asking", async () => {
+        const onRefreshWater = pending();
+        const r = await draw({status: "connected", vitals: someVitals, onRefreshWater});
+
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+        await fireEvent.press(r.getByTestId("machine-refresh"));
+
+        expect(onRefreshWater).toHaveBeenCalledTimes(1);
+    });
+
+    it("is not a sheet", async () => {
+        const r = await draw({open: true, status: "connected", vitals: someVitals});
+
+        expect(r.queryByLabelText("Close")).toBeNull();
+    });
+
+    it("shows nothing at all when closed", async () => {
+        const r = await draw({open: false, status: "connected", vitals: someVitals});
+
+        expect(r.queryByTestId("machine-refresh")).toBeNull();
+    });
+
+    it("reads the water level large enough to glance at", async () => {
+        const r = await draw({status: "connected", vitals: someVitals});
+
+        // DotMatrixText delivers fontSize through style, not as a host prop
+        // (it is the app-wide floor enforcement point), so read the rendered
+        // size off the flattened style rather than props.fontSize.
+        const style = StyleSheet.flatten(
+            r.getByTestId("machine-water-value").props.style
+        ) as {fontSize?: number};
+        expect(style.fontSize).toBe(18);
+    });
+
+    it("says so when it is connected but has not heard any readings yet", async () => {
+        // The panel used to branch on `connected && vitals !== null` and let
+        // everything else fall to a final else whose copy is "Not in range".
+        // A machine that is connected but whose info blob has not arrived
+        // landed there and was described as out of range, while the header dot
+        // two rows up was green -- and its TRY NOW called onConnect, which has
+        // nothing to do when we are already connected, so it did nothing.
+        const {queryByText, queryByLabelText, getByLabelText} =
+            await draw({status: "connected", vitals: null});
+
+        expect(queryByText(/Not in range/)).toBeNull();
+        expect(queryByLabelText("Try now")).toBeNull();
+        expect(getByLabelText("Refresh the machine readings")).toBeTruthy();
+    });
+
+    it("leaves room beneath the last reading", async () => {
+        // Device testing found the panel looked clipped: $2 is seven points,
+        // which is not enough to separate the last row from the edge of the
+        // header. 18 is $4; pinned as a literal so that shrinking the token in
+        // the source cannot make this assertion agree with itself.
+        const {getByTestId} = await draw();
+        const style = StyleSheet.flatten(getByTestId("machine-panel").props.style);
+
+        expect(style.paddingBottom).toBeGreaterThanOrEqual(14);
+    });
+});

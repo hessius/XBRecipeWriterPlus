@@ -43,6 +43,34 @@ describe("the machine link", () => {
         expect(transport.connectedTo).toBeNull();
     });
 
+    it("starts idle — no attempt has been made, nothing is known about range", async () => {
+        // "Disconnected" would be false: it implies we tried and the machine
+        // was not reachable. "Idle" is the honest starting position.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
+
+        expect(result.current.status).toBe("idle");
+    });
+
+    it("does not become disconnected if a link event fires before any connect", async () => {
+        // onLink can fire whenever the Machine emits link history (e.g. note()).
+        // If one fires while we are still idle, the status must not change to
+        // "disconnected" — that would be a lie about what happened. The hook's
+        // setStatus functional updater guards this by only moving to
+        // "disconnected" from "connected".
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
+        expect(result.current.status).toBe("idle");
+
+        // note() calls announceLink(), which fires the hook's onLink callback
+        // with isConnected() === false — the idle case we are guarding.
+        await act(async () => { machine.note("test"); });
+
+        expect(result.current.status).toBe("idle");
+    });
+
     it("connects on demand and stays connected", async () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
@@ -95,7 +123,7 @@ describe("the machine link", () => {
 
         await act(async () => { await result.current.forget(); });
 
-        expect(result.current.status).toBe("disconnected");
+        expect(result.current.status).toBe("idle");
         expect(result.current.remembered).toBe("");
         expect(transport.connectedTo).toBeNull();
     });

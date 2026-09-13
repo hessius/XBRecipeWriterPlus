@@ -14,7 +14,7 @@ describe("LicencesScreen", () => {
         // dependency bump while still proving a row rendered.
         const first = LICENCES[0];
         expect(screen.getByText(
-            new RegExp(`${first.name} ${first.version} — ${first.licence}`)
+            new RegExp(`${first.name} ${first.version} · ${first.licence}`)
         )).toBeTruthy();
     });
 

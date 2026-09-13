@@ -15,6 +15,10 @@ function round(value: number): number {
  * Time is divided evenly between pours rather than scaled by pause duration —
  * the shape is an identifying mark, not a chart, and even division keeps short
  * pours visible.
+ *
+ * `library/brew/brewShape.ts` draws the same staircase on a real-seconds axis
+ * for the live brew, where it has to agree with a stage ladder about where
+ * "now" is. That divergence is deliberate; do not reconcile them.
  */
 export function buildProfilePath(pours: Pour[], width: number, height: number): string {
     if (pours.length === 0) {

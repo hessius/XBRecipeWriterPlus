@@ -1,6 +1,8 @@
+import {MACHINE_CARD_MAX_STAGES} from "./cardWriteErrors";
 import {AGITATION, POUR_PATTERN} from "./Pour";
 import Recipe from "./Recipe";
 import {displayRange, toDisplay, type TemperatureUnit} from "./units";
+import {grindTooFine} from "@/constants/copy";
 
 /**
  * Whether a recipe can be written to a card, and why not.
@@ -18,7 +20,7 @@ import {displayRange, toDisplay, type TemperatureUnit} from "./units";
  */
 
 /** Inclusive bounds for one field, in the units the model stores. */
-type Range = {min: number; max: number};
+export type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
 /** Exported for the test that keeps `library/grindBands` in step with the card. */
@@ -40,10 +42,19 @@ const AGITATION_RANGE: Range = {
 };
 
 /**
- * The pour count is written as `pours.length << 3` in a single byte, so 31 is
- * the last count that does not overflow it.
+ * The most stages a card may carry.
+ *
+ * The byte format allows 31 -- the count is written as `pours.length << 3` in a
+ * single byte, and 31 is the last value that does not overflow it. The machine
+ * is the tighter constraint: it rejects a card with eleven stages outright, and
+ * brews ten without complaint.
+ *
+ * This gates writing a card, and nothing else. A recipe may hold as many stages
+ * as it likes and brew them over BLE, where seventeen has been run successfully;
+ * refusing to let someone build one because a card could not carry it would be
+ * the medium dictating to the model.
  */
-const MAX_POURS = 31;
+const MAX_POURS = MACHINE_CARD_MAX_STAGES;
 /** The editor stops adding tea stages at three, and the card agrees. */
 const MAX_TEA_POURS = 3;
 
@@ -88,7 +99,7 @@ export function cardWriteProblems(
         // recipe carries when it was ground for espresso, and "the range is
         // 40-80" alone does not explain how it got that way.
         const grindSizeMsg = recipe.grindSize < GRIND_SIZE.min
-            ? `The grind size is ${recipe.grindSize}. A card cannot store a grind below ${GRIND_SIZE.min}.`
+            ? `The grind size is ${recipe.grindSize}. ${grindTooFine(GRIND_SIZE.min)}`
             : `The grind size is ${recipe.grindSize}. The range is ${GRIND_SIZE.min}-${GRIND_SIZE.max}.`;
         if (outside(recipe.grindSize, GRIND_SIZE)) {
             problems.push(grindSizeMsg);
@@ -198,3 +209,4 @@ export function cardWriteProblems(
 export function canWriteToCard(recipe: Recipe): boolean {
     return cardWriteProblems(recipe).length === 0;
 }
+

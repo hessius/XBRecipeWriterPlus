@@ -317,8 +317,8 @@ describe("displayName", () => {
         expect(named({source: "read", createdAt: 0}).displayName()).toBe("Read");
     });
 
-    it("falls back to Untitled for a recipe with no provenance at all", () => {
-        expect(named({source: "manual", createdAt: 0}).displayName()).toBe("Untitled");
+    it("falls back to Untitled Brew for a recipe with no provenance at all", () => {
+        expect(named({source: "manual", createdAt: 0}).displayName()).toBe("Untitled Brew");
     });
 });
 

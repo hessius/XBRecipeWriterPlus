@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Platform} from "react-native";
+import {Platform, Share} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
@@ -14,18 +14,30 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import MachinePanel from "@/components/MachinePanel";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
+import type {MachineVitals} from "@/components/MachinePanel";
+import {OVER} from "@/constants/brewCopy";
+import {ALREADY_IN_LIBRARY, CARD_READ_FAILED, HOLD_CARD} from "@/constants/copy";
 import {palette} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useCardWriter} from "@/hooks/useCardWriter";
+import {useMachine} from "@/hooks/useMachine";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
+import {serialiseCapture} from "@/library/cardDiagnostics";
+import RecipeDatabase from "@/library/RecipeDatabase";
+import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
+import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
 
 type Props = {
@@ -69,6 +81,71 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+    const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
+    const [shortcutShape] = useSetting("brewShortcut", settings);
+    // Written from the card-read sink below, never read here. The setter is the
+    // whole point: a diagnostic capture has to be persisted the instant it is
+    // taken, before `parseData` gets a chance to crash on a bypass card.
+    const [, setLastCardRead] = useSetting("lastCardRead", settings);
+
+    const {machine, status: machineStatus, connect: connectMachine, remembered} =
+        useMachine();
+    /**
+     * Undefined rather than a shape when there is nothing to brew on.
+     *
+     * A dead BREW button on every recipe would be worse than no button, which
+     * is the same reason the editor's action bar checks `machineDeviceId`.
+     */
+    const brewShortcut = showBrewRows && remembered !== ""
+        ? asBrewShortcut(shortcutShape)
+        : undefined;
+    // Seeded from machine.info so a machine that is already connected when the
+    // screen mounts does not show "Not in range" while the header dot says
+    // connected. The useState initialiser runs once; subsequent updates arrive
+    // through onLink below.
+    const [machineVitals, setMachineVitals] = useState<MachineVitals | null>(() => {
+        const info = machine.info;
+        if (info === null) return null;
+        return {waterEnough: info.waterEnough, waterFeed: info.waterFeed, mode: info.mode,
+                grindSize: info.grindSize, askedAt: Date.now()};
+    });
+
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [popoverNow, setPopoverNow] = useState(0);
+
+    // Advance the displayed age while the popover is open.
+    //
+    // Minutes-granularity only, so every 25 s is more than enough. The timer
+    // is created only while open and cleared on close and on unmount. setState
+    // is called only from inside the interval callback — never synchronously
+    // from the effect body — which satisfies react-hooks/set-state-in-effect.
+    useEffect(() => {
+        if (!popoverOpen) return;
+        const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
+        return () => clearInterval(id);
+    }, [popoverOpen]);
+    const {run: liveRun} = useLiveBrew();
+    /** When the brew screen was last pushed, so a second press in that window is refused. */
+    const lastBrewPushRef = useRef(0);
+
+    // Repaint vitals whenever the link emits an event (connected, info arrived,
+    // disconnected). The info blob is mutated in place on the shared machine, so
+    // React cannot see it without this subscription.
+    // On disconnect the last answered snapshot is deliberately kept — MachinePanel
+    // shows "Last seen X min ago" when status is not "connected" but vitals exist,
+    // and that copy is unreachable if we clear here.
+    useEffect(() => machine.onLink(() => {
+        const info = machine.info;
+        if (info !== null) {
+            setMachineVitals({
+                waterEnough: info.waterEnough,
+                waterFeed:   info.waterFeed,
+                mode:        info.mode,
+                grindSize:   info.grindSize,
+                askedAt:     Date.now()
+            });
+        }
+    }), [machine]);
 
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
@@ -81,6 +158,28 @@ export default function HomeScreen({db, settings}: Props) {
     // Cancel the user could actually press closed a different `NFC` than the one
     // `readCard` was awaiting, hiding the ceremony while the request lived on.
     const [nfc] = useState(() => new NFC());
+
+    // The action tray on each row can write a recipe to a card and share a link
+    // to it, the same two acts the editor offers — so they come from the same
+    // two hooks rather than a second implementation. `useCardWriter` brings its
+    // own `NFC` transport, its own overlay state and the `getIsClosed()` handling
+    // for a cancelled Android scan, so hosting WRITE here is wiring, not a new
+    // NFC path. Its volume-error report has no field to land in on this screen,
+    // so it becomes a toast; a library recipe that will not write already shows
+    // the card's own "will not write" mark.
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} =
+        useCardWriter((message) => {
+            if (message !== null) notify({tone: "error", message});
+        });
+    const {state: shareState, share: shareRecipe} = useShareRecipe();
+
+    // The same failures, and the same words, as the editor's share path.
+    useEffect(() => {
+        if (shareState.status !== "failed") {
+            return;
+        }
+        notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
+    }, [shareState]);
 
     const isEmpty = library.recipes.length === 0;
 
@@ -151,7 +250,7 @@ export default function HomeScreen({db, settings}: Props) {
                 // The same words a card read already uses when it turns out the
                 // library has this one. `resolveOnOpen` never makes a copy, so
                 // opening the existing recipe is the whole reveal.
-                notify({tone: "info", message: "Already in your library"});
+                notify({tone: "info", message: ALREADY_IN_LIBRARY});
             }
         }
     });
@@ -181,6 +280,7 @@ export default function HomeScreen({db, settings}: Props) {
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
             lastEditorPushAt = 0;
+            lastBrewPushRef.current = 0;
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -267,7 +367,7 @@ export default function HomeScreen({db, settings}: Props) {
             // and wrong, and the sheet already has its own spinner.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe read from card"
-                : "Hold the card to the top of the phone.");
+                : HOLD_CARD);
         }
         setReadProgress(progress);
         return undefined;
@@ -278,9 +378,19 @@ export default function HomeScreen({db, settings}: Props) {
         setReadProgress(0);
         try {
             const recipe = new Recipe();
-            const success = await recipe.readCard(nfc, progressCallback);
+            const success = await recipe.readCard(nfc, progressCallback, (capture) => {
+                // Persisted before `parseData` runs (the sink fires first), so a
+                // crash on a bypass card leaves the raw bytes recoverable from
+                // Settings → the card-read diagnostic rather than lost.
+                setLastCardRead(serialiseCapture(capture));
+            });
             setScanning(false);
             if (!success) {
+                // A false result now means one thing only: the user cancelled.
+                // Every real failure -- a card `parseData` cannot handle, a read
+                // that yields no bytes -- throws out of `readCard` and lands in
+                // the catch below. So silence here is the user getting what they
+                // asked for, not a swallowed error.
                 return;
             }
 
@@ -301,21 +411,36 @@ export default function HomeScreen({db, settings}: Props) {
                 return;
             }
             if (isExisting) {
-                notify({tone: "info", message: "Already in your library"});
+                notify({tone: "info", message: ALREADY_IN_LIBRARY});
             }
         } catch {
             setScanning(false);
-            // A cancelled Android scan throws. That is the user getting what
-            // they asked for, not a failure to report.
-            if (!nfc.getIsClosed()) {
-                notify({tone: "error", message: "Could not read the card. Please try again."});
+            // A cancelled scan throws. That is the user getting what they
+            // asked for, not a failure to report.
+            if (!nfc.wasCancelled()) {
+                notify({tone: "error", message: CARD_READ_FAILED});
             }
         }
     }
 
     async function cancelScan() {
-        await nfc.close();
+        await nfc.cancel();
         setScanning(false);
+    }
+
+    /**
+     * @returns whether the machine answered -- the refresh control's whole
+     * input, so it can show the wait rather than guess at how long one lasts.
+     */
+    async function refreshWater(): Promise<boolean> {
+        // Asking for the water level opens a BLE session and makes the machine
+        // beep — only do it when the user explicitly asks.
+        const answered = await machine.askHowItIsDoing();
+        if (answered && machine.info !== null) {
+            const {waterEnough, waterFeed, mode, grindSize} = machine.info;
+            setMachineVitals({waterEnough, waterFeed, mode, grindSize, askedAt: Date.now()});
+        }
+        return answered;
     }
 
     function openRecipe(recipe: Recipe): boolean {
@@ -330,9 +455,64 @@ export default function HomeScreen({db, settings}: Props) {
         return true;
     }
 
+    function openBrew(recipe: Recipe): void {
+        // There is one machine, and `LiveBrewProvider.start` refuses a second
+        // run while the first is still going. Without this the tap would push
+        // a brew screen that quietly showed the *other* recipe brewing, which
+        // reads as the app having started the wrong thing.
+        if (liveRun !== null
+            && !OVER.has(liveRun.phase.name)
+            && liveRun.recipe.uuid !== recipe.uuid) {
+            notify({
+                tone:    "info",
+                message: `The machine is busy brewing ${liveRun.recipe.displayName()}.`
+            });
+            return;
+        }
+        // eslint-disable-next-line react-hooks/purity
+        if (Date.now() - lastBrewPushRef.current < EDITOR_PUSH_GUARD_MS) {
+            return;
+        }
+        // eslint-disable-next-line react-hooks/purity
+        lastBrewPushRef.current = Date.now();
+        router.push({
+            pathname: "/brew",
+            params:   {recipeJSON: JSON.stringify(recipe)}
+        });
+    }
+
+    async function shareFromHome(recipe: Recipe): Promise<void> {
+        // The same shape as the editor's share: ask first whether the recipe
+        // can be shared at all, mint a link, remember it, then hand it to the
+        // system sheet. The `share` hook owns the "cannot share" message, so a
+        // blocked recipe only reports and mints nothing.
+        if (shareBlockReason(recipe) !== null) {
+            await shareRecipe(recipe);
+            return;
+        }
+        const url = await shareRecipe(recipe);
+        if (!url) {
+            return;
+        }
+        // Persist the minted link onto the stored recipe so a second share of
+        // the unchanged recipe returns it rather than minting a second permanent
+        // copy. Best-effort: the share itself has already happened either way.
+        try {
+            new RecipeDatabase().updateRecipe(recipe.uuid, recipe);
+        } catch {
+            // The link is still live in memory for this session.
+        }
+        try {
+            await Share.share({message: url});
+        } catch {
+            // The user dismissing the system sheet throws on some platforms.
+            // Nothing failed; there is nothing to say.
+        }
+    }
+
     // The import sheet covers the screen while it is open, and the NFC ceremony
     // while a scan is running. Both hide the subtree below from the reader.
-    const screenCovered = scanning || importOpen;
+    const screenCovered = scanning || importOpen || showNfcOverlay;
 
     return (
         <>
@@ -354,6 +534,23 @@ export default function HomeScreen({db, settings}: Props) {
                     editing={editing}
                     showEdit={!isEmpty}
                     canImport
+                    machineStatus={remembered ? machineStatus : undefined}
+                    machinePanel={remembered ? (
+                        <MachinePanel
+                            open={popoverOpen}
+                            status={machineStatus}
+                            accent={palette.success}
+                            vitals={machineVitals}
+                            now={popoverNow}
+                            onRefreshWater={refreshWater}
+                            onConnect={connectMachine}
+                        />
+                    ) : undefined}
+                    onMachinePress={() => {
+                        setPopoverNow(Date.now());
+                        setPopoverOpen((open) => !open);
+                    }}
+                    onMachineConnect={connectMachine}
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}
@@ -401,6 +598,14 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
+                                brewShortcut={brewShortcut}
+                                // Gated on a machine, the same rule the card's
+                                // own shortcut follows: a dead BREW on every row
+                                // is worse than none. Share and write need no
+                                // machine, so they are always offered.
+                                onBrew={remembered !== "" ? () => openBrew(item) : undefined}
+                                onShare={() => shareFromHome(item)}
+                                onWrite={() => writeCard(item)}
                                 onPress={() => openRecipe(item)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
@@ -427,6 +632,12 @@ export default function HomeScreen({db, settings}: Props) {
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>
+
+            {/* The write ceremony, hosted the same way the editor hosts it. A
+                second overlay rather than a shared one because reading and
+                writing are separate transports and only ever one is visible. */}
+            <NfcOverlay visible={showNfcOverlay} mode="write" progress={writeProgress}
+                        onCancel={onNFCDialogClose}/>
         </>
     );
 }

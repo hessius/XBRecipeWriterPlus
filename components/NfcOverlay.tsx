@@ -6,6 +6,7 @@ import {Text, YStack} from "tamagui";
 import DotBloom from "@/components/DotBloom";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
+import {HOLD_CARD} from "@/constants/copy";
 import {DURATION, useReducedMotion} from "@/constants/motion";
 
 /**
@@ -108,7 +109,7 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
                         </DotMatrixText>
                         {!isIOS && (
                             <Text fontSize={14} textAlign="center" color={palette.dim}>
-                                Hold the card to the top of the phone.
+                                {HOLD_CARD}
                             </Text>
                         )}
                     </YStack>

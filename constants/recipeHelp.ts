@@ -76,8 +76,8 @@ const ENTRIES = {
         detail: "Turning the grinder off writes grind size 81, one past the " +
                 "maximum, and the machine will refuse a card in that state " +
                 "outright. The workaround is to load any other recipe with the " +
-                "grinder enabled first — a shortcut button, another card, or " +
-                "the xBloom app — after " +
+                "grinder enabled first: a shortcut button, another card, or " +
+                "the xBloom app. After " +
                 "which this card will be accepted and the machine will show " +
                 "'--' for the grind size. There is no better way to disable " +
                 "the grinder from a recipe card."
@@ -96,14 +96,14 @@ const ENTRIES = {
         question: "What is the recipe ID for?",
         detail: "The recipe ID is how the app finds a recipe online. It is a " +
                 "three-letter vendor code, an optional T for tea, then two or " +
-                "three digits — CGL12, CGLT123. The card stores this ID and " +
+                "three digits, like CGL12 or CGLT123. The card stores this ID and " +
                 "not the name, so a card written without one will read back " +
                 "nameless. Changing or clearing it stops the wrong recipe " +
                 "being shown in the app; the machine brews the same either way."
     },
     name: {
         title: "Name",
-        hint:  "For your own organization in this app. The xBloom name is " +
+        hint:  "For your own organisation in this app. The xBloom name is " +
                "kept separate, derived from the XID."
     },
     volume: {
@@ -140,7 +140,7 @@ const ENTRIES = {
         title:  "Pattern",
         hint:   "The path the water takes over the bed.",
         question: "What do the pour patterns do?",
-        detail: "Centered holds the stream in one place. Circular walks it " +
+        detail: "Centred holds the stream in one place. Circular walks it " +
                 "round the bed at a fixed radius. Spiral works outward from " +
                 "the middle."
     },
@@ -163,6 +163,23 @@ const ENTRIES = {
                 "siphon, so a steep lands at about 120 ml. If the siphon " +
                 "triggers early because the leaf has swollen, take volume off " +
                 "the later steeps. Tea recipes are also limited to 3 steeps."
+    },
+    bypass: {
+        title:    "Bypass water",
+        hint:     "Extra water added straight to the cup.",
+        question: "What is bypass water?",
+        detail:   "Bypass water is dispensed straight into the cup at the end of " +
+                  "the brew, without passing through the coffee. It dilutes a " +
+                  "concentrated brew without weakening the extraction, which is " +
+                  "how a strong small brew is turned into a full cup. It does " +
+                  "not count towards the stage volumes, and a card has no room " +
+                  "to store it, so a recipe written to a card loses it."
+    },
+    bypassVolume: {
+        title: "Volume"
+    },
+    bypassTemperature: {
+        title: "Temperature"
     }
 } as const satisfies Record<string, HelpEntry>;
 

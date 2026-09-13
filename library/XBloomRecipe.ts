@@ -1,5 +1,8 @@
 import Pour, {POUR_PATTERN} from "./Pour";
 import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import {
+    BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
+} from "@/library/bypassLimits";
 import type {ImportSource} from "./importInput";
 
 export class XBloomRecipe {
@@ -74,6 +77,39 @@ export class XBloomRecipe {
                 ? this.xbRecipeJSON.recipeVo.rpm
                 : 120;
 
+            const rawBypassFlag   = this.xbRecipeJSON.recipeVo.isEnableBypassWater;
+            const rawBypassVolume = this.xbRecipeJSON.recipeVo.bypassVolume;
+            const rawBypassTemp   = this.xbRecipeJSON.recipeVo.bypassTemp;
+
+            // Accept volume/temp only when they are finite and within the range
+            // the editor itself allows -- the shared `bypassLimits` constants,
+            // not a restatement of them. An imported value outside that range
+            // would otherwise walk straight past the editor's own constraint
+            // and reach `Machine.brew` as a command argument the hardware has
+            // no meaning for. An out-of-range value is far more likely to be a
+            // schema change than a real recipe, and silently applying it would
+            // brew someone an unexpected dilution.
+            const bypassVolumeValid = typeof rawBypassVolume === "number" && Number.isFinite(rawBypassVolume)
+                && rawBypassVolume >= BYPASS_VOLUME.min && rawBypassVolume <= BYPASS_VOLUME.max;
+            const bypassTempValid = typeof rawBypassTemp === "number" && Number.isFinite(rawBypassTemp)
+                && rawBypassTemp >= BYPASS_TEMPERATURE.min && rawBypassTemp <= BYPASS_TEMPERATURE.max;
+
+            // Volume has no safe default: guessing one would brew someone an
+            // unexpected dilution, so an implausible volume drops the bypass
+            // entirely. Temperature does have one -- 85 C, the same value
+            // `Recipe` starts from -- so a missing or garbled temperature no
+            // longer costs the user their bypass. That asymmetry is deliberate.
+            if (bypassVolumeValid) {
+                recipe.bypassVolume = rawBypassVolume;
+                recipe.bypassTemp   = bypassTempValid ? rawBypassTemp : BYPASS_DEFAULT_TEMPERATURE;
+                // isEnableBypassWater: 1 = ON, 2 = OFF — xBloom's inverted scheme.
+                // A non-zero volume is also required; flag-on with zero water
+                // means the machine dispenses nothing, so treat it as off.
+                recipe.bypassEnabled = rawBypassFlag === 1 && rawBypassVolume > 0;
+            }
+            // An implausible volume leaves bypass at its defaults
+            // (bypassEnabled: false, bypassVolume: 0, bypassTemp: 85).
+
             let cup = this.xbRecipeJSON.recipeVo.cupType ?? 1
 
             switch (cup) {
@@ -95,6 +131,11 @@ export class XBloomRecipe {
             }
 
             console.log('cup:', cup, 'cupType:', recipe.cupType);
+
+            // Tea is special-cased throughout the app; bypass is out of scope.
+            if (recipe.cupType === CUP_TYPE.TEA) {
+                recipe.bypassEnabled = false;
+            }
 
             for (let i = 0; i < pourCount; i++) {
                 let pourData = this.xbRecipeJSON.recipeVo.pourList[i];

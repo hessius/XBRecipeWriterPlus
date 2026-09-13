@@ -1,14 +1,18 @@
 import {
-    BREW_INFO_ROUNDS, FRAME_GAP_MS, HANDSHAKE_FRESH_MS, HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS,
-    RECIPE_ACK_MS
+    BREW_INFO_ROUNDS, ECHO_FRAMES, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS,
+    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS,
+    SETTLE_CEILING_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {cardWriteProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 import {RadioUnavailableError} from "./errors";
 
+import {frameLogText, historyLine} from "./frameLog";
 import {
     ascii,
+    buildBypassDose,
+    bypassTempValue,
     buildType1,
     buildType1Bytes,
     buildType2,
@@ -18,9 +22,9 @@ import {
     MACHINE_STATE,
     parseNotification,
     splitFrames,
+    type BypassTempEncoding,
     type MachineInfo,
     type Notification,
-    type TeaSteepEncoding
 } from "./protocol";
 import type {FoundMachine, MachineTransport} from "./Transport";
 
@@ -37,6 +41,24 @@ export type FrameListener = (
     direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
 ) => void;
 
+/**
+ * One frame kept in the machine's always-on history.
+ *
+ * `at` is a wall clock, like `LinkEvent.at`, because the only reader is a human
+ * lining the log up against a machine that beeped at a particular moment — and
+ * the ~20 s of grind silence between two entries is itself diagnostic, so the
+ * gaps have to be visible. `frame` is an independent copy of the raw bytes, kept
+ * beside the decode exactly as the console prints them, because a frame we could
+ * not decode on someone's firmware is the single most useful thing to have.
+ */
+export type FrameLogEntry = {
+    at: number;
+    direction: FrameDirection;
+    frame: Uint8Array;
+    parsed: Notification;
+    source?: string;
+};
+
 /** Why a brew ended badly. Each has its own copy on the brew route. */
 export type BrewFailure =
     | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected"
@@ -46,6 +68,14 @@ export type BrewFailure =
      * it is already a sentence and there is no fixed set of them.
      */
     | "blocked";
+
+/** Why a brew will not start, in a form the UI can branch on. */
+export type BrewBlock = {
+    kind: "notConnected" | "noVitals" | "notEnoughWater" | "noWater" | "noBeans"
+        | "busy" | "recipe";
+    /** The sentence to show. Still the only thing most callers need. */
+    message: string;
+};
 
 /**
  * Where a brew has got to.
@@ -65,23 +95,60 @@ export type BrewPhase =
     | {name: "pressPlay"}
     | {name: "grinding"}
     | {name: "pouring"; pour: number; pours: number}
+    /**
+     * The bypass is dispensing into the cup.
+     *
+     * A phase of its own rather than a fourth pour, because it is not a pour:
+     * it does not go through the dripper, it is not in `recipe.pours`, and the
+     * machine gives it its own event. Making it look like a pour is exactly
+     * what folded its water onto the last stage.
+     */
+    | {name: "bypass"}
+    /**
+     * Water has stopped, but coffee is still draining from the brewer onto the
+     * scale. **Non-terminal**: the brew is not over until the machine's first
+     * ENJOY signal, the cup line goes flat, or the cup is lifted. Ending the
+     * record at BREWER_STOP threw away the last several seconds of the cup
+     * filling — the part that says how much coffee actually landed.
+     */
+    | {name: "settling"}
     | {name: "done"}
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
     | {name: "lostContact"}
-    | {name: "failed"; reason: BrewFailure; detail?: string};
+    /**
+     * `block` is the kind of pre-flight refusal, present only when `reason` is
+     * `"blocked"`. Without it every refusal looks the same to the UI, and a
+     * busy machine or an unwritable recipe was being explained as an empty
+     * water tank.
+     */
+    | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
-    40522: "noWater",
     8203:  "gearPosition",
-    8204:  "doseMismatch",
-    40517: "idling"
+    8204:  "doseMismatch"
+    // EVENT.ERROR_IDLING is deliberately absent: it means different things
+    // depending on the phase it arrives in, and `onEvent` decides.
+    //
+    // EVENT.WATER_LOW (40522) was here, and was the bug: see `onEvent`.
 };
 
 /** States from which a brew may be started at all. */
 const STARTABLE = new Set<number>([
     MACHINE_STATE.IDLE, MACHINE_STATE.COMPLETE, MACHINE_STATE.READY
 ]);
+
+/** States that are faults rather than activity. They are not "busy". */
+const FAULT_BLOCKS: Record<number, BrewBlock> = {
+    [MACHINE_STATE.NO_WATER]: {
+        kind: "noWater",
+        message: "The machine's water tank is empty. Fill it and try again."
+    },
+    [MACHINE_STATE.NO_BEANS]: {
+        kind: "noBeans",
+        message: "The machine is waiting for beans. Fill the hopper and try again."
+    }
+};
 
 /**
  * One thing that happened to the link.
@@ -104,6 +171,22 @@ const LINK_HISTORY_LIMIT = 200;
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
+    /**
+     * The machine has reported its tank low (event 40522) during this brew.
+     *
+     * A warning, never a failure: the brew carries on. Cleared when a new brew
+     * is asked for, so it always describes the run in front of the user.
+     *
+     * Nothing reads it yet, and that is deliberate — see #94. The consequence
+     * a user can act on is already covered by pre-flight refusing the *next*
+     * brew, and a mid-brew notice about something nobody can do anything about
+     * until it ends may be worse than silence. Kept because it is cheap, and
+     * because deciding to show it later should not mean re-deriving what 40522
+     * means from another ruined brew.
+     */
+    public waterLow = false;
+    /** When `state` was last heard, as a wall clock. 0 means never. */
+    private stateAt = 0;
 
     /**
      * What the link has been doing, oldest first.
@@ -116,6 +199,17 @@ export default class Machine {
      */
     public readonly linkHistory: LinkEvent[] = [];
 
+    /**
+     * The last frames in either direction, oldest first, minus the weight
+     * stream. See `FRAME_HISTORY_LIMIT` for why it lives here and what it holds.
+     *
+     * Deliberately never cleared on disconnect or reconnect: the most useful log
+     * is often the one that spans the drop — a link that failed mid-brew is
+     * exactly the case with no screen open to catch it — so `forget()` leaves
+     * this untouched even as it resets everything else.
+     */
+    public readonly frameHistory: FrameLogEntry[] = [];
+
     private transport: MachineTransport;
     private frameListeners = new Set<FrameListener>();
     private notificationListeners = new Set<(parsed: Notification) => void>();
@@ -124,16 +218,16 @@ export default class Machine {
 
     public phase: BrewPhase = {name: "idle"};
     /**
-     * Which reading of the tea steep encoding to send.
+     * Which reading of the bypass temperature to send.
      *
      * A property rather than a settings lookup, so this file keeps its one-way
      * dependency: `library/` does not reach up into `hooks/`. `useBrew` sets it
      * from the console's switch.
      */
-    private steepEncoding: TeaSteepEncoding = "homoland";
+    private bypassEncoding: BypassTempEncoding = "scaled";
 
-    get teaSteepEncoding(): TeaSteepEncoding {
-        return this.steepEncoding;
+    get bypassTempEncoding(): BypassTempEncoding {
+        return this.bypassEncoding;
     }
 
     /**
@@ -141,8 +235,8 @@ export default class Machine {
      * telling the machine something rather than mutating a value the React
      * Compiler believes it owns.
      */
-    setTeaSteepEncoding(encoding: TeaSteepEncoding): void {
-        this.steepEncoding = encoding;
+    setBypassTempEncoding(encoding: BypassTempEncoding): void {
+        this.bypassEncoding = encoding;
     }
 
     /**
@@ -172,6 +266,17 @@ export default class Machine {
     private sequence = 0;
     private brewing = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * Promotes a stranded `settling` to `done` after `settleCapMs`.
+     *
+     * `settling` is non-terminal and only ENJOY_2 reaches `done`, so one
+     * dropped notification would otherwise leave the run hung — CANCEL on
+     * screen, the next brew refused as busy. This is the run's own backstop,
+     * separate from the recorder's cap on the record.
+     */
+    private settleTimer: ReturnType<typeof setTimeout> | null = null;
+    /** When the current settle began, for the ceiling the watchdog cannot pass. */
+    private settleOpenedAt = 0;
     private retriedInPro = false;
     /**
      * The commit frame of an uploaded recipe that has not been started yet.
@@ -182,9 +287,20 @@ export default class Machine {
      */
     private pendingCommit: Uint8Array | null = null;
 
+    /**
+     * Whether this brew's commit frame has gone out.
+     *
+     * Not derivable from `pendingCommit`, which `startBrew` clears before it
+     * sends: a brew that has just been committed and one that was never
+     * uploaded both hold null. The difference is the whole question `0x1E`
+     * asks -- the machine says "waiting to be started" and cannot say by whom.
+     */
+    private committed: boolean = false;
+
     private frameGapMs: number;
     private infoWaitMs: number;
     private handshakeFreshMs: number;
+    private settleCapMs: number;
     /** When the session was last renewed, so it is not renewed needlessly. */
     private lastHandshakeAt = 0;
 
@@ -193,15 +309,21 @@ export default class Machine {
      * @param options.infoWaitMs How long to wait for an answer to the info request.
      * @param options.handshakeFreshMs How long a session handshake stays good for.
      *     Tests pass 0; nothing else should.
+     * @param options.settleCapMs How long a stranded settling phase waits before
+     *     it is promoted to done. Tests may shorten it; nothing else should.
      */
     constructor(
         transport: MachineTransport,
-        options: {frameGapMs?: number; infoWaitMs?: number; handshakeFreshMs?: number} = {}
+        options: {
+            frameGapMs?: number; infoWaitMs?: number; handshakeFreshMs?: number;
+            settleCapMs?: number;
+        } = {}
     ) {
         this.transport = transport;
         this.frameGapMs = options.frameGapMs ?? FRAME_GAP_MS;
         this.infoWaitMs = options.infoWaitMs ?? INFO_WAIT_MS;
         this.handshakeFreshMs = options.handshakeFreshMs ?? HANDSHAKE_FRESH_MS;
+        this.settleCapMs = options.settleCapMs ?? SETTLE_CAP_MS;
     }
 
     /** The pause between frames of a sequence. See `FRAME_GAP_MS`. */
@@ -306,7 +428,7 @@ export default class Machine {
      * Ask the machine to describe itself until it does, or give up.
      *
      * Does not throw: a machine that never introduces itself is still worth
-     * being connected to from the console, and `brewBlockReason` is where the
+     * being connected to from the console, and `brewBlock` is where the
      * consequence belongs.
      *
      * @returns whether the vitals are now known.
@@ -324,7 +446,7 @@ export default class Machine {
      * The *next* one, not "one at some point": a caller asking how the machine
      * is doing now must not be handed the answer to a question asked when the
      * link came up. Does not reject — a machine that stays quiet is still worth
-     * being connected to, and `brewBlockReason` is where the consequence
+     * being connected to, and `brewBlock` is where the consequence
      * belongs.
      *
      * @returns whether the machine answered before the window closed.
@@ -371,6 +493,7 @@ export default class Machine {
     }
 
     async askHowItIsDoing(): Promise<boolean> {
+        const infoBeforeRequest = this.info;
         // The machine will not answer a question asked outside a session, and
         // the session goes stale on its own — settled on hardware, where a
         // 40521 six minutes into a live link was ignored and the same frame
@@ -382,6 +505,10 @@ export default class Machine {
         }
         for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
             if (attempt > 0) await this.gap();
+            // A late answer to the previous attempt can land in the gap, when
+            // no per-attempt listener is mounted. It is still an answer to this
+            // refresh and must not leave the control waiting for another frame.
+            if (this.info !== infoBeforeRequest) return true;
             // Listening before asking, not after. The answer can arrive inside
             // the write — the radio delivers on its own thread — and a listener
             // attached afterwards would miss it and wait out the whole window
@@ -397,7 +524,7 @@ export default class Machine {
                 // business setting.
                 return false;
             }
-            if (await answered) return true;
+            if (await answered || this.info !== infoBeforeRequest) return true;
         }
         // Silence is evidence, and it outranks the clock. The session is
         // renewed on a timer because renewing beeps -- but a machine that has
@@ -486,8 +613,7 @@ export default class Machine {
         // written before the radio has accepted the frame says a frame was
         // sent when the write is about to throw.
         await this.transport.write(frame);
-        this.frameListeners.forEach((listener) =>
-            listener("sent", frame, {kind: "unknown", raw: frame}));
+        this.emitFrame("sent", frame, {kind: "unknown", raw: frame});
     }
 
     /** Every frame in either direction, for the console's log. */
@@ -527,8 +653,15 @@ export default class Machine {
 
     private receiveFrame(frame: Uint8Array, source?: string): void {
         const parsed = parseNotification(frame);
+        // Retain and announce *before* acting on the frame. Handling it fires
+        // the phase listeners, and a phase listener — `BrewRecorder` — is what
+        // snapshots the log for a brew's record. Retaining afterwards meant the
+        // frame that ended a brew was the one frame missing from that brew's
+        // log, which is precisely the frame the record exists to preserve.
+        this.emitFrame("received", frame, parsed, source);
         if (parsed.kind === "status") {
             this.state = parsed.state;
+            this.stateAt = Date.now();
             this.onState(parsed.state);
         }
         if (parsed.kind === "info") {
@@ -536,8 +669,52 @@ export default class Machine {
             this.announceLink();
         }
         if (parsed.kind === "event") this.onEvent(parsed.code, parsed.value);
-        this.frameListeners.forEach((listener) => listener("received", frame, parsed, source));
+        // Proof of life during the drawdown. Handled after the frame, so an
+        // ENJOY_2 that has just ended the brew does not re-arm a watchdog for a
+        // phase the run has already left.
+        if (this.phase.name === "settling") this.armSettleTimer();
         this.notificationListeners.forEach((listener) => listener(parsed));
+    }
+
+    /**
+     * Announce a frame to the console's live listeners and fold it into the
+     * always-on history. One path so the two can never disagree about what the
+     * link carried.
+     */
+    private emitFrame(
+        direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
+    ): void {
+        this.retainFrame(direction, frame, parsed, source);
+        this.frameListeners.forEach((listener) => listener(direction, frame, parsed, source));
+    }
+
+    /**
+     * Fold one frame into the bounded history, dropping the weight stream.
+     *
+     * Cup and water weight arrive at ~10 Hz each and would evict everything
+     * diagnostic within seconds, so they are the one thing left out — the same
+     * point `parseNotification` makes about keeping `unknown` above all else.
+     * The bytes are copied because the parser hands out subarray views over a
+     * packet buffer the transport is free to reuse.
+     */
+    private retainFrame(
+        direction: FrameDirection, frame: Uint8Array, parsed: Notification, source?: string
+    ): void {
+        if (parsed.kind === "waterWeight" || parsed.kind === "cupWeight") return;
+        const entry = {at: Date.now(), direction, frame: frame.slice(), parsed, source};
+        this.frameHistory.push(entry);
+        if (this.frameHistory.length > FRAME_HISTORY_LIMIT) this.frameHistory.shift();
+        if (ECHO_FRAMES) console.log(`[xbrw] ${historyLine(entry)}`);
+    }
+
+    /**
+     * The frames of this session since `from`, as text, oldest first.
+     *
+     * Taken by wall clock rather than by index because the caller is a brew,
+     * which knows when it started and nothing about the ring behind it.
+     */
+    public frameLogSince(from: number): string {
+        return frameLogText(this.frameHistory.filter((entry) => entry.at >= from));
     }
 
     onPhase(listener: (phase: BrewPhase) => void): () => void {
@@ -551,14 +728,40 @@ export default class Machine {
         // answered it. A stale timer left running would fire a "rejected"
         // failure into the middle of a working pour.
         if (phase.name !== "sending") this.clearAckTimer();
+        // The settling watchdog belongs only to the settling phase; any other
+        // phase has already moved the run on, so drop it before it is possibly
+        // re-armed below. This is also what stops it firing into a later brew.
+        this.clearSettleTimer();
         this.phase = phase;
         this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
             .includes(phase.name);
+        if (phase.name === "settling") {
+            this.settleOpenedAt = Date.now();
+            this.armSettleTimer();
+        }
         // A brew that has ended takes its uncommitted recipe with it. Left
         // behind, START on a later screen would commit a recipe the user has
         // already cancelled or watched fail.
-        if (!this.brewing) this.pendingCommit = null;
+        if (!this.brewing) {
+            this.pendingCommit = null;
+            this.committed = false;
+        }
         this.phaseListeners.forEach((listener) => listener(phase));
+    }
+
+    /**
+     * The machine's state, with an expired fault treated as unknown.
+     *
+     * Only a fault expires. The alternative to expiring one is refusing a brew
+     * on a reading from before the user filled the tank it complained about,
+     * which is the bug this fixes. The alternative to *keeping* an activity
+     * state is deciding a silently grinding machine is free, which is worse.
+     */
+    private freshState(): number | null {
+        if (this.state === null) return null;
+        if (FAULT_BLOCKS[this.state] === undefined) return this.state;
+        if (Date.now() - this.stateAt > STATE_FRESH_MS) return null;
+        return this.state;
     }
 
     /**
@@ -568,22 +771,44 @@ export default class Machine {
      * costs water on the counter or a brew interrupted halfway. What it cannot
      * check — whether a cup is under the spout, whether the pod is in, whether
      * the beans match the dose — is stated on the brew route instead.
+     *
+     * Typed rather than prose because the two water failures are not the same
+     * event: refused before anything was sent is amber, recoverable and offers
+     * TRY AGAIN, while the machine stopping mid-brew is red and deliberately
+     * offers nothing, because the dose is already spent.
      */
-    brewBlockReason(recipe: Recipe): string | null {
-        if (!this.isConnected()) return "The machine is not connected.";
+    brewBlock(recipe: Recipe): BrewBlock | null {
+        if (!this.isConnected()) {
+            return {kind: "notConnected", message: "The machine is not connected."};
+        }
         if (this.info === null) {
             // Not a pedantic check. The water level is reported nowhere else,
             // and "we never heard" is not the same as "the tank is fine" —
             // treating it as such is how a recipe gets committed to a machine
             // with an empty tank.
-            return "The machine has not said how it is doing yet. Reconnect and try again.";
+            return {
+                kind: "noVitals",
+                message:
+                    "The machine has not said how it is doing yet. Reconnect and try again."
+            };
         }
-        if (!this.info.waterEnough) return "The machine's water tank is low.";
-        if (this.state !== null && !STARTABLE.has(this.state)) {
-            return "The machine is busy. Wait for it to finish.";
+        // `waterEnough` is the reservoir sensor. A tap-fed machine reports the
+        // unused tank as low even though its configured supply is available.
+        if (this.info.waterFeed === "tank" && !this.info.waterEnough) {
+            return {kind: "notEnoughWater", message: "The machine's water tank is low."};
+        }
+        const state = this.freshState();
+        if (state !== null) {
+            const fault = FAULT_BLOCKS[state];
+            // A fault is not activity. Telling somebody with an empty hopper
+            // to wait for the machine to finish is both wrong and unactionable.
+            if (fault !== undefined) return fault;
+            if (!STARTABLE.has(state)) {
+                return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
+            }
         }
         const problems = cardWriteProblems(recipe);
-        if (problems.length > 0) return problems[0];
+        if (problems.length > 0) return {kind: "recipe", message: problems[0]};
         return null;
     }
 
@@ -594,10 +819,17 @@ export default class Machine {
      * over — the brew's progress arrives as phases.
      */
     async brew(recipe: Recipe): Promise<void> {
+        // The tank warning belongs to one run, not to the session.
+        this.waterLow = false;
         // A fresh attempt: the PRO-mode offer is per-brew, and this was not
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
+        // A brew that died on the machine leaves a warning up, and a machine
+        // sitting on a warning will not take a recipe: on device, TRY AGAIN
+        // after a no-beans stop did nothing until the warning was dismissed by
+        // hand. Send it home first -- it is the same pair `cancelBrew` sends.
+        if (this.mayBeShowingAWarning()) await this.sendHome();
         // Ask how it is doing *now*, every time. Not only when the vitals are
         // missing: they go stale, and the tank is the whole point of asking.
         // Telling the user to reconnect is also asking them to do something the
@@ -626,14 +858,17 @@ export default class Machine {
     }
 
     private async brewOnce(recipe: Recipe): Promise<void> {
-        const blocked = this.brewBlockReason(recipe);
+        const blocked = this.brewBlock(recipe);
         if (blocked !== null) {
             // The phase as well as the throw. The caller gets an exception to
             // handle, but the brew screen watches the phase, and a refusal that
             // left the phase at `idle` sat there saying "Ready when you are."
             // with nothing to press.
-            this.setPhase({name: "failed", reason: "blocked", detail: blocked});
-            throw new Error(blocked);
+            this.setPhase({
+                name: "failed", reason: "blocked",
+                detail: blocked.message, block: blocked.kind
+            });
+            throw new Error(blocked.message);
         }
 
         this.pourCount = recipe.pours.length;
@@ -642,6 +877,7 @@ export default class Machine {
         const tea = recipe.isTea();
         const commit = tea ? buildType1(4512) : buildType1(8002);
         this.pendingCommit = null;
+        this.committed = false;
 
         try {
             // This whole sequence, gaps and all, mirrors `run_brew` in the
@@ -652,13 +888,22 @@ export default class Machine {
                 // sent at connect may be many minutes old by now, and the
                 // reference re-sends it at the start of every brew.
                 buildType1(8100, [185, 1]),
-                // Bypass off, but the dose still has to travel: the machine
-                // needs it to grind correctly, and skipping it makes the grind
-                // drift. The two bypass arguments are float bits, which for
-                // zero are the same four zero bytes an integer would give.
-                buildType1(8102, [0, 0, Math.round(recipe.dosage)]),
+                // The dose has to travel whether or not there is a bypass: the
+                // machine needs it to grind correctly, and skipping this frame
+                // makes the grind drift. Tea sends no bypass at all -- the
+                // machine ignores it there, as `shareLink` already assumes.
+                // The two bypass arguments are float bits (see `buildBypassDose`
+                // and `ble-protocol.md`), so a live volume or temperature must
+                // be encoded as a float, not as the integer `buildType1` writes.
+                tea || !recipe.bypassEnabled
+                    ? buildBypassDose(0, 0, recipe.dosage)
+                    : buildBypassDose(
+                        Math.round(recipe.bypassVolume),
+                        bypassTempValue(recipe.bypassTemp, this.bypassEncoding),
+                        recipe.dosage
+                    ),
                 ...(tea ? [
-                    buildType1Bytes(4513, encodeTeaBlob(recipe, this.teaSteepEncoding))
+                    buildType1Bytes(4513, encodeTeaBlob(recipe))
                 ] : [
                     setCupFrame(),
                     buildType1Bytes(
@@ -672,6 +917,9 @@ export default class Machine {
             // The first frame of that burst was a handshake, so the session is
             // good again and the next question does not need to beep for one.
             this.lastHandshakeAt = Date.now();
+            // The burst carried the commit when auto-start is on, so from here
+            // the machine is starting itself and needs nothing from the user.
+            this.committed = this.autoStart;
         } catch (error) {
             // Without this the brew is left in `sending` with no timer armed —
             // the phase is only ever left by an acknowledgement that can no
@@ -718,6 +966,7 @@ export default class Machine {
             });
             throw error;
         }
+        this.committed = true;
         this.armAckTimer();
     }
 
@@ -765,14 +1014,62 @@ export default class Machine {
         this.ackTimer = null;
     }
 
+    /**
+     * (Re)start the silence watchdog over settling.
+     *
+     * Called once when settling opens and again on every frame that arrives
+     * during it, so the countdown measures how long the machine has been quiet
+     * rather than how long the drawdown has taken. A drawdown may take as long
+     * as it likes; ENJOY ends it. The ceiling is what stops a machine that
+     * chatters without ever finishing from hanging the run.
+     */
+    private armSettleTimer(): void {
+        this.clearSettleTimer();
+        const since = Date.now() - this.settleOpenedAt;
+        const wait = Math.max(0, Math.min(this.settleCapMs, SETTLE_CEILING_MS - since));
+        this.settleTimer = setTimeout(() => {
+            // Only if nothing else moved the run on. A dropped ENJOY must not
+            // strand it in a non-terminal phase forever.
+            if (this.phase.name === "settling") this.setPhase({name: "done"});
+        }, wait);
+        this.settleTimer.unref?.();
+    }
+
+    private clearSettleTimer(): void {
+        if (this.settleTimer !== null) clearTimeout(this.settleTimer);
+        this.settleTimer = null;
+    }
+
+    /**
+     * Stop whatever is happening and put the machine back on its home screen.
+     *
+     * Paced, and through `sendPaced` rather than two bare writes: the pacing is
+     * what a burst of Write Without Response needs to survive at all, and going
+     * through it is also what takes the radio away from a brew sequence that
+     * may still be mid-flight.
+     */
+    private async sendHome(): Promise<void> {
+        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+    }
+
     /** Stop a brew and put the machine back on its home screen. */
     async cancelBrew(): Promise<void> {
-        // Paced, and through `sendPaced` rather than two bare writes: the
-        // pacing is what a burst of Write Without Response needs to survive at
-        // all, and going through it is also what takes the radio away from a
-        // brew sequence that may still be mid-flight.
-        await this.sendPaced([buildType1(40519, [1]), buildType1(8022)]);
+        await this.sendHome();
         this.setPhase({name: "cancelled"});
+    }
+
+    /**
+     * Whether the machine is likely to be sitting on something it wants
+     * acknowledged, rather than on its home screen.
+     *
+     * Two endings are excluded. A pre-flight refusal never told the machine
+     * anything, so there is nothing on its screen. And a cancel already sent it
+     * home -- that is what `cancelBrew` is.
+     */
+    private mayBeShowingAWarning(): boolean {
+        const p = this.phase;
+        if (p.name === "lostContact") return true;
+        return p.name === "failed" && p.reason !== "blocked";
     }
 
     private onState(state: number): void {
@@ -787,9 +1084,18 @@ export default class Machine {
                 this.setPhase({name: "armed"});
                 break;
             case MACHINE_STATE.AWAITING_CONFIRM:
-                // The machine is waiting for a human. We do not send 40518:
-                // one source watched it move the state backwards, another
-                // verified it aborts a running brew, a third calls it PAUSE.
+                // "Waiting to be started" -- the machine cannot say by whom,
+                // and only we know. Once our commit has gone out this is a
+                // waypoint on the way to grinding, and hardware confirms the
+                // firmware usually skips it entirely; telling the user to
+                // press a button they just pressed in the app is how it read
+                // on the device.
+                //
+                // Uncommitted, it is the state the prompt exists for. We still
+                // do not send 40518 to escape it: one source watched it move
+                // the state backwards, another verified it aborts a running
+                // brew, a third calls it PAUSE.
+                if (this.committed) break;
                 this.setPhase({name: "pressPlay"});
                 break;
             case MACHINE_STATE.STARTING:
@@ -801,6 +1107,31 @@ export default class Machine {
                 this.setPhase({name: "failed", reason: "noBeans"});
                 break;
             case MACHINE_STATE.NO_WATER:
+                // The 0x57 status channel reports a water *level*, not a
+                // *fault*. While the pump draws hard during a pour, a tank
+                // sitting near the float sensor's threshold dips transiently
+                // below it and surfaces here as NO_WATER.
+                //
+                // Its neighbour, event 40522, was once read as the explicit
+                // fault channel that justified this being only a level. That
+                // turned out to be a level warning too — see `EVENT.WATER_LOW`
+                // — so neither channel stops a running pour any more.
+                //
+                // In the field report that prompted this, the machine was
+                // observed pouring normally throughout — it never beeped, never
+                // showed a water warning, and 40522 never fired — yet a single
+                // 0x0C mid-pour discarded the whole brew. So once water is
+                // actually running we ignore the *state*: `pouring`, and
+                // `settling` too, where the pour is over and the record all but
+                // complete, so throwing a finished brew away over a level
+                // reading would be strictly worse than the bug being fixed.
+                // Every other phase keeps the original fatal handling.
+                //
+                // The frame buffer added alongside this did its job: the
+                // console log of 2026-09-09 caught the next occurrence and
+                // showed 40522, not 0x0C, ending a brew the machine completed.
+                if (this.phase.name === "pouring" || this.phase.name === "bypass"
+                    || this.phase.name === "settling") break;
                 this.setPhase({name: "failed", reason: "noWater"});
                 break;
             default:
@@ -810,6 +1141,32 @@ export default class Machine {
 
     private onEvent(code: number, value?: number): void {
         if (!this.brewing) return;
+
+        if (code === EVENT.ERROR_IDLING) {
+            // During grinding the machine is almost certainly flashing +BEANS:
+            // it stops the burr and idles rather than reporting an empty
+            // hopper as its own event. Outside grinding it is what it says.
+            this.setPhase(this.phase.name === "grinding"
+                ? {name: "failed", reason: "noBeans"}
+                : {name: "failed", reason: "idling"});
+            return;
+        }
+
+        if (code === EVENT.WATER_LOW) {
+            // Not a stop. 40522 is the tank crossing its low mark, and the
+            // machine keeps brewing straight through it — see the capture
+            // quoted on `EVENT.WATER_LOW`. Treating it as fatal is what threw
+            // away two perfectly good brews and told the user the machine had
+            // run out of water while it was visibly still pouring.
+            //
+            // The consequence the user actually needs is already handled: the
+            // machine's next info frame reports `waterEnough: false`, and the
+            // pre-flight `brewBlock` refuses the *next* brew with a message
+            // about filling the tank. This only remembers that it happened.
+            this.waterLow = true;
+            this.announceLink();
+            return;
+        }
 
         const failure = FAILURE_EVENTS[code];
         if (failure !== undefined) {
@@ -824,15 +1181,34 @@ export default class Machine {
             case EVENT.POUR_START:
                 this.setPhase({
                     name: "pouring",
-                    // The machine's own index, when it sends one. Counting our
-                    // own would drift the moment a pour is skipped or repeated.
-                    pour: Math.min(Math.max(value ?? 1, 1), this.pourCount),
+                    // The machine's index is **zero-based**: the HCI snoop
+                    // quoted in docs/machine-integration/ble-protocol.md
+                    // records 0 for the first pour of six and 5 for the last.
+                    // Clamping it up to one with `Math.max`
+                    // made the first stage right by accident and every later
+                    // stage wrong by one, which froze the counter, stopped the
+                    // second rung ever animating and left the holding warning
+                    // permanently on.
+                    pour: Math.min((value ?? 0) + 1, this.pourCount),
                     pours: this.pourCount
                 });
                 break;
+            case EVENT.RD_BYPASS:
+                // Deliberately not clamped into the pours, the way POUR_START
+                // is. The bypass is after them.
+                this.setPhase({name: "bypass"});
+                break;
             case EVENT.BREWER_STOP:
+                // Water is done, drawdown is not. Enter settling so the
+                // recorder keeps the cup filling; the brew ends when the cup
+                // line flattens, not here.
+                this.setPhase({name: "settling"});
+                break;
             case EVENT.ENJOY:
             case EVENT.ENJOY_2:
+                // The first ENJOY is the machine's coffee-ready signal and the
+                // point where its own UI considers the brew complete. ENJOY_2
+                // remains a fallback for firmware that omits the first event.
                 this.setPhase({name: "done"});
                 break;
             default:
@@ -847,6 +1223,9 @@ export default class Machine {
         // about: a fired timer after a disconnect would report a phantom
         // failure about a machine we are no longer talking to.
         this.clearAckTimer();
+        // Likewise the settling watchdog: a promotion to `done` fired after the
+        // link dropped would land on whatever brew came next.
+        this.clearSettleTimer();
         if (this.brewing) {
             // The machine executes a committed recipe itself, so a dropped
             // link is very probably not a failed brew. Saying "failed" would
@@ -858,6 +1237,7 @@ export default class Machine {
         // talking to.
         this.info = null;
         this.state = null;
+        this.stateAt = 0;
         // Last, so a listener reading `isConnected()` or `info` sees the link
         // as gone rather than half torn down.
         this.announceLink();
