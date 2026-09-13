@@ -1,5 +1,5 @@
 import {allocateBands, BAR_CAP, BAR_FLOOR, BAR_MAX, GAP_CAP, GAP_FLOOR,
-        GAP_MAX, SUMMARY_BANDS, TRACE_CAP, TRACE_FLOOR,
+        GAP_MAX, summaryBands, SUMMARY_BANDS, TRACE_CAP, TRACE_FLOOR,
         TRACE_MAX} from "@/library/brew/bands";
 
 describe("allocateBands", () => {
@@ -175,5 +175,47 @@ describe("SUMMARY_BANDS", () => {
         const live = allocateBands(400, 4);
         expect(live.barHeight).toBe(SUMMARY_BANDS.barHeight);
         expect(live.rungGap).toBe(SUMMARY_BANDS.rungGap);
+    });
+});
+
+describe("summaryBands", () => {
+    it("keeps today's bands when nothing has been measured", () => {
+        expect(summaryBands(0, 4)).toEqual(SUMMARY_BANDS);
+    });
+
+    it("keeps today's bands when there is no room to grow", () => {
+        // Exactly the height today's bands already need.
+        expect(summaryBands(4 * (BAR_CAP + GAP_CAP), 4)).toEqual(SUMMARY_BANDS);
+    });
+
+    it("never shrinks below today's bands, however little room there is", () => {
+        expect(summaryBands(10, 9)).toEqual(SUMMARY_BANDS);
+    });
+
+    it("thickens the bars before it spreads the rungs", () => {
+        // Room for eight more points per stage: the bars take it first.
+        const bands = summaryBands(4 * (BAR_CAP + GAP_CAP) + 4 * 8, 4);
+
+        expect(bands.barHeight).toBe(BAR_CAP + 8);
+        expect(bands.rungGap).toBe(GAP_CAP);
+    });
+
+    it("spreads the rungs once the bars are at their ceiling", () => {
+        // Far more room than the bars can absorb.
+        const bands = summaryBands(4 * (BAR_CAP + GAP_CAP) + 4 * 40, 4);
+
+        expect(bands.barHeight).toBe(BAR_MAX);
+        expect(bands.rungGap).toBe(GAP_MAX);
+    });
+
+    it("never exceeds the ceilings the live screen obeys", () => {
+        const bands = summaryBands(10000, 3);
+
+        expect(bands.barHeight).toBe(BAR_MAX);
+        expect(bands.rungGap).toBe(GAP_MAX);
+    });
+
+    it("keeps today's bands for a ladder with no stages", () => {
+        expect(summaryBands(800, 0)).toEqual(SUMMARY_BANDS);
     });
 });

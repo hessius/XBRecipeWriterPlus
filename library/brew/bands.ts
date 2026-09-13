@@ -63,6 +63,38 @@ export const SUMMARY_BANDS = {
 } as const;
 
 /**
+ * The summary ladder's bands, grown into whatever height it has been given.
+ *
+ * `SUMMARY_BANDS` is the floor, not the answer: a summary that has room should
+ * look like the live screen, which reaches `BAR_MAX` on a real phone, rather
+ * than staying frozen at the soft caps and reading thinner once the brew is
+ * over than it did while it ran.
+ *
+ * Growth only, in the same order `allocateBands` uses — bars before gaps. A
+ * ladder with no room keeps today's bands and scrolls, which is what it
+ * already does; nothing here can make a summary thinner than it is today.
+ *
+ * @param ladderHeight the height left for the rungs after everything above
+ *                     them, or 0 when nothing has been measured yet
+ * @param stages       how many rungs the ladder will draw
+ */
+export function summaryBands(
+    ladderHeight: number, stages: number
+): {barHeight: number; rungGap: number} {
+    if (stages <= 0 || ladderHeight <= 0) return {...SUMMARY_BANDS};
+
+    let slack = ladderHeight - stages * (BAR_CAP + GAP_CAP);
+    if (slack <= 0) return {...SUMMARY_BANDS};
+
+    const barMore = Math.min(BAR_MAX - BAR_CAP, Math.floor(slack / stages));
+    slack -= barMore * stages;
+
+    const gapMore = Math.min(GAP_MAX - GAP_CAP, Math.floor(slack / stages));
+
+    return {barHeight: BAR_CAP + barMore, rungGap: GAP_CAP + gapMore};
+}
+
+/**
  * Share `flexHeight` between the trace and the ladder.
  *
  * @param flexHeight the measured height available to the trace and the ladder
