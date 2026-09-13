@@ -5,7 +5,7 @@ import {
 } from "@/hooks/useMachine";
 import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
-import Machine from "@/library/machine/Machine";
+import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
 
 // `library/machine/Transport` (imported transitively by the hook) builds a
 // BleManager singleton at module load, which throws under Jest. These tests
@@ -165,19 +165,52 @@ describe("the machine link", () => {
 describe("holding the link across the app going away", () => {
     /** An AppState a test can drive, in place of the platform's. */
     function fakeAppState() {
-        const handlers: ((state: string) => void)[] = [];
+        const handlers = new Set<(state: string) => void>();
+        const remove = jest.fn();
         return {
             addEventListener(_type: "change", handler: (state: string) => void) {
-                handlers.push(handler);
-                return {remove() {}};
+                handlers.add(handler);
+                return {
+                    remove: () => {
+                        handlers.delete(handler);
+                        remove();
+                    }
+                };
             },
-            /** Move the app to a state and let the handlers finish. */
             async go(state: string) {
-                for (const handler of handlers) handler(state);
-                // The handlers are async inside; let their chains settle.
+                handlers.forEach((handler) => handler(state));
                 for (let i = 0; i < 20; i++) await Promise.resolve();
-            }
+            },
+            listenerCount: () => handlers.size,
+            remove
         };
+    }
+
+    function lifecycleMachine(initialPhase: BrewPhase = {name: "idle"}) {
+        const listeners = new Set<(phase: BrewPhase) => void>();
+        let connected = true;
+        const machine = {
+            phase: initialPhase,
+            isConnected: () => connected,
+            disconnect: jest.fn(async () => { connected = false; }),
+            note: jest.fn(),
+            onPhase(listener: (phase: BrewPhase) => void) {
+                listeners.add(listener);
+                return () => listeners.delete(listener);
+            },
+            emitPhase(phase: BrewPhase) {
+                machine.phase = phase;
+                listeners.forEach((listener) => listener(phase));
+            },
+            reconnect() {
+                connected = true;
+            },
+            drop() {
+                connected = false;
+            },
+            phaseListenerCount: () => listeners.size
+        };
+        return machine;
     }
 
     async function held() {
@@ -260,6 +293,151 @@ describe("holding the link across the app going away", () => {
         await Promise.all([appState.go("active"), appState.go("active")]);
 
         expect(reconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        "waking", "sending", "readyToStart", "armed", "pressPlay",
+        "grinding", "pouring", "bypass", "settling"
+    ] satisfies BrewPhase["name"][])("retains the link during background %s", async (name) => {
+        const phase: BrewPhase = name === "pouring"
+            ? {name: "pouring", pour: 1, pours: 2}
+            : {name} as BrewPhase;
+        const machine = lifecycleMachine(phase);
+        const appState = fakeAppState();
+        const reconnect = jest.fn(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+
+        expect(isActiveBrewPhase(machine.phase)).toBe(true);
+        expect(machine.disconnect).not.toHaveBeenCalled();
+        expect(machine.isConnected()).toBe(true);
+    });
+
+    it("disconnects once when a retained brew becomes terminal in background", async () => {
+        const machine = lifecycleMachine({name: "pouring", pour: 1, pours: 2});
+        const appState = fakeAppState();
+        const reconnect = jest.fn(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+        machine.emitPhase({name: "done"});
+        machine.emitPhase({name: "cancelled"});
+        await Promise.resolve();
+
+        expect(machine.disconnect).toHaveBeenCalledTimes(1);
+        expect(machine.isConnected()).toBe(false);
+    });
+
+    it("does not reconnect or replace a retained link on foreground", async () => {
+        const machine = lifecycleMachine({name: "grinding"});
+        const appState = fakeAppState();
+        const reconnect = jest.fn(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+        await appState.go("active");
+
+        expect(reconnect).not.toHaveBeenCalled();
+        expect(machine.isConnected()).toBe(true);
+    });
+
+    it("does not reconnect after genuine transport loss during a background brew", async () => {
+        const machine = lifecycleMachine({name: "pouring", pour: 1, pours: 2});
+        const appState = fakeAppState();
+        const reconnect = jest.fn(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+        machine.drop();
+        machine.emitPhase({name: "lostContact"});
+        await appState.go("active");
+
+        expect(reconnect).not.toHaveBeenCalled();
+    });
+
+    it("waits for its background disconnect before reconnecting on a fast return", async () => {
+        const machine = lifecycleMachine({name: "idle"});
+        const appState = fakeAppState();
+        let finishDisconnect: (() => void) | undefined;
+        machine.disconnect.mockImplementation(() => new Promise<void>((resolve) => {
+            finishDisconnect = () => {
+                machine.drop();
+                resolve();
+            };
+        }));
+        const reconnect = jest.fn(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+        await appState.go("active");
+
+        expect(reconnect).not.toHaveBeenCalled();
+        finishDisconnect?.();
+        for (let i = 0; i < 20; i++) await Promise.resolve();
+
+        expect(reconnect).toHaveBeenCalledTimes(1);
+        expect(machine.isConnected()).toBe(true);
+    });
+
+    it("releases an idle reconnect that finishes after the app backgrounds again", async () => {
+        const machine = lifecycleMachine({name: "idle"});
+        const appState = fakeAppState();
+        let finishReconnect: (() => void) | undefined;
+        const reconnect = jest.fn()
+            .mockImplementationOnce(() => new Promise<void>((resolve) => {
+                finishReconnect = () => {
+                    machine.reconnect();
+                    resolve();
+                };
+            }))
+            .mockImplementation(async () => machine.reconnect());
+
+        holdLinkAcrossAppState(machine, reconnect, {appState});
+        await appState.go("background");
+        await appState.go("active");
+        await appState.go("background");
+        finishReconnect?.();
+        for (let i = 0; i < 20; i++) await Promise.resolve();
+
+        expect(reconnect).toHaveBeenCalledTimes(1);
+        expect(machine.disconnect).toHaveBeenCalledTimes(2);
+        expect(machine.isConnected()).toBe(false);
+
+        await appState.go("active");
+
+        expect(reconnect).toHaveBeenCalledTimes(2);
+        expect(machine.isConnected()).toBe(true);
+    });
+
+    it("records a failed lifecycle disconnect without an unhandled rejection", async () => {
+        const machine = lifecycleMachine({name: "idle"});
+        machine.disconnect.mockRejectedValueOnce(new Error("radio refused"));
+        const appState = fakeAppState();
+
+        holdLinkAcrossAppState(machine, async () => machine.reconnect(), {appState});
+        await appState.go("background");
+
+        expect(machine.note).toHaveBeenCalledWith(
+            "could not give the link back — radio refused"
+        );
+    });
+
+    it("removes both app-state and phase listeners during cleanup", () => {
+        const machine = lifecycleMachine();
+        const appState = fakeAppState();
+        const cleanup = holdLinkAcrossAppState(
+            machine, async () => machine.reconnect(), {appState}
+        );
+
+        expect(appState.listenerCount()).toBe(1);
+        expect(machine.phaseListenerCount()).toBe(1);
+
+        cleanup();
+
+        expect(appState.listenerCount()).toBe(0);
+        expect(machine.phaseListenerCount()).toBe(0);
+        expect(appState.remove).toHaveBeenCalledTimes(1);
     });
 });
 
