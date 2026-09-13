@@ -199,6 +199,24 @@ describe("BrewStageLadder", () => {
         expect(contentStyle(getByTestId("ladder-scroll")).justifyContent).toBe("center");
     });
 
+    it("does not auto-scroll when the content height exactly fits the viewport", async () => {
+        const rendered = await draw({activeIndex: 0});
+        const view = rendered.getByTestId("ladder-scroll");
+
+        await fireEvent(rendered.getByTestId("row-1"), "layout", {
+            nativeEvent: {layout: {x: 0, y: 90, width: 240, height: 40}}
+        });
+        await fireEvent(view, "layout", {nativeEvent: {layout: {height: 300}}});
+        await fireEvent(view, "contentSizeChange", 320, 300);
+
+        expect(rendered.getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+
+        await rendered.rerender(<BrewStageLadder {...ladderProps({activeIndex: 1})} />);
+
+        expect(rendered.getByTestId("ladder-scroll").props.scrollEnabled).toBe(false);
+        expect(mockScrollTo).not.toHaveBeenCalled();
+    });
+
     it("scrolls once the rungs are measured taller than the room", async () => {
         // The bug this replaced: `allocateBands` predicts a rung as its bar plus
         // its gap, but a rung also carries text that does not shrink, so past

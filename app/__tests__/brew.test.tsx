@@ -37,6 +37,7 @@ let mockCanOfferPro = false;
 let mockFirstBrewDone = true;
 let mockError: string | null = null;
 let mockBypass: BypassView | undefined = undefined;
+let mockBandAllocationArgs: Array<[number, number]> = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
@@ -81,6 +82,15 @@ jest.mock("@/hooks/useTraceAnimation", () => {
         return actual.useTraceAnimation(...args);
     };
     return {__esModule: true, ...actual, default: wrapped, useTraceAnimation: wrapped};
+});
+
+jest.mock("@/library/brew/bands", () => {
+    const actual = jest.requireActual("@/library/brew/bands");
+    const allocateBands = (...args: [number, number]) => {
+        mockBandAllocationArgs.push(args);
+        return actual.allocateBands(...args);
+    };
+    return {__esModule: true, ...actual, allocateBands};
 });
 
 // The brew screen now reads its run from useLiveBrew rather than calling
@@ -172,6 +182,7 @@ beforeEach(() => {
     mockError = null;
     traceAnimationArgs = [];
     mockBypass = undefined;
+    mockBandAllocationArgs = [];
 });
 
 describe("brew route", () => {
@@ -202,6 +213,33 @@ describe("brew route", () => {
         // hold if the figures row vanished entirely.
         expect(getAllByText("WATER")).toHaveLength(2);
         expect(getByTestId("ladder")).toBeTruthy();
+    });
+
+    it("subtracts the rendered band gap before allocating the brew bands", async () => {
+        const {getByTestId} = await renderWithProviders(<Brew />);
+        const region = getByTestId("brew-band-region");
+
+        expect(StyleSheet.flatten(region.props.style).gap).toBe(13);
+
+        await fireEvent(region, "layout", {
+            nativeEvent: {layout: {height: 400}}
+        });
+
+        await waitFor(() =>
+            expect(mockBandAllocationArgs.at(-1)).toEqual([387, mockRecipe.pours.length])
+        );
+    });
+
+    it("clamps the usable band height at zero before allocating", async () => {
+        const {getByTestId} = await renderWithProviders(<Brew />);
+
+        await fireEvent(getByTestId("brew-band-region"), "layout", {
+            nativeEvent: {layout: {height: 8}}
+        });
+
+        await waitFor(() =>
+            expect(mockBandAllocationArgs.at(-1)).toEqual([0, mockRecipe.pours.length])
+        );
     });
 
     it("feeds the trace the recipe's own grind speed, not a fixed number", async () => {

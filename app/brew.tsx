@@ -34,6 +34,7 @@ import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
+export const BREW_BAND_GAP = 13;
 
 /** Where an export sources its record: the freshest brew in the store. */
 type ExportStore = Pick<HistoryStore, "all" | "samples">;
@@ -112,7 +113,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const pauseElapsed = run?.pauseElapsed ?? 0;
 
     const [flexHeight, setFlexHeight] = useState(0);
-    const bands = allocateBands(flexHeight, recipe.pours.length);
+    const usableBandHeight = Math.max(0, flexHeight - BREW_BAND_GAP);
+    const bands = allocateBands(usableBandHeight, recipe.pours.length);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
@@ -255,7 +257,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </ScrollView>
             ) : (
                 <>
-                    <YStack flex={1} gap="$3"
+                    <YStack testID="brew-band-region" flex={1} gap={BREW_BAND_GAP}
                             onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
                         <BrewTrace
                             pours={recipe.pours}
