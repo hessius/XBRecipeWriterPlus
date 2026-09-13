@@ -75,9 +75,17 @@ In `components/__tests__/BrewNowCard.test.tsx`, add `LONGEST_NOW_SENTENCE` to
 the existing import from `@/constants/brewCopy`, and add `PATTERN_SENTENCE` too:
 
 ```ts
+import {StyleSheet} from "react-native";
 import {AGITATION_SENTENCE, LONGEST_NOW_SENTENCE, PATTERN_SENTENCE}
     from "@/constants/brewCopy";
 ```
+
+`DotMatrixText` composes its `style` into an array whose order is load-bearing
+(`components/DotMatrixText.tsx:152`), so `props.style.opacity` reads `undefined`.
+`StyleSheet.flatten` is the house idiom for this — see
+`components/__tests__/BrewHistoryRow.test.tsx:38`. The file's own
+`afterEach(cleanup)` owns teardown, so do not call `cleanup()` mid-test: racing
+an async render triggers overlapping `act()` and empties the next test's screen.
 
 Add these tests inside the existing `describe("BrewNowCard", ...)`:
 
@@ -91,7 +99,7 @@ it("reserves the tallest sentence so the card cannot change height", async () =>
     const reserve = getByTestId("brew-now-reserve");
 
     expect(reserve.props.children).toBe(LONGEST_NOW_SENTENCE);
-    expect(reserve.props.style.opacity).toBe(0);
+    expect(StyleSheet.flatten(reserve.props.style).opacity).toBe(0);
 });
 
 it("reserves the same height for a stage that says the least", async () => {
@@ -100,7 +108,6 @@ it("reserves the same height for a stage that says the least", async () => {
                      resting={false} />
     );
     const shortReserve = short.getByTestId("brew-now-reserve").props.children;
-    cleanup();
 
     const talkative = new Pour(
         1, 70, 92, 40,

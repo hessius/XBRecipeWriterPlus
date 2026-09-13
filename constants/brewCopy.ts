@@ -223,3 +223,19 @@ export const AGITATION_SENTENCE: Record<number, string> = {
     [AGITATION.BEFORE_OFF_AFTER_ON]: "Agitates the bed after pouring.",
     [AGITATION.BEFORE_ON_AFTER_ON]:  "Agitates the bed before and after pouring."
 };
+
+/**
+ * The most a now-card can ever be asked to say.
+ *
+ * `BrewNowCard` renders this at `opacity: 0` to reserve its height, because
+ * the card sits below the measured band region: a stage whose sentence wraps
+ * to a third line steals that height from the ladder, and every rung in the
+ * brew thins for the duration of that one stage.
+ *
+ * Derived from the tables rather than restated, so a longer sentence cannot be
+ * added to one without the reserve growing with it. The rest is spelled with
+ * three digits because that is the widest the byte format can carry.
+ */
+export const LONGEST_NOW_SENTENCE =
+    `${PATTERN_SENTENCE.circular}, then it rests 000 s. `
+    + AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_ON];

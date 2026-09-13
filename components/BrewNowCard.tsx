@@ -1,9 +1,11 @@
 import React from "react";
+import {View} from "react-native";
 import {YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import {glyphForPattern, type GlyphKind} from "@/components/PourGlyph";
-import {AGITATION_SENTENCE, PATTERN_SENTENCE} from "@/constants/brewCopy";
+import {AGITATION_SENTENCE, LONGEST_NOW_SENTENCE, PATTERN_SENTENCE}
+    from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
 import type Pour from "@/library/Pour";
@@ -58,9 +60,23 @@ export default function BrewNowCard({pour, accent, resting}: Props) {
             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6} color={accent}>
                 {heading}
             </DotMatrixText>
-            <DotMatrixText fontSize={11} color={palette.dim}>
-                {sentence}
-            </DotMatrixText>
+            <View>
+                {/* Reserves the height; never read. The card sits below the measured
+                    band region, so a sentence that wraps to a third line takes that
+                    height out of the ladder and thins every rung in the brew. Real
+                    text, not a minHeight: it wraps to the true tallest height and
+                    scales with Dynamic Type. */}
+                <DotMatrixText testID="brew-now-reserve" fontSize={11} color={palette.dim}
+                               style={{opacity: 0}}>
+                    {LONGEST_NOW_SENTENCE}
+                </DotMatrixText>
+                <View style={{position: "absolute", top: 0, left: 0, right: 0}}>
+                    <DotMatrixText testID="brew-now-sentence" fontSize={11}
+                                   color={palette.dim}>
+                        {sentence}
+                    </DotMatrixText>
+                </View>
+            </View>
         </YStack>
     );
 }
