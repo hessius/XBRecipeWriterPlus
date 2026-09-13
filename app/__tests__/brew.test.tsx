@@ -37,6 +37,7 @@ let mockCanOfferPro = false;
 let mockFirstBrewDone = true;
 let mockError: string | null = null;
 let mockBypass: BypassView | undefined = undefined;
+let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
@@ -45,7 +46,7 @@ const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
 
-function namedPhase(name: string): BrewPhase {
+function namedPhase(name: BrewPhase["name"]): BrewPhase {
     if (name === "pouring") return {name: "pouring", pour: 1, pours: 1};
     if (name === "failed") return {name: "failed", reason: "blocked"};
     return {name} as BrewPhase;
@@ -81,6 +82,15 @@ jest.mock("@/hooks/useTraceAnimation", () => {
         return actual.useTraceAnimation(...args);
     };
     return {__esModule: true, ...actual, default: wrapped, useTraceAnimation: wrapped};
+});
+
+jest.mock("@/library/brew/bands", () => {
+    const actual = jest.requireActual("@/library/brew/bands");
+    const allocateBands = (...args: [number, number]) => {
+        mockBandAllocationArgs.push(args);
+        return actual.allocateBands(...args);
+    };
+    return {__esModule: true, ...actual, allocateBands};
 });
 
 // The brew screen now reads its run from useLiveBrew rather than calling
@@ -172,20 +182,21 @@ beforeEach(() => {
     mockError = null;
     traceAnimationArgs = [];
     mockBypass = undefined;
+    mockBandAllocationArgs = [];
 });
 
 describe("brew route", () => {
     it.each([
         "waking", "sending", "readyToStart", "armed", "pressPlay",
         "grinding", "pouring", "bypass", "settling"
-    ])("keeps the screen awake during %s", async (phaseName) => {
+    ] as const)("keeps the screen awake during %s", async (phaseName) => {
         mockPhase = namedPhase(phaseName);
         await renderWithProviders(<Brew />);
         expect(mockUseKeepAwake).toHaveBeenCalled();
         expect(mockUseKeepAwake.mock.calls.every((call) => call.length === 0)).toBe(true);
     });
 
-    it.each(["idle", "done", "cancelled", "failed", "lostContact"])(
+    it.each(["idle", "done", "cancelled", "failed", "lostContact"] as const)(
         "releases the wake lock during %s",
         async (phaseName) => {
             mockPhase = namedPhase(phaseName);
@@ -202,6 +213,33 @@ describe("brew route", () => {
         // hold if the figures row vanished entirely.
         expect(getAllByText("WATER")).toHaveLength(2);
         expect(getByTestId("ladder")).toBeTruthy();
+    });
+
+    it("subtracts the rendered band gap before allocating the brew bands", async () => {
+        const {getByTestId} = await renderWithProviders(<Brew />);
+        const region = getByTestId("brew-band-region");
+
+        expect(StyleSheet.flatten(region.props.style).gap).toBe(13);
+
+        await fireEvent(region, "layout", {
+            nativeEvent: {layout: {height: 400}}
+        });
+
+        await waitFor(() =>
+            expect(mockBandAllocationArgs.at(-1)).toEqual([387, mockRecipe.pours.length])
+        );
+    });
+
+    it("clamps the usable band height at zero before allocating", async () => {
+        const {getByTestId} = await renderWithProviders(<Brew />);
+
+        await fireEvent(getByTestId("brew-band-region"), "layout", {
+            nativeEvent: {layout: {height: 8}}
+        });
+
+        await waitFor(() =>
+            expect(mockBandAllocationArgs.at(-1)).toEqual([0, mockRecipe.pours.length])
+        );
     });
 
     it("feeds the trace the recipe's own grind speed, not a fixed number", async () => {
@@ -394,7 +432,7 @@ describe("brew route", () => {
     });
 
     it("does not offer retry while the brew is still going", async () => {
-        // pouring is one of the RUNNING phases
+        // pouring is one of the active brew phases
         const {queryByLabelText} = await renderWithProviders(<Brew />);
         expect(queryByLabelText("Try again")).toBeNull();
     });

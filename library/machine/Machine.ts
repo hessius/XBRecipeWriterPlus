@@ -124,6 +124,15 @@ export type BrewPhase =
      */
     | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
+const ACTIVE_BREW_PHASE_NAMES: ReadonlySet<BrewPhase["name"]> = new Set([
+    "waking", "sending", "readyToStart", "armed", "pressPlay",
+    "grinding", "pouring", "bypass", "settling"
+]);
+
+export function isActiveBrewPhase(phase: BrewPhase): boolean {
+    return ACTIVE_BREW_PHASE_NAMES.has(phase.name);
+}
+
 const FAILURE_EVENTS: Record<number, BrewFailure> = {
     8203:  "gearPosition",
     8204:  "doseMismatch"
@@ -733,8 +742,7 @@ export default class Machine {
         // re-armed below. This is also what stops it firing into a later brew.
         this.clearSettleTimer();
         this.phase = phase;
-        this.brewing = !["idle", "done", "cancelled", "failed", "lostContact"]
-            .includes(phase.name);
+        this.brewing = isActiveBrewPhase(phase);
         if (phase.name === "settling") {
             this.settleOpenedAt = Date.now();
             this.armSettleTimer();
