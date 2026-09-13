@@ -178,14 +178,14 @@ describe("brew route", () => {
     it.each([
         "waking", "sending", "readyToStart", "armed", "pressPlay",
         "grinding", "pouring", "bypass", "settling"
-    ])("keeps the screen awake during %s", async (phaseName) => {
+    ] as const)("keeps the screen awake during %s", async (phaseName) => {
         mockPhase = namedPhase(phaseName);
         await renderWithProviders(<Brew />);
         expect(mockUseKeepAwake).toHaveBeenCalled();
         expect(mockUseKeepAwake.mock.calls.every((call) => call.length === 0)).toBe(true);
     });
 
-    it.each(["idle", "done", "cancelled", "failed", "lostContact"])(
+    it.each(["idle", "done", "cancelled", "failed", "lostContact"] as const)(
         "releases the wake lock during %s",
         async (phaseName) => {
             mockPhase = namedPhase(phaseName);
