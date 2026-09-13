@@ -11,6 +11,14 @@ import {renderWithProviders} from "@/test-utils/render";
 
 afterEach(cleanup);
 
+/**
+ * The reserve is deliberately hidden from the accessibility tree, which is also
+ * what RNTL's queries walk by default, so reading it back takes an opt-in.
+ */
+function reserveOf(getByTestId: (id: string, options?: object) => any) {
+    return getByTestId("brew-now-reserve", {includeHiddenElements: true});
+}
+
 function stage(pattern: number, pause: number): Pour {
     return new Pour(1, 70, 92, 40, AGITATION.ALL_OFF, pattern, pause);
 }
@@ -73,10 +81,22 @@ describe("BrewNowCard", () => {
                          resting={false} />
         );
 
-        const reserve = getByTestId("brew-now-reserve");
+        const reserve = reserveOf(getByTestId);
 
         expect(reserve.props.children).toBe(LONGEST_NOW_SENTENCE);
         expect(StyleSheet.flatten(reserve.props.style).opacity).toBe(0);
+    });
+
+    it("keeps the reserve out of the screen reader's way", async () => {
+        const {queryByTestId} = await renderWithProviders(
+            <BrewNowCard pour={stage(POUR_PATTERN.CENTERED, 0)} accent={palette.brand}
+                         resting={false} />
+        );
+
+        // Without the default, the card would announce the longest sentence and
+        // then the real one.
+        expect(queryByTestId("brew-now-reserve")).toBeNull();
+        expect(queryByTestId("brew-now-sentence")).not.toBeNull();
     });
 
     it("reserves the same height for a stage that says the least", async () => {
@@ -84,7 +104,7 @@ describe("BrewNowCard", () => {
             <BrewNowCard pour={stage(POUR_PATTERN.CENTERED, 0)} accent={palette.brand}
                          resting={false} />
         );
-        const shortReserve = short.getByTestId("brew-now-reserve").props.children;
+        const shortReserve = reserveOf(short.getByTestId).props.children;
 
         const talkative = new Pour(
             1, 70, 92, 40,
@@ -94,8 +114,7 @@ describe("BrewNowCard", () => {
             <BrewNowCard pour={talkative} accent={palette.brand} resting={false} />
         );
 
-        expect(long.getByTestId("brew-now-reserve").props.children)
-            .toBe(shortReserve);
+        expect(reserveOf(long.getByTestId).props.children).toBe(shortReserve);
     });
 
     it("draws the live sentence over the reserve, not beside it", async () => {

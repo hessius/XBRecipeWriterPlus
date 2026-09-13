@@ -96,7 +96,7 @@ it("reserves the tallest sentence so the card cannot change height", async () =>
                      resting={false} />
     );
 
-    const reserve = getByTestId("brew-now-reserve");
+    const reserve = getByTestId("brew-now-reserve", {includeHiddenElements: true});
 
     expect(reserve.props.children).toBe(LONGEST_NOW_SENTENCE);
     expect(StyleSheet.flatten(reserve.props.style).opacity).toBe(0);
@@ -107,7 +107,7 @@ it("reserves the same height for a stage that says the least", async () => {
         <BrewNowCard pour={stage(POUR_PATTERN.CENTERED, 0)} accent={palette.brand}
                      resting={false} />
     );
-    const shortReserve = short.getByTestId("brew-now-reserve").props.children;
+    const shortReserve = short.getByTestId("brew-now-reserve", {includeHiddenElements: true}).props.children;
 
     const talkative = new Pour(
         1, 70, 92, 40,
@@ -117,7 +117,7 @@ it("reserves the same height for a stage that says the least", async () => {
         <BrewNowCard pour={talkative} accent={palette.brand} resting={false} />
     );
 
-    expect(long.getByTestId("brew-now-reserve").props.children)
+    expect(long.getByTestId("brew-now-reserve", {includeHiddenElements: true}).props.children)
         .toBe(shortReserve);
 });
 
