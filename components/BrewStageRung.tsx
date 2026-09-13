@@ -64,8 +64,26 @@ const PENDING_OPACITY = 0.45;
 export const SEGMENT_GAP = 3;
 
 export const AGITATION_WIDTH = 11;
-const AGITATION_VIEWBOX_HEIGHT = 14;
-const AGITATION_PATH = "M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14";
+export const AGITATION_HALF_PERIOD = 7;
+const AGITATION_CENTER_X = AGITATION_WIDTH / 2;
+
+function formatCoordinate(value: number): string {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+export function agitationWavePath(height: number): string {
+    const safeHeight = Math.max(0, height);
+    let path = `M${formatCoordinate(AGITATION_CENTER_X)} 0`;
+
+    for (let top = 0; top < safeHeight; top += AGITATION_HALF_PERIOD) {
+        path += ` C1 ${formatCoordinate(top + 2)}`
+            + ` 10 ${formatCoordinate(top + 4.5)}`
+            + ` ${formatCoordinate(AGITATION_CENTER_X)}`
+            + ` ${formatCoordinate(top + AGITATION_HALF_PERIOD)}`;
+    }
+
+    return path;
+}
 
 /**
  * One agitation mark: a compact wave centred over a seam.
@@ -80,6 +98,7 @@ function AgitationMark({colour, barHeight, slotWidth, testID}: {
     slotWidth: number;
     testID: string;
 }) {
+    const path = agitationWavePath(barHeight);
     return (
         <View
             testID={testID}
@@ -105,12 +124,11 @@ function AgitationMark({colour, barHeight, slotWidth, testID}: {
                     testID={`${testID}-wave`}
                     width={AGITATION_WIDTH}
                     height={barHeight}
-                    viewBox={`0 0 ${AGITATION_WIDTH} ${AGITATION_VIEWBOX_HEIGHT}`}
-                    preserveAspectRatio="none"
+                    viewBox={`0 0 ${AGITATION_WIDTH} ${barHeight}`}
                 >
                     <Path
                         testID={`${testID}-path`}
-                        d={AGITATION_PATH}
+                        d={path}
                         fill="none"
                         stroke={colour}
                         strokeWidth={2}

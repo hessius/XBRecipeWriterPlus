@@ -1,7 +1,9 @@
 import React from "react";
 import {processColor, StyleSheet} from "react-native";
 
-import BrewStageRung, {AGITATION_WIDTH, SEGMENT_GAP} from "@/components/BrewStageRung";
+import BrewStageRung, {
+    agitationWavePath, AGITATION_HALF_PERIOD, AGITATION_WIDTH, SEGMENT_GAP
+} from "@/components/BrewStageRung";
 import {palette} from "@/constants/colors";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
@@ -212,30 +214,84 @@ describe("BrewStageRung", () => {
         }
     );
 
-    it.each([11, 28, 44])(
-        "scales the approved wave to fill a %i point bar height",
-        async (barHeight) => {
-            const {getByTestId} = await draw({
-                barHeight,
-                pour: new Pour(
-                    1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
-                )
-            });
-
-            expect(getByTestId("rung-agitation-after-wave").props.height).toBe(barHeight);
-            expect(getByTestId("rung-agitation-after-wave").props.align).toBe("none");
-        }
-    );
-
-    it("draws the approved compact wave", async () => {
+    it.each([
+        [11, 2],
+        [28, 4],
+        [44, 7]
+    ])("tiles %i point agitation marks with %i fixed half-waves", async (
+        barHeight,
+        halfWaves
+    ) => {
         const {getByTestId} = await draw({
+            barHeight,
             pour: new Pour(
-                1, 70, 93, 40, AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+                1, 70, 93, 40,
+                AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
             )
         });
 
-        expect(getByTestId("rung-agitation-after-path").props.d)
-            .toBe("M5.5 0 C1 2 10 4.5 5.5 7 C1 9.5 10 12 5.5 14");
+        const wave = getByTestId("rung-agitation-after-wave");
+        const path = String(getByTestId("rung-agitation-after-path").props.d);
+
+        expect(AGITATION_HALF_PERIOD).toBe(7);
+        expect(wave.props.height).toBe(barHeight);
+        // react-native-svg decomposes `viewBox` into vbWidth/vbHeight (and
+        // align/meetOrSlice) and never forwards a `viewBox` prop, so a test must
+        // assert on the decomposed props rather than the original string.
+        expect(wave.props.vbWidth).toBe(AGITATION_WIDTH);
+        expect(wave.props.vbHeight).toBe(barHeight);
+        expect(path.match(/ C/g)).toHaveLength(halfWaves);
+    });
+
+    it("keeps the first two half-waves identical at every bar height", () => {
+        const firstTwo =
+            "M5.5 0 C1 2 10 4.5 5.5 7 C1 9 10 11.5 5.5 14";
+
+        expect(agitationWavePath(11)).toBe(firstTwo);
+        expect(agitationWavePath(28).startsWith(firstTwo)).toBe(true);
+        expect(agitationWavePath(44).startsWith(firstTwo)).toBe(true);
+    });
+
+    it("clips the final partial wave instead of scaling it", async () => {
+        const {getByTestId} = await draw({
+            barHeight: 11,
+            pour: new Pour(
+                1, 70, 93, 40,
+                AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        expect(agitationWavePath(11)).toContain("5.5 14");
+        expect(getByTestId("rung-agitation-after-wave").props.vbWidth)
+            .toBe(AGITATION_WIDTH);
+        expect(getByTestId("rung-agitation-after-wave").props.vbHeight).toBe(11);
+        expect(getByTestId("rung-agitation-after-wave").props.align).not.toBe("none");
+    });
+
+    it("keeps the approved stroke width", async () => {
+        const {getByTestId} = await draw({
+            pour: new Pour(
+                1, 70, 93, 40,
+                AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        expect(getByTestId("rung-agitation-after-path").props.strokeWidth).toBe(2);
+    });
+
+    it("dims a completed stage's agitation wave with the rest of the rung", async () => {
+        const {getByTestId} = await draw({
+            state: "done",
+            delivered: 70,
+            pour: new Pour(
+                1, 70, 93, 40,
+                AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        expect(getByTestId("rung-agitation-after-path").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(palette.muted)})
+        );
     });
 
     it("draws a tail after-mark on a zero-width slot before the slack", async () => {
