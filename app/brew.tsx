@@ -16,8 +16,8 @@ import DotMatrixText from "@/components/DotMatrixText";
 import MachineDot from "@/components/MachineDot";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
-        FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY, PRO_MODE_PROMPT,
-        RUNNING} from "@/constants/brewCopy";
+        FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY,
+        PRO_MODE_PROMPT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
 import {sharedBrewDatabase, type HistoryStore} from "@/hooks/useBrewHistory";
@@ -29,6 +29,7 @@ import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
+import {isActiveBrewPhase} from "@/library/machine/Machine";
 import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 
@@ -120,7 +121,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
 
     const accent = resolveAccent(recipe);
     const motion = useTraceAnimation(phase.name, recipe.grindRPM);
-    const running = RUNNING.has(phase.name);
+    const running = isActiveBrewPhase(phase);
 
     // The two water events are not the same thing. `blocked` means nothing was
     // sent and the dose is safe; a failure by name means the machine stopped

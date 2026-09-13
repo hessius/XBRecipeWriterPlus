@@ -1,4 +1,4 @@
-import Machine from "@/library/machine/Machine";
+import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS, STATE_FRESH_MS} from "@/constants/machine";
@@ -11,6 +11,12 @@ import {event, float32, notification, status} from "./protocolFixtures";
 /** A pour-start event carrying the machine's own zero-based pour index. */
 function Uint8ArrayPourEvent(index: number): number[] {
     return notification(40510 & 0xFF, 40510 >> 8, [index]);
+}
+
+function namedPhase(name: BrewPhase["name"]): BrewPhase {
+    if (name === "pouring") return {name: "pouring", pour: 1, pours: 2};
+    if (name === "failed") return {name: "failed", reason: "blocked"};
+    return {name};
 }
 
 /** Six identical pours. The HCI snoop in docs/machine-integration was captured on six. */
@@ -40,6 +46,21 @@ describe("connecting to a machine", () => {
         // The handshake must be the very first thing written. Anything ahead of
         // it in the queue spends the window we are inside.
         expect(transport.sent[0]).toBe(8100);
+    });
+
+    describe("active brew phases", () => {
+        it.each([
+            "waking", "sending", "readyToStart", "armed", "pressPlay",
+            "grinding", "pouring", "bypass", "settling"
+        ] as const)("treats %s as active", (name) => {
+            expect(isActiveBrewPhase(namedPhase(name))).toBe(true);
+        });
+
+        it.each([
+            "idle", "done", "cancelled", "failed", "lostContact"
+        ] as const)("treats %s as inactive", (name) => {
+            expect(isActiveBrewPhase(namedPhase(name))).toBe(false);
+        });
     });
 
     it("asks the machine what it is", async () => {

@@ -45,7 +45,7 @@ const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
 
-function namedPhase(name: string): BrewPhase {
+function namedPhase(name: BrewPhase["name"]): BrewPhase {
     if (name === "pouring") return {name: "pouring", pour: 1, pours: 1};
     if (name === "failed") return {name: "failed", reason: "blocked"};
     return {name} as BrewPhase;
@@ -394,7 +394,7 @@ describe("brew route", () => {
     });
 
     it("does not offer retry while the brew is still going", async () => {
-        // pouring is one of the RUNNING phases
+        // pouring is one of the active brew phases
         const {queryByLabelText} = await renderWithProviders(<Brew />);
         expect(queryByLabelText("Try again")).toBeNull();
     });

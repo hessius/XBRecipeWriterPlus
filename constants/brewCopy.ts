@@ -101,17 +101,6 @@ export const FIRST_BREW_REMINDER =
 export const PRO_MODE_PROMPT =
     "Your machine is in Easy mode. Switch it to Pro and try again?";
 
-/** The phases during which stopping the machine is still a meaningful thing. */
-export const RUNNING = new Set([
-    "waking", "sending", "readyToStart", "armed", "pressPlay", "grinding", "pouring",
-    // The pour is done but the brew is not: the bypass still has to go in, and
-    // stopping the machine is still a meaningful thing to offer.
-    "bypass",
-    // The pour is done but the brew is not: coffee is still draining and the
-    // trace is still live, so the run's controls stay on screen.
-    "settling"
-]);
-
 /**
  * The note shown on a brew the machine finished well short of its plan.
  *
