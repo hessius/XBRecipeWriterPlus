@@ -8,6 +8,7 @@ import {File as FSFile} from "expo-file-system";
 
 import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
+import {sharedSettings} from "@/hooks/useSetting";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -39,6 +40,12 @@ jest.mock("expo-router", () => ({
     useLocalSearchParams: () => mockParams,
     useNavigation: () => ({setOptions: (...args: unknown[]) => mockSetOptions(...args)})
 }));
+
+// `useSetting` reaches for the shared SQLite-backed store, which cannot open
+// under Jest. The frame-log button rides the machine-console gate, so the
+// screen reads one setting and a test has to be able to set it.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 
 jest.mock("@/hooks/useBrewHistory", () => ({
     useBrewHistory: () => ({
@@ -528,6 +535,11 @@ describe("the frame log of a brew", () => {
     beforeEach(() => {
         mockParams = {id: "brew-1"};
         (Clipboard.setStringAsync as jest.Mock).mockClear();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+    });
+
+    afterEach(() => {
+        sharedSettings().set("machineConsoleAcknowledged", false);
     });
 
     it("copies what the machine said, for a brew that kept a log", async () => {
@@ -547,6 +559,19 @@ describe("the frame log of a brew", () => {
      */
     it("offers nothing to copy for a brew with no log", async () => {
         mockOpened = {record, samples: [], frames: ""};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
+    });
+
+    /**
+     * A wall of hex means nothing to someone who is not debugging the machine,
+     * so it rides the same seven-tap gate as the console and the card
+     * diagnostics rather than sitting in every owner's way.
+     */
+    it("stays hidden until the machine console has been found", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", false);
+        mockOpened = {record, samples: [], frames: log};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
         expect(screen.queryByLabelText("Copy the frame log")).toBeNull();

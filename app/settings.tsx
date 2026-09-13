@@ -245,6 +245,17 @@ export default function SettingsScreen({settings}: Props) {
                                        onPress={() => router.push("/about")}/>
                 </SettingsSection>
 
+                {/* Its own section rather than a line in Library. Everything
+                    else under Library is about the recipes you hold; a brew
+                    history is a record of what the machine did, and burying it
+                    among backup and delete made the app's own diary read as
+                    file management. */}
+                <SettingsSection>
+                    <SettingsActionRow label="Brew history"
+                                       detail="Every brew you have recorded."
+                                       onPress={() => router.push("/brewHistory")}/>
+                </SettingsSection>
+
                 <SettingsSection title="Recipe list">
                     <SettingsToggleRow
                         label="Show the COFFEE marker"
@@ -284,9 +295,6 @@ export default function SettingsScreen({settings}: Props) {
                 <MachineSection settings={settings}/>
 
                 <SettingsSection title="Library">
-                    <SettingsActionRow label="Brew history"
-                                       detail="Every brew you have recorded."
-                                       onPress={() => router.push("/brewHistory")}/>
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
                                        onPress={onBackUp}/>

@@ -65,29 +65,8 @@ jest.mock("@/hooks/useMachine", () => ({
 // under Jest. The plan's test drove state through `sharedSettings().set(...)`,
 // so the mock exposes a single in-memory `Settings` stand-in behind both
 // `useSetting` and `sharedSettings`, starting every key at its real default.
-jest.mock("@/hooks/useSetting", () => {
-    const React = require("react");
-    const {DEFAULTS} = require("@/library/Settings");
-    const store: Record<string, unknown> = {...DEFAULTS};
-    const listeners = new Set<() => void>();
-    const settings = {
-        get: (key: string) => store[key],
-        set: (key: string, value: unknown) => {
-            store[key] = value;
-            listeners.forEach((notify) => notify());
-        },
-        subscribe: (notify: () => void) => {
-            listeners.add(notify);
-            return () => listeners.delete(notify);
-        }
-    };
-    const sharedSettings = () => settings;
-    const useSetting = (key: string) => {
-        const value = React.useSyncExternalStore(settings.subscribe, () => settings.get(key));
-        return [value, (next: unknown) => settings.set(key, next)];
-    };
-    return {__esModule: true, default: useSetting, useSetting, sharedSettings};
-});
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 
 jest.mock("expo-router", () => ({
     router: {back: jest.fn()},

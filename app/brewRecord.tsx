@@ -16,6 +16,7 @@ import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
@@ -98,6 +99,11 @@ export default function BrewRecord({recipeLookup}: Props) {
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [recordHeight, setRecordHeight] = useState(0);
     const scroller = useRef<ScrollView>(null);
+
+    // The same seven-tap gate the machine console and the card diagnostics
+    // ride on. Read here rather than beside the button because it is a hook
+    // and the "brew not found" return below is earlier.
+    const [consoleFound] = useSetting("machineConsoleAcknowledged");
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
@@ -250,12 +256,15 @@ export default function BrewRecord({recipeLookup}: Props) {
                 <ExportButton label="Export the data" busy={busy}
                               onPress={() => void shareData()} />
             </XStack>
-            {/* Only when there is one to copy. A brew recorded before this
-                existed, or one whose log the retention sweep has taken, would
-                otherwise offer a copy that yields an empty clipboard — which
-                reads as the app having lost it rather than never having had
-                it. */}
-            {frames.length > 0 && (
+            {/* Only when there is one to copy, and only for someone who has
+                found the machine console. A brew recorded before this existed,
+                or one whose log the retention sweep has taken, would otherwise
+                offer a copy that yields an empty clipboard — which reads as the
+                app having lost it rather than never having had it. And a raw
+                frame log means nothing to anyone who is not debugging the
+                machine, so it rides the same seven-tap gate as the rest of the
+                diagnostics rather than sitting in everyone's way. */}
+            {frames.length > 0 && consoleFound && (
                 <XStack paddingHorizontal={SCREEN_PADDING}>
                     <ExportButton label="Copy the frame log" busy={false}
                                   onPress={() => copyFrames(frames)} />
