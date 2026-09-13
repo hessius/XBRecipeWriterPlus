@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
+import {LONGEST_ACTIVE_HEADLINE} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -409,6 +410,37 @@ describe("brew route", () => {
         });
 
         expect(summaryProps.availableHeight).toBe(720);
+    });
+
+    it("holds the headline's height for every phase of a live brew", async () => {
+        // "Letting the last of the coffee drain…" wraps where "Grinding…"
+        // does not, and the headline is a sibling of the measured band
+        // region — so the ladder redrew itself at the end of every recipe.
+        mockPhase = {name: "settling"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {getByTestId} = await renderWithProviders(<Brew />);
+        expect(getByTestId("brew-headline-reserve", {includeHiddenElements: true})
+            .props.children).toBe(LONGEST_ACTIVE_HEADLINE);
+    });
+
+    it("lets a terminal sentence take the height it needs", async () => {
+        // Terminal copy is longer than anything a running brew says, and a
+        // reserve would clip it. By then the screen is changing anyway.
+        mockPhase = {name: "cancelled"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {queryByTestId} = await renderWithProviders(<Brew />);
+        expect(queryByTestId("brew-headline-reserve", {includeHiddenElements: true}))
+            .toBeNull();
+    });
+
+    it("keeps the now card's footprint after the last stage", async () => {
+        // No live stage at `settling`, but unmounting the card hands its
+        // height back to the ladder and redraws it mid-brew.
+        mockPhase = {name: "settling"} as BrewPhase;
+        mockActiveIndex = 3;
+        const {getByTestId} = await renderWithProviders(<Brew />);
+        expect(getByTestId("brew-now-card", {includeHiddenElements: true}))
+            .toBeTruthy();
     });
 
     it("gives the summary the width it actually has, not the whole window", async () => {

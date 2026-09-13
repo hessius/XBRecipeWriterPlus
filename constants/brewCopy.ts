@@ -1,4 +1,5 @@
 import type {GlyphKind} from "@/components/PourGlyph";
+import {ACTIVE_BREW_PHASE_NAMES} from "@/library/machine/Machine";
 import {AGITATION} from "@/library/Pour";
 
 /** What each phase says. The wording is the feature. */
@@ -223,6 +224,24 @@ export const AGITATION_SENTENCE: Record<number, string> = {
     [AGITATION.BEFORE_OFF_AFTER_ON]: "Agitates the bed after pouring.",
     [AGITATION.BEFORE_ON_AFTER_ON]:  "Agitates the bed before and after pouring."
 };
+
+/**
+ * The longest sentence a brew in progress can put in the headline.
+ *
+ * The headline sits beside the measured band region, so a phase whose copy
+ * wraps to a second line takes that height out of the ladder and every rung
+ * changes thickness in the middle of a brew — which is what "Letting the last
+ * of the coffee drain…" did at the end of every recipe. `app/brew.tsx`
+ * reserves this while a brew is live.
+ *
+ * Derived from the phase table and the machine's own list of active phases, so
+ * neither a longer sentence nor a new phase can be added without the reserve
+ * growing with it. Terminal phases are deliberately excluded: their sentences
+ * are longer, and by the time one is said a single reflow costs nothing.
+ */
+export const LONGEST_ACTIVE_HEADLINE = [...ACTIVE_BREW_PHASE_NAMES]
+    .map((name) => PHASE_COPY[name] ?? "")
+    .reduce((longest, copy) => (copy.length > longest.length ? copy : longest), "");
 
 /**
  * The most a now-card can ever be asked to say.

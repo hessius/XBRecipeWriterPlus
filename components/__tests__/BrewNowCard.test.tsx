@@ -87,6 +87,39 @@ describe("BrewNowCard", () => {
         expect(StyleSheet.flatten(reserve.props.style).opacity).toBe(0);
     });
 
+    it("holds its place once the stages are over but the brew is not", async () => {
+        // At `settling` and `bypass` there is no live stage, so the card used
+        // to unmount outright — and the measured band region above it grew
+        // into the space, redrawing every rung in the middle of a brew.
+        const {getByTestId, queryByTestId} = await renderWithProviders(
+            <BrewNowCard pour={undefined} accent={palette.brand} resting={false}
+                         hold />
+        );
+
+        const card = getByTestId("brew-now-card", {includeHiddenElements: true});
+        expect(StyleSheet.flatten(card.props.style).opacity).toBe(0);
+        // Held, not shown: there is nothing true to say about a stage that is
+        // over, so it keeps its height and says none of it.
+        expect(queryByTestId("brew-now-sentence")).toBeNull();
+    });
+
+    it("holds exactly the height a live stage takes", async () => {
+        const live = await renderWithProviders(
+            <BrewNowCard pour={stage(POUR_PATTERN.CENTERED, 0)} accent={palette.brand}
+                         resting={false} />
+        );
+        const liveReserve = reserveOf(live.getByTestId).props.children;
+
+        const held = await renderWithProviders(
+            <BrewNowCard pour={undefined} accent={palette.brand} resting={false} hold />
+        );
+
+        // Same reserve, same one-line heading, therefore the same height.
+        expect(reserveOf(held.getByTestId).props.children).toBe(liveReserve);
+        expect(held.getByTestId("brew-now-heading", {includeHiddenElements: true})
+            .props.numberOfLines).toBe(1);
+    });
+
     it("keeps the reserve out of the screen reader's way", async () => {
         const {queryByTestId} = await renderWithProviders(
             <BrewNowCard pour={stage(POUR_PATTERN.CENTERED, 0)} accent={palette.brand}

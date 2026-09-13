@@ -124,7 +124,14 @@ export type BrewPhase =
      */
     | {name: "failed"; reason: BrewFailure; detail?: string; block?: BrewBlock["kind"]};
 
-const ACTIVE_BREW_PHASE_NAMES: ReadonlySet<BrewPhase["name"]> = new Set([
+/**
+ * Every phase in which a brew is under way.
+ *
+ * Exported because the brew screen has to reserve the height of the tallest
+ * sentence any of them can say: a headline that wraps to a second line takes
+ * that height out of the measured ladder and redraws every rung mid-brew.
+ */
+export const ACTIVE_BREW_PHASE_NAMES: ReadonlySet<BrewPhase["name"]> = new Set([
     "waking", "sending", "readyToStart", "armed", "pressPlay",
     "grinding", "pouring", "bypass", "settling"
 ]);

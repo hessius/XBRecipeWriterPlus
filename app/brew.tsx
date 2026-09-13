@@ -1,6 +1,6 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable, ScrollView, StyleSheet, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, StyleSheet, useWindowDimensions, View} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -16,7 +16,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import MachineDot from "@/components/MachineDot";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
-        FIRST_BREW_REMINDER, NO_RETRY, PHASE_COPY,
+        FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PHASE_COPY,
         PRO_MODE_PROMPT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
@@ -308,14 +308,17 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         bypass={bypass?.delivered}
                     />
 
-                    <BrewNowCard pour={livePour} accent={accent} resting={resting} />
+                            {/* Held for the whole run. Between the last pour and the
+                        summary there is no live stage, and a card that
+                        unmounts there gives its height back to the band
+                        region above — redrawing the ladder mid-brew. */}
+                    <BrewNowCard pour={livePour} accent={accent} resting={resting}
+                                 hold={running} />
                 </>
             )}
 
-            <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.8}
-                           color={headlineColor} style={{opacity: headlineOpacity}}>
-                {headline}
-            </DotMatrixText>
+            <PhaseHeadline text={headline} color={headlineColor}
+                           opacity={headlineOpacity} reserve={running} />
 
             {blocked && (
                 <Text color={palette.warn} fontSize={13}>
@@ -392,6 +395,42 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </YStack>
             )}
         </YStack>
+    );
+}
+
+/**
+ * The phase line, holding the tallest running sentence while a brew is live.
+ *
+ * It is a sibling of the measured band region, so a phase whose copy wraps to
+ * a second line takes that height out of the ladder and changes every rung's
+ * thickness mid-brew. Reserved only while running: a terminal sentence may
+ * legitimately be taller than any running one, and by then the screen is
+ * changing anyway.
+ */
+function PhaseHeadline({text, color, opacity, reserve}: {
+    text: string; color: string; opacity: number; reserve: boolean;
+}) {
+    const line = (
+        <DotMatrixText testID="brew-headline" fontSize={14} weight="bold"
+                       letterSpacing={1.8} color={color} style={{opacity}}>
+            {text}
+        </DotMatrixText>
+    );
+    if (!reserve) return line;
+    return (
+        <View>
+            <View accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants">
+                <DotMatrixText testID="brew-headline-reserve" fontSize={14}
+                               weight="bold" letterSpacing={1.8} color={color}
+                               style={{opacity: 0}}>
+                    {LONGEST_ACTIVE_HEADLINE}
+                </DotMatrixText>
+            </View>
+            <View style={{position: "absolute", top: 0, left: 0, right: 0}}>
+                {line}
+            </View>
+        </View>
     );
 }
 
