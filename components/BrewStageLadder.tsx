@@ -51,6 +51,14 @@ type Props = {
     /** Absent makes the rungs inert, which is what the live screen and the export want. */
     onSelectStage?: (index: number) => void;
     /**
+     * Paint finished stages in the accent rather than grey.
+     *
+     * The summary of a brew that ran to the end sets this: with no stage still
+     * running there is no distinction for the grey to draw. Off everywhere
+     * else, including every live ladder and every aborted summary.
+     */
+    accentDone?: boolean;
+    /**
      * The bypass, if this brew has one. Absent means no closing rung — which
      * is every recipe without a bypass and every record written before the
      * bypass was drawn at all.
@@ -67,7 +75,7 @@ type Props = {
  */
 export default function BrewStageLadder({
     pours, accent, activeIndex, barHeight, rungGap, scrolls, fill, stageWater, stalls,
-    pauseElapsed, selectedIndex = null, onSelectStage, bypass
+    pauseElapsed, selectedIndex = null, onSelectStage, bypass, accentDone = false
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured layout relative to the ScrollView content.
@@ -162,6 +170,7 @@ export default function BrewStageLadder({
                     stalls={stalls[index] ?? []}
                     selected={selectedIndex === index}
                     onPress={onSelectStage ? () => onSelectStage(index) : undefined}
+                    accentDone={accentDone}
                 />
             </View>
         );

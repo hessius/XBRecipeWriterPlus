@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, within} from "@testing-library/react-native";
 import {StyleSheet} from "react-native";
 
 import BrewStageLadder from "@/components/BrewStageLadder";
@@ -126,6 +126,25 @@ describe("BrewStageLadder", () => {
         expect(getByTestId("rung-3").props.style).not.toEqual(
             expect.objectContaining({opacity: 0.45})
         );
+    });
+
+    it("passes the accent-done choice to every rung", async () => {
+        const {getByTestId} = await draw({
+            activeIndex: 3,
+            accentDone: true
+        });
+
+        expect(StyleSheet.flatten(
+            within(getByTestId("rung-0")).getByTestId("segment-fill-0").props.style
+        ).backgroundColor).toBe(palette.brand);
+    });
+
+    it("leaves the live ladder grey when nobody asks otherwise", async () => {
+        const {getByTestId} = await draw({activeIndex: 3});
+
+        expect(StyleSheet.flatten(
+            within(getByTestId("rung-0")).getByTestId("segment-fill-0").props.style
+        ).backgroundColor).toBe(palette.muted);
     });
 
     it("dims the stages still to come and not the ones already poured", async () => {

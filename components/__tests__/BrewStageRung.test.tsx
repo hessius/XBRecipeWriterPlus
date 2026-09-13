@@ -138,6 +138,43 @@ describe("BrewStageRung", () => {
         expect(getByTestId("segment-1").props.style.backgroundColor).toBe(palette.warn);
     });
 
+    it("paints a done stage in the accent when the brew finished", async () => {
+        const {getByTestId} = await draw({
+            state: "done",
+            delivered: 70,
+            accentDone: true,
+            pour: new Pour(
+                1, 70, 93, 40,
+                AGITATION.BEFORE_OFF_AFTER_ON, POUR_PATTERN.CENTERED, 20
+            )
+        });
+
+        expect(StyleSheet.flatten(getByTestId("segment-fill-0").props.style)
+            .backgroundColor).toBe(palette.brand);
+        expect(getByTestId("rung-agitation-after-path").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(palette.brand)})
+        );
+    });
+
+    it("leaves a done stage grey by default, which is the live ladder", async () => {
+        const {getByTestId} = await draw({state: "done", delivered: 70});
+
+        expect(StyleSheet.flatten(getByTestId("segment-fill-0").props.style)
+            .backgroundColor).toBe(palette.muted);
+    });
+
+    it("keeps a stall amber even on an accented ladder", async () => {
+        const {getByTestId} = await draw({
+            state: "done",
+            delivered: 70,
+            accentDone: true,
+            stalls: [{atMl: 30, seconds: 8}]
+        });
+
+        expect(StyleSheet.flatten(getByTestId("segment-1").props.style)
+            .backgroundColor).toBe(palette.warn);
+    });
+
     it("keeps the stall bands after the stage is done", async () => {
         const {getByTestId} = await draw({
             state: "done", delivered: 70, pauseElapsed: 20,

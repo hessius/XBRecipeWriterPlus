@@ -47,6 +47,15 @@ type Props = {
     selected?: boolean;
     /** Absent on a rung that is not selectable — the live screen's, and the export's. */
     onPress?: () => void;
+    /**
+     * Paint a finished stage in the accent instead of grey.
+     *
+     * Off on the live ladder, where grey is what separates a stage that is
+     * over from the one running. A summary of a brew that reached the end has
+     * no such distinction left to draw, so the grey only costs the recipe its
+     * colour.
+     */
+    accentDone?: boolean;
     testID?: string;
 };
 
@@ -174,9 +183,9 @@ function buildLabel(
 }
 
 /** The colour a segment's filled part takes. */
-function fillColour(kind: Segment["kind"], accent: string, done: boolean): string {
+function fillColour(kind: Segment["kind"], stageColour: string): string {
     if (kind === "stall") return palette.warn;
-    return done ? palette.muted : accent;
+    return stageColour;
 }
 
 /**
@@ -186,9 +195,8 @@ function fillColour(kind: Segment["kind"], accent: string, done: boolean): strin
  * in a recipe are visible before it runs and the ladder reads as a plan and not
  * only as a progress bar; accent over the part that has elapsed.
  */
-function hatchColours(accent: string, done: boolean): {dim: string; bright: string} {
-    const bright = done ? palette.muted : accent;
-    return {dim: mix(bright, palette.base, HATCH_DIM), bright};
+function hatchColours(stageColour: string): {dim: string; bright: string} {
+    return {dim: mix(stageColour, palette.base, HATCH_DIM), bright: stageColour};
 }
 
 /**
@@ -236,7 +244,7 @@ function widestReadout(pour: Pour): string {
  */
 export default function BrewStageRung({
     pour, index, state, accent, laneSeconds, barHeight, delivered, pauseElapsed,
-    stalls, selected = false, onPress, testID
+    stalls, selected = false, onPress, accentDone = false, testID
 }: Props) {
     const segments = rungSegments({pour, delivered, pauseElapsed, stalls});
     const span = laneSeconds > 0 ? laneSeconds : 1;
@@ -248,7 +256,10 @@ export default function BrewStageRung({
     const radius = barHeight / 2;
     const before = pour.getAgitationBefore();
     const after = pour.getAgitationAfter();
-    const markColour = done ? palette.muted : accent;
+    // One decision, used by the bar, the hatch and the mark alike. A done
+    // stage is grey on the live ladder and accented on a finished summary.
+    const stageColour = done && !accentDone ? palette.muted : accent;
+    const markColour = stageColour;
     // Which gap the after-mark lives in. A stage with no rest has no seam
     // inside the lane, so its mark goes in a gap added past the last segment —
     // and a lane whose very first segment is the rest (a stage that pours no
@@ -299,7 +310,7 @@ export default function BrewStageRung({
                 )}
                 {segments.map((segment, i) => {
                     const fraction = Math.max(0, Math.min(1, segment.fill));
-                    const hatch = hatchColours(accent, done);
+                    const hatch = hatchColours(stageColour);
                     return (
                         <React.Fragment key={`segment-${i}`}>
                         {i > 0 && (
@@ -342,7 +353,7 @@ export default function BrewStageRung({
                                             flex: fraction,
                                             height: barHeight,
                                             borderRadius: radius,
-                                            backgroundColor: fillColour(segment.kind, accent, done)
+                                            backgroundColor: fillColour(segment.kind, stageColour)
                                         }}
                                     />
                                     <View style={{flex: 1 - fraction}} />
