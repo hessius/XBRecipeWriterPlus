@@ -29,7 +29,7 @@ type Props = {
     accent: string;
     /** The longest stage in the recipe, stalls included. Shared, or the lane means nothing. */
     laneSeconds: number;
-    /** The elastic bar height. Between 9 and 15; the ladder decides. */
+    /** The elastic bar height. Between `BAR_FLOOR` and `BAR_MAX`; the ladder decides. */
     barHeight: number;
     /** Millilitres delivered in this stage. */
     delivered: number;
