@@ -240,7 +240,15 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         samples={samples}
                         stages={recipe.pours}
                         accent={accent}
-                        width={width}
+                        // The summary sits inside this screen's own padding,
+                        // so the width it may draw in is not the window's.
+                        // Handed the window width it laid its trace out 36
+                        // points too wide: it overflowed right, read as
+                        // off-centre, and clipped the trace's right-aligned
+                        // overrun label. The export is unaffected — ViewShot
+                        // takes the capture's width from its parent, and this
+                        // prop only sizes the trace inside it.
+                        width={width - SCREEN_PADDING * 2}
                         plannedSeconds={plannedSeconds(recipe.pours)}
                         water={brewWater}
                         cup={last?.cup ?? 0}

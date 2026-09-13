@@ -1,9 +1,10 @@
 import React from "react";
-import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {Dimensions, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
+import {SCREEN_PADDING} from "@/constants/layout";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -12,6 +13,19 @@ import type {BypassView} from "@/library/brew/bypassState";
 import Recipe from "@/library/Recipe";
 
 const mockUseKeepAwake = jest.fn();
+
+let summaryProps: Record<string, unknown> = {};
+jest.mock("@/components/BrewSummary", () => {
+    const actual = jest.requireActual("@/components/BrewSummary");
+    return {
+        __esModule: true,
+        ...actual,
+        default: (props: Record<string, unknown>) => {
+            summaryProps = props;
+            return actual.default(props);
+        }
+    };
+});
 
 jest.mock("expo-keep-awake", () => ({
     useKeepAwake: (...args: unknown[]) => mockUseKeepAwake(...args)
@@ -375,6 +389,18 @@ describe("brew route", () => {
         const {getByTestId} = await renderWithProviders(<Brew />);
         expect(within(getByTestId("done-scroll")).getByTestId("ladder"))
             .toBeTruthy();
+    });
+
+    it("gives the summary the width it actually has, not the whole window", async () => {
+        // The done summary renders inside the root YStack's padding="$4" (18),
+        // and BrewSummary subtracts only its own capture padding. Handed the
+        // full window width it laid the trace out 36 points too wide, which
+        // overflowed right and clipped the trace's overrun label.
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        await renderWithProviders(<Brew />);
+        expect(summaryProps.width)
+            .toBe(Dimensions.get("window").width - SCREEN_PADDING * 2);
     });
 
     it("captures and shares the brew in place, without pushing /brewRecord", async () => {
