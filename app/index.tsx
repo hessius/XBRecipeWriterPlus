@@ -34,7 +34,6 @@ import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
-import {asBrewShortcut} from "@/library/brewShortcut";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {shareBlockReason} from "@/library/shareLink";
@@ -81,8 +80,6 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
-    const [showBrewRows] = useSetting("showBrewOnRecipeRows", settings);
-    const [shortcutShape] = useSetting("brewShortcut", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -90,15 +87,6 @@ export default function HomeScreen({db, settings}: Props) {
 
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
-    /**
-     * Undefined rather than a shape when there is nothing to brew on.
-     *
-     * A dead BREW button on every recipe would be worse than no button, which
-     * is the same reason the editor's action bar checks `machineDeviceId`.
-     */
-    const brewShortcut = showBrewRows && remembered !== ""
-        ? asBrewShortcut(shortcutShape)
-        : undefined;
     // Seeded from machine.info so a machine that is already connected when the
     // screen mounts does not show "Not in range" while the header dot says
     // connected. The useState initialiser runs once; subsequent updates arrive
@@ -598,11 +586,9 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={index === 0 && bounceFirstRow}
-                                brewShortcut={brewShortcut}
-                                // Gated on a machine, the same rule the card's
-                                // own shortcut follows: a dead BREW on every row
-                                // is worse than none. Share and write need no
-                                // machine, so they are always offered.
+                                // Gated on a machine: a dead BREW in every row's
+                                // tray is worse than none. Share and write need
+                                // no machine, so they are always offered.
                                 onBrew={remembered !== "" ? () => openBrew(item) : undefined}
                                 onShare={() => shareFromHome(item)}
                                 onWrite={() => writeCard(item)}

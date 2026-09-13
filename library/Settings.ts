@@ -1,7 +1,5 @@
 import * as SQLite from 'expo-sqlite';
 
-import {DEFAULT_BREW_SHORTCUT} from "@/library/brewShortcut";
-
 /**
  * Every setting, with its default.
  *
@@ -103,28 +101,6 @@ export const DEFAULTS = {
      * START; the machine holds the recipe quite happily until then.
      */
     machineAutoStart: false,
-    /**
-     * Whether every recipe row carries a BREW capsule.
-     *
-     * On by default: reaching the machine from the library is the whole point
-     * of the milestone, and a shortcut nobody can see is not a shortcut. It is
-     * also a permanent mark on every card, and somebody who brews rarely will
-     * want it gone.
-     */
-    showBrewOnRecipeRows: true,
-    /**
-     * Which shape that shortcut takes.
-     *
-     * A second key rather than five values on the boolean above. `get` falls
-     * back to `DEFAULTS[key]` for an absent row and there is no migration
-     * machinery here, so folding the two together would quietly switch the
-     * shortcut back on for anybody who had turned it off. When one shape wins,
-     * this key goes and the boolean stays.
-     *
-     * Read through `asBrewShortcut`: `get` only compares `typeof` against the
-     * default, which cannot tell one string from another.
-     */
-    brewShortcut: DEFAULT_BREW_SHORTCUT as string,
     /**
      * Whether the brew chart animates between phases.
      *

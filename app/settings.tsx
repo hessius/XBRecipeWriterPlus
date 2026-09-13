@@ -19,7 +19,6 @@ import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
-import {asBrewShortcut} from "@/library/brewShortcut";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -30,14 +29,6 @@ type Props = {
 const TEMPERATURE_OPTIONS = [
     {value: "C", label: "°C"},
     {value: "F", label: "°F"}
-] as const;
-
-const BREW_SHORTCUT_OPTIONS = [
-    {value: "edge", label: "EDGE"},
-    {value: "tab", label: "TAB"},
-    {value: "chip", label: "CHIP"},
-    {value: "glyph", label: "GLYPH"},
-    {value: "swipe", label: "SWIPE"}
 ] as const;
 
 const VERSION = Application.nativeApplicationVersion ?? "unknown";
@@ -76,9 +67,6 @@ export default function SettingsScreen({settings}: Props) {
     // Shown as a row inside MachineSection, not here. Read anyway, because a
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
-    const [showBrewOnRecipeRows, setShowBrewOnRecipeRows] =
-        useSetting("showBrewOnRecipeRows", settings);
-    const [brewShortcut, setBrewShortcut] = useSetting("brewShortcut", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
@@ -106,7 +94,7 @@ export default function SettingsScreen({settings}: Props) {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, showBrewOnRecipeRows, brewShortcut, animateBrewChart, brewTraceRetention
+            machineAutoStart, animateBrewChart, brewTraceRetention
         };
     }
 
@@ -158,12 +146,6 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (incoming.bypassTempEncoding === "scaled" || incoming.bypassTempEncoding === "plain") {
             setBypassTempEncoding(incoming.bypassTempEncoding);
-        }
-        if (typeof incoming.showBrewOnRecipeRows === "boolean") {
-            setShowBrewOnRecipeRows(incoming.showBrewOnRecipeRows);
-        }
-        if (typeof incoming.brewShortcut === "string") {
-            setBrewShortcut(asBrewShortcut(incoming.brewShortcut));
         }
         if (typeof incoming.animateBrewChart === "boolean") {
             setAnimateBrewChart(incoming.animateBrewChart);
@@ -267,20 +249,6 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
-                    <SettingsToggleRow
-                        label="Show BREW on recipe rows"
-                        description="Add a BREW shortcut to every recipe card. Turn it off if you brew rarely and prefer a quieter list."
-                        value={showBrewOnRecipeRows}
-                        onChange={setShowBrewOnRecipeRows}/>
-                    {showBrewOnRecipeRows && (
-                        <SettingsChoiceRow
-                            stacked
-                            label="BREW shortcut shape"
-                            description="Five shapes to try on the device. One of them will win and the rest will go."
-                            value={brewShortcut}
-                            options={BREW_SHORTCUT_OPTIONS}
-                            onChange={(value) => setBrewShortcut(asBrewShortcut(value))}/>
-                    )}
                 </SettingsSection>
 
                 <SettingsSection title="Units">

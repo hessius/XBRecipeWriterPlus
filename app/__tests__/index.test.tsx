@@ -988,65 +988,28 @@ describe("HomeScreen, opening one editor at a time", () => {
         );
     });
 
-    it("opens one brew screen when the capsule is tapped twice in a row", async () => {
+    it("opens one brew screen when the tray tile is tapped twice in a row", async () => {
         // Same race as the editor: the push is not instantaneous and a second
         // tap within the guard window would stack a second brew on top of the
         // first — one running, one waiting beneath it.
         mockRemembered = "machine-device-id";
         await renderHome({recipes: [named("Ethiopia")]});
-        const capsule = await screen.findByLabelText("Brew this recipe");
+        const brewTile = await screen.findByLabelText("Brew Ethiopia", {
+            includeHiddenElements: true
+        });
 
         await act(async () => {
-            fireEvent.press(capsule);
-            fireEvent.press(capsule);
+            fireEvent.press(brewTile);
+            fireEvent.press(brewTile);
         });
 
         expect(mockPush).toHaveBeenCalledTimes(1);
     });
 
-    it("draws the shape the settings chose", async () => {
-        mockRemembered = "machine-device-id";
-        const settings = new Settings(memoryStorage());
-        settings.set("showBrewOnRecipeRows", true);
-        settings.set("brewShortcut", "chip");
-        await renderWithProviders(
-            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
-        );
-
-        const shortcut = await screen.findByTestId("brew-shortcut");
-
-        // Presence alone proves nothing here. The screen currently hands every
-        // card the `edge` shape from a bridge left by the previous task, so a
-        // shortcut appears whatever the setting says -- which is the bug this
-        // task exists to fix.
-        //
-        // The chip is wide enough to say the word outright; the bands stack their
-        // letters one per line. So the word itself is what distinguishes the
-        // shape that was chosen from the shape that was hardcoded.
-        expect(within(shortcut).getByText("BREW")).toBeTruthy();
-        expect(within(shortcut).queryByText("B")).toBeNull();
-    });
-
-    it("draws no shortcut when nobody here owns a machine", async () => {
-        // Same library and same setting as above -- only the machine differs, so
-        // this cannot pass because the card or the recipe went missing.
-        mockRemembered = "";
-        const settings = new Settings(memoryStorage());
-        settings.set("showBrewOnRecipeRows", true);
-        settings.set("brewShortcut", "chip");
-        await renderWithProviders(
-            <HomeScreen db={store([named("Ethiopia")])} settings={settings}/>
-        );
-
-        // A dead BREW button on every recipe would be worse than no button.
-        expect(await screen.findByText("Ethiopia")).toBeTruthy();
-        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
-    });
-
     it("offers share and write in every row's action tray, brew only with a machine", async () => {
         // Share and write need no machine, so the action tray carries them
         // whatever is paired. Brew is the one act that needs hardware, and it
-        // follows the same no-dead-button rule the card's shortcut does.
+        // follows the no-dead-button rule.
         mockRemembered = "";
         await renderHome({recipes: [named("Ethiopia")]});
         await screen.findByText("Ethiopia");
@@ -1093,7 +1056,9 @@ describe("HomeScreen, opening one editor at a time", () => {
         await renderHome({recipes: [other]});
 
         await act(async () => {
-            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+            fireEvent.press(await screen.findByLabelText("Brew Colombia", {
+                includeHiddenElements: true
+            }));
         });
 
         expect(mockPush).not.toHaveBeenCalled();
@@ -1112,7 +1077,9 @@ describe("HomeScreen, opening one editor at a time", () => {
         await renderHome({recipes: [brewing]});
 
         await act(async () => {
-            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+            fireEvent.press(await screen.findByLabelText("Brew Ethiopia", {
+                includeHiddenElements: true
+            }));
         });
 
         expect(mockPush).toHaveBeenCalledTimes(1);
@@ -1125,7 +1092,9 @@ describe("HomeScreen, opening one editor at a time", () => {
         await renderHome({recipes: [named("Colombia")]});
 
         await act(async () => {
-            fireEvent.press(await screen.findByLabelText("Brew this recipe"));
+            fireEvent.press(await screen.findByLabelText("Brew Colombia", {
+                includeHiddenElements: true
+            }));
         });
 
         expect(mockPush).toHaveBeenCalledTimes(1);

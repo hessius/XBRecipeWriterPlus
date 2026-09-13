@@ -2,14 +2,12 @@ import React from "react";
 import {Pressable, View} from "react-native";
 import {XStack, YStack, Text} from "tamagui";
 
-import BrewShortcut, {type CardShortcut, SHORTCUT_INSET} from "@/components/BrewShortcut";
 import DigitRoll from "@/components/DigitRoll";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
-import type {BrewShortcut as BrewShortcutSetting} from "@/library/brewShortcut";
 import {canWriteToCard} from "@/library/cardLimits";
 import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
@@ -117,14 +115,7 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Fill the pour profile with a dot screen. Owned by the settings screen. */
     dottedProfile?: boolean;
-    /**
-     * Which shape the BREW shortcut takes, or undefined for none.
-     *
-     * `swipe` draws nothing here: it is a tile in the swipe tray rather than
-     * anything on the card.
-     */
-    brewShortcut?: BrewShortcutSetting;
-    /** Called when the BREW capsule is pressed. */
+    /** Called by the accessibility action that mirrors the swipe tray's BREW tile. */
     onBrew?: () => void;
     /**
      * The swipe tray's other two verbs.
@@ -152,7 +143,6 @@ export default function RecipeCard({
     onDelete,
     showCoffeeMarker = true,
     dottedProfile = false,
-    brewShortcut,
     onBrew,
     onShare,
     onWrite
@@ -161,16 +151,6 @@ export default function RecipeCard({
     const isTea = accentGroupFor(recipe) === "tea";
     const marker = isTea ? "TEA" : "COFFEE";
     const showMarker = isTea || showCoffeeMarker;
-    /**
-     * The shape this card actually draws, or null for none.
-     *
-     * `swipe` is the tray's tile and `editing` gives the card's bottom right
-     * over to duplicate and delete, which every shape would land on.
-     */
-    const shortcut: CardShortcut | null =
-        editing || brewShortcut === undefined || brewShortcut === "swipe"
-            ? null
-            : brewShortcut;
 
     // `accessible` groups the whole subtree into one element on iOS, so nothing
     // inside is announced on its own. Everything the card shows has to be in
@@ -188,18 +168,16 @@ export default function RecipeCard({
     // reach the buttons. These are the only non-visual path to them -- and the
     // swipe gesture they mirror is not available to a screen reader either.
     //
-    // Which is why `brew` asks whether brewing is possible rather than whether
-    // this card is the thing drawing it. Under `swipe` the card draws nothing
-    // and the only visible affordance is a tray tile behind a pan gesture, so
-    // that is the shape which needs the action most, not least.
+    // Which is why `brew` asks only whether brewing is possible. The card draws
+    // no visible BREW control any more; the only visible affordance is a tray
+    // tile behind a pan gesture, so removing this action would leave screen
+    // reader users with no path to brew from the library.
     const actions = [
         ...(onDuplicate !== undefined
             ? [{name: "duplicate", label: "Duplicate recipe"}]
             : []),
         ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
-        ...(brewShortcut !== undefined && onBrew !== undefined
-            ? [{name: "brew", label: "Brew this recipe"}]
-            : []),
+        ...(onBrew !== undefined ? [{name: "brew", label: "Brew this recipe"}] : []),
         // Same reasoning as `brew`, and for the same tray: SHARE and WRITE are
         // tiles revealed by a swipe, and a swipe is not something VoiceOver or
         // TalkBack can perform. Without these two the only way to hand out a
@@ -276,14 +254,9 @@ export default function RecipeCard({
                                  width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
                 </View>
 
-                {shortcut !== null && onBrew !== undefined && (
-                    <BrewShortcut variant={shortcut} accent={accent}
-                                  ink={onAccent.text} onPress={onBrew}/>
-                )}
-
                 <XStack testID="recipe-card-title-row"
                         justifyContent="space-between" alignItems="flex-start" gap="$2"
-                        paddingRight={shortcut === null ? 0 : SHORTCUT_INSET[shortcut]}>
+                        paddingRight={0}>
                     {/* Bounded to the same scale Doto is, so the two halves of the
                         card grow together rather than the prose swamping the data. */}
                     <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}

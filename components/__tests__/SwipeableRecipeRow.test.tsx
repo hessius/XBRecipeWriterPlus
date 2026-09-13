@@ -197,11 +197,11 @@ describe("SwipeableRecipeRow", () => {
     it("keeps BREW out of the management tray", async () => {
         // The right-swipe tray is housekeeping on the list. Brewing acts on the
         // recipe and now lives on the other side, so it must not reappear here
-        // even when the card is drawing its own on-card shortcut.
+        // even when it is available in the action tray.
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="edge" onBrew={() => undefined}/>
+                                onBrew={() => undefined}/>
         );
         const management = within(
             screen.getByTestId("row-actions", {includeHiddenElements: true})
@@ -228,22 +228,9 @@ describe("SwipeableRecipeRow", () => {
         expect(action.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
     });
 
-    it("offers BREW in the tray regardless of the on-card shape", async () => {
-        // The tray is the shortcut's home now; the shape setting only adds a
-        // second, visible affordance on the card to be judged against it. So a
-        // card drawing `edge` still gets a tray BREW.
-        await renderWithProviders(
-            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
-                                onDelete={() => undefined} onDuplicate={() => undefined}
-                                brewShortcut="edge" onBrew={() => undefined}
-                                onShare={() => undefined} onWrite={() => undefined}/>
-        );
-        expect(screen.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
-    });
-
     it("drops the BREW tile when there is no machine to brew on", async () => {
-        // The same rule the card's shortcut follows: a dead BREW is worse than
-        // no BREW. Share and write do not need a machine, so they stay.
+        // A dead BREW is worse than no BREW. Share and write do not need a
+        // machine, so they stay.
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}

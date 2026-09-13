@@ -2,7 +2,6 @@ import React from "react";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
-import {SHORTCUT_INSET} from "@/components/BrewShortcut";
 import {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
@@ -121,60 +120,6 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
         expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
-    });
-
-    describe("the BREW shortcut", () => {
-        it.each(["edge", "tab", "chip", "glyph"] as const)("draws a %s", async (variant) => {
-            await renderWithProviders(
-                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
-                            brewShortcut={variant} onBrew={() => undefined}/>
-            );
-            expect(screen.getByTestId("brew-shortcut")).toBeTruthy();
-        });
-
-        it("draws nothing for swipe, which is the tray's job", async () => {
-            await renderWithProviders(
-                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}
-                            brewShortcut="swipe" onBrew={() => undefined}/>
-            );
-            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
-        });
-
-        it("draws nothing when there is no shortcut at all", async () => {
-            await renderWithProviders(
-                <RecipeCard recipe={makeRecipe()} onPress={() => undefined}/>
-            );
-            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
-        });
-
-        it("stands aside while the card is editing", async () => {
-            await renderWithProviders(
-                <RecipeCard recipe={makeRecipe()} onPress={() => undefined} editing
-                            brewShortcut="chip" onBrew={() => undefined}
-                            onDuplicate={() => undefined} onDelete={() => undefined}/>
-            );
-            // Duplicate and delete sit in the card's bottom right, which is
-            // exactly where the chip lands, and editing is the one mode where
-            // brewing is plainly not what the user came to do.
-            expect(screen.queryByTestId("brew-shortcut")).toBeNull();
-            // The action's glyph is hidden from the accessibility tree on purpose,
-            // so this needs includeHiddenElements the way the file's other
-            // assertions on these two controls do.
-            expect(screen.getByTestId("recipe-card-delete",
-                                      {includeHiddenElements: true})).toBeTruthy();
-        });
-
-        it("keeps the marker clear of the band", async () => {
-            await renderWithProviders(
-                <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
-                            onPress={() => undefined}
-                            brewShortcut="tab" onBrew={() => undefined}/>
-            );
-            // The shipped capsule sat on top of the TEA marker. The card reserves
-            // the trailing edge rather than hoping the shape misses it.
-            expect(screen.getByTestId("recipe-card-title-row").props.style)
-                .toEqual(expect.objectContaining({paddingRight: SHORTCUT_INSET.tab}));
-        });
     });
 
     it("shows the dose and ratio", async () => {
@@ -721,12 +666,13 @@ describe("RecipeCard", () => {
         expect(await screen.findByLabelText("Will not write")).toBeTruthy();
     });
 
-    it("carries the BREW capsule when a machine is remembered", async () => {
+    it("carries the BREW accessibility action when a machine is remembered", async () => {
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        brewShortcut="edge" onBrew={jest.fn()} />
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={jest.fn()} />
         );
-        expect(screen.getByLabelText("Brew this recipe")).toBeTruthy();
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
     });
 
     it("carries none when there is no machine to brew on", async () => {
@@ -737,14 +683,13 @@ describe("RecipeCard", () => {
         expect(screen.queryByLabelText("Brew this recipe")).toBeNull();
     });
 
-    it("offers the brew action to a screen reader when the capsule is shown", async () => {
+    it("offers the brew action to a screen reader when brewing is possible", async () => {
         // The card collapses its subtree into one accessibility element, so
-        // the capsule's own button is unreachable. A `brew` accessibilityAction
-        // mirrors the swipe path that the capsule provides visually.
+        // the swipe tray's button is unreachable. A `brew` accessibilityAction
+        // mirrors the swipe path that provides BREW visually.
         const onBrew = jest.fn();
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        brewShortcut="edge" onBrew={onBrew}/>
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={onBrew}/>
         );
         const card = screen.getByTestId("recipe-card");
         expect(card.props.accessibilityActions).toEqual(
@@ -756,20 +701,17 @@ describe("RecipeCard", () => {
         expect(onBrew).toHaveBeenCalledTimes(1);
     });
 
-    it("still offers the brew action when the tray draws the shortcut", async () => {
-        // `swipe` puts BREW in the tray, behind a pan gesture that VoiceOver
-        // cannot perform -- the same reason duplicate and delete are mirrored
-        // here. So this is the shape that needs the action most, and it was
-        // the one shape that did not publish it.
+    it("draws no BREW shortcut on the card while keeping the screen-reader action", async () => {
+        // BREW lives in the tray, behind a pan gesture that VoiceOver cannot
+        // perform -- the same reason duplicate and delete are mirrored here.
         const onBrew = jest.fn();
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
-                        brewShortcut="swipe" onBrew={onBrew}/>
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={onBrew}/>
         );
         const card = screen.getByTestId("recipe-card");
 
-        // The card draws nothing for `swipe`, so this is not the visual
-        // shortcut coming back -- only the non-visual path to it.
+        // This is not the visual shortcut coming back -- only the non-visual
+        // path to the tray tile.
         expect(screen.queryByTestId("brew-shortcut")).toBeNull();
         expect(card.props.accessibilityActions).toEqual(
             expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])

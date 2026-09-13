@@ -81,10 +81,6 @@ describe("Settings", () => {
         expect(Object.keys(DEFAULTS)).not.toContain("helpStyle");
     });
 
-    it("shows BREW on recipe rows unless told otherwise", () => {
-        expect(new Settings(fakeStorage()).get("showBrewOnRecipeRows")).toBe(true);
-    });
-
     it("animates the brew chart by default", () => {
         expect(new Settings(fakeStorage()).get("animateBrewChart")).toBe(true);
     });

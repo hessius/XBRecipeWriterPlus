@@ -9,7 +9,6 @@ import DotMatrixText from "@/components/DotMatrixText";
 import RecipeCard from "@/components/RecipeCard";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
-import type {BrewShortcut} from "@/library/brewShortcut";
 import {resolveAccent} from "@/library/accent";
 
 type Props = {
@@ -25,12 +24,6 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
     dottedProfile?: boolean;
-    /**
-     * Forwarded to the card, which draws the on-card shape. The tray offers BREW
-     * regardless — the setting only chooses whether a *second*, visible
-     * affordance is drawn on the card to be judged against the tray.
-     */
-    brewShortcut?: BrewShortcut;
     /** Brew this recipe. Present only when there is a machine to brew on. */
     onBrew?: () => void;
     /** Share a link to this recipe. */
@@ -121,7 +114,6 @@ export default function SwipeableRecipeRow({
                                                editing = false,
                                                showCoffeeMarker = true,
                                                dottedProfile = false,
-                                               brewShortcut,
                                                onBrew,
                                                onShare,
                                                onWrite
@@ -190,7 +182,7 @@ export default function SwipeableRecipeRow({
      * it, put it on a card — which is a different kind of thing from managing the
      * list, and so deserves its own side. Each tile appears only when the screen
      * can perform it: BREW needs a machine, so it is absent when `onBrew` is not
-     * given, the same rule the card's own shortcut follows.
+     * given. A dead BREW on every row would be worse than no BREW.
      */
     function renderLeftActions() {
         return (
@@ -258,7 +250,7 @@ export default function SwipeableRecipeRow({
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
-                            brewShortcut={brewShortcut} onBrew={onBrew}
+                            onBrew={onBrew}
                             onShare={onShare} onWrite={onWrite}
                             onDelete={onDelete} onDuplicate={onDuplicate}/>
             </Swipeable>
