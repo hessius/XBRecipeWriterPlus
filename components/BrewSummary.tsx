@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useState} from "react";
 import {StyleSheet, View} from "react-native";
 import {Text, YStack} from "tamagui";
 
@@ -9,7 +9,7 @@ import MarqueeText from "@/components/MarqueeText";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {SUMMARY_BANDS} from "@/library/brew/bands";
+import {summaryBands} from "@/library/brew/bands";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
 import type {Stall} from "@/library/brew/stalls";
@@ -60,6 +60,14 @@ type Props = {
     onSelectStage?: (index: number) => void;
     /** The bypass this brew had, if any. Absent on every record without one. */
     bypass?: BypassView;
+    /**
+     * The height the summary may draw in, from the screen's scroll viewport.
+     *
+     * Absent — or zero — keeps the frozen bands, which is what a caller that
+     * has measured nothing gets. The ladder never grows past the ceilings the
+     * live screen obeys, and never shrinks below the bands it has today.
+     */
+    availableHeight?: number;
 };
 
 /**
@@ -75,13 +83,27 @@ type Props = {
 export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
-    note, nameStill = false, selectedIndex = null, onSelectStage, bypass
+    note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
+    availableHeight = 0
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
 
+    // Measured from an onLayout event, never an effect. Everything above the
+    // ladder is one subtree, so its height is one reading; the ladder's own
+    // height is excluded, which is what stops this feeding back on itself.
+    const [chromeHeight, setChromeHeight] = useState(0);
+    const ladderHeight = availableHeight === 0 || chromeHeight === 0
+        ? 0
+        : availableHeight - chromeHeight - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
+    const bands = summaryBands(ladderHeight, stages.length);
+
     return (
         <View testID="brew-capture" style={styles.capture}>
+            <View
+                testID="summary-chrome"
+                onLayout={(e) => setChromeHeight(e.nativeEvent.layout.height)}
+            >
             {/* A truncated name is a name the user cannot read, and there is
                 nowhere here to put a second line. The line rests, travels to
                 its end, rests again and comes back — and does nothing at all
@@ -139,6 +161,7 @@ export default function BrewSummary({
                 accent={accent}
                 bypass={bypass?.delivered}
             />
+            </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the
                 figures stay flush the way they were on screen. */}
             <YStack marginTop="$3">
@@ -154,10 +177,16 @@ export default function BrewSummary({
                     // From bands.ts, not literals: the live screen sizes its
                     // ladder from a measured flex height, but a summary renders
                     // inside a ViewShot with fill={false} and has none. The
-                    // soft-cap band set gives the same thick, proportional bars
-                    // a well-filled live ladder settles at — see SUMMARY_BANDS.
-                    barHeight={SUMMARY_BANDS.barHeight}
-                    rungGap={SUMMARY_BANDS.rungGap}
+                    // soft-cap band set is now the floor rather than the whole
+                    // answer — a summary with a measured height grows its rungs
+                    // up to the same ceilings the live ladder obeys.
+                    barHeight={bands.barHeight}
+                    rungGap={bands.rungGap}
+                    // A brew that reached its last stage has nothing left for
+                    // grey to distinguish, so it wears the recipe's colour. An
+                    // aborted one keeps grey: that is what makes the stage it
+                    // stopped on readable.
+                    accentDone={activeIndex === stages.length}
                     scrolls={false}
                     fill={false}
                     stageWater={stageWater}

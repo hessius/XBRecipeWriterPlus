@@ -1,7 +1,7 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
@@ -70,6 +70,21 @@ jest.mock("@/components/BrewStageLadder", () => {
         default: (props: Record<string, unknown>) => {
             ladderProps = props;
             return Ladder(props);
+        }
+    };
+});
+
+// The real summary, wrapped so a test can see the height the screen measured
+// and handed it — the leg no rendered pixel would reveal if it broke.
+let summaryProps: Record<string, unknown> = {};
+jest.mock("@/components/BrewSummary", () => {
+    const actual = jest.requireActual("@/components/BrewSummary");
+    return {
+        __esModule: true,
+        ...actual,
+        default: (props: Record<string, unknown>) => {
+            summaryProps = props;
+            return actual.default(props);
         }
     };
 });
@@ -433,6 +448,20 @@ describe("brew record's stage detail", () => {
             samples: [{at: 0, water: 0, cup: 0, pour: 1},
                       {at: 228_000, water: 250, cup: 244, pour: 2}]
         };
+    });
+
+    it("gives the summary the height its scroller measured", async () => {
+        const {getByTestId} = await renderWithProviders(
+            <BrewRecord recipeLookup={lookup} />
+        );
+
+        await act(async () => {
+            fireEvent(getByTestId("record-scroll"), "layout", {
+                nativeEvent: {layout: {height: 640, width: 390, x: 0, y: 0}}
+            });
+        });
+
+        expect(summaryProps.availableHeight).toBe(640);
     });
 
     it("puts the detail inside the screen's scroller so its end can be read", async () => {

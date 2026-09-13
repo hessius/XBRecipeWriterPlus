@@ -1,6 +1,6 @@
 import React from "react";
 import {Dimensions, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 
 import Brew from "@/app/brew";
@@ -199,6 +199,14 @@ beforeEach(() => {
     mockBandAllocationArgs = [];
 });
 
+// The done branch: a finished brew, drawn in its scroller. A shared entry so
+// the height and export tests do not each restate the same two mocks.
+async function drawDone() {
+    mockPhase = {name: "done"} as BrewPhase;
+    mockActiveIndex = 1;
+    return renderWithProviders(<Brew />);
+}
+
 describe("brew route", () => {
     it.each([
         "waking", "sending", "readyToStart", "armed", "pressPlay",
@@ -389,6 +397,18 @@ describe("brew route", () => {
         const {getByTestId} = await renderWithProviders(<Brew />);
         expect(within(getByTestId("done-scroll")).getByTestId("ladder"))
             .toBeTruthy();
+    });
+
+    it("gives the summary the height its scroller measured", async () => {
+        const {getByTestId} = await drawDone();
+
+        await act(async () => {
+            fireEvent(getByTestId("done-scroll"), "layout", {
+                nativeEvent: {layout: {height: 720, width: 354, x: 0, y: 0}}
+            });
+        });
+
+        expect(summaryProps.availableHeight).toBe(720);
     });
 
     it("gives the summary the width it actually has, not the whole window", async () => {

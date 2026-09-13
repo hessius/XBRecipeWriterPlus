@@ -115,6 +115,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const [flexHeight, setFlexHeight] = useState(0);
     const usableBandHeight = Math.max(0, flexHeight - BREW_BAND_GAP);
     const bands = allocateBands(usableBandHeight, recipe.pours.length);
+    const [doneHeight, setDoneHeight] = useState(0);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
@@ -232,6 +233,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 // The record screen has done exactly this from the start; only
                 // the live modal was missing it.
                 <ScrollView testID="done-scroll" style={{flex: 1}}
+                            onLayout={(e) => setDoneHeight(e.nativeEvent.layout.height)}
                             contentContainerStyle={{flexGrow: 1}}>
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                     <BrewSummary
@@ -260,6 +262,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
                         bypass={bypass}
+                        availableHeight={doneHeight}
                     />
                 </ViewShot>
                 </ScrollView>

@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
-import {screen, within} from "@testing-library/react-native";
+import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
 import BrewSummary from "@/components/BrewSummary";
 import {palette} from "@/constants/colors";
@@ -26,7 +26,9 @@ jest.mock("@/components/MarqueeText", () => {
 // The real ladder, wrapped so a test can see the band widths the summary hands
 // it. RNTL performs no layout, so the thickness is only ever a prop here — but
 // it is the prop that regressed: the summary drew #88's thin pre-caps.
-let ladderProps: {barHeight?: unknown; rungGap?: unknown} = {};
+let ladderProps: {
+    barHeight?: unknown; rungGap?: unknown; accentDone?: unknown;
+} = {};
 jest.mock("@/components/BrewStageLadder", () => {
     const actual = jest.requireActual("@/components/BrewStageLadder");
     const Ladder = actual.default;
@@ -56,7 +58,7 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>>
             recipeName="Ethiopia Guji"
             hasStream={true}
             samples={samples}
-            stages={pours(2)}
+            stages={pours(3)}
             accent={palette.brand}
             width={390}
             plannedSeconds={120}
@@ -64,8 +66,8 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>>
             cup={244}
             seconds={126}
             activeIndex={2}
-            stageWater={[40, 40]}
-            stalls={[[], []]}
+            stageWater={[40, 40, 40]}
+            stalls={[[], [], []]}
             stagesUnavailable={false}
             {...overrides}
         />
@@ -120,6 +122,43 @@ describe("BrewSummary", () => {
         await draw({stagesUnavailable: false});
         expect(ladderProps.barHeight).toBe(28);
         expect(ladderProps.rungGap).toBe(20);
+    });
+
+    it("keeps today's bands until anything has been measured", async () => {
+        await draw({stagesUnavailable: false});
+
+        expect(ladderProps.barHeight).toBe(28);
+        expect(ladderProps.rungGap).toBe(20);
+    });
+
+    it("grows the rungs into the height the screen measured", async () => {
+        const {getByTestId} = await draw({
+            stagesUnavailable: false,
+            availableHeight: 900
+        });
+
+        // The chrome above the ladder reports 300, leaving 600 - 2*30 of capture
+        // padding for three stages: room for both bands to reach their ceilings.
+        await act(async () => {
+            fireEvent(getByTestId("summary-chrome"), "layout", {
+                nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
+            });
+        });
+
+        expect(ladderProps.barHeight).toBe(44);
+        expect(ladderProps.rungGap).toBe(34);
+    });
+
+    it("accents the ladder of a brew that reached its last stage", async () => {
+        await draw({stagesUnavailable: false, activeIndex: 3});
+
+        expect(ladderProps.accentDone).toBe(true);
+    });
+
+    it("leaves an aborted brew's ladder grey, so the stop still shows", async () => {
+        await draw({stagesUnavailable: false, activeIndex: 1});
+
+        expect(ladderProps.accentDone).toBe(false);
     });
 
     it("says when the machine ended the brew early", async () => {

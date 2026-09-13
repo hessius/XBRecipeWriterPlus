@@ -96,6 +96,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // record and its samples are already in memory here.
     // The stage whose detail is open, or null for none.
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [recordHeight, setRecordHeight] = useState(0);
     const scroller = useRef<ScrollView>(null);
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
@@ -194,6 +195,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                 what is left below the figures and there was otherwise no way to
                 read the end of it. */}
             <ScrollView ref={scroller} testID="record-scroll"
+                        onLayout={(e) => setRecordHeight(e.nativeEvent.layout.height)}
                         contentContainerStyle={{paddingBottom: 24, gap: 8}}>
             <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                 <BrewSummary
@@ -221,6 +223,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     onSelectStage={(index) =>
                         setSelectedIndex((was) => (was === index ? null : index))}
                     bypass={bypass}
+                    availableHeight={recordHeight}
                 />
             </ViewShot>
 
