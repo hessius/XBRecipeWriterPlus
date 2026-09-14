@@ -31,6 +31,14 @@ describe("Recipe tags", () => {
         expect(recipe.tags).toEqual(["Espresso"]);
     });
 
+    it("folds non-ASCII case too, unlike SQLite's NOCASE", () => {
+        // Pinned deliberately: NOCASE would keep both. Any tag column that
+        // must agree with this has to store a key folded by normaliseTags.
+        const recipe = new Recipe();
+        recipe.setTags(["CAFÉ", "café"]);
+        expect(recipe.tags).toEqual(["CAFÉ"]);
+    });
+
     it("drops tags longer than the limit rather than truncating them", () => {
         // A truncated tag is a plausible-looking wrong tag.
         const recipe = new Recipe();

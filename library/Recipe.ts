@@ -41,9 +41,14 @@ export function isValidXID(xid: string): boolean {
 }
 export const DEFAULT_GRIND_SIZE = 50;
 
-/** Characters. Longer tags are dropped on import rather than truncated. */
+/**
+ * UTF-16 code units, not glyphs — an emoji costs two and a family emoji eight.
+ * A deliberately coarse bound: it exists to cap a hostile backup, not to ration
+ * the user. Longer tags are dropped on import rather than truncated, because a
+ * truncated tag is a plausible-looking wrong tag.
+ */
 export const MAX_TAG_LENGTH = 32;
-/** Tags per recipe. Both limits exist to bound a hostile backup, not the user. */
+/** Tags per recipe. Bounds a hostile backup, not the user. */
 export const MAX_TAGS_PER_RECIPE = 20;
 
 const POLY_TABLE = [
@@ -312,10 +317,14 @@ class Recipe {
      * Normalise and store a set of tags.
      *
      * Deduplication is case-insensitive but keeps the first spelling the user
-     * typed, so "Espresso" and "espresso" are one tag and it stays
-     * capitalised the way they wrote it. `recipe_tags.tag` is collated NOCASE
-     * for the same reason; the two must agree or filtering disagrees with
-     * what the user sees.
+     * typed, so "Espresso" and "espresso" are one tag and it stays capitalised
+     * the way they wrote it.
+     *
+     * The folding is JavaScript's, which is full Unicode: "CAFÉ" and "café"
+     * are one tag here. SQLite's built-in NOCASE folds ASCII only and would
+     * call them two. So a tag column that needs to agree with this must store
+     * a key folded by this function, not lean on COLLATE NOCASE — otherwise
+     * filtering disagrees with what the user sees.
      */
     public setTags(tags: unknown): void {
         this.tags = Recipe.normaliseTags(tags);
