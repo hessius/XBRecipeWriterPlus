@@ -418,6 +418,62 @@ describe("HomeScreen", () => {
         // ...but still in the tree: it is hidden, not unmounted.
         expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
     });
+
+    describe("the accent a recipe is edited under", () => {
+        it("is settled before the editor sees it", async () => {
+            // The editor is pushed with the recipe serialised, and a recipe is only
+            // written to the table on SAVE. Without an index assigned here, the
+            // editor draws a uuid-hash colour and the library row later draws the
+            // least-used one -- so the colour the user edited under is not the
+            // colour they then have to find in the list.
+            const unsaved = named("Ethiopia");
+            expect(unsaved.accentIndex).toBeUndefined();
+
+            await renderWithProviders(
+                <HomeScreen db={store([unsaved])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Ethiopia,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(typeof pushed.accentIndex).toBe("number");
+        });
+
+        it("does not move for a recipe that already has one", async () => {
+            // Re-assigning here would repaint a saved recipe every time it was
+            // opened. `assignAccent` keeps a valid index, which is what makes it
+            // safe to call on every route into the editor.
+            const saved = named("Kenya");
+            saved.accentIndex = 5;
+
+            await renderWithProviders(
+                <HomeScreen db={store([saved])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Kenya,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(pushed.accentIndex).toBe(5);
+        });
+
+        it("does not hand a second recipe the colour the first one took", async () => {
+            const first = named("Ethiopia");
+            first.accentIndex = 0;
+            const second = named("Kenya");
+
+            await renderWithProviders(
+                <HomeScreen db={store([first, second])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Kenya,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(pushed.accentIndex).not.toBe(0);
+        });
+    });
 });
 
 describe("import", () => {

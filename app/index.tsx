@@ -34,6 +34,7 @@ import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {assignAccent} from "@/library/accent";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {shareBlockReason} from "@/library/shareLink";
@@ -436,6 +437,12 @@ export default function HomeScreen({db, settings}: Props) {
             return false;
         }
         lastEditorPushAt = Date.now();
+        // Every route into the editor comes through here: a card read, an
+        // import, a new recipe, and a tap on a row that is already saved. The
+        // accent is settled here rather than on save, so the colour the user
+        // edits under is the colour the library row gets. `assignAccent` is
+        // idempotent, so the already-saved row is a no-op.
+        assignAccent(recipe, library.recipes);
         router.push({
             pathname: "/editRecipe",
             params:   {recipeJSON: JSON.stringify(recipe)}
