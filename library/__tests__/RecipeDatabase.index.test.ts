@@ -80,3 +80,111 @@ describe("schema creation", () => {
         expect((db.retrieveAllRecipes() ?? []).map((r) => r.name)).toEqual(["Still works"]);
     });
 });
+
+type IndexRow = {
+    uuid: string;
+    sortName: string | null;
+    pourCount: number;
+    isTea: number;
+};
+
+function indexRows(): IndexRow[] {
+    return mockBacking.getAllSync(
+        "SELECT uuid, sortName, pourCount, isTea FROM recipes ORDER BY uuid;"
+    ) as IndexRow[];
+}
+
+function tagRows(): {uuid: string; tag: string}[] {
+    return mockBacking.getAllSync(
+        "SELECT uuid, tag FROM recipe_tags ORDER BY uuid, tag;"
+    ) as {uuid: string; tag: string}[];
+}
+
+describe("write path", () => {
+    it("indexes a recipe on insert", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        db.insertRecipe(recipe);
+
+        expect(indexRows()).toEqual([
+            {uuid: recipe.uuid, sortName: "Morning", pourCount: 0, isTea: 0}
+        ]);
+    });
+
+    it("reindexes on update", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Before";
+        db.insertRecipe(recipe);
+
+        recipe.name = "After";
+        db.updateRecipe(recipe.uuid, recipe);
+
+        expect(indexRows()[0].sortName).toBe("After");
+    });
+
+    it("stores tags on insert", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["morning", "filter"]);
+        db.insertRecipe(recipe);
+
+        expect(tagRows().map((r) => r.tag)).toEqual(["filter", "morning"]);
+    });
+
+    it("replaces tags on update rather than accumulating them", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["morning"]);
+        db.insertRecipe(recipe);
+
+        recipe.setTags(["evening"]);
+        db.updateRecipe(recipe.uuid, recipe);
+
+        expect(tagRows().map((r) => r.tag)).toEqual(["evening"]);
+    });
+
+    it("removes tags when the recipe is deleted", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["morning"]);
+        db.insertRecipe(recipe);
+
+        db.deleteRecipe(recipe.uuid);
+
+        expect(tagRows()).toEqual([]);
+    });
+
+    it("removes every tag when the library is emptied", () => {
+        const db = new RecipeDatabase();
+        for (const name of ["A", "B"]) {
+            const recipe = new Recipe();
+            recipe.name = name;
+            recipe.setTags([name.toLowerCase()]);
+            db.insertRecipe(recipe);
+        }
+
+        db.deleteAllRecipes();
+
+        expect(tagRows()).toEqual([]);
+    });
+
+    it("finds tags case-insensitively", () => {
+        // recipe_tags.tag is collated NOCASE so that filtering agrees with
+        // Recipe.setTags' case-insensitive dedupe.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["Espresso"]);
+        db.insertRecipe(recipe);
+
+        const found = mockBacking.getAllSync(
+            "SELECT uuid FROM recipe_tags WHERE tag = ?;", ["ESPRESSO"]
+        );
+        expect(found).toHaveLength(1);
+    });
+});

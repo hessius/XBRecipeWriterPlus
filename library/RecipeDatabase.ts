@@ -3,10 +3,53 @@ import * as SQLite from 'expo-sqlite';
 import Recipe from './Recipe';
 import {assignAccent} from './accent';
 import {copyName} from './duplicates';
-import {columnDefinitions, indexStatements} from './recipeIndex';
+import {columnDefinitions, indexStatements, projectRecipe} from './recipeIndex';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
+    private inTransaction = false;
+
+    /** SQLite has no nested transactions; the outermost one wins. */
+    private atomically(task: () => void): void {
+        if (this.inTransaction) {
+            task();
+            return;
+        }
+        this.inTransaction = true;
+        try {
+            this.db.withTransactionSync(task);
+        } finally {
+            this.inTransaction = false;
+        }
+    }
+
+    /**
+     * Write a recipe's blob, its index columns and its tags as one unit.
+     *
+     * One statement rather than a blob write followed by an index write: a row
+     * must never carry an index describing a different recipe than its blob.
+     * `INSERT OR REPLACE` covers both insert and update, so the projection is
+     * expressed once.
+     */
+    private writeRow(recipe: Recipe): void {
+        const projected = projectRecipe(recipe);
+        const names = Object.keys(projected);
+        const placeholders = names.map(() => "?").join(", ");
+
+        this.db.runSync(
+            `INSERT OR REPLACE INTO recipes (uuid, recipeJSON, ${names.join(", ")})
+             VALUES (?, ?, ${placeholders});`,
+            [recipe.uuid, JSON.stringify(recipe), ...names.map((name) => projected[name])]
+        );
+
+        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [recipe.uuid]);
+        for (const tag of recipe.tags) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO recipe_tags (uuid, tag) VALUES (?, ?);",
+                [recipe.uuid, tag]
+            );
+        }
+    }
 
     constructor() {
         this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
@@ -59,15 +102,7 @@ class RecipeDatabase {
     public insertRecipe(recipe: Recipe): void {
         if (recipe && !this.getRecipe(recipe.uuid)) {
             assignAccent(recipe, this.retrieveAllRecipes() ?? []);
-            let recipeJson = JSON.stringify(recipe);
-            this.db.runSync(`
-                        INSERT INTO recipes (uuid, recipeJSON)
-                        VALUES (?, ?);`,
-                [
-                    recipe.uuid,
-                    recipeJson
-                ]
-            );
+            this.atomically(() => this.writeRow(recipe));
         } else {
             throw new Error("DB: Recipe already exists");
         }
@@ -78,30 +113,22 @@ class RecipeDatabase {
         if (!recipe) {
             this.insertRecipe(updatedRecipe);
             return;
-        } else {
-            assignAccent(updatedRecipe, this.retrieveAllRecipes() ?? []);
-            let updatedRecipeJson = JSON.stringify(updatedRecipe);
-            this.db.runSync(`
-                        UPDATE recipes
-                        SET recipeJSON = ?
-                        WHERE uuid = ?;`,
-                [
-                    updatedRecipeJson,
-                    uuid
-                ]
-            );
         }
+        assignAccent(updatedRecipe, this.retrieveAllRecipes() ?? []);
+        this.atomically(() => {
+            if (updatedRecipe.uuid !== uuid) {
+                this.db.runSync("DELETE FROM recipes WHERE uuid = ?;", [uuid]);
+                this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+            }
+            this.writeRow(updatedRecipe);
+        });
     }
 
     public deleteRecipe(uuid: string): void {
-        this.db.runSync(`
-                    DELETE
-                    FROM recipes
-                    WHERE uuid = ?;`,
-            [
-                uuid
-            ]
-        );
+        this.atomically(() => {
+            this.db.runSync("DELETE FROM recipes WHERE uuid = ?;", [uuid]);
+            this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+        });
     }
 
     /**
@@ -112,7 +139,10 @@ class RecipeDatabase {
      * this process holding a handle to something that no longer exists.
      */
     public deleteAllRecipes(): void {
-        this.db.runSync("DELETE FROM recipes");
+        this.atomically(() => {
+            this.db.runSync("DELETE FROM recipes");
+            this.db.runSync("DELETE FROM recipe_tags");
+        });
     }
 
     /**
@@ -126,7 +156,7 @@ class RecipeDatabase {
      * rather than swallowed.
      */
     public insertRecipes(recipes: Recipe[]): void {
-        this.db.withTransactionSync(() => {
+        this.atomically(() => {
             for (const recipe of recipes) this.insertRecipe(recipe);
         });
     }
@@ -140,7 +170,7 @@ class RecipeDatabase {
      * original library exactly as it was instead of an emptied, half-filled one.
      */
     public replaceAllRecipes(recipes: Recipe[]): void {
-        this.db.withTransactionSync(() => {
+        this.atomically(() => {
             this.deleteAllRecipes();
             for (const recipe of recipes) this.insertRecipe(recipe);
         });
