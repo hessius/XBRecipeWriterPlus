@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import Recipe from './Recipe';
 import {assignAccent} from './accent';
 import {copyName} from './duplicates';
+import {columnDefinitions, indexStatements} from './recipeIndex';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
@@ -13,11 +14,46 @@ class RecipeDatabase {
     }
 
 
+    /**
+     * Bring the schema up to date.
+     *
+     * The base table is created exactly as it always was, so an existing
+     * database is untouched by the first statement. Everything after it is
+     * additive: every index column is nullable with no default, which makes
+     * this method a no-op on re-run and makes a partially completed previous
+     * run self-healing.
+     *
+     * `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite versions
+     * Expo ships, so a duplicate is caught rather than avoided — the same
+     * pattern BrewDatabase already uses.
+     */
     private createTable(): void {
         this.db.execSync(`
             PRAGMA journal_mode = WAL;
-            CREATE TABLE IF NOT EXISTS recipes (uuid TEXT PRIMARY KEY NOT NULL,recipeJSON TEXT);`
+            CREATE TABLE IF NOT EXISTS recipes (uuid TEXT PRIMARY KEY NOT NULL,recipeJSON TEXT);
+            CREATE TABLE IF NOT EXISTS recipe_tags (
+                uuid TEXT NOT NULL,
+                tag TEXT NOT NULL COLLATE NOCASE,
+                PRIMARY KEY (uuid, tag)
+            );
+            CREATE INDEX IF NOT EXISTS idx_recipe_tags_tag ON recipe_tags(tag);
+            CREATE TABLE IF NOT EXISTS schema_meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL
+            );`
         );
+
+        for (const definition of columnDefinitions()) {
+            try {
+                this.db.execSync(`ALTER TABLE recipes ADD COLUMN ${definition};`);
+            } catch {
+                // Already there.
+            }
+        }
+
+        for (const statement of indexStatements()) {
+            this.db.execSync(statement);
+        }
     }
 
     public insertRecipe(recipe: Recipe): void {
