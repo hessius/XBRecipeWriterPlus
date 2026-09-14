@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import Recipe from './Recipe';
-import {assignAccent} from './accent';
+import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {columnDefinitions, indexStatements, projectRecipe, schemaHash} from './recipeIndex';
 
@@ -180,9 +180,30 @@ class RecipeDatabase {
         });
     }
 
+    /**
+     * The accent indices already taken in a recipe's half of the palette.
+     *
+     * The SQL half of `accentsInUseAmong`. `isTea` is a column precisely so
+     * this does not reimplement `Recipe.isTea()`, which owns the 0x13/0x23
+     * legacy normalisations -- `accent.ts` warns that a second copy of that
+     * predicate would silently miss the next such fix.
+     *
+     * The recipe is excluded from its own tally, or it would count as
+     * competition for the colour it already holds. Repeats are kept: a
+     * repeated index is what makes one colour more used than another.
+     */
+    private accentsInUse(recipe: Recipe): number[] {
+        const rows = this.db.getAllSync(
+            `SELECT accentIndex FROM recipes
+             WHERE isTea = ? AND uuid != ? AND accentIndex IS NOT NULL;`,
+            [recipe.isTea() ? 1 : 0, recipe.uuid]
+        ) as {accentIndex: number}[];
+        return rows.map((row) => row.accentIndex);
+    }
+
     public insertRecipe(recipe: Recipe): void {
         if (recipe && !this.getRecipe(recipe.uuid)) {
-            assignAccent(recipe, this.retrieveAllRecipes() ?? []);
+            recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
             this.atomically(() => this.writeRow(recipe));
         } else {
             throw new Error("DB: Recipe already exists");
@@ -195,7 +216,8 @@ class RecipeDatabase {
             this.insertRecipe(updatedRecipe);
             return;
         }
-        assignAccent(updatedRecipe, this.retrieveAllRecipes() ?? []);
+        updatedRecipe.accentIndex =
+            reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
         this.atomically(() => {
             // No caller rewrites a uuid today, so this branch is dormant. It
             // exists because writeRow's INSERT OR REPLACE keys on the blob's
