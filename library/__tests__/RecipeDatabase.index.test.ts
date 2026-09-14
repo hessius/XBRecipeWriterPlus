@@ -1,5 +1,5 @@
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
-import {INDEX_COLUMNS} from "@/library/recipeIndex";
+import {INDEX_COLUMNS, schemaHash} from "@/library/recipeIndex";
 
 /**
  * Unlike RecipeDatabase.test.ts, these tests need to reach the underlying
@@ -219,5 +219,85 @@ describe("write path", () => {
 
         expect(indexRows().map((r) => r.sortName)).toEqual(["Kept"]);
         expect(tagRows().map((r) => r.tag)).toEqual(["keep"]);
+    });
+});
+
+function storedHash(): string | null {
+    const row = mockBacking.getFirstSync(
+        "SELECT value FROM schema_meta WHERE key = 'indexHash';"
+    ) as {value: string} | null;
+    return row ? row.value : null;
+}
+
+describe("rebuild", () => {
+    it("records the schema hash on first open", () => {
+        new RecipeDatabase();
+        expect(storedHash()).toBe(schemaHash());
+    });
+
+    it("rebuilds the index when the stored hash is stale", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        recipe.setTags(["filter"]);
+        db.insertRecipe(recipe);
+
+        // Simulate a descriptor change: blank the index and stale the hash,
+        // leaving the blob untouched.
+        mockBacking.runSync("UPDATE recipes SET sortName = NULL, pourCount = NULL;");
+        mockBacking.runSync("DELETE FROM recipe_tags;");
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        expect(indexRows()[0].sortName).toBe("Morning");
+        expect(tagRows().map((r) => r.tag)).toEqual(["filter"]);
+        expect(storedHash()).toBe(schemaHash());
+    });
+
+    it("does not rebuild when the hash matches", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        db.insertRecipe(recipe);
+
+        // A value no projection would produce. If it survives the next open,
+        // no rebuild ran.
+        mockBacking.runSync("UPDATE recipes SET sortName = 'UNTOUCHED';");
+        new RecipeDatabase();
+
+        expect(indexRows()[0].sortName).toBe("UNTOUCHED");
+    });
+
+    it("never writes the blob during a rebuild", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        db.insertRecipe(recipe);
+        const before = (mockBacking.getFirstSync(
+            "SELECT recipeJSON FROM recipes;"
+        ) as {recipeJSON: string}).recipeJSON;
+
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        new RecipeDatabase();
+
+        const after = (mockBacking.getFirstSync(
+            "SELECT recipeJSON FROM recipes;"
+        ) as {recipeJSON: string}).recipeJSON;
+        expect(after).toBe(before);
+    });
+
+    it("leaves the hash unstored when a rebuild fails, so the next open retries", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        db.insertRecipe(recipe);
+
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        // A blob that Recipe cannot parse at all makes the rebuild throw.
+        mockBacking.runSync("UPDATE recipes SET recipeJSON = '{{{';");
+
+        expect(() => new RecipeDatabase()).toThrow();
+        expect(storedHash()).toBe("stale");
     });
 });

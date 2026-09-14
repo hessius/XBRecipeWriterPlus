@@ -3,7 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import Recipe from './Recipe';
 import {assignAccent} from './accent';
 import {copyName} from './duplicates';
-import {columnDefinitions, indexStatements, projectRecipe} from './recipeIndex';
+import {columnDefinitions, indexStatements, projectRecipe, schemaHash} from './recipeIndex';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
@@ -42,18 +42,60 @@ class RecipeDatabase {
             [recipe.uuid, JSON.stringify(recipe), ...names.map((name) => projected[name])]
         );
 
-        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [recipe.uuid]);
-        for (const tag of recipe.tags) {
+        this.writeTags(recipe.uuid, recipe.tags);
+    }
+
+    /**
+     * Replace a recipe's rows in `recipe_tags`, delete-then-insert.
+     *
+     * Shared by `writeRow` and `reindexRow` so the tag projection lives in one
+     * place: an update and a rebuild must produce identical tag rows for the
+     * same recipe, and the surest way to guarantee that is to have them run the
+     * same code.
+     */
+    private writeTags(uuid: string, tags: string[]): void {
+        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+        for (const tag of tags) {
             this.db.runSync(
                 "INSERT OR IGNORE INTO recipe_tags (uuid, tag) VALUES (?, ?);",
-                [recipe.uuid, tag]
+                [uuid, tag]
             );
         }
+    }
+
+    /**
+     * Rewrite one row's index columns and tags from an already-parsed recipe,
+     * without touching its blob.
+     *
+     * This is the rebuild's counterpart to `writeRow`, and the difference is
+     * the whole point: it never names `recipeJSON` and uses UPDATE, not
+     * INSERT OR REPLACE, so it cannot rewrite the blob under any circumstance —
+     * not even a bug in the projection. A rebuild touches every recipe in the
+     * library at once; routing every blob through parse-then-reserialise would
+     * mean a single serialisation regression rewrites the user's whole library
+     * with no backup, which is the one unrecoverable outcome the "blob is the
+     * only truth" rule exists to prevent. The `recipe` here is read-only.
+     *
+     * The SET clause is generated from `projectRecipe`'s keys so the column
+     * list still lives only in recipeIndex.ts.
+     */
+    private reindexRow(uuid: string, recipe: Recipe): void {
+        const projected = projectRecipe(recipe);
+        const names = Object.keys(projected);
+        const assignments = names.map((name) => `${name} = ?`).join(", ");
+
+        this.db.runSync(
+            `UPDATE recipes SET ${assignments} WHERE uuid = ?;`,
+            [...names.map((name) => projected[name]), uuid]
+        );
+
+        this.writeTags(uuid, recipe.tags);
     }
 
     constructor() {
         this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
         this.createTable();
+        this.migrateIndex();
     }
 
 
@@ -97,6 +139,45 @@ class RecipeDatabase {
         for (const statement of indexStatements()) {
             this.db.execSync(statement);
         }
+    }
+
+    /**
+     * Rebuild the index when the descriptor array has changed.
+     *
+     * The blob is never written here — `reindexRow` updates only the index
+     * columns and tags — so the worst a wrong descriptor can do is produce a
+     * wrong index over intact data, which the next rebuild corrects. The hash
+     * is stored last and inside the same transaction, so a failure leaves it
+     * stale and the next open simply tries again: a half-rebuilt index cannot
+     * persist.
+     *
+     * A legacy blob is not upgraded in place by a rebuild, deliberately. That
+     * is the status quo: Recipe's constructor migrates lazily on every read,
+     * and an actual save writes the upgraded form through writeRow.
+     */
+    private migrateIndex(): void {
+        const current = schemaHash();
+        const stored = this.db.getFirstSync(
+            "SELECT value FROM schema_meta WHERE key = 'indexHash';"
+        ) as {value: string} | null;
+
+        if (stored && stored.value === current) return;
+
+        this.atomically(() => {
+            const rows = this.db.getAllSync(
+                "SELECT uuid, recipeJSON FROM recipes;"
+            ) as {uuid: string; recipeJSON: string}[];
+
+            for (const row of rows) {
+                this.reindexRow(row.uuid, new Recipe(undefined, row.recipeJSON));
+            }
+
+            this.db.runSync(
+                `INSERT INTO schema_meta (key, value) VALUES ('indexHash', ?)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+                [current]
+            );
+        });
     }
 
     public insertRecipe(recipe: Recipe): void {
