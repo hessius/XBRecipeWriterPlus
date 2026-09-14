@@ -283,8 +283,12 @@ describe("the write gate", () => {
 describe("a recipe with no stages", () => {
     it("opens with a real first stage rather than the placeholder", async () => {
         // The editor's ADD STAGE passes pours.length - 1, which is -1 when
-        // there are none. Routed to addPour that lands on the copy-from-
-        // previous fallback and yields 1 ml at 39 C.
+        // there are none. Without the hook's routing this would reach
+        // `Recipe.addPour(-1)`, and because the copy-from-previous path is
+        // guarded by `this.pours.length > 0` an empty recipe skips it and
+        // lands on the placeholder branch, which yields 1 ml at 39 C. The hook
+        // instead routes an empty recipe to `addOpeningPour`, giving a real
+        // first stage at the rounded target volume and 93 C.
         const {result} = await renderBlankEditor();
 
         await act(async () => {
@@ -308,17 +312,26 @@ describe("a recipe with no stages", () => {
         expect(result.current.canWrite).toBe(true);
     });
 
-    it("still copies the previous stage once there is one", async () => {
+    it("goes back to copying the previous stage once the recipe has one", async () => {
         const {result} = await renderBlankEditor();
 
         await act(async () => {
             result.current.addPour(-1);
+        });
+
+        // The opening stage is itself 93 C, so asserting the second stage is
+        // 93 C would pass on any route. Move stage 0 to a value distinct from
+        // every default in play -- 93 (opening coffee), 85 (opening tea) and 39
+        // (the placeholder floor) -- but still inside the card's 39-99
+        // temperature range, then prove the second stage inherited exactly it.
+        await act(async () => {
+            await result.current.editStage(0, "temperature", 71);
         });
         await act(async () => {
             result.current.addPour(0);
         });
 
         expect(result.current.recipe!.pours).toHaveLength(2);
-        expect(result.current.recipe!.pours[1].temperature).toBe(93);
+        expect(result.current.recipe!.pours[1].temperature).toBe(71);
     });
 });
