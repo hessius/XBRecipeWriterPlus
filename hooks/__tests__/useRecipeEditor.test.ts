@@ -312,6 +312,43 @@ describe("a recipe with no stages", () => {
         expect(result.current.canWrite).toBe(true);
     });
 
+    it("cannot be saved until it has one", async () => {
+        // A recipe with no stages is not an unfinished recipe, it is not yet a
+        // recipe: it brews nothing. Keeping an invalid recipe is deliberately
+        // allowed -- an unbalanced one is saved and fixed later -- but a
+        // stage-less one has nothing to come back to, and saving it puts a row
+        // in the library that can neither be brewed nor written, which is a
+        // worse offer than making the user tap ADD STAGE once.
+        const {result} = await renderBlankEditor();
+
+        expect(result.current.canSave).toBe(false);
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.canSave).toBe(true);
+    });
+
+    it("can still be saved while it is invalid in every other way", async () => {
+        // The stage gate must not quietly become a validity gate. A recipe
+        // whose stages do not add up to the dose and ratio is still savable,
+        // which is the behaviour the ADD STAGE guard sits beside rather than
+        // replaces.
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+        await act(async () => {
+            await result.current.editStage(0, "volume", 100);
+        });
+
+        expect(result.current.balance.balanced).toBe(false);
+        expect(result.current.canWrite).toBe(false);
+        expect(result.current.canSave).toBe(true);
+    });
+
     it("goes back to copying the previous stage once the recipe has one", async () => {
         const {result} = await renderBlankEditor();
 
