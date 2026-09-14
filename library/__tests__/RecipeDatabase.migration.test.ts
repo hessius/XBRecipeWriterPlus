@@ -117,3 +117,30 @@ describe("migrating a pre-index database", () => {
         expect(mockBacking.getAllSync("SELECT * FROM recipe_tags;")).toEqual([]);
     });
 });
+
+describe("rebuild cost", () => {
+    it("indexes a large library within a sane time", () => {
+        const blobs = Array.from({length: 500}, (_, i) =>
+            legacyBlob(`uuid-${i}`, `Recipe ${i}`, 0)
+        );
+        buildLegacyDatabase(blobs);
+
+        const started = Date.now();
+        new RecipeDatabase();
+        const elapsed = Date.now() - started;
+
+        // jest.setup.js replaces console.log with a mock, so the figure has to
+        // go straight to stdout or it is silently swallowed.
+        process.stdout.write(`rebuild of 500 recipes: ${elapsed}ms\n`);
+
+        // A ceiling, not a target. expo-sqlite's sync API runs on the JS
+        // thread, so this blocks; it happens once per schema change. If this
+        // ever fails, the specified fallback is a lazy per-row rebuild, with
+        // the hash written only once every row has been visited.
+        expect(elapsed).toBeLessThan(3000);
+
+        expect(mockBacking.getAllSync(
+            "SELECT COUNT(*) AS n FROM recipes WHERE sortName IS NOT NULL;"
+        )).toEqual([{n: 500}]);
+    });
+});
