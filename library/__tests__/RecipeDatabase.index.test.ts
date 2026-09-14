@@ -287,6 +287,48 @@ describe("rebuild", () => {
         expect(after).toBe(before);
     });
 
+    it("never writes a legacy blob during a rebuild", () => {
+        // The test above uses a current blob, which survives a
+        // parse-and-reserialise round trip byte-identical -- so on its own it
+        // cannot tell reindexRow from writeRow. Verified by mutation: swapping
+        // one for the other leaves it green. A legacy blob is the difference.
+        //
+        // This matters because a rebuild touches every recipe at once. If it
+        // re-serialised, a regression in Recipe's serialisation would rewrite
+        // the whole library in a single pass, with no backup taken. Lazy
+        // migration on read is the existing mechanism and stays that way.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Legacy";
+        db.insertRecipe(recipe);
+
+        // cupType 0x13 is a first-generation tea card; the Recipe constructor
+        // folds it to 0x03 on read. Re-serialising would persist the folded
+        // value and the blob would no longer be what the user's file holds.
+        const legacy = JSON.stringify({
+            ...JSON.parse(
+                (mockBacking.getFirstSync(
+                    "SELECT recipeJSON FROM recipes;"
+                ) as {recipeJSON: string}).recipeJSON
+            ),
+            cupType: 0x13
+        });
+        mockBacking.runSync("UPDATE recipes SET recipeJSON = ?;", [legacy]);
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        const after = (mockBacking.getFirstSync(
+            "SELECT recipeJSON FROM recipes;"
+        ) as {recipeJSON: string}).recipeJSON;
+        expect(JSON.parse(after).cupType).toBe(0x13);
+        expect(after).toBe(legacy);
+
+        // The index still reflects the migrated reading, which is the point:
+        // the projection sees tea, the blob stays as the user's file has it.
+        expect(indexRows()[0].isTea).toBe(1);
+    });
+
     it("leaves the hash unstored when a rebuild fails, so the next open retries", () => {
         const db = new RecipeDatabase();
         const recipe = new Recipe();
