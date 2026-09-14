@@ -1,7 +1,7 @@
 import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
-import Pour from "./Pour";
+import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
 import uuid from 'react-native-uuid';
 
 export const CUP_TYPE = {
@@ -239,6 +239,38 @@ class Recipe {
             this.bypassTemp    = jsonRecipe.bypassTemp    ?? 85;
         }
 
+    }
+
+    /**
+     * The first stage of a recipe that has none.
+     *
+     * Separate from `addPour` on purpose. `addPour(n, false)` answers "give me
+     * an empty pour I will fill in" and yields a minimum-valued placeholder;
+     * the test suite depends on that. This answers "what should the user's
+     * first stage be", which is a different question with a different answer.
+     *
+     * Coffee opens at the whole target volume because that is what
+     * `autoFixPourVolumes` gives a single-pour recipe anyway, so one tap of ADD
+     * STAGE carries a new recipe from invalid to writable rather than to a
+     * second problem. Tea opens at 90 ml because tea clamps every pour there,
+     * and has its ratio fixed because tea derives the ratio from the volumes
+     * rather than the other way round.
+     */
+    public addOpeningPour() {
+        const tea = this.isTea();
+        const pour = new Pour(
+            1,
+            tea ? 90 : this.getTotalVolume(),
+            tea ? 85 : 93,
+            30,
+            AGITATION.ALL_OFF,
+            POUR_PATTERN.CENTERED,
+            0
+        );
+        this.pours.push(pour);
+        if (tea) {
+            this.fixRatio();
+        }
     }
 
     public addPour(pourNumber: number, copyFromPrevious: boolean = true) {

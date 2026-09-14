@@ -1,5 +1,5 @@
 import Recipe, {CUP_TYPE} from '../Recipe';
-import Pour from '../Pour';
+import Pour, {POUR_PATTERN} from '../Pour';
 import {buildCard, TEA_CARD, XPOD_CARD} from './cardFixtures';
 
 /**
@@ -167,5 +167,67 @@ describe('tea decoding', () => {
 
     it('leaves non-tea recipes at the encoded dose', () => {
         expect(new Recipe(buildCard(XPOD_CARD)).dosage).toBe(15);
+    });
+});
+
+describe("addOpeningPour", () => {
+    it("opens a coffee recipe with a stage that satisfies the balance", () => {
+        // dose x ratio is the sum the machine demands, and a single-pour recipe
+        // is what autoFixPourVolumes would produce anyway. Matching it means one
+        // tap of ADD STAGE carries a new recipe from invalid to writable.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.OMNI;
+        recipe.dosage = 15;
+        recipe.ratio = 16;
+        recipe.grindSize = 65;
+
+        recipe.addOpeningPour();
+
+        expect(recipe.pours).toHaveLength(1);
+        expect(recipe.pours[0].volume).toBe(240);
+        expect(recipe.pours[0].temperature).toBe(93);
+        expect(recipe.pours[0].flowRate).toBe(30);
+        expect(recipe.pours[0].pourPattern).toBe(POUR_PATTERN.CENTERED);
+        expect(recipe.pours[0].agitation).toBe(0);
+        expect(recipe.pours[0].pauseTime).toBe(0);
+        expect(recipe.pours[0].pourNumber).toBe(1);
+        expect(recipe.isPourVolumeValid()).toBe(true);
+    });
+
+    it("opens a tea recipe at 90 ml and 85 degrees", () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.dosage = 5;
+
+        recipe.addOpeningPour();
+
+        expect(recipe.pours).toHaveLength(1);
+        expect(recipe.pours[0].volume).toBe(90);
+        expect(recipe.pours[0].temperature).toBe(85);
+    });
+
+    it("fixes a tea recipe's ratio, which is derived rather than chosen", () => {
+        // Coffee's volume comes from its ratio. Tea is the other way round:
+        // fixRatio derives the ratio from the volumes, and without this call a
+        // new tea recipe sits at ratio 0 -- below RATIO.min -- and would need a
+        // second, unexplained tap on auto-adjust to reach the state coffee
+        // reaches in one.
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.TEA;
+        recipe.dosage = 5;
+
+        recipe.addOpeningPour();
+
+        expect(recipe.ratio).toBe(18);
+    });
+
+    it("leaves the placeholder pour idiom alone", () => {
+        // addPour(0, false) is how the test suite builds a pour it is about to
+        // fill in. It must keep yielding the minimum-valued placeholder.
+        const recipe = new Recipe();
+        recipe.addPour(0, false);
+
+        expect(recipe.pours[0].volume).toBe(1);
+        expect(recipe.pours[0].temperature).toBe(39);
     });
 });
