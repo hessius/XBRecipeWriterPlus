@@ -329,6 +329,53 @@ describe("rebuild", () => {
         expect(indexRows()[0].isTea).toBe(1);
     });
 
+    it("skips a blob it cannot parse instead of taking the library down", () => {
+        const db = new RecipeDatabase();
+        const good = new Recipe();
+        good.name = "Morning";
+        const bad = new Recipe();
+        bad.name = "Broken";
+        db.insertRecipe(good);
+        db.insertRecipe(bad);
+
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        mockBacking.runSync("UPDATE recipes SET sortName = NULL;");
+        // A blob Recipe cannot parse at all. This runs unattended on launch, so
+        // throwing here would make the database unopenable on this and every
+        // subsequent launch - the stale hash guarantees the retry.
+        mockBacking.runSync(
+            "UPDATE recipes SET recipeJSON = '{{{' WHERE uuid = ?;", [bad.uuid]
+        );
+
+        expect(() => new RecipeDatabase()).not.toThrow();
+
+        // The good row is indexed; the bad row is left unindexed, which is the
+        // recoverable failure rather than the unrecoverable one.
+        const named = mockBacking.getAllSync(
+            "SELECT uuid, sortName FROM recipes ORDER BY uuid;"
+        ) as {uuid: string; sortName: string | null}[];
+        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("Morning");
+        expect(named.find((r) => r.uuid === bad.uuid)?.sortName).toBeNull();
+
+        // And the blob is untouched, so it is still there to be recovered from.
+        expect(mockBacking.getFirstSync(
+            "SELECT recipeJSON FROM recipes WHERE uuid = ?;", [bad.uuid]
+        )).toEqual({recipeJSON: "{{{"});
+    });
+
+    it("stores the hash after skipping, so a permanently bad row cannot loop forever", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        db.insertRecipe(recipe);
+
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        mockBacking.runSync("UPDATE recipes SET recipeJSON = '{{{';");
+
+        new RecipeDatabase();
+        expect(storedHash()).toBe(schemaHash());
+    });
+
     it("leaves the hash unstored when a rebuild fails, so the next open retries", () => {
         const db = new RecipeDatabase();
         const recipe = new Recipe();
@@ -336,8 +383,14 @@ describe("rebuild", () => {
         db.insertRecipe(recipe);
 
         mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
-        // A blob that Recipe cannot parse at all makes the rebuild throw.
-        mockBacking.runSync("UPDATE recipes SET recipeJSON = '{{{';");
+        // Not a bad row - those are skipped - but a genuine SQL failure part
+        // way through the rebuild. Dropping a table would not do it, because
+        // createTable recreates everything before migrateIndex runs; a trigger
+        // survives that and aborts the UPDATE reindexRow makes for every row.
+        mockBacking.execSync(
+            `CREATE TRIGGER fail_reindex BEFORE UPDATE ON recipes
+             BEGIN SELECT RAISE(ABORT, 'reindex failed'); END;`
+        );
 
         expect(() => new RecipeDatabase()).toThrow();
         expect(storedHash()).toBe("stale");

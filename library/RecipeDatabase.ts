@@ -146,13 +146,23 @@ class RecipeDatabase {
      *
      * The blob is never written here — `reindexRow` updates only the index
      * columns and tags — so the worst a wrong descriptor can do is produce a
-     * wrong index over intact data, which the next rebuild corrects. The hash
+     * wrong index over intact data, which the next rebuild corrects.
+     *
+     * A row whose blob will not parse is skipped rather than allowed to throw.
+     * This runs unattended on launch, before anything can be shown, so a single
+     * corrupt blob would otherwise make the database unopenable — and because a
+     * failed rebuild deliberately leaves the hash stale, it would retry and
+     * fail again on every subsequent launch. Skipping leaves that row's index
+     * columns NULL, which is the recoverable failure this whole design is built
+     * around; the blob is untouched and still there to be recovered from.
+     *
      * The hash is stored last and inside the same transaction, so a failure
-     * leaves it stale and the next open simply tries again: a half-rebuilt
-     * index cannot persist. Those are two independent defences — ordering
-     * alone survives a lost transaction, and the transaction alone survives a
-     * reordering — so a test can only catch losing both at once, which is what
-     * "leaves the hash unstored when a rebuild fails" does. Keep both.
+     * that is *not* one bad row — a genuine SQL error — leaves it stale and the
+     * next open simply tries again: a half-rebuilt index cannot persist. Those
+     * are two independent defences — ordering alone survives a lost
+     * transaction, and the transaction alone survives a reordering — so a test
+     * can only catch losing both at once, which is what "leaves the hash
+     * unstored when a rebuild fails" does. Keep both.
      *
      * A legacy blob is not upgraded in place by a rebuild, deliberately. That
      * is the status quo: Recipe's constructor migrates lazily on every read,
@@ -172,7 +182,15 @@ class RecipeDatabase {
             ) as {uuid: string; recipeJSON: string}[];
 
             for (const row of rows) {
-                this.reindexRow(row.uuid, new Recipe(undefined, row.recipeJSON));
+                let recipe: Recipe;
+                try {
+                    recipe = new Recipe(undefined, row.recipeJSON);
+                } catch {
+                    // Unreadable blob: leave this row unindexed and carry on,
+                    // rather than take the whole library down with it.
+                    continue;
+                }
+                this.reindexRow(row.uuid, recipe);
             }
 
             this.db.runSync(
