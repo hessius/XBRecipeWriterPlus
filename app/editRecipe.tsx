@@ -647,7 +647,10 @@ function StagesDeck({
                        disabled={addDisabled}
                        onPress={() => {
                            // `Recipe.addPour(n)` copies `pours[n]` and splices
-                           // in after it, so appending is the last index.
+                           // in after it, so appending is the last index. On a
+                           // recipe with no stages that index is -1, and the
+                           // hook routes it to `addOpeningPour` instead —
+                           // there is nothing to copy.
                            if (!addDisabled) addPour(recipe.pours.length - 1);
                        }}>
                 <XStack alignItems="center" justifyContent="center" gap="$2"

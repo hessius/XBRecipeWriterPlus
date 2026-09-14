@@ -248,7 +248,14 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
                 notify({tone: "info", message: "Tea recipes are limited to 3 pours."});
                 return;
             }
-            recipe.addPour(pourNumber);
+            // A recipe with no stages has nothing to copy from, and the screen
+            // passes -1 for it. `addPour` would fall through to its placeholder
+            // branch and produce 1 ml at 39 C.
+            if (recipe.pours.length === 0) {
+                recipe.addOpeningPour();
+            } else {
+                recipe.addPour(pourNumber);
+            }
             setVolumeError(null);
             setKey((prev) => prev + 1);
         }

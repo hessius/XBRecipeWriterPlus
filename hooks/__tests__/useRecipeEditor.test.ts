@@ -35,6 +35,22 @@ async function renderEditor(overrides: {onSaved?: () => void; temperatureUnit?: 
     }));
 }
 
+/** A recipe with no stages at all, as the create flow produces one. */
+async function renderBlankEditor() {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.OMNI;
+    recipe.dosage = 15;
+    recipe.ratio = 16;
+    recipe.grindSize = 65;
+    recipe.grindRPM = 120;
+
+    return renderHook(() => useRecipeEditor({
+        recipeJSON:      JSON.stringify(recipe),
+        temperatureUnit: "C",
+        onSaved:         jest.fn()
+    }));
+}
+
 describe("the volume readout (#40)", () => {
     it("follows the ratio without being told to repaint", async () => {
         const {result} = await renderEditor();
@@ -261,5 +277,48 @@ describe("the write gate", () => {
 
         expect(result.current.writeProblems.some((p) => p.includes("500 F"))).toBe(true);
         expect(result.current.writeProblems.some((p) => p.includes("260 C"))).toBe(false);
+    });
+});
+
+describe("a recipe with no stages", () => {
+    it("opens with a real first stage rather than the placeholder", async () => {
+        // The editor's ADD STAGE passes pours.length - 1, which is -1 when
+        // there are none. Routed to addPour that lands on the copy-from-
+        // previous fallback and yields 1 ml at 39 C.
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.recipe!.pours).toHaveLength(1);
+        expect(result.current.recipe!.pours[0].volume).toBe(240);
+        expect(result.current.recipe!.pours[0].temperature).toBe(93);
+    });
+
+    it("is writable after that one tap", async () => {
+        const {result} = await renderBlankEditor();
+
+        expect(result.current.canWrite).toBe(false);
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.canWrite).toBe(true);
+    });
+
+    it("still copies the previous stage once there is one", async () => {
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+        await act(async () => {
+            result.current.addPour(0);
+        });
+
+        expect(result.current.recipe!.pours).toHaveLength(2);
+        expect(result.current.recipe!.pours[1].temperature).toBe(93);
     });
 });
