@@ -247,21 +247,48 @@ finding the row.
 
 ### 6.2 The correction
 
-`RecipeDatabase` gains a public `assignAccent(recipe)` holding the line
-`insertRecipe` already runs:
+All three routes funnel through one function — `openRecipe()` in
+`app/index.tsx`, which is also what a tap on an existing library row calls. That
+is the single place the assignment belongs, rather than three call sites that
+can drift.
+
+`RecipeDatabase.accentsInUse` is currently private and holds the rule for which
+indices count: same half of the palette, excluding the recipe itself. The screen
+needs that same rule against the in-memory library rather than a fresh
+`retrieveAllRecipes()` on every editor open, so the rule moves to
+`library/accent.ts` where both can reach it:
 
 ```ts
-recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
+export function accentsInUseAmong(recipe: Recipe, others: Recipe[]): number[];
+export function assignAccent(recipe: Recipe, others: Recipe[]): void;
 ```
 
-`insertRecipe` calls it instead of inlining it. The three entry points call it
-after building the recipe and before pushing the editor.
+`assignAccent` is the line `insertRecipe` already runs, with the candidate list
+passed in:
+
+```ts
+recipe.accentIndex = reassignIfCrossed(recipe, accentsInUseAmong(recipe, others));
+```
+
+`RecipeDatabase.insertRecipe` calls `assignAccent(recipe, this.retrieveAllRecipes() ?? [])`,
+and its private `accentsInUse` is deleted rather than left as a second copy of
+the rule. `openRecipe` calls `assignAccent(recipe, library.recipes)`.
 
 It is idempotent by construction: `reassignIfCrossed` returns an existing index
 unchanged when it is valid for the recipe's group, and only reassigns when the
-recipe has crossed between halves or has no index at all. So calling it early
-and again on save cannot change the answer, and `insertRecipe` needs no
-knowledge of whether it has already run.
+recipe has crossed between halves or has no index at all. So calling it on the
+way into the editor and again on save cannot change the answer, and
+`insertRecipe` needs no knowledge of whether it has already run. A tap on an
+existing library row is a no-op for the same reason.
+
+Distribution is unaffected — the colour is still the least-used one in the half.
+Only the moment of assignment moves.
+
+Two unsaved recipes could in principle be handed the same index, since neither
+is in the table to count against the other. This is accepted: the editor holds
+one recipe at a time, and the second save reassigns nothing because the index it
+holds is still valid. The result is a repeated colour no worse than the ones the
+palette already repeats once the library outgrows eight recipes.
 
 Distribution is unaffected — the colour is still the least-used one in the half.
 Only the moment of assignment moves.
