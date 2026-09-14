@@ -13,9 +13,13 @@ jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockBacking
 }));
 
-// Imported after the mock so the module picks it up.
+// Imported after the mock so the module picks it up. import/first is disabled
+// deliberately: moving these to the top would bind RecipeDatabase to the real
+// expo-sqlite before jest.mock replaces it.
+/* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
 import Recipe from "@/library/Recipe";
+/* eslint-enable import/first */
 
 beforeEach(() => {
     mockBacking = createTestDatabase();
