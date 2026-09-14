@@ -438,10 +438,14 @@ export default function HomeScreen({db, settings}: Props) {
         }
         lastEditorPushAt = Date.now();
         // Every route into the editor comes through here: a card read, an
-        // import, a new recipe, and a tap on a row that is already saved. The
-        // accent is settled here rather than on save, so the colour the user
-        // edits under is the colour the library row gets. `assignAccent` is
-        // idempotent, so the already-saved row is a no-op.
+        // import, and a tap on a row that is already saved. The accent is
+        // settled here rather than on save, so the colour the user edits under
+        // is the colour the library row gets. `assignAccent` is idempotent: a
+        // row that already holds a valid index for its half is left untouched,
+        // so re-settling a saved recipe on the way in does not repaint it. The
+        // two rows it does touch are a legacy recipe saved before the index
+        // existed and one whose cup type has crossed between coffee and tea;
+        // both then match the editor, which is what we want.
         assignAccent(recipe, library.recipes);
         router.push({
             pathname: "/editRecipe",

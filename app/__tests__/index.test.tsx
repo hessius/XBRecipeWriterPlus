@@ -458,7 +458,7 @@ describe("HomeScreen", () => {
             expect(pushed.accentIndex).toBe(5);
         });
 
-        it("does not hand a second recipe the colour the first one took", async () => {
+        it("gives a second recipe the next free colour, not the one the first one took", async () => {
             const first = named("Ethiopia");
             first.accentIndex = 0;
             const second = named("Kenya");
@@ -471,7 +471,7 @@ describe("HomeScreen", () => {
             await waitFor(() => expect(mockPush).toHaveBeenCalled());
 
             const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
-            expect(pushed.accentIndex).not.toBe(0);
+            expect(pushed.accentIndex).toBe(1);
         });
     });
 });
