@@ -1,15 +1,16 @@
 import RecipeDatabase from "@/library/RecipeDatabase";
 import Recipe from "@/library/Recipe";
+// The `mock` prefix is what lets a jest.mock factory close over this binding:
+// the factory is hoisted above the imports, so Jest rejects any out-of-scope
+// reference that is not named as a mock. Same reason as mockBacking in
+// RecipeDatabase.index.test.ts.
+import {createTestDatabase as mockCreateTestDatabase} from "@/test-utils/sqlite";
 
-jest.mock("expo-sqlite", () => {
+jest.mock("expo-sqlite", () => ({
     // A real SQLite database per call, so each `new RecipeDatabase()` in a
-    // test is isolated. Required inline because jest.mock factories are
-    // hoisted above imports and may not close over module-scope bindings.
-    const {createTestDatabase} = require("@/test-utils/sqlite");
-    return {
-        openDatabaseSync: () => createTestDatabase()
-    };
-});
+    // test is isolated.
+    openDatabaseSync: () => mockCreateTestDatabase()
+}));
 function freshDatabase(): RecipeDatabase {
     return new RecipeDatabase();
 }

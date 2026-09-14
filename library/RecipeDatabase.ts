@@ -147,9 +147,12 @@ class RecipeDatabase {
      * The blob is never written here — `reindexRow` updates only the index
      * columns and tags — so the worst a wrong descriptor can do is produce a
      * wrong index over intact data, which the next rebuild corrects. The hash
-     * is stored last and inside the same transaction, so a failure leaves it
-     * stale and the next open simply tries again: a half-rebuilt index cannot
-     * persist.
+     * The hash is stored last and inside the same transaction, so a failure
+     * leaves it stale and the next open simply tries again: a half-rebuilt
+     * index cannot persist. Those are two independent defences — ordering
+     * alone survives a lost transaction, and the transaction alone survives a
+     * reordering — so a test can only catch losing both at once, which is what
+     * "leaves the hash unstored when a rebuild fails" does. Keep both.
      *
      * A legacy blob is not upgraded in place by a rebuild, deliberately. That
      * is the status quo: Recipe's constructor migrates lazily on every read,
