@@ -36,7 +36,11 @@ export type IndexColumn = {
  * mechanism that is correct in dev and quietly wrong in release is worse than
  * one that asks for a number.
  *
- * `recipeIndex.test.ts` pins the hash, so a forgotten bump fails CI.
+ * A forgotten bump is caught by the golden-projection test in
+ * `recipeIndex.test.ts`, which pins the projected value of every column. The
+ * pinned *hash* cannot do it: the hash covers column shape only, so a changed
+ * `from` body leaves it identical. Changing a projection therefore fails on
+ * the golden values, which is the prompt to bump this number.
  */
 export const INDEX_REVISION = 1;
 
