@@ -187,4 +187,37 @@ describe("write path", () => {
         );
         expect(found).toHaveLength(1);
     });
+
+    it("rolls back the index and the tags, not just the blob", () => {
+        // The existing rollback tests in RecipeDatabase.test.ts assert only
+        // that the blob survives. This pins the invariant the write path
+        // exists for: a row must never keep an index or tags describing a
+        // recipe its blob no longer matches. Without this, a regression in
+        // tag-delete ordering or index atomicity would leave the blob correct
+        // and pass every other test.
+        const db = new RecipeDatabase();
+        const kept = new Recipe();
+        kept.name = "Kept";
+        kept.setTags(["keep"]);
+        db.insertRecipe(kept);
+
+        const doomed = new Recipe();
+        doomed.name = "Doomed";
+        doomed.setTags(["gone"]);
+
+        expect(() =>
+            db.replaceAllRecipes([
+                doomed,
+                // A recipe that throws on serialisation aborts the batch.
+                {
+                    get uuid(): string {
+                        throw new Error("boom");
+                    }
+                } as unknown as Recipe
+            ])
+        ).toThrow();
+
+        expect(indexRows().map((r) => r.sortName)).toEqual(["Kept"]);
+        expect(tagRows().map((r) => r.tag)).toEqual(["keep"]);
+    });
 });

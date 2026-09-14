@@ -116,6 +116,12 @@ class RecipeDatabase {
         }
         assignAccent(updatedRecipe, this.retrieveAllRecipes() ?? []);
         this.atomically(() => {
+            // No caller rewrites a uuid today, so this branch is dormant. It
+            // exists because writeRow's INSERT OR REPLACE keys on the blob's
+            // own uuid: without the delete, a rewrite would leave the old row
+            // orphaned under the old key. A caller that ever does rewrite one
+            // must still ensure the new uuid is not already taken, or the
+            // replace silently clobbers whichever recipe holds it.
             if (updatedRecipe.uuid !== uuid) {
                 this.db.runSync("DELETE FROM recipes WHERE uuid = ?;", [uuid]);
                 this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
