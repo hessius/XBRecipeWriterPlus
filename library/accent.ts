@@ -133,6 +133,11 @@ export function accentsInUseAmong(recipe: Recipe, others: Recipe[]): number[] {
  * is valid for the recipe's group, so this can be called on the way into the
  * editor and again on save without the colour moving. That is the point of it —
  * the colour the user edits under is the colour the library row gets.
+ *
+ * The one exception is a recipe that changes cup type between the two calls:
+ * crossing between coffee and tea is exactly what makes the old index name a
+ * colour in the wrong half, so `reassignIfCrossed` picks a fresh one. Moving the
+ * accent then is the correct answer rather than a broken promise.
  */
 export function assignAccent(recipe: Recipe, others: Recipe[]): void {
     recipe.accentIndex = reassignIfCrossed(recipe, accentsInUseAmong(recipe, others));

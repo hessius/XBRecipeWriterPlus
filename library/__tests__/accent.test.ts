@@ -227,6 +227,9 @@ describe("assignAccent", () => {
         const first = subject.accentIndex;
         assignAccent(subject, [taken]);
 
+        // Pin the expected index as well as comparing the two calls: comparing
+        // alone would pass if both assignments were wrong in the same way.
+        expect(first).toBe(1);
         expect(subject.accentIndex).toBe(first);
     });
 
@@ -235,6 +238,33 @@ describe("assignAccent", () => {
 
         assignAccent(subject, []);
 
+        // With no company the least-used tea index is deterministically 0. The
+        // loose `< tea.length` assertion would pass for any of 0–3, so it could
+        // not catch a tea recipe indexed against the coffee half until the value
+        // exceeded four.
+        expect(subject.accentIndex).toBe(0);
+    });
+
+    it("reassigns across the group boundary against the taken tea indices", () => {
+        // Exercises the composition of accentsInUseAmong and reassignIfCrossed:
+        // a recipe holding a coffee index that flips to tea must be reassigned
+        // using the company it keeps, not in isolation. Three of the four tea
+        // indices are taken once each, so the fourth is the unambiguous
+        // least-used answer.
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        subject.accentIndex = 6;
+        subject.cupType = CUP_TYPE.TEA;
+
+        const taken = [0, 1, 2].map((index) => {
+            const tea = recipeWithCup(CUP_TYPE.TEA);
+            tea.accentIndex = index;
+            return tea;
+        });
+
+        assignAccent(subject, taken);
+
+        expect(subject.accentIndex).toBe(3);
         expect(subject.accentIndex).toBeLessThan(accents.tea.length);
+        expect([0, 1, 2]).not.toContain(subject.accentIndex);
     });
 });
