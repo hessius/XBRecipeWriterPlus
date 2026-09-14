@@ -249,18 +249,33 @@ class Recipe {
      * the test suite depends on that. This answers "what should the user's
      * first stage be", which is a different question with a different answer.
      *
-     * Coffee opens at the whole target volume because that is what
-     * `autoFixPourVolumes` gives a single-pour recipe anyway, so one tap of ADD
-     * STAGE carries a new recipe from invalid to writable rather than to a
-     * second problem. Tea opens at 90 ml because tea clamps every pour there,
-     * and has its ratio fixed because tea derives the ratio from the volumes
-     * rather than the other way round.
+     * Coffee opens at the rounded target volume because that is exactly what
+     * `autoFixPourVolumes` gives a single-pour recipe anyway: its single-pour
+     * branch assigns `getStageTargetVolume`, the whole-millilitre rounding of
+     * dose times ratio. Going through the same helper matters because the ratio
+     * need not be whole -- xBloom's share links carry 1:15.5, and 15 g at
+     * 1:15.5 is 232.5 ml. The unrounded figure passes `isPourVolumeValid`, but
+     * `cardWriteProblems` rejects it for not being a whole number and the byte
+     * encoder would truncate it, so one tap of ADD STAGE would carry the recipe
+     * from invalid to invalid rather than to writable. Tea opens at 90 ml
+     * because tea clamps every pour there, and has its ratio fixed because tea
+     * derives the ratio from the volumes rather than the other way round.
+     *
+     * An opening pour is by definition the first, so the method refuses to run
+     * on a recipe that already has stages: `pourNumber` is hardcoded to 1, and
+     * appending a second stage numbered 1 would corrupt the numbering that
+     * `BrewRecord` copies verbatim into the stored brew history. The caller
+     * routes here only when the recipe is empty, but the invariant belongs on
+     * the method whose name promises it.
      */
     public addOpeningPour() {
+        if (this.pours.length > 0) {
+            return;
+        }
         const tea = this.isTea();
         const pour = new Pour(
             1,
-            tea ? 90 : this.getTotalVolume(),
+            tea ? 90 : this.getStageTargetVolume(),
             tea ? 85 : 93,
             30,
             AGITATION.ALL_OFF,

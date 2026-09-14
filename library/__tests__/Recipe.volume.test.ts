@@ -1,5 +1,5 @@
 import Recipe, {CUP_TYPE} from '../Recipe';
-import Pour, {POUR_PATTERN} from '../Pour';
+import Pour, {POUR_PATTERN, AGITATION} from '../Pour';
 import {buildCard, TEA_CARD, XPOD_CARD} from './cardFixtures';
 
 /**
@@ -146,6 +146,16 @@ describe('pour list editing', () => {
         expect(recipe.pours.map(p => p.pourNumber)).toEqual([1, 2]);
         expect(recipe.pours.map(p => p.volume)).toEqual([30, 105]);
     });
+
+    it("leaves the placeholder pour idiom alone", () => {
+        // addPour(0, false) is how the test suite builds a pour it is about to
+        // fill in. It must keep yielding the minimum-valued placeholder.
+        const recipe = new Recipe();
+        recipe.addPour(0, false);
+
+        expect(recipe.pours[0].volume).toBe(1);
+        expect(recipe.pours[0].temperature).toBe(39);
+    });
 });
 
 describe('tea decoding', () => {
@@ -188,7 +198,7 @@ describe("addOpeningPour", () => {
         expect(recipe.pours[0].temperature).toBe(93);
         expect(recipe.pours[0].flowRate).toBe(30);
         expect(recipe.pours[0].pourPattern).toBe(POUR_PATTERN.CENTERED);
-        expect(recipe.pours[0].agitation).toBe(0);
+        expect(recipe.pours[0].agitation).toBe(AGITATION.ALL_OFF);
         expect(recipe.pours[0].pauseTime).toBe(0);
         expect(recipe.pours[0].pourNumber).toBe(1);
         expect(recipe.isPourVolumeValid()).toBe(true);
@@ -221,13 +231,38 @@ describe("addOpeningPour", () => {
         expect(recipe.ratio).toBe(18);
     });
 
-    it("leaves the placeholder pour idiom alone", () => {
-        // addPour(0, false) is how the test suite builds a pour it is about to
-        // fill in. It must keep yielding the minimum-valued placeholder.
+    it("rounds a fractional coffee target to a whole millilitre", () => {
+        // A fractional ratio is not a contrivance: xBloom's own share links
+        // carry ratios like 1:15.5, and importing one lands 15 g at 1:15.5,
+        // whose dose-times-ratio target is 232.5 ml. A fractional stage volume
+        // once hung the app's redistribution loop, which is why the opening
+        // pour goes through getStageTargetVolume's rounding rather than taking
+        // getTotalVolume raw: the raw 232.5 passes isPourVolumeValid but
+        // cardWriteProblems then rejects it for not being a whole number.
         const recipe = new Recipe();
-        recipe.addPour(0, false);
+        recipe.cupType = CUP_TYPE.OMNI;
+        recipe.dosage = 15;
+        recipe.ratio = 15.5;
 
-        expect(recipe.pours[0].volume).toBe(1);
-        expect(recipe.pours[0].temperature).toBe(39);
+        recipe.addOpeningPour();
+
+        expect(Number.isInteger(recipe.pours[0].volume)).toBe(true);
+        expect(recipe.pours[0].volume).toBe(233); // Math.round(232.5) rounds half up
+    });
+
+    it("refuses to open a recipe that already has a stage", () => {
+        // An opening pour is by definition the first. Called on a non-empty
+        // recipe it would append a second stage numbered 1 -- corrupting the
+        // numbering that BrewRecord copies into stored history -- so it is a
+        // no-op that leaves the existing stage exactly as it was.
+        const recipe = recipeWithPours([240], 15, 16);
+        const existing = recipe.pours[0];
+
+        recipe.addOpeningPour();
+
+        expect(recipe.pours).toHaveLength(1);
+        expect(recipe.pours[0]).toBe(existing);
+        expect(recipe.pours[0].volume).toBe(240);
+        expect(recipe.pours[0].pourNumber).toBe(1);
     });
 });
