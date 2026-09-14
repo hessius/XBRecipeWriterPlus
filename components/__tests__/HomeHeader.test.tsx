@@ -61,7 +61,12 @@ describe("HomeHeader", () => {
 
         const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
         const arrived = collapsed.getByTestId("home-header-slide");
-        expect(arrived.props.jestAnimatedStyle.value.width).toBeGreaterThan(0);
+        // Pinned to the exact width rather than merely "more than nothing".
+        // The slide clips to this figure, so a glyph added to it without
+        // widening it is simply invisible -- and every other assertion in this
+        // file reads the accessibility tree, where a clipped glyph is still
+        // present and still tappable. Three touch targets of 44.
+        expect(arrived.props.jestAnimatedStyle.value.width).toBe(132);
     });
 
     it("keeps the parked glyphs out of reach", async () => {
