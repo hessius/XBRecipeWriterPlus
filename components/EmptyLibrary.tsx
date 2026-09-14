@@ -12,9 +12,9 @@ const MARK_DOT_SIZE = 5;
 /**
  * What the list area shows when there are no recipes.
  *
- * It replaces the list only. The header and both CTA tiles stay exactly where
- * they are, so the first thing a new user sees is the two things they can do —
- * which is also why there is no button in here.
+ * It replaces the list only. The header and all three CTA tiles stay exactly
+ * where they are, so the first thing a new user sees is the three things they
+ * can do — which is also why there is no button in here.
  */
 export default function EmptyLibrary() {
     return (
@@ -37,7 +37,8 @@ export default function EmptyLibrary() {
                     NO RECIPES YET
                 </DotMatrixText>
                 <Text fontSize={13} textAlign="center" color={palette.muted}>
-                    Read a card or import a recipe using the buttons above.
+                    Read a card, import a recipe, or write one from scratch using
+                    the buttons above.
                 </Text>
             </YStack>
         </YStack>
