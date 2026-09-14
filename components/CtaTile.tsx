@@ -6,8 +6,14 @@ import DotMatrixText from "@/components/DotMatrixText";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 
-/** The icon size inside a tile: large enough that the dot grid still reads. */
-const TILE_ICON_SIZE = 26;
+/**
+ * The icon size inside a tile: large enough that the dot grid still reads.
+ *
+ * Sized against the square tile below rather than in the abstract — at 26 the
+ * glyph left the tile looking mostly empty once it stopped being letterbox
+ * shaped.
+ */
+const TILE_ICON_SIZE = 32;
 
 type Props = {
     icon: DotIconName;
@@ -22,8 +28,8 @@ type Props = {
 /**
  * A primary action: icon above a dot-matrix label.
  *
- * The home screen shows two of these at equal weight. There is deliberately no
- * primary/secondary variant — if a third action ever earns equal weight it joins
+ * The home screen shows three of these at equal weight. There is deliberately no
+ * primary/secondary variant — if a fourth action ever earns equal weight it joins
  * the row; if it does not, it does not belong here.
  */
 export default function CtaTile({
@@ -47,7 +53,13 @@ export default function CtaTile({
             alignItems="center"
             justifyContent="center"
             gap="$2"
-            paddingVertical="$4"
+            // Square, not padded to whatever the contents come to. Three tiles
+            // across divide the width evenly, so `flex` fixes the width and the
+            // ratio derives the height from it — the row stays square on any
+            // screen without a height being guessed per device. Padding alone
+            // gave a wide, shallow tile that read as cramped beside its
+            // neighbours.
+            aspectRatio={1}
             borderRadius="$6"
             backgroundColor={palette.raised}
             borderWidth={1}

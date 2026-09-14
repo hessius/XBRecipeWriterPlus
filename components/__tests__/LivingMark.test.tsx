@@ -29,6 +29,11 @@ const flatten = (style: unknown) => StyleSheet.flatten(style as never) as Record
 
 // Each plus glyph lights 11 cells of its 9x9 bitmap; the mark is two glyphs
 // side by side, so this is the one count that means "the whole mark drew".
+//
+// It is also what caught the mark being restyled by a change made for the home
+// screen's NEW tile: the mark used to read `DOT_ICONS.plus`, and squaring that
+// glyph took the count to 26. The mark now owns its own bitmap, because it is
+// pinned to `assets/images/icon.png` and a UI glyph is not.
 const DOT_COUNT = 22;
 
 describe("LivingMark", () => {

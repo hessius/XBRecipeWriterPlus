@@ -394,16 +394,21 @@ export const DOT_ICONS = {
      * Steps a value up in a stepper, and stands alone for "new" on the home
      * screen's NEW tile and its collapsed-header glyph. Those are the only two
      * readings it carries; see `duplicate` for the offer it must not stand for.
+     *
+     * Deliberately square: 7 wide by 7 tall, both arms centred on row and
+     * column 4. It was 7 by 5, which is invisible at stepper size but reads as
+     * a squashed plus at tile size, where it is the largest glyph on the home
+     * screen.
      */
     plus: [
         ".........",
-        ".........",
+        "....#....",
         "....#....",
         "....#....",
         ".#######.",
         "....#....",
         "....#....",
-        ".........",
+        "....#....",
         "........."
     ],
     /**

@@ -762,6 +762,38 @@ describe("the stages deck", () => {
             .toBe(false);
     });
 
+    it("offers no mismatch and no auto fix before there are any stages", async () => {
+        // A blank recipe from the NEW tile arrives with a dose and a ratio but
+        // no stages, so `poured` is 0 against a target of 240 and the balance
+        // check calls that a mismatch. It is not one: the sum has not been
+        // started. The banner named a shortfall the user had not caused, and
+        // AUTO FIX had no stages to rescale, so it was inert as well as
+        // premature.
+        await renderEditor({pours: []});
+        await fireEvent.press(screen.getByLabelText("Stages, 0"));
+
+        expect(screen.queryByTestId("stage-mismatch")).toBeNull();
+        expect(screen.queryByLabelText("Auto fix")).toBeNull();
+    });
+
+    it("shows the mismatch again once a stage exists and does not add up", async () => {
+        // The guard above is about emptiness, not about validity, and must not
+        // quietly become a second write gate. One stage in, the opening pour
+        // fills the whole target so there is nothing to report; nudge it down
+        // and the banner is due again.
+        await renderEditor({pours: []});
+        await fireEvent.press(screen.getByLabelText("Stages, 0"));
+
+        await fireEvent.press(screen.getByLabelText("Add stage"));
+        expect(screen.queryByTestId("stage-mismatch")).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 1"));
+        await fireEvent.press(screen.getByLabelText("Decrease Stage volume"));
+
+        expect(screen.getByTestId("stage-mismatch")).toBeTruthy();
+        expect(screen.getByLabelText("Auto fix")).toBeTruthy();
+    });
+
     it("explains a mismatch and offers to fix it", async () => {
         await renderEditor();
         await fireEvent.press(screen.getByLabelText("Stages, 3"));

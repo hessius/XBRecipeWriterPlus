@@ -55,7 +55,7 @@ type Props = {
 export default function NewRecipeSheet({open, onOpenChange, onChoose}: Props) {
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange}
-                   title="New recipe" heightPercent={42}>
+                   title="New recipe" heightPercent={27}>
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                 {DOORS.map((door) => (
                     <Pressable key={door.group}

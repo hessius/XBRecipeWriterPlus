@@ -569,7 +569,15 @@ function StagesDeck({
 
     return (
         <YStack>
-            {!balance.balanced && (
+            {/* Not shown before there are any stages. With none, `poured` is 0
+                and `balance.balanced` is false, so a blank recipe opened on
+                "0 OF 240 ML" and offered to fix it — but the mismatch names a
+                sum the recipe has not begun, and AUTO FIX has nothing to
+                rescale, so the button was inert as well as premature. The
+                emptiness is already spoken for: ADD STAGE is the only live
+                control on the deck, and SAVE, WRITE and BREW are all refused
+                until it is pressed. */}
+            {!balance.balanced && recipe.pours.length > 0 && (
                 <XStack testID="stage-mismatch" alignItems="center" gap="$2.5"
                         marginTop="$2.5" padding="$3" borderRadius="$4"
                         backgroundColor={palette.raised}

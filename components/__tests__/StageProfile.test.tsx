@@ -80,7 +80,47 @@ function fillsWithin(element: unknown): string[] {
     return [...here, ...below];
 }
 
+/** Every path `d` string drawn anywhere inside an element. */
+function pathsWithin(element: unknown): string[] {
+    const node = element as {props?: {d?: unknown}; children?: unknown[]};
+    const here = typeof node.props?.d === "string" ? [node.props.d] : [];
+    const below = (node.children ?? [])
+        .filter((child) => typeof child === "object" && child !== null)
+        .flatMap(pathsWithin);
+    return [...here, ...below];
+}
+
 describe("StageProfile", () => {
+    it("draws no curve at all for a recipe with no stages", async () => {
+        // A blank recipe opens straight onto this chart, and the fill path is
+        // built by appending a baseline to `buildProfilePath`. With no stages
+        // that returns "", so the fill became `L338 0 Z` -- a subpath opening
+        // with a line rather than a move. RNSVG's parser does not skip invalid
+        // path data, it raises "UnexpectedData", and the screen came down with
+        // it. Asserting on every `d` in the tree rather than on a count of
+        // Paths, because what has to hold is that nothing malformed is emitted,
+        // not how the guard is spelled.
+        await renderWithProviders(
+            <StageProfile pours={[]} target={240} accent={palette.brand}
+                          width={338} height={92} testID="profile"/>
+        );
+
+        for (const d of pathsWithin(screen.getByTestId("profile"))) {
+            expect(d).toMatch(/^[Mm]/);
+        }
+    });
+
+    it("still draws the target a stageless recipe has to reach", async () => {
+        // The curve goes, the goal does not: the box is empty because nothing
+        // has been poured yet, and the line says how much there is to pour.
+        await renderWithProviders(
+            <StageProfile pours={[]} target={240} accent={palette.brand}
+                          width={338} height={92}/>
+        );
+
+        expect(screen.getByTestId("stage-profile-target")).toBeTruthy();
+    });
+
     it("draws a target line", async () => {
         await renderWithProviders(
             <StageProfile pours={pours(96, 96, 96)} target={288} accent="#F0B98E"
