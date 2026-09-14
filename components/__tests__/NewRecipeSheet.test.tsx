@@ -6,6 +6,8 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import NewRecipeSheet from "@/components/NewRecipeSheet";
+import {MAX_TEA_POURS} from "@/library/cardLimits";
+import {blankRecipe} from "@/library/newRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("NewRecipeSheet", () => {
@@ -53,6 +55,27 @@ describe("NewRecipeSheet", () => {
 
         expect(await screen.findByText(/15 g · 1:16/)).toBeTruthy();
         expect(await screen.findByText(/5 g · 90 ml steeps · up to 3/)).toBeTruthy();
+    });
+
+    it("states the presets the factory will actually apply", async () => {
+        // The test above pins the wording; this one pins the wording to the
+        // truth. Without it, blankRecipe could move the dose to 18 g and both
+        // suites would stay green while the door told the user 15 -- the door
+        // is the only place the presets are stated, so nothing else would
+        // catch it.
+        await renderWithProviders(
+            <NewRecipeSheet open onOpenChange={() => {}} onChoose={() => {}}/>
+        );
+
+        const coffee = blankRecipe("coffee");
+        expect(await screen.findByText(
+            new RegExp(`${coffee.dosage} g · 1:${coffee.ratio} · grind ${coffee.grindSize}`)
+        )).toBeTruthy();
+
+        const tea = blankRecipe("tea");
+        expect(await screen.findByText(
+            new RegExp(`^${tea.dosage} g · 90 ml steeps · up to ${MAX_TEA_POURS}$`)
+        )).toBeTruthy();
     });
 
     it("draws nothing while closed", async () => {

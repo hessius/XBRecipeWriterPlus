@@ -446,10 +446,10 @@ describe("addOpeningPour", () => {
 
     it("fixes a tea recipe's ratio, which is derived rather than chosen", () => {
         // Coffee's volume comes from its ratio. Tea is the other way round:
-        // fixRatio derives the ratio from the volumes, and without this call a
-        // new tea recipe sits at ratio 0 -- below RATIO.min -- and would need a
-        // second, unexplained tap on auto-adjust to reach the state coffee
-        // reaches in one.
+        // fixRatio derives the ratio from the volumes. A bare Recipe sits at
+        // the -1 "not set" sentinel until this call -- below RATIO.min, and a
+        // negative brew target if anything renders it. (blankRecipe seeds tea
+        // at 18 for exactly that reason; this test covers the bare class.)
         const recipe = new Recipe();
         recipe.cupType = CUP_TYPE.TEA;
         recipe.dosage = 5;

@@ -14,8 +14,13 @@ const SWATCH_SIZE = 10;
  * The two doors, in the order they are offered.
  *
  * The summary states the presets `blankRecipe` will apply. The door is the only
- * place a user is told what they are about to get, so the two have to agree —
- * `library/__tests__/newRecipe.test.ts` pins the numbers on the other side.
+ * place a user is told what they are about to get, so the two have to agree.
+ * They are written out rather than derived from `blankRecipe` because a door is
+ * a sentence, not a field dump — "up to 3" is a card limit and "steeps" is a
+ * word for the user, neither of which the factory knows. The agreement is held
+ * by a test in this component's suite that reads the factory and checks these
+ * strings against it, so a changed preset fails here rather than quietly
+ * leaving the door telling the wrong story.
  */
 const DOORS: {group: AccentGroup; label: string; summary: string}[] = [
     {group: "coffee", label: "COFFEE", summary: "15 g · 1:16 · grind 65 · OMNI"},
@@ -77,7 +82,14 @@ export default function NewRecipeSheet({open, onOpenChange, onChoose}: Props) {
                                                letterSpacing={1.5} color={palette.text}>
                                     {door.label}
                                 </DotMatrixText>
-                                <Text fontSize={12} color={palette.muted}>
+                                {/*
+                                  * `dim`, not `muted`: muted measures 3.55:1
+                                  * against this door's fill, and the palette
+                                  * says outright it is not a text colour. This
+                                  * line is the only statement of what the user
+                                  * is about to get, so it has to be readable.
+                                  */}
+                                <Text fontSize={12} color={palette.dim}>
                                     {door.summary}
                                 </Text>
                             </YStack>
