@@ -63,11 +63,12 @@ export const INDEX_COLUMNS: IndexColumn[] = [
     {name: "cupType", type: "INTEGER", indexed: true, from: (r) => r.cupType},
     {
         name: "isTea", type: "INTEGER", indexed: true,
-        // Asks the recipe rather than comparing cupType. The tea byte can
-        // carry the default cup count in its high nibble and legacy cards
-        // arrive as 0x13 or 0x23; isTea() owns every one of those
-        // normalisations, and accent.ts already warns that a second copy of
-        // the predicate would silently miss the next such fix.
+        // Asks the recipe rather than comparing cupType here. Legacy tea
+        // cards arrive as 0x13 or 0x23 with the cup count in the high nibble;
+        // the JSON constructor folds those to 0x03, and isTea() is the single
+        // predicate over the result. Comparing cupType inline would be a
+        // second copy of that predicate, which accent.ts warns would silently
+        // miss the next such fix.
         from: (r) => (r.isTea() ? 1 : 0)
     },
     {name: "dosage", type: "REAL", from: (r) => r.dosage},
