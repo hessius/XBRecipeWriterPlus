@@ -18,7 +18,7 @@ jest.mock("expo-sqlite", () => ({
 // expo-sqlite before jest.mock replaces it.
 /* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 /* eslint-enable import/first */
 
 beforeEach(() => {
@@ -341,5 +341,79 @@ describe("rebuild", () => {
 
         expect(() => new RecipeDatabase()).toThrow();
         expect(storedHash()).toBe("stale");
+    });
+});
+
+describe("accent assignment", () => {
+    it("gives successive recipes different accents", () => {
+        const db = new RecipeDatabase();
+        const first = new Recipe();
+        first.name = "A";
+        const second = new Recipe();
+        second.name = "B";
+
+        db.insertRecipe(first);
+        db.insertRecipe(second);
+
+        const accents = (db.retrieveAllRecipes() ?? []).map((r) => r.accentIndex);
+        expect(new Set(accents).size).toBe(2);
+    });
+
+    it("counts only recipes in the same half of the palette", () => {
+        const db = new RecipeDatabase();
+        const coffee = new Recipe();
+        coffee.name = "Coffee";
+        const tea = new Recipe();
+        tea.name = "Tea";
+        // CUP_TYPE.TEA (0x03), not the legacy 0x13 byte: the 0x13 -> 0x03 fold
+        // lives in the JSON constructor, so a value set directly on an
+        // in-memory Recipe stays 0x13 and isTea() reads it as coffee. A genuine
+        // in-memory tea recipe carries 0x03.
+        tea.cupType = CUP_TYPE.TEA;
+
+        db.insertRecipe(coffee);
+        db.insertRecipe(tea);
+
+        // Separate palettes, so both take index 0.
+        expect(db.getRecipe(coffee.uuid)!.accentIndex).toBe(0);
+        expect(db.getRecipe(tea.uuid)!.accentIndex).toBe(0);
+    });
+
+    it("does not move an accent the recipe already holds", () => {
+        // The colour the user edits under is the colour the library row gets.
+        // A save must not renumber it -- and the recipe must not be counted as
+        // competition for the colour it is already using.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Settled";
+        db.insertRecipe(recipe);
+        const original = db.getRecipe(recipe.uuid)!.accentIndex;
+
+        recipe.name = "Renamed";
+        db.updateRecipe(recipe.uuid, recipe);
+
+        expect(db.getRecipe(recipe.uuid)!.accentIndex).toBe(original);
+    });
+
+    it("reassigns when a recipe crosses between coffee and tea", () => {
+        // Crossing is what makes the old index name a colour in the wrong
+        // half, so moving it then is correct rather than a broken promise.
+        const db = new RecipeDatabase();
+        const filler = new Recipe();
+        filler.name = "Filler";
+        filler.cupType = 0x13;
+        db.insertRecipe(filler);
+
+        const crossing = new Recipe();
+        crossing.name = "Crossing";
+        db.insertRecipe(crossing);
+        crossing.accentIndex = 999; // invalid for either half
+
+        crossing.cupType = 0x13;
+        db.updateRecipe(crossing.uuid, crossing);
+
+        const settled = db.getRecipe(crossing.uuid)!.accentIndex!;
+        expect(settled).toBeGreaterThanOrEqual(0);
+        expect(settled).not.toBe(999);
     });
 });
