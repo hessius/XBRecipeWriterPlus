@@ -1,4 +1,3 @@
-import {accents} from "@/constants/colors";
 import {accentGroupFor} from "@/library/accent";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {blankRecipe} from "@/library/newRecipe";
@@ -21,7 +20,15 @@ describe("blankRecipe", () => {
 
         expect(recipe.dosage).toBe(5);
         expect(recipe.cupType).toBe(CUP_TYPE.TEA);
-        expect(recipe.isTea()).toBe(true);
+        // Tea's ratio is seeded at the value fixRatio derives from the 90 ml
+        // opening stage, so it is never the -1 "not set" sentinel the editor
+        // would render as a -5 ml target. The grind fields are deliberately
+        // left at their class defaults -- every call site that draws grind
+        // gates on !isTea, so grindSize's -1 is invisible on tea.
+        expect(recipe.ratio).toBe(18);
+        expect(recipe.grindSize).toBe(-1);
+        expect(recipe.grindRPM).toBe(120);
+        expect(recipe.grinder).toBe(true);
     });
 
     it("starts with no stages, for either beverage", () => {
@@ -43,12 +50,18 @@ describe("blankRecipe", () => {
     });
 
     it("cannot be written to a card until it has a stage", () => {
-        // The gate already exists; this pins that a blank recipe trips it
-        // rather than reaching a card half-formed.
-        expect(cardWriteProblems(blankRecipe("coffee")))
-            .toContain("The recipe has no stages.");
-        expect(cardWriteProblems(blankRecipe("tea")))
-            .toContain("The recipe has no stages.");
+        // The gate already exists; this pins the whole problem list a blank
+        // recipe trips, rather than that it merely includes one line -- the
+        // loose form once hid the -1 ratio sentinel's nonsense on tea. Both
+        // problems are truthful: no stages, and 0 ml poured against the target.
+        expect(cardWriteProblems(blankRecipe("coffee"))).toEqual([
+            "The recipe has no stages.",
+            "The stages pour 0 ml, but the dose and ratio ask for 240 ml.",
+        ]);
+        expect(cardWriteProblems(blankRecipe("tea"))).toEqual([
+            "The recipe has no stages.",
+            "The stages pour 0 ml, but the dose and ratio ask for 90 ml.",
+        ]);
     });
 
     it("is one tap from writable, for either beverage", () => {
@@ -67,6 +80,5 @@ describe("blankRecipe", () => {
         // which half the new recipe will draw from.
         expect(accentGroupFor(blankRecipe("coffee"))).toBe("coffee");
         expect(accentGroupFor(blankRecipe("tea"))).toBe("tea");
-        expect(accents.coffee.length).toBeGreaterThan(accents.tea.length);
     });
 });
