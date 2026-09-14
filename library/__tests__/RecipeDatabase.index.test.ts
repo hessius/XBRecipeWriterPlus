@@ -395,25 +395,39 @@ describe("accent assignment", () => {
         expect(db.getRecipe(recipe.uuid)!.accentIndex).toBe(original);
     });
 
-    it("reassigns when a recipe crosses between coffee and tea", () => {
-        // Crossing is what makes the old index name a colour in the wrong
-        // half, so moving it then is correct rather than a broken promise.
+    it("keeps an in-range accent across a crossing, and replaces one that overflows", () => {
+        // The real rule, which is narrower than "crossing reassigns". The
+        // coffee palette has 8 entries and tea 4, and the index is looked up
+        // in whichever half the recipe now belongs to. So a coffee index of
+        // 0-3 still names a real tea colour after crossing and is kept --
+        // consistent with accents not moving under the user -- while 4-7
+        // would point past the end of the tea half and must be replaced.
+        //
+        // Note the raw byte 0x13 cannot be used here: that fold lives in the
+        // JSON constructor, so a directly-assigned 0x13 still reads as coffee
+        // and nothing crosses at all.
         const db = new RecipeDatabase();
-        const filler = new Recipe();
-        filler.name = "Filler";
-        filler.cupType = 0x13;
-        db.insertRecipe(filler);
 
-        const crossing = new Recipe();
-        crossing.name = "Crossing";
-        db.insertRecipe(crossing);
-        crossing.accentIndex = 999; // invalid for either half
+        const kept = new Recipe();
+        kept.name = "Kept";
+        db.insertRecipe(kept);
+        expect(db.getRecipe(kept.uuid)!.accentIndex).toBe(0);
 
-        crossing.cupType = 0x13;
-        db.updateRecipe(crossing.uuid, crossing);
+        kept.cupType = CUP_TYPE.TEA;
+        db.updateRecipe(kept.uuid, kept);
+        expect(db.getRecipe(kept.uuid)!.isTea()).toBe(true);
+        expect(db.getRecipe(kept.uuid)!.accentIndex).toBe(0);
 
-        const settled = db.getRecipe(crossing.uuid)!.accentIndex!;
+        const overflowing = new Recipe();
+        overflowing.name = "Overflowing";
+        db.insertRecipe(overflowing);
+        overflowing.accentIndex = 7; // valid for coffee, past the end of tea
+
+        overflowing.cupType = CUP_TYPE.TEA;
+        db.updateRecipe(overflowing.uuid, overflowing);
+
+        const settled = db.getRecipe(overflowing.uuid)!.accentIndex!;
         expect(settled).toBeGreaterThanOrEqual(0);
-        expect(settled).not.toBe(999);
+        expect(settled).toBeLessThan(4);
     });
 });
