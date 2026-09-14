@@ -74,6 +74,25 @@ describe("blankRecipe", () => {
         expect(cardWriteProblems(tea)).toEqual([]);
     });
 
+    it("seeds a ratio the first stage will not move", () => {
+        // The literal 18 above pins what the factory chose; this pins why it
+        // chose it. Tea derives its ratio from the volumes, so if the opening
+        // stage's 90 ml ever changed, fixRatio would derive something else and
+        // the figure in the header would jump the moment the user tapped ADD
+        // STAGE -- silently, because every other test balances against
+        // whatever fixRatio produced rather than against the seed.
+        const tea = blankRecipe("tea");
+        const seeded = tea.ratio;
+        tea.addOpeningPour();
+        expect(tea.ratio).toBe(seeded);
+
+        // Coffee runs the other way round: the stage is sized from the ratio,
+        // so the ratio must survive untouched.
+        const coffee = blankRecipe("coffee");
+        coffee.addOpeningPour();
+        expect(coffee.ratio).toBe(16);
+    });
+
     it("lands in the half of the palette its beverage owns", () => {
         // Not a colour assertion for its own sake: the chooser shows these
         // swatches on the door, so the door and the recipe must agree about
