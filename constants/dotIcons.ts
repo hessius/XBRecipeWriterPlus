@@ -145,6 +145,8 @@ export const DOT_ICONS = {
      *
      * A plus was considered and rejected: on its own a plus reads as "new", and
      * duplicating a recipe is not the same offer as writing one from scratch.
+     * That reading is now load-bearing rather than hypothetical — the home
+     * screen's NEW tile is a bare plus, and it means exactly that.
      */
     duplicate: [
         "...######",
@@ -388,7 +390,11 @@ export const DOT_ICONS = {
         ".........",
         "........."
     ],
-    /** Steps a value up. Never used on its own to mean "new". */
+    /**
+     * Steps a value up in a stepper, and stands alone for "new" on the home
+     * screen's NEW tile and its collapsed-header glyph. Those are the only two
+     * readings it carries; see `duplicate` for the offer it must not stand for.
+     */
     plus: [
         ".........",
         ".........",
