@@ -2,6 +2,8 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {accents} from "@/constants/colors";
 import {
     accentGroupFor,
+    accentsInUseAmong,
+    assignAccent,
     nextAccentIndex,
     reassignIfCrossed,
     resolveAccent
@@ -165,5 +167,74 @@ describe("assigning an accent when the beverage changes", () => {
         const recipe = new Recipe();
         recipe.cupType = CUP_TYPE.XPOD;
         expect(reassignIfCrossed(recipe, [0, 1])).toBe(2);
+    });
+});
+
+describe("accentsInUseAmong", () => {
+    it("counts only the recipe's own half of the palette", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+
+        const coffee = recipeWithCup(CUP_TYPE.OMNI);
+        coffee.accentIndex = 2;
+        const tea = recipeWithCup(CUP_TYPE.TEA);
+        tea.accentIndex = 3;
+
+        expect(accentsInUseAmong(subject, [coffee, tea])).toEqual([2]);
+    });
+
+    it("does not count the recipe against itself", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        subject.accentIndex = 5;
+
+        expect(accentsInUseAmong(subject, [subject])).toEqual([]);
+    });
+
+    it("ignores recipes that have no index yet", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        const unsaved = recipeWithCup(CUP_TYPE.OMNI);
+
+        expect(accentsInUseAmong(subject, [unsaved])).toEqual([]);
+    });
+
+    it("keeps repeats, because a repeat is what makes an index more used", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        const first = recipeWithCup(CUP_TYPE.OMNI);
+        first.accentIndex = 1;
+        const second = recipeWithCup(CUP_TYPE.OMNI);
+        second.accentIndex = 1;
+
+        expect(accentsInUseAmong(subject, [first, second])).toEqual([1, 1]);
+    });
+});
+
+describe("assignAccent", () => {
+    it("gives an unassigned recipe the least-used index in its half", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        const taken = recipeWithCup(CUP_TYPE.OMNI);
+        taken.accentIndex = 0;
+
+        assignAccent(subject, [taken]);
+
+        expect(subject.accentIndex).toBe(1);
+    });
+
+    it("leaves a valid index alone, so it can be called twice", () => {
+        const subject = recipeWithCup(CUP_TYPE.OMNI);
+        const taken = recipeWithCup(CUP_TYPE.OMNI);
+        taken.accentIndex = 0;
+
+        assignAccent(subject, [taken]);
+        const first = subject.accentIndex;
+        assignAccent(subject, [taken]);
+
+        expect(subject.accentIndex).toBe(first);
+    });
+
+    it("gives a tea recipe an index inside the shorter tea half", () => {
+        const subject = recipeWithCup(CUP_TYPE.TEA);
+
+        assignAccent(subject, []);
+
+        expect(subject.accentIndex).toBeLessThan(accents.tea.length);
     });
 });
