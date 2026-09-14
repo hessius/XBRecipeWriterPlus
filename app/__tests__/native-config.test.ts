@@ -4,21 +4,20 @@ type PluginEntry = string | [string, Record<string, unknown>];
 
 describe("native release configuration", () => {
     /**
-     * 1.5.0, not 1.5.1.
+     * 1.6.0.
      *
-     * The background-modes change is native and `runtimeVersion.policy` is
-     * `appVersion`, which normally means a native-affecting change has to carry
-     * a bump: an over-the-air update built against new native code must never
-     * land on a binary that does not have it. That rule has no subject here.
-     * 1.5.0 exists only as TestFlight builds 4 to 6, the store still holds
-     * 1.0.0, and no update has ever been published — there are no EAS Update
-     * branches at all — so no installed binary claims runtime 1.5.0 and none
-     * can be handed the wrong bundle. M4 therefore reaches the store as the
-     * 1.5.0 it was developed as, rather than skipping a version to record a
-     * collision that cannot happen.
+     * `runtimeVersion.policy` is `appVersion`, so the version string is also
+     * the runtime version: an over-the-air update built against new native code
+     * must never land on a binary that does not have it. This release adds no
+     * native code — it is a sheet, a tile, a header glyph and domain logic —
+     * but it follows 1.5.0 into the store, and a released version is not
+     * reused.
+     *
+     * 1.5.0 build 9 is the M4 release candidate; the 1.5.1 builds 7 and 8 that
+     * preceded it have been retired. This release is 1.6.0 build 1.
      */
-    it("ships M4 as 1.5.0, on the appVersion runtime policy", () => {
-        expect(appConfig.expo.version).toBe("1.5.0");
+    it("ships the create-recipe release as 1.6.0, on the appVersion runtime policy", () => {
+        expect(appConfig.expo.version).toBe("1.6.0");
         expect(appConfig.expo.runtimeVersion.policy).toBe("appVersion");
     });
 
