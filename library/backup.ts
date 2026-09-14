@@ -269,6 +269,14 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     shareId:     (v) => typeof v === "string",
     shareUrl:    isShareUrl,
     shareSnapshot: (v) => typeof v === "string",
+    // Sanitised, not rejected — deliberately unlike every other entry here.
+    // This file is severe because a bad recipe's next stop is a genuine card
+    // and a malformed write is not trivially recoverable. A tag reaches no
+    // card, no machine and no share payload, so refusing an otherwise-perfect
+    // recipe over a decorative field would be the harm rather than the guard.
+    // `Recipe.normaliseTags` drops whatever it cannot use, so any shape is
+    // acceptable here and the constructor decides what survives.
+    tags: () => true,
     sharedTableId: isNumber,
     // Stricter than the sibling ids: a tableId is an account row's primary
     // key, so a negative one is not a plausible value that happens to be

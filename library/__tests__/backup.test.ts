@@ -387,3 +387,67 @@ describe("a share URL out of a backup file", () => {
         expect(accepts(42)).toBe(false);
     });
 });
+
+describe("tags", () => {
+    function backupWithTags(tags: unknown): string {
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        const envelope = JSON.parse(buildBackup([recipe], {}));
+        envelope.recipes[0].tags = tags;
+        return JSON.stringify(envelope);
+    }
+
+    it("round-trips tags through an export and import", () => {
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["morning", "filter"]);
+
+        const result = parseBackup(buildBackup([recipe], {}));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].tags).toEqual(["morning", "filter"]);
+    });
+
+    it("reads a backup written before tags existed", () => {
+        const recipe = new Recipe();
+        recipe.name = "Old";
+        const envelope = JSON.parse(buildBackup([recipe], {}));
+        delete envelope.recipes[0].tags;
+
+        const result = parseBackup(JSON.stringify(envelope));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].tags).toEqual([]);
+    });
+
+    it("keeps the recipe and drops the tags when the field is malformed", () => {
+        // Deliberately unlike every other field in this file. A malformed tag
+        // costs the recipe its tags, not its existence: a tag never reaches a
+        // card, so rejecting an otherwise-perfect recipe would be the harm.
+        for (const hostile of ["nope", 7, null, [1, 2], [{}]]) {
+            const result = parseBackup(backupWithTags(hostile));
+            expect(result.ok).toBe(true);
+            if (!result.ok) continue;
+            expect(result.payload.recipes).toHaveLength(1);
+            expect(result.payload.recipes[0].tags).toEqual([]);
+        }
+    });
+
+    it("bounds an absurd number of tags", () => {
+        const result = parseBackup(
+            backupWithTags(Array.from({length: 500}, (_, i) => `t${i}`))
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].tags).toHaveLength(20);
+    });
+
+    it("bounds an absurdly long tag", () => {
+        const result = parseBackup(backupWithTags(["a".repeat(10000), "ok"]));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].tags).toEqual(["ok"]);
+    });
+});
