@@ -4,6 +4,7 @@ import React, {useState} from "react";
 import {ScrollView, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
+import CardReadDiagnostic from "@/components/CardReadDiagnostic";
 import MachineSection from "@/components/MachineSection";
 import RestoreSheet, {type RestoreChoice} from "@/components/RestoreSheet";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -57,7 +58,7 @@ export default function SettingsScreen({settings}: Props) {
     const [showHints, setShowHints] = useSetting("showHints", settings);
     const [temperatureUnit, setTemperatureUnit] =
         useSetting("temperatureUnit", settings);
-    const [teaSteepEncoding, setTeaSteepEncoding] = useSetting("teaSteepEncoding", settings);
+    const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding", settings);
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone", settings);
     const [machineConsoleAcknowledged, setMachineConsoleAcknowledged] =
         useSetting("machineConsoleAcknowledged", settings);
@@ -66,6 +67,9 @@ export default function SettingsScreen({settings}: Props) {
     // Shown as a row inside MachineSection, not here. Read anyway, because a
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
+    const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [brewTraceRetention, setBrewTraceRetention] =
+        useSetting("brewTraceRetention", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -87,9 +91,10 @@ export default function SettingsScreen({settings}: Props) {
     // a key someone forgot.
     function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
         return {
-            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit, teaSteepEncoding,
+            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
+            bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart
+            machineAutoStart, animateBrewChart, brewTraceRetention
         };
     }
 
@@ -139,8 +144,14 @@ export default function SettingsScreen({settings}: Props) {
         if (typeof incoming.machineAutoStart === "boolean") {
             setMachineAutoStart(incoming.machineAutoStart);
         }
-        if (incoming.teaSteepEncoding === "homoland" || incoming.teaSteepEncoding === "saya6k") {
-            setTeaSteepEncoding(incoming.teaSteepEncoding);
+        if (incoming.bypassTempEncoding === "scaled" || incoming.bypassTempEncoding === "plain") {
+            setBypassTempEncoding(incoming.bypassTempEncoding);
+        }
+        if (typeof incoming.animateBrewChart === "boolean") {
+            setAnimateBrewChart(incoming.animateBrewChart);
+        }
+        if (typeof incoming.brewTraceRetention === "number") {
+            setBrewTraceRetention(incoming.brewTraceRetention);
         }
     }
 
@@ -216,6 +227,17 @@ export default function SettingsScreen({settings}: Props) {
                                        onPress={() => router.push("/about")}/>
                 </SettingsSection>
 
+                {/* Its own section rather than a line in Library. Everything
+                    else under Library is about the recipes you hold; a brew
+                    history is a record of what the machine did, and burying it
+                    among backup and delete made the app's own diary read as
+                    file management. */}
+                <SettingsSection>
+                    <SettingsActionRow label="Brew history"
+                                       detail="Every brew you have recorded."
+                                       onPress={() => router.push("/brewHistory")}/>
+                </SettingsSection>
+
                 <SettingsSection title="Recipe list">
                     <SettingsToggleRow
                         label="Show the COFFEE marker"
@@ -251,6 +273,11 @@ export default function SettingsScreen({settings}: Props) {
                                        detail="Everything on this phone. There is no undo."
                                        onPress={() => setConfirmingDeleteAll(true)}/>
                 </SettingsSection>
+
+                {/* Gated behind the machine console's acknowledgement, so it is
+                    invisible until a user opens the developer area — see the
+                    component. */}
+                <CardReadDiagnostic settings={settings}/>
             </YStack>
 
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
@@ -268,4 +295,3 @@ export default function SettingsScreen({settings}: Props) {
         </YStack>
     );
 }
-

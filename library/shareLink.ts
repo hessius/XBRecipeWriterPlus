@@ -118,13 +118,21 @@ export function buildSharePayload(recipe: Recipe): SharePayload {
         isSetGrinderSize:    tea ? 2 : enabled(recipe.grinder),
         rpm:                 tea ? 60 : recipe.grindRPM,
         cupType:             cloudCupType(recipe.cupType),
-        bypassTemp:          85,
-        // Cosmetic while `isEnableBypassWater` is 2, but 0 is the honest value.
-        bypassVolume:        0,
+        // Tea does not support bypass; the machine ignores it and sending a live
+        // bypass with cupType 4 would produce an unbreakable share link.
+        //
+        // A bypass that is off sends the canonical 85, never the temperature the
+        // editor preserved while it was off. Those preserved values are there so
+        // that re-enabling bypass does not lose the user's setting, but they must
+        // not reach the wire: an off payload that varies with an invisible field
+        // makes an already-shared recipe read as stale and mints a duplicate row
+        // in the service account every time the link is shared again.
+        bypassTemp:          tea || !recipe.bypassEnabled ? 85 : recipe.bypassTemp,
+        bypassVolume:        tea || !recipe.bypassEnabled ? 0  : recipe.bypassVolume,
         subSetType:          2,
         appPlace:            [4],
         isShortcuts:         2,
-        isEnableBypassWater: 2,
+        isEnableBypassWater: tea ? 2  : enabled(recipe.bypassEnabled),
         // Load-bearing: this value partitions the account's library, and the
         // mint function looks the new row up in the `adaptedModel: 1` list.
         adaptedModel:        1,

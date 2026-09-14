@@ -17,7 +17,7 @@ type Props = {
  * treatment the screen already used for its one section before there were
  * several. Upper-cased here rather than at the call sites so the sections cannot
  * drift apart from one another. It stays outside and above the card, the way the
- * BREW deck's `ML TOTAL` caption sits above its own grouped rows.
+ * BREW deck's `ML BREW` caption sits above its own grouped rows.
  *
  * The rows sit inside a `surface` card — not `raised` — for two reasons, both
  * borrowed from the editor's BREW deck (`app/editRecipe.tsx`, the one grouped

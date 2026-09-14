@@ -524,4 +524,11 @@ describe("SettingsScreen", () => {
         expect(indexOf("RECIPE LIST")).toBeLessThan(indexOf("UNITS"));
         expect(indexOf("UNITS")).toBeLessThan(indexOf("LIBRARY"));
     });
+
+    it("offers a retention choice, including keeping none", async () => {
+        const {getByText} = await renderWithProviders(
+            <SettingsScreen settings={new Settings(memoryStorage())}/>
+        );
+        expect(getByText("Don't keep traces")).toBeTruthy();
+    });
 });

@@ -4,6 +4,8 @@ import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Input, Text, XStack, YStack} from "tamagui";
 
+import BypassRung from "@/components/BypassRung";
+import BypassWriteSheet from "@/components/BypassWriteSheet";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
@@ -19,14 +21,18 @@ import Stepper from "@/components/Stepper";
 import TeaBanner from "@/components/TeaBanner";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
+import {grindTooFine} from "@/constants/copy";
 import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
-import {useShareRecipe} from "@/hooks/useShareRecipe";
+import type {BypassField} from "@/hooks/useRecipeEditor";
+import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
+import {parseCapture} from "@/library/cardDiagnostics";
+import {maxStagesForBytes, SIGNATURE_BYTES} from "@/library/cardWriteErrors";
 import type Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -35,6 +41,23 @@ import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
+
+/**
+ * The most stages the last card read could hold.
+ *
+ * Genuine cards have been read at both 128 and 160 bytes, so the ceiling is a
+ * property of the card in the user's hand rather than of the format. Falling
+ * back to the smaller of the two is the conservative guess: advising a ceiling
+ * that turns out to be generous is a refusal at the write, which is the failure
+ * this is trying to save the user from.
+ */
+const FALLBACK_MAX_STAGES = 10;
+
+function maxStagesFromLastCard(lastCardRead: string): number {
+    const info = parseCapture(lastCardRead)?.systemInfo;
+    if (!info) return FALLBACK_MAX_STAGES;
+    return maxStagesForBytes(info.blockCount * info.blockSize - SIGNATURE_BYTES);
+}
 
 /**
  * The cup and grinder choices, as the segmented rows want them. Values are the
@@ -75,9 +98,9 @@ type TextFieldRowProps = {
      *
      * A `Pressable` does not blur a focused `TextInput`, so WRITE, SAVE, More
      * and Back can all fire while this row still holds a value the recipe has
-     * never seen. The draft goes to a ref rather than to state: this row is
-     * keyed on the value it mirrors, so publishing per keystroke would remount
-     * it and take the cursor with it.
+     * never seen. The draft goes to a ref rather than to state: the recipe is
+     * mutated in place and published by a key bump, so routing per keystroke
+     * through state would re-render the row and fight the cursor for no gain.
      */
     onDraft?: (value: string) => void;
     /** Validates on every keystroke; false marks the field and reports up. */
@@ -86,6 +109,14 @@ type TextFieldRowProps = {
     invalidReason?: string;
     /** Reports the field's validity so the write and save gates can honour it. */
     onInvalidChange?: (invalid: boolean) => void;
+    /** Told when the input gains or loses focus, so a caller can defer work. */
+    onFocusChange?: (focused: boolean) => void;
+    /**
+     * A live annotation on the field's own label, e.g. that an online lookup
+     * failed. Passed straight to `FieldRow`; unlike `error` it does not gate any
+     * button and is not styled as a validation failure.
+     */
+    note?: string;
 };
 
 /**
@@ -95,6 +126,11 @@ type TextFieldRowProps = {
  * feeding the input back a controlled `value` on every keystroke would fight the
  * cursor. It commits when editing ends, which is when the value is worth writing
  * back.
+ *
+ * The row keys on an external-replacement epoch at its call site, not on the
+ * value it mirrors, so only a wholesale swap of the recipe (a revert) remounts
+ * it and resets the visible text; an ordinary edit leaves it mounted. See the
+ * key comment beside the call.
  *
  * A field may validate live: `validate` runs on every keystroke, not only on
  * commit, so a bad value closes the write and save gates before the field
@@ -107,19 +143,19 @@ type TextFieldRowProps = {
 function TextFieldRow({
     topic, label, initialValue, maxLength, autoCapitalize,
     showHint, onCommit, onDraft,
-    validate, invalidReason, onInvalidChange
+    validate, invalidReason, onInvalidChange, onFocusChange, note
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
     // The whole row focuses this, so a short or empty value no longer leaves a
     // wide strip of the row looking tappable while only the input responds.
     const inputRef = useRef<React.ElementRef<typeof Input>>(null);
 
-    // Reports validity on mount, and this row is keyed on the value it mirrors
-    // by its call sites — so an external change (a revert to a good ID, a
-    // refreshed name) remounts the whole row and both the local `invalid` mark
-    // and the screen's gate are recomputed from the new value. Keying only the
-    // inner input left this state behind: the danger colour and the reason
-    // stayed on a field that now held something valid.
+    // Reports validity on mount. The row is keyed on the external-replacement
+    // epoch by its call site, so a revert remounts the whole row and both the
+    // local `invalid` mark and the screen's gate are recomputed here from the
+    // restored value. Keying only the inner input left this state behind: the
+    // danger colour and the reason stayed on a field that now held something
+    // valid.
     useEffect(() => {
         if (validate) onInvalidChange?.(!validate(initialValue));
     }, [initialValue, validate, onInvalidChange]);
@@ -143,13 +179,15 @@ function TextFieldRow({
         // swallow the taps meant for the stepper's - and + controls.
         <Pressable accessible={false} testID={`field-row-${label}`}
                    onPress={() => (inputRef.current as TextInput | null)?.focus()}>
-            <FieldRow topic={topic} showHint={showHint}
+            <FieldRow topic={topic} showHint={showHint} note={note}
                       error={invalid ? invalidReason : undefined}>
                 {/* Not keyed here: the key belongs on the row, which is what owns
                     the `invalid` state this input feeds. */}
                 <Input ref={inputRef} unstyled accessibilityLabel={label}
                        defaultValue={initialValue} maxLength={maxLength}
                        autoCapitalize={autoCapitalize} onChangeText={onChangeText}
+                       onFocus={() => onFocusChange?.(true)}
+                       onBlur={() => onFocusChange?.(false)}
                        onEndEditing={(event) => onCommit(event.nativeEvent.text)}
                        textAlign="right" minWidth={110} fontSize={16}
                        color={invalid ? palette.danger : palette.text}/>
@@ -171,6 +209,21 @@ type BrewDeckProps = {
     onInputErrorChange: (invalid: boolean) => void;
     /** Raises a too-fine imported grind to the card minimum. */
     coarsenGrindToMinimum: () => void;
+    /**
+     * The xBloom name lookup for this recipe's XID was tried and failed. Shown
+     * as a quiet note on the XID row, not an error: the recipe is valid without
+     * a looked-up name, so this never touches the save gate.
+     */
+    xidLookupFailed: boolean;
+    /**
+     * Counter bumped only when the recipe instance is swapped (a revert). The
+     * two text rows key on it, so a genuine external replacement remounts them
+     * and resets their visible text and validity, while an ordinary edit or an
+     * XID lookup leaves the field a user is typing in mounted.
+     */
+    externalEpoch: number;
+    /** The Recipe ID field reports focus so the hook can defer the XID lookup. */
+    onXidFocusChange: (focused: boolean) => void;
 };
 
 /**
@@ -197,7 +250,8 @@ type BrewDeckProps = {
  */
 function BrewDeck({
     recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum
+    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum, xidLookupFailed,
+    externalEpoch, onXidFocusChange
 }: BrewDeckProps) {
     "use no memo";
 
@@ -218,18 +272,30 @@ function BrewDeck({
     // fix it that the stage mismatch has always had.
     const tooFine = showGrind && recipe.grindSize < CARD_GRIND_MIN;
     const fineBand = tooFine ? grindBand(recipe.grindSize) : undefined;
+    // Tea has no bypass anywhere in the app; the machine ignores it.
+    const showBypass = recipe.bypassEnabled && !isTea;
 
     return (
         <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
                 overflow="hidden">
-            <XStack alignItems="baseline" gap="$2"
+            <XStack alignItems="baseline" gap="$2" flexWrap="wrap"
                     paddingHorizontal="$4" paddingTop="$4" paddingBottom="$3">
                 <DotMatrixText testID="brew-target" fontSize={22} weight="bold" color={accent}>
                     {balanceTarget}
                 </DotMatrixText>
                 {/* `dim`, not `muted`: muted is 4.12:1 and the palette says in
                     as many words that it is not a text colour. */}
-                <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML TOTAL</Text>
+                <Text fontSize={10} letterSpacing={1.6} color={palette.dim}>ML BREW</Text>
+                {/* Without this line the ladder adds up to more than the header
+                    and the app looks broken. It is not: the header is the
+                    volume the machine checks the stages against, and bypass is
+                    dispensed outside it. Doto, so the units are upper-case. */}
+                {showBypass && (
+                    <DotMatrixText testID="brew-bypass-split" fontSize={11} weight="bold"
+                                   letterSpacing={1.4} color={palette.info}>
+                        {`+ ${recipe.bypassVolume} ML BYPASS`}
+                    </DotMatrixText>
+                )}
             </XStack>
 
             <FieldRow topic="dose"
@@ -258,8 +324,8 @@ function BrewDeck({
                         </DotMatrixText>
                         <Text fontSize={12} lineHeight={16} color={palette.dim}>
                             {fineBand === undefined
-                                ? `A card cannot store a grind below ${CARD_GRIND_MIN}.`
-                                : `Ground for ${fineBand.longLabel}. A card cannot store a grind below ${CARD_GRIND_MIN}.`}
+                                ? grindTooFine(CARD_GRIND_MIN)
+                                : `Ground for ${fineBand.longLabel}. ${grindTooFine(CARD_GRIND_MIN)}`}
                         </Text>
                     </YStack>
                     <Pressable accessibilityRole="button"
@@ -332,28 +398,32 @@ function BrewDeck({
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
-            {/* Keyed on the value it mirrors, so an external change — a
-                revert, a refreshed xBloom name — remounts this one row and
-                nothing else. It sits on the row rather than the input because
-                the row owns the validity state. The key bump used to live on
-                the scroll container, which reset the scroll offset every time
-                a stepper was nudged.
+            {/* Keyed on the external-replacement epoch, not on the value it
+                mirrors. The counter bumps only when the whole recipe is swapped
+                out — a revert — so that one case still remounts the row and
+                resets its visible text, local `invalid` mark and the screen's
+                save gate to the restored ID. An ordinary keystroke or a
+                late-arriving XID lookup does not touch the epoch, so the field a
+                user is typing in is never remounted mid-entry: keying on
+                `recipe.xid` used to do exactly that, and a mid-typing render
+                (the XID lookup resolving) reset the uncontrolled input and ate
+                keystrokes.
 
-                The field name prefixes the key so two rows can never collide: a
-                share-link import arrives with `xid` and `name` both empty
-                strings, and bare `key={recipe.xid}` / `key={recipe.name}` would
-                then be the same key on sibling rows — React logs "two children
-                with the same key". The prefix keeps each row's key in its own
-                namespace. */}
-            <TextFieldRow key={`xid-${recipe.xid}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
+                The `xid-`/`name-` prefixes keep the two rows in separate key
+                namespaces, so a share-link import — which arrives with `xid`
+                and `name` both empty and now shares the same epoch — cannot land
+                two siblings on one key and draw React's duplicate-key warning. */}
+            <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
                           maxLength={8} autoCapitalize="characters"
                       showHint={showHint}
+                          note={xidLookupFailed ? "not found" : undefined}
                           validate={isValidXID} onInvalidChange={onInputErrorChange}
-                          invalidReason="Not a valid ID — three letters, an optional T, then two or three digits, like CGL12."
+                          invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
+                          onFocusChange={onXidFocusChange}
                           onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
 
-            <TextFieldRow key={`name-${recipe.name}`} topic="name" label="Name" initialValue={recipe.name}
+            <TextFieldRow key={`name-${externalEpoch}`} topic="name" label="Name" initialValue={recipe.name}
                           maxLength={100}
                       showHint={showHint}
                           onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
@@ -362,33 +432,52 @@ function BrewDeck({
     );
 }
 
+/**
+ * What the stages deck has open.
+ *
+ * A string sentinel rather than an index past the end, so that every consumer
+ * that reaches into `recipe.pours` has to narrow before it can. An out-of-range
+ * index would have compiled everywhere and been wrong at runtime in exactly one
+ * place.
+ */
+type OpenRung = number | "bypass" | null;
+
 type StagesDeckProps = {
     recipe: Recipe;
 
     balance: {poured: number; target: number; balanced: boolean};
     accent: string;
     isTea: boolean;
-    /** The open stage's index, or null. Held by the screen, not the tile. */
-    openStage: number | null;
-    setOpenStage: React.Dispatch<React.SetStateAction<number | null>>;
+    /** The open rung, or null. Held by the screen, not the tile. */
+    openStage: OpenRung;
+    setOpenStage: React.Dispatch<React.SetStateAction<OpenRung>>;
     /** Reports where a stage sits within the deck, so it can be scrolled to. */
     onStageLayout: (index: number, y: number) => void;
+    /** The same, for the bypass rung. */
+    onBypassLayout: (y: number) => void;
     editStage: (index: number, field: StageField, value: number) => void;
+    setBypassEnabled: (on: boolean) => void;
+    editBypass: (field: BypassField, value: number) => void;
+    showHint: boolean;
     addPour: (pourNumber: number) => void;
     deletePour: (pourNumber: number) => void;
     autoAdjustPourVolumes: () => void;
     temperatureUnit: TemperatureUnit;
+    /** The most stages the last card read could hold; advisory only. */
+    maxStages: number;
 };
 
 type StageProfileCardProps = {
     pours: Pour[];
     target: number;
     accent: string;
-    /** The stage the list has open, so the curve can highlight its band. */
-    selected: number | null;
+    /** The rung the list has open, so the curve can highlight its band. */
+    selected: OpenRung;
+    /** Bypass water in millilitres, or 0 when it is off. */
+    bypassVolume: number;
     /** The header has collapsed, so the screen is short of room. */
     collapsed: boolean;
-    onSelect: (index: number) => void;
+    onSelect: (index: number | "bypass") => void;
     /** Reports how much of the content the pinned card covers, once laid out. */
     onHeight: (height: number) => void;
 };
@@ -416,7 +505,7 @@ type StageProfileCardProps = {
 export const PROFILE_HEIGHT = {full: 92, compact: 52} as const;
 
 function StageProfileCard({
-    pours, target, accent, selected, collapsed, onSelect, onHeight
+    pours, target, accent, selected, bypassVolume, collapsed, onSelect, onHeight
 }: StageProfileCardProps) {
     "use no memo";
 
@@ -437,6 +526,7 @@ function StageProfileCard({
                               height={collapsed
                                   ? PROFILE_HEIGHT.compact
                                   : PROFILE_HEIGHT.full}
+                              bypassVolume={bypassVolume}
                               selected={selected ?? undefined} onSelect={onSelect}/>
             </YStack>
         </YStack>
@@ -459,7 +549,8 @@ function StageProfileCard({
  */
 function StagesDeck({
     recipe, balance, accent, isTea, openStage, setOpenStage, onStageLayout,
-    editStage, addPour, deletePour, autoAdjustPourVolumes, temperatureUnit,
+    onBypassLayout, editStage, addPour, deletePour, autoAdjustPourVolumes,
+    temperatureUnit, setBypassEnabled, editBypass, showHint, maxStages,
 }: StagesDeckProps) {
     "use no memo";
 
@@ -501,6 +592,29 @@ function StagesDeck({
                             AUTO FIX
                         </DotMatrixText>
                     </Pressable>
+                </XStack>
+            )}
+
+            {/* Advisory, not a gate. The add button stays live and the recipe
+                stays saveable: a recipe that is only ever brewed over BLE has
+                no ceiling at all, and refusing to let someone build one because
+                a card could not hold it would be the app inventing a limit the
+                machine does not have. `warn`, not `danger`: nothing is wrong
+                yet. */}
+            {recipe.pours.length > maxStages && (
+                <XStack testID="stage-ceiling" alignItems="center" gap="$2.5"
+                        marginTop="$2.5" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.warn}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.warn}>
+                            {`${recipe.pours.length} STAGES`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            {`A card holds ${maxStages} stages. This recipe can still be saved and brewed over Bluetooth, but it cannot be written to a card.`}
+                        </Text>
+                    </YStack>
                 </XStack>
             )}
 
@@ -546,6 +660,27 @@ function StagesDeck({
                     </DotMatrixText>
                 </XStack>
             </Pressable>
+
+            {/* The bypass rung closes the ladder, after the add button rather
+                than before it: adding a stage is an operation on the list, and
+                bypass is the last thing that happens in the cup. */}
+            <View onLayout={(event) => onBypassLayout(event.nativeEvent.layout.y)}>
+                <BypassRung recipe={recipe} isTea={isTea}
+                            open={openStage === "bypass"}
+                            showHint={showHint} temperatureUnit={temperatureUnit}
+                            onToggle={() =>
+                                setOpenStage((current) =>
+                                    current === "bypass" ? null : "bypass")}
+                            onEnabledChange={(on) => {
+                                setBypassEnabled(on);
+                                // Open it on the way on so the two controls are
+                                // there without a second tap, and close it on
+                                // the way off so nothing is selected pointing
+                                // at a rung that is no longer drawn.
+                                setOpenStage(on ? "bypass" : null);
+                            }}
+                            onChange={editBypass}/>
+            </View>
         </YStack>
     );
 }
@@ -680,10 +815,11 @@ export default function EditRecipe() {
     const [showHint, setShowHint] = useSetting("showHints");
     const [rememberedMachine] = useSetting("machineDeviceId");
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
+    const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
 
     const [deck, setDeck] = useState<Deck>("brew");
-    const [openStage, setOpenStage] = useState<number | null>(null);
+    const [openStage, setOpenStage] = useState<OpenRung>(null);
     const [actionBarHeight, setActionBarHeight] = useState(0);
 
     // Layout facts, not state: nothing on screen changes when a stage moves,
@@ -691,6 +827,7 @@ export default function EditRecipe() {
     // layout pass of every tile.
     const scrollRef = useRef<ScrollView>(null);
     const stageOffsets = useRef<number[]>([]);
+    const bypassOffset = useRef(0);
     const deckOffset = useRef(0);
     const profileHeight = useRef(0);
 
@@ -710,9 +847,11 @@ export default function EditRecipe() {
      * halfway down the list a tap on it would highlight and open a tile that
      * was off screen in either direction, and nothing appeared to happen.
      */
-    function selectStage(index: number) {
+    function selectStage(index: number | "bypass") {
         setOpenStage(index);
-        const tileY = stageOffsets.current[index];
+        const tileY = index === "bypass"
+            ? bypassOffset.current
+            : stageOffsets.current[index];
         if (tileY === undefined) return;
         scrollRef.current?.scrollTo({
             y:        stageScrollTarget(deckOffset.current, tileY, profileHeight.current),
@@ -722,6 +861,7 @@ export default function EditRecipe() {
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
     // without changing what the next recipe opens on.
@@ -731,7 +871,9 @@ export default function EditRecipe() {
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
-        setInputError, editStage, addPour, deletePour, autoAdjustPourVolumes, coarsenGrindToMinimum
+        setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
+        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
+        setXidFocused
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -745,14 +887,7 @@ export default function EditRecipe() {
         if (shareState.status !== "failed") {
             return;
         }
-        const message = {
-            network:     "Could not reach the sharing service. Check your connection.",
-            limited:     "Sharing is busy right now. Try again in a few minutes.",
-            unavailable: "Sharing is temporarily unavailable. Everything else still works.",
-            unusable:    "This recipe cannot be shared yet — check the pour volumes and dose.",
-            pending:     "This recipe's link is still being created. Try again in a moment."
-        }[shareState.reason];
-        notify({tone: "error", message});
+        notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
 
     // Computed before the header effect, not after the `recipe` guard below, so
@@ -870,6 +1005,26 @@ export default function EditRecipe() {
         }
     }
 
+    async function onWritePress() {
+        const currentRecipe = recipe;
+        if (!currentRecipe) return;
+        await flushDrafts();
+        if (currentRecipe.bypassEnabled) {
+            setBypassWriteOpen(true);
+            return;
+        }
+        await writeCard(currentRecipe);
+    }
+
+    function cancelBypassWrite() {
+        setBypassWriteOpen(false);
+    }
+
+    async function confirmBypassWrite() {
+        setBypassWriteOpen(false);
+        await writeCard(recipe);
+    }
+
     async function deleteRecipe() {
         await flushDrafts();
         try {
@@ -885,7 +1040,7 @@ export default function EditRecipe() {
     // -- must also hide the screen from TalkBack, which an absolutely
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
-    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen;
+    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen || bypassWriteOpen;
 
     return (
         <>
@@ -932,6 +1087,22 @@ export default function EditRecipe() {
                             paddingBottom: actionBarHeight + 16
                         }}
                         stickyHeaderIndices={deck === "stages" ? [2] : undefined}
+                        // iOS grows the scroll view's own bottom inset by the
+                        // keyboard's height so a focused field low on the screen
+                        // — the Recipe ID and Name rows sit near the bottom of
+                        // the brew deck — scrolls clear of the software keyboard
+                        // instead of hiding behind it. It adds to the inset, so
+                        // the measured `paddingBottom` above still holds; and it
+                        // only ever touches the bottom inset, so the sticky
+                        // profile header on the stages deck is untouched. Android
+                        // resizes the window under Expo's default
+                        // `softwareKeyboardLayoutMode: "resize"`, so the same
+                        // field is pushed up there without an extra setting.
+                        automaticallyAdjustKeyboardInsets
+                        // A tap on WRITE/SAVE while the keyboard is up commits
+                        // the field and fires the button, rather than being
+                        // eaten by the keyboard-dismiss.
+                        keyboardShouldPersistTaps="handled"
                         onScroll={onScroll} scrollEventThrottle={16}>
                 {recipe.isTea() ? <TeaBanner accent={accent}/> : <YStack/>}
 
@@ -941,6 +1112,9 @@ export default function EditRecipe() {
                 {deck === "stages" ? (
                     <StageProfileCard pours={recipe.pours} target={balance.target}
                                       accent={accent} selected={openStage}
+                                      bypassVolume={recipe.bypassEnabled
+                                          ? recipe.bypassVolume
+                                          : 0}
                                       collapsed={collapsed}
                                       onSelect={selectStage}
                                       onHeight={(height) => {
@@ -948,15 +1122,19 @@ export default function EditRecipe() {
                                       }}/>
                 ) : <YStack/>}
 
-                {/* The deck is keyed on the counter, not the scroll container: the
-                    model is mutated in place, so `recipe` keeps its identity
-                    across an edit and the deck has to be told the value moved.
-                    The key used to sit on the ScrollView, which sent the user
-                    back to the top of the screen on every nudge. */}
+                {/* No `key` on the deck: the model is mutated in place, so
+                    `recipe` keeps its identity across an edit and a remount
+                    would drop the hold-to-repeat timer inside a `Stepper`. The
+                    redraw rides on the `key` counter threaded through the hook
+                    instead. (An earlier key on the ScrollView sent the user
+                    back to the top of the screen on every nudge.) */}
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
                               coarsenGrindToMinimum={coarsenGrindToMinimum}
+                              xidLookupFailed={xidLookupFailed}
+                              externalEpoch={externalEpoch}
+                              onXidFocusChange={setXidFocused}
                               onDraft={(label, value) => drafts.current.set(label, value)}
                               onInputErrorChange={setInputError}/>
                 ) : (
@@ -969,9 +1147,15 @@ export default function EditRecipe() {
                                 onStageLayout={(index, y) => {
                                     stageOffsets.current[index] = y;
                                 }}
+                                onBypassLayout={(y) => {
+                                    bypassOffset.current = y;
+                                }}
+                                setBypassEnabled={setBypassEnabled}
+                                editBypass={editBypass} showHint={showHint}
                                 addPour={addPour} deletePour={deletePour}
                                 autoAdjustPourVolumes={autoAdjustPourVolumes}
-                                temperatureUnit={temperatureUnit}/>
+                                temperatureUnit={temperatureUnit}
+                                maxStages={maxStagesFromLastCard(lastCardRead)}/>
                     </View>
                 )}
             </ScrollView>
@@ -980,7 +1164,7 @@ export default function EditRecipe() {
                        canBrewAtAll={rememberedMachine !== ""}
                        canBrew={canWrite}
                        onBrew={onBrewPress}
-                       onWrite={async () => { await flushDrafts(); await writeCard(recipe); }}
+                       onWrite={onWritePress}
                        onSave={async () => {
                            await flushDrafts();
                            // `saveRecipe` navigates away on success, so a store
@@ -997,6 +1181,7 @@ export default function EditRecipe() {
             </YStack>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
+                                 recipeUuid={recipe.uuid}
                                  onOpenChange={setOverflowOpen}
                                  showHints={showHint} onShowHintsChange={setShowHint}
                                  onShare={onSharePress}
@@ -1015,6 +1200,11 @@ export default function EditRecipe() {
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
+
+            <BypassWriteSheet open={bypassWriteOpen}
+                              recipe={recipe}
+                              onCancel={cancelBypassWrite}
+                              onConfirm={confirmBypassWrite}/>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>

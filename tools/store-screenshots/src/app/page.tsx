@@ -65,7 +65,7 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "import", "stages", "read", "hero"] as const;
+const SHOTS = ["home", "import", "stages", "read", "hero", "brew", "history"] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -318,24 +318,135 @@ const frame: React.CSSProperties = {
     background: C.base
 };
 
-/** 1 - Hero. The one slide most people will ever see. */
+/**
+ * 1 - Hero. The one slide most people will ever see.
+ *
+ * Three phones rather than one, because the app is no longer one thing. The
+ * order left to right is the arc of the whole product -- read a card, rewrite
+ * it, brew it -- so the slide carries the "come for the cards, stay for the
+ * brews" story without the headline having to say two things at once. The
+ * headline still sells the cards alone: that is what people arrive looking for.
+ */
+const HERO_FAN: {name: Shot; alt: string; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
+    {name: "home", alt: "Recipe library", left: "21%", scale: 0.88, rotate: -9, z: 1, opacity: 0.62},
+    {name: "brew", alt: "A brew in progress", left: "79%", scale: 0.88, rotate: 9, z: 1, opacity: 0.62},
+    {name: "hero", alt: "Recipe editor", left: "50%", scale: 1, rotate: 0, z: 2, opacity: 1}
+];
+
 const slideHero: SlideDef = {
     id: "hero",
+    component: ({cW, cH}) => {
+        const base = cW * 0.72;
+        return (
+            <div style={frame}>
+                <Glow cW={cW} colour={C.brand} x="50%" y="72%" size={1.6} opacity={0.42} />
+                <Glow cW={cW} colour={ACCENT.blossom} x="12%" y="18%" size={0.8} opacity={0.14} />
+                <DotScreen cW={cW} colour="rgba(255,255,255,0.10)" />
+                <Caption
+                    cW={cW}
+                    eyebrow="XBRW++"
+                    headline={
+                        <>
+                            Rewrite the card
+                            <br />
+                            that came with
+                            <br />
+                            <span style={{color: C.brand}}>your</span> coffee.
+                        </>
+                    }
+                />
+                {HERO_FAN.map((f) => (
+                    <Phone
+                        key={f.name}
+                        src={img(shot(f.name))}
+                        alt={f.alt}
+                        style={{
+                            position: "absolute",
+                            top: cH * 0.62,
+                            left: f.left,
+                            width: base * f.scale,
+                            zIndex: f.z,
+                            opacity: f.opacity,
+                            transform: `translate(-50%, -42%) rotate(${f.rotate}deg)`
+                        }}
+                    />
+                ))}
+            </div>
+        );
+    }
+};
+
+/**
+ * 2 - Library. What the app becomes once you have used it for a month.
+ *
+ * The wall of tinted cards behind the phone is the point of the slide: the
+ * library outgrows the cards it started from, and a single centred phone on an
+ * empty ground would have said only "here is a list screen". The tints are the
+ * six cup-type accents, so the texture is the app's own vocabulary rather than
+ * decoration invented for a listing.
+ */
+function CardWall({cW, cH}: {cW: number; cH: number}) {
+    const tints = Object.values(ACCENT);
+    const cardW = cW * 0.105;
+    const cardH = cardW * 1.5;
+    const gap = cW * 0.028;
+    const cols = Math.ceil((cW * 1.5) / (cardW + gap));
+    const rows = Math.ceil((cH * 1.2) / (cardH + gap));
+    return (
+        <div
+            style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: cW * 1.5,
+                height: cH * 1.2,
+                transform: "translate(-50%, -50%) rotate(-8deg)",
+                pointerEvents: "none"
+            }}>
+            {Array.from({length: rows}).map((_, r) => (
+                <div key={r} style={{display: "flex", gap, marginBottom: gap, marginLeft: r % 2 ? cardW * 0.5 : 0}}>
+                    {Array.from({length: cols}).map((_, c) => (
+                        <div
+                            key={c}
+                            style={{
+                                width: cardW,
+                                height: cardH,
+                                flexShrink: 0,
+                                borderRadius: cW * 0.014,
+                                background: tints[(r * cols + c) % tints.length],
+                                opacity: 0.14
+                            }}
+                        />
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideLibrary: SlideDef = {
+    id: "library",
     component: ({cW, cH}) => (
         <div style={frame}>
-            <Glow cW={cW} colour={C.brand} x="50%" y="78%" size={1.5} opacity={0.42} />
-            <Glow cW={cW} colour={ACCENT.blossom} x="12%" y="18%" size={0.8} opacity={0.14} />
-            <DotScreen cW={cW} colour="rgba(255,255,255,0.10)" />
+            <CardWall cW={cW} cH={cH} />
+            <Glow cW={cW} colour={ACCENT.lilac} x="50%" y="80%" size={1.5} opacity={0.3} />
+            <Glow cW={cW} colour={C.base} x="50%" y="8%" size={1.8} opacity={0.75} />
+            {/* Sinks the wall behind the phone: without it the tiles and the
+                recipe rows inside the capture compete at the same scale. */}
+            <Glow cW={cW} colour={C.base} x="50%" y="66%" size={1.7} opacity={0.85} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
             <Caption
                 cW={cW}
-                eyebrow="XBRW++"
+                eyebrow="Your library"
+                eyebrowColour={ACCENT.lilac}
+                scale={0.88}
                 headline={
                     <>
-                        Rewrite the card
+                        Cards you read.
                         <br />
-                        that came with
+                        Links you found.
                         <br />
-                        <span style={{color: C.brand}}>your</span> coffee.
+                        Recipes <span style={{color: ACCENT.lilac}}>you wrote</span>.
                     </>
                 }
             />
@@ -345,9 +456,9 @@ const slideHero: SlideDef = {
                 style={{
                     position: "absolute",
                     bottom: 0,
-                    width: "84%",
+                    width: "82%",
                     left: "50%",
-                    transform: "translateX(-50%) translateY(8%)"
+                    transform: "translateX(-50%) translateY(10%)"
                 }}
             />
         </div>
@@ -355,7 +466,94 @@ const slideHero: SlideDef = {
 };
 
 /**
- * 2 - Import. The four-step card flow, then the phone.
+ * 3 - Brew. The feature that turned a card writer into an app you open daily.
+ *
+ * The rising dotted trace behind the phone is the brew graph pulled out of the
+ * screen and drawn at slide scale, so the idea survives being seen at thumbnail
+ * size where the real chart inside the phone is four pixels tall. The phone is
+ * tilted and pushed off centre because the two slides either side of it are
+ * upright and centred.
+ */
+function TraceMotif({
+    cW,
+    cH,
+    colour,
+    opacity = 1
+}: {
+    cW: number;
+    cH: number;
+    colour: string;
+    opacity?: number;
+}) {
+    const pts: [number, number][] = [
+        [-0.04, 0.9],
+        [0.16, 0.72],
+        [0.3, 0.7],
+        [0.48, 0.48],
+        [0.62, 0.46],
+        [0.8, 0.22],
+        [1.04, 0.16]
+    ];
+    const path = pts.map(([x, y], i) => `${i ? "L" : "M"}${x * cW} ${y * cH}`).join(" ");
+    return (
+        <svg
+            width={cW}
+            height={cH}
+            style={{position: "absolute", inset: 0, opacity, pointerEvents: "none"}}
+            aria-hidden="true">
+            <path
+                d={path}
+                fill="none"
+                stroke={colour}
+                strokeWidth={cW * 0.006}
+                strokeLinecap="round"
+                strokeDasharray={`${cW * 0.001} ${cW * 0.026}`}
+                opacity={0.55}
+            />
+            {pts.slice(1, -1).map(([x, y]) => (
+                <circle key={`${x}`} cx={x * cW} cy={y * cH} r={cW * 0.011} fill={colour} opacity={0.75} />
+            ))}
+        </svg>
+    );
+}
+
+const slideBrew: SlideDef = {
+    id: "brew",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={C.brand} x="62%" y="58%" size={1.7} opacity={0.4} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <div style={{position: "absolute", left: 0, top: cH * 0.19, width: cW, height: cH * 0.4}}>
+                <TraceMotif cW={cW} cH={cH * 0.4} colour={C.brand} />
+            </div>
+            <Caption
+                cW={cW}
+                eyebrow="Bluetooth"
+                headline={
+                    <>
+                        Watch the pour
+                        <br />
+                        <span style={{color: C.brand}}>happen</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("brew"))}
+                alt="A brew in progress"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "74%",
+                    left: "48%",
+                    transform: "translateX(-50%) translateY(13%) rotate(-4deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/**
+ * 5 - Import. The four-step card flow, then the phone.
  *
  * The steps run horizontally rather than down a column so the phone can keep
  * its full width: the interesting half of this capture is the middle band, and
@@ -374,7 +572,6 @@ const slideImport: SlideDef = {
             <Caption
                 cW={cW}
                 eyebrow="Import"
-                align="left"
                 eyebrowColour={ACCENT.sky}
                 headline={
                     <>
@@ -454,7 +651,7 @@ const slideImport: SlideDef = {
     )
 };
 
-/** 3 - Editor. Two phones layered, to say "there is a lot in here". */
+/** 4 - Editor. Two phones layered, to say "there is a lot in here". */
 const slideStages: SlideDef = {
     id: "stages",
     component: ({cW, cH}) => (
@@ -502,7 +699,7 @@ const slideStages: SlideDef = {
     )
 };
 
-/** 4 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
+/** 6 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
 const slideRead: SlideDef = {
     id: "read",
     component: ({cW, cH}) => (
@@ -561,7 +758,69 @@ const slideRead: SlideDef = {
 };
 
 /**
- * 5 - Privacy. The contrast slide: inverted, no device, all type.
+ * 7 - History. The quiet feature that keeps people in the app.
+ *
+ * Five ghosts of slide 3's trace, stacked and fading backwards. Rewriting the
+ * live graph as an archive says "every brew" in one glance, where the screen
+ * itself -- a list of rows -- is unreadable at thumbnail size. An earlier pass
+ * drew flat bars instead and they read as a loading skeleton, which is the one
+ * thing a store listing must never look like.
+ */
+function GhostTraces({cW, cH, colour}: {cW: number; cH: number; colour: string}) {
+    const layers = [0.5, 0.36, 0.25, 0.16, 0.09];
+    return (
+        <div style={{position: "absolute", left: 0, top: cH * 0.2, width: cW, height: cH * 0.34}}>
+            {layers.map((opacity, i) => (
+                <div
+                    key={opacity}
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        transform: `translateY(${i * cH * 0.035}px) scaleY(${1 - i * 0.06})`
+                    }}>
+                    <TraceMotif cW={cW} cH={cH * 0.34} colour={colour} opacity={opacity} />
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideHistory: SlideDef = {
+    id: "history",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={ACCENT.oolong} x="24%" y="62%" size={1.4} opacity={0.26} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <GhostTraces cW={cW} cH={cH} colour={ACCENT.oolong} />
+            <Caption
+                cW={cW}
+                eyebrow="History"
+                eyebrowColour={ACCENT.oolong}
+                headline={
+                    <>
+                        Every brew,
+                        <br />
+                        <span style={{color: ACCENT.oolong}}>kept</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("history"))}
+                alt="A past brew"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "72%",
+                    right: "-4%",
+                    transform: "translateY(11%) rotate(3deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/**
+ * 8 - Privacy. The contrast slide: inverted, no device, all type.
  *
  * The headline is the app's own ticker line. It is the loudest thing XBRW++
  * says about itself, and a listing that buries "no account" under a screenshot
@@ -633,7 +892,16 @@ const slidePrivacy: SlideDef = {
     )
 };
 
-const SLIDES: SlideDef[] = [slideHero, slideImport, slideStages, slideRead, slidePrivacy];
+const SLIDES: SlideDef[] = [
+    slideHero,
+    slideLibrary,
+    slideBrew,
+    slideStages,
+    slideImport,
+    slideRead,
+    slideHistory,
+    slidePrivacy
+];
 
 /* -------------------------------------------------------------- promo image */
 
@@ -647,7 +915,7 @@ const promoSlide: SlideDef = {
     component: ({cW, cH}) => {
         const fan: {name: Shot; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
             {name: "stages", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
-            {name: "hero", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
+            {name: "brew", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
             {name: "home", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
         ];
         const base = cH * 0.88 * MK_RATIO;

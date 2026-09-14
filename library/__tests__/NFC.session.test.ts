@@ -86,6 +86,47 @@ describe("a session being opened", () => {
     });
 });
 
+describe("cancellation versus teardown", () => {
+    it("does not record a cancellation for a plain close", async () => {
+        // `close()` is our own teardown -- it runs from every `finally` on the
+        // way out of a read or write. Reading it as a Cancel is the whole bug:
+        // it made a genuine read failure look like the user walking away, so
+        // the error vanished. Teardown must leave `wasCancelled()` false.
+        const nfc = new NFC();
+        NfcManager.requestTechnology.mockResolvedValueOnce(undefined);
+        await nfc.open();
+
+        await nfc.close();
+
+        expect(nfc.wasCancelled()).toBe(false);
+    });
+
+    it("records a cancellation when the user cancels", async () => {
+        const nfc = new NFC();
+        NfcManager.requestTechnology.mockResolvedValueOnce(undefined);
+        await nfc.open();
+
+        await nfc.cancel();
+
+        expect(nfc.wasCancelled()).toBe(true);
+        expect(nfc.getIsClosed()).toBe(true);
+        expect(NfcManager.cancelTechnologyRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats a failed open as a cancellation, so an iOS sheet dismissal is silent", async () => {
+        // The iOS system NFC sheet is Apple's, not ours: the user tapping its
+        // Cancel button, or a scan timing out with no tag, rejects
+        // `requestTechnology`. No card was produced and there is nothing to
+        // report, so a failed open counts as a cancellation and stays silent.
+        const nfc = new NFC();
+        NfcManager.requestTechnology.mockRejectedValueOnce(new Error("no tag"));
+
+        await expect(nfc.open()).rejects.toThrow("no tag");
+
+        expect(nfc.wasCancelled()).toBe(true);
+    });
+});
+
 describe("a session being cancelled before it opens", () => {
     it("does not start a request when Cancel arrives during init", async () => {
         // The overlay is up and cancellable while `init()` is still awaiting
@@ -102,7 +143,7 @@ describe("a session being cancelled before it opens", () => {
         );
 
         const starting = nfc.init();
-        await nfc.close();
+        await nfc.cancel();
         releaseStart();
         await starting;
 
@@ -115,12 +156,13 @@ describe("a session being cancelled before it opens", () => {
         const nfc = new NFC();
 
         await nfc.init();
-        await nfc.close();
+        await nfc.cancel();
 
         await nfc.init();
         NfcManager.requestTechnology.mockResolvedValueOnce(undefined);
         await nfc.open();
 
         expect(nfc.getIsClosed()).toBe(false);
+        expect(nfc.wasCancelled()).toBe(false);
     });
 });

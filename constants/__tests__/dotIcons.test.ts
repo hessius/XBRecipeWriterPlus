@@ -5,10 +5,24 @@ const names = Object.keys(DOT_ICONS) as DotIconName[];
 describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
-            ["back", "delete", "duplicate", "edit", "error", "help", "import",
-             "info", "minus", "more", "overflow", "plus", "revert", "scan",
-             "settings", "share", "success"]
+            ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
+             "duplicate", "edit", "error", "help", "import", "info", "link-off", "link-on",
+             "link-wait", "minus", "more", "overflow", "plus", "refresh", "revert", "scan",
+             "settings", "share", "success", "write"]
         );
+    });
+
+    it("draws chevron-down as chevron-right turned a quarter turn", () => {
+        // Stated in the comment on the icon, so worth holding: the two are the
+        // same mark pointing two ways. Drawn by hand they drifted, and a
+        // shallower, full-width chevron read as a different icon set beside
+        // `back` in the same nav row.
+        const right = DOT_ICONS["chevron-right"];
+        const rotated = Array.from({length: DOT_ICON_GRID}, (_, r) =>
+            Array.from({length: DOT_ICON_GRID}, (_, c) =>
+                right[DOT_ICON_GRID - 1 - c][r]).join(""));
+
+        expect(DOT_ICONS["chevron-down"]).toEqual(rotated);
     });
 
     it.each(names)("%s is a square grid of the declared size", (name) => {
@@ -56,6 +70,24 @@ describe("the new editor glyphs", () => {
         for (let y = 0; y < DOT_ICON_GRID; y++) {
             expect(rows[y]).toBe(rows[DOT_ICON_GRID - 1 - y]);
         }
+    });
+
+    it("draws brew as a play mark, symmetric about the middle row", () => {
+        // A play triangle that is heavier above than below reads as tipped over.
+        // Hand-drawn rows drift, and at 24px the tilt is visible before the
+        // asymmetry is.
+        const rows = DOT_ICONS.brew;
+        for (let y = 0; y < DOT_ICON_GRID; y++) {
+            expect(rows[y]).toBe(rows[DOT_ICON_GRID - 1 - y]);
+        }
+    });
+
+    it("draws write as an arrow over a card, not a second scan mark", () => {
+        // `scan` already means READ CARD on the home screen. The arrow is the
+        // whole distinction, so the bottom of the mark is a closed card outline
+        // and the top is the arrow pointing into it.
+        expect(DOT_ICONS.write[DOT_ICON_GRID - 1]).toBe("#########");
+        expect(DOT_ICONS.write.join("/")).not.toBe(DOT_ICONS.scan.join("/"));
     });
 
     it("draws more as a caret that is symmetric about the middle column", () => {

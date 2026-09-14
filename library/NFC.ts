@@ -1,6 +1,7 @@
 import {Platform} from 'react-native';
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import Recipe from "@/library/Recipe";
+import {CardCapacityError, CardWriteError, SIGNATURE_BYTES} from "./cardWriteErrors";
 import {Buffer} from 'buffer';
 
 global.Buffer = Buffer;
@@ -22,12 +23,19 @@ export function setNfcAlertIOS(message: string) {
     });
 }
 
-type NfcSystemInfo = {
+export type NfcSystemInfo = {
     afi: number;
     blockSize: number;
     blockCount: number;
     dsfid: number;
 };
+
+/**
+ * The 32 bytes xBloom derives from the card's serial and writes ahead of the
+ * recipe. Re-exported from `cardWriteErrors`, where it now lives so consumers
+ * can reason about capacity without importing a runtime value from `NFC`.
+ */
+export {SIGNATURE_BYTES, CardWriteError, CardCapacityError} from "./cardWriteErrors";
 
 class NFC {
     private isClosed = true;
@@ -42,6 +50,22 @@ class NFC {
      * together, which is the window the user is actually looking at.
      */
     private cancelled = false;
+
+    /**
+     * The system info from the most recent read, so the capture layer can
+     * report a card's true capacity without re-interrogating the tag.
+     *
+     * `readCard` already fetches it while the tag is open; a second fetch would
+     * need the session still live, which it is not by the time the caller has
+     * the data in hand. Cleared at the start of every read so a later read
+     * cannot report an earlier card's numbers.
+     */
+    private lastSystemInfo: NfcSystemInfo | null = null;
+
+    /** The system info seen by the last `readCard`, or null if none. */
+    public getLastSystemInfo(): NfcSystemInfo | null {
+        return this.lastSystemInfo;
+    }
 
     async init() {
         // A new ceremony, so a Cancel from the last one does not carry over.
@@ -61,11 +85,19 @@ class NFC {
         return this.isClosed;
     }
 
+    /** Whether the user cancelled this session (as opposed to it being torn down). */
+    public wasCancelled() {
+        return this.cancelled;
+    }
+
 
     async close() {
-        // Recorded even when there is nothing to cancel yet: a Cancel during
-        // `init()` has to be remembered until `open()` can honour it.
-        this.cancelled = true;
+        // Teardown only: this runs from every `finally` on the way out of a
+        // read or write, so it must not look like a Cancel. Reading it as one
+        // was the bug -- a genuine read failure closed the tag before parsing,
+        // and a `cancelled`-set-here made that failure indistinguishable from
+        // the user walking away, so the error vanished. `cancel()` is the
+        // user-initiated path; this is not it.
 
         // Callers close explicitly and again from a `finally`; cancelling a
         // session that has already ended rejects with "Not even registered".
@@ -80,10 +112,24 @@ class NFC {
         }
     }
 
+    /**
+     * The user-initiated teardown: dismissing our overlay or the Android NFC
+     * dialog. Records the cancellation -- so a fault raised on the way down is
+     * read as the user walking away rather than something to report -- then
+     * tears the session down exactly as `close()` does.
+     *
+     * Recorded even when there is nothing to cancel yet: a Cancel during
+     * `init()` has to be remembered until `open()` can honour it.
+     */
+    async cancel() {
+        this.cancelled = true;
+        await this.close();
+    }
+
     async open() {
         // Cancelled while init was still running. Throwing rather than
         // returning quietly keeps the caller's existing shape: `readCard` and
-        // `writeCard` already treat a throw with `getIsClosed()` true as the
+        // `writeCard` already treat a throw with `wasCancelled()` true as the
         // user having walked away, and report nothing.
         if (this.cancelled) {
             this.isClosed = true;
@@ -107,10 +153,15 @@ class NFC {
             }
         } catch (e) {
             // Back to closed, which is what a failed open always looked like:
-            // before this method set the flag eagerly, a rejection left it
-            // true. Callers read `getIsClosed()` to tell a user cancellation
-            // from a real fault, so restoring it keeps that judgement intact.
+            // before this method set the flag eagerly, a rejection left it true.
             this.isClosed = true;
+            // A session that never opened produced no card and nothing to
+            // report, so a failed open counts as a cancellation. That is what
+            // keeps an iOS Cancel silent -- the user tapping Cancel on Apple's
+            // system NFC sheet, and a scan that timed out without a tag, both
+            // reject `requestTechnology` here. Callers read `wasCancelled()` to
+            // tell that walk-away from a real fault, so this must be set.
+            this.cancelled = true;
             throw e;
         }
     }
@@ -208,8 +259,13 @@ class NFC {
     }
 
     async readCard(progressCallBack: (progress: number, id?: string) => Promise<string | undefined>): Promise<number[] | null> {
+        // Cleared before the read, not after: a read that fails partway must
+        // not leave the previous card's capacity behind for the capture to
+        // report as if it were this one's.
+        this.lastSystemInfo = null;
         try {
             let sysInfo = await this.getSystemInfo();
+            this.lastSystemInfo = sysInfo;
             await progressCallBack(30);
             console.log(sysInfo);
             const nfcTag = await NfcManager.getTag();
@@ -281,21 +337,39 @@ class NFC {
         //await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
         try {
             let info = await this.getSystemInfo();
-            if (info) {
-                let totalBlocks = info.blockCount * info.blockSize;
-                let availableRecipeBlocks = totalBlocks - 32; //accounts for 32 byte hash
-                console.log("CardInfo:" + JSON.stringify(info));
-                console.log("Total Blocks:" + totalBlocks);
-                if (data.length < availableRecipeBlocks) {
-                    const padding = new Array(availableRecipeBlocks - data.length).fill(0);
-                    data = data.concat(padding);
-                }
-                // the resolved tag object will contain `ndefMessage` property
-                //const nfcTag = await NfcManager.getTag();
-                await this.writeBlocks(8, data, progressCallBack);
+            if (!info) {
+                // The tag never answered, so we do not know how big it is. Writing
+                // blind could run off the end; returning quietly is worse still,
+                // because the flow then looks like a success and the user walks
+                // away with an unwritten card.
+                throw new CardWriteError("The card did not report its size, so the recipe was not written.");
             }
+
+            const totalBytes = info.blockCount * info.blockSize;
+            const availableBytes = totalBytes - SIGNATURE_BYTES;
+            console.log("CardInfo:" + JSON.stringify(info));
+            console.log("Total bytes:" + totalBytes);
+
+            if (data.length > availableBytes) {
+                // Refuse before the first block goes down. A partial write leaves a
+                // genuine card holding half a recipe, and trampling the signature
+                // that follows would be unrecoverable — we cannot regenerate it.
+                throw new CardCapacityError(data.length, availableBytes);
+            }
+
+            if (data.length < availableBytes) {
+                const padding = new Array(availableBytes - data.length).fill(0);
+                data = data.concat(padding);
+            }
+            // the resolved tag object will contain `ndefMessage` property
+            //const nfcTag = await NfcManager.getTag();
+            await this.writeBlocks(SIGNATURE_BYTES / 4, data, progressCallBack);
         } catch (e) {
-            if (!this.isClosed) {
+            // Our own refusals are not tag faults and not user cancellations, so
+            // they surface even when the session has closed. Swallowing one would
+            // reproduce the very bug this guard exists to stop: a write that
+            // quietly does nothing while the flow reports success.
+            if (e instanceof CardWriteError || !this.isClosed) {
                 throw e;
             }
         }

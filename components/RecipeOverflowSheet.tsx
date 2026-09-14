@@ -1,3 +1,4 @@
+import {router} from "expo-router";
 import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
@@ -21,6 +22,8 @@ type Props = {
     open: boolean;
     /** False for a recipe with no xBloom identity to re-read a name from. */
     canRefreshName: boolean;
+    /** The recipe's UUID, used to filter the brew history. */
+    recipeUuid?: string;
     onOpenChange: (open: boolean) => void;
     /** Whether the deck draws its one-line hints. */
     showHints: boolean;
@@ -40,7 +43,7 @@ type Props = {
  * that matter impossible to find.
  */
 export default function RecipeOverflowSheet({
-    open, canRefreshName, onOpenChange, showHints, onShowHintsChange,
+    open, canRefreshName, recipeUuid, onOpenChange, showHints, onShowHintsChange,
     onShare, onDuplicate, onRefreshName, onRevert, onDelete
 }: Props) {
     function pick(action: () => void) {
@@ -115,6 +118,9 @@ export default function RecipeOverflowSheet({
                     hint:   "Creates a link that opens this recipe in the xBloom app."
                 })}
                 {row("Duplicate", "duplicate", onDuplicate)}
+                {row("Brew history", "info", () => router.push(recipeUuid ? `/brewHistory?recipeUuid=${recipeUuid}` : "/brewHistory"), {
+                    hint: "Shows every recorded brew of this recipe."
+                })}
                 {/* Spoken in full, but captioned short: the other four rows are
                     one-word captions, and a sentence set in uppercase Doto
                     beside them reads as a different kind of thing. */}

@@ -81,6 +81,40 @@ export function buildType1Bytes(cmd: number, payload: Uint8Array): Uint8Array {
     return frame(FUNC_TYPE_1, cmd, payload);
 }
 
+/**
+ * Which reading of the bypass temperature argument to send.
+ *
+ * The command descriptor names the argument "bypass temp x10", which is either
+ * tenths of a degree or a scale factor nobody has confirmed on hardware. A
+ * wrong choice produces no error at all -- the machine simply dispenses the
+ * bypass at the wrong temperature -- so it is a switch rather than a guess.
+ */
+export type BypassTempEncoding = "scaled" | "plain";
+
+/** The value to send for a bypass temperature in degrees Celsius. */
+export function bypassTempValue(celsius: number, encoding: BypassTempEncoding): number {
+    return encoding === "scaled" ? Math.round(celsius * 10) : Math.round(celsius);
+}
+
+/**
+ * Command 8102: the two bypass arguments carry IEEE-754 float bits, the dose an
+ * integer (see `ble-protocol.md` and the 8102 descriptor in `commands.ts`).
+ *
+ * `buildType1` writes every argument as a little-endian integer, which is right
+ * for the dose and for a disabled bypass — float `0.0` and the integer `0` are
+ * the same four zero bytes — but wrong for a live bypass volume or temperature,
+ * where int bits and float bits diverge. This builds the frame the machine
+ * actually reads: two float32 arguments, then the integer dose.
+ */
+export function buildBypassDose(bypassVolume: number, bypassTemp: number, doseG: number): Uint8Array {
+    const payload = new Uint8Array(12);
+    const view = new DataView(payload.buffer);
+    view.setFloat32(0, bypassVolume, true);
+    view.setFloat32(4, bypassTemp, true);
+    view.setUint32(8, Math.round(doseG), true);
+    return buildType1Bytes(8102, payload);
+}
+
 /** A type 2 command. Slot writes, mode switch, calibration. */
 export function buildType2(cmd: number, payload: Uint8Array): Uint8Array {
     return frame(FUNC_TYPE_2, cmd, payload);
@@ -115,11 +149,36 @@ export const EVENT = {
     BREWER_START:     40506,
     GRINDER_STOP:     40507,
     POUR_START:       40510,
+    /**
+     * 40520. The bypass firing.
+     *
+     * Verified from a full frame log of 2026-09-10: a three-stage recipe with
+     * a 5 ml bypass emitted 40510(0), 40510(1), 40510(2) and then this, 61 s
+     * after the last pour began and 8 s before BREWER_STOP. There is no fourth
+     * POUR_START, so this is the only announcement the bypass ever makes.
+     *
+     * The gap is the drawdown: the machine lets the dripper finish before it
+     * dispenses into the cup, and how long that takes is not knowable in
+     * advance.
+     */
+    RD_BYPASS:        40520,
     BREWER_STOP:      40511,
     ENJOY:            40512,
     ENJOY_2:          40513,
     ERROR_IDLING:     40517,
-    ERROR_NO_WATER:   40522,
+    /**
+     * 40522. Named for what a capture proves it to be, not for what it was
+     * assumed to be.
+     *
+     * It was `ERROR_NO_WATER`, and it ended brews. A full console log of
+     * 2026-09-09 settles it: the machine emitted 40522 with value 0 eleven
+     * seconds into the first pour, then went on to pour all three stages,
+     * `BREWER_STOP`, `ENJOY`, and `COMPLETE` — a flawless brew, no beep, no
+     * warning on the machine. The info frame it sent afterwards had
+     * `waterEnough` (payload[33]) flipped from 1 to 0, which is the tank
+     * crossing its low mark. So this is the level warning, not a stop.
+     */
+    WATER_LOW:        40522,
     ERROR_GEAR:       8203,
     ERROR_DOSE_WATER: 8204,
     MACHINE_INFO:     40521,
@@ -369,24 +428,15 @@ export function encodeCoffeeBlob(recipe: BlobRecipe): Uint8Array {
 }
 
 /**
- * Which reading of the tea steep encoding to send.
- *
- * Not a preference so much as an open question with a switch on it. See
- * contradiction C11 in `docs/machine-integration/ble-protocol.md`.
- */
-export type TeaSteepEncoding = "homoland" | "saya6k";
-
-/**
  * Bytes 4 and 5 of a tea segment — the two the coffee format spends on a
  * two's-complement wait and a zero.
+ *
+ * There used to be a second candidate reading behind a console switch. A
+ * stopwatched sixty-second steep on real hardware settled it on 2026-09-01: this
+ * is the right one. See contradiction C11 in
+ * `docs/machine-integration/ble-protocol.md`, now answered.
  */
-export function teaSteepBytes(seconds: number, encoding: TeaSteepEncoding): [number, number] {
-    if (encoding === "saya6k") {
-        // A soak byte in position 5, scaled because the firmware is understood
-        // to run it at about 1.67x. Clamped to at least 1: a zero soak is a
-        // steep that does not happen.
-        return [0, Math.max(1, Math.min(Math.round(seconds * 0.6), 255))];
-    }
+export function teaSteepBytes(seconds: number): [number, number] {
     const minutes = Math.floor(seconds / 60);
     const remainder = seconds % 60;
     return [(-remainder) & 0xFF, (minutes * 32) & 0xFF];
@@ -398,7 +448,7 @@ export function teaSteepBytes(seconds: number, encoding: TeaSteepEncoding): [num
  * Same chunked segment shape as coffee, different timing bytes, and the
  * grinder always off.
  */
-export function encodeTeaBlob(recipe: BlobRecipe, encoding: TeaSteepEncoding): Uint8Array {
+export function encodeTeaBlob(recipe: BlobRecipe): Uint8Array {
     const segments: number[] = [];
     recipe.pours.forEach((pour, index) => {
         let left = Math.round(pour.volume);
@@ -406,7 +456,7 @@ export function encodeTeaBlob(recipe: BlobRecipe, encoding: TeaSteepEncoding): U
             segments.push(MAX_SEGMENT_VOLUME, pour.temperature, pour.pourPattern, pour.agitation);
             left -= MAX_SEGMENT_VOLUME;
         }
-        const [wait, soak] = teaSteepBytes(Math.round(pour.pauseTime), encoding);
+        const [wait, soak] = teaSteepBytes(Math.round(pour.pauseTime));
         segments.push(
             left,
             Math.round(pour.temperature),

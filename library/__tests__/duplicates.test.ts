@@ -128,3 +128,56 @@ describe("resolveOnOpen", () => {
         expect(resolveOnOpen([other], candidate).recipe).toBe(candidate);
     });
 });
+
+describe("bypass and identity", () => {
+    function withBypass(volume = 45, temp = 60): Recipe {
+        const recipe = sample();
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = volume;
+        recipe.bypassTemp    = temp;
+        return recipe;
+    }
+
+    it("matches on the card alone by default", () => {
+        // A card cannot carry bypass. A read of a stored bypass recipe returns
+        // the card's plain bytes, and matching strictly there would deposit a
+        // stripped duplicate every time the user scans a recipe they hold.
+        const stored = withBypass();
+        expect(findDuplicate([stored], sample())).toBe(stored);
+    });
+
+    it("tells a bypass recipe from its plain twin when asked to", () => {
+        const stored = sample();
+        expect(findDuplicate([stored], withBypass(), "brew")).toBeNull();
+    });
+
+    it("still matches two recipes whose bypass agrees", () => {
+        const stored = withBypass();
+        expect(findDuplicate([stored], withBypass(), "brew")).toBe(stored);
+    });
+
+    it("separates two bypasses that differ only in volume", () => {
+        expect(findDuplicate([withBypass(45)], withBypass(60), "brew")).toBeNull();
+    });
+
+    it("separates two bypasses that differ only in temperature", () => {
+        expect(findDuplicate([withBypass(45, 60)], withBypass(45, 70), "brew")).toBeNull();
+    });
+
+    it("ignores the volume and temperature of a bypass that is off", () => {
+        // Disabled bypass is not dispensed, so a remembered volume behind an
+        // off switch is not a difference in the brew.
+        const stored = sample();
+        stored.bypassVolume = 45;
+        stored.bypassTemp   = 60;
+        expect(findDuplicate([stored], sample(), "brew")).toBe(stored);
+    });
+
+    it("carries the strictness through resolveOnOpen", () => {
+        const stored = sample();
+        const candidate = withBypass();
+        expect(resolveOnOpen([stored], candidate, "brew")).toEqual({
+            recipe: candidate, isExisting: false
+        });
+    });
+});

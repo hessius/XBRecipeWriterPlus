@@ -1,5 +1,7 @@
 import React from "react";
 import {PixelRatio, Text, type StyleProp, type TextStyle} from "react-native";
+import Animated, {useAnimatedStyle, type SharedValue}
+    from "react-native-reanimated";
 
 import {palette} from "@/constants/colors";
 
@@ -78,6 +80,19 @@ type Props = {
     children: string | number;
     /** Clamped up to `DOTO_MIN_FONT_SIZE`. */
     fontSize?: number;
+    /**
+     * A size that changes over time, driving the same clamp on the UI thread.
+     *
+     * Here rather than left to call sites so that this component remains the
+     * single place Doto's family and floor are enforced: a header that wanted
+     * an animated dot-matrix title would otherwise have to reach for
+     * `Animated.Text` and name the font itself, and the floor would hold only
+     * by convention.
+     *
+     * Takes precedence over `fontSize`, which is still required — it is what
+     * the text is laid out at before the first frame.
+     */
+    animatedFontSize?: SharedValue<number>;
     weight?: DotoWeight;
     color?: string;
     /** Doto is dense, so most call sites want a little extra tracking. */
@@ -94,35 +109,98 @@ type Props = {
  * and system status. Anything a human typed — a recipe name, an error message —
  * stays in Inter and must not be rendered through here.
  *
+ * One deliberate exception, granted by the product owner after seeing it on a
+ * device: the recipe title on the brew screen and in the brew summary. Every
+ * other glyph on those two screens is Doto, and one line of Inter among them
+ * read as unstyled rather than as a different register. The name keeps its own
+ * casing there — this component does not upper-case, callers do — so it is
+ * still recognisably the name a person typed.
+ *
+ * A register rule that follows from the above, stated because it looks like a
+ * bug and has been "fixed" by mistake before: units are lower case in Inter
+ * ("18 g", "250 ml") and upper case in Doto ("18 G", "250 ML"). They disagree
+ * on purpose. Doto is an all-caps readout standing in for a machine's own
+ * display, and a lone lower-case g in a run of capitals reads as a typo; in
+ * running prose an upper-case G is simply the wrong unit symbol. Do not unify
+ * them in one direction without changing both registers deliberately.
+ *
  * This is the only place in the app that names the Doto font family.
  */
-export default function DotMatrixText({
+export default function DotMatrixText(props: Props) {
+    // The animated path lives in its own component, because hooks cannot be
+    // called conditionally and this one is rendered by the hundred: every list
+    // row and every figure on a dense screen would otherwise allocate a shared
+    // value and register a worklet whose style is then thrown away.
+    if (props.animatedFontSize !== undefined) {
+        return <AnimatedDotMatrixText {...props} animatedFontSize={props.animatedFontSize}/>;
+    }
+    const {
+        children, fontSize = 14, weight = "bold", color = palette.text,
+        letterSpacing = 0.5, numberOfLines, style, testID
+    } = props;
+    return (
+        <Text
+            testID={testID}
+            numberOfLines={numberOfLines}
+            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+            style={staticStyle({color, letterSpacing, style, weight, fontSize})}>
+            {children}
+        </Text>
+    );
+}
+
+/** The style stack shared by both paths. Order is load-bearing; see below. */
+function staticStyle({color, letterSpacing, style, weight, fontSize}: {
+    color: string;
+    letterSpacing: number;
+    style: StyleProp<DotMatrixStyle>;
+    weight: DotoWeight;
+    fontSize: number;
+}) {
+    return [
+        {color, letterSpacing},
+        style,
+        // After the caller's style, not before. `style` carries layout —
+        // margins, line height — but must not reach the two properties
+        // that make this component the single enforcement point.
+        {
+            fontFamily: DOTO_FAMILIES[weight],
+            fontSize:   requestedSize(fontSize)
+        }
+    ];
+}
+
+/** The Reanimated path. Only mounted when a caller passed an animated size. */
+function AnimatedDotMatrixText({
     children,
     fontSize = 14,
+    animatedFontSize,
     weight = "bold",
     color = palette.text,
     letterSpacing = 0.5,
     numberOfLines,
     style,
     testID
-}: Props) {
+}: Props & {animatedFontSize: SharedValue<number>}) {
+    // `PixelRatio` cannot be read from the UI thread, so the floor is worked
+    // out here and the worklet closes over the number.
+    const floor = DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1);
+    const animatedStyle = useAnimatedStyle(() => ({
+        fontSize: Math.max(animatedFontSize.value, floor)
+    }));
+
     return (
-        <Text
+        <Animated.Text
             testID={testID}
             numberOfLines={numberOfLines}
             maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
             style={[
-                {color, letterSpacing},
-                style,
-                // After the caller's style, not before. `style` carries layout —
-                // margins, line height — but must not reach the two properties
-                // that make this component the single enforcement point.
-                {
-                    fontFamily: DOTO_FAMILIES[weight],
-                    fontSize:   requestedSize(fontSize)
-                }
+                ...staticStyle({color, letterSpacing, style, weight, fontSize}),
+                // Last of all, so the animated size wins over the static one it
+                // was laid out at.
+                animatedStyle
             ]}>
             {children}
-        </Text>
+        </Animated.Text>
     );
 }

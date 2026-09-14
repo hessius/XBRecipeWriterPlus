@@ -33,6 +33,23 @@ function newIdempotencyKey(): string {
     return `${Date.now().toString(36)}-${rand()}-${rand()}`;
 }
 
+/**
+ * What to tell the user for each way a share can fail.
+ *
+ * Lives beside the reasons rather than at the screens that show it: the editor
+ * and the home screen's action tray both share recipes and both report the same
+ * failures, and two copies of these five strings would drift the moment one was
+ * reworded. `Record` rather than a lookup literal so a new reason cannot be
+ * added without the compiler demanding words for it.
+ */
+export const SHARE_FAILURE_MESSAGE: Record<ShareErrorReason, string> = {
+    network:     "Could not reach the sharing service. Check your connection.",
+    limited:     "Sharing is busy right now. Try again in a few minutes.",
+    unavailable: "Sharing is temporarily unavailable. Everything else still works.",
+    unusable:    "This recipe cannot be shared yet. Check the pour volumes and dose.",
+    pending:     "This recipe's link is still being created. Try again in a moment."
+};
+
 export type ShareState =
     | {status: "idle"}
     | {status: "sharing"}

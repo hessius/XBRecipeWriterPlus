@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet, View} from "react-native";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import HomeHeader from "@/components/HomeHeader";
@@ -18,10 +19,14 @@ function props(overrides = {}) {
     };
 }
 
+function tintOpacity(): number {
+    return screen.getByTestId("machine-dot-tint").props.jestAnimatedStyle.value.opacity;
+}
+
 describe("HomeHeader", () => {
     it("shows the title and the recipe count", async () => {
         await renderWithProviders(<HomeHeader {...props()}/>);
-        expect(screen.getByText("Recipes")).toBeTruthy();
+        expect(screen.getByLabelText("XBRW++")).toBeTruthy();
         expect(screen.getByText("7")).toBeTruthy();
     });
 
@@ -81,10 +86,10 @@ describe("HomeHeader", () => {
         // rendered tree, so re-querying it after a second render finds one tree,
         // not two.
         const expanded = await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
-        const big = expanded.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
+        const big = expanded.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
 
         const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
-        const small = collapsed.getByText("Recipes").props.jestAnimatedStyle.value.fontSize;
+        const small = collapsed.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
 
         expect(small).toBeLessThan(big);
     });
@@ -138,10 +143,62 @@ describe("HomeHeader", () => {
 
     it("clears the status bar itself", async () => {
         // This screen hides the navigation bar, so nothing above the header is
-        // holding the status bar off it.
+        // holding the status bar off it. The inset sits on the wrapper that now
+        // also carries the machine panel, so the panel is inside the header's
+        // box rather than over the screen.
         await renderWithProviders(<HomeHeader {...props()}/>);
-        const style = screen.getByTestId("home-header").props.style;
+        const style = screen.getByTestId("home-header-inset").props.style;
 
         expect(style.paddingTop).toBeGreaterThanOrEqual(TEST_INSETS.top);
+    });
+
+    it("holds the title the same distance below the status bar as before", async () => {
+        // The inset moved off the row and onto the wrapper. If the row kept a
+        // top padding of its own it would now be added to the inset rather than
+        // overridden by it, and everything in the header would sit lower.
+        await renderWithProviders(<HomeHeader {...props()}/>);
+        const wrap = StyleSheet.flatten(screen.getByTestId("home-header-inset").props.style);
+        const row  = StyleSheet.flatten(screen.getByTestId("home-header").props.style);
+
+        expect((wrap.paddingTop ?? 0) + (row.paddingTop ?? 0)).toBe(TEST_INSETS.top + 8);
+    });
+
+    it("shows the machine dot left of the settings gear", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <HomeHeader {...props({machineStatus: "connected"})} />
+        );
+        expect(getByLabelText("Machine connected")).toBeTruthy();
+    });
+
+    it("tells the dot when the header has collapsed", async () => {
+        await renderWithProviders(
+            <HomeHeader {...props({collapsed: true, machineStatus: "connected"})}/>
+        );
+        // The dot desaturates with the header rather than on its own schedule, so
+        // the header is the only thing that knows the threshold.
+        expect(tintOpacity()).toBe(0);
+    });
+
+    it("calls onMachinePress when the machine dot is tapped", async () => {
+        const onMachinePress = jest.fn();
+        await renderWithProviders(
+            <HomeHeader {...props({machineStatus: "connected", onMachinePress})}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Machine connected"));
+        expect(onMachinePress).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the machine panel below the header row, not over the screen", async () => {
+        const r = await renderWithProviders(
+            <HomeHeader {...props()} machinePanel={<View testID="the-panel" />} />
+        );
+
+        expect(r.getByTestId("the-panel")).toBeTruthy();
+    });
+
+    it("has no panel when it is not given one", async () => {
+        const r = await renderWithProviders(<HomeHeader {...props()} />);
+
+        expect(r.queryByTestId("the-panel")).toBeNull();
     });
 });

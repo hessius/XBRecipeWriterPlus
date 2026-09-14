@@ -4,6 +4,7 @@ import {router} from "expo-router";
 import {Text, XStack, YStack} from "tamagui";
 
 import SettingsActionRow from "@/components/SettingsActionRow";
+import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {palette} from "@/constants/colors";
@@ -13,6 +14,13 @@ import type {Settings} from "@/library/Settings";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;
+
+const RETENTION_OPTIONS = [
+    {value: "10",  label: "10"},
+    {value: "50",  label: "50"},
+    {value: "200", label: "200"},
+    {value: "0",   label: "Don't keep traces"}
+] as const;
 
 /** One label-and-value line of the machine's own vitals. */
 function Vital({label, value}: {label: string; value: string}) {
@@ -41,13 +49,16 @@ function Vital({label, value}: {label: string; value: string}) {
 export default function MachineSection({settings}: {settings?: Settings}) {
     const {machine, status, error, remembered, connect, forget} = useMachine();
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
+    const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
 
     /** What the section says when there is no live link. */
     const idleStatus = status === "connecting" ? "Connecting…"
         : remembered === "" ? "No machine paired"
-            : `Not connected · ${remembered}`;
+            : status === "idle" ? `Not connected · ${remembered}`
+                : `Not in range · ${remembered}`;
 
     // The vitals are a snapshot taken at connect. Left alone, a tank refilled
     // since then still reads Low here, and only a relaunch clears it.
@@ -102,7 +113,9 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                                onPress={onSecretPress}>
                         <Vital label="Firmware" value={info.firmware}/>
                     </Pressable>
-                    <Vital label="Water" value={info.waterEnough ? "OK" : "Low"}/>
+                    <Vital label="Water" value={info.waterFeed === "tap"
+                        ? "Plumbed"
+                        : info.waterEnough ? "OK" : "Low"}/>
                     <Vital label="Grind size" value={String(info.grindSize)}/>
                     <Vital label="Mode" value={info.mode}/>
                 </YStack>
@@ -113,6 +126,19 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                 description="Off, BREW loads the recipe onto the machine and waits for you to press START. On, it starts grinding the moment the recipe lands."
                 value={autoStart}
                 onChange={setAutoStart}/>
+
+            <SettingsToggleRow
+                label="Animate the brew chart"
+                description="When off, each phase change holds its end state immediately. The system Reduced Motion switch also disables animation independently."
+                value={animateBrewChart}
+                onChange={setAnimateBrewChart}/>
+
+            <SettingsChoiceRow
+                label="Keep raw brew traces"
+                description="How many past brews keep their full sample stream. Records are always kept; only the detail behind them expires."
+                value={String(brewTraceRetention)}
+                options={RETENTION_OPTIONS}
+                onChange={(v) => setBrewTraceRetention(Number(v))}/>
 
             {remembered !== "" && (
                 <SettingsActionRow label="Forget this machine" tone="danger"

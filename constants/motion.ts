@@ -53,7 +53,7 @@ export const STAGGER = {
 } as const;
 
 /**
- * The About screen's attract mode.
+ * The About screen's attract mode, and any other long-period idle decoration.
  *
  * An order of magnitude longer than everything above, and deliberately so: this
  * is idle decoration that rewards a user for lingering, not feedback on
@@ -97,7 +97,48 @@ export const ATTRACT = {
     glimmerRest: 4400,
     /** The mark coming apart under a tap, and settling back. */
     tap: 220,
-    tapHold: 120
+    tapHold: 120,
+
+    /**
+     * Brew-chart pre-pour animation timings.
+     *
+     * These two drive the waking/sending/grinding phases of the trace
+     * animation. They are a full order of magnitude longer than UI feedback
+     * timings: the chart is passive decoration while the machine is getting
+     * ready, not a response to a tap.
+     */
+    /** One full breath of the waiting trace. Slow enough to read as breathing. */
+    brewBreath: 3400,
+    /** One pass of the travelling send-head across the trace. */
+    brewTravel: 1400,
+
+    /**
+     * How long the `++` wordmark tint lasts after launch.
+     *
+     * Long enough to be read once; after that the three characters compete
+     * with the recipe list's accents and are better left unsaturated.
+     * Once per session, timed from app load.
+     */
+    wordmarkFadeDelay: 10_000,
+    /**
+     * The shortest gap between two replays of the wordmark's tint.
+     *
+     * Without it, a fast scroll up and down strobes the one piece of brand
+     * colour in the app, which is the opposite of a nod. An expansion that
+     * arrives sooner than this settles to the muted `++` without replaying,
+     * silently.
+     *
+     * A judgement, not a measurement, and here rather than in the component so
+     * it is tunable in the one place motion is tuned.
+     */
+    wordmarkReplayFloor: 2000,
+    /**
+     * How long the replayed tint holds at full before falling away.
+     *
+     * The launch tint holds for ten seconds because it is being read. This one
+     * is being noticed, which takes less.
+     */
+    wordmarkReplayHold: 600
 } as const;
 
 /** Spring configs, for anything a finger drives. */export const SPRING = {

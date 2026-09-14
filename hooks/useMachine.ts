@@ -3,11 +3,14 @@ import {AppState} from "react-native";
 
 import {CONNECT_DELAYS_MS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
-import Machine from "@/library/machine/Machine";
+import Machine, {
+    isActiveBrewPhase,
+    type BrewPhase
+} from "@/library/machine/Machine";
 import type {Settings} from "@/library/Settings";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
-export type LinkStatus = "disconnected" | "connecting" | "connected" | "failed";
+export type LinkStatus = "idle" | "disconnected" | "connecting" | "connected" | "failed";
 
 /**
  * One machine for the whole app.
@@ -56,6 +59,14 @@ export type AppStateLike = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+type LinkLifecycleMachine = {
+    phase: BrewPhase;
+    isConnected: () => boolean;
+    disconnect: () => Promise<void>;
+    note: (text: string) => void;
+    onPhase: (listener: (phase: BrewPhase) => void) => () => void;
+};
+
 /**
  * Hold the link across the app leaving the front and coming back.
  *
@@ -75,49 +86,100 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * nobody asked for.
  */
 export function holdLinkAcrossAppState(
-    machine: Machine,
+    machine: LinkLifecycleMachine,
     reconnect: () => Promise<void>,
     options: {appState?: AppStateLike} = {}
 ): () => void {
     const appState = options.appState ?? (AppState as unknown as AppStateLike);
 
-    // Whether the link now missing is one this function took away. Held until a
-    // reconnection succeeds, so a foreground that could not reach the machine
-    // is tried again the next time the app comes forward rather than written
-    // off for the rest of the session.
     let released = false;
     let reconnecting = false;
+    let backgrounded = false;
+    let retainedForBrew = false;
+    let releasePromise: Promise<void> | null = null;
 
-    const subscription = appState.addEventListener("change", (next) => {
-        if (next === "background") {
-            released = machine.isConnected();
-            if (released) {
-                machine.note("app went to the back — giving the link back");
-                void machine.disconnect();
-            }
+    function release(note: string): void {
+        if (!machine.isConnected() || released) return;
+        released = true;
+        retainedForBrew = false;
+        machine.note(note);
+        releasePromise = machine.disconnect()
+            .catch((error) => {
+                machine.note(`could not give the link back — ${(error as Error).message}`);
+            })
+            .finally(() => {
+                releasePromise = null;
+            });
+    }
+
+    const phaseSubscription = machine.onPhase((phase) => {
+        if (!backgrounded || !retainedForBrew || isActiveBrewPhase(phase)) return;
+
+        // A real transport loss reaches `lostContact` after the radio is already
+        // gone. Do not mark that as our release: foregrounding must not reconnect
+        // into a brew whose live state is unknown.
+        if (!machine.isConnected()) {
+            retainedForBrew = false;
             return;
         }
+
+        release("brew ended in the background — giving the link back");
+    });
+
+    const appStateSubscription = appState.addEventListener("change", (next) => {
+        if (next === "background") {
+            backgrounded = true;
+            if (!machine.isConnected()) return;
+
+            if (isActiveBrewPhase(machine.phase)) {
+                retainedForBrew = true;
+                released = false;
+                machine.note("active brew went to the back — keeping the link");
+                return;
+            }
+
+            release("app went to the back — giving the link back");
+            return;
+        }
+
         if (next !== "active") return;
-        if (!released || machine.isConnected() || reconnecting) return;
+        backgrounded = false;
+        retainedForBrew = false;
+        if (!released || reconnecting) return;
 
         reconnecting = true;
         machine.note("app came to the front — taking the link back");
         void (async () => {
             try {
-                // `reconnect` does its own retrying: connecting to this machine
-                // is unreliable enough that one attempt is not a fair test.
+                await releasePromise;
+                if (machine.isConnected()) {
+                    released = false;
+                    return;
+                }
                 await reconnect();
+                if (backgrounded) {
+                    released = false;
+                    if (isActiveBrewPhase(machine.phase)) {
+                        retainedForBrew = true;
+                        machine.note("active brew is in the back — keeping the restored link");
+                        return;
+                    }
+                    release("reconnect finished in the back — giving the link back");
+                    return;
+                }
                 released = false;
-            } catch (e) {
-                // Bounded on purpose. A machine that has been switched off
-                // should stop being asked about, and Connect is still there.
-                machine.note(`could not take it back — ${(e as Error).message}`);
+            } catch (error) {
+                machine.note(`could not take it back — ${(error as Error).message}`);
+            } finally {
+                reconnecting = false;
             }
-            reconnecting = false;
         })();
     });
 
-    return () => subscription.remove();
+    return () => {
+        appStateSubscription.remove();
+        phaseSubscription();
+    };
 }
 
 /**
@@ -153,6 +215,12 @@ export async function connectRememberedMachine(
  * Called from the root layout rather than from a screen, because the settings
  * screen is where the only `useMachine` on a normal launch path lives and a
  * user who never opens it would never be connected.
+ *
+ * This *is* the warm connect: by the time anyone reaches for BREW the app
+ * already knows whether the machine is there and whether its tank has water.
+ * Resist the urge to add a second one inside `sharedMachine()` — merely asking
+ * for the machine must not touch the radio, which is the whole reason the
+ * remembered-id check above is repeated here.
  */
 export function startMachineLink(): void {
     const store = settingsStore();
@@ -278,7 +346,10 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     const machine = injected ?? sharedMachine();
     const [remembered, setRemembered] = useSetting("machineDeviceId", options.settings);
     const [status, setStatus] = useState<LinkStatus>(
-        machine.isConnected() ? "connected" : "disconnected"
+        // If already connected (e.g. the hook remounts with a live machine),
+        // reflect that. Otherwise we genuinely do not know yet: no attempt has
+        // been made in this app session.
+        machine.isConnected() ? "connected" : "idle"
     );
     const [error, setError] = useState<string | null>(null);
 
@@ -292,7 +363,16 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         // dropping — produces no frame at all, so a frame subscription leaves
         // the view saying "Connected" about a machine that has gone away.
         return machine.onLink(() => {
-            setStatus(machine.isConnected() ? "connected" : "disconnected");
+            setStatus(prev =>
+                // A link event saying "connected" is always correct — take it.
+                // A link event saying "not connected" means the state changed:
+                // if we were connected, the link dropped → disconnected.
+                // Any other previous state (idle, connecting, failed) should
+                // not be overwritten here; connect()'s own path owns those.
+                machine.isConnected() ? "connected"
+                    : prev === "connected" ? "disconnected"
+                        : prev
+            );
             setLinkVersion((n) => n + 1);
         });
     }, [machine]);
@@ -321,7 +401,7 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         await machine.disconnect();
         setRemembered("");
         setError(null);
-        setStatus("disconnected");
+        setStatus("idle");
     }
 
     return {machine, status, error, remembered, connect, forget};

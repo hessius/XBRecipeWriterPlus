@@ -382,6 +382,29 @@ describe("a recipe already in the library", () => {
         expect(onOpenRecipe.mock.calls[0][0]).toBe(existing);
         expect(onOpenRecipe.mock.calls[0][1]).toBe(true);
     });
+
+    it("brings in a bypass recipe rather than opening its plain twin", async () => {
+        // The card bytes are identical, because no card carries bypass. Opening
+        // the stored one here would hand the user the recipe without the
+        // dilution they asked for and call it the same recipe.
+        const plain = importedRecipe();
+        const withBypass = importedRecipe();
+        withBypass.bypassEnabled = true;
+        withBypass.bypassVolume  = 45;
+        withBypass.bypassTemp    = 60;
+        mockGetRecipe.mockReturnValueOnce(withBypass);
+
+        const {onOpenRecipe, stored} = setup([plain]);
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+        expect(onOpenRecipe.mock.calls[0][0]).toBe(withBypass);
+        expect(onOpenRecipe.mock.calls[0][1]).toBe(false);
+    });
 });
 
 describe("a share intent", () => {
@@ -426,6 +449,29 @@ describe("a share intent", () => {
         await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
         expect(onOpenRecipe.mock.calls[0][0]).toBe(existing);
         expect(onOpenRecipe.mock.calls[0][1]).toBe(true);
+    });
+
+    it("brings in a bypass recipe rather than opening its plain twin", async () => {
+        // The card bytes are identical, because no card carries bypass. Opening
+        // the stored one here would hand the user the recipe without the
+        // dilution they asked for and call it the same recipe.
+        const plain = importedRecipe();
+        const withBypass = importedRecipe();
+        withBypass.bypassEnabled = true;
+        withBypass.bypassVolume  = 45;
+        withBypass.bypassTemp    = 60;
+        mockGetRecipe.mockReturnValueOnce(withBypass);
+
+        const {onOpenRecipe, stored} = setup([plain]);
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await waitFor(() => expect(onOpenRecipe).toHaveBeenCalledTimes(1));
+        expect(onOpenRecipe.mock.calls[0][0]).toBe(withBypass);
+        expect(onOpenRecipe.mock.calls[0][1]).toBe(false);
     });
 });
 

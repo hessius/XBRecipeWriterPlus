@@ -4,8 +4,10 @@ XBRW++ reads and rewrites xBloom recipe cards. It does not talk to the machine.
 This folder is a desk study of whether it should, what that would take, and what
 becomes possible if it does.
 
-**Researched 2026-08-29. Nothing here is hardware-verified except the grind
-size offset**, which was confirmed on a real machine on 2026-08-31 (#68).
+**Researched 2026-08-29. Almost nothing here is hardware-verified.** Two
+claims are: the grind size offset, confirmed on a real machine on 2026-08-31
+(#68), and event 40520 `RD_Bypass`, confirmed by a full frame log of a bypass
+brew on 2026-09-10.
 
 ## Read this first
 
@@ -37,7 +39,7 @@ decide whether to build on a statement or go and verify it first.
 | `corroborated` | Two or more independent projects agree |
 | `single-source` | Exactly one project claims it |
 | `inferred` | Deduced from reading code, not stated anywhere |
-| `verified` | We have personally observed it on hardware. **Applies to exactly one claim: the grind size offset (#68).** |
+| `verified` | We have personally observed it on hardware. **Applies to exactly two claims: the grind size offset (#68), and event 40520 `RD_Bypass`.** |
 
 An issue derived from an `inferred` claim must say so on its face, so that
 whoever picks it up knows the first task is confirmation rather than
@@ -82,8 +84,8 @@ is what standalone grind mode is for. Our range covers the machine's whole
 brewing band.
 
 The offset was **confirmed on hardware** — grind sizes written by XBRW++ appear
-as intended on the machine (issue #68, closed). `verified` — the only claim in
-this folder that carries that tag.
+as intended on the machine (issue #68, closed). `verified` — one of only two
+claims in this folder that carries that tag.
 
 **Do not widen `GRIND_SIZE` below 40:** the encoder would emit a negative byte.
 Note also that the grinder-off value a user sees is **81** (`GRIND_SIZE_OFFSET`

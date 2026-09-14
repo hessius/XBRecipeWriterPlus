@@ -45,16 +45,16 @@ export const DEFAULTS = {
      */
     temperatureUnit: "C" as "C" | "F",
     /**
-     * Which of the two candidate tea steep encodings to send.
+     * Which reading of the bypass temperature argument to send.
      *
-     * The protocol's least-settled corner: HomoLand derives the encoding from
-     * the official app's own transform, saya6k derives it from two stopwatch
-     * readings and says so. They are not variants of one scheme, and a wrong
-     * choice produces no error at all — the tea simply steeps for the wrong
-     * length. HomoLand's wins on provenance and is the default; the other is
-     * reachable from the machine console so a stopwatch can settle it.
+     * The command descriptor calls the argument "bypass temp x10", which is
+     * either tenths of a degree or a scale factor nobody has confirmed. A wrong
+     * choice raises no error: the bypass simply arrives at the wrong
+     * temperature. The scaled reading is the one the descriptor implies and is
+     * the default; the other is reachable from the machine console so a
+     * thermometer can settle it.
      */
-    teaSteepEncoding: "homoland" as "homoland" | "saya6k",
+    bypassTempEncoding: "scaled" as "scaled" | "plain",
     /**
      * The last machine that connected, so later sessions reconnect directly
      * rather than scanning. Empty until one has.
@@ -100,7 +100,41 @@ export const DEFAULTS = {
      * grinder. With this off the recipe is uploaded and the brew route offers
      * START; the machine holds the recipe quite happily until then.
      */
-    machineAutoStart: false
+    machineAutoStart: false,
+    /**
+     * Whether the brew chart animates between phases.
+     *
+     * On by default, and layered on top of the system Reduced Motion
+     * preference rather than replacing it: the system switch is about
+     * vestibular safety and this one is about taste, and answering the first
+     * should not require answering the second. When either is off, each
+     * animation holds its end state rather than disappearing.
+     */
+    animateBrewChart: true,
+    /**
+     * How many brews keep their raw sample stream.
+     *
+     * A stream is about 2 400 samples — some tens of kilobytes — and only the
+     * brews you are still dialling in are worth that. The records themselves
+     * are never swept: history stays complete, and only the detail behind it
+     * expires. Zero is a real choice and means zero.
+     */
+    brewTraceRetention: 50,
+    /**
+     * The raw bytes of the last card read, kept so a crash cannot lose them.
+     *
+     * Not a preference — a diagnostic. A genuine "bypass water" card read to
+     * apparent success and then took the app down, on a phone whose owner
+     * cannot see a console, and `parseData` is the suspect. So the bytes are
+     * captured *before* they are parsed and written here straight away: if the
+     * parse throws a millisecond later, the evidence is already on disk and the
+     * settings screen can hand it back as copyable text.
+     *
+     * A serialised `CardCapture` (see `library/cardDiagnostics.ts`), or empty
+     * until a card has been read. Held out of backups below: it is potentially
+     * large and it describes one scan on one phone, not a choice worth carrying.
+     */
+    lastCardRead: ""
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -120,8 +154,8 @@ export type SettingKey = keyof typeof DEFAULTS;
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
-export type BackupExcluded = "machineDeviceId";
-export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId"];
+export type BackupExcluded = "machineDeviceId" | "lastCardRead";
+export const NOT_IN_BACKUP: readonly SettingKey[] = ["machineDeviceId", "lastCardRead"];
 
 /**
  * Widen a literal type (as produced by `DEFAULTS`'s `as const`) back to its

@@ -6,6 +6,8 @@ import {useRecipeEditor} from "@/hooks/useRecipeEditor";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type NFC from "@/library/NFC";
+import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
+import {CARD_WRITE_FAILED} from "@/constants/copy";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
@@ -18,9 +20,11 @@ jest.mock("@/library/RecipeDatabase");
 jest.mock("@/library/NFC", () => ({
     __esModule:     true,
     default:        jest.fn().mockImplementation(() => ({
-        getIsClosed: jest.fn(() => true),
-        close:       jest.fn(),
-        readCard:    jest.fn()
+        getIsClosed:  jest.fn(() => true),
+        wasCancelled: jest.fn(() => false),
+        close:        jest.fn(),
+        cancel:       jest.fn(),
+        readCard:     jest.fn()
     })),
     setNfcAlertIOS: jest.fn()
 }));
@@ -149,6 +153,75 @@ describe("useCardWriter", () => {
 
         expect(result.current.writeProgress).toBe(60);
         Platform.OS = "android";
+    });
+
+    it("names the card's own limit when the recipe does not fit", async () => {
+        // Card capacity varies by tag, so the generic write failure could not tell
+        // the user whether to change the recipe or reach for a different card.
+        // A 96-byte card holds (96 - 12) / 8 = 10 stages.
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new CardCapacityError(116, 96));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: expect.stringContaining("room for 10")
+        });
+    });
+
+    it("says nothing was written when the card would not report its size", async () => {
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new CardWriteError("no size"));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: expect.stringMatching(/did not report its size/i)
+        });
+    });
+
+    it("reports a generic write failure the user can see", async () => {
+        // This toast used to be dead code: `Recipe.writeCard`'s own `finally`
+        // closes the session, so the old `!getIsClosed()` guard was always
+        // false by the time the hook's catch ran and the failure vanished.
+        // Asking `wasCancelled()` instead lets a genuine fault through.
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new Error("transceive failed"));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: CARD_WRITE_FAILED
+        });
+    });
+
+    it("stays silent when the user cancels the write", async () => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const NFC = require("@/library/NFC").default;
+        NFC.mockImplementationOnce(() => ({
+            getIsClosed:  jest.fn(() => true),
+            wasCancelled: jest.fn(() => true),
+            close:        jest.fn(),
+            cancel:       jest.fn(),
+            readCard:     jest.fn()
+        }));
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        const valid = validRecipe();
+        jest.spyOn(valid, "writeCard").mockRejectedValue(new Error("cancelled"));
+
+        await act(async () => result.current.writeCard(valid));
+
+        expect(notify).not.toHaveBeenCalled();
     });
 
     it("gives the iOS sheet the placement copy, not a percentage", async () => {

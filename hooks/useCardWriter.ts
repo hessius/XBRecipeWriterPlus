@@ -1,7 +1,9 @@
 import {useState} from "react";
 import {Platform} from "react-native";
 import {notify} from "@/components/XbrwToast";
+import {CARD_SIZE_UNKNOWN, CARD_WRITE_FAILED, cardTooSmall, HOLD_CARD} from "@/constants/copy";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
 import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
@@ -46,7 +48,7 @@ export function useCardWriter(
     const [nfc] = useState(() => new NFC());
 
     async function onNFCDialogClose() {
-        await nfc.close();
+        await nfc.cancel();
         setShowNfcOverlay(false);
     }
 
@@ -63,7 +65,7 @@ export function useCardWriter(
             // copy, so this is the only place it appears on iOS.
             setNfcAlertIOS(progress >= 100
                 ? "Recipe written to card"
-                : "Hold the card to the top of the phone.");
+                : HOLD_CARD);
         }
         return undefined;
     }
@@ -88,9 +90,22 @@ export function useCardWriter(
         } catch (e) {
             console.log("Write error!:" + e);
             setShowNfcOverlay(false);
-            // A cancelled scan throws, and the user cancelling is not a failure.
-            if (!nfc.getIsClosed()) {
-                notify({tone: "error", message: "Could not write the recipe to the card."});
+            // A refusal we raised ourselves knows why it refused, and the generic
+            // failure could not tell the user which card to blame or what to change.
+            if (e instanceof CardCapacityError) {
+                notify({
+                    tone: "error",
+                    message: cardTooSmall(recipe?.pours.length ?? 0, e.maxStages())
+                });
+            } else if (e instanceof CardWriteError) {
+                notify({tone: "error", message: CARD_SIZE_UNKNOWN});
+            } else if (!nfc.wasCancelled()) {
+                // A cancelled write is the user's choice, not a failure. Every
+                // real fault reaches here because `Recipe.writeCard` rethrows
+                // it, so this toast is no longer the dead code it was when the
+                // guard asked `getIsClosed()` -- always true once the session's
+                // `finally` had closed it.
+                notify({tone: "error", message: CARD_WRITE_FAILED});
             }
         }
     }

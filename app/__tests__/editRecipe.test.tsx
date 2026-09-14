@@ -29,10 +29,24 @@ let mockShareState: {status: "idle"} | {status: "sharing"} |
     {status: "failed"; reason: "network" | "limited" | "unavailable" | "unusable"} = {status: "idle"};
 const mockShareRecipe = jest.fn();
 jest.mock("@/hooks/useShareRecipe", () => ({
+    // Spread the real module: only the hook needs faking, and the failure copy
+    // must stay the genuine `SHARE_FAILURE_MESSAGE` or the toast assertion below
+    // would be checking a string this file made up.
+    ...jest.requireActual("@/hooks/useShareRecipe"),
     useShareRecipe: () => ({
         state:        mockShareState,
         share:        mockShareRecipe,
         dismissError: jest.fn()
+    })
+}));
+
+const mockWriteCard = jest.fn();
+jest.mock("@/hooks/useCardWriter", () => ({
+    useCardWriter: () => ({
+        writeCard:        mockWriteCard,
+        onNFCDialogClose: jest.fn(),
+        showNfcOverlay:   false,
+        writeProgress:    0
     })
 }));
 
@@ -117,6 +131,7 @@ beforeEach(() => {
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
+    mockWriteCard.mockReset();
 });
 
 /**
@@ -252,6 +267,54 @@ describe("the editor", () => {
 
         expect(screen.getByLabelText("Write card").props.accessibilityState.disabled).toBe(true);
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+    });
+
+    it("does not write a bypass recipe until the card-loss warning is confirmed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+
+        expect(mockWriteCard).not.toHaveBeenCalled();
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(screen.getByText(/Cards cannot store bypass water/i)).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("writes nothing when the bypass card-loss warning is cancelled", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Do not write to the card"));
+
+        expect(mockWriteCard).not.toHaveBeenCalled();
+        jest.useRealTimers();
+    });
+
+    it("writes a bypass recipe once the warning is explicitly confirmed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({bypassEnabled: true, bypassVolume: 23, bypassTemp: 91});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Write without bypass"));
+
+        expect(mockWriteCard).toHaveBeenCalledTimes(1);
+        expect(mockWriteCard.mock.calls[0][0].bypassEnabled).toBe(true);
+        expect(mockWriteCard.mock.calls[0][0].bypassVolume).toBe(23);
+        expect(mockWriteCard.mock.calls[0][0].bypassTemp).toBe(91);
+        jest.useRealTimers();
+    });
+
+    it("writes a non-bypass recipe without showing the card-loss warning", async () => {
+        await renderEditor({bypassEnabled: false});
+
+        await fireEvent.press(screen.getByLabelText("Write card"));
+
+        expect(mockWriteCard).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/Cards cannot store bypass water/i)).toBeNull();
     });
 
     it("dims the write action by its fill, never by the group's opacity", async () => {
@@ -533,9 +596,10 @@ describe("the editor", () => {
 
     it("does not collide row keys when xid and name are both empty", async () => {
         // A share-link import arrives with `xid` and `name` both `""`. The two
-        // TextFieldRows are keyed on those values, so without namespacing the
-        // keys they would clash and React would log a duplicate-key warning.
-        // The suite does not silence `console.error`, so spy on it directly.
+        // TextFieldRows share one external-replacement epoch, so their keys
+        // reduce to `xid-0` and `name-0`; without the field-name prefix both
+        // would be `0` on sibling rows and React would log a duplicate-key
+        // warning. The suite does not silence `console.error`, so spy directly.
         const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
         try {
             await renderEditor({xid: "", name: ""});
@@ -547,6 +611,38 @@ describe("the editor", () => {
         } finally {
             errorSpy.mockRestore();
         }
+    });
+
+    it("reopens the save gate when a revert replaces a bad recipe ID", async () => {
+        // Typing an invalid ID closes the write and save gates. A revert then
+        // swaps the whole recipe out for one with a valid ID, which must reopen
+        // them. The rows key on an external-replacement epoch, not on the ID
+        // value: the reverted recipe here carries the same CGL12 it started
+        // with, so a value-based key would not change and the row would never
+        // remount to clear the stale `invalid` mark — the gate would stay shut.
+        //
+        // Fake timers because each sheet gates its open state on a
+        // `requestAnimationFrame`, and this opens two in turn.
+        jest.useFakeTimers();
+        const backing = fixture();
+        backing.xid = "CGL12";
+        await renderEditor({xid: "CGL12", offline_backup: backing.getData()});
+
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(true);
+
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Revert"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("THE SAVED COPY"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // The external replacement remounted the row, recomputed its validity
+        // from the restored CGL12 and reopened the gate.
+        expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
+        expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+        jest.useRealTimers();
     });
 });
 

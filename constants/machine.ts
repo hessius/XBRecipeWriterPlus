@@ -128,3 +128,125 @@ export const BREW_INFO_ROUNDS = 3;
  * unlikely to accept a millisecond later.
  */
 export const CONNECT_DELAYS_MS = [0, 1200, 2500, 4000, 6000];
+
+/**
+ * How long a fault state is believed before it is treated as unknown.
+ *
+ * Only fault states (`NO_WATER`, `NO_BEANS`) expire. Activity states never do,
+ * because the machine is silent while it works: grinding emits no `0x57` frame
+ * for around twenty seconds and a pour emits none for the duration of the pour,
+ * so silence is what a busy machine sounds like. Expiring an activity state
+ * would let the app decide a running machine is free.
+ *
+ * A fault expires because the user fixes it at the machine, away from the app,
+ * and the app cannot observe that. Without expiry, `NO_WATER` stays forever and
+ * every subsequent attempt is refused as a tank fault on a full tank.
+ *
+ * Fifteen seconds is safely shorter than the ~20 s grind gap recorded in
+ * `docs/machine-integration/ble-protocol.md`, so a fault frame emitted at the
+ * start of a grind could not masquerade as a grind silence. It is also longer
+ * than a full pre-flight, so a fault that arrives during a pre-flight is still
+ * fresh when `brewBlock` runs.
+ */
+export const STATE_FRESH_MS = 15_000;
+
+/**
+ * How long the cup weight must sit flat before a settling brew is called done.
+ *
+ * After the machine stops pouring, coffee keeps dripping from the brewer onto
+ * the scale; the brew is not over until that drawdown stops and the cup line
+ * flattens. Four seconds of no meaningful rise is long enough that a slow last
+ * drip does not cut the trace short, and short enough that the record is
+ * stamped while the drawdown is still fresh.
+ *
+ * Four seconds is only safe because this test is now gated on the machine
+ * having said the coffee is ready — see `BrewRecorder.watchSettle`. Ungated it
+ * was not: a bed that dams, drips nothing for five seconds and then releases is
+ * an ordinary slow drawdown, and calling that the end truncated the record with
+ * a third of the water still sitting above the grounds.
+ */
+export const SETTLE_FLAT_MS = 4000;
+
+/**
+ * How long the machine must say *nothing at all* before a settling brew is
+ * force-ended.
+ *
+ * Settling waits for the machine's own end signal, ENJOY_2 (40513) — the event
+ * that stops its timer. That is the only thing that actually knows when the
+ * drawdown is finished, so nothing here should ever beat it to the conclusion.
+ * But `settling` is non-terminal, so a single dropped BLE notification would
+ * strand the run: the screen stuck on CANCEL, the mini bar never finishing, the
+ * next brew refused as "machine busy". Hence a backstop.
+ *
+ * This is a **silence** timer, not an elapsed one, and that distinction is the
+ * whole point. As a plain ninety seconds from the start of settling it fired on
+ * a real brew — a slow, well-behaved drawdown that took over two minutes, whose
+ * machine went on happily reporting the cup filling the entire time. The app
+ * declared it finished with a third of the water still in the dripper. A
+ * machine that is still talking is still brewing; only one that has gone quiet
+ * has lost its ENJOY_2. So every frame that arrives during settling starts this
+ * over.
+ *
+ * It bounds two things with two timers on the same duration: `BrewRecorder`
+ * caps the *record*, and `Machine` runs a *settling watchdog* over the *run*.
+ */
+export const SETTLE_CAP_MS = 90_000;
+
+/**
+ * The longest a brew may sit in settling however talkative the machine is.
+ *
+ * `SETTLE_CAP_MS` restarts on every frame, which is right for a slow drawdown
+ * and wrong for a cup that never stops weeping: a scale nudging up and down at
+ * 10 Hz would re-arm the watchdog forever and hang the run — exactly the defect
+ * the watchdog exists to prevent, reintroduced through its own fix. This is the
+ * ceiling that cannot be pushed back.
+ *
+ * Ten minutes because it must not be reachable by any real brew. The slowest
+ * drawdown observed is a little over two, and the failure it guards against is
+ * a stuck run, which the user can already leave by dismissing the sheet.
+ */
+export const SETTLE_CEILING_MS = 600_000;
+
+/**
+ * How far the cup weight must fall from its peak to read as the cup being
+ * lifted off the scale, ending settling at once.
+ *
+ * Not the noise floor. `NOISE_FLOOR_ML` is the half-gram the scale settles by
+ * frame to frame, and `settlePeak` is a running maximum — so testing a
+ * peak-to-trough fall against it turns ordinary ±0.3 g jitter (a 0.6 g swing
+ * across a plateau) into a "lift" and truncates the drawdown this whole phase
+ * exists to capture. A cup actually being lifted changes the reading by tens
+ * to hundreds of grams, three orders of magnitude clear of that jitter, so ten
+ * grams sits safely between the two and cannot be reached by noise.
+ */
+export const LIFT_DROP_G = 10;
+
+/**
+ * How many notification frames the machine keeps in its always-on history.
+ *
+ * The console's frame log only exists while that screen is mounted, but during
+ * a brew the user is on the brew sheet — so a brew produces no log at all, and
+ * the one-off field bugs that most need diagnosing leave nothing to read. This
+ * buffer lives on the machine so a log covering the brew can be copied
+ * afterwards.
+ *
+ * The weight stream is excluded (see `retainFrame`), so what lands here is
+ * sparse. A whole brew is a few minutes and emits only: a handful of state
+ * changes, ~10 lifecycle events (grinder-stop, up to six pour-starts,
+ * brewer-stop, the two enjoys), the five or so recipe-send frames, and the
+ * occasional info or unknown — tens of frames, not thousands. 256 holds several
+ * whole brews with wide margin while staying a small fixed cap (256 short byte
+ * arrays) that can never grow without bound.
+ */
+export const FRAME_HISTORY_LIMIT = 256;
+
+/**
+ * Whether every retained frame is also echoed to the Metro console.
+ *
+ * On in development and off under test, where two thousand frames of echo
+ * would bury the assertions. It exists because the in-memory history dies with
+ * a JS reload, and the first field capture of a false out-of-water was lost
+ * exactly that way; the terminal's scrollback outlives the app.
+ */
+export const ECHO_FRAMES =
+    typeof __DEV__ !== "undefined" && __DEV__ && process.env.NODE_ENV !== "test";

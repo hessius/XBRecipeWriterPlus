@@ -6,6 +6,12 @@ import {HELP_HEIGHT} from "@/components/HelpSheet";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
+const mockPush = jest.fn();
+
+jest.mock("expo-router", () => ({
+    router: {push: (...args: unknown[]) => mockPush(...args)}
+}));
+
 const ACTIONS = {
     showHints:         false,
     onShowHintsChange: jest.fn(),
@@ -18,7 +24,10 @@ const ACTIONS = {
 };
 
 describe("RecipeOverflowSheet", () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockPush.mockReset();
+    });
 
     it("is sized to the handful of rows it holds", async () => {
         // Nothing in here scrolls -- one switch and four rows -- so it has no
@@ -151,5 +160,28 @@ describe("RecipeOverflowSheet", () => {
 
         expect(screen.getByLabelText("Delete").props.accessibilityHint)
             .toMatch(/cannot be undone/);
+    });
+
+    it("offers a Brew history row", async () => {
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
+        );
+        expect(screen.getByLabelText("Brew history")).toBeTruthy();
+    });
+
+    it("navigates to the full history list when no recipe is specified", async () => {
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName {...ACTIONS}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Brew history"));
+        expect(mockPush).toHaveBeenCalledWith("/brewHistory");
+    });
+
+    it("navigates to the recipe-filtered history when a recipeUuid is given", async () => {
+        await renderWithProviders(
+            <RecipeOverflowSheet open canRefreshName recipeUuid="uuid-99" {...ACTIONS}/>
+        );
+        await fireEvent.press(screen.getByLabelText("Brew history"));
+        expect(mockPush).toHaveBeenCalledWith("/brewHistory?recipeUuid=uuid-99");
     });
 });

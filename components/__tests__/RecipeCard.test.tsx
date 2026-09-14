@@ -59,6 +59,7 @@ function profilePath(): string {
 }
 
 const TOUCH = {
+    persist: () => undefined,
     nativeEvent: {
         touches:        [],
         changedTouches: [],
@@ -165,7 +166,7 @@ describe("RecipeCard", () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        const card = screen.getByTestId("recipe-card");
+        const card = screen.getByTestId("recipe-card-surface");
         expect(accents.coffee).toContain(card.props.style.backgroundColor);
     });
 
@@ -175,7 +176,7 @@ describe("RecipeCard", () => {
         const recipe = makeRecipe();
         recipe.accentIndex = 5;
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
-        expect(screen.getByTestId("recipe-card").props.style.backgroundColor)
+        expect(screen.getByTestId("recipe-card-surface").props.style.backgroundColor)
             .toBe(accents.coffee[5]);
     });
 
@@ -184,7 +185,7 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe({cupType: CUP_TYPE.TEA})}
                         onPress={jest.fn()}/>
         );
-        const card = screen.getByTestId("recipe-card");
+        const card = screen.getByTestId("recipe-card-surface");
         expect(accents.tea).toContain(card.props.style.backgroundColor);
     });
 
@@ -283,7 +284,7 @@ describe("RecipeCard", () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
         );
-        const style = screen.getByTestId("recipe-card").props.style as
+        const style = screen.getByTestId("recipe-card-surface").props.style as
             Record<string, number | string>;
         // The profile is drawn oversized and flush to the corner; without the
         // clip it spills out of the card.
@@ -395,7 +396,7 @@ describe("RecipeCard", () => {
                         onPress={jest.fn()}/>
         );
         expect(screen.queryByLabelText("0")).toBeNull();
-        expect(screen.getAllByText("—")).toHaveLength(2);
+        expect(screen.getAllByText("–")).toHaveLength(2);
     });
 
     it("announces everything the grouping hides", async () => {
@@ -499,9 +500,42 @@ describe("RecipeCard", () => {
             <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
         );
 
-        await press(screen.getByTestId("recipe-card"));
+        await fireEvent.press(screen.getByTestId("recipe-card"));
 
         expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not press from a bare responder release, because the card is not Tamagui-pressed", async () => {
+        // This is the swipe-opens-the-recipe bug, pinned at the one place a
+        // unit test can reach it.
+        //
+        // Swiping a row left or right opened the recipe as well as the tray.
+        // The card sits inside a Swipeable, so a pan and a tap compete for the
+        // same finger, and Tamagui's press lost the argument: it fires `onPress`
+        // from `onResponderRelease` unconditionally, with no test of how far the
+        // finger travelled. In gesture-handler mode -- which `index.js` turns on
+        // for the whole app -- it does check, but from a `runOnJS` callback, so
+        // on a busy JS thread the cancel loses the race to the release. That
+        // matches the report exactly: it happened while a brew was streaming and
+        // would not reproduce on an idle app.
+        //
+        // Brew history is the same Swipeable around an ordinary `Pressable` and
+        // has never done it, because RN's press is taken away natively the
+        // moment the pan claims the touch, with no JS in the path.
+        //
+        // So this asserts the negative that tells the two apart: a raw grant and
+        // release is a Tamagui press and is not a React Native one. If the card
+        // is ever given its `onPress` back as a Tamagui prop, this fails.
+        const onPress = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={onPress}/>
+        );
+
+        const card = screen.getByTestId("recipe-card");
+        await fireEvent(card, "responderGrant", TOUCH);
+        await fireEvent(card, "responderRelease", TOUCH);
+
+        expect(onPress).not.toHaveBeenCalled();
     });
 
     it("hides the row actions by default", async () => {
@@ -630,5 +664,116 @@ describe("RecipeCard", () => {
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()} showCoffeeMarker/>);
 
         expect(await screen.findByLabelText("Will not write")).toBeTruthy();
+    });
+
+    it("carries the BREW accessibility action when a machine is remembered", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={jest.fn()} />
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+    });
+
+    it("carries none when there is no machine to brew on", async () => {
+        // A dead button on every card is worse than no button.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} />
+        );
+        expect(screen.queryByLabelText("Brew this recipe")).toBeNull();
+    });
+
+    it("offers the brew action to a screen reader when brewing is possible", async () => {
+        // The card collapses its subtree into one accessibility element, so
+        // the swipe tray's button is unreachable. A `brew` accessibilityAction
+        // mirrors the swipe path that provides BREW visually.
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={onBrew}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "brew"}});
+        expect(onBrew).toHaveBeenCalledTimes(1);
+    });
+
+    it("draws no BREW shortcut on the card while keeping the screen-reader action", async () => {
+        // BREW lives in the tray, behind a pan gesture that VoiceOver cannot
+        // perform -- the same reason duplicate and delete are mirrored here.
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onBrew={onBrew}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+
+        // This is not the visual shortcut coming back -- only the non-visual
+        // path to the tray tile.
+        expect(screen.queryByTestId("brew-shortcut")).toBeNull();
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "brew"}});
+        expect(onBrew).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers the tray's share and write verbs to a screen reader", async () => {
+        // SHARE and WRITE live only in the swipe tray, whose tiles sit inside
+        // this card's accessibility group and behind a pan gesture. Without
+        // these two actions there is no way at all for a VoiceOver or TalkBack
+        // user to hand out a link or put a recipe on a card.
+        const onShare = jest.fn();
+        const onWrite = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onShare={onShare} onWrite={onWrite}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "share", label: "Share recipe"},
+                {name: "write", label: "Write recipe to card"}
+            ])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "share"}});
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "write"}});
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onWrite).toHaveBeenCalledTimes(1);
+    });
+
+    it("publishes no share or write action when the screen cannot perform them", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onDelete={jest.fn()}/>
+        );
+        const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
+            {name: string}[]).map((a) => a.name);
+        expect(names).toContain("delete");
+        expect(names).not.toContain("share");
+        expect(names).not.toContain("write");
+    });
+
+    it("offers no brew action when there is nothing to brew on", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onDelete={jest.fn()}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+
+        // The other actions are here, so this is not passing because the card
+        // published no actions at all.
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "delete", label: "Delete recipe"}])
+        );
+        expect(card.props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
+        );
     });
 });

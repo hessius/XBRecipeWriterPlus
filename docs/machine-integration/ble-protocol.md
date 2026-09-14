@@ -87,7 +87,7 @@
 | 8002 | 0x1F42 | **Execute / Commit** | T1 | `[1]` | Arms → awaiting-confirm. Byte-exact: `580101421F0C000000017FCF`. | `spec` |
 | 40518 | 0x9E46 | **Start / Confirm** | T1 | `[1]` | Seq=0x9E. Sends after commit if machine stalls in awaiting-confirm. See CONTRADICTION C4. | `corroborated` |
 | 40519 | 0x9E47 | **Cancel** | T1 | `[1]` | Seq=0x9E. Abort committed/running brew. | `corroborated` |
-| 40524 | 0x9E48 | **Coffee Resume** | T1 | `[1]` | Resume after pause. | `single-source` (HomoLand) |
+| 40524 | 0x9E4C | **Coffee Resume** | T1 | `[1]` | Resume after pause. | `single-source` (HomoLand) |
 | 40518 | 0x9E46 | **Coffee Pause** | — | — | Same code as Start — context-dependent. See CONTRADICTION C4. | `single-source` (HomoLand) |
 | 8019 | 0x1F53 | **Brewer Pause** | T1 | (none) | Pause brew. | `spec` |
 | 8021 | 0x1F55 | **Brewer Resume** | T1 | (none) | Resume brew. | `spec` |
@@ -137,31 +137,74 @@
 | 0x15 frame | — | Coffee/Cup Weight | float32 LE (grams) | Brew-record cup weight stream, ~10×/s. | `corroborated` |
 | 20501 | 0x5015 | Scale Weight (alt) | float32 LE | brAzzi64 notation for the weight stream. See CONTRADICTION C7. | `spec` |
 | 10507 | 0x290B | Scale Weight (alt-2) | float32 LE | Second alternative notation observed in some captures. | `single-source` (brAzzi64) |
-| 40523 | 0x9E4B | Water Volume | float32 LE | Tank water volume, ~100ms interval. | `spec` |
+| 40523 | 0x9E4B | Water Volume | float32 LE | Named "tank volume" by the sources, but on this firmware it is the **dispensed** water and it climbs through a brew. `parseNotification` matches it on its low byte `0x4B` alone, so it decodes as a water weight and never reaches the event map. Its neighbour 40522 is the no-water fault. | `corroborated` |
 | 8023 | 0x1F57 | Machine Activity | LE uint32 | Activity states: 1=Pro idle, 65=Easy idle, 34=brewing, 36=brew done, 16=grinding complete. | `corroborated` |
 | 8011 | 0x1F4B | Machine Awake | — | Machine is not sleeping | `spec` |
 | 8009 | 0x1F49 | Machine Sleeping | — | Machine entered sleep | `spec` |
 | 11511 | 0x2CF7 | Mode Switch ACK | mode code | Status C2 = ACK | `spec` |
 | 11510 | 0x2CF6 | Easy Recipe Send ACK | — | One per slot write | `spec` |
 | 11512 | 0x2CF8 | Recipe Order ACK | — | | `spec` |
-| 40502 | 0x9E26 | Coffee Starting / Grinder Start | — | Machine-side grinding begin | `spec` |
-| 40506 | 0x9E2A | Brewer Start | — | Water heater spinning up; fires ~3s after grind start (before pours) | `single-source` (Alshekhi) |
-| 40507 | 0x9E2B | Grinder Stop | — | Grinder finished | `spec` |
-| 40510 | 0x9E2E | Bloom/Pour Start | pour_index | One per pour | `spec` |
-| 40511 | 0x9E2F | Brewer Stop | — | Brew complete | `spec` |
-| 40512 | 0x9E30 | Enjoy! | — | Final "coffee ready" notification | `spec` |
-| 40513 | 0x9E31 | Enjoy (2) | — | Second enjoy notification | `spec` |
-| 40515 | 0x9E33 | Pour Volume ACK | — | May be firmware-version dependent | `single-source` (brAzzi64) |
-| 40516 | 0x9E34 | Pour Transition | — | May be firmware-version dependent | `single-source` (brAzzi64) |
-| 40517 | 0x9E35 | Error: Idling | — | | `spec` |
-| 40520 | 0x9E38 | RD_Bypass | — | Bypass/dilution pour event | `single-source` (Alshekhi) |
-| 40522 | 0x9E3A | Error: No Water | — | Tank empty | `spec` |
+| 40502 | 0x9E36 | Coffee Starting / Grinder Start | — | Machine-side grinding begin | `spec` |
+| 40506 | 0x9E3A | Brewer Start | — | Water heater spinning up; fires ~3s after grind start (before pours) | `single-source` (Alshekhi) |
+| 40507 | 0x9E3B | Grinder Stop | — | Grinder finished | `spec` |
+| 40510 | 0x9E3E | Bloom/Pour Start | pour_index, **zero-based** (see below) | One per pour | `spec` |
+| 40511 | 0x9E3F | Brewer Stop | — | Brew complete | `spec` |
+| 40512 | 0x9E40 | Enjoy! | — | Final "coffee ready" notification | `spec` |
+| 40513 | 0x9E41 | Enjoy (2) | — | Second enjoy notification | `spec` |
+| 40515 | 0x9E43 | Pour Volume ACK | — | May be firmware-version dependent | `single-source` (brAzzi64) |
+| 40516 | 0x9E44 | Pour Transition | — | May be firmware-version dependent | `single-source` (brAzzi64) |
+| 40517 | 0x9E45 | Error: Idling | — | | `spec` |
+| 40520 | 0x9E48 | RD_Bypass | — | The bypass firing, after the drawdown | **`verified`** (capture 2026-09-10) |
+| 40522 | 0x9E4A | Error: No Water | — | Tank empty | `spec` |
 | 8203 | 0x200B | Error: Gear Position | — | Grinder gear error | `spec` |
+
+### Event 40520 is the bypass, and there is no pour start for it `verified`
+
+Verified by a full frame log of 2026-09-10: a three-stage recipe with a 5 ml
+bypass emitted 40510(0), 40510(1), 40510(2) — and then 40520, 61 s after the
+last pour began and 8 s before `BREWER_STOP`. **There is no fourth 40510.**
+
+That matters more than naming the event. Anything that buckets scale readings
+by the last announced `pour_index` will fold the bypass's water onto the last
+stage, and the long drawdown wait before it will look like a stalled pour. The
+app therefore enters a `bypass` phase on 40520 and gives it a lane of its own;
+see `docs/superpowers/specs/2026-09-10-brew-bypass-display-design.md`.
+
+### `pour_index` is zero-based
+
+Worth stating on its own, because getting it wrong is silently survivable: the
+first stage comes out right and every later stage is off by one.
+
+From brAzzi64's HCI snoop of the official Android app (`adb bugreport` with
+Bluetooth HCI snoop logging, Pixel 3, 2026-03-28, firmware V12.0D.500). The
+recipe was 16 g at 1:16, 256 ml, **six pours**, spiral, grinder off:
+
+```
+Δt (s)   Cmd     Name              Payload decode
+16.7     40502   Coffee Starting
+17.7     40510   Pour Start        pour_index=0   (bloom)
+60.9     40510   Pour Start        pour_index=1
+83.9     40510   Pour Start        pour_index=2
+106.9    40510   Pour Start        pour_index=3
+129.9    40510   Pour Start        pour_index=4
+155.0    40510   Pour Start        pour_index=5
+178.0    40511   Brewer Stop
+180.1    40512   Enjoy!
+```
+
+Six pours, indices 0 through 5. A stage number for display is therefore
+`pour_index + 1`, which is what `Machine.onEvent` does.
+
+This is quoted here rather than cited to a URL because a code comment that
+points at a document nobody reviewing the diff can open is not evidence. The
+capture also shows no 40515 or 40516 in that session, which is where this
+document's `single-source` marking on those two comes from.
+
 | 8204 | 0x200C | Error: Dose/Water | — | Dose or water mismatch | `spec` |
-| 8107 | 0x1F6B | Brewer Mode | — | | `spec` |
-| 8108 | 0x1F6C | Brewer Temp | — | | `spec` |
-| 8105 | 0x1F69 | Grinder Size | — | | `spec` |
-| 8106 | 0x1F6A | Grinder Speed | — | | `spec` |
+| 8107 | 0x1FAB | Brewer Mode | — | | `spec` |
+| 8108 | 0x1FAC | Brewer Temp | — | | `spec` |
+| 8105 | 0x1FA9 | Grinder Size | — | | `spec` |
+| 8106 | 0x1FAA | Grinder Speed | — | | `spec` |
 | 9000 | 0x2328 | In Grinder | — | User navigated to grinder | `spec` |
 | 9001 | 0x2329 | In Brewer | — | | `spec` |
 | 9002 | 0x232A | In Scale | — | Object placed on scale | `spec` |
@@ -172,7 +215,7 @@
 | 9008 | 0x2330 | Scale Out | — | Object removed from scale | `spec` |
 | 9009 | 0x2331 | Grinder Paused | — | | `spec` |
 | 9010 | 0x2332 | Brewer Paused | — | | `spec` |
-| 40505 | 0x9E29 | Gear Report | — | Gear position report during grind | `spec` |
+| 40505 | 0x9E39 | Gear Report | — | Gear position report during grind | `spec` |
 
 ---
 
@@ -220,7 +263,7 @@
 | 13–18 | theModel | ASCII (0xFF = blank) |
 | 19–28 | theVersion | ASCII firmware string |
 | 29–32 | areaAp | LE float |
-| 33 | waterEnough | uint8 (0=low, 1=ok) |
+| 33 | waterEnough | uint8 (0=low, 1=ok); reservoir sensor only, ignore for brew preflight when `waterFeed=1` |
 | 34 | systemStatus | uint8 |
 | 35 | userCount | uint8 |
 | 36 | waterFeed | uint8 (0=tank, 1=tap) |

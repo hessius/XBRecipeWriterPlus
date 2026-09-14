@@ -109,16 +109,21 @@ describe("pod codes", () => {
         expect(parseImportInput("  ETH120  ")).toEqual({kind: "xid", xid: "ETH120"});
     });
 
-    it("rejects two letters", () => {
-        expect(parseImportInput("ET120")).toBeNull();
+    it("accepts two letters, as xBloom's own XB0001 uses", () => {
+        expect(parseImportInput("XB0001")).toEqual({kind: "xid", xid: "XB0001"});
+        expect(parseImportInput("ET120")).toEqual({kind: "xid", xid: "ET120"});
     });
 
     it("rejects one digit", () => {
         expect(parseImportInput("ETH1")).toBeNull();
     });
 
-    it("rejects four digits", () => {
-        expect(parseImportInput("ETH1234")).toBeNull();
+    it("accepts four digits, within the seven-character field", () => {
+        expect(parseImportInput("ETH1234")).toEqual({kind: "xid", xid: "ETH1234"});
+    });
+
+    it("still rejects one letter", () => {
+        expect(parseImportInput("E1234")).toBeNull();
     });
 });
 
