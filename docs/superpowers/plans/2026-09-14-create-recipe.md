@@ -47,7 +47,7 @@ Run a single test file with `npx jest path/to/file.test.ts`, and a single test w
 | File | Change |
 | --- | --- |
 | `library/accent.ts` | Gains `accentsInUseAmong` and `assignAccent`. |
-| `library/RecipeDatabase.ts` | `insertRecipe` uses `assignAccent`; private `accentsInUse` deleted. |
+| `library/RecipeDatabase.ts` | `insertRecipe` and `updateRecipe` use `assignAccent`; private `accentsInUse` deleted. |
 | `library/Recipe.ts` | Gains `addOpeningPour()`. |
 | `hooks/useRecipeEditor.ts` | `addPour` routes to `addOpeningPour` on an empty recipe. |
 | `app/index.tsx` | `openRecipe` assigns the accent; third CTA tile; owns `NewRecipeSheet`. |
