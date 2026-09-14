@@ -15,13 +15,14 @@ import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
 import MachinePanel from "@/components/MachinePanel";
+import NewRecipeSheet from "@/components/NewRecipeSheet";
 import NfcOverlay from "@/components/NfcOverlay";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
 import {ALREADY_IN_LIBRARY, CARD_READ_FAILED, HOLD_CARD} from "@/constants/copy";
-import {palette} from "@/constants/colors";
+import {palette, type AccentGroup} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useMachine} from "@/hooks/useMachine";
@@ -34,6 +35,7 @@ import NFC, {setNfcAlertIOS} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {blankRecipe} from "@/library/newRecipe";
 import {assignAccent} from "@/library/accent";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
@@ -178,6 +180,10 @@ export default function HomeScreen({db, settings}: Props) {
     // longer a third: that rule moved into `useRecipeImport` (`showField`), so
     // the screen only owns "is the sheet open".
     const [importOpen, setImportOpen] = useState(false);
+
+    // Whether the coffee-or-tea chooser is open. Separate from `importOpen`:
+    // the two sheets are different questions and only ever one is up.
+    const [newOpen, setNewOpen] = useState(false);
 
     // The web URL of the share intent we have already acted on, so a re-delivery
     // of the *same* payload is ignored. expo-share-intent can hand the same
@@ -438,9 +444,10 @@ export default function HomeScreen({db, settings}: Props) {
         }
         lastEditorPushAt = Date.now();
         // Every route into the editor comes through here: a card read, an
-        // import, and a tap on a row that is already saved. The accent is
-        // settled here rather than on save, so the colour the user edits under
-        // is the colour the library row gets. `assignAccent` is idempotent: a
+        // import, a tap on a row that is already saved, and a recipe written
+        // from scratch. The accent is settled here rather than on save, so the
+        // colour the user edits under is the colour the library row gets.
+        // `assignAccent` is idempotent: a
         // row that already holds a valid index for its half is left untouched,
         // so re-settling a saved recipe on the way in does not repaint it. The
         // two rows it does touch are a legacy recipe saved before the index
@@ -452,6 +459,17 @@ export default function HomeScreen({db, settings}: Props) {
             params:   {recipeJSON: JSON.stringify(recipe)}
         });
         return true;
+    }
+
+    function createRecipe(group: AccentGroup): void {
+        // Close the chooser regardless of what `openRecipe` decides. The only
+        // way it refuses is the 2 s push guard rejecting a double-tap, and in
+        // that case leaving the sheet open would just invite another tap into
+        // the same rejected push; the user's next deliberate attempt reopens it.
+        setNewOpen(false);
+        // Straight to `openRecipe`, so a new recipe gets the same push guard
+        // and the same accent settling as a read or an import.
+        openRecipe(blankRecipe(group));
     }
 
     function openBrew(recipe: Recipe): void {
@@ -509,21 +527,23 @@ export default function HomeScreen({db, settings}: Props) {
         }
     }
 
-    // The import sheet covers the screen while it is open, and the NFC ceremony
-    // while a scan is running. Both hide the subtree below from the reader.
-    const screenCovered = scanning || importOpen || showNfcOverlay;
+    // The import sheet and the new-recipe chooser each cover the screen while
+    // open, and the NFC ceremony while a scan is running. All three hide the
+    // subtree below from the reader.
+    const screenCovered = scanning || importOpen || newOpen || showNfcOverlay;
 
     return (
         <>
             {/* The NFC ceremony is a modal moment, and an absolutely positioned
                 overlay only covers the screen visually. While it -- or the
-                import sheet, a non-modal Tamagui sheet that renders as a sibling
-                of this screen rather than through a native Modal and so isolates
-                nothing on Android -- is up, this subtree hides its own
-                descendants from the screen reader, so TalkBack cannot reach and
-                fire the controls behind it — the Android half of what
-                `accessibilityViewIsModal` does on iOS. The sheet is rendered
-                outside this guarded subtree, so it never hides itself. */}
+                import sheet or the new-recipe chooser, both non-modal Tamagui
+                sheets that render as a sibling of this screen rather than
+                through a native Modal and so isolate nothing on Android -- is
+                up, this subtree hides its own descendants from the screen
+                reader, so TalkBack cannot reach and fire the controls behind it
+                — the Android half of what `accessibilityViewIsModal` does on
+                iOS. The sheets are rendered outside this guarded subtree, so
+                they never hide themselves. */}
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
@@ -574,6 +594,9 @@ export default function HomeScreen({db, settings}: Props) {
                                 // plain tap.
                                 if (source) importer.resolveNow(source, "shortcut");
                             }}/>
+                        <CtaTile icon="plus" label="NEW"
+                                 accessibilityLabel="Create a recipe"
+                                 onPress={() => setNewOpen(true)}/>
                     </XStack>
                 </Collapsible>
 
@@ -626,6 +649,9 @@ export default function HomeScreen({db, settings}: Props) {
                         library.refresh();
                     }
                 }}/>
+
+            <NewRecipeSheet open={newOpen} onOpenChange={setNewOpen}
+                            onChoose={createRecipe}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         onCancel={cancelScan}/>
