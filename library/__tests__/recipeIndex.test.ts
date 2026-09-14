@@ -47,11 +47,11 @@ describe("recipeIndex descriptors", () => {
     });
 
     it("pins the schema hash", () => {
-        // This value is expected to change whenever INDEX_COLUMNS changes.
-        // When it does: confirm the change was intended, bump INDEX_REVISION
-        // if you altered a `from` body rather than the column shape, then
-        // paste the new hash here. See recipeIndex.ts for why the revision
-        // cannot be derived automatically.
+        // This value covers the *shape* of INDEX_COLUMNS only -- name, type,
+        // collation, indexed -- plus INDEX_REVISION. It does NOT cover the
+        // `from` bodies, so changing a projection leaves this green; the
+        // golden-projection test below is what catches that. When this does
+        // fail: confirm the change was intended, then paste the new hash.
         expect(schemaHash()).toBe("f409112d");
     });
 
@@ -62,6 +62,49 @@ describe("recipeIndex descriptors", () => {
 });
 
 describe("projectRecipe", () => {
+    it("pins the projected value of every column", () => {
+        // The guard the schema hash cannot be. The hash covers column shape
+        // only -- a changed `from` body leaves it identical -- so without
+        // this a projection could change semantics, no rebuild would be
+        // triggered, and every existing install would keep stale index values
+        // until some unrelated change happened to bump INDEX_REVISION.
+        //
+        // If this fails: a projection changed. Confirm it was intended, bump
+        // INDEX_REVISION in recipeIndex.ts so installed devices rebuild, then
+        // update both this expectation and the pinned hash above.
+        const recipe = new Recipe();
+        recipe.name = "Reference";
+        recipe.createdAt = 1700000000000;
+        recipe.dosage = 15;
+        recipe.ratio = 16;
+        recipe.grindSize = 60;
+        recipe.grindRPM = 120;
+        recipe.grinder = true;
+        recipe.accentIndex = 3;
+        recipe.bypassEnabled = false;
+        recipe.pours = [pour(100, 93), pour(120, 88)];
+
+        expect(projectRecipe(recipe)).toEqual({
+            sortName: "Reference",
+            createdAt: 1700000000000,
+            source: "manual",
+            accentIndex: 3,
+            cupType: recipe.cupType,
+            isTea: 0,
+            dosage: 15,
+            ratio: 16,
+            grindSize: 60,
+            grinder: 1,
+            grindRPM: 120,
+            pourCount: 2,
+            totalVolume: 220,
+            minTemp: 88,
+            maxTemp: 93,
+            bypassEnabled: 0,
+            sharedTableId: null
+        });
+    });
+
     it("produces a value for every declared column", () => {
         const projected = projectRecipe(new Recipe());
         expect(Object.keys(projected).sort())
