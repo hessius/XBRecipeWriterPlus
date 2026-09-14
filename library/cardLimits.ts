@@ -56,7 +56,7 @@ const AGITATION_RANGE: Range = {
  */
 const MAX_POURS = MACHINE_CARD_MAX_STAGES;
 /** The editor stops adding tea stages at three, and the card agrees. */
-const MAX_TEA_POURS = 3;
+export const MAX_TEA_POURS = 3;
 
 function outside(value: number, range: Range): boolean {
     return !Number.isFinite(value) || value < range.min || value > range.max;

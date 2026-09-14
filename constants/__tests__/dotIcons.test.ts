@@ -25,6 +25,36 @@ describe("DOT_ICONS", () => {
         expect(DOT_ICONS["chevron-down"]).toEqual(rotated);
     });
 
+    it("draws plus as a square mark, as wide as it is tall", () => {
+        // It stands alone for "new" on the home screen's NEW tile, where it is
+        // the largest glyph on the screen. At 7 by 5 it read as a squashed
+        // plus there, though it was unremarkable at stepper size. Measured as a
+        // bounding box rather than pinned as art, so the mark can be redrawn
+        // without the rule going stale.
+        const rows = DOT_ICONS.plus;
+        const lit = rows.flatMap((row, r) =>
+            Array.from(row).flatMap((cell, c) => (cell === "#" ? [[r, c]] : [])));
+
+        const extent = (axis: 0 | 1) => {
+            const values = lit.map((cell) => cell[axis]);
+            return Math.max(...values) - Math.min(...values) + 1;
+        };
+
+        expect(extent(1)).toBe(extent(0));
+    });
+
+    it("draws plus with both arms centred on the grid", () => {
+        // A square bounding box alone would also accept a mark sitting off to
+        // one side, which is the other half of looking symmetrical.
+        const rows = DOT_ICONS.plus;
+        const mirroredHorizontally = rows.map((row) =>
+            Array.from(row).reverse().join(""));
+        const mirroredVertically = [...rows].reverse();
+
+        expect(mirroredHorizontally).toEqual([...rows]);
+        expect(mirroredVertically).toEqual([...rows]);
+    });
+
     it.each(names)("%s is a square grid of the declared size", (name) => {
         const rows = DOT_ICONS[name];
         expect(rows).toHaveLength(DOT_ICON_GRID);

@@ -24,14 +24,14 @@ const TOUCH_TARGET = 44;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
 
 /**
- * The width the two arriving glyphs occupy once they have landed.
+ * The width the three arriving glyphs occupy once they have landed.
  *
  * It is stated rather than measured because the animation has to know the
  * target before the glyphs have anywhere to be measured in: they start at zero
  * width, so an `onLayout` would report zero and the slide would never leave.
  * Each glyph is exactly one touch target wide by construction above.
  */
-const SLIDE_WIDTH = TOUCH_TARGET * 2;
+const SLIDE_WIDTH = TOUCH_TARGET * 3;
 
 type ActionProps = {
     icon: DotIconName;
@@ -85,6 +85,7 @@ type Props = {
     onToggleEdit: () => void;
     onScan: () => void;
     onImport: () => void;
+    onNew: () => void;
     onSettings: () => void;
 };
 
@@ -113,6 +114,7 @@ export default function HomeHeader({
     onToggleEdit,
     onScan,
     onImport,
+    onNew,
     onSettings
 }: Props) {
     const insets = useSafeAreaInsets();
@@ -181,6 +183,7 @@ export default function HomeHeader({
                             <Action icon="scan" label="Read a card" onPress={onScan}/>
                             <Action icon="import" label="Import a recipe"
                                     disabled={!canImport} onPress={onImport}/>
+                            <Action icon="plus" label="Create a recipe" onPress={onNew}/>
                         </XStack>
                     </Animated.View>
                     {showEdit && (

@@ -4,7 +4,7 @@ import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-na
 import * as Clipboard from "expo-clipboard";
 
 import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 import {Settings, type SettingsStorage} from "@/library/Settings";
@@ -417,6 +417,62 @@ describe("HomeScreen", () => {
         await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
         // ...but still in the tree: it is hidden, not unmounted.
         expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    describe("the accent a recipe is edited under", () => {
+        it("is settled before the editor sees it", async () => {
+            // The editor is pushed with the recipe serialised, and a recipe is only
+            // written to the table on SAVE. Without an index assigned here, the
+            // editor draws a uuid-hash colour and the library row later draws the
+            // least-used one -- so the colour the user edited under is not the
+            // colour they then have to find in the list.
+            const unsaved = named("Ethiopia");
+            expect(unsaved.accentIndex).toBeUndefined();
+
+            await renderWithProviders(
+                <HomeScreen db={store([unsaved])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Ethiopia,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(typeof pushed.accentIndex).toBe("number");
+        });
+
+        it("does not move for a recipe that already has one", async () => {
+            // Re-assigning here would repaint a saved recipe every time it was
+            // opened. `assignAccent` keeps a valid index, which is what makes it
+            // safe to call on every route into the editor.
+            const saved = named("Kenya");
+            saved.accentIndex = 5;
+
+            await renderWithProviders(
+                <HomeScreen db={store([saved])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Kenya,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(pushed.accentIndex).toBe(5);
+        });
+
+        it("gives a second recipe the next free colour, not the one the first one took", async () => {
+            const first = named("Ethiopia");
+            first.accentIndex = 0;
+            const second = named("Kenya");
+
+            await renderWithProviders(
+                <HomeScreen db={store([first, second])} settings={new Settings(memoryStorage())}/>
+            );
+            await fireEvent.press(await screen.findByLabelText(/^Kenya,/));
+
+            await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+            const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+            expect(pushed.accentIndex).toBe(1);
+        });
     });
 });
 
@@ -1321,5 +1377,110 @@ describe("HomeScreen age timer", () => {
         await act(async () => { ageClock!.fn(); }); // manual tick — mirrors what the real timer would do
         // popoverNow = Date.now() at 3-min mark, askedAt = 0 → age = 3 min.
         expect(screen.getByText("3 MIN AGO")).toBeTruthy();
+    });
+});
+
+describe("writing a recipe from scratch", () => {
+    function blankScreen() {
+        return <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>;
+    }
+
+    it("offers a third way to get a recipe", async () => {
+        await renderWithProviders(blankScreen());
+
+        expect(screen.getByLabelText("Create a recipe")).toBeTruthy();
+    });
+
+    it("asks coffee or tea before opening the editor", async () => {
+        // The editor hides the cup-type row on tea, so the beverage cannot be
+        // changed later. Opening straight into a coffee recipe would be
+        // offering a change the editor does not permit.
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+
+        expect(await screen.findByLabelText("New coffee recipe")).toBeTruthy();
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("opens the editor on a blank coffee recipe", async () => {
+        // Fake timers, and advance past the sheet's entrance before pressing a
+        // door: XbrwSheet mounts the sheet closed and opens it on the next
+        // `requestAnimationFrame`, so a door pressed before that frame lands on
+        // a sheet that is in the tree but not yet accepting touches and the tap
+        // is silently dropped -- the same reason the import tests advance here.
+        jest.useFakeTimers();
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(await screen.findByLabelText("New coffee recipe"));
+
+        const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+        expect(pushed.cupType).toBe(CUP_TYPE.OMNI);
+        expect(pushed.dosage).toBe(15);
+        expect(pushed.ratio).toBe(16);
+        expect(pushed.grindSize).toBe(65);
+        expect(pushed.pours).toHaveLength(0);
+        expect(pushed.source).toBe("manual");
+        jest.useRealTimers();
+    });
+
+    it("opens the editor on a blank tea recipe", async () => {
+        jest.useFakeTimers();
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(await screen.findByLabelText("New tea recipe"));
+
+        const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+        expect(pushed.cupType).toBe(CUP_TYPE.TEA);
+        expect(pushed.dosage).toBe(5);
+        jest.useRealTimers();
+    });
+
+    it("gives the new recipe a colour on the way in", async () => {
+        jest.useFakeTimers();
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(await screen.findByLabelText("New coffee recipe"));
+
+        const pushed = JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON);
+        expect(typeof pushed.accentIndex).toBe("number");
+        jest.useRealTimers();
+    });
+
+    it("takes the screen out of the reader's reach while the chooser is open", async () => {
+        // NewRecipeSheet is a non-modal Tamagui sheet, exactly like ImportSheet:
+        // it renders as a sibling of this screen rather than through a native
+        // Modal, so Android gets no isolation from it and the screen behind must
+        // hide its own subtree.
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+
+        // The header button behind the chooser is unreachable to the screen
+        // reader...
+        await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
+        // ...but still in the tree: it is hidden, not unmounted.
+        expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("closes the chooser once a beverage is taken", async () => {
+        jest.useFakeTimers();
+        await renderWithProviders(blankScreen());
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(await screen.findByLabelText("New coffee recipe"));
+
+        // XbrwSheet keeps a dismissed sheet mounted through its EXIT_GRACE so it
+        // can animate away; advance past it before asserting the door is gone.
+        await act(async () => { jest.advanceTimersByTime(500); });
+        expect(screen.queryByLabelText("New coffee recipe")).toBeNull();
+        jest.useRealTimers();
     });
 });

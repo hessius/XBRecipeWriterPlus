@@ -154,12 +154,25 @@ export default function StageProfile({
             )}
 
             {/* Translated to the bottom of the box: buildProfilePath draws from
-                y=0 to y=drawn, and the baseline belongs on the floor. */}
-            <Path d={`${path} L${stageWidth} ${drawn} Z`} fill={accent} opacity={0.16}
-                  transform={`translate(0 ${height - drawn})`}/>
-            <Path d={path} fill="none" stroke={accent} strokeWidth={stroke}
-                  strokeLinejoin="round" strokeLinecap="round"
-                  transform={`translate(0 ${height - drawn})`}/>
+                y=0 to y=drawn, and the baseline belongs on the floor.
+
+                Both are skipped when there is no curve. `buildProfilePath`
+                returns "" for a recipe with no stages, and the fill below
+                appends a baseline to it, which produced the path `L338 0 Z` —
+                a subpath that starts with a line rather than a move. That is
+                invalid SVG, and RNSVG does not ignore it: its parser raised
+                "UnexpectedData" and took the screen down. Reachable since a
+                blank recipe became something the app can author. */}
+            {path !== "" && (
+                <>
+                    <Path d={`${path} L${stageWidth} ${drawn} Z`} fill={accent}
+                          opacity={0.16}
+                          transform={`translate(0 ${height - drawn})`}/>
+                    <Path d={path} fill="none" stroke={accent} strokeWidth={stroke}
+                          strokeLinejoin="round" strokeLinecap="round"
+                          transform={`translate(0 ${height - drawn})`}/>
+                </>
+            )}
 
             {/* Bypass, in its own band and in its own colour. Outlined rather
                 than filled solid, and dashed rather than continuous, because it

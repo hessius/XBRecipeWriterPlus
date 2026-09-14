@@ -102,3 +102,43 @@ export function reassignIfCrossed(recipe: Recipe, inUse: number[]): number {
 
     return nextAccentIndex(group, inUse);
 }
+
+/**
+ * The accent indices already taken in a recipe's half of the palette.
+ *
+ * Only the same half counts: the coffee library is larger, and letting its
+ * indices into the tea tally would skew tea towards colours nothing uses. The
+ * recipe is excluded from its own tally, or it would count as competition for
+ * the colour it already holds.
+ *
+ * Repeats are kept deliberately — a repeated index is what makes a colour more
+ * used than another, which is the whole input to `nextAccentIndex`.
+ *
+ * Takes the candidates rather than reading them, so the home screen can pass
+ * the library it already holds in memory and the database can pass the table.
+ */
+export function accentsInUseAmong(recipe: Recipe, others: Recipe[]): number[] {
+    const group = accentGroupFor(recipe);
+    return others
+        .filter((other) => other.uuid !== recipe.uuid &&
+                           accentGroupFor(other) === group)
+        .map((other) => other.accentIndex)
+        .filter((index): index is number => typeof index === "number");
+}
+
+/**
+ * Settle a recipe's accent against the company it keeps.
+ *
+ * Idempotent: `reassignIfCrossed` returns an existing index unchanged when it
+ * is valid for the recipe's group, so this can be called on the way into the
+ * editor and again on save without the colour moving. That is the point of it —
+ * the colour the user edits under is the colour the library row gets.
+ *
+ * The one exception is a recipe that changes cup type between the two calls:
+ * crossing between coffee and tea is exactly what makes the old index name a
+ * colour in the wrong half, so `reassignIfCrossed` picks a fresh one. Moving the
+ * accent then is the correct answer rather than a broken promise.
+ */
+export function assignAccent(recipe: Recipe, others: Recipe[]): void {
+    recipe.accentIndex = reassignIfCrossed(recipe, accentsInUseAmong(recipe, others));
+}

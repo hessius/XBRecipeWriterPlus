@@ -38,6 +38,19 @@ function tile(name = "SCAN") {
 }
 
 describe("CtaTile", () => {
+    it("is square, so the three-tile row reads as a row of squares", async () => {
+        // The tile used to take its height from padding around its contents,
+        // which gave a wide, shallow box that read as cramped. `flex` fixes the
+        // width at a third of the row, so the ratio is what makes the height
+        // follow it on any screen.
+        await renderWithProviders(
+            <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
+        );
+
+        const style = tile().props.style as Record<string, unknown>;
+        expect(style.aspectRatio).toBe(1);
+    });
+
     it("renders its label", async () => {
         await renderWithProviders(
             <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
@@ -146,14 +159,16 @@ describe("CtaTile", () => {
             <CtaTile icon="scan" label="SCAN" onPress={jest.fn()}/>
         );
         const style = tile().props.style as Record<string, number | string>;
-        // Two tiles sit side by side at equal weight; without flex each shrinks
-        // to its own content and the row stops being a pair.
+        // Three tiles sit side by side at equal weight; without flex each
+        // shrinks to its own content and the row stops being a set.
         expect(style.flex).toBe(1);
         expect(style.backgroundColor).toBe(palette.raised);
         expect(style.borderTopColor).toBe(palette.line);
         expect(style.borderTopWidth).toBe(1);
         expect(style.borderTopLeftRadius).toBeGreaterThan(0);
-        expect(style.paddingTop).toBeGreaterThan(0);
+        // Height comes from the square ratio now, not from padding around the
+        // contents; see the dedicated test above.
+        expect(style.aspectRatio).toBe(1);
     });
 
     it("uses the accessibility label when the Doto label is an abbreviation", async () => {

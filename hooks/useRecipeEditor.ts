@@ -171,7 +171,17 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
 
     /** A recipe the machine would reject cannot be written; it can still be kept. */
     const canWrite = writeProblems.length === 0 && !inputError && recipe !== null;
-    const canSave = !inputError && recipe !== null;
+    /**
+     * Keeping an invalid recipe is allowed; keeping an empty one is not.
+     *
+     * An unbalanced recipe is still a recipe, and saving it so it can be fixed
+     * later is deliberate. A recipe with no stages is not unfinished, it is not
+     * yet a recipe: it brews nothing, and saving it would put a row in the
+     * library that can be neither brewed nor written. Only `blankRecipe` can
+     * produce one — `deletePour` refuses to remove the last stage — so this
+     * gate has exactly one subject, and one tap on ADD STAGE clears it.
+     */
+    const canSave = !inputError && recipe !== null && recipe.pours.length > 0;
 
     function getRecipe(): Recipe | null {
         return recipe;
@@ -248,7 +258,14 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
                 notify({tone: "info", message: "Tea recipes are limited to 3 pours."});
                 return;
             }
-            recipe.addPour(pourNumber);
+            // A recipe with no stages has nothing to copy from, and the screen
+            // passes -1 for it. `addPour` would fall through to its placeholder
+            // branch and produce 1 ml at 39 C.
+            if (recipe.pours.length === 0) {
+                recipe.addOpeningPour();
+            } else {
+                recipe.addPour(pourNumber);
+            }
             setVolumeError(null);
             setKey((prev) => prev + 1);
         }

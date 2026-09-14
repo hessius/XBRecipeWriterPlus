@@ -35,4 +35,14 @@ describe("EmptyLibrary", () => {
         await renderWithProviders(<EmptyLibrary/>);
         expect(screen.queryByRole("progressbar")).toBeNull();
     });
+
+    it("names every way into the library, not two of three", async () => {
+        // The copy lists the actions explicitly, so it goes stale the moment
+        // the tile row changes. A user with an empty library is exactly the
+        // one who needs to know they can write a recipe themselves.
+        await renderWithProviders(<EmptyLibrary/>);
+        expect(screen.getByText(
+            "Read a card, import a recipe, or write one from scratch using the buttons above."
+        )).toBeTruthy();
+    });
 });

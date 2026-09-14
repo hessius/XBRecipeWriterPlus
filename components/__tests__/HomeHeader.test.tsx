@@ -14,6 +14,7 @@ function props(overrides = {}) {
         onToggleEdit: jest.fn(),
         onScan:       jest.fn(),
         onImport:     jest.fn(),
+        onNew:        jest.fn(),
         onSettings:   jest.fn(),
         ...overrides
     };
@@ -60,7 +61,12 @@ describe("HomeHeader", () => {
 
         const collapsed = await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
         const arrived = collapsed.getByTestId("home-header-slide");
-        expect(arrived.props.jestAnimatedStyle.value.width).toBeGreaterThan(0);
+        // Pinned to the exact width rather than merely "more than nothing".
+        // The slide clips to this figure, so a glyph added to it without
+        // widening it is simply invisible -- and every other assertion in this
+        // file reads the accessibility tree, where a clipped glyph is still
+        // present and still tappable. Three touch targets of 44.
+        expect(arrived.props.jestAnimatedStyle.value.width).toBe(132);
     });
 
     it("keeps the parked glyphs out of reach", async () => {
@@ -104,7 +110,7 @@ describe("HomeHeader", () => {
             .map((node) => node.props.accessibilityLabel);
 
         expect(order).toEqual([
-            "Read a card", "Import a recipe", "Edit recipes", "Settings"
+            "Read a card", "Import a recipe", "Create a recipe", "Edit recipes", "Settings"
         ]);
     });
 
@@ -200,5 +206,24 @@ describe("HomeHeader", () => {
         const r = await renderWithProviders(<HomeHeader {...props()} />);
 
         expect(r.queryByTestId("the-panel")).toBeNull();
+    });
+
+    it("takes new in with scan and import once the tiles are gone", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        expect(screen.getByLabelText("Create a recipe")).toBeTruthy();
+    });
+
+    it("leaves new to the tile while expanded", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(screen.queryByLabelText("Create a recipe")).toBeNull();
+    });
+
+    it("reports a tap on the new glyph", async () => {
+        const onNew = jest.fn();
+        await renderWithProviders(<HomeHeader {...props({collapsed: true, onNew})}/>);
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+
+        expect(onNew).toHaveBeenCalled();
     });
 });

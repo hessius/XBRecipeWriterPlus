@@ -8,7 +8,7 @@ import Animated, {
 import {XStack} from "tamagui";
 
 import {palette} from "@/constants/colors";
-import {DOT_ICONS, DOT_ICON_GRID, litCells} from "@/constants/dotIcons";
+import {DOT_ICON_GRID, litCells} from "@/constants/dotIcons";
 import {ATTRACT, EASING, SPRING, useReducedMotion} from "@/constants/motion";
 
 type Cell = {
@@ -135,6 +135,30 @@ const MARK_ROW_OFFSET = Math.floor((COLUMNS - DOT_ICON_GRID) / 2);
 const DISC_RADIUS = COLUMNS / 2 - 0.2;
 
 /**
+ * The plus the *mark* is built from, held here rather than taken from
+ * `DOT_ICONS`.
+ *
+ * This is not an icon, it is a reproduction: the `++` below has to keep
+ * matching `assets/images/icon.png`, which ships in the bundle and is what iOS
+ * draws on the home screen. `DOT_ICONS.plus` is a UI glyph and answers to the
+ * screens that draw it — it was widened to a square so it would not read as
+ * squashed on the home screen's NEW tile, and that change silently restyled the
+ * brand mark, which is how this copy came to exist. The two marks look alike
+ * and are free to drift; only this one is pinned to an asset.
+ */
+const MARK_PLUS = [
+    ".........",
+    ".........",
+    "....#....",
+    "....#....",
+    ".#######.",
+    "....#....",
+    "....#....",
+    ".........",
+    "........."
+];
+
+/**
  * The lit cells of both plus signs, laid out side by side, resolved once.
  *
  * At module scope because the layout is a constant: it depends on the glyph
@@ -146,7 +170,7 @@ const DISC_RADIUS = COLUMNS / 2 - 0.2;
 const CELLS: Cell[] = (() => {
     // litCells reports {x, y}, not {row, column} — matched here rather than
     // renamed at the call site, since the fields are the grid's own vocabulary.
-    const lit = litCells(DOT_ICONS.plus);
+    const lit = litCells(MARK_PLUS);
     const cells: Cell[] = [];
     for (const mark of [0, 1]) {
         for (const cell of lit) {

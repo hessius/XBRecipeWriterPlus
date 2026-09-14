@@ -1457,6 +1457,21 @@ describe("asking how the machine is doing now", () => {
         expect(machine.brewBlock(brewable([]))?.kind).toBe("recipe");
     });
 
+    it("refuses a recipe with no stages, on an otherwise willing machine", async () => {
+        // The editor can now open a recipe that has never had a stage, so this
+        // is reachable rather than theoretical. Asserted on a machine that is
+        // connected, has reported its vitals and is idle, so the refusal can
+        // only be coming from the recipe -- and the message is pinned because
+        // it is what the brew route puts in front of the user.
+        const {machine} = await readyMachine();
+
+        expect(machine.brewBlock(brewable())).toBeNull();
+        expect(machine.brewBlock(brewable([]))).toEqual({
+            kind:    "recipe",
+            message: "The recipe has no stages."
+        });
+    });
+
     it("notices the tank emptied after the link came up", async () => {
         // The same freshness in the direction that matters more. Trusting a
         // reading from twenty minutes ago is how a recipe gets committed to a

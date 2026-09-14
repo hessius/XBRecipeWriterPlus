@@ -35,6 +35,22 @@ async function renderEditor(overrides: {onSaved?: () => void; temperatureUnit?: 
     }));
 }
 
+/** A recipe with no stages at all, as the create flow produces one. */
+async function renderBlankEditor() {
+    const recipe = new Recipe();
+    recipe.cupType = CUP_TYPE.OMNI;
+    recipe.dosage = 15;
+    recipe.ratio = 16;
+    recipe.grindSize = 65;
+    recipe.grindRPM = 120;
+
+    return renderHook(() => useRecipeEditor({
+        recipeJSON:      JSON.stringify(recipe),
+        temperatureUnit: "C",
+        onSaved:         jest.fn()
+    }));
+}
+
 describe("the volume readout (#40)", () => {
     it("follows the ratio without being told to repaint", async () => {
         const {result} = await renderEditor();
@@ -261,5 +277,98 @@ describe("the write gate", () => {
 
         expect(result.current.writeProblems.some((p) => p.includes("500 F"))).toBe(true);
         expect(result.current.writeProblems.some((p) => p.includes("260 C"))).toBe(false);
+    });
+});
+
+describe("a recipe with no stages", () => {
+    it("opens with a real first stage rather than the placeholder", async () => {
+        // The editor's ADD STAGE passes pours.length - 1, which is -1 when
+        // there are none. Without the hook's routing this would reach
+        // `Recipe.addPour(-1)`, and because the copy-from-previous path is
+        // guarded by `this.pours.length > 0` an empty recipe skips it and
+        // lands on the placeholder branch, which yields 1 ml at 39 C. The hook
+        // instead routes an empty recipe to `addOpeningPour`, giving a real
+        // first stage at the rounded target volume and 93 C.
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.recipe!.pours).toHaveLength(1);
+        expect(result.current.recipe!.pours[0].volume).toBe(240);
+        expect(result.current.recipe!.pours[0].temperature).toBe(93);
+    });
+
+    it("is writable after that one tap", async () => {
+        const {result} = await renderBlankEditor();
+
+        expect(result.current.canWrite).toBe(false);
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.canWrite).toBe(true);
+    });
+
+    it("cannot be saved until it has one", async () => {
+        // A recipe with no stages is not an unfinished recipe, it is not yet a
+        // recipe: it brews nothing. Keeping an invalid recipe is deliberately
+        // allowed -- an unbalanced one is saved and fixed later -- but a
+        // stage-less one has nothing to come back to, and saving it puts a row
+        // in the library that can neither be brewed nor written, which is a
+        // worse offer than making the user tap ADD STAGE once.
+        const {result} = await renderBlankEditor();
+
+        expect(result.current.canSave).toBe(false);
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        expect(result.current.canSave).toBe(true);
+    });
+
+    it("can still be saved while it is invalid in every other way", async () => {
+        // The stage gate must not quietly become a validity gate. A recipe
+        // whose stages do not add up to the dose and ratio is still savable,
+        // which is the behaviour the ADD STAGE guard sits beside rather than
+        // replaces.
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+        await act(async () => {
+            await result.current.editStage(0, "volume", 100);
+        });
+
+        expect(result.current.balance.balanced).toBe(false);
+        expect(result.current.canWrite).toBe(false);
+        expect(result.current.canSave).toBe(true);
+    });
+
+    it("goes back to copying the previous stage once the recipe has one", async () => {
+        const {result} = await renderBlankEditor();
+
+        await act(async () => {
+            result.current.addPour(-1);
+        });
+
+        // The opening stage is itself 93 C, so asserting the second stage is
+        // 93 C would pass on any route. Move stage 0 to a value distinct from
+        // every default in play -- 93 (opening coffee), 85 (opening tea) and 39
+        // (the placeholder floor) -- but still inside the card's 39-99
+        // temperature range, then prove the second stage inherited exactly it.
+        await act(async () => {
+            await result.current.editStage(0, "temperature", 71);
+        });
+        await act(async () => {
+            result.current.addPour(0);
+        });
+
+        expect(result.current.recipe!.pours).toHaveLength(2);
+        expect(result.current.recipe!.pours[1].temperature).toBe(71);
     });
 });
