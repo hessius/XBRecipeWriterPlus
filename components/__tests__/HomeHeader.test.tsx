@@ -14,6 +14,7 @@ function props(overrides = {}) {
         onToggleEdit: jest.fn(),
         onScan:       jest.fn(),
         onImport:     jest.fn(),
+        onNew:        jest.fn(),
         onSettings:   jest.fn(),
         ...overrides
     };
@@ -104,7 +105,7 @@ describe("HomeHeader", () => {
             .map((node) => node.props.accessibilityLabel);
 
         expect(order).toEqual([
-            "Read a card", "Import a recipe", "Edit recipes", "Settings"
+            "Read a card", "Import a recipe", "Create a recipe", "Edit recipes", "Settings"
         ]);
     });
 
@@ -200,5 +201,24 @@ describe("HomeHeader", () => {
         const r = await renderWithProviders(<HomeHeader {...props()} />);
 
         expect(r.queryByTestId("the-panel")).toBeNull();
+    });
+
+    it("takes new in with scan and import once the tiles are gone", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
+        expect(screen.getByLabelText("Create a recipe")).toBeTruthy();
+    });
+
+    it("leaves new to the tile while expanded", async () => {
+        await renderWithProviders(<HomeHeader {...props({collapsed: false})}/>);
+        expect(screen.queryByLabelText("Create a recipe")).toBeNull();
+    });
+
+    it("reports a tap on the new glyph", async () => {
+        const onNew = jest.fn();
+        await renderWithProviders(<HomeHeader {...props({collapsed: true, onNew})}/>);
+
+        await fireEvent.press(screen.getByLabelText("Create a recipe"));
+
+        expect(onNew).toHaveBeenCalled();
     });
 });

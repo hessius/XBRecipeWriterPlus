@@ -573,6 +573,7 @@ export default function HomeScreen({db, settings}: Props) {
                     onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}
+                    onNew={() => setNewOpen(true)}
                     onSettings={() => router.push("/settings")}/>
 
                 <Collapsible open={!collapsed}>
