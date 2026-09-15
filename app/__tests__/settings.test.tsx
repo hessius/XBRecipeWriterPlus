@@ -1,6 +1,6 @@
 import * as Application from "expo-application";
 import React from "react";
-import {screen, fireEvent, act} from "@testing-library/react-native";
+import {screen, fireEvent, act, within} from "@testing-library/react-native";
 import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import SettingsScreen from "@/app/settings";
@@ -435,6 +435,33 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("temperatureUnit")).toBe("C");
         expect(restored.get("dotMatrixProfile")).toBe(true);
+    });
+
+    it("presents its sheets outside the screen's flex container", async () => {
+        // XbrwSheet is deliberately not `modal`, so it renders in place rather
+        // than through a Portal. As a child of the screen's `flex={1}` YStack it
+        // is an ordinary flex child sitting next to a ScrollView that takes the
+        // space, so it resolves to zero height and draws nothing -- the failure
+        // XbrwSheet's own comment calls looking "exactly like a control that did
+        // nothing". On device that was Delete all doing nothing at all: the
+        // press fired and the state flipped, but no sheet was ever drawn.
+        //
+        // The sheet must therefore be a sibling of the screen, which is the
+        // shape app/index.tsx and app/editRecipe.tsx already use.
+        mockLibraryRecipes = [recipeNamed("A", "u1")];
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Delete all recipes, Everything on this phone. There is no undo."}));
+        await settleSheet();
+
+        // The sheet is up...
+        expect(screen.getByText(/deletes 1 recipe/i)).toBeTruthy();
+        // ...and outside both the scroll view and the screen's flex container.
+        expect(within(screen.getByTestId("settings-scroll"))
+            .queryByText(/deletes 1 recipe/i)).toBeNull();
+        expect(within(screen.getByTestId("settings-screen"))
+            .queryByText(/deletes 1 recipe/i)).toBeNull();
     });
 
     it("deletes the whole library, on the real count, only after confirming", async () => {

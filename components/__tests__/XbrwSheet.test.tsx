@@ -147,3 +147,72 @@ describe("XbrwSheet", () => {
         }
     });
 });
+
+/**
+ * The failure that made "Delete all recipes" do nothing on the settings screen.
+ *
+ * `open`, the mounted flag and the shown flag used to be three separate
+ * `useState`s, reconciled during render by a one-shot latch that only fired on
+ * a *change* of `open`. A re-render interleaving between the latch and its
+ * effects could commit the latch without the mount, and since the latch never
+ * fires twice for the same value the sheet stayed out of the tree permanently.
+ *
+ * On device it looked exactly like a dead button: the press fired, the parent's
+ * state flipped to true, and nothing was ever drawn. The evidence is a device
+ * log showing the impossible state directly — `open=true rendered=false
+ * shown=true` — where the old code's `if (!rendered) return null` discarded a
+ * sheet that had already been told to show itself.
+ *
+ * Honest caveat: these two tests pass against the old implementation as well.
+ * Jest's renderer does not interleave renders the way the device did, so they
+ * document the invariant rather than reproduce the race. What actually makes
+ * the bug unrepresentable is `rendered = phase.rendered || open` plus bundling
+ * the three flags into one state, and that was verified from the device log.
+ */
+describe("XbrwSheet under an unstable parent", () => {
+    it("opens even when a stale exit timer lands after it has reopened", async () => {
+        const {rerender} = await renderWithProviders(
+            <XbrwSheet open={false} onOpenChange={jest.fn()} title="ABOUT">
+                <Text>the body</Text>
+            </XbrwSheet>
+        );
+        expect(screen.queryByText("the body")).toBeNull();
+
+        // Reopened before the exit grace from the initial closed state expires,
+        // so the timer scheduled while it was closed fires afterwards.
+        await act(async () => {
+            rerender(
+                <XbrwSheet open onOpenChange={jest.fn()} title="ABOUT">
+                    <Text>the body</Text>
+                </XbrwSheet>
+            );
+        });
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, EXIT_GRACE + 50));
+        });
+
+        expect(screen.getByText("the body")).toBeTruthy();
+    });
+
+    it("stays in the tree while a parent re-renders repeatedly during the open", async () => {
+        const {rerender} = await renderWithProviders(
+            <XbrwSheet open={false} onOpenChange={jest.fn()} title="ABOUT">
+                <Text>the body</Text>
+            </XbrwSheet>
+        );
+
+        // A neighbour re-rendering on its own schedule, as MachineSection does
+        // on the settings screen, re-renders the sheet with an unchanged `open`.
+        for (let i = 0; i < 5; i += 1) {
+            await act(async () => {
+                rerender(
+                    <XbrwSheet open onOpenChange={jest.fn()} title="ABOUT">
+                        <Text>the body</Text>
+                    </XbrwSheet>
+                );
+            });
+        }
+
+        expect(screen.getByText("the body")).toBeTruthy();
+    });
+});

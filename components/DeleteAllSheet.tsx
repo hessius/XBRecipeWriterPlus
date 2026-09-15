@@ -2,7 +2,7 @@ import React from "react";
 import {Button, Text, YStack} from "tamagui";
 
 import XbrwSheet from "@/components/XbrwSheet";
-import {palette} from "@/constants/colors";
+import {onAccent, palette} from "@/constants/colors";
 
 type Props = {
     open: boolean;
@@ -21,7 +21,9 @@ type Props = {
  * given against a number rather than against the word "all".
  *
  * The safe choice is the one that reads as the plain action: "Keep my recipes",
- * not "Cancel".
+ * not "Cancel". It is tinted `success` rather than left chromeless so that the
+ * way out is as easy to find as the way through — on a sheet whose other filled
+ * button deletes the library, a quiet escape is the wrong kind of quiet.
  *
  * The count is on the destructive button as well as in the sentence, so the
  * visible label and the accessible name say the same thing — a voice-control
@@ -54,7 +56,8 @@ export default function DeleteAllSheet({
                 </Button>
 
                 <Button accessibilityRole="button" accessibilityLabel="Keep my recipes"
-                        chromeless onPress={onCancel}>
+                        backgroundColor={palette.success} color={onAccent.text}
+                        onPress={onCancel}>
                     Keep my recipes
                 </Button>
             </YStack>

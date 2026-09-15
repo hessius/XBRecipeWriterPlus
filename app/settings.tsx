@@ -212,9 +212,20 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     return (
-        <YStack flex={1} backgroundColor={palette.base}>
+        <>
+        {/* A Fragment, with the sheets as siblings of the screen rather than
+            children of it. XbrwSheet is deliberately not `modal`, so it renders
+            in place rather than through a Portal — and a non-modal sheet left
+            inside this `flex={1}` YStack becomes an ordinary flex child next to
+            a ScrollView that takes the space, so it resolves to zero height and
+            draws nothing. That is the failure XbrwSheet's own comment describes
+            as looking "exactly like a control that did nothing", and it is what
+            made Delete all appear to do nothing at all. `app/index.tsx` and
+            `app/editRecipe.tsx` both already use this shape. */}
+        <YStack testID="settings-screen" flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="Settings" onBack={() => router.back()}/>
-            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 48}}>
+            <ScrollView testID="settings-scroll"
+                        contentContainerStyle={{padding: 16, paddingBottom: 48}}>
             <YStack>
                 {/* At the top rather than the conventional bottom. The row
                     carries the app's name and version, so it reads as the
@@ -279,6 +290,8 @@ export default function SettingsScreen({settings}: Props) {
                     component. */}
                 <CardReadDiagnostic settings={settings}/>
             </YStack>
+            </ScrollView>
+        </YStack>
 
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
                           onCancel={() => setRestoreOpen(false)}
@@ -291,7 +304,6 @@ export default function SettingsScreen({settings}: Props) {
                             onCancel={() => setConfirmingDeleteAll(false)}
                             onBackUpFirst={onBackUpFirst}
                             onDelete={onDeleteAll}/>
-            </ScrollView>
-        </YStack>
+        </>
     );
 }
