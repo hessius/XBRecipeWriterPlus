@@ -82,10 +82,16 @@ jest.mock("expo-crypto", () => ({
 /**
  * `expo-secure-store` is native; the mock is an in-memory keychain so the
  * session tests can round-trip through it without a device.
+ *
+ * `__store` is exposed so `jest.afterEnv.js` can empty it between tests.
+ * `jest.clearAllMocks()` cannot: the store is a Map, not a mock function, and
+ * a keychain that carries a token from one test into the next makes the suite
+ * order-dependent.
  */
 jest.mock("expo-secure-store", () => {
     const store = new Map();
     return {
+        __store: store,
         setItemAsync: async (k, v) => void store.set(k, v),
         getItemAsync: async (k) => (store.has(k) ? store.get(k) : null),
         deleteItemAsync: async (k) => void store.delete(k),

@@ -56,7 +56,7 @@ module.exports = defineConfig([
     },
     {
         // Node-run files: config, jest setup and scripts.
-        files: ["*.js", "*.cjs", "jest.setup.js", "scripts/**"],
+        files: ["*.js", "*.cjs", "jest.setup.js", "jest.afterEnv.js", "scripts/**"],
         languageOptions: {
             globals: {
                 __dirname: "readonly",
@@ -65,7 +65,12 @@ module.exports = defineConfig([
                 module: "writable",
                 require: "readonly",
                 process: "readonly",
-                jest: "readonly"
+                jest: "readonly",
+                // `jest.afterEnv.js` runs under setupFilesAfterEnv, where the
+                // test framework's globals exist. `jest.setup.js` runs before
+                // they do, which is the whole reason the second file exists.
+                beforeEach: "readonly",
+                afterEach: "readonly"
             }
         }
     },
