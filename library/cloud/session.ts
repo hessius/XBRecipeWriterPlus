@@ -84,6 +84,14 @@ export async function loadSession(): Promise<Session | null> {
     }
 }
 
+/**
+ * Not defended like `loadSession` is, deliberately.
+ *
+ * If the keychain refuses the delete — it is locked, say — the session is
+ * still there, and the honest answer is to say so. Swallowing it would leave
+ * the user believing they had signed out of an account they had not, which is
+ * the one failure here with a privacy cost.
+ */
 export async function signOut(): Promise<void> {
     await SecureStore.deleteItemAsync(KEY);
 }

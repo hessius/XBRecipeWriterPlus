@@ -74,6 +74,7 @@ describe("signIn", () => {
         await expect(signIn("a@b.c", "secret")).rejects.toMatchObject({
             kind: "server",
         });
+        expect(await loadSession()).toBeNull();
     });
 });
 

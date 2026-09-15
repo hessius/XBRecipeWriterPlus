@@ -61,6 +61,12 @@ Both packages are native, so the runtime version must move. In `app.json`, chang
 Leave the two-component spelling rule alone: this is `1.7.0`, matching the existing
 three-component `1.6.0` already in the file. Do not reformat it.
 
+`app/__tests__/native-config.test.ts` pins that string, so it fails until it is moved
+too. Update the assertion *and* its docblock: the comment there explains why each
+release's number is what it is, and a bump with a stale explanation is worse than none.
+This one is not housekeeping — both new packages are native, so an OTA carrying the
+account screen onto a 1.6.0 binary would find no keychain module at all.
+
 - [ ] **Step 3: Verify the config still parses**
 
 Run: `npx expo config --type public > /dev/null && echo ok`
@@ -814,7 +820,7 @@ export async function post(
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/transport.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -917,6 +923,7 @@ describe("signIn", () => {
         await expect(signIn("a@b.c", "secret")).rejects.toMatchObject({
             kind: "server",
         });
+        expect(await loadSession()).toBeNull();
     });
 });
 
@@ -1068,6 +1075,14 @@ export async function loadSession(): Promise<Session | null> {
     }
 }
 
+/**
+ * Not defended like `loadSession` is, deliberately.
+ *
+ * If the keychain refuses the delete — it is locked, say — the session is
+ * still there, and the honest answer is to say so. Swallowing it would leave
+ * the user believing they had signed out of an account they had not, which is
+ * the one failure here with a privacy cost.
+ */
 export async function signOut(): Promise<void> {
     await SecureStore.deleteItemAsync(KEY);
 }
@@ -1076,7 +1091,7 @@ export async function signOut(): Promise<void> {
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/session.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1879,7 +1894,7 @@ export function matchAccent(color: string, group: AccentGroup): number | null {
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/accentMatch.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2832,7 +2847,7 @@ export function useCloudImport(deps: CloudImportDeps) {
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest hooks/__tests__/useCloudImport.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Run lint on the new hook**
 
@@ -3433,7 +3448,7 @@ different fonts.
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest app/__tests__/importCloud.test.tsx`
-Expected: PASS, 11 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 6: Commit**
 
