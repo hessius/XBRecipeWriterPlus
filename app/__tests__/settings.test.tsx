@@ -149,6 +149,10 @@ describe("SettingsScreen", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockLibraryRecipes = [];
+        // `clearAllMocks` forgets calls but keeps implementations, so a test
+        // that made one of these reject would otherwise poison its successors.
+        mockLoadSession.mockResolvedValue(null);
+        mockSignOut.mockResolvedValue(undefined);
     });
 
     it("shows the coffee marker toggle in its stored state", async () => {
@@ -600,6 +604,27 @@ describe("SettingsScreen", () => {
         await waitFor(() => expect(screen.getByRole("button",
             {name: "Sign in, Bring across the recipes you made in the xBloom app."})).toBeTruthy());
         expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("says so when the keychain would not let go of the account", async () => {
+        // `signOut` is undefended on purpose, so this call site must not
+        // swallow it. Silence would leave someone believing they had signed out
+        // of an account they had not -- the one failure here with a privacy
+        // cost -- and the row correctly still says they are connected.
+        mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
+        mockSignOut.mockRejectedValue(new Error("keychain locked"));
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await waitFor(() => expect(screen.getByRole("button", {name: "Sign out"})).toBeTruthy());
+
+        await fireEvent.press(screen.getByRole("button", {name: "Sign out"}));
+
+        await waitFor(() => expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: "Could not sign out. The account is still connected."
+        }));
+        expect(screen.getByRole("button",
+            {name: "Import recipes, sam@example.com"})).toBeTruthy();
     });
 
     it("opens the importer from the connected account too", async () => {

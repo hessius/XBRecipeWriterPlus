@@ -17,23 +17,32 @@ import {loadSession, signOut, type Session} from "@/library/cloud/session";
  */
 export function useCloudSession() {
     const [session, setSession] = useState<Session | null>(null);
-    // Not state: nothing renders from it, and the async load reads it after an
-    // await, where a captured render's value would already be stale.
-    const gone = useRef(false);
+    // A counter rather than a boolean, and not state: nothing renders from it,
+    // and every async path reads it after an await, where a captured render's
+    // value would already be stale.
+    //
+    // A boolean could only say whether the screen was focused now, which is not
+    // the question. Someone who leaves mid-load and comes straight back focuses
+    // again, clearing the flag, and the load from the visit they abandoned then
+    // passes the guard and writes -- possibly over the newer load, if it lands
+    // second. Counting says which visit a load belongs to, so only the current
+    // one may write. `forget` bumps it too, so a load still in flight cannot
+    // sign the user back in a moment after they signed out.
+    const visit = useRef(0);
 
     useFocusEffect(
         useCallback(() => {
-            gone.current = false;
+            // Read, not bumped. Every refocus is preceded by a blur, and the
+            // cleanup below is what bumps, so a bump here would be a line no
+            // test could ever observe.
+            const mine = visit.current;
             void (async () => {
                 const stored = await loadSession();
-                // A load that lands after the screen is gone must not touch
-                // state: it would be writing on behalf of a hook nobody is
-                // watching.
-                if (gone.current) return;
+                if (visit.current !== mine) return;
                 setSession(stored);
             })();
             return () => {
-                gone.current = true;
+                visit.current++;
             };
         }, [])
     );
@@ -41,10 +50,17 @@ export function useCloudSession() {
     /**
      * Forgetting is local. There is no endpoint to call: the token simply stops
      * being held, which is the whole of what signing out means here.
+     *
+     * It does not catch. `signOut` is deliberately undefended -- a keychain that
+     * refuses the delete leaves the token in place, and someone believing they
+     * had signed out of an account they had not is the one failure here with a
+     * privacy cost. The caller reports it; this hook must not swallow it, and
+     * must not clear the session it failed to discard either.
      */
     async function forget() {
+        const mine = ++visit.current;
         await signOut();
-        if (gone.current) return;
+        if (visit.current !== mine) return;
         setSession(null);
     }
 

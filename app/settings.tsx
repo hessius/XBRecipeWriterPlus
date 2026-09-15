@@ -50,6 +50,22 @@ const VERSION = Application.nativeApplicationVersion ?? "unknown";
 export default function SettingsScreen({settings}: Props) {
     const router = useRouter();
     const cloud = useCloudSession();
+
+    async function signOutOfCloud() {
+        try {
+            await cloud.forget();
+        } catch {
+            // `signOut` is undefended on purpose: a locked keychain leaves the
+            // token in place. Saying nothing would leave someone believing they
+            // had signed out of an account they had not, which is the one
+            // failure here with a privacy cost. The row stays as it was,
+            // because it truthfully still describes a connected account.
+            notify({
+                tone:    "error",
+                message: "Could not sign out. The account is still connected."
+            });
+        }
+    }
     const [showCoffeeMarker, setShowCoffeeMarker] =
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
@@ -300,7 +316,7 @@ export default function SettingsScreen({settings}: Props) {
                         // recovered without the password again.
                         <SettingsActionRow label="Sign out" tone="danger"
                                            onPress={() => {
-                                               void cloud.forget();
+                                               void signOutOfCloud();
                                            }}/>
                     )}
                 </SettingsSection>

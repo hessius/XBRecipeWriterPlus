@@ -4904,132 +4904,64 @@ all sit behind a keyboard in one. The caveat sits above the fields."
 ---
 ## Task 14: The two doors
 
+**Status: done.** Implemented in `ced7592`, rewritten to the spec in `3125e2c`,
+and hardened in the commit after it.
+
 **Files:**
 - Modify: `components/ImportSheet.tsx`
 - Modify: `app/settings.tsx`
-- Test: `components/__tests__/ImportSheet.test.tsx` (existing — add a case)
+- New: `hooks/useCloudSession.ts`
+- Test: `components/__tests__/ImportSheet.test.tsx`, `app/__tests__/settings.test.tsx`,
+  `hooks/__tests__/useCloudSession.test.ts`
 
-Import already has three doors that all open the one sheet. The account is the fourth
-way in and belongs *inside* that sheet, not beside it as a fifth home-screen tile: it is
-a kind of import, and the home screen's three tiles are the app's whole top-level
-vocabulary. Settings gets a second entrance because that is where a signed-in account
-has to be visible and revocable.
+**This task as originally written was wrong, and the record is kept here rather
+than quietly corrected.** It prescribed a filled Tamagui `Button` in the sheet
+and one static `Import from xBloom` row in Settings. §4.1 of the design asks for
+neither, and the spec review caught it. What was built instead:
 
-- [ ] **Step 1: Write the failing test**
+**In `ImportSheet`**, below the paste face and visible only while
+`state.status === "idle"`: a rule, a dot-matrix `YOUR XBLOOM ACCOUNT` in the
+sheet's own chrome register, the caption `Bring in the recipes you've made`, and
+a chevron. The chevron is the point -- it promises *departure*, so the row does
+not read as a third thing that might expand in place, which is exactly how a
+button sitting under the field and the paste face did read. The row closes the
+sheet **before** it pushes: a sheet left open behind the pushed screen is still
+there, over it, when the user comes back.
 
-Add to `components/__tests__/ImportSheet.test.tsx` (inside the existing top-level
-`describe`; keep the file's existing imports and helpers):
+It hides once a lookup is resolving, has failed or has found something. The
+sheet then has one subject, and a second import route competing with a found
+recipe is noise at the moment of decision. It is gated on the lookup's status
+alone, never on `showField` -- coupling it to the field would take it away from
+someone who arrived by a share, the one route where an account is most likely
+what they wanted.
 
-```tsx
-    it("offers the xBloom account as a way in", async () => {
-        await renderWithProviders(<ImportSheet {...props()} open/>);
-        expect(
-            screen.getByRole("button", {name: /Import from your xBloom account/i})
-        ).toBeTruthy();
-    });
+**In Settings**, an `xBloom account` section above Library -- Library is the
+recipes you hold, and this is where some of them can come from. Unlike the
+sheet's door it knows whether anyone is signed in, because this is where someone
+comes looking to disconnect, which the sheet must never carry. Signed out: a
+`Sign in` row. Signed in: `Import recipes` captioned with the account email, and
+`Sign out` in `danger`.
 
-    it("leaves the sheet and opens the account screen", async () => {
-        const onOpenChange = jest.fn();
-        await renderWithProviders(
-            <ImportSheet {...props()} open onOpenChange={onOpenChange}/>
-        );
+`hooks/useCloudSession.ts` backs it. It is far smaller than `useCloudImport` --
+it never lists or imports -- so Settings gets its own hook rather than mounting
+the whole state machine to read one email off it. It reloads on **focus**, not
+on mount: the way the account changes is that the user leaves for the import
+route, signs in there, and comes back, and a hook that looked only once would
+still be offering `Sign in` to somebody who had just done it.
 
-        await fireEvent.press(
-            screen.getByRole("button", {name: /Import from your xBloom account/i})
-        );
+Two things that reviews found and that are easy to get wrong again:
 
-        // Closed first, then pushed: a sheet left open behind a pushed screen
-        // is still there when the user comes back, over the screen they
-        // navigated to.
-        expect(onOpenChange).toHaveBeenCalledWith(false);
-        expect(router.push).toHaveBeenCalledWith("/importCloud");
-    });
-```
-
-If the file does not already mock `expo-router`, add at the top, beside the other mocks:
-
-```tsx
-jest.mock("expo-router", () => ({router: {push: jest.fn()}}));
-import {router} from "expo-router";
-```
-
-and `jest.clearAllMocks()` in a `beforeEach` if there is not one already. Read the file
-first and fit the case to its existing shape — `props()` above stands for whatever
-helper that file already uses to build the component's props; if it builds them inline,
-build them inline.
-
-- [ ] **Step 2: Run it and watch it fail**
-
-Run: `npx jest components/__tests__/ImportSheet.test.tsx`
-Expected: FAIL — unable to find an element with that role and name.
-
-- [ ] **Step 3: Add the row to the sheet**
-
-In `components/ImportSheet.tsx`, inside the `YStack` that opens at line ~166, after the
-`PasteOverlay` block and still inside the `state.status === "idle"` gate that the paste
-affordance uses, add:
-
-```tsx
-                {/* The fourth door. It lives in the sheet rather than on the
-                    home screen because it is a kind of import, and the home
-                    screen's three tiles are the app's entire top-level
-                    vocabulary — a fourth would cost more than it bought. */}
-                <Button
-                    accessibilityLabel="Import from your xBloom account"
-                    backgroundColor={palette.raised}
-                    color={palette.text}
-                    onPress={() => {
-                        onOpenChange(false);
-                        router.push("/importCloud");
-                    }}>
-                    Import from your xBloom account
-                </Button>
-```
-
-Add `import {router} from "expo-router";` to the file's imports if it is not there, and
-`Button` to the existing `tamagui` import if it is not.
-
-- [ ] **Step 4: Run the sheet's tests**
-
-Run: `npx jest components/__tests__/ImportSheet.test.tsx`
-Expected: PASS — the two new cases and every case that was passing before.
-
-- [ ] **Step 5: Add the settings section**
-
-In `app/settings.tsx`, directly above the `SettingsSection title="Library"` block at
-line ~276, add:
-
-```tsx
-                {/* Its own section above Library, not a line inside it:
-                    Library is the recipes you hold, and this is where some of
-                    them can come from. */}
-                <SettingsSection title="xBloom account">
-                    <SettingsActionRow label="Import from xBloom"
-                                       detail="Sign in and bring across the recipes you made there."
-                                       onPress={() => router.push("/importCloud")}/>
-                </SettingsSection>
-```
-
-`router` is already imported in that file.
-
-- [ ] **Step 6: Run the settings tests**
-
-Run: `npx jest app/__tests__/settings.test.tsx`
-Expected: PASS. If that file asserts on a count of rows or sections, update the count —
-it is a count, not a contract.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add components/ImportSheet.tsx app/settings.tsx components/__tests__/ImportSheet.test.tsx app/__tests__/settings.test.tsx
-git commit -m "feat: open the account screen from the import sheet and settings
-
-The sheet, because an account is a kind of import and the home screen's
-three tiles are the app's whole top-level vocabulary. Settings, because a
-signed-in account has to be visible and revocable somewhere permanent."
-```
-
----
+- **The focus guard counts visits; it is not a boolean.** A boolean can only
+  say whether the screen is focused *now*, which is not the question. Someone
+  who leaves mid-load and returns focuses again, clearing the flag, so the load
+  from the visit they abandoned passes the guard and writes -- over the newer
+  answer, if it lands second. `forget` bumps the counter too, so a load already
+  in flight cannot sign the user back in a moment after they signed out.
+- **`forget` does not catch, and its caller must.** `signOut` is undefended on
+  purpose: a locked keychain leaves the token in place, and someone believing
+  they had signed out of an account they had not is the one failure here with a
+  privacy cost. Settings reports it in a toast and leaves the row saying the
+  account is connected, because it still is.
 
 ## Task 15: Gates and the device pass
 
