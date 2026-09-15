@@ -2519,6 +2519,46 @@ to the mapper that has already been hardened against their API."
 ```
 
 ---
+## Task 9.5: Capture what only the import response carries (inserted)
+
+Inserted mid-milestone, ahead of Task 10, because it is the one piece of this feature
+that cannot be deferred. `shareMemberName`, `shareMemberHead` and `podsVo.imagePath`
+exist only in the API response at the moment of import. A recipe imported without them
+has lost them permanently: recovering them would mean re-fetching every share link a
+user has ever imported, and share links expire. Index columns and UI can be rebuilt from
+the stored blob at any time; these cannot be rebuilt from anything.
+
+**Files:** `library/Recipe.ts`, `library/XBloomRecipe.ts`, `library/backup.ts`,
+`library/__tests__/recipeAttribution.test.ts`
+
+- [x] Three optional string fields on `Recipe` — `sharedBy`, `sharedByAvatar`,
+  `imageURL` — read forgivingly in the `json` constructor so older stored recipes keep
+  loading. Metadata only: absent from `getData`/`parseData`, no card bytes, no CRC.
+- [x] `XBloomRecipe.getRecipe` reads all three. The two `shareMember` keys are siblings
+  of `recipeVo`, not inside it, so an account row (which is a bare `recipeVo`) carries
+  the artwork but no sharer. `imagePath` was already being read into a private field
+  that nothing persisted.
+- [x] `backup.ts` drops a malformed one rather than rejecting the recipe.
+
+**Naming is a contract**: M5 is designed against exactly `sharedBy`, `sharedByAvatar`
+and `imageURL`. All three kept.
+
+**Out of scope, owned by M5:** UI, settings, index columns, `INDEX_REVISION`.
+
+### The one place the brief did not match the code
+
+The brief asked to follow `backup.ts`'s "existing rule" that a malformed value is
+dropped rather than rejecting the recipe. **That rule did not exist.** Every entry in
+`RECIPE_FIELDS` is load-bearing, and a failure makes `looksLikeRecipe` return `false`,
+which rejects the whole recipe. Adding an HTTPS check for the avatar there would have
+deleted the user's recipe over a picture — the opposite of what was asked.
+
+So `DROPPABLE_RECIPE_FIELDS` is a genuinely new mechanism, applied in `reviveRecipe`
+before the constructor sees the entry. The asymmetry is the point: the existing map
+guards fields whose corruption means the file is not what it claims, while these three
+are third-party decoration where a bad value is a plausible thing to find in an honest
+file. (The brief also referred to how `tags` are read; `Recipe` has no `tags` field.)
+
 ## Task 10: The import plan
 
 This is where the promise in the spec lives — *never silently overwrite an edit made

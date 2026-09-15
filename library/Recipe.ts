@@ -167,6 +167,23 @@ class Recipe {
      * link changed, and M6 can diff it. A few hundred bytes per shared recipe.
      */
     public shareSnapshot?: string;
+    /**
+     * Who shared this recipe, and their avatar, as xBloom reported them.
+     *
+     * Captured at import because that is the only moment they exist. The
+     * detail response carries them beside `recipeVo`, and a share link expires
+     * -- a recipe imported without them cannot be repaired later by re-asking,
+     * because there is nothing left to ask. Everything else about attribution
+     * (showing it, indexing it) can be rebuilt from the stored recipe at any
+     * time, so it waits; this cannot, so it does not.
+     *
+     * Metadata only. They are not in `getData`/`parseData`, take no card
+     * bytes and do not enter the CRC.
+     */
+    public sharedBy?: string;
+    public sharedByAvatar?: string;
+    /** The pod artwork, likewise only ever present in the import response. */
+    public imageURL?: string;
 
     constructor(data?: number[], json?: string, hasSignature: boolean = true) {
         this.uuid = (uuid.v4() as string);
@@ -251,6 +268,15 @@ class Recipe {
             if (typeof jsonRecipe.cloudFingerprint === "string") {
                 this.cloudFingerprint = jsonRecipe.cloudFingerprint;
             }
+            // Read the same forgiving way as the two above: absent, or present
+            // as something that is not a string, both mean undefined rather
+            // than a throw. Recipes stored before these existed are the common
+            // case, not an error, and they must keep loading.
+            if (typeof jsonRecipe.sharedBy === "string") this.sharedBy = jsonRecipe.sharedBy;
+            if (typeof jsonRecipe.sharedByAvatar === "string") {
+                this.sharedByAvatar = jsonRecipe.sharedByAvatar;
+            }
+            if (typeof jsonRecipe.imageURL === "string") this.imageURL = jsonRecipe.imageURL;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;

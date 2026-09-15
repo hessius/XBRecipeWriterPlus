@@ -71,6 +71,24 @@ export class XBloomRecipe {
             recipe.dosage = dosage;
             recipe.xbloomName = title;
             recipe.source = "import";
+
+            // Attribution and artwork live only in the response. `imagePath`
+            // was already being read into a private field that nothing
+            // persisted, so it was reaching the screen and then being thrown
+            // away; the two `shareMember` keys were not read at all. They sit
+            // beside `recipeVo`, not inside it, which is why an account row --
+            // which is a bare `recipeVo` -- carries the artwork but no sharer.
+            const detail = this.xbRecipeJSON as Record<string, unknown>;
+            if (typeof detail.shareMemberName === "string") {
+                recipe.sharedBy = detail.shareMemberName;
+            }
+            if (typeof detail.shareMemberHead === "string") {
+                recipe.sharedByAvatar = detail.shareMemberHead;
+            }
+            const imagePath = this.xbRecipeJSON.recipeVo.podsVo?.imagePath;
+            if (typeof imagePath === "string") {
+                recipe.imageURL = imagePath;
+            }
             recipe.grindSize = grindSize;
             recipe.xid = xid;
 
