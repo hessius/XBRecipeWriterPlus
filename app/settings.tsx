@@ -214,7 +214,8 @@ export default function SettingsScreen({settings}: Props) {
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="Settings" onBack={() => router.back()}/>
-            <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 48}}>
+            <ScrollView testID="settings-scroll"
+                        contentContainerStyle={{padding: 16, paddingBottom: 48}}>
             <YStack>
                 {/* At the top rather than the conventional bottom. The row
                     carries the app's name and version, so it reads as the
@@ -279,7 +280,17 @@ export default function SettingsScreen({settings}: Props) {
                     component. */}
                 <CardReadDiagnostic settings={settings}/>
             </YStack>
+            </ScrollView>
 
+            {/* Outside the ScrollView, which is not a detail. XbrwSheet is
+                deliberately not `modal`, so it renders in place as a sibling
+                rather than through a Portal — see the comment in XbrwSheet. A
+                sheet left inside the scroll view is therefore positioned
+                against the scrolled content rather than the screen, and on a
+                screen this long the Delete all row is far enough down that the
+                sheet lands off-screen entirely: the button reads as doing
+                nothing at all. Every other screen already puts its sheets after
+                its ScrollView; this one was the exception. */}
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
                           onCancel={() => setRestoreOpen(false)}
                           onRestore={(choice) => {
@@ -291,7 +302,6 @@ export default function SettingsScreen({settings}: Props) {
                             onCancel={() => setConfirmingDeleteAll(false)}
                             onBackUpFirst={onBackUpFirst}
                             onDelete={onDeleteAll}/>
-            </ScrollView>
         </YStack>
     );
 }

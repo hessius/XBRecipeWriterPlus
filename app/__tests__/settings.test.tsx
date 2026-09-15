@@ -1,6 +1,6 @@
 import * as Application from "expo-application";
 import React from "react";
-import {screen, fireEvent, act} from "@testing-library/react-native";
+import {screen, fireEvent, act, within} from "@testing-library/react-native";
 import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import SettingsScreen from "@/app/settings";
@@ -435,6 +435,27 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("temperatureUnit")).toBe("C");
         expect(restored.get("dotMatrixProfile")).toBe(true);
+    });
+
+    it("presents its sheets outside the scroll view", async () => {
+        // XbrwSheet is deliberately not `modal`, so it renders in place as a
+        // sibling rather than through a Portal. Left inside the ScrollView it is
+        // positioned against the scrolled content rather than the screen, and
+        // this screen is long enough that the Delete all row sits well down it
+        // -- the sheet then opens off-screen and the button reads as doing
+        // nothing at all. That is exactly what was reported on device.
+        mockLibraryRecipes = [recipeNamed("A", "u1")];
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Delete all recipes, Everything on this phone. There is no undo."}));
+        await settleSheet();
+
+        // The sheet is up...
+        expect(screen.getByText(/deletes 1 recipe/i)).toBeTruthy();
+        // ...and reached the screen, not the scrolling content.
+        expect(within(screen.getByTestId("settings-scroll"))
+            .queryByText(/deletes 1 recipe/i)).toBeNull();
     });
 
     it("deletes the whole library, on the real count, only after confirming", async () => {
