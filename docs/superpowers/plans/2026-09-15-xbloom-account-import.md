@@ -16,6 +16,7 @@
 
 | File | Responsibility |
 | --- | --- |
+| `library/cloud/key.ts` | xBloom's public key, and nothing else. Its own file so the cipher's tests need not import the HTTP layer. |
 | `library/cloud/rsa.ts` | PKCS#1 v1.5 public-key encryption in pure BigInt. One export. No network, no app knowledge. |
 | `library/cloud/transport.ts` | The xBloom HTTP envelope: headers, the encrypted body, the response unwrap. Knows nothing about recipes. |
 | `library/cloud/session.ts` | Sign in, hold the token in `expo-secure-store`, sign out. The only file that touches a credential. |
@@ -84,10 +85,41 @@ import. `node-forge` and `jsencrypt` were both rejected as an order of magnitude
 code than the single operation needed.
 
 **Files:**
+- Create: `library/cloud/key.ts`
 - Create: `library/cloud/rsa.ts`
 - Test: `library/cloud/__tests__/rsa.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Put the key in its own file**
+
+The key gets a file of its own rather than living in `transport.ts`, because the RSA
+tests need it and a test for the cipher has no business importing the HTTP layer to get
+at a constant.
+
+Create `library/cloud/key.ts`:
+
+```ts
+/**
+ * xBloom's public key, exactly as their web client ships it.
+ *
+ * The irregular line wrapping is theirs. Do not reflow it: it is kept
+ * comparable byte for byte with the copy in `api/_lib/xbloom.ts` and with
+ * whatever their client ships next.
+ *
+ * Duplicated from `api/_lib/xbloom.ts` on purpose. That file is a
+ * zero-dependency Vercel function and `library/` must never import from it.
+ */
+export const XBLOOM_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4LF40GZ72SdhMyl765K/i4nY5
+CPcHz2Q1IKWKZ9S79xmK7G8pUhbVf4EZLvnNF1+9IvOFQUKV5Z7ZNNviqSpnql9
+tAT+8+J/He0R7pcirvVSxgdr2i9V/C/gmqAEZ5qVTzRnd3uWdFoKzPdEBxP0Ipor
+J1VBbCv90yBSOhVxO+QIDAQAB
+-----END PUBLIC KEY-----`;
+```
+
+Copy it from `api/_lib/xbloom.ts:10-15` rather than retyping it. The second line is 63
+characters where the others are 64; that is correct and is not a transcription error.
+
+- [ ] **Step 2: Write the failing test**
 
 The golden vector below was produced by `node:crypto`'s `publicEncrypt` with
 `RSA_NO_PADDING` over a deterministic padded block, against the real xBloom modulus.
@@ -98,7 +130,7 @@ Create `library/cloud/__tests__/rsa.test.ts`:
 
 ```ts
 import {encryptChunks, modPow, parsePublicKey, pkcs1Pad} from "../rsa";
-import {XBLOOM_PUBLIC_KEY} from "../transport";
+import {XBLOOM_PUBLIC_KEY} from "../key";
 
 describe("parsePublicKey", () => {
     it("reads the modulus and exponent out of the SPKI PEM", async () => {
@@ -180,12 +212,12 @@ describe("encryptChunks", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 3: Run it and watch it fail**
 
 Run: `npx jest library/cloud/__tests__/rsa.test.ts`
 Expected: FAIL — `Cannot find module '../rsa'`.
 
-- [ ] **Step 3: Implement it**
+- [ ] **Step 4: Implement it**
 
 Create `library/cloud/rsa.ts`:
 
@@ -385,7 +417,7 @@ export function encryptChunks(plaintext: string, pem: string): string {
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 5: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/rsa.test.ts`
 Expected: PASS, 6 tests. The golden-vector one failing means the exponentiation or the
@@ -406,10 +438,10 @@ jest.mock("expo-crypto", () => ({
 That deterministic stub deliberately produces a zero byte every 256, which is what makes
 the "never uses a zero byte" test meaningful rather than decorative.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add library/cloud/rsa.ts library/cloud/__tests__/rsa.test.ts jest.setup.js
+git add library/cloud/key.ts library/cloud/rsa.ts library/cloud/__tests__/rsa.test.ts jest.setup.js
 git commit -m "feat: add pure-BigInt RSA for the xBloom envelope
 
 Checked against node:crypto by golden vector. Hermes has no node:crypto
@@ -594,19 +626,12 @@ import {encryptChunks} from "./rsa";
 
 const BASE = "https://client-api.xbloom.com";
 
-/**
- * xBloom's public key, exactly as their web client ships it.
- *
- * The irregular line wrapping is theirs. Do not reflow it: it is kept
- * comparable byte for byte with the copy in `api/_lib/xbloom.ts` and with
- * whatever their client ships next.
- */
-export const XBLOOM_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4LF40GZ72SdhMyl765K/i4nY5
-CPcHz2Q1IKWKZ9S79xmK7G8pUhbVf4EZLvnNF1+9IvOFQUKV5Z7ZNNviqSpnql9
-tAT+8+J/He0R7pcirvVSxgdr2i9V/C/gmqAEZ5qVTzRnd3uWdFoKzPdEBxP0Ipor
-J1VBbCv90yBSOhVxO+QIDAQAB
------END PUBLIC KEY-----`;
+// The key lives in `key.ts` so the RSA tests can reach it without importing
+// the HTTP layer. Imported rather than re-exported bare, because `post` uses
+// it; the re-export is for callers who think of it as part of the transport.
+import {XBLOOM_PUBLIC_KEY} from "./key";
+
+export {XBLOOM_PUBLIC_KEY};
 
 const HEADERS: Record<string, string> = {
     "Content-Type": "application/json",
