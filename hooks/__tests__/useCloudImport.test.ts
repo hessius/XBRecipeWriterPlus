@@ -229,6 +229,42 @@ describe("useCloudImport", () => {
         expect(result.current.imported).toBe(0);
     });
 
+    /**
+     * The same promise, one step further on. Ticking an `edited` box *is* the
+     * consent -- §4.4 is explicit that there is no second dialog -- so this is
+     * a path a user reaches deliberately, and the write it produces must
+     * preserve the recipe's identity. It did not: the entry named a local uuid
+     * to replace while carrying a freshly minted one, so the row stayed keyed
+     * on the old uuid and held a blob claiming the new one, and the recipe
+     * forked in two on the next save.
+     */
+    it("replaces an edited recipe in place when the user says so", async () => {
+        const edited = localFrom();
+        edited.name = "my own notes";
+
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = {...deps(), localRecipes: () => [edited]};
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        expect(result.current.plan!.entries[0].status).toBe("edited");
+
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        const [uuid, written] = d.replaceRecipe.mock.calls[0] as [string, Recipe];
+        expect(uuid).toBe(edited.uuid);
+        // The row is found by the uuid passed and stores the recipe's own. The
+        // two must agree or the recipe splits.
+        expect(written.uuid).toBe(edited.uuid);
+        expect(d.saveRecipes).not.toHaveBeenCalled();
+    });
+
     it("writes the recipe the user ticked, not merely the right number of them", async () => {
         mockLoad.mockResolvedValue(session);
         mockFetch.mockResolvedValue([row, {...row, tableId: 2, theName: "Peru"}]);

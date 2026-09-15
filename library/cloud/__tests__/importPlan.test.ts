@@ -121,6 +121,26 @@ describe("buildImportPlan", () => {
         expect(plan.entries[0].selected).toBe(false);
     });
 
+    it("keeps the local identity when an edited row is ticked by hand", async () => {
+        // Ticking an `edited` box *is* the consent -- there is no second
+        // dialog -- so this is a path the user reaches deliberately, not an
+        // edge case. It forked in exactly the way the `replacing` comment
+        // describes: the entry named a local uuid to replace while carrying a
+        // freshly minted one, so `updateRecipe` keyed the row on the old uuid
+        // and stored a blob claiming the new one. The recipe then split in two
+        // on the next save, and with two locals sharing a cloud id it would
+        // read `edited` for ever after -- the very corruption this feature
+        // exists to prevent, reached through its own consent path.
+        const local = imported();
+        local.dosage = 22;
+
+        const plan = buildImportPlan([row()], [local]);
+
+        expect(plan.entries[0].status).toBe("edited");
+        expect(plan.entries[0].existingUuid).toBe(local.uuid);
+        expect(plan.entries[0].recipe.uuid).toBe(local.uuid);
+    });
+
     it("still calls it edited when the cloud side changed too", async () => {
         const local = imported();
         local.dosage = 22;
@@ -294,6 +314,12 @@ describe("buildImportPlan", () => {
             // Naming one of the two copies would aim a hand-ticked write at
             // whichever the database returned first.
             expect(plan.entries[0].existingUuid).toBeUndefined();
+            // And with nothing named, the entry must keep an identity of its
+            // own. Borrowing one of the two locals' uuids here would send an
+            // *insert* carrying a uuid the library already holds, which is the
+            // same fork from the other end: two rows, one uuid.
+            expect(plan.entries[0].recipe.uuid).not.toBe("a");
+            expect(plan.entries[0].recipe.uuid).not.toBe("b");
         }
     });
 

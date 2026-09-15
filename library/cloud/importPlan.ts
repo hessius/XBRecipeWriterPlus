@@ -119,11 +119,16 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         // so handing it a freshly minted one leaves the row keyed on the old
         // uuid and the blob claiming the new one. The next lookup misses and
         // inserts a second copy -- the recipe silently forks in two.
-        const replacing = !ambiguous.has(cloudId) && existing !== undefined
-            && (status === "updated" || status === "unchanged");
-        // `unchanged` is in that list for the same reason `updated` is. It is
-        // never ticked for the user, but they may tick it by hand, and a
-        // hand-ticked row must not be the one path that forks.
+        //
+        // The test is not the status. It is whether this entry will name a
+        // local recipe to replace, because that is what decides which write
+        // path it takes -- and `existingUuid` below is set on exactly this
+        // condition. Keying the realignment off the status instead let the two
+        // drift apart, and they did: `edited` named a local uuid while
+        // carrying a fresh one, so the recipe forked the moment somebody
+        // ticked the box. `unchanged` and `edited` are both reached only by a
+        // deliberate tick, and neither may be the path that forks.
+        const replacing = !ambiguous.has(cloudId) && existing !== undefined;
         if (replacing) {
             recipe.uuid = existing.uuid;
             // `key` only matters in memory: the JSON constructor always sets
