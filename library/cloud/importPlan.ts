@@ -121,8 +121,14 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         // inserts a second copy -- the recipe silently forks in two.
         const replacing = !ambiguous.has(cloudId) && existing !== undefined
             && (status === "updated" || status === "unchanged");
+        // `unchanged` is in that list for the same reason `updated` is. It is
+        // never ticked for the user, but they may tick it by hand, and a
+        // hand-ticked row must not be the one path that forks.
         if (replacing) {
             recipe.uuid = existing.uuid;
+            // `key` only matters in memory: the JSON constructor always sets
+            // it from `uuid` and never reads a stored one, so this aligns the
+            // object the caller is holding and nothing more. Not load-bearing.
             recipe.key = existing.uuid;
         }
 

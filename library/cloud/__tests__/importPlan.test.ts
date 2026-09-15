@@ -90,6 +90,20 @@ describe("buildImportPlan", () => {
         expect(plan.entries[0].selected).toBe(false);
     });
 
+    it("keeps the local identity when an unchanged row is ticked by hand", async () => {
+        // `unchanged` is the one status a user reaches only deliberately, so
+        // it is also the one that would fork quietly if its clause were ever
+        // dropped from `replacing`: `updateRecipe` finds the row by the uuid
+        // it is handed and stores the recipe's own, and a fresh uuid leaves
+        // the two disagreeing.
+        const local = imported();
+        const plan = buildImportPlan([row()], [local]);
+
+        expect(plan.entries[0].status).toBe("unchanged");
+        expect(plan.entries[0].existingUuid).toBe(local.uuid);
+        expect(plan.entries[0].recipe.uuid).toBe(local.uuid);
+    });
+
     it("calls a changed row updated when the local copy is untouched", async () => {
         const plan = buildImportPlan([row({dose: 20})], [imported()]);
         expect(plan.entries[0].status).toBe("updated");

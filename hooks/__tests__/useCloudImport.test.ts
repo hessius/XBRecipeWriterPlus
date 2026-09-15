@@ -362,6 +362,57 @@ describe("useCloudImport", () => {
     });
 
     /**
+     * The write-once flag belongs to the plan, not to the tap: a user who
+     * imports, refreshes, and imports again is doing something legitimate,
+     * and a flag that only cleared on unmount would silently do nothing the
+     * second time while still saying `done`.
+     */
+    it("writes again after a refresh brings a new plan", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = deps();
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        await act(async () => {
+            await result.current.confirm();
+        });
+        expect(d.saveRecipes).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            await result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        expect(d.saveRecipes).toHaveBeenCalledTimes(2);
+    });
+
+    it("counts every recipe that landed, not every write", async () => {
+        // One save call carries all the fresh recipes, so a count taken from
+        // the call rather than its contents would read 1 after importing a
+        // whole account.
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([
+            row,
+            {...row, tableId: 2, theName: "Peru"},
+            {...row, tableId: 3, theName: "Yirgacheffe"},
+        ]);
+        const d = deps();
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        await waitFor(() => expect(result.current.status).toBe("done"));
+        expect(result.current.imported).toBe(3);
+    });
+
+    /**
      * A failed write is not a reason to strand the screen on a spinner. The
      * recipes that landed are real, so the count must be the truth rather than
      * the total that was attempted.
@@ -422,5 +473,35 @@ describe("useCloudImport", () => {
         });
 
         expect(localRecipes).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Parity with the restore path above. A sign-in is the slowest call in the
+     * flow and the easiest one to walk away from, so the guard after it earns
+     * the same proof rather than being taken on trust.
+     */
+    it("does no work when a sign-in lands after the screen is gone", async () => {
+        let release: (s: typeof session) => void = () => {};
+        mockSignIn.mockReturnValue(new Promise((resolve) => {
+            release = resolve as (s: typeof session) => void;
+        }) as ReturnType<typeof signIn>);
+        mockFetch.mockResolvedValue([row]);
+
+        const {result, unmount} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("signedOut"));
+
+        await act(async () => {
+            void result.current.submitSignIn("a@b.c", "secret");
+        });
+        await waitFor(() => expect(result.current.status).toBe("signingIn"));
+        await act(async () => {
+            unmount();
+        });
+        await act(async () => {
+            release(session);
+        });
+
+        // The listing fetch is the first thing a surviving sign-in would do.
+        expect(mockFetch).not.toHaveBeenCalled();
     });
 });
