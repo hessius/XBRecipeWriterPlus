@@ -241,4 +241,43 @@ describe("CloudImportRow", () => {
             expect(styleOf("cloud-import-status").color).toBe(palette.dim);
         }
     );
+
+    it("carries the selection in the tick's colour, not only its shape", async () => {
+        const picked = entry({selected: true});
+        picked.recipe.accentIndex = 2;
+
+        await renderWithProviders(<CloudImportRow entry={picked} onToggle={jest.fn()}/>);
+
+        expect(styleOf("cloud-import-tick").color).toBe(accents.coffee[2]);
+    });
+
+    it("steps the tick back when the entry is not selected", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({selected: false})} onToggle={jest.fn()}/>
+        );
+        expect(styleOf("cloud-import-tick").color).toBe(palette.dim);
+    });
+
+    /**
+     * The three captionless statuses have nothing to append, and a label built
+     * by joining an absent one reads "Kenya, New here, " -- a trailing pause
+     * and then silence, every row, for the whole list.
+     */
+    it("does not trail an empty clause when there is no caption", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "new"})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityLabel)
+            .toBe("Kenya, New here");
+    });
+
+    it("keeps the name at full strength and the caption stepped back", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selected: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(styleOf("cloud-import-name").color).toBe(palette.text);
+        expect(styleOf("cloud-import-caption").color).toBe(palette.dim);
+    });
 });

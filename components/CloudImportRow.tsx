@@ -2,8 +2,8 @@ import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
-import {accents, palette} from "@/constants/colors";
-import {accentGroupFor} from "@/library/accent";
+import {palette} from "@/constants/colors";
+import {resolveAccent} from "@/library/accent";
 import type {ImportEntry, ImportStatus} from "@/library/cloud/importPlan";
 
 /**
@@ -59,9 +59,11 @@ type Props = {
 };
 
 export default function CloudImportRow({entry, onToggle}: Props) {
-    const group = accentGroupFor(entry.recipe);
-    const groupAccents = accents[group];
-    const accent = groupAccents[(entry.recipe.accentIndex ?? 0) % groupAccents.length];
+    // The library's own resolver, not a local lookup: it validates the index
+    // and falls back to the same hash every other screen uses, so a recipe
+    // with a missing or bogus index is the same colour here as it will be in
+    // the list this screen is feeding.
+    const accent = resolveAccent(entry.recipe);
 
     return (
         <Pressable
@@ -89,12 +91,14 @@ export default function CloudImportRow({entry, onToggle}: Props) {
                     borderRadius={BAR_WIDTH / 2}
                     backgroundColor={entry.selected ? accent : palette.dim}/>
                 <YStack flex={1} gap="$1">
-                    <Text color={palette.text} fontSize={16}>{entry.name}</Text>
+                    <Text testID="cloud-import-name" color={palette.text} fontSize={16}>
+                        {entry.name}
+                    </Text>
                     <Text testID="cloud-import-status" color={TONES[entry.status]} fontSize={13}>
                         {LABELS[entry.status]}
                     </Text>
                     {CAPTIONS[entry.status] ? (
-                        <Text color={palette.dim} fontSize={12}>
+                        <Text testID="cloud-import-caption" color={palette.dim} fontSize={12}>
                             {CAPTIONS[entry.status]}
                         </Text>
                     ) : null}
