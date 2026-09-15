@@ -349,10 +349,16 @@ function reviveRecipe(entry: unknown): Recipe | null {
     if (!isPlainObject(entry)) return null;
     if (!looksLikeRecipe(entry)) return null;
 
-    // Strip the droppable fields before the constructor sees them, not after.
-    // The constructor is deliberately forgiving and would keep whatever it was
-    // given, and a copy is taken so a rejected value is removed from the
-    // recipe we build rather than from the caller's parsed file.
+    // Strip the droppable fields before the constructor sees them, not after:
+    // the constructor is deliberately forgiving and would keep whatever it was
+    // given.
+    //
+    // The copy is hygiene rather than a guarantee anyone can observe, and no
+    // test covers it: `parseBackup` takes a string, so the object being
+    // stripped was parsed here and is discarded when the loop ends. It is kept
+    // because `reviveRecipe` reads as though it takes someone else's object,
+    // and the day it does, deleting from it would mean reading a backup
+    // quietly rewrote it.
     let cleaned = entry;
     for (const [field, ok] of Object.entries(DROPPABLE_RECIPE_FIELDS)) {
         if (cleaned[field] !== undefined && !ok(cleaned[field])) {
