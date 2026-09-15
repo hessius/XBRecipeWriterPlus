@@ -1,10 +1,11 @@
 import * as Clipboard from "expo-clipboard";
 import {router} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Keyboard, TextInput} from "react-native";
-import {Button, Input, Spinner, Text, XStack, YStack} from "tamagui";
+import {Keyboard, Pressable, TextInput} from "react-native";
+import {Input, Spinner, Text, XStack, YStack} from "tamagui";
 import type {ColorTokens} from "tamagui";
 
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import ImportResult from "@/components/ImportResult";
 import PasteOverlay from "@/components/PasteOverlay";
@@ -14,6 +15,8 @@ import type {RecipeImport} from "@/hooks/useRecipeImport";
 
 const FIELD_LABEL = "Share link or pod code";
 const FORMAT_HINT = "Paste an xBloom share link, or a pod code like ETH120.";
+const ACCOUNT_LABEL = "YOUR XBLOOM ACCOUNT";
+const ACCOUNT_CAPTION = "Bring in the recipes you've made";
 
 /**
  * The app's own face for the paste affordance.
@@ -223,20 +226,62 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                 {/* The fourth door. It lives in the sheet rather than on the home
                     screen because it is a kind of import, and the home screen's
                     three tiles are the app's entire top-level vocabulary -- a
-                    fourth would cost more than it bought. */}
+                    fourth would cost more than it bought.
+
+                    A rule, a dot-matrix label in the sheet's own chrome
+                    register, a caption and a chevron, rather than a filled
+                    button. The chevron promises departure, so the row does not
+                    read as a third thing that might expand in place -- which a
+                    button sitting under the field and the paste face would.
+
+                    It shows only while the sheet is idle. Once a lookup is
+                    resolving, has failed or has found something, the sheet has
+                    one subject, and a second import route competing with a
+                    found recipe is noise at the moment of decision. */}
                 {state.status === "idle" && (
-                    <Button
-                        backgroundColor={palette.raised}
-                        color={palette.text}
-                        onPress={() => {
-                            // Closed first, then pushed: a sheet left open behind
-                            // the pushed screen would still be there, over it,
-                            // when the user came back.
-                            onOpenChange(false);
-                            router.push("/importCloud");
-                        }}>
-                        Import from your xBloom account
-                    </Button>
+                    <Pressable accessibilityRole="button"
+                               accessibilityLabel={`${ACCOUNT_LABEL}, ${ACCOUNT_CAPTION}`}
+                               onPress={() => {
+                                   // Closed first, then pushed: a sheet left open
+                                   // behind the pushed screen would still be
+                                   // there, over it, when the user came back.
+                                   onOpenChange(false);
+                                   router.push("/importCloud");
+                               }}
+                               // The same answer to a finger every primary tap in
+                               // the app gives -- CtaTile's, by way of
+                               // SettingsActionRow.
+                               style={({pressed}) => ({
+                                   opacity:   pressed ? 0.7 : 1,
+                                   transform: [{scale: pressed ? 0.98 : 1}]
+                               })}>
+                        <YStack testID="import-account-rule" height={1}
+                                backgroundColor={palette.line} marginBottom="$3"/>
+                        {/* 44pt is iOS's minimum touch target; two short lines
+                            would otherwise fall just short of it. */}
+                        <XStack alignItems="center" justifyContent="space-between"
+                                gap="$4" minHeight={44}>
+                            <YStack flex={1} gap="$1">
+                                <DotMatrixText testID="import-account-label" fontSize={11}
+                                               weight="bold" letterSpacing={1.6}
+                                               color={palette.text}>
+                                    {ACCOUNT_LABEL}
+                                </DotMatrixText>
+                                <Text testID="import-account-caption" fontSize={13}
+                                      color={palette.dim}>
+                                    {ACCOUNT_CAPTION}
+                                </Text>
+                            </YStack>
+                            {/* Decorative: the row is already a labelled button,
+                                so the glyph must not become a second
+                                accessibility element. The chevron is the `back`
+                                glyph rotated, as SettingsActionRow builds its
+                                own. */}
+                            <XStack style={{transform: [{rotate: "180deg"}]}}>
+                                <DotIcon name="back" size={14} color={palette.muted}/>
+                            </XStack>
+                        </XStack>
+                    </Pressable>
                 )}
 
                 {state.status === "resolving" && (

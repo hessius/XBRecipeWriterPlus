@@ -469,13 +469,29 @@ it("does not dismiss the keyboard when a shortcut degrades to the found panel", 
     dismiss.mockRestore();
 });
 
-it("offers the xBloom account as a way in", async () => {
+const ACCOUNT = /YOUR XBLOOM ACCOUNT/i;
+
+it("offers the xBloom account as a way in, as a row that promises departure", async () => {
     await renderWithProviders(
         <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
-    expect(
-        screen.getByRole("button", {name: /Import from your xBloom account/i})
-    ).toBeTruthy();
+
+    // The spec's row, not a filled button: a rule, the dot-matrix label in the
+    // sheet's own chrome register, and a caption saying what lies through it.
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
+    expect(screen.getByTestId("import-account-label")).toBeTruthy();
+    expect(screen.getByText("Bring in the recipes you've made")).toBeTruthy();
+});
+
+it("names the row by both its lines, so it is not just an account", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByLabelText(
+        "YOUR XBLOOM ACCOUNT, Bring in the recipes you've made"
+    )).toBeTruthy();
 });
 
 it("leaves the sheet and opens the account screen", async () => {
@@ -484,32 +500,52 @@ it("leaves the sheet and opens the account screen", async () => {
         <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
     );
 
-    await fireEvent.press(
-        screen.getByRole("button", {name: /Import from your xBloom account/i})
-    );
+    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
 
-    // Closed first, then pushed: a sheet left open behind a pushed screen is
-    // still there when the user comes back, over the screen they went to.
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(router.push).toHaveBeenCalledWith("/importCloud");
 });
 
-it("does not offer the account door while a lookup is in flight or a recipe is found", async () => {
-    // The door is a kind of import in its own right, so it belongs only where
-    // the sheet is idle. Underneath a running lookup it would compete with the
-    // spinner, and underneath the found panel it would sit beside the very
-    // recipe the sheet has already brought back.
-    const {rerender} = await renderWithProviders(
-        <ImportSheet open onOpenChange={() => {}}
-                     importer={stubImport({state: {status: "resolving"}})}/>
+it("closes before it pushes, not merely as well as", async () => {
+    // Order is the whole point. A sheet left open behind the pushed screen is
+    // still there, over it, when the user comes back -- so "both happened" is
+    // not the guarantee; "closed first" is.
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
     );
-    expect(screen.queryByRole("button", {name: /Import from your xBloom account/i})).toBeNull();
 
-    await act(async () => {
-        rerender(
-            <ImportSheet open onOpenChange={() => {}}
-                         importer={stubImport({state: foundState()})}/>
-        );
-    });
-    expect(screen.queryByRole("button", {name: /Import from your xBloom account/i})).toBeNull();
+    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
+
+    expect(onOpenChange.mock.invocationCallOrder[0])
+        .toBeLessThan((router.push as jest.Mock).mock.invocationCallOrder[0]);
+});
+
+it.each([
+    ["a lookup is in flight", {status: "resolving"} as const],
+    ["a lookup has failed",
+        {status: "error", reason: "notFound", message: "No such pod code."} as const],
+    ["a recipe has been found", undefined]
+])("does not offer the account door while %s", async (_name, state) => {
+    // The sheet then has one subject. A second import route competing with a
+    // found recipe is noise at the moment of decision, and under a running
+    // lookup it competes with the spinner.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({state: state ?? foundState()})}/>
+    );
+
+    expect(screen.queryByRole("button", {name: ACCOUNT})).toBeNull();
+});
+
+it("offers the door even when the field is hidden, because it is not part of the field", async () => {
+    // The door is gated on the lookup's status alone. Coupling it to
+    // `showField` would take it away from someone who arrived by a share,
+    // which is the one route where an account is most likely what they wanted.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false})}/>
+    );
+
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
 });

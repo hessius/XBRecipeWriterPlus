@@ -1,6 +1,6 @@
 import * as Application from "expo-application";
 import React from "react";
-import {screen, fireEvent, act, within} from "@testing-library/react-native";
+import {screen, fireEvent, act, within, waitFor} from "@testing-library/react-native";
 import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import SettingsScreen from "@/app/settings";
@@ -26,7 +26,20 @@ function renderOrder(node: ReactTestRendererJSON | ReactTestRendererJSON[] | str
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
     ...jest.requireActual("expo-router"),
-    useRouter: () => ({push: mockPush})
+    useRouter:      () => ({push: mockPush}),
+    // Fired once on mount, which is what `useCloudSession` reads the stored
+    // session in. The real one also fires on every return to this screen.
+    useFocusEffect: (cb: () => void | (() => void)) => {
+        const {useEffect} = jest.requireActual("react");
+        useEffect(cb, [cb]);
+    }
+}));
+
+const mockLoadSession = jest.fn(async () => null as unknown);
+const mockSignOut = jest.fn(async () => {});
+jest.mock("@/library/cloud/session", () => ({
+    loadSession: () => mockLoadSession(),
+    signOut:     () => mockSignOut()
 }));
 
 const mockExportBackup = jest.fn();
@@ -549,15 +562,55 @@ describe("SettingsScreen", () => {
         expect(indexOf("About XBRW++")).toBeGreaterThanOrEqual(0);
         expect(indexOf("About XBRW++")).toBeLessThan(indexOf("RECIPE LIST"));
         expect(indexOf("RECIPE LIST")).toBeLessThan(indexOf("UNITS"));
-        expect(indexOf("UNITS")).toBeLessThan(indexOf("LIBRARY"));
+        expect(indexOf("UNITS")).toBeLessThan(indexOf("XBLOOM ACCOUNT"));
+        expect(indexOf("XBLOOM ACCOUNT")).toBeLessThan(indexOf("LIBRARY"));
     });
 
-    it("opens the xBloom account importer from its own section", async () => {
+    it("offers sign-in under its own heading when no account is connected", async () => {
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
+        // The heading, not just the row: a section whose title went missing
+        // still works and still reads as part of whatever sits above it.
+        await waitFor(() => expect(screen.getByText("XBLOOM ACCOUNT")).toBeTruthy());
         // SettingsActionRow folds label and detail into one accessible name.
         await fireEvent.press(screen.getByRole("button",
-            {name: "Import from xBloom, Sign in and bring across the recipes you made there."}));
+            {name: "Sign in, Bring across the recipes you made in the xBloom app."}));
+
+        expect(mockPush).toHaveBeenCalledWith("/importCloud");
+        // Nothing to sign out of yet.
+        expect(screen.queryByRole("button", {name: "Sign out"})).toBeNull();
+    });
+
+    it("names the connected account and offers a way out of it", async () => {
+        mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        // The email is what tells someone which account they are looking at,
+        // so it is shown rather than a bare "Signed in".
+        await waitFor(() => expect(screen.getByRole("button",
+            {name: "Import recipes, sam@example.com"})).toBeTruthy());
+        expect(screen.queryByRole("button", {name: /^Sign in/})).toBeNull();
+
+        await fireEvent.press(screen.getByRole("button", {name: "Sign out"}));
+
+        await waitFor(() => expect(mockSignOut).toHaveBeenCalled());
+        // Signing out is not a navigation: it happens here, and the section
+        // falls back to offering sign-in.
+        await waitFor(() => expect(screen.getByRole("button",
+            {name: "Sign in, Bring across the recipes you made in the xBloom app."})).toBeTruthy());
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("opens the importer from the connected account too", async () => {
+        mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await waitFor(() => expect(screen.getByRole("button",
+            {name: "Import recipes, sam@example.com"})).toBeTruthy());
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Import recipes, sam@example.com"}));
 
         expect(mockPush).toHaveBeenCalledWith("/importCloud");
     });

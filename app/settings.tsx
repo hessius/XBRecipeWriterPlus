@@ -15,6 +15,7 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
+import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
@@ -48,6 +49,7 @@ const VERSION = Application.nativeApplicationVersion ?? "unknown";
  */
 export default function SettingsScreen({settings}: Props) {
     const router = useRouter();
+    const cloud = useCloudSession();
     const [showCoffeeMarker, setShowCoffeeMarker] =
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
@@ -273,13 +275,34 @@ export default function SettingsScreen({settings}: Props) {
 
                 <MachineSection settings={settings}/>
 
-                {/* Its own section above Library, not a line inside it: Library is
-                    the recipes you hold, and this is where some of them can come
-                    from. */}
+                {/* Its own section above Library, not a line inside it: Library
+                    is the recipes you hold, and this is where some of them can
+                    come from.
+
+                    Unlike the import sheet's door, this section knows whether
+                    anyone is signed in, because this is where someone comes
+                    looking to disconnect. The sheet must never carry that: it
+                    is a place to bring something in, not a place to sever an
+                    account. */}
                 <SettingsSection title="xBloom account">
-                    <SettingsActionRow label="Import from xBloom"
-                                       detail="Sign in and bring across the recipes you made there."
-                                       onPress={() => router.push("/importCloud")}/>
+                    {cloud.session === null ? (
+                        <SettingsActionRow label="Sign in"
+                                           detail="Bring across the recipes you made in the xBloom app."
+                                           onPress={() => router.push("/importCloud")}/>
+                    ) : (
+                        <SettingsActionRow label="Import recipes"
+                                           detail={cloud.session.email}
+                                           onPress={() => router.push("/importCloud")}/>
+                    )}
+                    {cloud.session !== null && (
+                        // `danger`, like "Delete all recipes": signing out
+                        // discards the only copy of a token that cannot be
+                        // recovered without the password again.
+                        <SettingsActionRow label="Sign out" tone="danger"
+                                           onPress={() => {
+                                               void cloud.forget();
+                                           }}/>
+                    )}
                 </SettingsSection>
 
                 <SettingsSection title="Library">
