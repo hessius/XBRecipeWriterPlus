@@ -115,8 +115,10 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         const status = ambiguous.has(cloudId) ? "edited" : classify(existing, recipe);
 
         applyAccent(recipe, color, assignedSoFar);
-        // After the accent, because the fingerprint excludes it and this is
-        // the value the *next* import will compare against.
+        // The fingerprint excludes the accent, so the order of these two is
+        // immaterial and no test pins it. Stamped here because this is the
+        // value the *next* import compares against, and it should describe the
+        // recipe in its final state.
         recipe.cloudFingerprint = fingerprint(recipe);
         assignedSoFar.push(recipe);
 
@@ -125,7 +127,12 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
             name: recipe.name,
             status,
             recipe,
-            existingUuid: existing?.uuid,
+            // Not named when the local side is ambiguous: two copies carry
+            // this cloud id and the one in the map is whichever the database
+            // happened to return first. The entry is unselected, but a user
+            // may still tick it by hand, and a write aimed at a coin-flip
+            // winner is worse than one the caller has to resolve.
+            existingUuid: ambiguous.has(cloudId) ? undefined : existing?.uuid,
             selected: status === "new" || status === "updated",
         });
     }

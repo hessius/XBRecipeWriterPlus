@@ -2854,6 +2854,9 @@ describe("buildImportPlan", () => {
 
             expect(plan.entries[0].status).toBe("edited");
             expect(plan.entries[0].selected).toBe(false);
+            // Naming one of the two copies would aim a hand-ticked write at
+            // whichever the database returned first.
+            expect(plan.entries[0].existingUuid).toBeUndefined();
         }
     });
 
@@ -2880,6 +2883,30 @@ describe("buildImportPlan", () => {
 
         expect(plan.entries[0].cloudId).toBe(4242);
         expect(plan.entries[0].recipe.cloudId).toBe(4242);
+    });
+
+    /**
+     * Accents are chosen against the existing library as well as against this
+     * import. Without that, a first-ever import into a library already skewed
+     * onto one colour would happily pile onto it -- and the whole point of
+     * `assignAccent` is that a new recipe is visually distinguishable from the
+     * ones already there.
+     */
+    it("avoids an accent the local library is already crowded with", async () => {
+        const crowded: Recipe[] = [];
+        for (let i = 0; i < 6; i += 1) {
+            const local = new Recipe();
+            local.uuid = `local-${i}`;
+            local.accentIndex = 0;
+            crowded.push(local);
+        }
+
+        // A colour far from every palette accent, so this goes down the
+        // `assignAccent` path rather than the fidelity path.
+        const plan = buildImportPlan([row({theColor: "#808080"})], crowded);
+
+        expect(plan.entries[0].status).toBe("new");
+        expect(plan.entries[0].recipe.accentIndex).not.toBe(0);
     });
 });
 ```
@@ -3036,7 +3063,7 @@ function applyAccent(recipe: Recipe, color: string | undefined, others: Recipe[]
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/importPlan.test.ts`
-Expected: PASS, 25 tests.
+Expected: PASS, 26 tests.
 
 Two will be fiddly and are worth getting right rather than adjusting:
 
