@@ -504,4 +504,62 @@ describe("useCloudImport", () => {
         // The listing fetch is the first thing a surviving sign-in would do.
         expect(mockFetch).not.toHaveBeenCalled();
     });
+
+    /**
+     * The screen reports the outcome from this return value rather than from
+     * state, because after the await the count it captured at render is one
+     * import out of date. So the return value is a contract, not a
+     * convenience, and it is asserted here rather than only through a mock.
+     */
+    it("hands back what it imported", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row, {...row, tableId: 2, theName: "Peru"}]);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        let outcome: unknown;
+        await act(async () => {
+            outcome = await result.current.confirm();
+        });
+
+        expect(outcome).toEqual({imported: 2, failed: false});
+    });
+
+    it("says it failed while still naming what landed", async () => {
+        const stored = localFrom();
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([
+            {...row, tableId: 2, theName: "Peru"},
+            {...row, theName: "Kenya AB"},
+        ]);
+        const d = {...deps(), localRecipes: () => [stored]};
+        d.replaceRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        let outcome: unknown;
+        await act(async () => {
+            outcome = await result.current.confirm();
+        });
+
+        expect(outcome).toEqual({imported: 1, failed: true});
+    });
+
+    it("hands back nothing when there was no plan to import", async () => {
+        // The screen distinguishes this from an outcome: it must not toast
+        // "Imported 0 recipes" at someone who never started an import.
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("signedOut"));
+
+        let outcome: unknown = "untouched";
+        await act(async () => {
+            outcome = await result.current.confirm();
+        });
+
+        expect(outcome).toBeNull();
+    });
 });

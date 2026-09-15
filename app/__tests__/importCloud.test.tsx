@@ -156,12 +156,18 @@ describe("importCloud", () => {
         expect(mockHook.confirm).toHaveBeenCalled();
     });
 
-    it("reports what it imported when it is done", async () => {
+    it("draws no completion screen, because the toast already reported it", async () => {
+        // Not an omission. `finish` toasts and closes, so a done state would
+        // be a screen nobody reaches with a second way to leave on it.
         mockHook.status = "done";
         mockHook.imported = 3;
 
         await renderWithProviders(<ImportCloudScreen/>);
-        expect(screen.getByText(/Imported 3 recipes/i)).toBeTruthy();
+
+        expect(screen.queryByText(/Imported 3 recipes/i)).toBeNull();
+        expect(screen.queryByLabelText("Done")).toBeNull();
+        // Positively anchored: the screen did render, it just has no done UI.
+        expect(screen.getByText("xBloom account")).toBeTruthy();
     });
 
     it("says the endpoints carry some risk to the account, not merely that they are unofficial", async () => {
@@ -176,6 +182,11 @@ describe("importCloud", () => {
         // already been walked past by everyone who was going to walk past it.
         await renderWithProviders(<ImportCloudScreen/>);
 
+        // Case matters here and is load-bearing: the caveat says "password"
+        // in lower case and the field is labelled "Password", so the
+        // case-sensitive indexOf below cannot match the caveat by accident.
+        // Capitalising it in the copy would quietly weaken this test.
+        //
         // Rendered order, read off the tree itself. RNTL v14 has no query for
         // "comes before", and the tree is serialised depth-first, so the two
         // positions in it are the two positions on screen.
@@ -376,5 +387,42 @@ describe("importCloud", () => {
     it("offers no sign out when there is no session", async () => {
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.queryByLabelText("Sign out")).toBeNull();
+    });
+
+    it("really refuses a second sign-in, not merely announcing that it would", async () => {
+        // The a11y mirror and the functional guard are two different props;
+        // asserting only the first leaves a double submit possible.
+        mockHook.status = "signingIn";
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign in"));
+
+        expect(mockHook.submitSignIn).not.toHaveBeenCalled();
+    });
+
+    it("really refuses an import of nothing", async () => {
+        choosing({entries: [entry({selected: false})]});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Import 0 recipes"));
+
+        expect(mockHook.confirm).not.toHaveBeenCalled();
+    });
+
+    it("offers no import button at all when the account is empty", async () => {
+        choosing({entries: [], counts: {new: 0, updated: 0, unchanged: 0, edited: 0}});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.queryByLabelText(/^Import /)).toBeNull();
+        expect(screen.getByText(/No recipes to import/i)).toBeTruthy();
+    });
+
+    it("says one recipe appeared twice without saying recipes", async () => {
+        choosing({duplicated: 1});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText(
+            "1 recipe appeared twice in your account and was listed once."
+        )).toBeTruthy();
     });
 });

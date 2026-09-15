@@ -35,7 +35,11 @@ const ERRORS: Record<CloudErrorKind, string> = {
 };
 
 export default function ImportCloudScreen() {
-    const database = new RecipeDatabase();
+    // One store for the screen's lifetime. Every `new RecipeDatabase()` opens
+    // SQLite and replays the table setup, and this screen re-renders on every
+    // keystroke into the email and password fields. `useRecipeLibrary` guards
+    // the same way, for the same reason.
+    const [database] = useState(() => new RecipeDatabase());
     const cloud = useCloudImport({
         localRecipes: () => database.retrieveAllRecipes() ?? [],
         saveRecipes: (recipes) => database.insertRecipes(recipes),
@@ -94,8 +98,13 @@ export default function ImportCloudScreen() {
                                 the way the xBloom app does, using endpoints xBloom
                                 has never published, so there is some risk to your
                                 account in using it — they could change or withdraw
-                                them, and they have not agreed to this.
+                                them at any time, and have not sanctioned this use.
+                            </Text>
 
+                            {/* A second node, not a blank line inside the first:
+                                a blank line in one Text collapses, and the
+                                reassurance would run straight on from the risk. */}
+                            <Text color={palette.dim} fontSize={13}>
                                 Your email and password go directly to xBloom, never
                                 to us or to anyone else. Only a revocable token is
                                 kept on this phone — your password is never stored.
@@ -207,15 +216,10 @@ export default function ImportCloudScreen() {
                         <Text color={palette.dim}>Importing…</Text>
                     )}
 
-                    {cloud.status === "done" && (
-                        <>
-                            <Text color={palette.text}>
-                                {`Imported ${recipes(cloud.imported)}.`}
-                            </Text>
-                            <Button accessibilityLabel="Done"
-                                    onPress={() => router.back()}>Done</Button>
-                        </>
-                    )}
+                    {/* `done` draws nothing on purpose. `finish` reports the
+                        outcome in a toast and closes the screen, so a state
+                        here would be a screen the user never reaches and a
+                        second Done button beside the one that already left. */}
 
                     {cloud.session && (
                         // `Session.email` exists so the user can see which
