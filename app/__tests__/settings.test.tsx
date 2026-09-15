@@ -437,13 +437,17 @@ describe("SettingsScreen", () => {
         expect(restored.get("dotMatrixProfile")).toBe(true);
     });
 
-    it("presents its sheets outside the scroll view", async () => {
-        // XbrwSheet is deliberately not `modal`, so it renders in place as a
-        // sibling rather than through a Portal. Left inside the ScrollView it is
-        // positioned against the scrolled content rather than the screen, and
-        // this screen is long enough that the Delete all row sits well down it
-        // -- the sheet then opens off-screen and the button reads as doing
-        // nothing at all. That is exactly what was reported on device.
+    it("presents its sheets outside the screen's flex container", async () => {
+        // XbrwSheet is deliberately not `modal`, so it renders in place rather
+        // than through a Portal. As a child of the screen's `flex={1}` YStack it
+        // is an ordinary flex child sitting next to a ScrollView that takes the
+        // space, so it resolves to zero height and draws nothing -- the failure
+        // XbrwSheet's own comment calls looking "exactly like a control that did
+        // nothing". On device that was Delete all doing nothing at all: the
+        // press fired and the state flipped, but no sheet was ever drawn.
+        //
+        // The sheet must therefore be a sibling of the screen, which is the
+        // shape app/index.tsx and app/editRecipe.tsx already use.
         mockLibraryRecipes = [recipeNamed("A", "u1")];
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
@@ -453,8 +457,10 @@ describe("SettingsScreen", () => {
 
         // The sheet is up...
         expect(screen.getByText(/deletes 1 recipe/i)).toBeTruthy();
-        // ...and reached the screen, not the scrolling content.
+        // ...and outside both the scroll view and the screen's flex container.
         expect(within(screen.getByTestId("settings-scroll"))
+            .queryByText(/deletes 1 recipe/i)).toBeNull();
+        expect(within(screen.getByTestId("settings-screen"))
             .queryByText(/deletes 1 recipe/i)).toBeNull();
     });
 

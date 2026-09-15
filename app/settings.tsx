@@ -212,7 +212,17 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     return (
-        <YStack flex={1} backgroundColor={palette.base}>
+        <>
+        {/* A Fragment, with the sheets as siblings of the screen rather than
+            children of it. XbrwSheet is deliberately not `modal`, so it renders
+            in place rather than through a Portal — and a non-modal sheet left
+            inside this `flex={1}` YStack becomes an ordinary flex child next to
+            a ScrollView that takes the space, so it resolves to zero height and
+            draws nothing. That is the failure XbrwSheet's own comment describes
+            as looking "exactly like a control that did nothing", and it is what
+            made Delete all appear to do nothing at all. `app/index.tsx` and
+            `app/editRecipe.tsx` both already use this shape. */}
+        <YStack testID="settings-screen" flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="Settings" onBack={() => router.back()}/>
             <ScrollView testID="settings-scroll"
                         contentContainerStyle={{padding: 16, paddingBottom: 48}}>
@@ -281,16 +291,8 @@ export default function SettingsScreen({settings}: Props) {
                 <CardReadDiagnostic settings={settings}/>
             </YStack>
             </ScrollView>
+        </YStack>
 
-            {/* Outside the ScrollView, which is not a detail. XbrwSheet is
-                deliberately not `modal`, so it renders in place as a sibling
-                rather than through a Portal — see the comment in XbrwSheet. A
-                sheet left inside the scroll view is therefore positioned
-                against the scrolled content rather than the screen, and on a
-                screen this long the Delete all row is far enough down that the
-                sheet lands off-screen entirely: the button reads as doing
-                nothing at all. Every other screen already puts its sheets after
-                its ScrollView; this one was the exception. */}
             <RestoreSheet open={restoreOpen} payload={pending} existing={library.recipes}
                           onCancel={() => setRestoreOpen(false)}
                           onRestore={(choice) => {
@@ -302,6 +304,6 @@ export default function SettingsScreen({settings}: Props) {
                             onCancel={() => setConfirmingDeleteAll(false)}
                             onBackUpFirst={onBackUpFirst}
                             onDelete={onDeleteAll}/>
-        </YStack>
+        </>
     );
 }
