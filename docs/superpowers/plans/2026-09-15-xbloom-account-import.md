@@ -1518,6 +1518,34 @@ comment already explains what reusing one of them would break."
 
 ---
 
+
+- [ ] **Step 6: Stop a duplicate from claiming the account recipe**
+
+`duplicateRecipe` rebuilds the copy from the whole source JSON, so the two
+new fields carry over the way every other field does. They must not. The
+import matches a local recipe to an account recipe by `cloudId`, and two
+local rows holding one id give the next sync two candidates for one account
+row with no basis to choose between them. `duplicateRecipe` already clears
+`uuid` and `accentIndex` for the same reason; these join them.
+
+In `library/RecipeDatabase.ts`, after `copy.accentIndex = undefined;`:
+
+```ts
+        // A duplicate is a new local recipe, not a second copy of the account
+        // recipe. Carrying the id over would leave two rows both claiming to
+        // be the same xBloom recipe, and the import matches on exactly that
+        // id: the next sync would find two locals for one account row and
+        // have no basis to choose between them. The fingerprint records what
+        // the account's copy looked like, so it goes with the id it belongs to.
+        copy.cloudId = undefined;
+        copy.cloudFingerprint = undefined;
+```
+
+with a test in `library/__tests__/RecipeDatabase.test.ts` asserting the copy
+has neither field and the original still has both.
+
+---
+
 ## Task 7: The fingerprint
 
 **Files:**
