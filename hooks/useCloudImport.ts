@@ -89,11 +89,16 @@ export function useCloudImport(deps: CloudImportDeps) {
                 setSession(null);
                 setStatus("signedOut");
             } else {
-                // `active`, not the `session` from state: on the first listing
-                // after a restore or a sign-in, state still holds the `null`
-                // from the render that started this, so reading it would sign
+                // `choosing`, flatly. An earlier version asked `active ?
+                // ... : "signedOut"` here, guarding against a listing failure
+                // arriving with no session -- but `active` is the `Session`
+                // this call was made with, so the limb could never run. The
+                // guard it was reaching for is real and lives above: on the
+                // first listing after a restore or a sign-in, `session` in
+                // state still holds the `null` from the render that started
+                // this, so that is the value never to read here. It would sign
                 // out a user whose token is fine and whose wifi is not.
-                setStatus(active ? "choosing" : "signedOut");
+                setStatus("choosing");
             }
         }
     }
