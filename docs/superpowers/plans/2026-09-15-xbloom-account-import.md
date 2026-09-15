@@ -4969,29 +4969,34 @@ Two things that reviews found and that are easy to get wrong again:
 Nothing here is new code. This is the point at which the feature is either finished or
 is not.
 
-- [ ] **Step 1: Types**
+- [x] **Step 1: Types** — clean.
 
 Run: `npm run typecheck`
 Expected: no output, exit 0.
 
-- [ ] **Step 2: Lint**
+- [x] **Step 2: Lint** — 0 errors, 8 warnings, the pre-existing baseline unmoved.
 
 Run: `npm run lint`
 Expected: **0 errors.** The pre-existing baseline is 8 warnings; this branch may add the
 one deliberate `exhaustive-deps` disable in `useCloudImport.ts` and nothing else. If the
 warning count has risen, find out why rather than accepting it.
 
-- [ ] **Step 3: The whole suite**
+- [x] **Step 3: The whole suite** — 180 suites, 2,977 tests, all green (up from 2,852).
 
 Run: `npm test`
 Expected: every suite green. The count should have risen by roughly 100 tests — this
 branch adds nine test files.
 
-- [ ] **Step 4: Dependency health**
+- [x] **Step 4: Dependency health** — 21/21, after `d02fc88` caught three SDK patch releases up. That drift was upstream and affected main equally.
 
 Run: `npx expo-doctor`
 Expected: all checks passed. CI treats this as a hard failure, so a warning here is a
 red build.
+
+**Steps 5 and 6 need the phone and are the only part of this milestone that cannot be
+done here.** A whole-implementation review has been run in the meantime; it found one
+high-severity bug -- an `edited` recipe forked in two when the user consented to
+importing it -- fixed in `006cafb`.
 
 - [ ] **Step 5: Build to the device**
 
@@ -5033,21 +5038,21 @@ a test — a bug found on the device is a bug the suite did not have.
 
 Run this checklist before opening the pull request.
 
-- [ ] **Spec coverage.** Walk `docs/superpowers/specs/2026-09-15-xbloom-account-import-design.md`
+- [x] **Spec coverage.** Walk `docs/superpowers/specs/2026-09-15-xbloom-account-import-design.md`
       section by section and name the task that implements each: §2 RSA → Task 2; §2
       transport → Task 3; §3 data model and the three ids → Task 6; §3 fingerprint →
       Task 7; §4 the user's path → Tasks 10–13; §5 accents → Tasks 8, 9; §6 credentials
       and failure → Tasks 4, 11; §8 testing → every task. §7 (#76, publishing) and §9
       are out of scope by the spec's own words and have no task by design.
-- [ ] **Placeholders.** Grep the diff for `TODO`, `TBD`, `FIXME` and `any`.
-- [ ] **Type consistency.** `ImportEntry`'s fields as used in Tasks 11–13 (`cloudId`,
+- [x] **Placeholders.** None: no TODO, TBD or FIXME, and no new `any`. Grep the diff for `TODO`, `TBD`, `FIXME` and `any`.
+- [x] **Type consistency.** `ImportEntry`'s fields as used in Tasks 11–13 (`cloudId`,
       `name`, `status`, `recipe`, `selected`, `existingUuid`) must match Task 10's
       definition exactly, and `ImportPlan`'s (`entries`, `unreadable`, `counts`) likewise.
       A field renamed in one place and not the other typechecks as `undefined` in a
       `.map` and fails silently in the UI.
-- [ ] **No colour literal.** `grep -nE "#[0-9a-fA-F]{6}" app/ components/` over the diff
+- [x] **No colour literal.** None. `grep -nE "#[0-9a-fA-F]{6}" app/ components/` over the diff
       returns nothing.
-- [ ] **No `library/` import of `api/`.** `library/cloud/` duplicates the public key
+- [x] **No `library/` import of `api/`.** None. `library/cloud/` duplicates the public key
       deliberately; `api/_lib/xbloom.ts` is a zero-dependency Vercel function and must
       stay one.
 
