@@ -231,15 +231,24 @@ anywhere.
 
 ### 4.4 Signed in
 
-Your recipes in three groups, each row a checkbox:
+Your recipes in four groups, each row a checkbox. The labels run on one axis —
+*here* versus *in xBloom* — so they read as one sentence about two places
+rather than four unrelated adjectives:
 
 - **New here** — checked by default. The common case is "bring in everything",
   and it should take one tap.
-- **Already imported, unchanged** — unchecked, dimmed, "already in your
-  library". Visible rather than filtered out so the count reconciles: six in
-  xBloom, six on screen, no mystery about the missing ones.
-- **Edited here since importing** — unchecked, labelled plainly, with a caption
-  stating that importing replaces the changes you made. Ticking the box **is**
+- **Changed in xBloom** — checked by default. The cloud copy moved and the
+  local one was never touched, so bringing it across loses nothing; it is the
+  same "bring in everything" gesture as a new recipe and belongs in it.
+
+  This group was missed when the spec said *three*. It is not a fourth
+  decision, it is the second half of the first one: the pair that is safe to
+  take, split only so the row can say which it is.
+- **Already in your library** — unchecked, dimmed. Visible rather than filtered
+  out so the count reconciles: six in xBloom, six on screen, no mystery about
+  the missing ones.
+- **Edited here** — unchecked, dimmed, with a caption stating that importing
+  replaces the changes you made. Ticking the box **is**
   the consent; there is no second dialog, because the row already states the
   consequence at the point of decision.
 

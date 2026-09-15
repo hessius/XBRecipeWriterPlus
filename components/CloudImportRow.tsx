@@ -20,10 +20,13 @@ import type {ImportEntry, ImportStatus} from "@/library/cloud/importPlan";
  * the screen never told them (spec 4.4).
  */
 
+// The wording runs on one axis -- *here* versus *in xBloom* -- so the four
+// statuses read as one sentence about two places rather than four unrelated
+// adjectives. Taken from spec 4.4, which quotes its copy.
 const LABELS: Record<ImportStatus, string> = {
-    new: "New",
+    new: "New here",
     updated: "Changed in xBloom",
-    unchanged: "Already imported",
+    unchanged: "Already in your library",
     edited: "Edited here",
 };
 
@@ -47,6 +50,8 @@ const TONES: Record<ImportStatus, string> = {
     unchanged: palette.dim,
     edited: palette.dim,
 };
+
+const BAR_WIDTH = 4;
 
 type Props = {
     entry: ImportEntry;
@@ -75,13 +80,17 @@ export default function CloudImportRow({entry, onToggle}: Props) {
                     recipe will wear once it lands, so the choice and its
                     result are visible in the same glance. */}
                 <YStack
-                    width={4}
+                    testID="cloud-import-accent"
+                    width={BAR_WIDTH}
                     height={32}
-                    borderRadius={2}
+                    // Half the width, so the bar is a pill at any width. Not a
+                    // `$` token: the radius is a consequence of this bar's
+                    // geometry, and a token would drift away from it.
+                    borderRadius={BAR_WIDTH / 2}
                     backgroundColor={entry.selected ? accent : palette.dim}/>
                 <YStack flex={1} gap="$1">
                     <Text color={palette.text} fontSize={16}>{entry.name}</Text>
-                    <Text color={TONES[entry.status]} fontSize={13}>
+                    <Text testID="cloud-import-status" color={TONES[entry.status]} fontSize={13}>
                         {LABELS[entry.status]}
                     </Text>
                     {CAPTIONS[entry.status] ? (
@@ -91,6 +100,7 @@ export default function CloudImportRow({entry, onToggle}: Props) {
                     ) : null}
                 </YStack>
                 <Text
+                    testID="cloud-import-tick"
                     color={entry.selected ? accent : palette.dim}
                     fontSize={18}>
                     {entry.selected ? "✓" : "○"}
