@@ -68,27 +68,53 @@ export default function XbrwSheet({
     // It is taken back out again once it has finished leaving, rather than on
     // the frame it is dismissed: unmounting immediately would take the exit
     // animation with it, and the sheet would vanish rather than leave.
-    const [rendered, setRendered] = useState(open);
-    const [shown, setShown] = useState(open);
-    const [wasOpen, setWasOpen] = useState(open);
+    // One state object rather than three `useState`s, which is the whole point.
+    //
+    // These three values must move together. As separate states with `wasOpen`
+    // acting as a one-shot latch, a re-render that interleaved between the
+    // latch firing and its effects could commit `wasOpen: true` without
+    // `rendered: true` — and because the latch only fires on a *change* of
+    // `open`, it then never fired again and the sheet stayed invisible for
+    // good. That is not theoretical: it is why "Delete all recipes" did
+    // nothing on the settings screen, whose MachineSection re-renders often
+    // enough to interleave, while the same sheet worked on the library screen.
+    // Bundling them makes an inconsistent commit unrepresentable.
+    const [phase, setPhase] = useState(() => ({
+        rendered: open, shown: open, wasOpen: open
+    }));
 
     // Adjusted while rendering rather than from an effect, so that the mount
     // and the dismissal both take effect on this pass. Only the opening waits.
-    if (open !== wasOpen) {
-        setWasOpen(open);
-        if (open) setRendered(true);
-        else setShown(false);
+    if (open !== phase.wasOpen) {
+        setPhase(open
+            ? {rendered: true, shown: false, wasOpen: true}
+            : {rendered: phase.rendered, shown: false, wasOpen: false});
     }
+
+    // `|| open` is the belt to the braces above: whatever the latch has done,
+    // a sheet the caller says is open is in the tree. The failure this replaces
+    // was invisible and permanent, so it is worth being unable to express.
+    const rendered = phase.rendered || open;
+    const shown = phase.shown;
 
     useEffect(() => {
         if (!open) return;
-        const frame = requestAnimationFrame(() => setShown(true));
+        // Guarded on `wasOpen` so a frame left over from a sheet that has since
+        // been dismissed cannot show it again.
+        const frame = requestAnimationFrame(
+            () => setPhase((p) => (p.wasOpen ? {...p, shown: true} : p))
+        );
         return () => cancelAnimationFrame(frame);
     }, [open]);
 
     useEffect(() => {
         if (open) return;
-        const timer = setTimeout(() => setRendered(false), EXIT_GRACE);
+        // Guarded for the mirror reason: an exit timer from an earlier close
+        // must never pull a reopened sheet back out of the tree.
+        const timer = setTimeout(
+            () => setPhase((p) => (p.wasOpen ? p : {...p, rendered: false})),
+            EXIT_GRACE
+        );
         return () => clearTimeout(timer);
     }, [open]);
 
@@ -182,7 +208,11 @@ export default function XbrwSheet({
                     subtree it needs to hide. Each host screen instead marks its
                     own subtree `no-hide-descendants` while a sheet is open --
                     see `app/editRecipe.tsx` and `app/index.tsx`. */}
-                <YStack gap="$3" aria-label={title} accessibilityViewIsModal={shown}>
+                {/* `$5` between the chrome and the content, not the `$3` that
+                    separates rows within the content. The heading is a label
+                    for the sheet rather than its first row, and at `$3` it
+                    crowded the first control enough to read as part of it. */}
+                <YStack gap="$5" aria-label={title} accessibilityViewIsModal={shown}>
                     {heading}
                     {children}
                 </YStack>
