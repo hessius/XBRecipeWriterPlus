@@ -24,6 +24,11 @@ import {accents, type AccentGroup} from "@/constants/colors";
  * which is to say "nearest" there was noise, and the winner would have been a
  * pink. Above this line the answer is no answer, and `assignAccent` picks as
  * it does for any other new recipe.
+ *
+ * The test pins this into the gap the observations leave — above every real
+ * match, below the real miss — and deliberately not to 0.06 exactly. The
+ * evidence justifies the gap, not the number, and a test asserting the number
+ * would fail for every retune without ever catching a bad one.
  */
 export const MAX_ACCENT_DISTANCE = 0.06;
 
