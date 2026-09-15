@@ -132,6 +132,7 @@ export default function RootLayout() {
                                             <Stack.Screen name="about" options={{headerShown: false}}/>
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
+                                            <Stack.Screen name="importCloud" options={{headerShown: false}}/>
                                             {/* The history list and one brew's
                                                 record. These were registered
                                                 nowhere, so they fell through to

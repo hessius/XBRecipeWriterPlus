@@ -3739,7 +3739,8 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import CloudImportRow from "@/components/CloudImportRow";
 import type {ImportEntry} from "@/library/cloud/importPlan";
-import Recipe from "@/library/Recipe";
+import {accents, palette} from "@/constants/colors";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 const entry = (over: Partial<ImportEntry> = {}): ImportEntry => {
@@ -3755,6 +3756,25 @@ const entry = (over: Partial<ImportEntry> = {}): ImportEntry => {
     };
 };
 
+/**
+ * Tamagui resolves colour into the style prop, which arrives as a nest of
+ * arrays. Flatten it before asking what colour something is.
+ *
+ * Note that nothing here calls `unmount()`. Under RNTL v14 a manual unmount
+ * leaves the next render unable to find anything at all -- including through
+ * its own returned queries -- so every case below gets its own `it` and lets
+ * automatic cleanup do the work. A comparison is two tests, not one test with
+ * two renders.
+ */
+const styleOf = (testID: string): Record<string, unknown> =>
+    Object.assign({}, ...[screen.getByTestId(testID).props.style].flat(Infinity));
+
+const LABEL = {
+    new: "New here",
+    updated: "Changed in xBloom",
+    unchanged: "Already in your library",
+} as const;
+
 describe("CloudImportRow", () => {
     it("shows the recipe name", async () => {
         await renderWithProviders(
@@ -3767,7 +3787,7 @@ describe("CloudImportRow", () => {
         await renderWithProviders(
             <CloudImportRow entry={entry()} onToggle={jest.fn()}/>
         );
-        expect(screen.getByText("New")).toBeTruthy();
+        expect(screen.getByText("New here")).toBeTruthy();
     });
 
     it("says what will happen for an updated recipe", async () => {
@@ -3794,7 +3814,7 @@ describe("CloudImportRow", () => {
                 entry={entry({status: "unchanged", selected: false})}
                 onToggle={jest.fn()}/>
         );
-        expect(screen.getByText("Already imported")).toBeTruthy();
+        expect(screen.getByText("Already in your library")).toBeTruthy();
     });
 
     it("reports its selected state to assistive technology", async () => {
@@ -3827,6 +3847,176 @@ describe("CloudImportRow", () => {
         await fireEvent.press(screen.getByRole("checkbox", {name: /Kenya/}));
         expect(onToggle).toHaveBeenCalled();
     });
+
+    /**
+     * The spec puts the consent on the tick itself: there is no confirming
+     * dialog after it. So the row has to say what ticking would cost before
+     * the user does it, or they are agreeing to something never stated.
+     */
+    it("tells an edited row what importing would cost, before it is ticked", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selected: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(
+            await screen.findByText("Importing replaces the changes you made here")
+        ).toBeTruthy();
+    });
+
+    it.each(["new", "updated", "unchanged"] as const)(
+        "does not caption %s, where ticking costs nothing",
+        async (status) => {
+            await renderWithProviders(
+                <CloudImportRow entry={entry({status})} onToggle={jest.fn()}/>
+            );
+
+            // Positively assert the row is there first: without it this would
+            // pass just as well against a component that rendered nothing.
+            expect(screen.getByText(LABEL[status])).toBeTruthy();
+            expect(
+                screen.queryByText("Importing replaces the changes you made here")
+            ).toBeNull();
+        }
+    );
+
+    /**
+     * The glyph is the only selection signal a sighted user gets, and it can
+     * be exactly backwards while every assertion about copy stays green.
+     */
+    it("shows a ticked box when the entry is selected", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({selected: true})} onToggle={jest.fn()}/>
+        );
+        expect(screen.getByTestId("cloud-import-tick")).toHaveTextContent("\u2713");
+    });
+
+    it("shows an empty box when the entry is not", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({selected: false})} onToggle={jest.fn()}/>
+        );
+        expect(screen.getByTestId("cloud-import-tick")).toHaveTextContent("\u25cb");
+    });
+
+    it("announces an unselected row as unchecked", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({selected: false})} onToggle={jest.fn()}/>
+        );
+        expect(screen.getByRole("checkbox").props.accessibilityState.checked)
+            .toBe(false);
+    });
+
+    /**
+     * The label is the whole row for a screen reader. If it carried only the
+     * name, a blind user ticking an edited recipe would never be told that
+     * doing so discards their changes -- and the tick is the only consent.
+     */
+    it("reads the name, the status and the consequence aloud", async () => {
+        await renderWithProviders(
+            <CloudImportRow
+                entry={entry({status: "edited", selected: false})}
+                onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityLabel).toBe(
+            "Kenya, Edited here, Importing replaces the changes you made here"
+        );
+    });
+
+    it("wears the recipe's own accent when selected", async () => {
+        const picked = entry({selected: true});
+        picked.recipe.accentIndex = 2;
+
+        await renderWithProviders(<CloudImportRow entry={picked} onToggle={jest.fn()}/>);
+
+        expect(styleOf("cloud-import-accent").backgroundColor)
+            .toBe(accents.coffee[2]);
+    });
+
+    it("steps the accent back when the entry is not selected", async () => {
+        const unpicked = entry({selected: false});
+        unpicked.recipe.accentIndex = 2;
+
+        await renderWithProviders(<CloudImportRow entry={unpicked} onToggle={jest.fn()}/>);
+
+        expect(styleOf("cloud-import-accent").backgroundColor).toBe(palette.dim);
+    });
+
+    it("gives a tea recipe a tea accent, not a coffee one", async () => {
+        // The two palettes are separate on purpose, and a tea recipe drawn in
+        // a coffee accent would be the one place the import screen disagreed
+        // with the library it is feeding.
+        const tea = entry({selected: true});
+        // Ours, not xBloom's: their cup types are 1-4 and tea is their 4,
+        // while CUP_TYPE.TEA is 0x03 here. The assertion below is what stops
+        // a wrong constant from quietly making this a coffee test.
+        tea.recipe.cupType = CUP_TYPE.TEA;
+        tea.recipe.accentIndex = 1;
+        expect(tea.recipe.isTea()).toBe(true);
+
+        await renderWithProviders(<CloudImportRow entry={tea} onToggle={jest.fn()}/>);
+
+        expect(styleOf("cloud-import-accent").backgroundColor).toBe(accents.tea[1]);
+        expect(accents.tea[1]).not.toBe(accents.coffee[1]);
+    });
+
+    // Spec 4.4: already-imported is "unchecked, dimmed". The rows that would
+    // act carry full-strength text; the two that would not step back.
+    it.each(["new", "updated"] as const)(
+        "keeps %s at full strength", async (status) => {
+            await renderWithProviders(
+                <CloudImportRow entry={entry({status})} onToggle={jest.fn()}/>
+            );
+            expect(styleOf("cloud-import-status").color).toBe(palette.text);
+        }
+    );
+
+    it.each(["unchanged", "edited"] as const)(
+        "dims %s, which is not offering to do anything", async (status) => {
+            await renderWithProviders(
+                <CloudImportRow entry={entry({status})} onToggle={jest.fn()}/>
+            );
+            expect(styleOf("cloud-import-status").color).toBe(palette.dim);
+        }
+    );
+
+    it("carries the selection in the tick's colour, not only its shape", async () => {
+        const picked = entry({selected: true});
+        picked.recipe.accentIndex = 2;
+
+        await renderWithProviders(<CloudImportRow entry={picked} onToggle={jest.fn()}/>);
+
+        expect(styleOf("cloud-import-tick").color).toBe(accents.coffee[2]);
+    });
+
+    it("steps the tick back when the entry is not selected", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({selected: false})} onToggle={jest.fn()}/>
+        );
+        expect(styleOf("cloud-import-tick").color).toBe(palette.dim);
+    });
+
+    /**
+     * The three captionless statuses have nothing to append, and a label built
+     * by joining an absent one reads "Kenya, New here, " -- a trailing pause
+     * and then silence, every row, for the whole list.
+     */
+    it("does not trail an empty clause when there is no caption", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "new"})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityLabel)
+            .toBe("Kenya, New here");
+    });
+
+    it("keeps the name at full strength and the caption stepped back", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selected: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(styleOf("cloud-import-name").color).toBe(palette.text);
+        expect(styleOf("cloud-import-caption").color).toBe(palette.dim);
+    });
 });
 ```
 
@@ -3844,8 +4034,8 @@ import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
-import {accents, palette} from "@/constants/colors";
-import {accentGroupFor} from "@/library/accent";
+import {palette} from "@/constants/colors";
+import {resolveAccent} from "@/library/accent";
 import type {ImportEntry, ImportStatus} from "@/library/cloud/importPlan";
 
 /**
@@ -3855,21 +4045,45 @@ import type {ImportEntry, ImportStatus} from "@/library/cloud/importPlan";
  * has gone wrong. The app is saying it will not overwrite a change the user
  * made here unless asked, which is a courtesy, and a red row would read as a
  * problem to be solved.
+ *
+ * It does carry one extra line, though. Ticking the box *is* the consent --
+ * there is no confirmation dialog after it -- so the row has to state the
+ * consequence at the point of decision, or the user is agreeing to something
+ * the screen never told them (spec 4.4).
  */
 
+// The wording runs on one axis -- *here* versus *in xBloom* -- so the four
+// statuses read as one sentence about two places rather than four unrelated
+// adjectives. Taken from spec 4.4, which quotes its copy.
 const LABELS: Record<ImportStatus, string> = {
-    new: "New",
+    new: "New here",
     updated: "Changed in xBloom",
-    unchanged: "Already imported",
+    unchanged: "Already in your library",
     edited: "Edited here",
 };
 
+/**
+ * The consequence, for the one status where ticking costs the user something.
+ *
+ * Only `edited` has one: for the others, importing is either the obvious thing
+ * or a no-op, and a caption on every row would turn into wallpaper and stop
+ * being read on the row that matters.
+ */
+const CAPTIONS: Partial<Record<ImportStatus, string>> = {
+    edited: "Importing replaces the changes you made here",
+};
+
+// `unchanged` and `edited` step back to secondary text. `dim` rather than
+// `muted`: `muted` is 4.12:1 on `base` and documented as a non-text colour, so
+// a status line drawn in it would fall under AA.
 const TONES: Record<ImportStatus, string> = {
     new: palette.text,
     updated: palette.text,
-    unchanged: palette.muted,
-    edited: palette.muted,
+    unchanged: palette.dim,
+    edited: palette.dim,
 };
+
+const BAR_WIDTH = 4;
 
 type Props = {
     entry: ImportEntry;
@@ -3877,15 +4091,19 @@ type Props = {
 };
 
 export default function CloudImportRow({entry, onToggle}: Props) {
-    const group = accentGroupFor(entry.recipe);
-    const palette_ = accents[group];
-    const accent = palette_[(entry.recipe.accentIndex ?? 0) % palette_.length];
+    // The library's own resolver, not a local lookup: it validates the index
+    // and falls back to the same hash every other screen uses, so a recipe
+    // with a missing or bogus index is the same colour here as it will be in
+    // the list this screen is feeding.
+    const accent = resolveAccent(entry.recipe);
 
     return (
         <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{checked: entry.selected}}
-            accessibilityLabel={`${entry.name}, ${LABELS[entry.status]}`}
+            accessibilityLabel={[entry.name, LABELS[entry.status], CAPTIONS[entry.status]]
+                .filter(Boolean)
+                .join(", ")}
             onPress={() => onToggle(entry.cloudId)}
             style={({pressed}) => ({
                 opacity: pressed ? 0.7 : 1,
@@ -3896,17 +4114,29 @@ export default function CloudImportRow({entry, onToggle}: Props) {
                     recipe will wear once it lands, so the choice and its
                     result are visible in the same glance. */}
                 <YStack
-                    width={4}
+                    testID="cloud-import-accent"
+                    width={BAR_WIDTH}
                     height={32}
-                    borderRadius={2}
+                    // Half the width, so the bar is a pill at any width. Not a
+                    // `$` token: the radius is a consequence of this bar's
+                    // geometry, and a token would drift away from it.
+                    borderRadius={BAR_WIDTH / 2}
                     backgroundColor={entry.selected ? accent : palette.dim}/>
                 <YStack flex={1} gap="$1">
-                    <Text color={palette.text} fontSize={16}>{entry.name}</Text>
-                    <Text color={TONES[entry.status]} fontSize={13}>
+                    <Text testID="cloud-import-name" color={palette.text} fontSize={16}>
+                        {entry.name}
+                    </Text>
+                    <Text testID="cloud-import-status" color={TONES[entry.status]} fontSize={13}>
                         {LABELS[entry.status]}
                     </Text>
+                    {CAPTIONS[entry.status] ? (
+                        <Text testID="cloud-import-caption" color={palette.dim} fontSize={12}>
+                            {CAPTIONS[entry.status]}
+                        </Text>
+                    ) : null}
                 </YStack>
                 <Text
+                    testID="cloud-import-tick"
                     color={entry.selected ? accent : palette.dim}
                     fontSize={18}>
                     {entry.selected ? "✓" : "○"}
@@ -3924,7 +4154,7 @@ colour, so the status line uses `dim` for the two greyed states. Fix `TONES` to 
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest components/__tests__/CloudImportRow.test.tsx`
-Expected: PASS, 8 tests.
+Expected: PASS, 27 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -3955,7 +4185,11 @@ import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 import ImportCloudScreen from "@/app/importCloud";
 import {renderWithProviders} from "@/test-utils/render";
 
-const hook = {
+// The screen constructs a `new RecipeDatabase()` at module scope of the
+// component body; without this mock jest opens real expo-sqlite.
+jest.mock("@/library/RecipeDatabase");
+
+const mockHook = {
     status: "signedOut" as string,
     session: null as unknown,
     plan: null as unknown,
@@ -3969,13 +4203,13 @@ const hook = {
 };
 
 jest.mock("@/hooks/useCloudImport", () => ({
-    useCloudImport: () => hook,
+    useCloudImport: () => mockHook,
 }));
 
 describe("importCloud", () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        Object.assign(hook, {
+        Object.assign(mockHook, {
             status: "signedOut",
             session: null,
             plan: null,
@@ -3999,31 +4233,31 @@ describe("importCloud", () => {
         await fireEvent.changeText(screen.getByLabelText("Password"), "secret");
         await fireEvent.press(screen.getByRole("button", {name: /sign in/i}));
 
-        expect(hook.submitSignIn).toHaveBeenCalledWith("a@b.c", "secret");
+        expect(mockHook.submitSignIn).toHaveBeenCalledWith("a@b.c", "secret");
     });
 
     it("says so when the credentials were refused", async () => {
-        hook.error = "credentials";
+        mockHook.error = "credentials";
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.getByText(/Email or password not accepted/i)).toBeTruthy();
     });
 
     it("says so when the network was unreachable", async () => {
-        hook.error = "network";
+        mockHook.error = "network";
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.getByText(/Could not reach xBloom/i)).toBeTruthy();
     });
 
     it("lists the offered recipes once there is a plan", async () => {
-        hook.status = "choosing";
-        hook.plan = {
+        mockHook.status = "choosing";
+        mockHook.plan = {
             entries: [
                 {
                     cloudId: 1,
                     name: "Kenya",
                     status: "new",
                     selected: true,
-                    recipe: {accentIndex: 0, cupType: 1, isTea: () => false},
+                    recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
                 },
             ],
             unreadable: 0,
@@ -4035,8 +4269,8 @@ describe("importCloud", () => {
     });
 
     it("says how many recipes it could not read rather than hiding it", async () => {
-        hook.status = "choosing";
-        hook.plan = {
+        mockHook.status = "choosing";
+        mockHook.plan = {
             entries: [],
             unreadable: 2,
             counts: {new: 0, updated: 0, unchanged: 0, edited: 0},
@@ -4047,8 +4281,8 @@ describe("importCloud", () => {
     });
 
     it("says so when the account has no recipes at all", async () => {
-        hook.status = "choosing";
-        hook.plan = {
+        mockHook.status = "choosing";
+        mockHook.plan = {
             entries: [],
             unreadable: 0,
             counts: {new: 0, updated: 0, unchanged: 0, edited: 0},
@@ -4059,15 +4293,15 @@ describe("importCloud", () => {
     });
 
     it("confirms the chosen recipes", async () => {
-        hook.status = "choosing";
-        hook.plan = {
+        mockHook.status = "choosing";
+        mockHook.plan = {
             entries: [
                 {
                     cloudId: 1,
                     name: "Kenya",
                     status: "new",
                     selected: true,
-                    recipe: {accentIndex: 0, cupType: 1, isTea: () => false},
+                    recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
                 },
             ],
             unreadable: 0,
@@ -4076,12 +4310,12 @@ describe("importCloud", () => {
 
         await renderWithProviders(<ImportCloudScreen/>);
         await fireEvent.press(screen.getByRole("button", {name: /import 1 recipe/i}));
-        expect(hook.confirm).toHaveBeenCalled();
+        expect(mockHook.confirm).toHaveBeenCalled();
     });
 
     it("reports what it imported when it is done", async () => {
-        hook.status = "done";
-        hook.imported = 3;
+        mockHook.status = "done";
+        mockHook.imported = 3;
 
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.getByText(/Imported 3 recipes/i)).toBeTruthy();
@@ -4195,13 +4429,13 @@ export default function ImportCloudScreen() {
                     )}
 
                     {(cloud.status === "listing" || cloud.status === "restoring") && (
-                        <Text color={palette.muted}>Reading your recipes…</Text>
+                        <Text color={palette.dim}>Reading your recipes…</Text>
                     )}
 
                     {cloud.status === "choosing" && cloud.plan && (
                         <>
                             {cloud.plan.entries.length === 0 && (
-                                <Text color={palette.muted}>
+                                <Text color={palette.dim}>
                                     No recipes to import. This lists the recipes you
                                     created in xBloom, not ones you have opened from
                                     a link.
@@ -4218,7 +4452,7 @@ export default function ImportCloudScreen() {
                             {cloud.plan.unreadable > 0 && (
                                 // Said out loud. A recipe quietly missing from a
                                 // list is the one failure the user cannot notice.
-                                <Text color={palette.muted} fontSize={13}>
+                                <Text color={palette.dim} fontSize={13}>
                                     {cloud.plan.unreadable} recipes could not be read
                                     and were left out.
                                 </Text>
@@ -4242,7 +4476,7 @@ export default function ImportCloudScreen() {
                     )}
 
                     {cloud.status === "importing" && (
-                        <Text color={palette.muted}>Importing…</Text>
+                        <Text color={palette.dim}>Importing…</Text>
                     )}
 
                     {cloud.status === "done" && (
