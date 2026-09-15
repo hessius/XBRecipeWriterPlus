@@ -420,7 +420,7 @@ export function encryptChunks(plaintext: string, pem: string): string {
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/rsa.test.ts`
-Expected: PASS, 6 tests. The golden-vector one failing means the exponentiation or the
+Expected: PASS, 8 tests. The golden-vector one failing means the exponentiation or the
 DER walk is wrong — nothing downstream will work until it is green.
 
 `expo-crypto` needs a mock. Add to `jest.setup.js`, alongside the existing mocks:
@@ -429,14 +429,32 @@ DER walk is wrong — nothing downstream will work until it is green.
 jest.mock("expo-crypto", () => ({
     getRandomBytes: (n) => {
         const out = new Uint8Array(n);
-        for (let i = 0; i < n; i++) out[i] = (i * 7 + 13) % 256;
+        for (let i = 0; i < n; i++) out[i] = i % 16 === 3 ? 0 : (i * 7 + 13) % 256;
         return out;
     },
 }));
 ```
 
-That deterministic stub deliberately produces a zero byte every 256, which is what makes
-the "never uses a zero byte" test meaningful rather than decorative.
+The zeros are every sixteenth byte, and at offset 3 rather than 0, and both numbers
+matter. A zero every 256 is never reached: `pkcs1Pad` for this key asks for 124 bytes
+at a time and the sequence restarts on each call, so the filtering would never be
+exercised and the test would pass with the filter deleted. And a zero at offset 0 hangs
+`pkcs1Pad` outright — its final call asks for a single byte, and a one-byte draw that is
+always zero never makes progress.
+
+Because that is easy to get wrong and impossible to notice, the suite guards it. Add to
+the `pkcs1Pad` describe, above the zero-byte test, and add `import * as Crypto from
+"expo-crypto";` at the top of the test file:
+
+```ts
+    it("is tested against a source that actually yields zero bytes", async () => {
+        const drawn = Crypto.getRandomBytes(124);
+        expect(Array.from(drawn)).toContain(0);
+    });
+```
+
+Prove the pair works by mutation: delete `if (b === 0) continue;` from `pkcs1Pad` and
+confirm "never uses a zero byte inside the padding string" fails. Put it back.
 
 - [ ] **Step 6: Commit**
 

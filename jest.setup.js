@@ -60,14 +60,21 @@ jest.mock("expo-file-system", () => {
 
 /**
  * `expo-crypto` is a native module. The stub is deterministic so the golden
- * vectors stay reproducible, and it deliberately emits a zero byte every 256
- * so the "never uses a zero byte inside the padding" test has something real
- * to reject rather than passing by luck.
+ * vectors stay reproducible, and it deliberately emits zero bytes so the
+ * "never uses a zero byte inside the padding" test has something real to
+ * reject rather than passing by luck.
+ *
+ * Every sixteenth byte, and at offset 3 rather than 0, for two reasons a
+ * first attempt got wrong. A zero every 256 is never reached: `pkcs1Pad` for
+ * this key asks for 124 bytes and the sequence restarts on each call, so the
+ * test passed whether or not the filtering existed. And a zero at offset 0
+ * would hang `pkcs1Pad` outright — its last call asks for a single byte, and
+ * a one-byte draw that is always zero never makes progress.
  */
 jest.mock("expo-crypto", () => ({
     getRandomBytes: (n) => {
         const out = new Uint8Array(n);
-        for (let i = 0; i < n; i++) out[i] = (i * 7 + 13) % 256;
+        for (let i = 0; i < n; i++) out[i] = i % 16 === 3 ? 0 : (i * 7 + 13) % 256;
         return out;
     },
 }));

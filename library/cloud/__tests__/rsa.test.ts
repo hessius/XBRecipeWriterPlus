@@ -1,3 +1,5 @@
+import * as Crypto from "expo-crypto";
+
 import {encryptChunks, modPow, parsePublicKey, pkcs1Pad} from "../rsa";
 import {XBLOOM_PUBLIC_KEY} from "../key";
 
@@ -51,6 +53,15 @@ describe("pkcs1Pad", () => {
         expect(padded[1]).toBe(0x02);
         expect(padded[127 - 3]).toBe(0x00);
         expect(Array.from(padded.slice(125))).toEqual([1, 2, 3]);
+    });
+
+    it("is tested against a source that actually yields zero bytes", async () => {
+        // Guards the test below. The first stub drew its zeros every 256
+        // bytes, but `pkcs1Pad` never asks for more than 124 at a time and
+        // the sequence restarts on each call, so the filtering was never
+        // exercised and the test would have passed with the filter deleted.
+        const drawn = Crypto.getRandomBytes(124);
+        expect(Array.from(drawn)).toContain(0);
     });
 
     it("never uses a zero byte inside the padding string", async () => {
