@@ -79,6 +79,19 @@ jest.mock("expo-crypto", () => ({
     },
 }));
 
+/**
+ * `expo-secure-store` is native; the mock is an in-memory keychain so the
+ * session tests can round-trip through it without a device.
+ */
+jest.mock("expo-secure-store", () => {
+    const store = new Map();
+    return {
+        setItemAsync: async (k, v) => void store.set(k, v),
+        getItemAsync: async (k) => (store.has(k) ? store.get(k) : null),
+        deleteItemAsync: async (k) => void store.delete(k),
+    };
+});
+
 jest.mock("expo-clipboard", () => ({
     setStringAsync:         jest.fn(async () => true),
     hasStringAsync:         jest.fn(async () => false),
