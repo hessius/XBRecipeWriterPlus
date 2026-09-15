@@ -149,6 +149,15 @@ class Recipe {
      */
     public cloudFingerprint?: string;
     /**
+     * The colour this recipe wore in xBloom, carried only from the row to the
+     * accent matcher.
+     *
+     * Not persisted and not in `backup.ts`'s validator map: an imported
+     * recipe's accent is one of ours from the moment it lands, and keeping
+     * the foreign hex would invite something to draw with it later.
+     */
+    public cloudColor?: string;
+    /**
      * Bypass water is dispensed alongside the brew for dilution. It is NOT
      * stored on the NFC card — it is a cloud/model-only concept. These defaults
      * are load-bearing: the share-link payload builder reads them and compares

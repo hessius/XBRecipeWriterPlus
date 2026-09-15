@@ -21,6 +21,23 @@ export class XBloomRecipe {
         this.id = source.kind === "xid" ? source.xid : source.id;
     }
 
+    /**
+     * Wrap a `recipeVo` this app already holds.
+     *
+     * The account list returns complete `recipeVo` objects — the #74 spike
+     * checked every field `getRecipe` reads — so an account import is one
+     * request, not one per recipe. The rows are entered as `xid` sources
+     * because that path reads `shareRecipeLink`, which is where a row carries
+     * its share id.
+     */
+    public static fromAccountRow(row: Record<string, unknown>): XBloomRecipe {
+        const pods = row.podsVo as {id?: unknown} | undefined;
+        const xid = typeof pods?.id === "string" ? pods.id : "";
+        const instance = new XBloomRecipe({kind: "xid", xid});
+        instance.xbRecipeJSON = {recipeVo: row};
+        return instance;
+    }
+
     private containsChineseCustomChars(inputString: string) {
         // Define the Unicode values for the characters
         const unicodeCharacters = [0x660E, 0x8C26]; // Unicode for "明" and "谦"

@@ -33,7 +33,7 @@ async function editorFor(xid: string, xbloomName: string) {
 
 describe("deferring the XID lookup while the ID field is focused", () => {
     it("holds a failed lookup until the field blurs", async () => {
-        (XBloomRecipe as jest.Mock).mockImplementation(() => ({
+        (XBloomRecipe as unknown as jest.Mock).mockImplementation(() => ({
             fetchRecipeDetail: () => Promise.reject(new Error("offline")),
             getRecipeTitle:    () => "",
             getRecipe:         () => null
@@ -55,7 +55,7 @@ describe("deferring the XID lookup while the ID field is focused", () => {
     });
 
     it("holds a successful lookup's name until the field blurs", async () => {
-        (XBloomRecipe as jest.Mock).mockImplementation(() => ({
+        (XBloomRecipe as unknown as jest.Mock).mockImplementation(() => ({
             fetchRecipeDetail: () => Promise.resolve(),
             getRecipeTitle:    () => "Ethiopia Guji",
             getRecipe:         () => null
@@ -75,7 +75,7 @@ describe("deferring the XID lookup while the ID field is focused", () => {
     });
 
     it("applies the lookup at once when the field is not focused", async () => {
-        (XBloomRecipe as jest.Mock).mockImplementation(() => ({
+        (XBloomRecipe as unknown as jest.Mock).mockImplementation(() => ({
             fetchRecipeDetail: () => Promise.resolve(),
             getRecipeTitle:    () => "Ethiopia Guji",
             getRecipe:         () => null
