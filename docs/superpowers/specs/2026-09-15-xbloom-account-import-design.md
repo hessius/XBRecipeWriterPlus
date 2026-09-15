@@ -75,18 +75,58 @@ convenient — one place to fix a changed endpoint — and it would make the pri
 claim unverifiable, which is the whole thing #75 exists to protect. This is
 recorded here so it is not re-proposed as a simplification.
 
-### 2.3 New dependency
+### 2.3 New dependencies
 
-`expo-secure-store`, installed with `npx expo install`. It is a native addition,
-so `expo.version` in `app.json` needs a bump (`runtimeVersion.policy` is
-`appVersion`).
+`expo-secure-store` for the token, and `expo-crypto` for the random bytes of
+PKCS#1 padding. Both installed with `npx expo install`. They are native
+additions, so `expo.version` in `app.json` needs a bump
+(`runtimeVersion.policy` is `appVersion`).
+
+### 2.4 RSA on the device
+
+The app has never encrypted anything. The only RSA in the repo is
+`api/_lib/xbloom.ts`, which uses `node:crypto` — unavailable in Hermes — and
+which `library/` may not import anyway.
+
+So `transport.ts` carries its own RSA-PKCS#1 v1.5 public encrypt: a DER walk
+for the modulus and exponent, and `BigInt` modular exponentiation. This was
+prototyped before being written down and its ciphertext matches
+`node:crypto`'s `publicEncrypt` byte for byte on a fixed padded block, so it is
+a verified approach rather than a hopeful one. It is roughly sixty lines and
+adds no dependency.
+
+A JS RSA library was considered and rejected: `node-forge` and `jsencrypt` are
+each an order of magnitude more code than the one operation we need, and both
+carry their own ASN.1 and BigInteger implementations that we would ship and
+never otherwise use.
+
+The padding's random bytes are the one thing we do not write ourselves.
+`Math.random` is not a source for them, SDK 57 ships no `crypto.getRandomValues`
+polyfill, and `expo-crypto.getRandomBytes` is synchronous and native — hence
+the dependency above.
 
 ## 3. Data model
 
 Two new fields on `Recipe`:
 
-- **`cloudId: number`** — xBloom's `tableId`. `0` when the recipe did not come
-  from there.
+- **`cloudId: number`** — xBloom's `tableId` for this recipe **in your own
+  account library**. `0` when the recipe did not come from there.
+
+#### 3.0.1 Three ids that are not each other
+
+`Recipe` already carries two id fields pointing in different directions, and
+`Recipe.ts:120-130` warns about confusing them. `cloudId` is a third. The doc
+comment on the new field must state all three, because picking the wrong one is
+a silent bug:
+
+| Field | Direction | Meaning |
+|---|---|---|
+| `shareId` | inbound | the id a recipe was **imported from** via a share link |
+| `sharedTableId` | outbound | the id a share link was **minted from**, for a recipe we published |
+| `cloudId` | inbound | the id of this recipe **in your own account library** |
+
+Reusing `sharedTableId` for import would make a minted link look like an import
+origin, which is the exact failure its existing comment was written to prevent.
 - **`cloudFingerprint: string`** — a hash of the recipe's **brew-defining
   fields as imported**.
 
@@ -245,6 +285,14 @@ Collisions are allowed. Two of the observed recipes already share `#DEC3AF`, so
 duplicate accents are normal upstream, and nearest-match deliberately overrides
 the usual least-used assignment when it does match.
 
+### 5.2 What the matcher returns
+
+`accentIndex` on a `Recipe` is an **index into the beverage's accent array**,
+not a hex string (`Recipe.ts:118`). So `accentMatch.ts` returns
+`number | null` — the index of the nearest accent, or `null` when nothing is
+within `MAX_ACCENT_DISTANCE`. On `null` the caller falls back to the existing
+`assignAccent(recipe, others)` from `library/accent.ts`.
+
 ## 6. Credentials and failure
 
 ### 6.1 What is stored
@@ -303,12 +351,14 @@ alerts.
 
 A partial import keeps what it managed to write — those recipes are valid.
 
-### 6.6 Dependency worth naming
+### 6.6 No dependency on the index branch
 
-Writing many recipes at once wants `RecipeDatabase.atomically`, which exists on
-the unmerged `recipe-index` branch, not on `main`. M6 assumes that branch has
-landed. Without it the import writes rows one at a time and a mid-import failure
-leaves a partial library with no rollback.
+An earlier draft of this design assumed the import needed
+`RecipeDatabase.atomically`, which lives on the unmerged `recipe-index` branch.
+It does not: `insertRecipes` on `main` already wraps its loop in
+`withTransactionSync`, so a mid-import failure rolls back cleanly.
+
+M6 can therefore be built and shipped independently of `recipe-index`.
 
 ## 7. What this makes possible in #76
 
@@ -334,8 +384,10 @@ The pure core carries the weight.
 - **`accentMatch.ts`** — golden tests on the five observed colours, including
   the tea one falling back rather than matching, the `MAX_ACCENT_DISTANCE`
   boundary, the tea-group constraint and the `0x13` trap.
-- **`transport.ts`** — 117-byte PKCS#1 chunking against the 1024-bit key. No
-  network.
+- **`transport.ts`** — the DER walk recovering the known 1024-bit modulus and
+  exponent `65537`; a padded block encrypting to a ciphertext that matches a
+  golden vector; 117-byte chunking, so a 200-byte plaintext yields 256 bytes of
+  ciphertext in two blocks. No network.
 - **`cloudLibrary.ts`** — a fake transport proving it walks `totalPage` rather
   than assuming one page.
 - **`session.ts`** — a mocked secure store, with one test asserting that after a
