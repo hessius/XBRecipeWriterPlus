@@ -1542,7 +1542,8 @@ In `library/RecipeDatabase.ts`, after `copy.accentIndex = undefined;`:
 ```
 
 with a test in `library/__tests__/RecipeDatabase.test.ts` asserting the copy
-has neither field and the original still has both.
+has neither field and the original still has both -- assert the original's
+fingerprint too, not just its id, or clearing the wrong one passes.
 
 ---
 

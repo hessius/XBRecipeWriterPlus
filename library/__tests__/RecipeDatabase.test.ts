@@ -195,7 +195,9 @@ describe("duplicating a recipe", () => {
         expect(copy!.cloudId).toBeUndefined();
         expect(copy!.cloudFingerprint).toBeUndefined();
         // The original is untouched -- it is still the one that came down.
-        expect(database.getRecipe(original.uuid)?.cloudId).toBe(4242);
+        const kept = database.getRecipe(original.uuid);
+        expect(kept?.cloudId).toBe(4242);
+        expect(kept?.cloudFingerprint).toBe("abc123");
     });
 
     it("numbers further copies instead of repeating one name", () => {
