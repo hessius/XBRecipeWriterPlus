@@ -624,6 +624,11 @@ Expected: FAIL — `Cannot find module '../transport'`.
 Create `library/cloud/transport.ts`:
 
 ```ts
+// The key lives in `key.ts` so the RSA tests can reach it without importing
+// the HTTP layer. Imported rather than re-exported bare, because `post` uses
+// it; the re-export below is for callers who think of it as part of the
+// transport.
+import {XBLOOM_PUBLIC_KEY} from "./key";
 import {encryptChunks} from "./rsa";
 
 /**
@@ -643,11 +648,6 @@ import {encryptChunks} from "./rsa";
  */
 
 const BASE = "https://client-api.xbloom.com";
-
-// The key lives in `key.ts` so the RSA tests can reach it without importing
-// the HTTP layer. Imported rather than re-exported bare, because `post` uses
-// it; the re-export is for callers who think of it as part of the transport.
-import {XBLOOM_PUBLIC_KEY} from "./key";
 
 export {XBLOOM_PUBLIC_KEY};
 
