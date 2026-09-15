@@ -1702,7 +1702,6 @@ describe("fingerprint", () => {
  */
 const COVERED: [string, (r: Recipe) => void][] = [
     ["name",           (r) => { r.name = "Other"; }],
-    ["xbloomName",     (r) => { r.xbloomName = "Other"; }],
     ["xid",            (r) => { r.xid = "ZZZZ"; }],
     ["dosage",         (r) => { r.dosage += 1; }],
     ["ratio",          (r) => { r.ratio += 1; }],
@@ -1752,6 +1751,9 @@ const IGNORED: [string, (r: Recipe) => void][] = [
     ["uid",              (r) => { r.uid = [7, 8, 9]; }],
     ["cloudId",          (r) => { r.cloudId = 4242; }],
     ["cloudFingerprint", (r) => { r.cloudFingerprint = "stamped"; }],
+    ["xbloomName",       (r) => { r.xbloomName = "Refreshed From Cloud"; }],
+    ["checksum",         (r) => { r.checksum = 123; }],
+    ["shareSnapshot",    (r) => { r.shareSnapshot = "snapshot"; }],
 ];
 
 describe("what the digest must stay blind to", () => {
@@ -1772,11 +1774,11 @@ it("cannot be forged by a name containing the field separator", async () => {
     // Both of these join to the same three-part string, "Kenya|Pour|Over".
     const a = make();
     a.name = "Kenya";
-    a.xbloomName = "Pour\u001fOver";
+    a.xid = "Pour\u001fOver";
 
     const b = make();
     b.name = "Kenya\u001fPour";
-    b.xbloomName = "Over";
+    b.xid = "Over";
 
     expect(fingerprint(a)).not.toBe(fingerprint(b));
 });
@@ -1810,7 +1812,16 @@ import type Recipe from "@/library/Recipe";
  *   card is written. Brewing a recipe is not editing it.
  * - `cloudId`, `cloudFingerprint` — stamping the fingerprint must not change
  *   the fingerprint.
- * - `createdAt`, `tags` — bookkeeping.
+ * - `xbloomName` — the cloud's cached title, whose own doc says it is not
+ *   hand-edited and that a sync refreshes it. The user edits `name`. Hashing
+ *   a field the app rewrites for itself can only ever report an edit nobody
+ *   made; it can never catch one.
+ * - `checksum`, `shareSnapshot` — derived from content, or rewritten when a
+ *   share link is minted. Sharing a recipe is not editing it.
+ * - `createdAt` — bookkeeping.
+ *
+ * Not to be confused with `Recipe.fingerprint()`, which is card-byte identity
+ * for the duplicate detector. This one is about brewing content.
  *
  * This is not a security hash — nobody is trying to forge one. But it is not
  * a throwaway either. Equal means "untouched since import", and untouched is
@@ -1822,7 +1833,6 @@ import type Recipe from "@/library/Recipe";
 export function fingerprint(recipe: Recipe): string {
     const parts: (string | number)[] = [
         recipe.name ?? "",
-        recipe.xbloomName ?? "",
         recipe.xid ?? "",
         recipe.dosage,
         recipe.ratio,
@@ -1849,6 +1859,11 @@ export function fingerprint(recipe: Recipe): string {
         );
     }
 
+    // Every numeric part above must have a value. JSON turns `undefined` into
+    // `null`, which is a shape a string can never take but two absent numbers
+    // can share, so an optional number added here without a default would put
+    // the ambiguity back.
+    //
     // Encoded, not joined. A separator stops 1|23 colliding with 12|3, but
     // `name` and `xbloomName` are whatever the user typed, so a name that
     // contained the separator could reproduce another recipe's parts string
@@ -1889,7 +1904,7 @@ the constructor migrates, and it is not part of the current content.
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/fingerprint.test.ts`
-Expected: PASS, 47 tests.
+Expected: PASS, 49 tests.
 
 - [ ] **Step 5: Commit**
 

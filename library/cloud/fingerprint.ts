@@ -16,7 +16,16 @@ import type Recipe from "@/library/Recipe";
  *   card is written. Brewing a recipe is not editing it.
  * - `cloudId`, `cloudFingerprint` — stamping the fingerprint must not change
  *   the fingerprint.
- * - `createdAt`, `tags` — bookkeeping.
+ * - `xbloomName` — the cloud's cached title, whose own doc says it is not
+ *   hand-edited and that a sync refreshes it. The user edits `name`. Hashing
+ *   a field the app rewrites for itself can only ever report an edit nobody
+ *   made; it can never catch one.
+ * - `checksum`, `shareSnapshot` — derived from content, or rewritten when a
+ *   share link is minted. Sharing a recipe is not editing it.
+ * - `createdAt` — bookkeeping.
+ *
+ * Not to be confused with `Recipe.fingerprint()`, which is card-byte identity
+ * for the duplicate detector. This one is about brewing content.
  *
  * This is not a security hash — nobody is trying to forge one. But it is not
  * a throwaway either. Equal means "untouched since import", and untouched is
@@ -28,7 +37,6 @@ import type Recipe from "@/library/Recipe";
 export function fingerprint(recipe: Recipe): string {
     const parts: (string | number)[] = [
         recipe.name ?? "",
-        recipe.xbloomName ?? "",
         recipe.xid ?? "",
         recipe.dosage,
         recipe.ratio,
@@ -55,6 +63,11 @@ export function fingerprint(recipe: Recipe): string {
         );
     }
 
+    // Every numeric part above must have a value. JSON turns `undefined` into
+    // `null`, which is a shape a string can never take but two absent numbers
+    // can share, so an optional number added here without a default would put
+    // the ambiguity back.
+    //
     // Encoded, not joined. A separator stops 1|23 colliding with 12|3, but
     // `name` and `xbloomName` are whatever the user typed, so a name that
     // contained the separator could reproduce another recipe's parts string

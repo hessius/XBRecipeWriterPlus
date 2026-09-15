@@ -143,7 +143,8 @@ temperature, pattern, agitation and pause — in a fixed field order, so the has
 is stable across serialisation changes.
 
 It deliberately **excludes** `uuid`, `key`, `accent`, `tags`, `backup`,
-`offline_backup` and `cloudId`. Two reasons, and both are bugs avoided:
+`offline_backup`, `cloudId`, `checksum`, `shareSnapshot` and `xbloomName`.
+Three reasons, and all are bugs avoided:
 
 - We assign the accent ourselves at import (§5). A fingerprint taken over the
   whole recipe would differ from the cloud's the moment it was stored, marking
@@ -151,6 +152,13 @@ It deliberately **excludes** `uuid`, `key`, `accent`, `tags`, `backup`,
 - `backup` and `offline_backup` hold raw card bytes and change when a recipe is
   written to a card. Writing a card is not editing a recipe, and it must not
   make one look edited.
+
+- `xbloomName` is the cloud's cached title and is not hand-edited: the user
+  types into `name`, and a refresh rewrites `xbloomName` from xBloom. A field
+  the app rewrites for itself can only report an edit nobody made, never catch
+  one. `checksum` and `shareSnapshot` are excluded on the same ground -- one is
+  derived from the card bytes, the other is rewritten when a share link is
+  minted, and sharing a recipe is not editing it.
 
 Tags are excluded for the same reason: they are ours, the cloud has no concept
 of them, and tagging an imported recipe should not cost the user their ability
