@@ -4963,6 +4963,7 @@ Two things that reviews found and that are easy to get wrong again:
   privacy cost. Settings reports it in a toast and leaves the row saying the
   account is connected, because it still is.
 
+---
 ## Task 15: Gates and the device pass
 
 Nothing here is new code. This is the point at which the feature is either finished or
