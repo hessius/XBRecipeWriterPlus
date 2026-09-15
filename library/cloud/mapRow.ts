@@ -38,7 +38,11 @@ export type MappedRow = {
  * a partial walk outright for the same reason.
  */
 export function mapRow(row: CloudRow): MappedRow | null {
-    if (typeof row.tableId !== "number") return null;
+    // Zero is not a row id, it is the design's sentinel for "did not come from
+    // an account" (spec 3.0.1). A row claiming it is a row we cannot identify,
+    // and letting one through would mint a recipe whose id matches every
+    // hand-made recipe in the library.
+    if (typeof row.tableId !== "number" || row.tableId <= 0) return null;
 
     const recipe = XBloomRecipe.fromAccountRow(row).getRecipe();
     if (!recipe) return null;

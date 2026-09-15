@@ -2575,48 +2575,70 @@ testable function.
 Create `library/cloud/__tests__/importPlan.test.ts`:
 
 ```ts
-import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import {fingerprint} from "../fingerprint";
 import {buildImportPlan} from "../importPlan";
+import {mapRow} from "../mapRow";
 
+// The plan's fixture used a `pourList` shape the mapper does not read
+// (`water`/`pourType`/`speed`/`pauseTime`/`agitation`); the real field names
+// are `volume`/`temperature`/`pattern`/`flowRate`/`pausing`/
+// `isEnableVibration*`, verified against `mapRow.test.ts` and
+// `XBloomRecipe.getRecipe`. A row with the wrong names maps to a recipe with a
+// NaN flow rate and no volume, so every fingerprint comparison below would be
+// noise.
 const row = (over: Record<string, unknown> = {}) => ({
     tableId: 1,
     theName: "Kenya",
     theColor: "#B8C9A2",
     grandWater: 16,
     dose: 18,
-    pourCount: 1,
+    pourCount: 2,
     grinderSize: 60,
     isSetGrinderSize: 1,
     rpm: 100,
     cupType: 1,
     podsVo: {id: "AB12CD"},
+    // Two stages, not one of 288 ml: a non-tea stage is capped at 240 ml by
+    // `cardLimits.ts`, and the next stop for one of these is a genuine card.
     pourList: [
         {
             pourNumber: 1,
-            water: 288,
+            volume: 144,
             temperature: 93,
-            pourType: 0,
-            speed: 3,
-            pauseTime: 30,
-            agitation: 0,
+            pattern: 1,
+            flowRate: 3,
+            pausing: 30,
+            isEnableVibrationBefore: 0,
+            isEnableVibrationAfter: 0,
+        },
+        {
+            pourNumber: 2,
+            volume: 144,
+            temperature: 93,
+            pattern: 2,
+            flowRate: 3,
+            pausing: 0,
+            isEnableVibrationBefore: 0,
+            isEnableVibrationAfter: 0,
         },
     ],
     ...over,
 });
 
-/** The local recipe that a given row would have produced when imported. */
+/**
+ * The local recipe that a given row would have produced when imported.
+ *
+ * The plan hand-reconstructed this recipe, but a hand-built copy has to
+ * replicate everything `XBloomRecipe.getRecipe` and `fixRatio` derive, and any
+ * drift there makes the fingerprint comparison test something other than what
+ * it claims. This is the state we are comparing against, so it is produced by
+ * the very mapper the plan uses, then stamped the way `buildImportPlan` stamps
+ * a fresh import: accent excluded from the fingerprint on purpose.
+ */
 function imported(over: Record<string, unknown> = {}): Recipe {
-    const recipe = new Recipe(undefined, undefined);
-    recipe.name = "Kenya";
-    recipe.dosage = 18;
-    recipe.ratio = 16;
-    recipe.grindSize = 60;
-    recipe.grindRPM = 100;
-    recipe.xid = "AB12CD";
-    recipe.pours = [new Pour(1, 288, 93, 3, 0, 0, 30)];
-    recipe.cloudId = 1;
+    const mapped = mapRow(row());
+    const recipe = mapped!.recipe;
     Object.assign(recipe, over);
     recipe.cloudFingerprint = recipe.cloudFingerprint ?? fingerprint(recipe);
     return recipe;
@@ -2732,10 +2754,16 @@ describe("buildImportPlan", () => {
         expect(index).toBeLessThan(8);
     });
 
-    it("stamps the fingerprint after the accent is chosen", async () => {
-        // Order matters only in that it must not matter: the fingerprint
-        // excludes the accent, so a recipe must read as unchanged on the very
-        // next import.
+    it("reads a recipe it just imported as unchanged", async () => {
+        // This is the first of the two fingerprint traps in spec 3.1. We give
+        // every import an accent of our own, so if the fingerprint covered the
+        // accent, every recipe would come back "edited" the moment it landed
+        // and the feature would accuse the user of edits they never made.
+        //
+        // It does not pin the *order* of the stamp and the accent, despite an
+        // earlier title here claiming it did: the fingerprint excludes the
+        // accent, so both orders give the same answer. The exclusion is pinned
+        // directly in `fingerprint.test.ts`.
         const first = buildImportPlan([row()], []);
         const stored = first.entries[0].recipe;
 
@@ -2771,6 +2799,87 @@ describe("buildImportPlan", () => {
             unchanged: 1,
             edited: 1,
         });
+    });
+
+    /**
+     * The spec calls this the one bug in the design that would quietly destroy
+     * work: `cloudId: 0` means "did not come from an account", so a hand-made
+     * recipe must never be seen as already imported and replaced by a
+     * stranger's. Guarded on both sides -- a row cannot claim id 0, and a local
+     * recipe holding the sentinel cannot be matched by one.
+     */
+    it("never matches a recipe carrying the cloudId 0 sentinel", async () => {
+        const handMade = new Recipe();
+        handMade.name = "My own";
+        handMade.uuid = "mine";
+        handMade.cloudId = 0;
+
+        const plan = buildImportPlan([row({tableId: 0})], [handMade]);
+
+        // The row itself is not a row we can identify, so it never becomes an
+        // entry at all.
+        expect(plan.entries).toHaveLength(0);
+        expect(plan.unreadable).toBe(1);
+    });
+
+    it("does not let a real row claim a local recipe holding the sentinel", async () => {
+        const handMade = new Recipe();
+        handMade.uuid = "mine";
+        handMade.cloudId = 0;
+
+        const plan = buildImportPlan([row({tableId: 7})], [handMade]);
+
+        expect(plan.entries[0].status).toBe("new");
+        expect(plan.entries[0].existingUuid).toBeUndefined();
+    });
+
+    /**
+     * Two local copies of one cloud id -- from a restore, say -- leave us
+     * unable to say which one a row refers to. Letting the map's insertion
+     * order decide would make the answer depend on the order the database
+     * returned rows, and could pre-select an overwrite while the other copy
+     * holds the user's edits.
+     */
+    it("refuses to choose between two local copies of one cloud id", async () => {
+        const untouched = imported();
+        untouched.uuid = "a";
+        const edited = imported();
+        edited.uuid = "b";
+        edited.name = "changed here";
+
+        const changedUpstream = row({theName: "Kenya AB"});
+
+        for (const order of [[untouched, edited], [edited, untouched]]) {
+            const plan = buildImportPlan([changedUpstream], order);
+
+            expect(plan.entries[0].status).toBe("edited");
+            expect(plan.entries[0].selected).toBe(false);
+        }
+    });
+
+    it("takes one row twice as one decision, and says so", async () => {
+        const plan = buildImportPlan([row(), row()], []);
+
+        expect(plan.entries).toHaveLength(1);
+        expect(plan.duplicated).toBe(1);
+        expect(plan.counts.new).toBe(1);
+    });
+
+    // Both of these were completely unguarded: the entry could name any recipe
+    // and carry any id with the suite still green, and they are what the
+    // import screen lists and what the writer keys on.
+    it("names the entry after the recipe it carries", async () => {
+        const plan = buildImportPlan([row({theName: "Yirgacheffe"})], []);
+
+        expect(plan.entries[0].name).toBe("Yirgacheffe");
+        expect(plan.entries[0].name).toBe(plan.entries[0].recipe.name);
+    });
+
+    it("carries the row's own cloud id on the entry", async () => {
+        const plan = buildImportPlan([row({tableId: 4242})], []);
+
+        expect(plan.entries[0].cloudId).toBe(4242);
+        expect(plan.entries[0].recipe.cloudId).toBe(4242);
     });
 });
 ```
@@ -2927,7 +3036,7 @@ function applyAccent(recipe: Recipe, color: string | undefined, others: Recipe[]
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/importPlan.test.ts`
-Expected: PASS, 19 tests.
+Expected: PASS, 25 tests.
 
 Two will be fiddly and are worth getting right rather than adjusting:
 
