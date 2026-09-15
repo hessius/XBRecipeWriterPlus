@@ -2198,67 +2198,47 @@ instead of fetching one it already has.
 Create `library/cloud/__tests__/mapRow.test.ts`:
 
 ```ts
-import {mapRow} from "../mapRow";
+import type Recipe from "@/library/Recipe";
+import {XBloomRecipe} from "@/library/XBloomRecipe";
+import type {CloudRow} from "./cloudLibrary";
 
-const row = () => ({
-    tableId: 4242,
-    theName: "Kenya Nyeri",
-    theColor: "#B8C9A2",
-    grandWater: 16,
-    dose: 18,
-    pourCount: 1,
-    grinderSize: 60,
-    isSetGrinderSize: 1,
-    rpm: 100,
-    cupType: 1,
-    podsVo: {id: "AB12CD"},
-    pourList: [
-        {
-            pourNumber: 1,
-            water: 288,
-            temperature: 93,
-            pourType: 0,
-            speed: 3,
-            pauseTime: 30,
-            agitation: 0,
-        },
-    ],
-});
+/**
+ * One account row, one `Recipe` — or nothing.
+ *
+ * There is no mapping code here on purpose. `XBloomRecipe.getRecipe` already
+ * reads this shape, and has been hardened against every out-of-range value
+ * their API has produced; a second mapper would be a second place for those
+ * lessons to be forgotten.
+ *
+ * `null` rather than a partial recipe: the next stop for one of these is a
+ * write to a genuine card, and a recipe assembled from a row the mapper could
+ * not read is not something to hand to that.
+ */
+export function mapRow(row: CloudRow): Recipe | null {
+    if (typeof row.tableId !== "number") return null;
 
-describe("mapRow", () => {
-    it("produces a Recipe from a row", async () => {
-        const recipe = mapRow(row());
-        expect(recipe).not.toBeNull();
-        expect(recipe!.dosage).toBe(18);
-        expect(recipe!.ratio).toBe(16);
-        expect(recipe!.xid).toBe("AB12CD");
-    });
+    const recipe = XBloomRecipe.fromAccountRow(row).getRecipe();
+    if (!recipe) return null;
 
-    it("carries the cloud id across", async () => {
-        expect(mapRow(row())!.cloudId).toBe(4242);
-    });
+    // `getRecipe` is deliberately forgiving so it can migrate its own old
+    // shapes, which makes it useless as a validator: a row missing the fields
+    // that make a brew -- no pours, no dose -- yields a recipe with an empty
+    // pour list and a NaN ratio rather than a thrown error. The next stop for
+    // one of these is a write to a genuine card, so a structurally empty
+    // recipe is rejected here rather than handed on.
+    if (recipe.pours.length === 0 || !Number.isFinite(recipe.dosage) || !Number.isFinite(recipe.ratio)) {
+        return null;
+    }
 
-    it("marks the recipe as imported", async () => {
-        expect(mapRow(row())!.source).toBe("import");
-    });
-
-    it("returns null for a row the mapper cannot read", async () => {
-        // A shape change must not produce a half-built recipe whose next stop
-        // is a real card.
-        expect(mapRow({tableId: 1})).toBeNull();
-        expect(mapRow({})).toBeNull();
-    });
-
-    it("returns null when the row carries no id", async () => {
-        const bad = row() as Record<string, unknown>;
-        delete bad.tableId;
-        expect(mapRow(bad)).toBeNull();
-    });
-
-    it("keeps the raw colour so the accent can be matched later", async () => {
-        expect(mapRow(row())!.cloudColor).toBe("#B8C9A2");
-    });
-});
+    recipe.cloudId = row.tableId;
+    if (typeof row.theName === "string" && row.theName) {
+        recipe.name = row.theName;
+    }
+    if (typeof row.theColor === "string") {
+        recipe.cloudColor = row.theColor;
+    }
+    return recipe;
+}
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -2350,7 +2330,7 @@ next to the two fields from Task 6:
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/mapRow.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 10 tests.
 
 If a row in the fixture above turns out not to be quite what `getRecipe` reads, fix the
 fixture from `library/XBloomRecipe.ts` — not the mapper. The fixture is a claim about
