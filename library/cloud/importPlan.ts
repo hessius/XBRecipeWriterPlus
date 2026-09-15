@@ -114,6 +114,18 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         const existing = byCloudId.get(cloudId);
         const status = ambiguous.has(cloudId) ? "edited" : classify(existing, recipe);
 
+        // A replacement keeps the local recipe's identity. `updateRecipe`
+        // finds the row by the uuid it is passed but stores the recipe's own,
+        // so handing it a freshly minted one leaves the row keyed on the old
+        // uuid and the blob claiming the new one. The next lookup misses and
+        // inserts a second copy -- the recipe silently forks in two.
+        const replacing = !ambiguous.has(cloudId) && existing !== undefined
+            && (status === "updated" || status === "unchanged");
+        if (replacing) {
+            recipe.uuid = existing.uuid;
+            recipe.key = existing.uuid;
+        }
+
         applyAccent(recipe, color, assignedSoFar);
         // The fingerprint excludes the accent, so the order of these two is
         // immaterial and no test pins it. Stamped here because this is the

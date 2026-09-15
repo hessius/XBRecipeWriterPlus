@@ -3103,8 +3103,13 @@ Create `hooks/__tests__/useCloudImport.test.ts`:
 import {act, renderHook, waitFor} from "@testing-library/react-native";
 
 import Recipe from "@/library/Recipe";
+import {fetchCloudRecipes} from "@/library/cloud/cloudLibrary";
+import {fingerprint} from "@/library/cloud/fingerprint";
+import {loadSession, signIn, signOut} from "@/library/cloud/session";
 import {useCloudImport} from "@/hooks/useCloudImport";
 
+// `jest.mock` is hoisted above these imports, so the bindings above resolve to
+// the mocked modules despite sitting with the rest of the imports.
 jest.mock("@/library/cloud/session", () => ({
     loadSession: jest.fn(),
     signIn: jest.fn(),
@@ -3113,9 +3118,6 @@ jest.mock("@/library/cloud/session", () => ({
 jest.mock("@/library/cloud/cloudLibrary", () => ({
     fetchCloudRecipes: jest.fn(),
 }));
-
-import {fetchCloudRecipes} from "@/library/cloud/cloudLibrary";
-import {loadSession, signIn, signOut} from "@/library/cloud/session";
 
 const mockLoad = loadSession as jest.MockedFunction<typeof loadSession>;
 const mockSignIn = signIn as jest.MockedFunction<typeof signIn>;
@@ -3127,16 +3129,19 @@ const row = {
     tableId: 1,
     theName: "Kenya",
     theColor: "#B8C9A2",
-    grandWater: 16,
+    grandWater: 288,
     dose: 18,
-    pourCount: 1,
+    pourCount: 2,
     grinderSize: 60,
     isSetGrinderSize: 1,
     rpm: 100,
     cupType: 1,
     podsVo: {id: "AB12CD"},
+    // Two stages: a non-tea stage is capped at 240 ml by `cardLimits.ts`, and
+    // these recipes are written to genuine cards.
     pourList: [
-        {pourNumber: 1, water: 288, temperature: 93, pourType: 0, speed: 3, pauseTime: 30, agitation: 0},
+        {volume: 144, temperature: 93, pattern: 3, flowRate: 3, pausing: 30, isEnableVibrationBefore: 0, isEnableVibrationAfter: 0},
+        {volume: 144, temperature: 93, pattern: 2, flowRate: 3, pausing: 0, isEnableVibrationBefore: 0, isEnableVibrationAfter: 0},
     ],
 };
 
@@ -3216,7 +3221,9 @@ describe("useCloudImport", () => {
         await waitFor(() => expect(result.current.status).toBe("choosing"));
 
         expect(result.current.plan!.entries[0].selected).toBe(true);
-        act(() => result.current.toggle(1));
+        await act(async () => {
+            result.current.toggle(1);
+        });
         expect(result.current.plan!.entries[0].selected).toBe(false);
     });
 
@@ -3228,7 +3235,9 @@ describe("useCloudImport", () => {
         const {result} = await renderHook(() => useCloudImport(d));
         await waitFor(() => expect(result.current.status).toBe("choosing"));
 
-        act(() => result.current.toggle(2));
+        await act(async () => {
+            result.current.toggle(2);
+        });
         await act(async () => {
             await result.current.confirm();
         });
@@ -3241,7 +3250,11 @@ describe("useCloudImport", () => {
     it("replaces rather than inserts an entry that has a local counterpart", async () => {
         const local = new Recipe(undefined, undefined);
         local.cloudId = 1;
-        local.cloudFingerprint = "stale";
+        // The stored fingerprint has to match the local recipe as it stands, or
+        // `classify` reads it as user-edited and declines to pre-select it. A
+        // matching stamp with a differing cloud copy is exactly the "updated"
+        // case this test means to exercise.
+        local.cloudFingerprint = fingerprint(local);
 
         mockLoad.mockResolvedValue(session);
         mockFetch.mockResolvedValue([row]);
@@ -3271,6 +3284,246 @@ describe("useCloudImport", () => {
 
         expect(mockSignOut).toHaveBeenCalled();
         await waitFor(() => expect(result.current.status).toBe("signedOut"));
+    });
+
+    /**
+     * The local recipe a row would have produced, stamped as an untouched
+     * import so `classify` reads it as `unchanged`/`updated` rather than
+     * `edited`.
+     */
+    function localFrom(over: Record<string, unknown> = {}): Recipe {
+        const {mapRow} = jest.requireActual("@/library/cloud/mapRow");
+        const recipe: Recipe = mapRow(row).recipe;
+        recipe.uuid = "local-1";
+        recipe.key = "local-1";
+        Object.assign(recipe, over);
+        recipe.cloudFingerprint = fingerprint(recipe);
+        return recipe;
+    }
+
+    /**
+     * The promise the whole milestone rests on, checked at the last gate
+     * before a write. An edited recipe is offered unticked; if `confirm` ever
+     * stopped honouring that tick, the user's own work would be replaced by a
+     * stranger's copy with no warning.
+     */
+    it("never writes over a locally edited recipe", async () => {
+        const edited = localFrom();
+        edited.name = "my own notes";
+
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = {...deps(), localRecipes: () => [edited]};
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        expect(result.current.plan!.entries[0].status).toBe("edited");
+        expect(result.current.plan!.entries[0].selected).toBe(false);
+
+        await act(async () => {
+            await result.current.confirm();
+        });
+        await waitFor(() => expect(result.current.status).toBe("done"));
+
+        expect(d.replaceRecipe).not.toHaveBeenCalled();
+        expect(d.saveRecipes).not.toHaveBeenCalled();
+        expect(result.current.imported).toBe(0);
+    });
+
+    it("writes the recipe the user ticked, not merely the right number of them", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row, {...row, tableId: 2, theName: "Peru"}]);
+        const d = deps();
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        await act(async () => {
+            await result.current.confirm();
+        });
+        await waitFor(() => expect(result.current.status).toBe("done"));
+
+        const written = d.saveRecipes.mock.calls[0][0] as Recipe[];
+        expect(written).toHaveLength(1);
+        expect(written[0].cloudId).toBe(2);
+        expect(result.current.imported).toBe(1);
+    });
+
+    it("hands the replacement the recipe it named, under the local uuid", async () => {
+        const stored = localFrom();
+
+        mockLoad.mockResolvedValue(session);
+        // A fresh row alongside the replacement, so that picking any other
+        // entry's recipe -- the first, say -- is distinguishable from picking
+        // the right one.
+        mockFetch.mockResolvedValue([
+            {...row, tableId: 2, theName: "Peru"},
+            {...row, theName: "Kenya AB"},
+        ]);
+        const d = {...deps(), localRecipes: () => [stored]};
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        expect(result.current.plan!.entries[1].status).toBe("updated");
+
+        await act(async () => {
+            await result.current.confirm();
+        });
+        await waitFor(() => expect(result.current.status).toBe("done"));
+
+        const [uuid, recipe] = d.replaceRecipe.mock.calls[0] as [string, Recipe];
+        expect(uuid).toBe("local-1");
+        expect(recipe.cloudId).toBe(1);
+        // `updateRecipe` finds the row by the uuid it is given but stores the
+        // recipe's own. If they differ, the row and its contents disagree and
+        // the next lookup forks the recipe in two.
+        expect(recipe.uuid).toBe("local-1");
+        expect(d.saveRecipes.mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it("toggles back on, not merely off", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        expect(result.current.plan!.entries[0].selected).toBe(false);
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        expect(result.current.plan!.entries[0].selected).toBe(true);
+    });
+
+    it("keeps the session when the network fails, and offers a retry", async () => {
+        const {CloudError} = jest.requireActual("@/library/cloud/transport");
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockRejectedValue(new CloudError("network", "offline"));
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+
+        await waitFor(() => expect(result.current.error).toBe("network"));
+        // Signing the user out over bad wifi would lose them a working token
+        // for a failure that has nothing to do with it.
+        expect(result.current.status).toBe("choosing");
+        expect(mockSignOut).not.toHaveBeenCalled();
+        expect(result.current.session).toEqual(session);
+    });
+
+    it("clears the error when the retry succeeds", async () => {
+        const {CloudError} = jest.requireActual("@/library/cloud/transport");
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockRejectedValueOnce(new CloudError("network", "offline"));
+        mockFetch.mockResolvedValue([row]);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.error).toBe("network"));
+
+        await act(async () => {
+            await result.current.refresh();
+        });
+
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+        expect(result.current.error).toBeNull();
+    });
+
+    it("does nothing when confirm arrives with no plan", async () => {
+        const d = deps();
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("signedOut"));
+
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        expect(d.saveRecipes).not.toHaveBeenCalled();
+        expect(d.replaceRecipe).not.toHaveBeenCalled();
+        expect(result.current.status).toBe("signedOut");
+    });
+
+    it("writes once when confirm is tapped twice before it renders", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = deps();
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        await act(async () => {
+            await Promise.all([result.current.confirm(), result.current.confirm()]);
+        });
+
+        expect(d.saveRecipes).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * A failed write is not a reason to strand the screen on a spinner. The
+     * recipes that landed are real, so the count must be the truth rather than
+     * the total that was attempted.
+     */
+    it("keeps and reports what landed when a write fails", async () => {
+        const stored = localFrom();
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([
+            {...row, tableId: 2, theName: "Peru"},
+            {...row, theName: "Kenya AB"},
+        ]);
+        const d = {...deps(), localRecipes: () => [stored]};
+        d.replaceRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        await waitFor(() => expect(result.current.status).toBe("done"));
+        expect(result.current.imported).toBe(1);
+        expect(result.current.error).toBe("server");
+    });
+
+    /**
+     * Asserting that React did not warn would prove nothing: React 18 dropped
+     * the setState-after-unmount warning, so that test passes whether the
+     * guard is there or not. What is observable is the work the guard skips --
+     * reading the whole local library and building a plan for a screen nobody
+     * is looking at.
+     */
+    it("does no work when the fetch lands after the screen is gone", async () => {
+        let release: (rows: unknown[]) => void = () => {};
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockReturnValue(new Promise((resolve) => {
+            release = resolve as (rows: unknown[]) => void;
+        }) as ReturnType<typeof fetchCloudRecipes>);
+
+        const localRecipes = jest.fn(() => [] as Recipe[]);
+        const {result, unmount} = await renderHook(
+            () => useCloudImport({...deps(), localRecipes})
+        );
+        await waitFor(() => expect(result.current.status).toBe("listing"));
+        expect(localRecipes).not.toHaveBeenCalled();
+
+        // Two acts, not one: inside a single act React has not committed the
+        // unmount by the time the promise resolves, so the guard would not yet
+        // be set and the test would be measuring the wrong moment.
+        await act(async () => {
+            unmount();
+        });
+        await act(async () => {
+            release([row]);
+        });
+
+        expect(localRecipes).not.toHaveBeenCalled();
     });
 });
 ```
@@ -3447,7 +3700,7 @@ export function useCloudImport(deps: CloudImportDeps) {
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest hooks/__tests__/useCloudImport.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 19 tests.
 
 - [ ] **Step 5: Run lint on the new hook**
 

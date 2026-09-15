@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 import type Recipe from "@/library/Recipe";
 import {fetchCloudRecipes} from "@/library/cloud/cloudLibrary";
@@ -40,39 +40,45 @@ export function useCloudImport(deps: CloudImportDeps) {
     const [plan, setPlan] = useState<ImportPlan | null>(null);
     const [error, setError] = useState<CloudErrorKind | null>(null);
     const [imported, setImported] = useState(0);
+    // Not state: nothing renders from it, and every async path reads it after
+    // an await, where a captured render's value would already be stale.
+    const gone = useRef(false);
+    const written = useRef(false);
 
     useEffect(() => {
-        let cancelled = false;
+        gone.current = false;
         void (async () => {
             const stored = await loadSession();
             // A restore that lands after the screen is gone must not touch
             // state: React warns, and worse, it would fetch on behalf of a hook
             // nobody is watching.
-            if (cancelled) return;
+            if (gone.current) return;
             if (!stored) {
                 setStatus("signedOut");
                 return;
             }
             setSession(stored);
-            await list(stored, () => cancelled);
+            await list(stored);
         })();
         return () => {
-            cancelled = true;
+            gone.current = true;
         };
         // Once, on mount. The hook owns the session from here.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    async function list(active: Session, gone: () => boolean = () => false) {
+    async function list(active: Session) {
         setStatus("listing");
         setError(null);
         try {
             const rows = await fetchCloudRecipes(active);
-            if (gone()) return;
+            if (gone.current) return;
             setPlan(buildImportPlan(rows, localRecipes()));
+            // A new plan is a new decision, and may be taken up to once.
+            written.current = false;
             setStatus("choosing");
         } catch (caught) {
-            if (gone()) return;
+            if (gone.current) return;
             const kind = caught instanceof CloudError ? caught.kind : "server";
             setError(kind);
             if (kind === "unauthorised") {
@@ -83,7 +89,11 @@ export function useCloudImport(deps: CloudImportDeps) {
                 setSession(null);
                 setStatus("signedOut");
             } else {
-                setStatus(session ? "choosing" : "signedOut");
+                // `active`, not the `session` from state: on the first listing
+                // after a restore or a sign-in, state still holds the `null`
+                // from the render that started this, so reading it would sign
+                // out a user whose token is fine and whose wifi is not.
+                setStatus(active ? "choosing" : "signedOut");
             }
         }
     }
@@ -93,9 +103,11 @@ export function useCloudImport(deps: CloudImportDeps) {
         setError(null);
         try {
             const next = await signIn(email, password);
+            if (gone.current) return;
             setSession(next);
             await list(next);
         } catch (caught) {
+            if (gone.current) return;
             setError(caught instanceof CloudError ? caught.kind : "server");
             setStatus("signedOut");
         }
@@ -118,21 +130,46 @@ export function useCloudImport(deps: CloudImportDeps) {
 
     async function confirm() {
         if (!plan) return;
+        // A second tap before the first render of `importing` would otherwise
+        // run the writes again: the inserts collide on their uuids and throw,
+        // and the replacements are applied twice. State cannot guard this --
+        // it has not re-rendered yet -- and neither can releasing the flag at
+        // the end of this function, because there is no await before the
+        // writes, so the whole body runs before the second tap is dispatched.
+        //
+        // So the flag belongs to the plan rather than to the call: one plan is
+        // imported at most once, and `list` clears it when a new one arrives.
+        if (written.current) return;
+        written.current = true;
         setStatus("importing");
 
         const chosen = plan.entries.filter((entry) => entry.selected);
         const fresh = chosen.filter((entry) => !entry.existingUuid);
         const replacing = chosen.filter((entry) => entry.existingUuid);
 
-        // One call for the inserts, because `saveRecipes` is transactional:
-        // twenty recipes arrive together or not at all.
-        if (fresh.length > 0) saveRecipes(fresh.map((entry) => entry.recipe));
-        for (const entry of replacing) {
-            replaceRecipe(entry.existingUuid!, entry.recipe);
+        let landed = 0;
+        try {
+            // One call for the inserts, because `saveRecipes` is transactional:
+            // twenty recipes arrive together or not at all.
+            if (fresh.length > 0) {
+                saveRecipes(fresh.map((entry) => entry.recipe));
+                landed += fresh.length;
+            }
+            for (const entry of replacing) {
+                replaceRecipe(entry.existingUuid!, entry.recipe);
+                landed += 1;
+            }
+            setImported(landed);
+            setStatus("done");
+        } catch {
+            // The writes that landed are real and the user keeps them. Report
+            // the count rather than a total that never happened, and land on
+            // `done` with an error beside it: a half-finished import the user
+            // can see is recoverable, a screen stuck on a spinner is not.
+            setImported(landed);
+            setError("server");
+            setStatus("done");
         }
-
-        setImported(chosen.length);
-        setStatus("done");
     }
 
     async function forgetAccount() {
