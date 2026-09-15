@@ -1547,6 +1547,27 @@ fingerprint too, not just its id, or clearing the wrong one passes.
 
 ---
 
+
+- [ ] **Step 7: Keep the account identity through a revert**
+
+`hooks/useRecipeEditor.ts` restores a recipe by building a fresh `Recipe` and
+copying a whitelist of fields back over it — `alwaysKeepFields`, whose comment
+says a restore replaces the brew parameters and not the recipe's *identity*.
+`cloudId` is identity by that definition, so it belongs in the list; without
+it every revert silently orphans the row and the next sync re-imports the
+recipe as though it had never been seen.
+
+Add `'cloudId', 'cloudFingerprint'` to `alwaysKeepFields`, with the reason,
+and a test in `hooks/__tests__/useRecipeEditor.test.ts` that runs the `saved`
+revert through `revertSources` and asserts both survive. (`runRevert` is not
+on the hook's public surface; it is reached through `revertSources[].action`.)
+
+Note also that `cloudId`'s validator is stricter than its siblings —
+`isNumber(v) && v >= 0` — because a tableId is a primary key and a negative
+one means a tampered file, not a plausible mistake.
+
+---
+
 ## Task 7: The fingerprint
 
 **Files:**

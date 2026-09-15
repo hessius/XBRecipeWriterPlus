@@ -72,4 +72,15 @@ describe("backup validation of the cloud fields", () => {
 
         expect(parseBackup(wrap(recipe)).ok).toBe(false);
     });
+
+    it("rejects a negative cloudId, which no account row has", async () => {
+        // A tableId is a primary key. A negative one is not a plausible value
+        // that happens to be wrong; it is a file that has been tampered with.
+        const recipe = JSON.parse(
+            JSON.stringify(new Recipe(undefined, undefined))
+        );
+        recipe.cloudId = -1;
+
+        expect(parseBackup(wrap(recipe)).ok).toBe(false);
+    });
 });

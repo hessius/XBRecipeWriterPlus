@@ -310,8 +310,15 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     // colours by all survive a restore. Without `accentIndex` the card would
     // silently change colour, and without `createdAt`/`source` a restored
     // recipe would lose its provenance and placeholder name.
+    //
+    // `cloudId` is identity in exactly that sense: it says which xBloom
+    // account recipe this row IS. Dropping it would orphan the row, and the
+    // next sync would import the same recipe again as though it had never
+    // been seen. Its fingerprint goes with it, since a fingerprint without
+    // the id it belongs to means nothing.
     const alwaysKeepFields = ['uuid', 'backup', 'name', 'xbloomName',
-                              'accentIndex', 'createdAt', 'source'];
+                              'accentIndex', 'createdAt', 'source',
+                              'cloudId', 'cloudFingerprint'];
 
     function keepSettingsAndSave(
         restoredRecipe: Recipe,

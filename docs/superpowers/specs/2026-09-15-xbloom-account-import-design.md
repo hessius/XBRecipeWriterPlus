@@ -164,9 +164,16 @@ imported" is the one bug in this design that would quietly destroy work.
 Both fields are carried through backup and restore, which means entries in
 `backup.ts`'s validator map. That file is a declared trust boundary, so they are
 validated like everything else: `cloudId` a finite non-negative number or
-absent, `cloudFingerprint` a string or absent. A malformed value is **dropped,
-not rejected**, matching how tags are handled — a bad field must not cost a user
-their whole backup.
+absent, `cloudFingerprint` a string or absent.
+
+A malformed value **skips that recipe**, which is what every other entry in the
+map already does. An earlier draft of this section said such a value should be
+*dropped* rather than rejected, "matching how tags are handled" — that was
+wrong twice over. Tags are lenient because they are **absent** from the map and
+so are never validated at all, not because the map has a lenient mode; and a
+special case at a trust boundary is worth more than the one recipe it saves,
+because the next reader has to work out which fields are strict and which are
+not. The recipe is skipped and the rest of the backup restores.
 
 ## 4. The user's path
 

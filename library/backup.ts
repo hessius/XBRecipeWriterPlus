@@ -225,7 +225,10 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     shareUrl:    isShareUrl,
     shareSnapshot: (v) => typeof v === "string",
     sharedTableId: isNumber,
-    cloudId:          isNumber,
+    // Stricter than the sibling ids: a tableId is an account row's primary
+    // key, so a negative one is not a plausible value that happens to be
+    // wrong, it is a file that has been tampered with or corrupted.
+    cloudId:          (v) => isNumber(v) && (v as number) >= 0,
     cloudFingerprint: (v) => typeof v === "string",
     grinder:     (v) => typeof v === "boolean",
     dosage:      isNumber,
