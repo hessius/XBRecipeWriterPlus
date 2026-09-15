@@ -1,15 +1,16 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-// The `mock` prefix is what lets a jest.mock factory close over this binding.
+// The `mock` prefix is what lets the jest.mock factory below close over this
+// binding: the factory is hoisted above every import, so Jest rejects an
+// out-of-scope reference that is not named as a mock.
 import {createTestDatabase as mockCreateTestDatabase} from "@/test-utils/sqlite";
+import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
+import RecipeDatabase from "@/library/RecipeDatabase";
+import Recipe from "@/library/Recipe";
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockCreateTestDatabase()
 }));
-
-import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
-import RecipeDatabase from "@/library/RecipeDatabase";
-import Recipe from "@/library/Recipe";
 
 /**
  * The library hook driven against a real SQLite database rather than a stub.
