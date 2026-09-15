@@ -60,7 +60,22 @@ export class CloudError extends Error {
  * `skey` really is the literal string below in every surveyed client; it is
  * not a secret and not per-account.
  */
-export function authFields(memberId: number, token: string) {
+/**
+ * The shape every call carries. Written out rather than inferred so a drift
+ * in `interfaceVersion` or `clientType` is a compile error here, at the wire
+ * contract, rather than only a test failure somewhere downstream.
+ */
+export type AuthFields = {
+    interfaceVersion: number;
+    skey: string;
+    phoneType: string;
+    clientType: number;
+    languageType: number;
+    memberId: number;
+    token: string;
+};
+
+export function authFields(memberId: number, token: string): AuthFields {
     return {
         interfaceVersion: 20240918,
         skey: "testskey",
@@ -106,11 +121,32 @@ export async function post(
         throw new CloudError("server", `xBloom replied ${response.status}`);
     }
 
-    const parsed = (await response.json()) as CloudResponse;
+    let parsed: CloudResponse;
+    try {
+        parsed = (await response.json()) as CloudResponse;
+    } catch {
+        // A 200 carrying something that is not JSON — a captive portal, a
+        // proxy's HTML error page, an empty body. `server` because the
+        // response is well-formed HTTP the app simply cannot use. Without
+        // this, the one path out of `post` that is not a `CloudError` is a
+        // raw SyntaxError, which the caller's per-kind copy cannot match and
+        // which reaches the user as a crash rather than a sentence.
+        //
+        // The caught error is deliberately not carried: it may quote the
+        // response body, and nothing on this path is ever surfaced anyway.
+        throw new CloudError("server", "xBloom sent a reply we could not read");
+    }
+
     if (parsed?.result === "success") return parsed;
 
     // Their message, kept so a bug report can quote it. It is never shown:
     // the UI has its own copy per `kind`, in the user's own language.
+    //
+    // This branch is the catch-all on purpose. A 200 whose JSON omits
+    // `result` altogether lands here too and is reported as an auth failure.
+    // Every failure the spike saw carried `result: "fail"`, so the shape is
+    // not expected; and of the two ways to be wrong about it, asking for a
+    // sign-in the user did not need is the recoverable one.
     const message = parsed?.info ?? "xBloom rejected the request";
 
     // An encrypted call is an authenticated call, and the overwhelmingly

@@ -37,6 +37,34 @@ describe("post", () => {
         expect(Buffer.from(body, "base64").length % 128).toBe(0);
     });
 
+    it("classifies an unreadable reply as a server failure", async () => {
+        // A captive portal or a proxy's HTML error page arrives as a 200 whose
+        // body is not JSON. Without this branch the only way out of `post`
+        // that is not a CloudError is a raw SyntaxError, which the caller's
+        // per-kind copy cannot match.
+        global.fetch = jest.fn(async () => ({
+            ok: true,
+            json: async () => {
+                throw new SyntaxError("Unexpected token < in JSON");
+            },
+        })) as never;
+
+        await expect(post("x.thtml", {}, false)).rejects.toMatchObject({
+            kind: "server",
+        });
+    });
+
+    it("treats a reply with no result at all as an auth failure", async () => {
+        // The catch-all. Every failure the spike saw carried result: "fail",
+        // so this shape is unexpected -- and of the two ways to be wrong
+        // about it, asking for a sign-in is the recoverable one.
+        global.fetch = jest.fn(async () => okResponse({nothing: true})) as never;
+
+        await expect(post("x.tuhtml", {}, true)).rejects.toMatchObject({
+            kind: "unauthorised",
+        });
+    });
+
     it("classifies a rejected login as a credentials failure", async () => {
         global.fetch = jest.fn(async () =>
             okResponse({result: "fail", info: "wrong password"})
