@@ -225,6 +225,8 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     shareUrl:    isShareUrl,
     shareSnapshot: (v) => typeof v === "string",
     sharedTableId: isNumber,
+    cloudId:          isNumber,
+    cloudFingerprint: (v) => typeof v === "string",
     grinder:     (v) => typeof v === "boolean",
     dosage:      isNumber,
     ratio:       isNumber,

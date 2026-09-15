@@ -130,6 +130,25 @@ class Recipe {
     public sharedTableId?: number;
     public shareUrl?: string;
     /**
+     * The row id of this recipe in **your own xBloom account library**.
+     *
+     * A third id, and not either of the two above it. `shareId` is where a
+     * recipe was imported *from*; `sharedTableId` is a link this app *minted*.
+     * `cloudId` is neither — it is the identity of a recipe you authored in
+     * xBloom's own app, and it is what makes a second import recognise a
+     * recipe it has already brought across instead of duplicating it.
+     */
+    public cloudId?: number;
+    /**
+     * The fingerprint of this recipe's brewing content as it stood at import.
+     *
+     * Compared against the recipe's fingerprint now to tell an untouched
+     * import from one the user has since edited here. See
+     * `library/cloud/fingerprint.ts` for what it covers and, more
+     * importantly, what it deliberately does not.
+     */
+    public cloudFingerprint?: string;
+    /**
      * Bypass water is dispensed alongside the brew for dilution. It is NOT
      * stored on the NFC card — it is a cloud/model-only concept. These defaults
      * are load-bearing: the share-link payload builder reads them and compares
@@ -228,6 +247,10 @@ class Recipe {
             // "never shared" and "shared, link unknown" are different states
             // and only the first one is safe to re-mint from silently.
             this.sharedTableId = jsonRecipe.sharedTableId;
+            if (typeof jsonRecipe.cloudId === "number") this.cloudId = jsonRecipe.cloudId;
+            if (typeof jsonRecipe.cloudFingerprint === "string") {
+                this.cloudFingerprint = jsonRecipe.cloudFingerprint;
+            }
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;
