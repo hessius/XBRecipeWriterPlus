@@ -1933,111 +1933,122 @@ palette that breaks a match fails here rather than on a device.
 Create `library/cloud/__tests__/accentMatch.test.ts`:
 
 ```ts
-import {accents, type AccentGroup} from "@/constants/colors";
+import {accents} from "@/constants/colors";
+import {MAX_ACCENT_DISTANCE, matchAccent} from "../accentMatch";
 
-/**
- * Give an imported recipe the palette accent closest to the colour it wore in
- * xBloom — but only when there really is one.
- *
- * The app's accents are a deliberate palette, so an imported hex cannot simply
- * be kept: it would sit among them looking almost right, which is worse than
- * looking different. Matching keeps the user's own sense of which recipe is
- * which without letting a foreign colour into the palette.
- *
- * The comparison is in OKLab because RGB distance does not mean what it looks
- * like it means: two colours a fixed RGB distance apart can be obviously
- * different in one part of the space and indistinguishable in another, and
- * the nearest neighbour by RGB is regularly not the nearest one to the eye.
- */
+describe("matchAccent", () => {
+    it("finds Sage for the xBloom green", async () => {
+        expect(matchAccent("#B8C9A2", "coffee")).toBe(
+            accents.coffee.indexOf("#B4D6A8")
+        );
+    });
 
-/**
- * How far is too far.
- *
- * The four coffee colours observed in a real account matched at 0.032-0.045.
- * The one tea colour observed was a blue-green whose nearest of four warm tea
- * accents was 0.093, with all four clustered inside 0.013 of each other —
- * which is to say "nearest" there was noise, and the winner would have been a
- * pink. Above this line the answer is no answer, and `assignAccent` picks as
- * it does for any other new recipe.
- *
- * The test pins this into the gap the observations leave — above every real
- * match, below the real miss — and deliberately not to 0.06 exactly. The
- * evidence justifies the gap, not the number, and a test asserting the number
- * would fail for every retune without ever catching a bad one.
- */
-export const MAX_ACCENT_DISTANCE = 0.06;
+    it("finds Peach for the xBloom tan", async () => {
+        expect(matchAccent("#DEC3AF", "coffee")).toBe(
+            accents.coffee.indexOf("#F0B98E")
+        );
+    });
 
-type Lab = {L: number; a: number; b: number};
+    it("finds Lilac for the xBloom violet", async () => {
+        expect(matchAccent("#ABACD1", "coffee")).toBe(
+            accents.coffee.indexOf("#BDB2E8")
+        );
+    });
 
-function parseHex(value: string | null | undefined): [number, number, number] | null {
-    // Typed loosely on purpose. `theColor` arrives over the network, where a
-    // recipe may simply not have one, and the type says nothing about what a
-    // server actually sent. Every other malformed shape already answers null
-    // and falls back to the app's own accent assignment; a missing one must
-    // do the same rather than throw and take the whole import down with it.
-    if (typeof value !== "string") return null;
-    const hex = value.trim().replace(/^#/, "");
-    if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
-    return [
-        parseInt(hex.slice(0, 2), 16),
-        parseInt(hex.slice(2, 4), 16),
-        parseInt(hex.slice(4, 6), 16),
-    ];
-}
+    it("finds Sky for the xBloom blue", async () => {
+        expect(matchAccent("#ADBDDB", "coffee")).toBe(
+            accents.coffee.indexOf("#9FC3F0")
+        );
+    });
 
-function toLinear(channel: number): number {
-    const c = channel / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
+    it("returns null for a blue-green in the tea palette", async () => {
+        // The tea accents are four warm colours. A blue-green has no
+        // neighbour among them: every candidate is roughly three times
+        // further away than any real match, and they sit within noise of each
+        // other, so "nearest" would be a coin toss that confidently returns a
+        // pink. No answer is the honest answer.
+        expect(matchAccent("#A2C0C2", "tea")).toBeNull();
+    });
 
-function toOklab(hex: string | null | undefined): Lab | null {
-    const rgb = parseHex(hex);
-    if (!rgb) return null;
-    const [r, g, b] = rgb.map(toLinear);
+    it("returns an exact match at zero distance", async () => {
+        expect(matchAccent("#9FC3F0", "coffee")).toBe(0);
+    });
 
-    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    it("only ever answers within its own group", async () => {
+        // A tea recipe must never be given a coffee accent: the two halves
+        // are what tell the library at a glance which is which.
+        const index = matchAccent("#CFD6A3", "tea");
+        expect(index).not.toBeNull();
+        expect(index!).toBeLessThan(accents.tea.length);
+    });
 
-    return {
-        L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-        a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-        b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-    };
-}
+    it("accepts a colour without its hash", async () => {
+        expect(matchAccent("9FC3F0", "coffee")).toBe(0);
+    });
 
-function distance(x: Lab, y: Lab): number {
-    return Math.hypot(x.L - y.L, x.a - y.a, x.b - y.b);
-}
+    it("rejects a three-digit hex", async () => {
+        expect(matchAccent("#fff", "coffee")).toBeNull();
+    });
 
-/**
- * The index of the nearest accent **within the given group**, or `null` when
- * nothing is near enough.
- *
- * An index, not a colour: `Recipe.accentIndex` is an index into the group's
- * array, and handing it a hex string would store something the palette cannot
- * be retuned through.
- */
-export function matchAccent(color: string | null | undefined, group: AccentGroup): number | null {
-    const target = toOklab(color);
-    if (!target) return null;
+    it("returns null for anything that is not a colour", async () => {
+        expect(matchAccent("", "coffee")).toBeNull();
+        expect(matchAccent("rebeccapurple", "coffee")).toBeNull();
+        expect(matchAccent("#12345", "coffee")).toBeNull();
+    });
 
-    const palette = accents[group];
-    let best: number | null = null;
-    let bestDistance = Infinity;
+    it("keeps the threshold above every real match and below the tea one", async () => {
+        // Guards the number itself: the measured matches sit at 0.032-0.045
+        // and the nearest tea candidate at 0.093.
+        expect(MAX_ACCENT_DISTANCE).toBeGreaterThan(0.045);
+        expect(MAX_ACCENT_DISTANCE).toBeLessThan(0.093);
+    });
+});
 
-    for (let i = 0; i < palette.length; i++) {
-        const candidate = toOklab(palette[i]);
-        if (!candidate) continue;
-        const d = distance(target, candidate);
-        if (d < bestDistance) {
-            bestDistance = d;
-            best = i;
-        }
-    }
+describe("colour values a server might actually send", () => {
+    // The import loop runs over every recipe in an account. One recipe with no
+    // colour, or a colour of a shape nobody anticipated, must cost that one
+    // recipe its accent and nothing else -- never the whole import.
+    it.each([
+        ["null", null],
+        ["undefined", undefined],
+        ["an empty string", ""],
+        ["a colour name", "rebeccapurple"],
+        ["short hex", "#fff"],
+        ["a number where a string was promised", 16711680 as unknown as string],
+        ["an object", {r: 1} as unknown as string],
+    ])("answers null for %s rather than throwing", async (_label, value) => {
+        expect(() => matchAccent(value as string, "coffee")).not.toThrow();
+        expect(matchAccent(value as string, "coffee")).toBeNull();
+    });
+});
 
-    return bestDistance <= MAX_ACCENT_DISTANCE ? best : null;
-}
+describe("colours with no hue to match", () => {
+    // The palette is light, low-chroma pastel, so a neutral in the same
+    // lightness band is genuinely close to an accent in OKLab -- #CCCCCC is
+    // 0.056 from Ice, inside the distance threshold. Distance alone would
+    // paint a recipe the user coloured silver a confident blue. Grey is not a
+    // bluish colour to be rounded to blue; it is the absence of the thing
+    // being matched.
+    it.each([
+        ["silver", "#CCCCCC"],
+        ["a darker grey", "#C8C8C8"],
+        ["mid grey", "#808080"],
+        ["white", "#FFFFFF"],
+        ["black", "#000000"],
+    ])("declines to match %s", async (_label, hex) => {
+        expect(matchAccent(hex, "coffee")).toBeNull();
+        expect(matchAccent(hex, "tea")).toBeNull();
+    });
+
+    it("still matches every colour seen in a real account", async () => {
+        // The floor has to sit below the least saturated colour the user
+        // actually chose (0.033) and above a true neutral (exactly 0).
+        expect(matchAccent("#B8C9A2", "coffee")).not.toBeNull();
+        expect(matchAccent("#DEC3AF", "coffee")).not.toBeNull();
+        expect(matchAccent("#ABACD1", "coffee")).not.toBeNull();
+        expect(matchAccent("#ADBDDB", "coffee")).not.toBeNull();
+    });
+});
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -2155,7 +2166,7 @@ export function matchAccent(color: string | null | undefined, group: AccentGroup
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/accentMatch.test.ts`
-Expected: PASS, 18 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 5: Commit**
 

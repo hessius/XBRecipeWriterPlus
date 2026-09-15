@@ -32,6 +32,24 @@ import {accents, type AccentGroup} from "@/constants/colors";
  */
 export const MAX_ACCENT_DISTANCE = 0.06;
 
+/**
+ * Below this much chroma, a colour has no hue to match.
+ *
+ * Distance alone cannot see this. Our whole palette is light, low-chroma
+ * pastel, so a neutral grey in the same lightness band lands genuinely close
+ * to an accent in OKLab: #CCCCCC is 0.056 from Ice, inside the line above, and
+ * a user who chose silver would get a confident blue. Grey is not a bluish
+ * colour that we should round to blue; it is the absence of the thing being
+ * matched, which is exactly the case for no answer.
+ *
+ * Every colour observed in a real account had chroma 0.033-0.056, and a true
+ * neutral has exactly 0, so this sits in the gap rather than near either edge.
+ * A very desaturated but real colour falls back to `assignAccent`, which is
+ * the safe direction: a recipe that looks like any other new one, rather than
+ * one confidently painted a colour the user did not choose.
+ */
+export const MIN_ACCENT_CHROMA = 0.02;
+
 type Lab = {L: number; a: number; b: number};
 
 function parseHex(value: string | null | undefined): [number, number, number] | null {
@@ -86,6 +104,7 @@ function distance(x: Lab, y: Lab): number {
 export function matchAccent(color: string | null | undefined, group: AccentGroup): number | null {
     const target = toOklab(color);
     if (!target) return null;
+    if (Math.hypot(target.a, target.b) < MIN_ACCENT_CHROMA) return null;
 
     const palette = accents[group];
     let best: number | null = null;

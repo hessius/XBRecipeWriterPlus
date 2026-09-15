@@ -51,7 +51,7 @@ describe("matchAccent", () => {
         expect(matchAccent("9FC3F0", "coffee")).toBe(0);
     });
 
-    it("accepts a three-digit hex", async () => {
+    it("rejects a three-digit hex", async () => {
         expect(matchAccent("#fff", "coffee")).toBeNull();
     });
 
@@ -84,5 +84,33 @@ describe("colour values a server might actually send", () => {
     ])("answers null for %s rather than throwing", async (_label, value) => {
         expect(() => matchAccent(value as string, "coffee")).not.toThrow();
         expect(matchAccent(value as string, "coffee")).toBeNull();
+    });
+});
+
+describe("colours with no hue to match", () => {
+    // The palette is light, low-chroma pastel, so a neutral in the same
+    // lightness band is genuinely close to an accent in OKLab -- #CCCCCC is
+    // 0.056 from Ice, inside the distance threshold. Distance alone would
+    // paint a recipe the user coloured silver a confident blue. Grey is not a
+    // bluish colour to be rounded to blue; it is the absence of the thing
+    // being matched.
+    it.each([
+        ["silver", "#CCCCCC"],
+        ["a darker grey", "#C8C8C8"],
+        ["mid grey", "#808080"],
+        ["white", "#FFFFFF"],
+        ["black", "#000000"],
+    ])("declines to match %s", async (_label, hex) => {
+        expect(matchAccent(hex, "coffee")).toBeNull();
+        expect(matchAccent(hex, "tea")).toBeNull();
+    });
+
+    it("still matches every colour seen in a real account", async () => {
+        // The floor has to sit below the least saturated colour the user
+        // actually chose (0.033) and above a true neutral (exactly 0).
+        expect(matchAccent("#B8C9A2", "coffee")).not.toBeNull();
+        expect(matchAccent("#DEC3AF", "coffee")).not.toBeNull();
+        expect(matchAccent("#ABACD1", "coffee")).not.toBeNull();
+        expect(matchAccent("#ADBDDB", "coffee")).not.toBeNull();
     });
 });
