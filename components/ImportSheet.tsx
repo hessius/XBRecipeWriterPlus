@@ -1,7 +1,8 @@
 import * as Clipboard from "expo-clipboard";
+import {router} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
 import {Keyboard, TextInput} from "react-native";
-import {Input, Spinner, Text, XStack, YStack} from "tamagui";
+import {Button, Input, Spinner, Text, XStack, YStack} from "tamagui";
 import type {ColorTokens} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -217,6 +218,25 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                             <PasteFace/>
                         </PasteOverlay>
                     </>
+                )}
+
+                {/* The fourth door. It lives in the sheet rather than on the home
+                    screen because it is a kind of import, and the home screen's
+                    three tiles are the app's entire top-level vocabulary -- a
+                    fourth would cost more than it bought. */}
+                {state.status === "idle" && (
+                    <Button
+                        backgroundColor={palette.raised}
+                        color={palette.text}
+                        onPress={() => {
+                            // Closed first, then pushed: a sheet left open behind
+                            // the pushed screen would still be there, over it,
+                            // when the user came back.
+                            onOpenChange(false);
+                            router.push("/importCloud");
+                        }}>
+                        Import from your xBloom account
+                    </Button>
                 )}
 
                 {state.status === "resolving" && (

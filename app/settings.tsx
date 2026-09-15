@@ -273,6 +273,15 @@ export default function SettingsScreen({settings}: Props) {
 
                 <MachineSection settings={settings}/>
 
+                {/* Its own section above Library, not a line inside it: Library is
+                    the recipes you hold, and this is where some of them can come
+                    from. */}
+                <SettingsSection title="xBloom account">
+                    <SettingsActionRow label="Import from xBloom"
+                                       detail="Sign in and bring across the recipes you made there."
+                                       onPress={() => router.push("/importCloud")}/>
+                </SettingsSection>
+
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."

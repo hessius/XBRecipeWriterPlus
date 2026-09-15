@@ -552,6 +552,16 @@ describe("SettingsScreen", () => {
         expect(indexOf("UNITS")).toBeLessThan(indexOf("LIBRARY"));
     });
 
+    it("opens the xBloom account importer from its own section", async () => {
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        // SettingsActionRow folds label and detail into one accessible name.
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Import from xBloom, Sign in and bring across the recipes you made there."}));
+
+        expect(mockPush).toHaveBeenCalledWith("/importCloud");
+    });
+
     it("offers a retention choice, including keeping none", async () => {
         const {getByText} = await renderWithProviders(
             <SettingsScreen settings={new Settings(memoryStorage())}/>

@@ -4,6 +4,7 @@
  */
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
+import {router} from "expo-router";
 import {Keyboard, TextInput} from "react-native";
 
 import ImportSheet from "@/components/ImportSheet";
@@ -29,7 +30,16 @@ jest.mock("expo-clipboard", () => ({
 
 let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
 
+// The sheet pushes the account route directly, so `router` is mocked rather
+// than `useRouter` -- see app/__tests__/settings.test.tsx for the spread that
+// keeps the typed-route helpers real.
+jest.mock("expo-router", () => ({
+    ...jest.requireActual("expo-router"),
+    router: {push: jest.fn()}
+}));
+
 beforeEach(() => {
+    jest.clearAllMocks();
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     mockNativePasteOnPress = undefined;
@@ -457,4 +467,49 @@ it("does not dismiss the keyboard when a shortcut degrades to the found panel", 
     expect(dismiss).not.toHaveBeenCalled();
 
     dismiss.mockRestore();
+});
+
+it("offers the xBloom account as a way in", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+    expect(
+        screen.getByRole("button", {name: /Import from your xBloom account/i})
+    ).toBeTruthy();
+});
+
+it("leaves the sheet and opens the account screen", async () => {
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
+    );
+
+    await fireEvent.press(
+        screen.getByRole("button", {name: /Import from your xBloom account/i})
+    );
+
+    // Closed first, then pushed: a sheet left open behind a pushed screen is
+    // still there when the user comes back, over the screen they went to.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(router.push).toHaveBeenCalledWith("/importCloud");
+});
+
+it("does not offer the account door while a lookup is in flight or a recipe is found", async () => {
+    // The door is a kind of import in its own right, so it belongs only where
+    // the sheet is idle. Underneath a running lookup it would compete with the
+    // spinner, and underneath the found panel it would sit beside the very
+    // recipe the sheet has already brought back.
+    const {rerender} = await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({state: {status: "resolving"}})}/>
+    );
+    expect(screen.queryByRole("button", {name: /Import from your xBloom account/i})).toBeNull();
+
+    await act(async () => {
+        rerender(
+            <ImportSheet open onOpenChange={() => {}}
+                         importer={stubImport({state: foundState()})}/>
+        );
+    });
+    expect(screen.queryByRole("button", {name: /Import from your xBloom account/i})).toBeNull();
 });
