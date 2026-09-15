@@ -108,3 +108,94 @@ describe("fingerprint", () => {
         expect(fingerprint(a)).not.toBe(fingerprint(b));
     });
 });
+
+/**
+ * Every field the digest covers, and how to change it.
+ *
+ * The hand-written tests above each name one field, which left the other
+ * eighteen unguarded: a review proved that `pauseTime` and fifteen others
+ * could be deleted from the digest with the whole suite still green. That is
+ * the "too blind" failure -- a real edit the fingerprint cannot see, and a
+ * sync that overwrites the user's work believing nothing had changed. A table
+ * is the only form of this test that does not rot as fields are added.
+ */
+const COVERED: [string, (r: Recipe) => void][] = [
+    ["name",           (r) => { r.name = "Other"; }],
+    ["xbloomName",     (r) => { r.xbloomName = "Other"; }],
+    ["xid",            (r) => { r.xid = "ZZZZ"; }],
+    ["dosage",         (r) => { r.dosage += 1; }],
+    ["ratio",          (r) => { r.ratio += 1; }],
+    ["grindSize",      (r) => { r.grindSize += 1; }],
+    ["grindRPM",       (r) => { r.grindRPM += 1; }],
+    ["grinder",        (r) => { r.grinder = !r.grinder; }],
+    ["cupType",        (r) => { r.cupType = r.cupType === 1 ? 2 : 1; }],
+    ["defaultCups",    (r) => { r.defaultCups += 1; }],
+    ["bypassEnabled",  (r) => { r.bypassEnabled = !r.bypassEnabled; }],
+    ["bypassVolume",   (r) => { r.bypassVolume += 1; }],
+    ["bypassTemp",     (r) => { r.bypassTemp += 1; }],
+    ["pours.length",   (r) => { r.pours.push(new Pour(2, 100, 90, 3, 0, 0, 20)); }],
+    ["pourNumber",     (r) => { r.pours[0].pourNumber += 1; }],
+    ["volume",         (r) => { r.pours[0].volume += 1; }],
+    ["temperature",    (r) => { r.pours[0].temperature += 1; }],
+    ["flowRate",       (r) => { r.pours[0].flowRate += 1; }],
+    ["agitation",      (r) => { r.pours[0].setAgitation(3); }],
+    ["pourPattern",    (r) => { r.pours[0].pourPattern += 1; }],
+    ["pauseTime",      (r) => { r.pours[0].pauseTime += 1; }],
+];
+
+describe("every field the digest claims to cover", () => {
+    it.each(COVERED)("notices a change to %s", async (_field, change) => {
+        const before = make();
+        const after = make();
+        change(after);
+        expect(fingerprint(after)).not.toBe(fingerprint(before));
+    });
+});
+
+/**
+ * The other direction. Touching any of these must NOT move the digest, or
+ * importing a recipe, colouring it, or writing it to a card would each mark
+ * it as edited by the user before the user had touched it.
+ */
+const IGNORED: [string, (r: Recipe) => void][] = [
+    ["uuid",             (r) => { r.uuid = "different-uuid"; }],
+    ["key",              (r) => { r.key = "different-key"; }],
+    ["accentIndex",      (r) => { r.accentIndex = 4; }],
+    ["createdAt",        (r) => { r.createdAt = 1234567890; }],
+    ["source",           (r) => { r.source = "duplicate"; }],
+    ["shareId",          (r) => { r.shareId = "abc"; }],
+    ["shareUrl",         (r) => { r.shareUrl = "https://example.test/x"; }],
+    ["sharedTableId",    (r) => { r.sharedTableId = 77; }],
+    ["backup",           (r) => { r.backup = [1, 2, 3]; }],
+    ["offline_backup",   (r) => { r.offline_backup = [4, 5, 6]; }],
+    ["uid",              (r) => { r.uid = [7, 8, 9]; }],
+    ["cloudId",          (r) => { r.cloudId = 4242; }],
+    ["cloudFingerprint", (r) => { r.cloudFingerprint = "stamped"; }],
+];
+
+describe("what the digest must stay blind to", () => {
+    it.each(IGNORED)("ignores %s", async (_field, change) => {
+        const before = make();
+        const after = make();
+        change(after);
+        expect(fingerprint(after)).toBe(fingerprint(before));
+    });
+});
+
+it("cannot be forged by a name containing the field separator", async () => {
+    // Joining on a separator is only unambiguous if no value can contain it.
+    // `name` and `xbloomName` are whatever the user typed, so a name carrying
+    // the separator could reproduce another recipe's parts string exactly and
+    // the two would hash equal -- "unchanged", which is the state a sync may
+    // overwrite without asking. The encoding has to rule it out, not the hash.
+    // Both of these join to the same three-part string, "Kenya|Pour|Over".
+    const a = make();
+    a.name = "Kenya";
+    a.xbloomName = "Pour\u001fOver";
+
+    const b = make();
+    b.name = "Kenya\u001fPour";
+    b.xbloomName = "Over";
+
+    expect(fingerprint(a)).not.toBe(fingerprint(b));
+});

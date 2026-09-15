@@ -18,9 +18,12 @@ import type Recipe from "@/library/Recipe";
  *   the fingerprint.
  * - `createdAt`, `tags` — bookkeeping.
  *
- * This is not a security hash and does not need to be one: the only thing an
- * unlikely collision costs is one recipe offered as "unchanged" when it was
- * edited, and the user is choosing from a list either way.
+ * This is not a security hash — nobody is trying to forge one. But it is not
+ * a throwaway either. Equal means "untouched since import", and untouched is
+ * the state the sync is allowed to overwrite without asking, so a collision
+ * costs a user the edits they made. That asymmetry is why the digest is 64
+ * bits rather than 32 and why the input is encoded unambiguously below: both
+ * cost nothing, and the failure they prevent is silent.
  */
 export function fingerprint(recipe: Recipe): string {
     const parts: (string | number)[] = [
@@ -52,22 +55,33 @@ export function fingerprint(recipe: Recipe): string {
         );
     }
 
-    // The separator is what stops 1|23 from colliding with 12|3. It is not
-    // decoration.
-    return hash(parts.join("\u001f"));
+    // Encoded, not joined. A separator stops 1|23 colliding with 12|3, but
+    // `name` and `xbloomName` are whatever the user typed, so a name that
+    // contained the separator could reproduce another recipe's parts string
+    // exactly -- an ambiguity in the encoding rather than a collision in the
+    // hash, and not one the digest width can help with. JSON quotes and
+    // escapes every string, so distinct parts always encode distinctly.
+    return hash(JSON.stringify(parts));
 }
 
+/** FNV-1a's 64-bit offset basis and prime. */
+const OFFSET = 0xcbf29ce484222325n;
+const PRIME = 0x100000001b3n;
+const MASK = 0xffffffffffffffffn;
+
 /**
- * FNV-1a, 32 bits, rendered as hex.
+ * FNV-1a, 64 bits, rendered as hex.
  *
- * Chosen because it is eight lines and needs no dependency. See the note above
- * about why cryptographic strength is not a requirement here.
+ * Chosen because it is ten lines and needs no dependency. 64 rather than 32
+ * because the birthday bound on 32 bits is around 77,000 values, which is not
+ * a comfortable distance from a real library, and the price of being wrong is
+ * a user's edits. BigInt is slower than `Math.imul`, but this runs once per
+ * recipe at import, not per frame.
  */
 function hash(input: string): string {
-    let h = 0x811c9dc5;
+    let h = OFFSET;
     for (let i = 0; i < input.length; i++) {
-        h ^= input.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
+        h = (h ^ BigInt(input.charCodeAt(i))) * PRIME & MASK;
     }
-    return h.toString(16).padStart(8, "0");
+    return h.toString(16).padStart(16, "0");
 }

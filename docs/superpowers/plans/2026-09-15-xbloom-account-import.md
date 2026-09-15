@@ -1689,6 +1689,97 @@ describe("fingerprint", () => {
         expect(fingerprint(a)).not.toBe(fingerprint(b));
     });
 });
+
+/**
+ * Every field the digest covers, and how to change it.
+ *
+ * The hand-written tests above each name one field, which left the other
+ * eighteen unguarded: a review proved that `pauseTime` and fifteen others
+ * could be deleted from the digest with the whole suite still green. That is
+ * the "too blind" failure -- a real edit the fingerprint cannot see, and a
+ * sync that overwrites the user's work believing nothing had changed. A table
+ * is the only form of this test that does not rot as fields are added.
+ */
+const COVERED: [string, (r: Recipe) => void][] = [
+    ["name",           (r) => { r.name = "Other"; }],
+    ["xbloomName",     (r) => { r.xbloomName = "Other"; }],
+    ["xid",            (r) => { r.xid = "ZZZZ"; }],
+    ["dosage",         (r) => { r.dosage += 1; }],
+    ["ratio",          (r) => { r.ratio += 1; }],
+    ["grindSize",      (r) => { r.grindSize += 1; }],
+    ["grindRPM",       (r) => { r.grindRPM += 1; }],
+    ["grinder",        (r) => { r.grinder = !r.grinder; }],
+    ["cupType",        (r) => { r.cupType = r.cupType === 1 ? 2 : 1; }],
+    ["defaultCups",    (r) => { r.defaultCups += 1; }],
+    ["bypassEnabled",  (r) => { r.bypassEnabled = !r.bypassEnabled; }],
+    ["bypassVolume",   (r) => { r.bypassVolume += 1; }],
+    ["bypassTemp",     (r) => { r.bypassTemp += 1; }],
+    ["pours.length",   (r) => { r.pours.push(new Pour(2, 100, 90, 3, 0, 0, 20)); }],
+    ["pourNumber",     (r) => { r.pours[0].pourNumber += 1; }],
+    ["volume",         (r) => { r.pours[0].volume += 1; }],
+    ["temperature",    (r) => { r.pours[0].temperature += 1; }],
+    ["flowRate",       (r) => { r.pours[0].flowRate += 1; }],
+    ["agitation",      (r) => { r.pours[0].setAgitation(3); }],
+    ["pourPattern",    (r) => { r.pours[0].pourPattern += 1; }],
+    ["pauseTime",      (r) => { r.pours[0].pauseTime += 1; }],
+];
+
+describe("every field the digest claims to cover", () => {
+    it.each(COVERED)("notices a change to %s", async (_field, change) => {
+        const before = make();
+        const after = make();
+        change(after);
+        expect(fingerprint(after)).not.toBe(fingerprint(before));
+    });
+});
+
+/**
+ * The other direction. Touching any of these must NOT move the digest, or
+ * importing a recipe, colouring it, or writing it to a card would each mark
+ * it as edited by the user before the user had touched it.
+ */
+const IGNORED: [string, (r: Recipe) => void][] = [
+    ["uuid",             (r) => { r.uuid = "different-uuid"; }],
+    ["key",              (r) => { r.key = "different-key"; }],
+    ["accentIndex",      (r) => { r.accentIndex = 4; }],
+    ["createdAt",        (r) => { r.createdAt = 1234567890; }],
+    ["source",           (r) => { r.source = "duplicate"; }],
+    ["shareId",          (r) => { r.shareId = "abc"; }],
+    ["shareUrl",         (r) => { r.shareUrl = "https://example.test/x"; }],
+    ["sharedTableId",    (r) => { r.sharedTableId = 77; }],
+    ["backup",           (r) => { r.backup = [1, 2, 3]; }],
+    ["offline_backup",   (r) => { r.offline_backup = [4, 5, 6]; }],
+    ["uid",              (r) => { r.uid = [7, 8, 9]; }],
+    ["cloudId",          (r) => { r.cloudId = 4242; }],
+    ["cloudFingerprint", (r) => { r.cloudFingerprint = "stamped"; }],
+];
+
+describe("what the digest must stay blind to", () => {
+    it.each(IGNORED)("ignores %s", async (_field, change) => {
+        const before = make();
+        const after = make();
+        change(after);
+        expect(fingerprint(after)).toBe(fingerprint(before));
+    });
+});
+
+it("cannot be forged by a name containing the field separator", async () => {
+    // Joining on a separator is only unambiguous if no value can contain it.
+    // `name` and `xbloomName` are whatever the user typed, so a name carrying
+    // the separator could reproduce another recipe's parts string exactly and
+    // the two would hash equal -- "unchanged", which is the state a sync may
+    // overwrite without asking. The encoding has to rule it out, not the hash.
+    // Both of these join to the same three-part string, "Kenya|Pour|Over".
+    const a = make();
+    a.name = "Kenya";
+    a.xbloomName = "Pour\u001fOver";
+
+    const b = make();
+    b.name = "Kenya\u001fPour";
+    b.xbloomName = "Over";
+
+    expect(fingerprint(a)).not.toBe(fingerprint(b));
+});
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -1721,9 +1812,12 @@ import type Recipe from "@/library/Recipe";
  *   the fingerprint.
  * - `createdAt`, `tags` — bookkeeping.
  *
- * This is not a security hash and does not need to be one: the only thing an
- * unlikely collision costs is one recipe offered as "unchanged" when it was
- * edited, and the user is choosing from a list either way.
+ * This is not a security hash — nobody is trying to forge one. But it is not
+ * a throwaway either. Equal means "untouched since import", and untouched is
+ * the state the sync is allowed to overwrite without asking, so a collision
+ * costs a user the edits they made. That asymmetry is why the digest is 64
+ * bits rather than 32 and why the input is encoded unambiguously below: both
+ * cost nothing, and the failure they prevent is silent.
  */
 export function fingerprint(recipe: Recipe): string {
     const parts: (string | number)[] = [
@@ -1755,24 +1849,35 @@ export function fingerprint(recipe: Recipe): string {
         );
     }
 
-    // The separator is what stops 1|23 from colliding with 12|3. It is not
-    // decoration.
-    return hash(parts.join("\u001f"));
+    // Encoded, not joined. A separator stops 1|23 colliding with 12|3, but
+    // `name` and `xbloomName` are whatever the user typed, so a name that
+    // contained the separator could reproduce another recipe's parts string
+    // exactly -- an ambiguity in the encoding rather than a collision in the
+    // hash, and not one the digest width can help with. JSON quotes and
+    // escapes every string, so distinct parts always encode distinctly.
+    return hash(JSON.stringify(parts));
 }
 
+/** FNV-1a's 64-bit offset basis and prime. */
+const OFFSET = 0xcbf29ce484222325n;
+const PRIME = 0x100000001b3n;
+const MASK = 0xffffffffffffffffn;
+
 /**
- * FNV-1a, 32 bits, rendered as hex.
+ * FNV-1a, 64 bits, rendered as hex.
  *
- * Chosen because it is eight lines and needs no dependency. See the note above
- * about why cryptographic strength is not a requirement here.
+ * Chosen because it is ten lines and needs no dependency. 64 rather than 32
+ * because the birthday bound on 32 bits is around 77,000 values, which is not
+ * a comfortable distance from a real library, and the price of being wrong is
+ * a user's edits. BigInt is slower than `Math.imul`, but this runs once per
+ * recipe at import, not per frame.
  */
 function hash(input: string): string {
-    let h = 0x811c9dc5;
+    let h = OFFSET;
     for (let i = 0; i < input.length; i++) {
-        h ^= input.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
+        h = (h ^ BigInt(input.charCodeAt(i))) * PRIME & MASK;
     }
-    return h.toString(16).padStart(8, "0");
+    return h.toString(16).padStart(16, "0");
 }
 ```
 
@@ -1784,7 +1889,7 @@ the constructor migrates, and it is not part of the current content.
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/fingerprint.test.ts`
-Expected: PASS, 12 tests.
+Expected: PASS, 47 tests.
 
 - [ ] **Step 5: Commit**
 
