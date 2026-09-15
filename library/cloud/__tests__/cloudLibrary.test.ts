@@ -55,13 +55,39 @@ describe("fetchCloudRecipes", () => {
     it("refuses to page forever if the server keeps returning full pages", async () => {
         mockPost.mockResolvedValue({result: "success", list: rows(100)});
 
-        const out = await fetchCloudRecipes(session);
-
         // 20 pages of 100 is far past any real library; a server that never
         // runs out is a bug on one side or the other, and the app must not
         // answer it with an unbounded request loop.
+        //
+        // It fails rather than returning the 2,000 rows it has. A capped walk
+        // that returns quietly is indistinguishable from a complete one, and
+        // the recipes beyond the cap would read as "not in your account".
+        await expect(fetchCloudRecipes(session)).rejects.toMatchObject({
+            kind: "server",
+        });
         expect(mockPost).toHaveBeenCalledTimes(20);
-        expect(out).toHaveLength(2000);
+    });
+
+    it("fails rather than truncating when a page part way through is unreadable", async () => {
+        mockPost
+            .mockResolvedValueOnce({result: "success", list: rows(100)})
+            .mockResolvedValueOnce({result: "success"});
+
+        await expect(fetchCloudRecipes(session)).rejects.toMatchObject({
+            kind: "server",
+        });
+    });
+
+    it("passes the abort signal through rather than swallowing it", async () => {
+        const failure = new Error("Aborted");
+        failure.name = "AbortError";
+        mockPost.mockRejectedValue(failure);
+
+        const controller = new AbortController();
+        // Straight out, not a short list dressed up as a complete one.
+        await expect(
+            fetchCloudRecipes(session, controller.signal)
+        ).rejects.toMatchObject({name: "AbortError"});
     });
 
     it("sends the auth fields and the adaptedModel filter in every request", async () => {
