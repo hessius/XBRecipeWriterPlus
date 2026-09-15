@@ -128,8 +128,15 @@ export function useCloudImport(deps: CloudImportDeps) {
         );
     }
 
-    async function confirm() {
-        if (!plan) return;
+    /**
+     * Returns what happened, rather than leaving the caller to read it back
+     * out of state. The screen reports the outcome in a toast and navigates
+     * away in the same handler, and after an await the `imported` it captured
+     * at render is stale. An effect watching `status` would be the other way
+     * round, and this repo does not seed or react to state in effects.
+     */
+    async function confirm(): Promise<{imported: number; failed: boolean} | null> {
+        if (!plan) return null;
         // A second tap before the first render of `importing` would otherwise
         // run the writes again: the inserts collide on their uuids and throw,
         // and the replacements are applied twice. State cannot guard this --
@@ -139,7 +146,7 @@ export function useCloudImport(deps: CloudImportDeps) {
         //
         // So the flag belongs to the plan rather than to the call: one plan is
         // imported at most once, and `list` clears it when a new one arrives.
-        if (written.current) return;
+        if (written.current) return null;
         written.current = true;
         setStatus("importing");
 
@@ -161,6 +168,7 @@ export function useCloudImport(deps: CloudImportDeps) {
             }
             setImported(landed);
             setStatus("done");
+            return {imported: landed, failed: false};
         } catch {
             // The writes that landed are real and the user keeps them. Report
             // the count rather than a total that never happened, and land on
@@ -169,6 +177,7 @@ export function useCloudImport(deps: CloudImportDeps) {
             setImported(landed);
             setError("server");
             setStatus("done");
+            return {imported: landed, failed: true};
         }
     }
 

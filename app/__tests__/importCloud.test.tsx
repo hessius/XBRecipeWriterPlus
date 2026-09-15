@@ -1,11 +1,14 @@
 import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import ImportCloudScreen from "@/app/importCloud";
+import {notify} from "@/components/XbrwToast";
 import {renderWithProviders} from "@/test-utils/render";
 
 // The screen constructs a `new RecipeDatabase()` at module scope of the
 // component body; without this mock jest opens real expo-sqlite.
 jest.mock("@/library/RecipeDatabase");
+jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+jest.mock("expo-router", () => ({router: {back: jest.fn(), push: jest.fn()}}));
 
 const mockHook = {
     status: "signedOut" as string,
@@ -23,6 +26,28 @@ const mockHook = {
 jest.mock("@/hooks/useCloudImport", () => ({
     useCloudImport: () => mockHook,
 }));
+
+const entry = (over: Record<string, unknown> = {}) => ({
+    cloudId: 1,
+    name: "Kenya",
+    status: "new",
+    selected: true,
+    recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
+    ...over,
+});
+
+const planWith = (over: Record<string, unknown> = {}) => ({
+    entries: [entry()],
+    unreadable: 0,
+    duplicated: 0,
+    counts: {new: 1, updated: 0, unchanged: 0, edited: 0},
+    ...over,
+});
+
+const choosing = (over: Record<string, unknown> = {}) => {
+    mockHook.status = "choosing";
+    mockHook.plan = planWith(over);
+};
 
 describe("importCloud", () => {
     beforeEach(() => {
@@ -137,5 +162,219 @@ describe("importCloud", () => {
 
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.getByText(/Imported 3 recipes/i)).toBeTruthy();
+    });
+
+    it("says the endpoints carry some risk to the account, not merely that they are unofficial", async () => {
+        // "Unofficial" alone reads as a disclaimer about polish. The thing the
+        // user is actually being asked to accept is a risk to their account.
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/risk to your account/i)).toBeTruthy();
+    });
+
+    it("puts the caveat above the fields, not below them", async () => {
+        // Placement is the whole point: a warning under a submit button has
+        // already been walked past by everyone who was going to walk past it.
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        // Rendered order, read off the tree itself. RNTL v14 has no query for
+        // "comes before", and the tree is serialised depth-first, so the two
+        // positions in it are the two positions on screen.
+        const tree = JSON.stringify(screen.toJSON());
+        const caveat = tree.indexOf("risk to your account");
+        const field = tree.indexOf("Password");
+
+        expect(caveat).toBeGreaterThan(-1);
+        expect(field).toBeGreaterThan(-1);
+        expect(caveat).toBeLessThan(field);
+    });
+
+    it("promises the password is never stored", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/password is never stored/i)).toBeTruthy();
+    });
+
+    it("masks the password field", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(true);
+    });
+
+    it("will not submit a sign-in that is already in flight", async () => {
+        mockHook.status = "signingIn";
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByLabelText("Sign in").props.accessibilityState.disabled)
+            .toBe(true);
+    });
+
+    it.each([
+        ["unauthorised", /sign-in has expired/i],
+        ["server", /could not answer/i],
+    ])("says so when the failure was %s", async (kind, copy) => {
+        mockHook.error = kind as string;
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(copy as RegExp)).toBeTruthy();
+    });
+
+    it.each([
+        ["restoring", /Reading your recipes/i],
+        ["listing", /Reading your recipes/i],
+        ["importing", /Importing/i],
+    ])("shows something during %s rather than an empty screen", async (status, copy) => {
+        mockHook.status = status as string;
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(copy as RegExp)).toBeTruthy();
+    });
+
+    it("offers a retry when signing in worked but the listing never arrived", async () => {
+        // `refresh` is otherwise unreachable: the list branch needs a plan, so
+        // without this the screen is an error message and nothing to press.
+        mockHook.status = "choosing";
+        mockHook.plan = null;
+        mockHook.error = "network";
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Try again"));
+
+        expect(mockHook.refresh).toHaveBeenCalled();
+    });
+
+    it("hands a row's own id to the hook when it is toggled", async () => {
+        choosing({entries: [entry(), entry({cloudId: 2, name: "Peru"})]});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText(/Peru/));
+
+        // The second row, not merely "a row": with one entry this test could
+        // not tell the right id from any id.
+        expect(mockHook.toggle).toHaveBeenCalledWith(2);
+        expect(mockHook.confirm).not.toHaveBeenCalled();
+    });
+
+    it("counts the selection, not the list", async () => {
+        choosing({
+            entries: [entry(), entry({cloudId: 2, name: "Peru", selected: false})],
+            counts: {new: 2, updated: 0, unchanged: 0, edited: 0},
+        });
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText("Import 1 recipe")).toBeTruthy();
+        expect(screen.queryByText("Import 2 recipes")).toBeNull();
+    });
+
+    it("says recipes, plural, when more than one is chosen", async () => {
+        choosing({
+            entries: [entry(), entry({cloudId: 2, name: "Peru"})],
+            counts: {new: 2, updated: 0, unchanged: 0, edited: 0},
+        });
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText("Import 2 recipes")).toBeTruthy();
+    });
+
+    it("disables the button when nothing is chosen", async () => {
+        choosing({entries: [entry({selected: false})]});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByLabelText("Import 0 recipes").props.accessibilityState.disabled)
+            .toBe(true);
+    });
+
+    it("does not show the empty state when there are recipes to show", async () => {
+        choosing();
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByText(/No recipes to import/i)).toBeNull();
+    });
+
+    it("does not list anything before the plan is being chosen", async () => {
+        mockHook.status = "importing";
+        mockHook.plan = planWith();
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByText("Kenya")).toBeNull();
+    });
+
+    it("says one recipe could not be read without saying recipes", async () => {
+        choosing({unreadable: 1});
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText("1 recipe could not be read and was left out.")).toBeTruthy();
+    });
+
+    it("says when a recipe appeared twice in the account", async () => {
+        // Counted in the plan so it is not dropped in silence; the screen is
+        // where that promise is either kept or broken.
+        choosing({duplicated: 2});
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/2 recipes appeared twice/i)).toBeTruthy();
+    });
+
+    it("reports the outcome in a toast and leaves, rather than parking the user", async () => {
+        const {router} = jest.requireMock("expo-router");
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 3, failed: false});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "success", message: "Imported 3 recipes.",
+        }));
+        expect(router.back).toHaveBeenCalled();
+    });
+
+    it("keeps what landed in the message when the import failed part-way", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 2, failed: true});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "error",
+            message: "Imported 2 recipes, then something went wrong.",
+        }));
+    });
+
+    it("does not claim an import when nothing landed", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 0, failed: true});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "error", message: "Could not import your recipes.",
+        }));
+    });
+
+    it("says nothing and stays put when there was no plan to import", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue(null);
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(mockHook.confirm).toHaveBeenCalled());
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("names the account it is signed in to", async () => {
+        // Without it, Sign out asks the user to revoke something they cannot
+        // identify.
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText("Signed in as a@b.c")).toBeTruthy();
+    });
+
+    it("offers a working sign out once there is a session", async () => {
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign out"));
+
+        expect(mockHook.forgetAccount).toHaveBeenCalled();
+    });
+
+    it("offers no sign out when there is no session", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByLabelText("Sign out")).toBeNull();
     });
 });

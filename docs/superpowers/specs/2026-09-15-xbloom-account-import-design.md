@@ -255,6 +255,17 @@ rather than four unrelated adjectives:
 One button: `Import 4 recipes`, the count following the selection, disabled at
 zero.
 
+Beneath the list, the account this is signed in to, and Sign out. Section 4.1
+puts those in settings, and they stay there — but they belong here too. This is
+the only screen that can be reached while signed in to the *wrong* account, and
+a user who notices that should not have to leave, find settings, and come back.
+The email is named beside the button for the same reason it is in settings:
+without it, Sign out asks someone to revoke something they cannot identify.
+
+On a failure that leaves no list — signed in, but the recipes never arrived —
+the error stands with a Try again. Otherwise `refresh` is unreachable and the
+screen is a message with nothing to press.
+
 ### 4.5 What it never does
 
 It never deletes anything.
@@ -263,8 +274,11 @@ It never deletes anything.
 - A recipe deleted upstream stays in your library untouched. This is an
   offline-first app; the cloud is not authoritative over your phone.
 
-On completion the existing toast reports what happened and the library
-refreshes. Imported recipes take their accent by nearest match from `theColor`.
+On completion the existing toast reports what happened and the screen closes,
+which is what refreshes the library — the list reloads when it regains focus.
+The toast rather than a screen to dismiss: the recipes are in the library now,
+and that is where the user should be standing. A partial failure says what
+landed as well as what did not, because the recipes that landed are real. Imported recipes take their accent by nearest match from `theColor`.
 
 ## 5. Accents
 

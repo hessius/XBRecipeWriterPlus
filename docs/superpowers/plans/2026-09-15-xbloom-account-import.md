@@ -4183,11 +4183,14 @@ Create `app/__tests__/importCloud.test.tsx`:
 import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import ImportCloudScreen from "@/app/importCloud";
+import {notify} from "@/components/XbrwToast";
 import {renderWithProviders} from "@/test-utils/render";
 
 // The screen constructs a `new RecipeDatabase()` at module scope of the
 // component body; without this mock jest opens real expo-sqlite.
 jest.mock("@/library/RecipeDatabase");
+jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+jest.mock("expo-router", () => ({router: {back: jest.fn(), push: jest.fn()}}));
 
 const mockHook = {
     status: "signedOut" as string,
@@ -4205,6 +4208,28 @@ const mockHook = {
 jest.mock("@/hooks/useCloudImport", () => ({
     useCloudImport: () => mockHook,
 }));
+
+const entry = (over: Record<string, unknown> = {}) => ({
+    cloudId: 1,
+    name: "Kenya",
+    status: "new",
+    selected: true,
+    recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
+    ...over,
+});
+
+const planWith = (over: Record<string, unknown> = {}) => ({
+    entries: [entry()],
+    unreadable: 0,
+    duplicated: 0,
+    counts: {new: 1, updated: 0, unchanged: 0, edited: 0},
+    ...over,
+});
+
+const choosing = (over: Record<string, unknown> = {}) => {
+    mockHook.status = "choosing";
+    mockHook.plan = planWith(over);
+};
 
 describe("importCloud", () => {
     beforeEach(() => {
@@ -4320,6 +4345,220 @@ describe("importCloud", () => {
         await renderWithProviders(<ImportCloudScreen/>);
         expect(screen.getByText(/Imported 3 recipes/i)).toBeTruthy();
     });
+
+    it("says the endpoints carry some risk to the account, not merely that they are unofficial", async () => {
+        // "Unofficial" alone reads as a disclaimer about polish. The thing the
+        // user is actually being asked to accept is a risk to their account.
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/risk to your account/i)).toBeTruthy();
+    });
+
+    it("puts the caveat above the fields, not below them", async () => {
+        // Placement is the whole point: a warning under a submit button has
+        // already been walked past by everyone who was going to walk past it.
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        // Rendered order, read off the tree itself. RNTL v14 has no query for
+        // "comes before", and the tree is serialised depth-first, so the two
+        // positions in it are the two positions on screen.
+        const tree = JSON.stringify(screen.toJSON());
+        const caveat = tree.indexOf("risk to your account");
+        const field = tree.indexOf("Password");
+
+        expect(caveat).toBeGreaterThan(-1);
+        expect(field).toBeGreaterThan(-1);
+        expect(caveat).toBeLessThan(field);
+    });
+
+    it("promises the password is never stored", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/password is never stored/i)).toBeTruthy();
+    });
+
+    it("masks the password field", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(true);
+    });
+
+    it("will not submit a sign-in that is already in flight", async () => {
+        mockHook.status = "signingIn";
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByLabelText("Sign in").props.accessibilityState.disabled)
+            .toBe(true);
+    });
+
+    it.each([
+        ["unauthorised", /sign-in has expired/i],
+        ["server", /could not answer/i],
+    ])("says so when the failure was %s", async (kind, copy) => {
+        mockHook.error = kind as string;
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(copy as RegExp)).toBeTruthy();
+    });
+
+    it.each([
+        ["restoring", /Reading your recipes/i],
+        ["listing", /Reading your recipes/i],
+        ["importing", /Importing/i],
+    ])("shows something during %s rather than an empty screen", async (status, copy) => {
+        mockHook.status = status as string;
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(copy as RegExp)).toBeTruthy();
+    });
+
+    it("offers a retry when signing in worked but the listing never arrived", async () => {
+        // `refresh` is otherwise unreachable: the list branch needs a plan, so
+        // without this the screen is an error message and nothing to press.
+        mockHook.status = "choosing";
+        mockHook.plan = null;
+        mockHook.error = "network";
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Try again"));
+
+        expect(mockHook.refresh).toHaveBeenCalled();
+    });
+
+    it("hands a row's own id to the hook when it is toggled", async () => {
+        choosing({entries: [entry(), entry({cloudId: 2, name: "Peru"})]});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText(/Peru/));
+
+        // The second row, not merely "a row": with one entry this test could
+        // not tell the right id from any id.
+        expect(mockHook.toggle).toHaveBeenCalledWith(2);
+        expect(mockHook.confirm).not.toHaveBeenCalled();
+    });
+
+    it("counts the selection, not the list", async () => {
+        choosing({
+            entries: [entry(), entry({cloudId: 2, name: "Peru", selected: false})],
+            counts: {new: 2, updated: 0, unchanged: 0, edited: 0},
+        });
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText("Import 1 recipe")).toBeTruthy();
+        expect(screen.queryByText("Import 2 recipes")).toBeNull();
+    });
+
+    it("says recipes, plural, when more than one is chosen", async () => {
+        choosing({
+            entries: [entry(), entry({cloudId: 2, name: "Peru"})],
+            counts: {new: 2, updated: 0, unchanged: 0, edited: 0},
+        });
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText("Import 2 recipes")).toBeTruthy();
+    });
+
+    it("disables the button when nothing is chosen", async () => {
+        choosing({entries: [entry({selected: false})]});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByLabelText("Import 0 recipes").props.accessibilityState.disabled)
+            .toBe(true);
+    });
+
+    it("does not show the empty state when there are recipes to show", async () => {
+        choosing();
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByText(/No recipes to import/i)).toBeNull();
+    });
+
+    it("does not list anything before the plan is being chosen", async () => {
+        mockHook.status = "importing";
+        mockHook.plan = planWith();
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByText("Kenya")).toBeNull();
+    });
+
+    it("says one recipe could not be read without saying recipes", async () => {
+        choosing({unreadable: 1});
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText("1 recipe could not be read and was left out.")).toBeTruthy();
+    });
+
+    it("says when a recipe appeared twice in the account", async () => {
+        // Counted in the plan so it is not dropped in silence; the screen is
+        // where that promise is either kept or broken.
+        choosing({duplicated: 2});
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText(/2 recipes appeared twice/i)).toBeTruthy();
+    });
+
+    it("reports the outcome in a toast and leaves, rather than parking the user", async () => {
+        const {router} = jest.requireMock("expo-router");
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 3, failed: false});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "success", message: "Imported 3 recipes.",
+        }));
+        expect(router.back).toHaveBeenCalled();
+    });
+
+    it("keeps what landed in the message when the import failed part-way", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 2, failed: true});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "error",
+            message: "Imported 2 recipes, then something went wrong.",
+        }));
+    });
+
+    it("does not claim an import when nothing landed", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue({imported: 0, failed: true});
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone: "error", message: "Could not import your recipes.",
+        }));
+    });
+
+    it("says nothing and stays put when there was no plan to import", async () => {
+        choosing();
+        mockHook.confirm.mockResolvedValue(null);
+
+        await renderWithProviders(<ImportCloudScreen/>);
+        await fireEvent.press(screen.getByLabelText("Import 1 recipe"));
+
+        await waitFor(() => expect(mockHook.confirm).toHaveBeenCalled());
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("names the account it is signed in to", async () => {
+        // Without it, Sign out asks the user to revoke something they cannot
+        // identify.
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.getByText("Signed in as a@b.c")).toBeTruthy();
+    });
+
+    it("offers a working sign out once there is a session", async () => {
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign out"));
+
+        expect(mockHook.forgetAccount).toHaveBeenCalled();
+    });
+
+    it("offers no sign out when there is no session", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+        expect(screen.queryByLabelText("Sign out")).toBeNull();
+    });
 });
 ```
 
@@ -4339,9 +4578,11 @@ import {ScrollView} from "react-native";
 import {Button, Input, Text, YStack, type ColorTokens} from "tamagui";
 
 import CloudImportRow from "@/components/CloudImportRow";
+import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useCloudImport} from "@/hooks/useCloudImport";
+
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {CloudErrorKind} from "@/library/cloud/transport";
 
@@ -4354,6 +4595,11 @@ import type {CloudErrorKind} from "@/library/cloud/transport";
  * The screen is layout. Every judgement it appears to make was made in
  * `buildImportPlan` and is tested there without a renderer.
  */
+
+/** "1 recipe", "3 recipes". Said often enough here to be worth naming once. */
+function recipes(count: number): string {
+    return `${count} recipe${count === 1 ? "" : "s"}`;
+}
 
 const ERRORS: Record<CloudErrorKind, string> = {
     credentials: "Email or password not accepted.",
@@ -4375,6 +4621,31 @@ export default function ImportCloudScreen() {
 
     const selected = cloud.plan?.entries.filter((e) => e.selected) ?? [];
 
+    /**
+     * Import, say what happened, and leave.
+     *
+     * The toast rather than a screen the user has to dismiss: the library is
+     * where the recipes now are, and the spec asks the existing toast to
+     * report the outcome. `confirm` hands back its result instead of the
+     * screen reading it out of state, which after the await would be the
+     * count captured at the last render.
+     */
+    async function finish() {
+        const outcome = await cloud.confirm();
+        if (!outcome) return;
+        notify(outcome.failed
+            ? {
+                tone: "error",
+                message: outcome.imported === 0
+                    ? "Could not import your recipes."
+                    // The ones that landed are real and the user keeps them,
+                    // so the message says what it got, not only what it lost.
+                    : `Imported ${recipes(outcome.imported)}, then something went wrong.`,
+            }
+            : {tone: "success", message: `Imported ${recipes(outcome.imported)}.`});
+        router.back();
+    }
+
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="xBloom account" onBack={() => router.back()}/>
@@ -4393,11 +4664,15 @@ export default function ImportCloudScreen() {
                                 under a submit button has already been walked
                                 past by everyone who was going to walk past it. */}
                             <Text color={palette.dim} fontSize={13}>
-                                This is not an official xBloom feature. Signing in
-                                sends your email and password directly to xBloom,
-                                never to us or to anyone else. Only a revocable
-                                token is kept on this phone — your password is
-                                never stored.
+                                This is not an official xBloom feature. It signs in
+                                the way the xBloom app does, using endpoints xBloom
+                                has never published, so there is some risk to your
+                                account in using it — they could change or withdraw
+                                them, and they have not agreed to this.
+
+                                Your email and password go directly to xBloom, never
+                                to us or to anyone else. Only a revocable token is
+                                kept on this phone — your password is never stored.
                             </Text>
 
                             <Input
@@ -4419,6 +4694,10 @@ export default function ImportCloudScreen() {
 
                             <Button
                                 accessibilityLabel="Sign in"
+                                // Tamagui's Button does not mirror `disabled`
+                                // into accessibilityState, so a disabled button
+                                // would announce itself as available. Said here.
+                                accessibilityState={{disabled: cloud.status === "signingIn"}}
                                 disabled={cloud.status === "signingIn"}
                                 backgroundColor={palette.raised}
                                 color={palette.text}
@@ -4430,6 +4709,19 @@ export default function ImportCloudScreen() {
 
                     {(cloud.status === "listing" || cloud.status === "restoring") && (
                         <Text color={palette.dim}>Reading your recipes…</Text>
+                    )}
+
+                    {cloud.status === "choosing" && !cloud.plan && (
+                        // Signed in, but the listing did not arrive. The error
+                        // above says why; without this there is nothing to
+                        // press and `refresh` is unreachable from the screen.
+                        <Button
+                            accessibilityLabel="Try again"
+                            backgroundColor={palette.raised}
+                            color={palette.text}
+                            onPress={() => cloud.refresh()}>
+                            Try again
+                        </Button>
                     )}
 
                     {cloud.status === "choosing" && cloud.plan && (
@@ -4453,23 +4745,33 @@ export default function ImportCloudScreen() {
                                 // Said out loud. A recipe quietly missing from a
                                 // list is the one failure the user cannot notice.
                                 <Text color={palette.dim} fontSize={13}>
-                                    {cloud.plan.unreadable} recipes could not be read
-                                    and were left out.
+                                    {`${recipes(cloud.plan.unreadable)} could not be read and ` +
+                                        (cloud.plan.unreadable === 1 ? "was" : "were") +
+                                        " left out."}
+                                </Text>
+                            )}
+
+                            {cloud.plan.duplicated > 0 && (
+                                // Counted for the same reason as unreadable:
+                                // the list is shorter than the account and the
+                                // user should be told why, not left to wonder.
+                                <Text color={palette.dim} fontSize={13}>
+                                    {`${recipes(cloud.plan.duplicated)} appeared twice in your ` +
+                                        "account and " +
+                                        (cloud.plan.duplicated === 1 ? "was" : "were") +
+                                        " listed once."}
                                 </Text>
                             )}
 
                             {cloud.plan.entries.length > 0 && (
                                 <Button
-                                    accessibilityLabel={
-                                        `Import ${selected.length} recipe` +
-                                        (selected.length === 1 ? "" : "s")
-                                    }
+                                    accessibilityLabel={`Import ${recipes(selected.length)}`}
+                                    accessibilityState={{disabled: selected.length === 0}}
                                     disabled={selected.length === 0}
                                     backgroundColor={palette.raised}
                                     color={palette.text}
-                                    onPress={() => cloud.confirm()}>
-                                    {`Import ${selected.length} recipe` +
-                                        (selected.length === 1 ? "" : "s")}
+                                    onPress={finish}>
+                                    {`Import ${recipes(selected.length)}`}
                                 </Button>
                             )}
                         </>
@@ -4482,10 +4784,10 @@ export default function ImportCloudScreen() {
                     {cloud.status === "done" && (
                         <>
                             <Text color={palette.text}>
-                                {`Imported ${cloud.imported} recipe` +
-                                    (cloud.imported === 1 ? "" : "s") + "."}
+                                {`Imported ${recipes(cloud.imported)}.`}
                             </Text>
-                            <Button onPress={() => router.back()}>Done</Button>
+                            <Button accessibilityLabel="Done"
+                                    onPress={() => router.back()}>Done</Button>
                         </>
                     )}
 
@@ -4535,7 +4837,7 @@ different fonts.
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest app/__tests__/importCloud.test.tsx`
-Expected: PASS, 9 tests.
+Expected: PASS, 35 tests.
 
 - [ ] **Step 6: Commit**
 

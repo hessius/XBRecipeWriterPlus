@@ -124,7 +124,7 @@ export default function RootLayout() {
                                                               headerShown: false,
                                                               animation: "slide_from_right"
                                                           }}/>
-                                            {/* These four draw ScreenHeader
+                                            {/* These five draw ScreenHeader
                                                 instead, for the same reason
                                                 and declared in the same
                                                 place. */}

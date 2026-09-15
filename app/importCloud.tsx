@@ -4,9 +4,11 @@ import {ScrollView} from "react-native";
 import {Button, Input, Text, YStack, type ColorTokens} from "tamagui";
 
 import CloudImportRow from "@/components/CloudImportRow";
+import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useCloudImport} from "@/hooks/useCloudImport";
+
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {CloudErrorKind} from "@/library/cloud/transport";
 
@@ -19,6 +21,11 @@ import type {CloudErrorKind} from "@/library/cloud/transport";
  * The screen is layout. Every judgement it appears to make was made in
  * `buildImportPlan` and is tested there without a renderer.
  */
+
+/** "1 recipe", "3 recipes". Said often enough here to be worth naming once. */
+function recipes(count: number): string {
+    return `${count} recipe${count === 1 ? "" : "s"}`;
+}
 
 const ERRORS: Record<CloudErrorKind, string> = {
     credentials: "Email or password not accepted.",
@@ -40,6 +47,31 @@ export default function ImportCloudScreen() {
 
     const selected = cloud.plan?.entries.filter((e) => e.selected) ?? [];
 
+    /**
+     * Import, say what happened, and leave.
+     *
+     * The toast rather than a screen the user has to dismiss: the library is
+     * where the recipes now are, and the spec asks the existing toast to
+     * report the outcome. `confirm` hands back its result instead of the
+     * screen reading it out of state, which after the await would be the
+     * count captured at the last render.
+     */
+    async function finish() {
+        const outcome = await cloud.confirm();
+        if (!outcome) return;
+        notify(outcome.failed
+            ? {
+                tone: "error",
+                message: outcome.imported === 0
+                    ? "Could not import your recipes."
+                    // The ones that landed are real and the user keeps them,
+                    // so the message says what it got, not only what it lost.
+                    : `Imported ${recipes(outcome.imported)}, then something went wrong.`,
+            }
+            : {tone: "success", message: `Imported ${recipes(outcome.imported)}.`});
+        router.back();
+    }
+
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="xBloom account" onBack={() => router.back()}/>
@@ -58,11 +90,15 @@ export default function ImportCloudScreen() {
                                 under a submit button has already been walked
                                 past by everyone who was going to walk past it. */}
                             <Text color={palette.dim} fontSize={13}>
-                                This is not an official xBloom feature. Signing in
-                                sends your email and password directly to xBloom,
-                                never to us or to anyone else. Only a revocable
-                                token is kept on this phone — your password is
-                                never stored.
+                                This is not an official xBloom feature. It signs in
+                                the way the xBloom app does, using endpoints xBloom
+                                has never published, so there is some risk to your
+                                account in using it — they could change or withdraw
+                                them, and they have not agreed to this.
+
+                                Your email and password go directly to xBloom, never
+                                to us or to anyone else. Only a revocable token is
+                                kept on this phone — your password is never stored.
                             </Text>
 
                             <Input
@@ -84,6 +120,10 @@ export default function ImportCloudScreen() {
 
                             <Button
                                 accessibilityLabel="Sign in"
+                                // Tamagui's Button does not mirror `disabled`
+                                // into accessibilityState, so a disabled button
+                                // would announce itself as available. Said here.
+                                accessibilityState={{disabled: cloud.status === "signingIn"}}
                                 disabled={cloud.status === "signingIn"}
                                 backgroundColor={palette.raised}
                                 color={palette.text}
@@ -95,6 +135,19 @@ export default function ImportCloudScreen() {
 
                     {(cloud.status === "listing" || cloud.status === "restoring") && (
                         <Text color={palette.dim}>Reading your recipes…</Text>
+                    )}
+
+                    {cloud.status === "choosing" && !cloud.plan && (
+                        // Signed in, but the listing did not arrive. The error
+                        // above says why; without this there is nothing to
+                        // press and `refresh` is unreachable from the screen.
+                        <Button
+                            accessibilityLabel="Try again"
+                            backgroundColor={palette.raised}
+                            color={palette.text}
+                            onPress={() => cloud.refresh()}>
+                            Try again
+                        </Button>
                     )}
 
                     {cloud.status === "choosing" && cloud.plan && (
@@ -118,23 +171,33 @@ export default function ImportCloudScreen() {
                                 // Said out loud. A recipe quietly missing from a
                                 // list is the one failure the user cannot notice.
                                 <Text color={palette.dim} fontSize={13}>
-                                    {cloud.plan.unreadable} recipes could not be read
-                                    and were left out.
+                                    {`${recipes(cloud.plan.unreadable)} could not be read and ` +
+                                        (cloud.plan.unreadable === 1 ? "was" : "were") +
+                                        " left out."}
+                                </Text>
+                            )}
+
+                            {cloud.plan.duplicated > 0 && (
+                                // Counted for the same reason as unreadable:
+                                // the list is shorter than the account and the
+                                // user should be told why, not left to wonder.
+                                <Text color={palette.dim} fontSize={13}>
+                                    {`${recipes(cloud.plan.duplicated)} appeared twice in your ` +
+                                        "account and " +
+                                        (cloud.plan.duplicated === 1 ? "was" : "were") +
+                                        " listed once."}
                                 </Text>
                             )}
 
                             {cloud.plan.entries.length > 0 && (
                                 <Button
-                                    accessibilityLabel={
-                                        `Import ${selected.length} recipe` +
-                                        (selected.length === 1 ? "" : "s")
-                                    }
+                                    accessibilityLabel={`Import ${recipes(selected.length)}`}
+                                    accessibilityState={{disabled: selected.length === 0}}
                                     disabled={selected.length === 0}
                                     backgroundColor={palette.raised}
                                     color={palette.text}
-                                    onPress={() => cloud.confirm()}>
-                                    {`Import ${selected.length} recipe` +
-                                        (selected.length === 1 ? "" : "s")}
+                                    onPress={finish}>
+                                    {`Import ${recipes(selected.length)}`}
                                 </Button>
                             )}
                         </>
@@ -147,10 +210,10 @@ export default function ImportCloudScreen() {
                     {cloud.status === "done" && (
                         <>
                             <Text color={palette.text}>
-                                {`Imported ${cloud.imported} recipe` +
-                                    (cloud.imported === 1 ? "" : "s") + "."}
+                                {`Imported ${recipes(cloud.imported)}.`}
                             </Text>
-                            <Button onPress={() => router.back()}>Done</Button>
+                            <Button accessibilityLabel="Done"
+                                    onPress={() => router.back()}>Done</Button>
                         </>
                     )}
 
