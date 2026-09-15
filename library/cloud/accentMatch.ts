@@ -29,7 +29,13 @@ export const MAX_ACCENT_DISTANCE = 0.06;
 
 type Lab = {L: number; a: number; b: number};
 
-function parseHex(value: string): [number, number, number] | null {
+function parseHex(value: string | null | undefined): [number, number, number] | null {
+    // Typed loosely on purpose. `theColor` arrives over the network, where a
+    // recipe may simply not have one, and the type says nothing about what a
+    // server actually sent. Every other malformed shape already answers null
+    // and falls back to the app's own accent assignment; a missing one must
+    // do the same rather than throw and take the whole import down with it.
+    if (typeof value !== "string") return null;
     const hex = value.trim().replace(/^#/, "");
     if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
     return [
@@ -44,7 +50,7 @@ function toLinear(channel: number): number {
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
-function toOklab(hex: string): Lab | null {
+function toOklab(hex: string | null | undefined): Lab | null {
     const rgb = parseHex(hex);
     if (!rgb) return null;
     const [r, g, b] = rgb.map(toLinear);
@@ -72,7 +78,7 @@ function distance(x: Lab, y: Lab): number {
  * array, and handing it a hex string would store something the palette cannot
  * be retuned through.
  */
-export function matchAccent(color: string, group: AccentGroup): number | null {
+export function matchAccent(color: string | null | undefined, group: AccentGroup): number | null {
     const target = toOklab(color);
     if (!target) return null;
 

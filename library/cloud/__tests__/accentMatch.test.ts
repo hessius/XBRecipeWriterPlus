@@ -68,3 +68,21 @@ describe("matchAccent", () => {
         expect(MAX_ACCENT_DISTANCE).toBeLessThan(0.093);
     });
 });
+
+describe("colour values a server might actually send", () => {
+    // The import loop runs over every recipe in an account. One recipe with no
+    // colour, or a colour of a shape nobody anticipated, must cost that one
+    // recipe its accent and nothing else -- never the whole import.
+    it.each([
+        ["null", null],
+        ["undefined", undefined],
+        ["an empty string", ""],
+        ["a colour name", "rebeccapurple"],
+        ["short hex", "#fff"],
+        ["a number where a string was promised", 16711680 as unknown as string],
+        ["an object", {r: 1} as unknown as string],
+    ])("answers null for %s rather than throwing", async (_label, value) => {
+        expect(() => matchAccent(value as string, "coffee")).not.toThrow();
+        expect(matchAccent(value as string, "coffee")).toBeNull();
+    });
+});

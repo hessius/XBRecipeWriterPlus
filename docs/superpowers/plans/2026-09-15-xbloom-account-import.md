@@ -820,7 +820,7 @@ export async function post(
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/transport.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1091,7 +1091,7 @@ export async function signOut(): Promise<void> {
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/session.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1338,7 +1338,7 @@ export async function fetchCloudRecipes(
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/cloudLibrary.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2003,6 +2003,24 @@ describe("matchAccent", () => {
         expect(MAX_ACCENT_DISTANCE).toBeLessThan(0.093);
     });
 });
+
+describe("colour values a server might actually send", () => {
+    // The import loop runs over every recipe in an account. One recipe with no
+    // colour, or a colour of a shape nobody anticipated, must cost that one
+    // recipe its accent and nothing else -- never the whole import.
+    it.each([
+        ["null", null],
+        ["undefined", undefined],
+        ["an empty string", ""],
+        ["a colour name", "rebeccapurple"],
+        ["short hex", "#fff"],
+        ["a number where a string was promised", 16711680 as unknown as string],
+        ["an object", {r: 1} as unknown as string],
+    ])("answers null for %s rather than throwing", async (_label, value) => {
+        expect(() => matchAccent(value as string, "coffee")).not.toThrow();
+        expect(matchAccent(value as string, "coffee")).toBeNull();
+    });
+});
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -2046,7 +2064,13 @@ export const MAX_ACCENT_DISTANCE = 0.06;
 
 type Lab = {L: number; a: number; b: number};
 
-function parseHex(value: string): [number, number, number] | null {
+function parseHex(value: string | null | undefined): [number, number, number] | null {
+    // Typed loosely on purpose. `theColor` arrives over the network, where a
+    // recipe may simply not have one, and the type says nothing about what a
+    // server actually sent. Every other malformed shape already answers null
+    // and falls back to the app's own accent assignment; a missing one must
+    // do the same rather than throw and take the whole import down with it.
+    if (typeof value !== "string") return null;
     const hex = value.trim().replace(/^#/, "");
     if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
     return [
@@ -2061,7 +2085,7 @@ function toLinear(channel: number): number {
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
-function toOklab(hex: string): Lab | null {
+function toOklab(hex: string | null | undefined): Lab | null {
     const rgb = parseHex(hex);
     if (!rgb) return null;
     const [r, g, b] = rgb.map(toLinear);
@@ -2089,7 +2113,7 @@ function distance(x: Lab, y: Lab): number {
  * array, and handing it a hex string would store something the palette cannot
  * be retuned through.
  */
-export function matchAccent(color: string, group: AccentGroup): number | null {
+export function matchAccent(color: string | null | undefined, group: AccentGroup): number | null {
     const target = toOklab(color);
     if (!target) return null;
 
@@ -2114,7 +2138,7 @@ export function matchAccent(color: string, group: AccentGroup): number | null {
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest library/cloud/__tests__/accentMatch.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -3067,7 +3091,7 @@ export function useCloudImport(deps: CloudImportDeps) {
 - [ ] **Step 4: Run the tests**
 
 Run: `npx jest hooks/__tests__/useCloudImport.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Run lint on the new hook**
 
@@ -3668,7 +3692,7 @@ different fonts.
 - [ ] **Step 5: Run the tests**
 
 Run: `npx jest app/__tests__/importCloud.test.tsx`
-Expected: PASS, 9 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 6: Commit**
 
