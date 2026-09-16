@@ -12,6 +12,11 @@ import type {RecipeImport} from "@/hooks/useRecipeImport";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
+import {sharedSettings} from "@/hooks/useSetting";
+
+// The sheet reads the account feature's gate, and `useSetting` reaches for the
+// shared SQLite-backed store, which cannot open under Jest.
+jest.mock("@/hooks/useSetting", () => require("@/test-utils/settingsMock").settingsMock());
 
 jest.mock("expo-clipboard", () => ({
     hasStringAsync:         jest.fn(async () => false),
@@ -40,6 +45,10 @@ jest.mock("expo-router", () => ({
 
 beforeEach(() => {
     jest.clearAllMocks();
+    // The account feature is gated off by default, and is not under test here.
+    // Turned on rather than the tests deleted: gated code still needs its
+    // coverage, and the gate is tested separately below.
+    sharedSettings().set("cloudAccountEnabled", true);
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     mockNativePasteOnPress = undefined;
@@ -548,4 +557,39 @@ it("offers the door even when the field is hidden, because it is not part of the
     );
 
     expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+});
+
+/**
+ * The gate, from the sheet's side.
+ *
+ * Absent rather than disabled, and the rule above it absent too: a greyed-out
+ * row is still an advertisement for something a user cannot have, and the
+ * promise of the gate is that this sheet looks exactly as it did before the
+ * feature existed.
+ */
+it("draws no account door at all while the feature is gated off", async () => {
+    sharedSettings().set("cloudAccountEnabled", false);
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.queryByRole("button", {name: ACCOUNT})).toBeNull();
+    expect(screen.queryByTestId("import-account-label")).toBeNull();
+    expect(screen.queryByTestId("import-account-caption")).toBeNull();
+    // The rule is the part a gate is most likely to leave behind: it belongs to
+    // the row rather than to the sheet, so a hairline with nothing under it is
+    // what a half-done gate looks like.
+    expect(screen.queryByTestId("import-account-rule")).toBeNull();
+});
+
+it("draws the account door once the feature is switched on", async () => {
+    sharedSettings().set("cloudAccountEnabled", true);
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
 });

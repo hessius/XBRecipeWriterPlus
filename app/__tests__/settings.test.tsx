@@ -121,6 +121,20 @@ function backupOf(recipes: Recipe[], settings: Record<string, unknown> = {}) {
     };
 }
 
+/**
+ * A store with the xBloom account feature switched on.
+ *
+ * The feature is gated off by default, so the tests that are about the account
+ * section have to turn it on. Turned on rather than deleted: gated code still
+ * needs its coverage, and the gate itself is tested separately at the bottom of
+ * this file.
+ */
+function accountOn(): Settings {
+    const settings = new Settings(memoryStorage());
+    settings.set("cloudAccountEnabled", true);
+    return settings;
+}
+
 function memoryStorage(): SettingsStorage {
     const values = new Map<string, string>();
     return {
@@ -543,7 +557,7 @@ describe("SettingsScreen", () => {
     });
 
     it("opens About from the top of the screen, not the bottom", async () => {
-        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
 
         // SettingsActionRow folds its label and detail into one accessible
         // name (see components/__tests__/SettingsRows.test.tsx), so the row's
@@ -571,7 +585,7 @@ describe("SettingsScreen", () => {
     });
 
     it("offers sign-in under its own heading when no account is connected", async () => {
-        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
 
         // The heading, not just the row: a section whose title went missing
         // still works and still reads as part of whatever sits above it.
@@ -588,7 +602,7 @@ describe("SettingsScreen", () => {
     it("names the connected account and offers a way out of it", async () => {
         mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
 
-        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
 
         // The email is what tells someone which account they are looking at,
         // so it is shown rather than a bare "Signed in".
@@ -614,7 +628,7 @@ describe("SettingsScreen", () => {
         mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
         mockSignOut.mockRejectedValue(new Error("keychain locked"));
 
-        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
         await waitFor(() => expect(screen.getByRole("button", {name: "Sign out"})).toBeTruthy());
 
         await fireEvent.press(screen.getByRole("button", {name: "Sign out"}));
@@ -630,7 +644,7 @@ describe("SettingsScreen", () => {
     it("opens the importer from the connected account too", async () => {
         mockLoadSession.mockResolvedValue({memberId: 7, token: "t", email: "sam@example.com"});
 
-        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
 
         await waitFor(() => expect(screen.getByRole("button",
             {name: "Import recipes, sam@example.com"})).toBeTruthy());
@@ -645,5 +659,109 @@ describe("SettingsScreen", () => {
             <SettingsScreen settings={new Settings(memoryStorage())}/>
         );
         expect(getByText("Don't keep traces")).toBeTruthy();
+    });
+
+    describe("the gate", () => {
+        it("shows nothing about an xBloom account while the feature is off", async () => {
+            await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+            // The heading as well as the rows. A section title left behind
+            // would read as part of whatever section follows it.
+            expect(screen.queryByText("XBLOOM ACCOUNT")).toBeNull();
+            expect(screen.queryByRole("button", {name: /^Sign in/})).toBeNull();
+            expect(screen.queryByRole("button", {name: "Sign out"})).toBeNull();
+        });
+
+        it("never asks the keychain about an account nobody enabled", async () => {
+            // The part of the gate that matters more than the drawing. Reading
+            // the token and then ignoring it would still be a Keychain prompt
+            // on a device, shown to somebody who has never heard of this
+            // feature.
+            await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+            await waitFor(() => expect(screen.getByText("LIBRARY")).toBeTruthy());
+            expect(mockLoadSession).not.toHaveBeenCalled();
+        });
+
+        it("reads the account only once the feature is switched on", async () => {
+            await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
+
+            await waitFor(() => expect(mockLoadSession).toHaveBeenCalled());
+        });
+
+        it("hides Labs until somebody has gone looking for it", async () => {
+            await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+            expect(screen.queryByText("LABS")).toBeNull();
+            expect(screen.queryByText("xBloom account import")).toBeNull();
+        });
+
+        it("offers the feature, and a way back out, once Labs is open", async () => {
+            const settings = new Settings(memoryStorage());
+            settings.set("labsUnlocked", true);
+
+            await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+            expect(screen.getByText("LABS")).toBeTruthy();
+            // Said plainly rather than hedged. Somebody who switches this on
+            // and then hits a wall should have been told a wall was there in
+            // the same breath as being offered it.
+            expect(screen.getByText(/Unfinished and unsupported/)).toBeTruthy();
+
+            await fireEvent.press(screen.getByRole("switch",
+                {name: "xBloom account import"}));
+
+            expect(settings.get("cloudAccountEnabled")).toBe(true);
+        });
+
+        it("closes Labs from inside it, and leaves what you switched on alone", async () => {
+            // The way in can afford to be undiscoverable because nobody
+            // arrives at it by accident. A way out that nobody can find is
+            // just a trap.
+            const settings = new Settings(memoryStorage());
+            settings.set("labsUnlocked", true);
+            settings.set("cloudAccountEnabled", true);
+
+            await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+            await fireEvent.press(screen.getByRole("button",
+                {name: "Hide Labs, Anything you switched on here stays on."}));
+
+            expect(settings.get("labsUnlocked")).toBe(false);
+            expect(settings.get("cloudAccountEnabled")).toBe(true);
+            expect(screen.queryByText("LABS")).toBeNull();
+            // Two separate switches, so the section going away does not take
+            // the account section with it.
+            expect(screen.getByText("XBLOOM ACCOUNT")).toBeTruthy();
+        });
+
+        it("will not let a backup file hand anybody Labs", async () => {
+            // A backup is not private: it goes to the share sheet. The keys are
+            // held out of the snapshot so one cannot carry them, and left out
+            // of the allowlist above so a hand-written one cannot either. This
+            // is the second of those two locks -- the first is the compile-time
+            // `BackupExcluded`, which no test can observe.
+            const storage = memoryStorage();
+            mockPickBackup.mockResolvedValue(backupOf(
+                [recipeNamed("A", "u1")],
+                {labsUnlocked: true, cloudAccountEnabled: true, dotMatrixProfile: true}
+            ));
+            mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+            await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+            await fireEvent.press(screen.getByRole("button",
+                {name: "Restore from a backup, Adds anything your library does not already have."}));
+            await settleSheet();
+            await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                            "checkedChange", true);
+            await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+            const restored = new Settings(storage);
+            expect(restored.get("labsUnlocked")).toBe(false);
+            expect(restored.get("cloudAccountEnabled")).toBe(false);
+            // The rest of the block still landed, so this is the two keys being
+            // refused and not the restore quietly failing.
+            expect(restored.get("dotMatrixProfile")).toBe(true);
+        });
     });
 });

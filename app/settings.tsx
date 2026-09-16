@@ -49,7 +49,14 @@ const VERSION = Application.nativeApplicationVersion ?? "unknown";
  */
 export default function SettingsScreen({settings}: Props) {
     const router = useRouter();
-    const cloud = useCloudSession();
+    const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
+    const [cloudAccountEnabled, setCloudAccountEnabled] =
+        useSetting("cloudAccountEnabled", settings);
+    // The gate is passed in rather than wrapped around the call, because a hook
+    // cannot be called conditionally. See the hook: while this is false it does
+    // not read the keychain, so a user who never opens LABS is never asked
+    // about one.
+    const cloud = useCloudSession(cloudAccountEnabled);
 
     async function signOutOfCloud() {
         try {
@@ -300,7 +307,7 @@ export default function SettingsScreen({settings}: Props) {
                     looking to disconnect. The sheet must never carry that: it
                     is a place to bring something in, not a place to sever an
                     account. */}
-                <SettingsSection title="xBloom account">
+                {cloudAccountEnabled && <SettingsSection title="xBloom account">
                     {cloud.session === null ? (
                         <SettingsActionRow label="Sign in"
                                            detail="Bring across the recipes you made in the xBloom app."
@@ -319,7 +326,7 @@ export default function SettingsScreen({settings}: Props) {
                                                void signOutOfCloud();
                                            }}/>
                     )}
-                </SettingsSection>
+                </SettingsSection>}
 
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"
@@ -337,6 +344,31 @@ export default function SettingsScreen({settings}: Props) {
                     invisible until a user opens the developer area — see the
                     component. */}
                 <CardReadDiagnostic settings={settings}/>
+
+                {/* Last, under everything a user came here for, and absent
+                    until seven taps on the version line open it.
+
+                    The rows here are unfinished work that is in the build so it
+                    cannot rot on a branch, not features. The caption on each
+                    one says so plainly rather than hedging: somebody who turns
+                    one on and then hits a wall should have been told, in the
+                    same breath as being offered it, that a wall was there.
+
+                    Closing it again is a row, not a second hidden gesture. The
+                    way in can afford to be undiscoverable because nobody
+                    arrives at it by accident; a way out that nobody can find is
+                    just a trap. Note it hides the section and changes nothing
+                    inside it -- what you switched on stays on, which is the
+                    honest reading of two separate switches. */}
+                {labsUnlocked && <SettingsSection title="Labs">
+                    <SettingsToggleRow
+                        label="xBloom account import"
+                        description="Unfinished and unsupported. Brings your xBloom recipes across."
+                        value={cloudAccountEnabled} onChange={setCloudAccountEnabled}/>
+                    <SettingsActionRow label="Hide Labs"
+                                       detail="Anything you switched on here stays on."
+                                       onPress={() => setLabsUnlocked(false)}/>
+                </SettingsSection>}
             </YStack>
             </ScrollView>
         </YStack>
