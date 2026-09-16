@@ -493,7 +493,16 @@ describe("authored fields through backup", () => {
         expect(parsed.payload.recipes[0].description).toBe("");
     });
 
-    it("drops a non-boolean favourite and keeps the recipe", () => {
+    it("falls back to a false favourite for a non-boolean value, whether from the boundary validator or Recipe's own guard", () => {
+        // This does not discriminate: Recipe's constructor already treats a
+        // non-boolean `favourite` as false (see Recipe.ts), so this input
+        // reaches the same result even if DROPPABLE_RECIPE_FIELDS.favourite
+        // were deleted. It stays because the validator is the trust-boundary
+        // layer and should not be judged by whether Recipe happens to agree
+        // with it today; a later reader who sees this test green must not
+        // conclude the validator line is provably dead code and remove it.
+        // The description case above is the one that would actually fail
+        // without its validator.
         const file = backupFileWithRecipeFields({favourite: "yes"});
 
         const parsed = parseBackup(file);

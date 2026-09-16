@@ -258,7 +258,12 @@ const DROPPABLE_RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     sharedByAvatar: isHttpsUrl,
     imageURL:       isHttpsUrl,
     // Both authored, both droppable: a malformed one costs a note or a star,
-    // and dropping the whole recipe would cost the recipe.
+    // and dropping the whole recipe would cost the recipe. They are not alike
+    // in what the validator here actually buys: the description cap is
+    // enforced only at this boundary, Recipe accepts any string, so removing
+    // it would let an unbounded description through. Recipe already treats a
+    // non-boolean favourite as false, so this entry defends the boundary
+    // rather than discriminating any input Recipe would not already handle.
     description:    (v) => typeof v === "string" && v.length <= MAX_DESCRIPTION,
     favourite:      (v) => typeof v === "boolean"
 };
@@ -362,8 +367,8 @@ function reviveRecipe(entry: unknown): Recipe | null {
     if (!looksLikeRecipe(entry)) return null;
 
     // Strip the droppable fields before the constructor sees them, not after:
-    // the constructor is deliberately forgiving and would keep whatever it was
-    // given.
+    // the constructor is deliberately forgiving and, for most of these fields,
+    // would keep whatever it was given.
     //
     // The copy is hygiene rather than a guarantee anyone can observe, and no
     // test covers it: `parseBackup` takes a string, so the object being
