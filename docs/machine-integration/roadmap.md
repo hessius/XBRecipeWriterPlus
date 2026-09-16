@@ -169,7 +169,9 @@ says about itself, and a third deck on the recipe screen for everything that is
 neither a brew parameter nor a stage.
 
 One question is deliberately unsettled and is going to testers: what a shelf's
-mark looks like. Three candidates ship behind one dev switch.
+mark looks like. Three candidates ship behind one row in LABS, the settings
+section M6 added. Not a `__DEV__` build flag: the whole point is that a tester
+on a production TestFlight build can switch between them.
 
 #55 was the original post-brew notes and rating issue. It was closed as not
 planned on 14 September, superseded by the #95 chain, which owns rating capture
@@ -191,16 +193,30 @@ player's *organisation* without its *transport* — a playlist plays in sequence
 and a recipe group does not.
 
 M5 also carries the one refactor on this roadmap. `RecipeDatabase.ts` stores
-each recipe as an opaque JSON blob keyed by uuid, which cannot support filtering
-or tags, and has nowhere to put M6's sync state. Doing that migration here —
-promoting filterable fields to columns and adding a side table for sync — means
-doing it once rather than twice.
+each recipe as an opaque JSON blob keyed by uuid, and you cannot filter, sort or
+group a blob. The migration promotes filterable fields to real columns while the
+blob stays the only source of truth, every column being a cache rebuildable from
+it.
 
-**That saving was spent**, because M6 shipped first. The index is designed and
-planned in full — [`2026-09-14-recipe-index-design.md`][idx-design] and
-[`2026-09-14-recipe-index.md`][idx-plan] — and still unbuilt, so it is M5's
-first phase rather than its inheritance. Read §0 of the design before starting
-it: M6 and M5 between them add four descriptors the original does not name.
+Note that cloud sync state needed no side table in the end. M6 put `cloudId` and
+`cloudFingerprint` on `Recipe`, so they live in the blob with everything else and
+ride through backup for free. An earlier draft of this roadmap expected a side
+table; the blob-is-truth rule turned out to cover that case too.
+
+**The index is built but unmerged.** `main` still carries the plain blob table,
+so it is M5's first phase, but the phase is a rebase rather than a build. The
+work is on the `recipe-index` branch: 28 commits, around 4,300 insertions, with
+the descriptor array, the tag table, the hash-triggered rebuild and a real-SQLite
+test harness all in place. It had never been pushed, which is why it was briefly
+believed lost; it is on the remote now.
+
+Both documents survive —
+[`2026-09-14-recipe-index-design.md`][idx-design] and
+[`2026-09-14-recipe-index.md`][idx-plan] — and the plan's header explains how to
+land the branch. Read §0 of the design first: M6 and M5 between them add four
+descriptors the original does not name, and the two that M5 introduces
+(`favourite`, `hasDescription`) are the reason the rebase and the shelves work
+belong to the same release.
 
 [idx-design]: ../superpowers/specs/2026-09-14-recipe-index-design.md
 [idx-plan]: ../superpowers/plans/2026-09-14-recipe-index.md

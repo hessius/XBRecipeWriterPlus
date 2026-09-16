@@ -276,9 +276,16 @@ take the derived mark. No user ever picks a glyph, and no shelf is ever left
 without a mark. The art then carries meaning: a glyph says the app found this
 shelf, stacked profiles say you built it.
 
-The favourites shelf tests that grammar and passes it. Its membership is
-authored one tap at a time, so it is a manual shelf, takes the profile mark, and
-sits under `YOUR SHELVES`.
+The favourites shelf tests that grammar and passes it. Its membership is authored
+one tap at a time, so it takes the profile mark and sits under `YOUR SHELVES`.
+
+It is the one shelf that is authored without being a tag. Its query is
+`favourite = 1` against the index column, not a tag lookup, because the favourite
+is already a field on the recipe with its own controls in the header and the
+swipe tray. Introducing a parallel `favourite` tag would give one piece of state
+two homes and a way to disagree with itself. So the rule is slightly wider than
+"manual means tag": a shelf is a query, most authored shelves query a tag, and
+this one queries the field that its own dedicated control writes.
 
 **One risk to watch in testing.** Pour profiles are already drawn on every recipe
 card. If a shelf of three shows the same three silhouettes as the cards beneath
@@ -572,6 +579,19 @@ they exist only in the API response at the moment of import. A recipe imported
 before the fields exist has lost them permanently, and recovering them would mean
 re-fetching every share link a user has ever imported.
 
+**`sharedBy` and `sharedByAvatar` arrive only from a share link**, not from the
+account library. `XBloomRecipe.fromAccountRow` wraps a bare `recipeVo`, and
+`shareMemberName` / `shareMemberHead` are siblings of that object in the
+share-detail response rather than fields inside it, so a row from your own
+library carries neither.
+
+That is correct rather than a gap: recipes in your own xBloom library are ones
+you authored, so there is no other author to name. It matters for two things
+though. Author shelves are built from share-link imports only, which is what
+makes a `BrewMind` shelf meaningful in the first place. And `imageURL` does
+survive an account import, because it comes from `podsVo.imagePath` inside the
+recipe object, so the pod section works for both routes.
+
 `library/backup.ts` gets a validator entry for each. Per the existing rule there,
 a malformed value is dropped and the recipe is kept. URLs from an untrusted file
 accept `https://` only.
@@ -598,7 +618,7 @@ All in `Settings.DEFAULTS`, which is what carries them into a backup.
 | `librarySortDirection` | `asc` |
 | `libraryFavouritesFirst` | `false` |
 | `showRecipeAvatars` | `false` |
-| `shelfMarkVariant` | dev only, for the tester build |
+| `shelfMarkVariant` | tester-controlled, through LABS |
 
 The tester build no longer needs a bespoke mechanism for that last one. M6
 (#112) shipped `labsUnlocked`, a settings key that reveals a LABS section,

@@ -21,18 +21,25 @@ being wrong is still a rebuild.
 
 ## 0. What has changed since this was approved
 
-Written 14 September and never built. Main still carries the original
-`recipes(uuid, recipeJSON)` table with no index columns, so nothing here has met
-a real library yet and none of it is load-bearing. Two things have happened
-since, and both only add entries to §2.1 rather than changing the rule.
+Written 14 September, built on the `recipe-index` branch, and not yet merged.
+`main` still carries the original `recipes(uuid, recipeJSON)` table with no index
+columns, so nothing here has met a real library yet. But the code exists and its
+tests pass, so treat this document as describing something real that needs
+rebasing, not a proposal. See the plan's header for the state of that branch.
+
+Two things have happened since, and both only add entries to §2.1 rather than
+changing the rule.
 
 **M6 landed, gated off** (#112). It added `cloudId` and `cloudFingerprint` to
-`Recipe` as its sync state, alongside the `sharedTableId` this document already
-reserved. §2.1's note that `sharedTableId` is "reserved ground for M6" is
-therefore half right: M6 arrived and brought two columns of its own. The
-reasoning is unchanged, since sync state is genuinely not recipe content. It
-also added `sharedBy`, `sharedByAvatar` and `imageURL`, which *are* recipe
-content and live in the blob.
+`Recipe` as its sync state. Note where they went: onto the model, and therefore
+into the blob and into backups, **not** into the descriptor array. §2.1's note
+that `sharedTableId` is "reserved ground for M6" turned out to be unnecessary
+rather than wrong — M6 needed no reserved column, because the blob already
+carries anything a recipe knows about itself. A field earns a column here only
+when something needs to filter, sort or group by it, and nothing filters by a
+sync fingerprint. M6 also added `sharedBy`, `sharedByAvatar` and `imageURL`,
+which are recipe content and likewise live in the blob; `sharedBy` earns a column
+below because author shelves group by it.
 
 **M5 was designed** ([the library shelves
 spec](2026-09-16-library-shelves-design.md)), and it is the thing that gives

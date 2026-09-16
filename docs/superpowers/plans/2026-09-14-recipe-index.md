@@ -6,15 +6,37 @@
 
 **Architecture:** The JSON blob in `recipes.recipeJSON` stays the only source of truth. A single descriptor array in `library/recipeIndex.ts` declares every index column and how to project it from a `Recipe`; the DDL, indices, write path and rebuild are all generated from that array. A hash of the array is stored in a `schema_meta` table — when it changes, the index is rebuilt from the blobs on next open. Tags live on the `Recipe` object (and therefore in the blob and in backups) and are projected into a derived `recipe_tags` table.
 
-**Tech Stack:** TypeScript, `expo-sqlite` (sync API), Jest, and `node:sqlite` as a real-SQLite test harness (built into Node 26, no new dependency).
+**Tech Stack:** TypeScript, `expo-sqlite` (sync API), Jest, and `node:sqlite` as a real-SQLite test harness (built into Node, no new dependency).
 
 **Design doc:** `docs/superpowers/specs/2026-09-14-recipe-index-design.md`
 
-**Branch:** a fresh branch off `main`. The original `recipe-index` branch has
-drifted into unrelated work and must not be reused.
+**Branch:** rebase the existing `recipe-index` branch onto `main`. **Do not start
+this plan from scratch.**
 
-> **Read §0 of the design doc before starting.** This plan was written on
-> 14 September and never executed. It is still accurate, but M6 has landed
+> **This plan has already been executed.** That is not obvious from reading it,
+> and an earlier note in this same header wrongly said it never had. The work
+> lives on the local `recipe-index` branch: 28 commits, roughly 4,300
+> insertions, including `library/recipeIndex.ts`, the `recipe_tags` table, the
+> rebuild, the `node:sqlite` harness in `test-utils/sqlite.ts`, and five test
+> files. It was never pushed and never opened as a PR, which is the only reason
+> it looked lost.
+>
+> So the task is a rebase, not a build. `main` has moved five squashed commits
+> since the branch point (2026-09-14, `3e1b956`). Nine files are touched by both
+> sides, and three of them are the ones that matter: `library/Recipe.ts`,
+> `library/RecipeDatabase.ts` and `library/backup.ts`, all of which M6 changed
+> substantially. The other six (`app/settings.tsx`, `components/XbrwSheet.tsx`,
+> `components/DeleteAllSheet.tsx` and their tests) are the branch's own
+> incidental sheet fixes and may well be redundant now: check whether `main`
+> already fixed them before resolving anything by hand.
+>
+> Read the body of this plan as the record of how the code got the shape it has,
+> not as a list of work to do. Where the code and the plan disagree, **the code
+> is right** and the plan text is stale — it was corrected during execution and
+> the prose was not always updated to match. The rebuild's `reindexRow` is the
+> clearest example.
+
+> **Read §0 of the design doc before starting.** M6 has landed
 > (gated) and M5 has been designed since, and between them they add four
 > descriptors this plan's task list does not name: `xid`, `sharedBy`,
 > `favourite` and `hasDescription`. Each is one entry in the descriptor array
@@ -72,7 +94,11 @@ npm run lint             # eslint .
 
 The existing mock in `RecipeDatabase.test.ts` pattern-matches query strings and ignores SQL. It cannot execute `ALTER TABLE`, hold a column, or honour a collation — so nothing later in this plan could be tested against it. Replace it first.
 
-`node:sqlite` is built into Node 26 (SQLite 3.53.2). No dependency is added.
+`node:sqlite` ships with Node itself, so no dependency is added. It stopped
+requiring `--experimental-sqlite` in v22.13, and this repo pins Node 24 through
+`.nvmrc`, which CI reads via `node-version-file`. So it is available unflagged
+both locally and in CI. Do not write a version number into the code: the
+requirement is simply "the Node this repo already uses".
 
 **Files:**
 - Create: `test-utils/sqlite.ts`
@@ -150,18 +176,21 @@ export function createTestDatabase(): FakeSQLiteDatabase {
 In `library/__tests__/RecipeDatabase.test.ts`, delete the whole `type Row` declaration and the `jest.mock("expo-sqlite", …)` block (lines 4–63 in the current file — everything from the `/**` above `type Row` down to the closing `}));`) and replace it with:
 
 ```ts
-import {createTestDatabase} from "@/test-utils/sqlite";
+import {createTestDatabase as mockCreateTestDatabase} from "@/test-utils/sqlite";
 
 jest.mock("expo-sqlite", () => ({
     // A fresh in-memory database per call, so each `new RecipeDatabase()` in
     // a test is isolated rather than sharing state.
-    openDatabaseSync: () => jest.requireActual<typeof import("@/test-utils/sqlite")>(
-        "@/test-utils/sqlite"
-    ).createTestDatabase()
+    openDatabaseSync: () => mockCreateTestDatabase()
 }));
 ```
 
-Leave `import {createTestDatabase}` in place even though the factory uses `requireActual` — the import documents the dependency and keeps the path checked by TypeScript.
+Reference the import directly in the factory rather than reaching for
+`jest.requireActual`. A `require` inside the factory trips `no-require-imports`
+and leaves the `createTestDatabase` import unused, which is two lint complaints
+bought for nothing. Name the import `mockCreateTestDatabase`: Jest allows a
+factory to close over an out-of-scope variable whose name begins with `mock`,
+which is precisely the escape hatch this case exists for.
 
 **Do not change a single assertion in this file.** The suite passing unaltered against real SQL is the proof that the harness is faithful.
 
@@ -776,12 +805,32 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         }
     },
     {name: "bypassEnabled", type: "INTEGER", from: (r) => (r.bypassEnabled ? 1 : 0)},
-    // Reserved ground for cloud sync: the one column here that is not a
-    // filterable recipe property. Sync state is not recipe content, so it is
-    // a real column under any scheme.
+    // The one column here that is not a filterable recipe property: it is the
+    // share identity a cloud recipe arrived with.
     {name: "sharedTableId", type: "INTEGER", from: (r) => r.sharedTableId ?? null}
 ];
+```
 
+**This array is four descriptors short of what M5 now needs.** It was written
+before the account import and before the library redesign. Add these when you
+pick the work up, and read §0 of
+[`2026-09-14-recipe-index-design.md`](../specs/2026-09-14-recipe-index-design.md)
+for why each one earns a column:
+
+```ts
+    {name: "xid", type: "TEXT", from: (r) => r.xid || null},
+    {name: "sharedBy", type: "TEXT", collate: "NOCASE",
+     from: (r) => r.sharedBy || null},
+    {name: "favourite", type: "INTEGER", from: (r) => (r.favourite ? 1 : 0)},
+    {name: "hasDescription", type: "INTEGER",
+     from: (r) => (r.description ? 1 : 0)},
+```
+
+Adding them changes the descriptor hash, which is exactly the mechanism that
+makes an existing install rebuild itself on first open. That is the intended
+path, not a special case.
+
+```ts
 /**
  * Every column is nullable with no default. That is what makes the ADD COLUMN
  * pass in RecipeDatabase a no-op on re-run, and a partially completed previous
@@ -1425,7 +1474,7 @@ Add to `library/RecipeDatabase.ts`, and call `this.migrateIndex()` from the cons
             ) as {uuid: string; recipeJSON: string}[];
 
             for (const row of rows) {
-                this.writeRow(new Recipe(undefined, row.recipeJSON));
+                this.reindexRow(new Recipe(undefined, row.recipeJSON), row.uuid);
             }
 
             this.db.runSync(
@@ -1443,7 +1492,68 @@ Extend the import:
 import {columnDefinitions, indexStatements, projectRecipe, schemaHash} from './recipeIndex';
 ```
 
-Note that `writeRow` uses `INSERT OR REPLACE` keyed on `uuid`, so a rebuild rewrites the same row rather than duplicating it — and it re-serialises the blob from the `Recipe` it just parsed. That is a round trip through `Recipe`'s own migrations, so a legacy blob is upgraded in place. The "never writes the blob" test asserts byte-identity for a *current* blob; if it fails for a legacy one, that is expected and desirable, and the test uses a current blob deliberately.
+Note that a rebuild must **never touch `recipeJSON`**, which is why it calls
+`reindexRow` rather than `writeRow`.
+
+An earlier draft of this plan had the rebuild call `writeRow` and argued the
+re-serialisation was a feature, on the grounds that a round trip through
+`Recipe`'s constructor upgrades a legacy blob in place. Do not do this. A
+rebuild is triggered by the descriptor hash changing, which means it runs on app
+open, across the entire library at once, with no user action and nothing to undo
+it. If `Recipe` fails to round-trip any field in any blob — a field a newer build
+wrote and this one does not know, or one the constructor reads but
+`JSON.stringify` does not emit — the rebuild destroys it everywhere
+simultaneously. `backup`, `offline_backup` and `uid` carry raw card bytes for the
+restore feature, and those are exactly the kind of field that is easy to drop and
+impossible to reconstruct.
+
+The upgrade-in-place benefit is not worth that, and it was never needed: legacy
+blobs are migrated by the constructor on every read already. That is the whole
+point of the blob staying authoritative. An in-place upgrade only changes *when*
+the migration runs, not whether it happens.
+
+So the rule is narrower than "the index is derived": **exactly one function
+writes `recipeJSON`, and the rebuild is not it.**
+
+Add the index-only projection beside `writeRow`:
+
+```ts
+    /**
+     * Refresh one row's index columns and tags from its `Recipe`, leaving
+     * `recipeJSON` untouched.
+     *
+     * The uuid is passed separately and taken from the row rather than from the
+     * parsed recipe, so a blob whose own `uuid` disagrees with its key cannot
+     * move the write to a different row.
+     */
+    private reindexRow(recipe: Recipe, uuid: string): void {
+        const projected = projectRecipe(recipe);
+        const names = Object.keys(projected);
+        const assignments = names.map((name) => `${name} = ?`).join(", ");
+
+        this.db.runSync(
+            `UPDATE recipes SET ${assignments} WHERE uuid = ?;`,
+            [...names.map((name) => projected[name]), uuid]
+        );
+
+        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+        for (const tag of recipe.tags) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO recipe_tags (uuid, tag) VALUES (?, ?);",
+                [uuid, tag]
+            );
+        }
+    }
+```
+
+`writeRow` keeps its `INSERT OR REPLACE` and stays the only blob writer, used by
+the normal save path. The two share `projectRecipe`, so the column list still
+appears once.
+
+The "never writes the blob during a rebuild" test therefore asserts byte
+identity for a *legacy* blob as well as a current one, and both must hold. That
+is a stronger test than the earlier draft's, and it is the one that catches this
+bug if anyone reintroduces it.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -1833,7 +1943,9 @@ describe("rebuild cost", () => {
         const elapsed = Date.now() - started;
 
         // eslint-disable-next-line no-console
-        console.log(`rebuild of 500 recipes: ${elapsed}ms`);
+        // Not console.log: jest.setup.js replaces it with a mock, so the line
+        // would never reach the terminal you are meant to read it from.
+        process.stdout.write(`rebuild of 500 recipes: ${elapsed}ms\n`);
 
         // A ceiling, not a target. expo-sqlite's sync API runs on the JS
         // thread, so this blocks; it happens once per schema change. If this
