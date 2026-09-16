@@ -100,8 +100,8 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 /**
  * A recipe that passes every field check in cardWriteProblems.
  *
- * Used by tests that need a balanced AND writable recipe to verify the
- * absence of the "Will not write" marker.
+ * Used by tests that need a balanced AND writable recipe, to tell a card that
+ * refuses to write apart from one that simply cannot.
  */
 function makeWritableRecipe(): Recipe {
     const recipe = new Recipe();
@@ -665,25 +665,45 @@ describe("RecipeCard", () => {
         expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
 
-    it("leaves a balanced one unmarked", async () => {
-        await renderWithProviders(<RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}/>);
-
-        expect(screen.queryByLabelText("Will not write")).toBeNull();
-    });
-
-    it("marks a recipe the machine would reject due to volume imbalance", async () => {
-        // Build from the writable fixture: imbalance is the only difference
-        // between this and the "leaves a balanced one unmarked" test above.
-        // dosage=15, ratio=15 → target=225 ml; setting volume to 10 breaks the balance.
+    it("draws no write warning on the card", async () => {
+        // There used to be a small X in the badge corner here. It read as a
+        // dismiss button, and it said only that something was wrong, never
+        // what. The refusal now lives on the WRITE tile in the swipe tray.
         const recipe = makeWritableRecipe();
         recipe.pours[0].volume = 10;
 
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
 
-        expect(screen.getByLabelText("Will not write")).toBeTruthy();
+        expect(screen.queryByLabelText("Will not write")).toBeNull();
     });
 
-    it("marks a balanced recipe whose fields are out of range as unwritable", async () => {
+    it("offers the write action on a recipe a card can hold", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()} onWrite={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "write", label: "Write recipe to card"}])
+        );
+    });
+
+    it("withdraws it from a recipe the machine would reject as imbalanced", async () => {
+        // Build from the writable fixture: imbalance is the only difference
+        // between this and the test above. dosage=15, ratio=15 -> target=225 ml;
+        // setting volume to 10 breaks the balance.
+        const recipe = makeWritableRecipe();
+        recipe.pours[0].volume = 10;
+
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()} onWrite={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({name: "write"})])
+        );
+    });
+
+    it("withdraws it from a balanced recipe whose fields are out of range", async () => {
         // The card used to ask only whether the volumes summed, so this recipe --
         // balanced, and holding a stage volume no byte can carry -- was shown as
         // writable while writing it would emit nonsense.
@@ -693,9 +713,13 @@ describe("RecipeCard", () => {
         recipe.ratio = 100;
         recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
 
-        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()} showCoffeeMarker/>);
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()} onWrite={jest.fn()} showCoffeeMarker/>
+        );
 
-        expect(await screen.findByLabelText("Will not write")).toBeTruthy();
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({name: "write"})])
+        );
     });
 
     it("carries the BREW accessibility action when a machine is remembered", async () => {
@@ -761,8 +785,10 @@ describe("RecipeCard", () => {
         // user to hand out a link or put a recipe on a card.
         const onShare = jest.fn();
         const onWrite = jest.fn();
+        // Writable, because WRITE is withdrawn from a recipe no card can hold
+        // -- the mirror of the dimmed tile.
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+            <RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}
                         onShare={onShare} onWrite={onWrite}/>
         );
         const card = screen.getByTestId("recipe-card");

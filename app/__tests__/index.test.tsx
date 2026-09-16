@@ -5,6 +5,7 @@ import * as Clipboard from "expo-clipboard";
 
 import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 import {Settings, type SettingsStorage} from "@/library/Settings";
@@ -192,6 +193,23 @@ function memoryStorage(): SettingsStorage {
 function named(name: string): Recipe {
     const r = new Recipe();
     r.name = name;
+    return r;
+}
+
+/**
+ * A recipe a card can actually hold: named, dosed, and balanced.
+ *
+ * The plain `named` fixture has no stages, which `cardWriteProblems` rejects,
+ * and the tray's WRITE tile is dimmed on anything it rejects.
+ */
+function writable(name: string): Recipe {
+    const r = named(name);
+    r.cupType = CUP_TYPE.XPOD;
+    r.dosage = 15;
+    r.ratio = 15;
+    r.grindSize = 60;
+    r.grindRPM = 90;
+    r.pours = [new Pour(0, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
     return r;
 }
 
@@ -1068,7 +1086,7 @@ describe("HomeScreen, opening one editor at a time", () => {
         // whatever is paired. Brew is the one act that needs hardware, and it
         // follows the no-dead-button rule.
         mockRemembered = "";
-        await renderHome({recipes: [named("Ethiopia")]});
+        await renderHome({recipes: [writable("Ethiopia")]});
         await screen.findByText("Ethiopia");
 
         expect(screen.getByLabelText("Share Ethiopia", {includeHiddenElements: true}))

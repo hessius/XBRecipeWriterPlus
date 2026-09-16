@@ -206,7 +206,12 @@ export default function RecipeCard({
         // TalkBack can perform. Without these two the only way to hand out a
         // link or put a recipe on a card is a gesture those users do not have.
         ...(onShare !== undefined ? [{name: "share", label: "Share recipe"}] : []),
-        ...(onWrite !== undefined ? [{name: "write", label: "Write recipe to card"}] : []),
+        // The mirror of the tray tile, which is dimmed on a recipe no card can
+        // hold. An accessibility action has no disabled state, so withdrawing
+        // it is the only way to say the same thing.
+        ...(onWrite !== undefined && canWriteToCard(recipe)
+            ? [{name: "write", label: "Write recipe to card"}]
+            : []),
         // And the same again for the management tray, which is the only place
         // the STAR tile lives. The star this toggles is in the label above, so
         // without an action a screen reader user can hear that a recipe is
@@ -302,11 +307,16 @@ export default function RecipeCard({
                         {recipe.displayName()}
                     </Text>
                     <XStack alignItems="center" gap="$1.5">
-                        {/* The card's badge corner: the star joins the marker and
-                            the write warning rather than the stats row, so the
-                            numbers keep their full width for the library view to
-                            build on. It leads the cluster, pushing the marker
-                            left, the way the write warning already trails it.
+                        {/* The card's badge corner: the star joins the marker
+                            rather than the stats row, so the numbers keep their
+                            full width for the library view to build on. It leads
+                            the cluster, pushing the marker left.
+
+                            It is the only badge here now. A small X used to
+                            trail the marker on a recipe no card can hold, and
+                            it read as a dismiss button; that refusal has moved
+                            onto the WRITE tile in the swipe tray, which is the
+                            control it actually refuses.
 
                             Hidden from accessibility on purpose: the word is
                             already in the card's own label above, and announcing
@@ -320,13 +330,6 @@ export default function RecipeCard({
                                            color={onAccent.marker}>
                                 {marker}
                             </DotMatrixText>
-                        )}
-                        {/* The same authority as the editor's WRITE gate. Asking
-                            only whether the volumes summed marked a recipe with a
-                            3100 ml stage as writable. */}
-                        {!canWriteToCard(recipe) && (
-                            <DotIcon name="error" size={12} color={onAccent.marker}
-                                     accessibilityLabel="Will not write"/>
                         )}
                     </XStack>
                 </XStack>
