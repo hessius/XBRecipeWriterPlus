@@ -127,10 +127,16 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         from: (r) => r.sharedBy || null
     },
     {name: "favourite", type: "INTEGER", indexed: true, from: (r) => (r.favourite ? 1 : 0)},
-    // Presence, not content. Nothing searches a description; one filter asks
-    // whether there is one, and a boolean column answers it without carrying
-    // the text twice.
-    {name: "hasDescription", type: "INTEGER", from: (r) => (r.description ? 1 : 0)}
+    // Both the flag and the text, deliberately, because they answer different
+    // questions. `hasDescription` is what a filter asks -- "does this recipe
+    // carry a note" -- and a 0/1 integer answers that without carrying the words
+    // twice. `description` is what search reads: phase 5 is where a user first
+    // gets somewhere to type a note, and a search that could not find one would
+    // be a bug nobody would trace back to this table. Neither is indexed: a
+    // presence filter over a boolean scans cheaply, and LIKE '%term%' cannot use
+    // an index at all, so one would only cost writes.
+    {name: "hasDescription", type: "INTEGER", from: (r) => (r.description ? 1 : 0)},
+    {name: "description", type: "TEXT", collate: "NOCASE", from: (r) => r.description || null}
 ];
 
 /**

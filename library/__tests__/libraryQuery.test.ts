@@ -70,8 +70,8 @@ describe("the built statement", () => {
         expect(sql).not.toContain(hostile);
         expect(sql).not.toContain("DROP TABLE recipes");
         expect(params).toContain(`%${hostile}%`);
-        // Four LIKE columns, four copies of the one pattern.
-        expect(params.filter((p) => p === `%${hostile}%`)).toHaveLength(4);
+        // Five LIKE columns, five copies of the one pattern.
+        expect(params.filter((p) => p === `%${hostile}%`)).toHaveLength(5);
     });
 
     it("escapes LIKE wildcards so a literal percent is a literal percent", () => {
@@ -125,6 +125,7 @@ type Spec = {
     tea?: boolean;
     xid?: string;
     sharedBy?: string;
+    description?: string;
     tags?: string[];
     /** Brew start timestamps; length is the times-brewed count. */
     brews?: number[];
@@ -141,6 +142,7 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
         if (spec.tea) recipe.cupType = CUP_TYPE.TEA;
         if (spec.xid !== undefined) recipe.xid = spec.xid;
         if (spec.sharedBy !== undefined) recipe.sharedBy = spec.sharedBy;
+        if (spec.description !== undefined) recipe.description = spec.description;
         if (spec.tags) recipe.setTags(spec.tags);
         db.insertRecipe(recipe);
         uuids[label] = recipe.uuid;
@@ -242,17 +244,19 @@ describe("querying a real database", () => {
             .toEqual(["once", "most", "never"]);
     });
 
-    it("searches name, tag, xid and author, and nothing else", () => {
+    it("searches name, tag, xid, author and description, and nothing else", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
             byName: {name: "Ethiopia Guji", createdAt: 1, ratio: 15},
             byTag: {name: "Blend", createdAt: 2, ratio: 15, tags: ["guji lot"]},
             byXid: {name: "Card", createdAt: 3, ratio: 15, xid: "GUJI99"},
             byAuthor: {name: "Gift", createdAt: 4, ratio: 15, sharedBy: "Guji Roasters"},
-            miss: {name: "Kenya", createdAt: 5, ratio: 15}
+            byDescription: {name: "Note", createdAt: 5, ratio: 15, description: "A guji lot from spring"},
+            miss: {name: "Kenya", createdAt: 6, ratio: 15}
         });
         const found = order(db, query({search: "guji"}), uuids);
-        expect(found.sort()).toEqual(["byAuthor", "byName", "byTag", "byXid"]);
+        expect(found.sort())
+            .toEqual(["byAuthor", "byDescription", "byName", "byTag", "byXid"]);
         expect(found).not.toContain("miss");
     });
 

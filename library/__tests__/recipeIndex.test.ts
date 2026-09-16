@@ -52,7 +52,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("aa6ceae1");
+        expect(schemaHash()).toBe("3da5523f");
     });
 
     it("folds the revision into the hash", () => {
@@ -105,7 +105,8 @@ describe("projectRecipe", () => {
             xid: null,
             sharedBy: null,
             favourite: 0,
-            hasDescription: 0
+            hasDescription: 0,
+            description: null
         });
     });
 
@@ -212,6 +213,7 @@ describe("M5 descriptors", () => {
         expect(projected.sharedBy).toBe("BrewMind");
         expect(projected.favourite).toBe(1);
         expect(projected.hasDescription).toBe(1);
+        expect(projected.description).toBe("Sunday morning");
     });
 
     it("stores absence as null rather than an empty string", () => {
@@ -225,6 +227,9 @@ describe("M5 descriptors", () => {
         expect(projected.sharedBy).toBeNull();
         expect(projected.favourite).toBe(0);
         expect(projected.hasDescription).toBe(0);
+        // The note's own column mirrors the presence flag: no note, no text to
+        // search, so null rather than an empty string that would match "".
+        expect(projected.description).toBeNull();
     });
 
     it("indexes the three columns a shelf groups by", () => {

@@ -78,15 +78,14 @@ function escapeLike(term: string): string {
 /**
  * The columns a search term matches, case insensitively, as a substring.
  *
- * `sortName`, `sharedBy`, `xid` and the recipe's tags. Not the placeholder
- * name: `recipeIndex` stores NULL in `sortName` for an unnamed recipe rather
- * than the formatted date it shows, precisely so searching "2026" does not
- * return every recipe nobody has named. Not `hasDescription` either: it is a
- * 0/1 presence flag, not the note's text, so a substring match against it would
- * be meaningless -- the description column the plan names as searchable does not
- * exist to search. LIKE folds ASCII case on its own, which is what "case
- * insensitively" asks for; the two NOCASE columns get the same treatment for
- * free.
+ * `sortName`, `sharedBy`, `xid`, the recipe's tags, and its description. Not
+ * the placeholder name: `recipeIndex` stores NULL in `sortName` for an unnamed
+ * recipe rather than the formatted date it shows, precisely so searching "2026"
+ * does not return every recipe nobody has named. `description` is the note's
+ * own text -- distinct from `hasDescription`, the 0/1 presence flag a filter
+ * asks, which carries none of the words to match. LIKE folds ASCII case on its
+ * own, which is what "case insensitively" asks for; the NOCASE columns get the
+ * same treatment for free.
  */
 function searchClause(): FilterClause {
     return {
@@ -94,6 +93,7 @@ function searchClause(): FilterClause {
             sortName LIKE ? ESCAPE '\\'
             OR sharedBy LIKE ? ESCAPE '\\'
             OR xid LIKE ? ESCAPE '\\'
+            OR description LIKE ? ESCAPE '\\'
             OR recipes.uuid IN (
                 SELECT uuid FROM recipe_tags WHERE tag LIKE ? ESCAPE '\\'
             )
@@ -125,8 +125,8 @@ export function buildLibraryQuery(
     if (term.length > 0) {
         const pattern = `%${escapeLike(term)}%`;
         conditions.push(searchClause().where);
-        // One bound value per `?` in the clause: four columns, four copies.
-        params.push(pattern, pattern, pattern, pattern);
+        // One bound value per `?` in the clause: five columns, five copies.
+        params.push(pattern, pattern, pattern, pattern, pattern);
     }
 
     for (const id of query.filters) {
