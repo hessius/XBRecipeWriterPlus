@@ -598,10 +598,13 @@ accept `https://` only.
 
 ### New index columns
 
-Added to the descriptor array in `library/recipeIndex.ts`, each with an
-`INDEX_REVISION` bump. A test fails if the bump is forgotten, because
+Added to the descriptor array in `library/recipeIndex.ts`. No `INDEX_REVISION`
+bump is needed: the schema hash covers the shape of that array, so adding a
+column changes it and every install rebuilds on next open. The revision number
+exists only for the case the hash cannot see, a changed `from` body with the
+shape left identical, which is invisible because
 `Function.prototype.toString()` returns `"[bytecode]"` under Hermes in release
-builds, so the `from` bodies cannot be hashed.
+builds.
 
 `xid`, `sharedBy`, `favourite`, and `hasDescription` (presence only, so that
 "has a note" can be a filter). Brew aggregates are joined at query time rather
@@ -671,13 +674,19 @@ worth stating so the plan does not have to rediscover it.
 
    **Both dependencies have moved since this was written.** The account import
    landed in #112 and captured all three fields, so that half is done. The
-   recipe index did not: it is designed and planned in full
-   ([design](2026-09-14-recipe-index-design.md),
-   [plan](../plans/2026-09-14-recipe-index.md)) but was never built, and `main`
-   still carries the plain `recipes(uuid, recipeJSON)` blob table. So phase 1
-   begins by building the index, against a fresh branch off `main` rather than
-   the drifted `recipe-index` branch, and §0 of that design lists the four
-   descriptors M5 and M6 add to it.
+   recipe index is built but unmerged: 28 commits on the `recipe-index` branch,
+   implementing [its design](2026-09-14-recipe-index-design.md) and
+   [plan](../plans/2026-09-14-recipe-index.md) in full, never pushed until now
+   and never opened as a PR. `main` still carries the plain
+   `recipes(uuid, recipeJSON)` blob table, so phase 1 still comes first, but it
+   is a rebase rather than a build. §0 of that design lists the four descriptors
+   M5 and M6 add to it.
+
+   Phase 1 and the favourite are planned together in
+   [`2026-09-16-m5-foundation-and-favourites.md`](../plans/2026-09-16-m5-foundation-and-favourites.md),
+   which also records why the description is not in that plan: it is typed on
+   the ABOUT deck, so it ships with phase 5 rather than being rendered with
+   nowhere to author it.
 2. **The row.** Description, the equal height line budget, the favourite star
    and its swipe tile, and evidence as a stats row suffix. Useful on its own:
    it answers "remembering what a recipe is" without any of the rest.
