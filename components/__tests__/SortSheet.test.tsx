@@ -61,6 +61,7 @@ describe("SortSheet", () => {
 
         await fireEvent.press(within(screen.getByLabelText("Sort direction")).getByText("OLDEST"));
 
+        expect(NOOP.onSortChange).toHaveBeenCalledTimes(1);
         expect(NOOP.onSortChange).toHaveBeenCalledWith("added", "asc");
     });
 

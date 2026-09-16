@@ -31,13 +31,13 @@ const FILTERS: RailFilter[] = [
 
 function railProps(overrides: Partial<React.ComponentProps<typeof LibraryRail>> = {}) {
     return {
-        collapsed:     false,
-        onSearchPress: jest.fn(),
-        sort:          "name" as const,
-        direction:     "asc" as const,
-        onSortPress:   jest.fn(),
-        filters:       FILTERS,
-        onFilterPress: jest.fn(),
+        collapsed:      false,
+        onSearchChange: jest.fn(),
+        sort:           "name" as const,
+        direction:      "asc" as const,
+        onSortPress:    jest.fn(),
+        filters:        FILTERS,
+        onFilterPress:  jest.fn(),
         ...overrides
     };
 }
@@ -98,11 +98,11 @@ describe("LibraryRail", () => {
         expect(style.backgroundColor).toBe("transparent");
     });
 
-    it("reports a search tap", async () => {
-        const onSearchPress = jest.fn();
-        await renderWithProviders(<LibraryRail {...railProps({onSearchPress})}/>);
+    it("expands the search chip into a field when tapped", async () => {
+        await renderWithProviders(<LibraryRail {...railProps()}/>);
+        expect(screen.queryByTestId("rail-search-field")).toBeNull();
         await press(screen.getByTestId("rail-search"));
-        expect(onSearchPress).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("rail-search-field")).toBeTruthy();
     });
 
     it("reports a sort tap", async () => {

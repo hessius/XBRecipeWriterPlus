@@ -4,6 +4,7 @@ import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-nati
 import {XStack, YStack} from "tamagui";
 
 import RailChip, {CHIP_HEIGHT} from "@/components/RailChip";
+import RailSearch from "@/components/RailSearch";
 import {palette} from "@/constants/colors";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import {chipLabel, isDefaultSort, type SortAxis, type SortDirection} from "@/library/librarySort";
@@ -30,9 +31,11 @@ type Props = {
      * below.
      */
     collapsed: boolean;
-    /** Whether a search term is currently held, so the search chip reads as on. */
-    searchActive?: boolean;
-    onSearchPress: () => void;
+    /**
+     * The debounced search term. The rail owns the field, its expansion and its
+     * timer through `RailSearch`; the owner is handed only the settled string.
+     */
+    onSearchChange: (term: string) => void;
     /** The current sort, so the sort chip can name its axis once it leaves the default. */
     sort: SortAxis;
     direction: SortDirection;
@@ -63,8 +66,7 @@ type Props = {
  */
 export default function LibraryRail({
     collapsed,
-    searchActive = false,
-    onSearchPress,
+    onSearchChange,
     sort,
     direction,
     onSortPress,
@@ -97,9 +99,7 @@ export default function LibraryRail({
     // the view segmented pair into it without restructuring the rail. Do not add
     // the view pair here; that is phase 4's job.
     const cluster = [
-        <RailChip key="search" testID="rail-search" icon="search"
-                  active={searchActive} accessibilityLabel="Search recipes"
-                  onPress={onSearchPress}/>,
+        <RailSearch key="search" onTermChange={onSearchChange}/>,
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortActive ? chipLabel(sort) : undefined}
