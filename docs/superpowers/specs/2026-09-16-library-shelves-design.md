@@ -600,6 +600,13 @@ All in `Settings.DEFAULTS`, which is what carries them into a backup.
 | `showRecipeAvatars` | `false` |
 | `shelfMarkVariant` | dev only, for the tester build |
 
+The tester build no longer needs a bespoke mechanism for that last one. M6
+(#112) shipped `labsUnlocked`, a settings key that reveals a LABS section,
+revealed by seven taps on the version line in About, and it was built as a
+general mechanism with this setting explicitly in mind. `shelfMarkVariant` is a
+row in that section. It does not read `__DEV__` or an EAS channel, so it works
+in a production TestFlight build, which is how the testers will get it.
+
 ### New `brews` columns
 
 `rating` (nullable, distinct from zero) and `observed` (0 for a hand entered
@@ -641,6 +648,16 @@ worth stating so the plan does not have to rediscover it.
    entries. Nothing visible ships, and everything after this is additive.
    Depends on `recipe-index` landing, and on the account import work capturing
    `sharedBy`, `sharedByAvatar` and `imageURL`.
+
+   **Both dependencies have moved since this was written.** The account import
+   landed in #112 and captured all three fields, so that half is done. The
+   recipe index did not: it is designed and planned in full
+   ([design](2026-09-14-recipe-index-design.md),
+   [plan](../plans/2026-09-14-recipe-index.md)) but was never built, and `main`
+   still carries the plain `recipes(uuid, recipeJSON)` blob table. So phase 1
+   begins by building the index, against a fresh branch off `main` rather than
+   the drifted `recipe-index` branch, and §0 of that design lists the four
+   descriptors M5 and M6 add to it.
 2. **The row.** Description, the equal height line budget, the favourite star
    and its swipe tile, and evidence as a stats row suffix. Useful on its own:
    it answers "remembering what a recipe is" without any of the rest.

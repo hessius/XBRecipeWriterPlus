@@ -155,8 +155,9 @@ treats that gap as a stall will report a failure that did not happen.
 
 **Designed.** [`2026-09-16-library-shelves-design.md`][m5-design] is the full
 design, and [`2026-09-16-library-shelves-visual.html`][m5-visual] is the drawn
-version written for the beta tester group. Both live on branch `m5-library`.
-Implementation has not started and no plan has been written yet.
+version written for the beta tester group.
+Implementation has not started and no plan has been written yet. This is the
+current position on the roadmap.
 
 [m5-design]: ../superpowers/specs/2026-09-16-library-shelves-design.md
 [m5-visual]: ../superpowers/specs/2026-09-16-library-shelves-visual.html
@@ -195,19 +196,24 @@ or tags, and has nowhere to put M6's sync state. Doing that migration here —
 promoting filterable fields to columns and adding a side table for sync — means
 doing it once rather than twice.
 
-**That last paragraph is now a live risk rather than a plan.** M6 is being built
-first, so the migration it was supposed to inherit does not exist yet. See the
-note under M6.
+**That saving was spent**, because M6 shipped first. The index is designed and
+planned in full — [`2026-09-14-recipe-index-design.md`][idx-design] and
+[`2026-09-14-recipe-index.md`][idx-plan] — and still unbuilt, so it is M5's
+first phase rather than its inheritance. Read §0 of the design before starting
+it: M6 and M5 between them add four descriptors the original does not name.
+
+[idx-design]: ../superpowers/specs/2026-09-14-recipe-index-design.md
+[idx-plan]: ../superpowers/plans/2026-09-14-recipe-index.md
 
 ### M6 · Your xBloom library
 
-| Issue | |
-|---|---|
-| #74 | Spike: what does xBloom actually consider "your library"? |
-| #75 | Keychain-backed xBloom authentication |
-| #58 | Import your xBloom cloud library |
-| #59 | Push edited recipes back to the xBloom cloud library |
-| #76 | "What leaves this device" screen |
+| Issue | | |
+|---|---|---|
+| #74 | Spike: what does xBloom actually consider "your library"? | open |
+| #75 | Keychain-backed xBloom authentication | **done** |
+| #58 | Import your xBloom cloud library | **done** |
+| #59 | Push edited recipes back to the xBloom cloud library | open |
+| #76 | "What leaves this device" screen | open, blocks 2.0.0 |
 
 Resolves the user-credential half of #56.
 
@@ -223,23 +229,57 @@ Push is deliberately create-only against name clashes rather than an update, so
 M6 has no conflict cases to resolve at all. Resolving them is the next project,
 not this one.
 
-**M6 is being built before M5, which inverts the order this roadmap assumed.**
-That is a legitimate choice, and it has one cost worth naming: M5 was carrying
-the `RecipeDatabase` migration *explicitly so it would happen once rather than
-twice*, and M6 now arrives before it. Two consequences follow.
+**Built, and switched off.** #112 landed M6 in `main` behind two settings keys,
+both `false`: `cloudAccountEnabled` is the feature, `labsUnlocked` is whether a
+LABS section appears in settings at all. Neither reads `__DEV__` nor detects an
+EAS channel, so the gate holds in a production TestFlight build, which is how
+testers will get it. LABS is revealed by seven taps on the version line in
+About, and neither key rides in a backup, so a crafted backup file cannot hand
+anybody the feature.
 
-The first is cheap to avoid. Three values exist only in the xBloom API response
-at the moment of import: `shareMemberName`, `shareMemberHead` and
-`podsVo.imagePath`. A recipe imported before those fields exist has lost them
-permanently, and recovering them would mean re-fetching every share link a user
-has ever imported. M5's design depends on the first of them for author shelves.
-Capturing them during M6 costs almost nothing; retrofitting them costs a
-re-import.
+It was built before M5, inverting the order this roadmap assumed, and it is
+released after it. See **Release order** below.
 
-The second is unavoidable and should simply be expected: the index migration
-will run twice, once for whatever state M6 needs and once for M5's descriptor
-columns. `INDEX_REVISION` exists for exactly this and will handle it, but the
-"do it once" saving in the paragraph above is spent.
+One cost was avoided and one was paid. Avoided: three values exist only in the
+xBloom response at the moment of import — `shareMemberName`, `shareMemberHead`
+and `podsVo.imagePath` — and a recipe imported without them has lost them
+permanently, short of re-fetching every share link. They were captured during
+M6 as `sharedBy`, `sharedByAvatar` and `imageURL`, and they are deliberately
+*not* gated, because they are ordinary recipe content that M5 builds author
+shelves and the pod section on. Paid: the index migration will now run twice
+rather than once. `INDEX_REVISION` exists for exactly that and will handle it.
+
+## Release order
+
+Build order and release order are not the same thing here, on purpose.
+
+| Version | Carries | State |
+|---|---|---|
+| 1.6.0 | M1 to M4, the create-recipe work, the grind-off fix | **shipped to TestFlight**, build 12, cut before M6 landed |
+| 1.7.0 | M5, with M6 still gated off | next |
+| 2.0.0 | M6, ungated | after M5 has been in the field |
+
+M6 is gated rather than branched because a branch that size parallel to an M5
+rewrite of the library screen is a merge conflict with a countdown on it.
+
+It is released after M5 because **M6 is a firehose pointed at an unorganised
+list**. Importing an entire xBloom library is the fastest way to turn a
+twenty-recipe library into a hundred-recipe one, and until M5 ships that lands
+in a screen with no search, no filter, no sort and no shelves. M5 is what makes
+M6 survivable, not merely nicer.
+
+2.0.0 rather than 1.8.0 because the major number marks the trust boundary
+moving. Up to and including M5 this app has never sent a user's credentials
+anywhere; M6 is the first version that does, which is what #76 exists to
+explain and what deserves the version number that makes people read it.
+
+`expo-updates` is not a dependency, so there is no OTA path and every change
+ships as a build. It is to be adopted before M5 reaches testers, since M5 is
+almost entirely JavaScript and shelf art needs iteration.
+
+#69, #62 and #71 are each a milestone's last open issue. They ride whichever
+release they happen to be finished for; holding a release for one is how
+milestones stop meaning anything.
 
 ## Not scheduled
 
