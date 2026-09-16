@@ -58,8 +58,9 @@ describe("LibraryRail", () => {
     });
 
     it("keeps its chips at 44 once the rail has shrunk", async () => {
-        // The rail sheds its own padding as the list scrolls; the targets inside
-        // it do not move off the touch minimum.
+        // A forward guard, not a proof: chip height does not read `collapsed`
+        // today, so this asserts nothing the expanded case does not. It is here
+        // so that the day someone ties chip size to the shrink, a test says no.
         await renderWithProviders(<LibraryRail {...railProps({collapsed: true})}/>);
         const style = screen.getByTestId("rail-search").props.style as Record<string, unknown>;
         expect(style.height).toBe(CHIP_HEIGHT);

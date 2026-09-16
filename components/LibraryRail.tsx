@@ -121,7 +121,13 @@ export default function LibraryRail({
                 <YStack testID="rail-divider" width={1} height={CHIP_HEIGHT}
                         backgroundColor={palette.line}/>
 
+                {/* `flexShrink` because a ScrollView sizes to its content by
+                    default, and this one is a row sibling of controls that must
+                    never be pushed off screen. Unbounded, the chips would simply
+                    run past the edge and the row would not scroll at all, which
+                    is the half of the rail that has to. */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                            style={{flexShrink: 1}}
                             contentContainerStyle={{gap: CHIP_GAP, alignItems: "center"}}>
                     {filters.map((filter) => (
                         <RailChip key={filter.id} testID={`rail-filter-${filter.id}`}
