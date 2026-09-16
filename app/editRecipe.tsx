@@ -735,6 +735,62 @@ type ActionBarProps = {
 /** How far the bar sits into the home indicator's inset. */
 const ACTION_BAR_SINK = 5;
 
+type BarButtonProps = {
+    label: string;
+    accessibilityLabel: string;
+    /** False when the action is refused: the recipe is one no card or machine takes. */
+    enabled: boolean;
+    /** The recipe's accent, for the one button that earns it. Absent = neutral. */
+    accent?: string;
+    flex: number;
+    onPress: () => void;
+};
+
+/**
+ * One button in the action bar, and the whole of the bar's state law.
+ *
+ * A button that can be pressed is filled -- the accent if it is the primary act
+ * on this recipe, the raised grey otherwise. A button that is refused has no
+ * fill at all, only the hairline it shares with every other outline in the app,
+ * and its word is set in the muted ink CtaTile and the swipe tray already use
+ * for the same meaning.
+ *
+ * So the three buttons were told apart by their ink alone, across one step from
+ * `dim` to `text`, while all three sat on the same raised fill. A refused BREW,
+ * a live WRITE and a refused WRITE were indistinguishable, and all three read as
+ * pressable. Fill is the signal now, and ink only agrees with it.
+ *
+ * Never an opacity on the group: it multiplies with whatever is beneath and
+ * takes the word down with it, which is how the label became unreadable the
+ * first time this was tried.
+ */
+function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: BarButtonProps) {
+    const fill = enabled
+        ? (accent ?? palette.raised)
+        : "transparent";
+
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+                   accessibilityState={{disabled: !enabled}}
+                   onPress={() => enabled && onPress()}
+                   style={{flex}}>
+            <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
+                    backgroundColor={fill}
+                    borderWidth={1}
+                    // The accent button's own edge, so it reads as one solid
+                    // block rather than a fill inside a grey ring.
+                    borderColor={enabled && accent !== undefined ? accent : palette.line}>
+                <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                               color={enabled
+                                   ? (accent !== undefined ? palette.base : palette.text)
+                                   : palette.muted}>
+                    {label}
+                </DotMatrixText>
+            </YStack>
+        </Pressable>
+    );
+}
+
 function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
@@ -752,58 +808,21 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
                 paddingBottom={Math.max(insets.bottom - ACTION_BAR_SINK, 0)}
                 backgroundColor={palette.base}
                 onLayout={(event) => onHeight(event.nativeEvent.layout.height)}>
+            {/* The accent goes to the one act that runs the recipe. With no
+                machine there is nothing to run it on, so WRITE inherits it:
+                putting a recipe on a card is then the primary act. */}
             {canBrewAtAll && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Brew"
-                           accessibilityState={{disabled: !canBrew}}
-                           onPress={() => canBrew && onBrew()}
-                           style={{flex: 2}}>
-                    <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                            backgroundColor={canBrew ? accent : palette.raised}>
-                        <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                       color={canBrew ? palette.base : palette.dim}>
-                            BREW
-                        </DotMatrixText>
-                    </YStack>
-                </Pressable>
+                <BarButton label="BREW" accessibilityLabel="Brew"
+                           enabled={canBrew} accent={accent} flex={2}
+                           onPress={onBrew}/>
             )}
-            <Pressable accessibilityRole="button" accessibilityLabel="Write card"
-                       accessibilityState={{disabled: !canWrite}}
-                       onPress={() => canWrite && onWrite()}
-                       style={{flex: canBrewAtAll ? 1 : 2}}>
-                {/* Disabled by swapping the fill, not by dropping the group's
-                    opacity: opacity multiplies with whatever is beneath and
-                    takes the label down with it. A flat raised tile keeps the
-                    word legible while plainly not being the live accent.
-
-                    With BREW present the accent is already spent on it, so
-                    WRITE is an outlined tile either way and only the ink can
-                    say it is refused. Dimming it is SAVE's treatment, beside
-                    it, for the same meaning. Without that the button looked
-                    live on a recipe no card could hold. */}
-                <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                        backgroundColor={canWrite && !canBrewAtAll ? accent : palette.raised}
-                        borderWidth={canBrewAtAll ? 1 : 0}
-                        borderColor={palette.line}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={canWrite
-                                       ? (canBrewAtAll ? palette.text : palette.base)
-                                       : palette.dim}>
-                        WRITE
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Save"
-                       accessibilityState={{disabled: !canSave}}
-                       onPress={() => canSave && onSave()}
-                       style={{flex: 1}}>
-                <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
-                        borderWidth={1} borderColor={palette.line}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={canSave ? palette.text : palette.dim}>
-                        SAVE
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
+            <BarButton label="WRITE" accessibilityLabel="Write card"
+                       enabled={canWrite}
+                       accent={canBrewAtAll ? undefined : accent}
+                       flex={canBrewAtAll ? 1 : 2}
+                       onPress={onWrite}/>
+            <BarButton label="SAVE" accessibilityLabel="Save"
+                       enabled={canSave} flex={1} onPress={onSave}/>
         </XStack>
     );
 }
