@@ -6,6 +6,7 @@ import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {palette} from "@/constants/colors";
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
 // shapes rather than inventing new ones. Note the comment there about reading a
@@ -156,6 +157,13 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
         </>
     );
     return view;
+}
+
+/** The ink one of the action bar's words is set in. */
+function inkOf(word: string): string | undefined {
+    const style = StyleSheet.flatten(screen.getByText(word).props.style) as
+        {color?: string} | undefined;
+    return style?.color;
 }
 
 /** Every background colour painted anywhere inside an element. */
@@ -1056,6 +1064,32 @@ describe("the action bar", () => {
         await renderEditor();
         expect(screen.getByLabelText("Brew")).toBeTruthy();
         expect(screen.getByLabelText("Write card")).toBeTruthy();
+    });
+
+    it("dims the WRITE word when the recipe cannot be written", async () => {
+        rememberMachine("AA:BB");
+        // With BREW present the accent is spent on it and WRITE is an outlined
+        // tile whether or not it is live, so the ink is the only thing left to
+        // say it is refused. It used to stay at full strength, and the button
+        // looked as pressable as SAVE beside it.
+        await renderEditor({dosage: 30});
+
+        expect(inkOf("WRITE")).toBe(palette.dim);
+        // The word is still there to read. Dimming is not hiding.
+        expect(screen.getByText("WRITE")).toBeTruthy();
+    });
+
+    it("leaves it at full strength on a recipe a card can hold", async () => {
+        rememberMachine("AA:BB");
+        await renderEditor();
+
+        expect(inkOf("WRITE")).toBe(palette.text);
+    });
+
+    it("dims it with no machine paired too, where WRITE wears the accent", async () => {
+        await renderEditor({dosage: 30});
+
+        expect(inkOf("WRITE")).toBe(palette.dim);
     });
 
     it("refuses to brew a recipe the machine would reject", async () => {

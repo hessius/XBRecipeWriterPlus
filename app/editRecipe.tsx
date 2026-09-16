@@ -773,13 +773,21 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
                 {/* Disabled by swapping the fill, not by dropping the group's
                     opacity: opacity multiplies with whatever is beneath and
                     takes the label down with it. A flat raised tile keeps the
-                    word legible while plainly not being the live accent. */}
+                    word legible while plainly not being the live accent.
+
+                    With BREW present the accent is already spent on it, so
+                    WRITE is an outlined tile either way and only the ink can
+                    say it is refused. Dimming it is SAVE's treatment, beside
+                    it, for the same meaning. Without that the button looked
+                    live on a recipe no card could hold. */}
                 <YStack alignItems="center" paddingVertical="$3.5" borderRadius="$4"
                         backgroundColor={canWrite && !canBrewAtAll ? accent : palette.raised}
                         borderWidth={canBrewAtAll ? 1 : 0}
                         borderColor={palette.line}>
                     <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={canWrite && !canBrewAtAll ? palette.base : palette.text}>
+                                   color={canWrite
+                                       ? (canBrewAtAll ? palette.text : palette.base)
+                                       : palette.dim}>
                         WRITE
                     </DotMatrixText>
                 </YStack>
