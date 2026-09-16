@@ -809,6 +809,53 @@ describe("RecipeCard", () => {
         );
     });
 
+    it("mirrors the KEEP tile as an accessibility action", async () => {
+        // The tile lives in the management tray, behind a pan gesture, inside
+        // this card's accessibility group. Without this action the star is
+        // something a screen reader user can hear but never set.
+        const onToggleFavourite = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onToggleFavourite={onToggleFavourite}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "favourite", label: "Add recipe to favourites"}
+            ])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "favourite"}});
+        expect(onToggleFavourite).toHaveBeenCalledTimes(1);
+    });
+
+    it("names the favourite action for what it will do", async () => {
+        // The label has to read the current state, or a favourited recipe
+        // offers to favourite itself again.
+        const recipe = makeRecipe();
+        recipe.favourite = true;
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()}
+                        onToggleFavourite={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "favourite", label: "Remove recipe from favourites"}
+            ])
+        );
+    });
+
+    it("publishes no favourite action when the screen cannot perform it", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onDelete={jest.fn()}/>
+        );
+        const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
+            {name: string}[]).map((a) => a.name);
+        expect(names).toContain("delete");
+        expect(names).not.toContain("favourite");
+    });
+
     it("marks a favourite recipe", async () => {
         // Queried with hidden elements included: the star is hidden from the
         // accessibility tree (its word is already in the card's own label), so

@@ -142,6 +142,8 @@ type Props = {
      */
     onShare?: () => void;
     onWrite?: () => void;
+    /** Same again for the management tray's KEEP tile. */
+    onToggleFavourite?: () => void;
 };
 
 /**
@@ -161,7 +163,8 @@ export default function RecipeCard({
     dottedProfile = false,
     onBrew,
     onShare,
-    onWrite
+    onWrite,
+    onToggleFavourite
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -203,7 +206,19 @@ export default function RecipeCard({
         // TalkBack can perform. Without these two the only way to hand out a
         // link or put a recipe on a card is a gesture those users do not have.
         ...(onShare !== undefined ? [{name: "share", label: "Share recipe"}] : []),
-        ...(onWrite !== undefined ? [{name: "write", label: "Write recipe to card"}] : [])
+        ...(onWrite !== undefined ? [{name: "write", label: "Write recipe to card"}] : []),
+        // And the same again for the management tray, which is the only place
+        // the KEEP tile lives. The star this toggles is in the label above, so
+        // without an action a screen reader user can hear that a recipe is a
+        // favourite but has no way to make it one.
+        ...(onToggleFavourite !== undefined
+            ? [{
+                name:  "favourite",
+                label: recipe.favourite
+                    ? "Remove recipe from favourites"
+                    : "Add recipe to favourites"
+            }]
+            : [])
     ];
 
     return (
@@ -238,6 +253,8 @@ export default function RecipeCard({
                     onShare?.();
                 } else if (event.nativeEvent.actionName === "write") {
                     onWrite?.();
+                } else if (event.nativeEvent.actionName === "favourite") {
+                    onToggleFavourite?.();
                 }
             }}
             // The press feedback Tamagui's `pressStyle` used to draw. Kept

@@ -44,7 +44,7 @@ const BOUNCE_CLOSE_DELAY = 1000;
 /**
  * The width of one action tile.
  *
- * The action tray is the widest, at three tiles. On the smallest supported
+ * Both trays are three tiles wide. On the smallest supported
  * device — an iPhone SE class phone at 320 pt — the row sits inside 12 pt of
  * horizontal padding on each side, leaving 296 pt. The tray is
  * `3·TILE_WIDTH + 2·gap + 2·padding`; with the `$2` (7 pt) gap and padding that
@@ -281,7 +281,8 @@ export default function SwipeableRecipeRow({
                             dottedProfile={dottedProfile}
                             onBrew={onBrew}
                             onShare={onShare} onWrite={onWrite}
-                            onDelete={onDelete} onDuplicate={onDuplicate}/>
+                            onDelete={onDelete} onDuplicate={onDuplicate}
+                            onToggleFavourite={onToggleFavourite}/>
             </Swipeable>
         </View>
     );
