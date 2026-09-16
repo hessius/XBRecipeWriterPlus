@@ -20,6 +20,7 @@ import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
+import {SORT_AXES, type SortAxis} from "@/library/librarySort";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -95,6 +96,13 @@ export default function SettingsScreen({settings}: Props) {
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
+    // Owned by the library rail, not shown as rows here. Read anyway, because a
+    // backup carries every preference and these are three.
+    const [librarySort, setLibrarySort] = useSetting("librarySort", settings);
+    const [librarySortDirection, setLibrarySortDirection] =
+        useSetting("librarySortDirection", settings);
+    const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
+        useSetting("libraryFavouritesFirst", settings);
 
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
@@ -119,7 +127,8 @@ export default function SettingsScreen({settings}: Props) {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, animateBrewChart, brewTraceRetention
+            machineAutoStart, animateBrewChart, brewTraceRetention,
+            librarySort, librarySortDirection, libraryFavouritesFirst
         };
     }
 
@@ -177,6 +186,18 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.brewTraceRetention === "number") {
             setBrewTraceRetention(incoming.brewTraceRetention);
+        }
+        // Checked against the axis table rather than "is a string", so a backup
+        // naming an axis this build has no fragment for is dropped rather than
+        // let through to an ORDER BY that would break.
+        if (typeof incoming.librarySort === "string" && incoming.librarySort in SORT_AXES) {
+            setLibrarySort(incoming.librarySort as SortAxis);
+        }
+        if (incoming.librarySortDirection === "asc" || incoming.librarySortDirection === "desc") {
+            setLibrarySortDirection(incoming.librarySortDirection);
+        }
+        if (typeof incoming.libraryFavouritesFirst === "boolean") {
+            setLibraryFavouritesFirst(incoming.libraryFavouritesFirst);
         }
     }
 

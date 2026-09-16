@@ -1,0 +1,164 @@
+/**
+ * The sort vocabulary: the axes the library can be ordered by, each with its
+ * chip label, its two direction words, its default direction, and the ORDER BY
+ * it contributes to the query.
+ *
+ * One table, read from everywhere. The sort chip, the sort sheet's direction
+ * pair and the query builder all derive from `SORT_AXES` rather than restating
+ * the axis list, for the reason `recipeIndex.ts` gives for its column array: a
+ * vocabulary written out in four places is how one copy drifts from the others,
+ * which is exactly how `showHints` once went missing from backups. Adding an
+ * axis is one entry here and nothing anywhere else.
+ *
+ * No SQL runs here and no database is imported. This module only says what a
+ * valid sort is and what ORDER BY text each one produces; the query builder
+ * assembles and `RecipeDatabase` executes.
+ */
+
+export type SortAxis = "name" | "added" | "lastBrewed" | "timesBrewed" | "ratio";
+export type SortDirection = "asc" | "desc";
+
+/**
+ * The ultimate tie break. Two recipes equal on every sort term must still land
+ * in the same order on every launch, or a list nobody edited appears to
+ * reshuffle itself between openings. `uuid` is the one column that is unique and
+ * stable, so it is what finally settles the order.
+ */
+const UUID_TIE = "uuid ASC";
+
+/**
+ * Every axis but name falls back to name before uuid, so nine recipes at zero
+ * brews read alphabetically rather than in whatever order the brews join
+ * happened to emit. NOCASE is restated rather than trusted to the column's
+ * declared collation, so a fragment is correct read on its own.
+ */
+const NAME_TIE = "sortName COLLATE NOCASE ASC";
+
+/** A non-name axis: its own term, then the shared name and uuid tie breaks. */
+function withTieBreaks(term: string): string {
+    return `${term}, ${NAME_TIE}, ${UUID_TIE}`;
+}
+
+/**
+ * Never brewed sorts last under this axis in BOTH directions, not merely "NULLs
+ * last" by accident of SQLite's ordering. LONGEST AGO must not open with the
+ * recipes nobody has ever brewed, so the CASE forces them to the end first and
+ * the real dates order among themselves after. `lastBrewedAt` is NULL when the
+ * brews join found nothing, so the same guard covers RECENT and LONGEST AGO.
+ */
+function brewedOrder(direction: SortDirection): string {
+    const term = direction === "asc" ? "lastBrewedAt ASC" : "lastBrewedAt DESC";
+    return withTieBreaks(`CASE WHEN lastBrewedAt IS NULL THEN 1 ELSE 0 END, ${term}`);
+}
+
+/** The same never-brewed-last guard as `brewedOrder`, over the count instead. */
+function countOrder(direction: SortDirection): string {
+    const term = direction === "asc" ? "brewCount ASC" : "brewCount DESC";
+    return withTieBreaks(`CASE WHEN brewCount IS NULL THEN 1 ELSE 0 END, ${term}`);
+}
+
+/**
+ * Unnamed recipes sort last under name in both directions, not first as SQLite
+ * would put their NULL `sortName`. `recipeIndex.ts` stores NULL rather than the
+ * formatted placeholder precisely so this axis can push them to the end
+ * deliberately instead of scattering them under a localised date string. The
+ * name term is the tie break here, so only uuid follows it.
+ */
+function nameOrder(direction: SortDirection): string {
+    const term = direction === "asc"
+        ? "sortName COLLATE NOCASE ASC"
+        : "sortName COLLATE NOCASE DESC";
+    return `sortName IS NULL, ${term}, ${UUID_TIE}`;
+}
+
+type AxisSpec = {
+    /** The chip label, in Doto caps. */
+    label: string;
+    /** The two direction words, taken verbatim from the design's table. */
+    directionLabels: Record<SortDirection, string>;
+    /**
+     * The direction applied when this axis is first chosen, picked so one tap is
+     * useful: the newest additions, the most recent brews, the most-brewed, the
+     * lowest ratios, and names from A.
+     */
+    defaultDirection: SortDirection;
+    /** The complete ORDER BY body this axis and direction produce. */
+    orderBy: (direction: SortDirection) => string;
+};
+
+/**
+ * The whole vocabulary. Rating (`BEST` / `WORST`, default `desc`, over
+ * `avg(brews.rating)` with the same never-rated-last guard the brew axes use)
+ * is deliberately absent: until #99 lets a recipe be rated every recipe would
+ * score identically and the axis would sort nothing. When it lands it is one
+ * more entry here.
+ */
+export const SORT_AXES: Record<SortAxis, AxisSpec> = {
+    name: {
+        label: "NAME",
+        directionLabels: {asc: "A TO Z", desc: "Z TO A"},
+        defaultDirection: "asc",
+        orderBy: nameOrder
+    },
+    added: {
+        label: "ADDED",
+        directionLabels: {asc: "OLDEST", desc: "NEWEST"},
+        defaultDirection: "desc",
+        orderBy: (direction) =>
+            withTieBreaks(direction === "asc" ? "createdAt ASC" : "createdAt DESC")
+    },
+    lastBrewed: {
+        label: "LAST BREWED",
+        directionLabels: {asc: "LONGEST AGO", desc: "RECENT"},
+        defaultDirection: "desc",
+        orderBy: brewedOrder
+    },
+    timesBrewed: {
+        label: "TIMES BREWED",
+        directionLabels: {asc: "LEAST", desc: "MOST"},
+        defaultDirection: "desc",
+        orderBy: countOrder
+    },
+    ratio: {
+        label: "RATIO",
+        directionLabels: {asc: "LOW TO HIGH", desc: "HIGH TO LOW"},
+        defaultDirection: "asc",
+        orderBy: (direction) =>
+            withTieBreaks(direction === "asc" ? "ratio ASC" : "ratio DESC")
+    }
+};
+
+/** The axes in the order the sort sheet lists them. */
+export const SORT_AXIS_ORDER: readonly SortAxis[] = [
+    "name", "added", "lastBrewed", "timesBrewed", "ratio"
+];
+
+/** The ORDER BY body for an axis and direction. */
+export function orderByFragment(axis: SortAxis, direction: SortDirection): string {
+    return SORT_AXES[axis].orderBy(direction);
+}
+
+/** The two direction words under a given axis, so a control can label itself. */
+export function directionLabels(axis: SortAxis): Record<SortDirection, string> {
+    return SORT_AXES[axis].directionLabels;
+}
+
+/** The direction to apply when an axis is first chosen. */
+export function defaultDirection(axis: SortAxis): SortDirection {
+    return SORT_AXES[axis].defaultDirection;
+}
+
+/** The chip label for an axis, in Doto caps. */
+export function chipLabel(axis: SortAxis): string {
+    return SORT_AXES[axis].label;
+}
+
+/**
+ * Whether the sort is the library's default of name ascending. This is the
+ * global default the sort chip stays a bare glyph for; any other state gives
+ * the chip the accent fill and makes it name its axis, so a library in an
+ * unusual order never looks like one in its usual order.
+ */
+export function isDefaultSort(axis: SortAxis, direction: SortDirection): boolean {
+    return axis === "name" && direction === "asc";
+}
