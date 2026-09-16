@@ -148,10 +148,36 @@ treats that gap as a stall will report a failure that did not happen.
 
 | Issue | |
 |---|---|
-| #55 | Post-brew notes and rating *(moved out of deferred)* |
 | #72 | Library management: tags, filtering and search |
 | #106 | Library groups: manual shelves and automatic ones |
 | #73 | Browse the community recipe hub |
+| #111 | Shelf ordering *(deferred out of the design, deliberately)* |
+
+**Designed.** [`2026-09-16-library-shelves-design.md`][m5-design] is the full
+design, and [`2026-09-16-library-shelves-visual.html`][m5-visual] is the drawn
+version written for the beta tester group.
+Implementation has not started and no plan has been written yet. This is the
+current position on the roadmap.
+
+[m5-design]: ../superpowers/specs/2026-09-16-library-shelves-design.md
+[m5-visual]: ../superpowers/specs/2026-09-16-library-shelves-visual.html
+
+The design resolves #72 and #106 into one mechanism: **every shelf is a query.**
+An automatic shelf queries index columns, a manual shelf queries a tag, and
+there is no shelf table at all. It also settles sorting, favourites, what a row
+says about itself, and a third deck on the recipe screen for everything that is
+neither a brew parameter nor a stage.
+
+One question is deliberately unsettled and is going to testers: what a shelf's
+mark looks like. Three candidates ship behind one row in LABS, the settings
+section M6 added. Not a `__DEV__` build flag: the whole point is that a tester
+on a production TestFlight build can switch between them.
+
+#55 was the original post-brew notes and rating issue. It was closed as not
+planned on 14 September, superseded by the #95 chain, which owns rating capture
+properly. This design consumes a rating and does not capture one, except for the
+hand-entered case, where rating a recipe writes a brew the app did not watch so
+that a card-only user is not locked out of every rating-derived feature.
 
 All local, all offline, all available to someone who never logs in. This is the
 milestone that improves on the official app rather than catching up to it —
@@ -167,20 +193,43 @@ player's *organisation* without its *transport* — a playlist plays in sequence
 and a recipe group does not.
 
 M5 also carries the one refactor on this roadmap. `RecipeDatabase.ts` stores
-each recipe as an opaque JSON blob keyed by uuid, which cannot support filtering
-or tags, and has nowhere to put M6's sync state. Doing that migration here —
-promoting filterable fields to columns and adding a side table for sync — means
-doing it once rather than twice.
+each recipe as an opaque JSON blob keyed by uuid, and you cannot filter, sort or
+group a blob. The migration promotes filterable fields to real columns while the
+blob stays the only source of truth, every column being a cache rebuildable from
+it.
+
+Note that cloud sync state needed no side table in the end. M6 put `cloudId` and
+`cloudFingerprint` on `Recipe`, so they live in the blob with everything else and
+ride through backup for free. An earlier draft of this roadmap expected a side
+table; the blob-is-truth rule turned out to cover that case too.
+
+**The index is built but unmerged.** `main` still carries the plain blob table,
+so it is M5's first phase, but the phase is a rebase rather than a build. The
+work is on the `recipe-index` branch: 28 commits, around 4,300 insertions, with
+the descriptor array, the tag table, the hash-triggered rebuild and a real-SQLite
+test harness all in place. It had never been pushed, which is why it was briefly
+believed lost; it is on the remote now.
+
+Both documents survive —
+[`2026-09-14-recipe-index-design.md`][idx-design] and
+[`2026-09-14-recipe-index.md`][idx-plan] — and the plan's header explains how to
+land the branch. Read §0 of the design first: M6 and M5 between them add four
+descriptors the original does not name, and the two that M5 introduces
+(`favourite`, `hasDescription`) are the reason the rebase and the shelves work
+belong to the same release.
+
+[idx-design]: ../superpowers/specs/2026-09-14-recipe-index-design.md
+[idx-plan]: ../superpowers/plans/2026-09-14-recipe-index.md
 
 ### M6 · Your xBloom library
 
-| Issue | |
-|---|---|
-| #74 | Spike: what does xBloom actually consider "your library"? |
-| #75 | Keychain-backed xBloom authentication |
-| #58 | Import your xBloom cloud library |
-| #59 | Push edited recipes back to the xBloom cloud library |
-| #76 | "What leaves this device" screen |
+| Issue | | |
+|---|---|---|
+| #74 | Spike: what does xBloom actually consider "your library"? | open |
+| #75 | Keychain-backed xBloom authentication | **done** |
+| #58 | Import your xBloom cloud library | **done** |
+| #59 | Push edited recipes back to the xBloom cloud library | open |
+| #76 | "What leaves this device" screen | open, blocks 2.0.0 |
 
 Resolves the user-credential half of #56.
 
@@ -195,6 +244,58 @@ confirmed against a real account before the rest of M6 is designed.
 Push is deliberately create-only against name clashes rather than an update, so
 M6 has no conflict cases to resolve at all. Resolving them is the next project,
 not this one.
+
+**Built, and switched off.** #112 landed M6 in `main` behind two settings keys,
+both `false`: `cloudAccountEnabled` is the feature, `labsUnlocked` is whether a
+LABS section appears in settings at all. Neither reads `__DEV__` nor detects an
+EAS channel, so the gate holds in a production TestFlight build, which is how
+testers will get it. LABS is revealed by seven taps on the version line in
+About, and neither key rides in a backup, so a crafted backup file cannot hand
+anybody the feature.
+
+It was built before M5, inverting the order this roadmap assumed, and it is
+released after it. See **Release order** below.
+
+One cost was avoided and one was paid. Avoided: three values exist only in the
+xBloom response at the moment of import — `shareMemberName`, `shareMemberHead`
+and `podsVo.imagePath` — and a recipe imported without them has lost them
+permanently, short of re-fetching every share link. They were captured during
+M6 as `sharedBy`, `sharedByAvatar` and `imageURL`, and they are deliberately
+*not* gated, because they are ordinary recipe content that M5 builds author
+shelves and the pod section on. Paid: the index migration will now run twice
+rather than once. `INDEX_REVISION` exists for exactly that and will handle it.
+
+## Release order
+
+Build order and release order are not the same thing here, on purpose.
+
+| Version | Carries | State |
+|---|---|---|
+| 1.6.0 | M1 to M4, the create-recipe work, the grind-off fix | **shipped to TestFlight**, build 12, cut before M6 landed |
+| 1.7.0 | M5, with M6 still gated off | next |
+| 2.0.0 | M6, ungated | after M5 has been in the field |
+
+M6 is gated rather than branched because a branch that size parallel to an M5
+rewrite of the library screen is a merge conflict with a countdown on it.
+
+It is released after M5 because **M6 is a firehose pointed at an unorganised
+list**. Importing an entire xBloom library is the fastest way to turn a
+twenty-recipe library into a hundred-recipe one, and until M5 ships that lands
+in a screen with no search, no filter, no sort and no shelves. M5 is what makes
+M6 survivable, not merely nicer.
+
+2.0.0 rather than 1.8.0 because the major number marks the trust boundary
+moving. Up to and including M5 this app has never sent a user's credentials
+anywhere; M6 is the first version that does, which is what #76 exists to
+explain and what deserves the version number that makes people read it.
+
+`expo-updates` is not a dependency, so there is no OTA path and every change
+ships as a build. It is to be adopted before M5 reaches testers, since M5 is
+almost entirely JavaScript and shelf art needs iteration.
+
+#69, #62 and #71 are each a milestone's last open issue. They ride whichever
+release they happen to be finished for; holding a release for one is how
+milestones stop meaning anything.
 
 ## Not scheduled
 

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XBRW++ · A library worth keeping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0C0C0C; --panel:#141414; --panel2:#171717; --line:#262626; --line2:#2e2e33;
+    --ink:#F2F2F5; --ink2:#A8A8B0; --ink3:#6E6E76; --ink4:#4A4A50;
+    --sky:#9FC3F0; --peach:#F0B98E; --blossom:#F0A0AB; --sage:#B4D6A8;
+    --mint:#97D8C4; --lilac:#BDB2E8; --ice:#A6D6E8; --rose:#E7A9C9;
+    --sencha:#CFD6A3; --oolong:#DCC194; --jasmine:#D9CF9A; --hibiscus:#E0AEA6;
+    --good:#7EC98F; --warn:#D9A87A; --bad:#D98080;
+    --mono:'Doto',ui-monospace,'SF Mono',Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:0 20px 90px}
+
+  /* ---------- masthead ---------- */
+  .mast{padding:52px 0 30px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:2.4px;color:var(--ink3);
+          text-transform:uppercase;margin:0 0 14px}
+  h1{font-size:clamp(28px,7vw,44px);line-height:1.12;margin:0 0 16px;font-weight:600;letter-spacing:-.5px}
+  .lede{font-size:17px;color:var(--ink2);margin:0;max-width:60ch}
+  .meta{font-family:var(--mono);font-size:10.5px;letter-spacing:1.6px;color:var(--ink4);
+        margin-top:22px;text-transform:uppercase}
+
+  /* ---------- structure ---------- */
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:0}
+  .num{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--sky);margin:0 0 9px}
+  h2{font-size:clamp(21px,4.6vw,28px);line-height:1.22;margin:0 0 13px;font-weight:600;letter-spacing:-.3px}
+  h3{font-size:16.5px;margin:30px 0 9px;font-weight:600}
+  h4{font-size:13.5px;margin:20px 0 7px;font-weight:600;color:var(--ink)}
+  p{margin:0 0 15px;color:var(--ink2);max-width:64ch}
+  p strong,li strong{color:var(--ink);font-weight:600}
+  ul{margin:0 0 15px;padding-left:20px;color:var(--ink2);max-width:64ch}
+  li{margin-bottom:7px}
+  code{font-family:var(--mono);font-size:.88em;background:#000;padding:1px 6px;
+       border-radius:4px;color:var(--sky)}
+  .quote{border-left:2px solid var(--sky);padding:2px 0 2px 16px;margin:0 0 20px;
+         color:var(--ink);font-size:16px;font-style:italic;max-width:62ch}
+
+  /* ---------- callouts ---------- */
+  .call{border-radius:11px;padding:15px 17px;margin:0 0 20px;font-size:14px;line-height:1.62}
+  .call p{margin:0 0 10px;max-width:none}.call p:last-child{margin:0}
+  .call h4{margin:0 0 7px;font-size:14px}
+  .call.ask{background:#101a22;border:1px solid #2b4657}
+  .call.ask h4{color:var(--ice)}
+  .call.note{background:#131316;border:1px solid var(--line2)}
+  .call.warn{background:#1c1610;border:1px solid #453424}
+  .call.warn h4{color:var(--warn)}
+
+  /* ---------- phone frame ---------- */
+  .stage{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 20px;align-items:flex-start}
+  .phone{background:#0C0C0C;border:1px solid #2a2a2a;border-radius:16px;padding:13px;
+         width:290px;flex:0 0 290px;max-width:100%}
+  .phone.wide{width:100%;flex:1 1 290px}
+  .cap{font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;color:var(--ink3);
+       margin:0 0 8px;text-transform:uppercase}
+
+  /* ---------- recipe card ---------- */
+  .rc{background:var(--panel);border-radius:12px;padding:11px 13px;position:relative;
+      overflow:hidden;margin-bottom:8px}
+  .rc .t{font-size:14px;font-weight:600;color:#fff;line-height:1.3}
+  .rc .t.clamp{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rc .d{font-size:11.5px;color:var(--ink2);margin-top:2px;white-space:nowrap;
+         overflow:hidden;text-overflow:ellipsis}
+  .rc .s{display:flex;align-items:center;gap:10px;margin-top:10px;font-family:var(--mono);
+         font-size:9.5px;letter-spacing:1px;color:var(--ink3)}
+  .rc .s .ev{margin-left:auto}
+  .rc .star{color:var(--peach);font-size:12px}
+  .rc .prof{position:absolute;right:0;bottom:0;opacity:.5;pointer-events:none}
+
+  /* ---------- rail ---------- */
+  .rail{display:flex;align-items:center;gap:6px;margin-bottom:11px;position:relative;
+        overflow:hidden;padding-right:26px}
+  .rail:after{content:'';position:absolute;right:0;top:0;bottom:0;width:30px;
+              background:linear-gradient(90deg,transparent,#0C0C0C)}
+  .chip{height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;
+        gap:5px;font-family:var(--mono);font-size:9.5px;letter-spacing:1.2px;color:#8a8a92;
+        background:var(--panel2);border:1px solid var(--line);white-space:nowrap;padding:0 11px;
+        flex:0 0 auto}
+  .chip.sq{width:34px;padding:0;flex:0 0 34px}
+  .chip.on{background:var(--sky);color:#0C0C0C;border-color:var(--sky)}
+  .seg{display:flex;height:34px;border-radius:17px;overflow:hidden;border:1px solid var(--line);flex:0 0 auto}
+  .seg div{width:36px;display:flex;align-items:center;justify-content:center;background:var(--panel2)}
+  .seg div.on{background:#2e2e2e}
+  .vr{width:1px;height:20px;background:#2f2f2f;flex:0 0 1px;margin:0 3px}
+
+  /* ---------- shelves ---------- */
+  .shelves{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sh{background:var(--panel);border-radius:10px;display:flex;align-items:center;gap:9px;
+      overflow:hidden;height:46px}
+  .sh .art{width:46px;height:46px;flex:0 0 46px;display:flex;align-items:center;justify-content:center}
+  .sh .lbl{font-size:11px;font-weight:600;color:#fff;line-height:1.2;padding-right:7px;min-width:0}
+  .sh .lbl em{display:block;font-family:var(--mono);font-size:8px;font-style:normal;
+              color:var(--ink3);letter-spacing:.8px;margin-top:2px}
+  .mos{display:grid;width:46px;height:46px;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+  .secthead{font-family:var(--mono);font-size:9px;letter-spacing:1.8px;color:var(--ink3);
+            margin:0 0 8px;text-transform:uppercase}
+
+  /* ---------- option cards ---------- */
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:0 0 18px}
+  .opt{background:#111114;border:1px solid var(--line2);border-radius:13px;padding:15px}
+  .opt.pick{border-color:#3a5a3a;background:#12180f}
+  .opt .oh{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .opt .ltr{width:24px;height:24px;border-radius:7px;background:#242428;color:var(--ink2);
+            display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+            font-size:12px;flex:0 0 24px}
+  .opt.pick .ltr{background:var(--good);color:#0C0C0C}
+  .opt h4{margin:0;font-size:14px}
+  .opt p{font-size:12.5px;margin:0 0 9px;max-width:none}
+  .verd{font-size:12px;line-height:1.6;color:var(--ink2);margin:0}
+  .y{color:var(--good)}.n{color:var(--bad)}
+
+  /* ---------- misc ---------- */
+  .tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 18px}
+  .tbl th{text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;
+          color:var(--ink3);padding:0 10px 8px 0;font-weight:400;text-transform:uppercase}
+  .tbl td{padding:8px 10px 8px 0;border-top:1px solid #1e1e1e;color:var(--ink2);vertical-align:top}
+  .tbl td:first-child{color:var(--ink);white-space:nowrap}
+  .pill{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:1.2px;
+        padding:3px 8px;border-radius:5px;background:#1c1c20;color:var(--ink3);margin:0 5px 5px 0}
+  .pill.q{background:#101a22;color:var(--ice)}
+  .sheet{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 0}
+  .sheet .st{font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;color:var(--ink3);padding:0 14px 10px}
+  .sheet .o{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;font-size:13.5px}
+  .sheet .o.sel{color:var(--sky)} .sheet .o.dim{color:var(--ink4)}
+  .sheet .o small{display:block;font-size:10.5px;color:var(--ink4);margin-top:1px}
+  .sheet hr{border:0;border-top:1px solid var(--line);margin:9px 0}
+  .seg2{display:flex;height:33px;border-radius:17px;overflow:hidden;border:1px solid var(--line);margin:0 14px}
+  .seg2 div{flex:1;display:flex;align-items:center;justify-content:center;background:var(--panel2);
+            font-family:var(--mono);font-size:9.5px;letter-spacing:1.2px;color:#8a8a92}
+  .seg2 div.on{background:var(--sky);color:#0C0C0C}
+  .hdrbar{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .hdrbar .g{width:32px;height:32px;border-radius:9px;background:#1a1a1a;display:flex;
+             align-items:center;justify-content:center;color:var(--ink2);font-size:14px;flex:0 0 32px}
+  .hdrbar .g.star{background:#1a1712;color:var(--peach)}
+  .hdrbar .ttl{font-size:16px;font-weight:600;color:#fff;flex:1;display:flex;align-items:center;gap:7px}
+  .hdrbar .ttl .pen{font-size:11px;color:var(--ink3)}
+  .dsw{display:flex;gap:6px;margin-bottom:12px}
+  .dsw div{flex:1;height:33px;border-radius:9px;background:var(--panel2);display:flex;
+           align-items:center;justify-content:center;font-family:var(--mono);font-size:9.5px;
+           letter-spacing:1.2px;color:#8a8a92}
+  .dsw div.on{background:var(--sky);color:#0C0C0C}
+  .fr{background:var(--panel);border-radius:10px;padding:10px 12px;margin-bottom:7px;
+      display:flex;align-items:center;justify-content:space-between;gap:11px}
+  .fr .l{font-family:var(--mono);font-size:9px;letter-spacing:1.2px;color:var(--ink3);flex:0 0 auto}
+  .fr .v{font-size:12.5px;color:var(--ink);text-align:right}
+  .fr .v.ph{color:var(--ink4)}
+  .pod{display:flex;gap:10px;align-items:center;background:var(--panel);border-radius:10px;
+       padding:10px 12px;margin-bottom:7px}
+  .pod .img{width:40px;height:40px;border-radius:8px;flex:0 0 40px;overflow:hidden;position:relative;
+            background:linear-gradient(140deg,#3a2f26,#6b5240 55%,#2a221c)}
+  .pod .img:after{content:'';position:absolute;left:8px;right:8px;top:13px;height:14px;
+                  border-radius:3px;background:rgba(255,255,255,.1)}
+  .pod .n{font-size:12.5px;color:#fff}
+  .pod .s{font-size:10.5px;color:var(--ink2);margin-top:2px}
+  .btn{border-radius:9px;padding:9px 11px;text-align:center;font-family:var(--mono);
+       font-size:9.5px;letter-spacing:1.3px;background:var(--sky);color:#0C0C0C}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;
+       letter-spacing:1.2px;color:var(--good);background:#12180f;border:1px solid #2c4430;
+       border-radius:7px;padding:5px 9px}
+  .mini{background:var(--panel);border-radius:9px;height:29px;display:flex;align-items:center;
+        padding:0 10px;font-size:11.5px;color:#d8d8d8;margin-bottom:6px;gap:7px}
+  .swi{width:40px;height:23px;border-radius:12px;background:var(--sky);position:relative;flex:0 0 40px}
+  .swi:after{content:'';position:absolute;right:2px;top:2px;width:19px;height:19px;
+             border-radius:10px;background:#0C0C0C}
+  .togg{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);
+        border:1px solid var(--line);border-radius:11px;padding:11px 14px;font-size:13.5px;color:var(--ink)}
+  .end{padding:40px 0 0;text-align:center}
+  .end p{margin:0 auto 12px;color:var(--ink3);font-size:13.5px}
+  @media(max-width:620px){
+    .phone{width:100%;flex:1 1 100%}
+    .stage{gap:22px}
+    .shelves{grid-template-columns:1fr}
+    body{font-size:15.5px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="mast">
+  <p class="kicker">XBRW++ · Design preview for testers</p>
+  <h1>A library worth keeping</h1>
+  <p class="lede">The recipe library can list your recipes and open them. It cannot help you find one, and it cannot tell you what one is for. This is the plan to fix that, drawn rather than described, so you can react to it before it is built.</p>
+  <p class="meta">16 September 2026 · Nothing here is built yet · Everything is still changeable</p>
+</div>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">01</p>
+  <h2>What is actually wrong</h2>
+  <p>One person with a hundred recipes described the problem like this:</p>
+  <p class="quote">Finding the one I want for a particular coffee or style, finding that new recipe I just added, but also remembering what a recipe is, why it is. It makes it hard to know what to try for a new coffee.</p>
+  <p>That is three problems wearing one coat, and only one of them is search.</p>
+  <ul>
+    <li><strong>Narrowing</strong> the library to a kind of recipe. A filter problem.</li>
+    <li><strong>Finding what changed recently.</strong> A sort problem. Today the list is A to Z with no alternative, so a recipe you added five minutes ago is buried in the middle of the alphabet.</li>
+    <li><strong>Reading a row and knowing what it is for.</strong> Neither. A row shows a name, a dose, a ratio and a grind size, which is what the machine needs and says nothing about why the recipe exists.</li>
+  </ul>
+  <div class="call ask">
+    <h4>What we want from you</h4>
+    <p>Mostly one thing, in section 06. The rest is here so that question makes sense, and so you can tell us if something is obviously wrong before it is code.</p>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">02</p>
+  <h2>What a row says about itself</h2>
+  <p>A recipe has two kinds of thing to say, and they should not compete for the same line.</p>
+  <p><strong>Evidence</strong> is worked out from your brews: an average rating, how many times, how long ago. It joins the row of numbers that is already there, so it costs no extra space.</p>
+  <p><strong>A description</strong> is one short line you write yourself. It is the answer to "why is this recipe", and nothing automatic can produce it.</p>
+
+  <div class="stage">
+    <div>
+      <p class="cap">Today</p>
+      <div class="phone">
+        <div class="rc">
+          <div class="t">Ethiopia Guji washed natural blend</div>
+          <div class="s"><span>18 G</span><span>1:16</span><span>GRIND 62</span></div>
+          <svg class="prof" width="150" height="42" viewBox="0 0 150 42"><path d="M0 34 L40 34 L40 22 L82 22 L82 11 L150 11" fill="none" stroke="#9FC3F0" stroke-width="2"/></svg>
+        </div>
+        <div class="rc">
+          <div class="t">House filter</div>
+          <div class="s"><span>20 G</span><span>1:15</span><span>GRIND 58</span></div>
+          <svg class="prof" width="150" height="42" viewBox="0 0 150 42"><path d="M0 32 L62 32 L62 14 L150 14" fill="none" stroke="#B4D6A8" stroke-width="2"/></svg>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="cap">Proposed</p>
+      <div class="phone">
+        <div class="rc">
+          <div class="t clamp">Ethiopia Guji washed natural blend</div>
+          <div class="d">Bright and floral, works cold</div>
+          <div class="s"><span class="star">★</span><span>18 G</span><span>1:16</span><span>GRIND 62</span><span class="ev">★4.3 · 12 · 3d</span></div>
+          <svg class="prof" width="150" height="42" viewBox="0 0 150 42"><path d="M0 34 L40 34 L40 22 L82 22 L82 11 L150 11" fill="none" stroke="#9FC3F0" stroke-width="2"/></svg>
+        </div>
+        <div class="rc">
+          <div class="t">House filter</div>
+          <div class="s"><span>20 G</span><span>1:15</span><span>GRIND 58</span><span class="ev">★4.0 · 31 · 1d</span></div>
+          <svg class="prof" width="150" height="42" viewBox="0 0 150 42"><path d="M0 32 L62 32 L62 14 L150 14" fill="none" stroke="#B4D6A8" stroke-width="2"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Every card is the same height</h3>
+  <p>The rule is <strong>two lines of prose per card, always</strong>. Either the title uses both, or the title gets one and your description gets the other. So a description never makes a card taller, it just changes what the two lines are spent on.</p>
+  <p>The trade is that a long title next to a description will be cut short, as above. That is deliberate. A name that needs two lines <em>and</em> an explanation is a name doing the description's job.</p>
+  <div class="call note">
+    <p>Descriptions are capped at around 60 characters, with a counter while you type. A limit you can see is a limit. A limit you discover by having your words vanish is a bug.</p>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">03</p>
+  <h2>One row of controls, not four</h2>
+  <p>Stack a search field, a sort control, a filter row and a heading above a list and the screen is well over half chrome before a single recipe appears. On a library of a hundred that is a bad trade. On a library of ten it is absurd.</p>
+  <p>So everything lives in one row. Three controls pin to the left behind a divider and never move: <strong>search</strong>, <strong>list or shelves</strong>, and <strong>sort</strong>. Filters scroll past them.</p>
+
+  <div class="phone wide">
+    <div class="rail">
+      <div class="chip sq">⌕</div>
+      <div class="seg">
+        <div class="on"><svg width="14" height="14" viewBox="0 0 13 13"><g fill="#fff"><rect y="1" width="13" height="1.6"/><rect y="5.7" width="13" height="1.6"/><rect y="10.4" width="13" height="1.6"/></g></svg></div>
+        <div><svg width="14" height="14" viewBox="0 0 13 13"><g fill="#6E6E76"><rect width="5.6" height="5.6"/><rect x="7.4" width="5.6" height="5.6"/><rect y="7.4" width="5.6" height="5.6"/><rect x="7.4" y="7.4" width="5.6" height="5.6"/></g></svg></div>
+      </div>
+      <div class="chip sq">⇅</div>
+      <div class="vr"></div>
+      <div class="chip">TEA</div>
+      <div class="chip">SINGLE POUR</div>
+      <div class="chip">GRINDER OFF</div>
+    </div>
+    <div class="rc"><div class="t clamp">Ethiopia Guji washed</div><div class="d">Bright and floral, works cold</div><div class="s"><span class="star">★</span><span>18 G</span><span>1:16</span><span class="ev">★4.3 · 12 · 3d</span></div></div>
+    <div class="rc"><div class="t">House filter</div><div class="s"><span>20 G</span><span>1:15</span><span class="ev">★4.0 · 31 · 1d</span></div></div>
+  </div>
+
+  <ul>
+    <li><strong>Search is a single glyph</strong> until you tap it, then it opens into a field and collapses again when cleared. It is the least used of the three in a small library and the most expensive in space, so it only takes room when it is earning it.</li>
+    <li><strong>The divider means something.</strong> Left of it are controls that are always there. Right of it is the filter vocabulary, which scrolls. Without it there is no way to know that half the row moves and half does not.</li>
+    <li><strong>The row stays put as you scroll</strong> and gets slightly shorter. The buttons inside it never get smaller than a comfortable tap.</li>
+  </ul>
+
+  <h3>List or shelves is a pair, not a toggle</h3>
+  <p>A single icon that switches views is ambiguous in a way that has no fix. Does a grid icon mean "you are in grid" or "tap for grid"? Users of the same app genuinely disagree. So both options are drawn and the active one lights up, and the app remembers which you used last. A ten recipe library and a hundred and eighty recipe library want different front doors.</p>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">04</p>
+  <h2>Shelves</h2>
+  <p>A shelf is a group of recipes. There are two kinds, and they work the same way underneath: <strong>a shelf is a question, asked fresh every time you look.</strong> Nothing is stored, so nothing can drift out of date.</p>
+
+  <div class="stage">
+    <div class="phone" style="flex:1 1 100%;width:100%">
+      <p class="secthead">Your shelves</p>
+      <div class="shelves">
+        <div class="sh"><div class="art"><svg width="46" height="46" viewBox="0 0 44 44"><path d="M0 34 L14 34 L14 22 L28 22 L28 12 L44 12" fill="none" stroke="#9FC3F0" stroke-width="1.7" opacity=".9"/><path d="M0 37 L18 37 L18 26 L44 26" fill="none" stroke="#B4D6A8" stroke-width="1.7" opacity=".75"/><path d="M0 31 L10 31 L10 19 L24 19 L24 9 L44 9" fill="none" stroke="#E7A9C9" stroke-width="1.7" opacity=".6"/></svg></div><div class="lbl">Morning<em>6</em></div></div>
+        <div class="sh"><div class="art"><svg width="46" height="46" viewBox="0 0 44 44"><path d="M0 36 L8 36 L8 30 L16 30 L16 20 L26 20 L26 12 L44 12" fill="none" stroke="#F0B98E" stroke-width="1.7" opacity=".9"/><path d="M0 38 L10 38 L10 28 L22 28 L22 16 L44 16" fill="none" stroke="#BDB2E8" stroke-width="1.7" opacity=".7"/></svg></div><div class="lbl">Kalita<em>4</em></div></div>
+        <div class="sh"><div class="art"><svg width="46" height="46" viewBox="0 0 44 44"><path d="M0 38 L6 38 L6 32 L13 32 L13 24 L20 24 L20 17 L28 17 L28 8 L44 8" fill="none" stroke="#E7A9C9" stroke-width="1.6" opacity=".85"/><path d="M0 35 L9 35 L9 27 L18 27 L18 20 L30 20 L30 13 L44 13" fill="none" stroke="#F0B98E" stroke-width="1.6" opacity=".7"/><path d="M0 40 L12 40 L12 30 L24 30 L24 18 L44 18" fill="none" stroke="#B4D6A8" stroke-width="1.6" opacity=".55"/></svg></div><div class="lbl">Experiments<em>9</em></div></div>
+        <div class="sh"><div class="art"><svg width="46" height="46" viewBox="0 0 44 44"><path d="M0 32 L22 32 L22 14 L44 14" fill="none" stroke="#97D8C4" stroke-width="1.7" opacity=".9"/><path d="M0 35 L20 35 L20 18 L44 18" fill="none" stroke="#9FC3F0" stroke-width="1.7" opacity=".7"/></svg></div><div class="lbl">Favourites<em>7</em></div></div>
+      </div>
+      <p class="secthead" style="margin-top:16px">Auto shelves</p>
+      <div class="shelves">
+        <div class="sh"><div class="art" style="background:#CFD6A3"><svg width="21" height="21" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="1" width="1" height="7"/><rect x="2" y="3" width="2" height="1"/><rect x="5" y="5" width="2" height="1"/></g></svg></div><div class="lbl">Tea<em>5</em></div></div>
+        <div class="sh"><div class="art" style="background:#9FC3F0"><svg width="21" height="21" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="1" width="1" height="2"/><rect x="3" y="3" width="3" height="3"/><rect x="4" y="6" width="1" height="1"/></g></svg></div><div class="lbl">Single pour<em>7</em></div></div>
+        <div class="sh"><div class="art" style="background:#F0B98E"><svg width="21" height="21" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="2" y="1" width="5" height="1"/><rect x="2" y="1" width="1" height="7"/><rect x="6" y="1" width="1" height="7"/><rect x="3" y="4" width="3" height="1"/></g></svg></div><div class="lbl">xBloom pods<em>12</em></div></div>
+        <div class="sh"><div class="art" style="background:#BDB2E8"><svg width="21" height="21" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="1" y="1" width="7" height="1"/><rect x="1" y="7" width="7" height="1"/><rect x="1" y="1" width="1" height="7"/><rect x="7" y="1" width="1" height="7"/><rect x="3" y="3" width="3" height="3"/></g></svg></div><div class="lbl">Grinder off<em>4</em></div></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Auto shelves: the app notices things</h3>
+  <p>These appear on their own, from what your recipes already say. You never make one and you cannot get one wrong.</p>
+  <p>
+    <span class="pill q">TEA</span><span class="pill q">XBLOOM PODS</span><span class="pill q">OVERFLOW PROTECTION OFF</span><span class="pill q">OTHER BREWER</span><span class="pill q">SINGLE POUR</span><span class="pill q">MANY STAGES</span><span class="pill q">GRINDER OFF</span><span class="pill q">XBLOOM RECIPES</span><span class="pill q">STRONG</span><span class="pill q">LONG</span><span class="pill q">HOT</span><span class="pill q">RECENTLY ADDED</span><span class="pill q">FROM BREWMIND</span>
+  </p>
+  <p>That last one is new and worth explaining. If you import recipes from a service that mints share links, the app can now remember who shared it, so everything from one source collects itself into a shelf.</p>
+  <p><strong>An auto shelf hides itself when it is useless:</strong> fewer than three recipes, or more than 80% of your library. A category holding almost everything is not a category.</p>
+
+  <h3>Your shelves: you decide</h3>
+  <p>You make one by picking recipes. The picker is the library screen itself, with all its filtering and searching and a tick on each row, because choosing from a hundred and eighty recipes in a plain list is not choosing.</p>
+  <p>Two consequences of the "a shelf is a question" model, worth knowing up front: <strong>a shelf cannot be empty</strong>, so you create it by choosing members rather than making an empty box first, and removing the last recipe removes the shelf, with a warning first.</p>
+  <div class="call note">
+    <p><strong>Not in this round:</strong> dragging shelves into your own order. It is recorded and parked until we know whether the automatic order is good enough. Tell us if it is not.</p>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">05</p>
+  <h2>Sorting, and favourites</h2>
+
+  <div class="stage">
+    <div style="flex:1 1 260px;min-width:0">
+      <p class="cap">The sort sheet</p>
+      <div class="sheet">
+        <div class="st">SORT BY</div>
+        <div class="o">Name</div>
+        <div class="o sel">Date added <span>✓</span></div>
+        <div class="o">Last brewed</div>
+        <div class="o">Times brewed</div>
+        <div class="o">Ratio</div>
+        <div class="o dim">Rating<small>Once brews can be rated</small></div>
+        <hr>
+        <div class="st" style="padding-bottom:8px">DIRECTION</div>
+        <div class="seg2"><div class="on">NEWEST FIRST</div><div>OLDEST FIRST</div></div>
+        <hr>
+        <div style="padding:0 14px"><div class="togg"><span>Favourites first</span><div class="swi"></div></div></div>
+      </div>
+    </div>
+    <div style="flex:1 1 260px;min-width:0">
+      <p class="cap">Favourites first, in the list</p>
+      <div class="phone">
+        <p class="secthead">Favourites</p>
+        <div class="mini"><span style="color:#F0B98E">★</span>Ethiopia Guji washed</div>
+        <div class="mini"><span style="color:#F0B98E">★</span>House filter</div>
+        <p class="secthead" style="margin-top:12px">All recipes</p>
+        <div class="mini">Colombia Huila</div>
+        <div class="mini">Kenya AA experiment</div>
+        <div class="mini">Decaf evening</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Direction is spelled out, not an arrow</h3>
+  <p>An up arrow next to "Times brewed" is genuinely ambiguous. So the axis is named plainly and the direction says what it means in words.</p>
+  <table class="tbl">
+    <tr><th>Sort by</th><th>Which reads</th></tr>
+    <tr><td>Name</td><td>A to Z · Z to A</td></tr>
+    <tr><td>Date added</td><td>Newest · Oldest</td></tr>
+    <tr><td>Last brewed</td><td>Recent · Longest ago</td></tr>
+    <tr><td>Times brewed</td><td>Most · Least</td></tr>
+    <tr><td>Ratio</td><td>Low to high · High to low</td></tr>
+    <tr><td>Rating</td><td>Best · Worst</td></tr>
+  </table>
+  <p>Two of the reversals are there for a reason rather than for symmetry. <strong>Longest ago</strong> finds what you have neglected. <strong>Worst first</strong> finds what needs retuning.</p>
+  <p>A sort never hides a recipe. Sort by "Last brewed" and something you have never brewed still appears, at the bottom.</p>
+
+  <h3>Favourites</h3>
+  <p>A star, set by swiping a row or from the recipe screen, shown on the card. "Favourites first" is a switch rather than a sort option, so it works <em>with</em> whatever sort you chose instead of replacing it. And favourites are a shelf, like anything else.</p>
+</section>
+
+<!-- =================================================== -->
+<section style="background:#0e1116;margin:0 -20px;padding:44px 20px;border-radius:14px;border:1px solid #223041">
+  <p class="num" style="color:var(--ice)">06 · The question for you</p>
+  <h2>What should a shelf look like?</h2>
+  <p>This is the one we genuinely cannot settle by arguing, so we would like your eye on it. Below are three ways of drawing a shelf, each shown at eight shelves, because the thing that matters is not whether one looks nice on its own. It is whether you can still tell them apart when there are a dozen.</p>
+  <p>The app has 8 coffee colours and 4 tea colours, so any approach leaning only on colour will start repeating itself quickly. That is the worry we are trying to test.</p>
+
+  <div class="opts">
+    <div class="opt">
+      <div class="oh"><div class="ltr">A</div><h4>Colour blocks</h4></div>
+      <p>A four way split of the colours of the recipes on the shelf.</p>
+      <div class="shelves" style="gap:6px">
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#9FC3F0"></div><div style="background:#B4D6A8"></div><div style="background:#E7A9C9"></div><div style="background:#97D8C4"></div></div><div class="lbl">Morning</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#F0B98E"></div><div style="background:#BDB2E8"></div><div style="background:#A6D6E8"></div><div style="background:#F0A0AB"></div></div><div class="lbl">Kalita</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#97D8C4"></div><div style="background:#9FC3F0"></div><div style="background:#CFD6A3"></div><div style="background:#DCC194"></div></div><div class="lbl">Guests</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#E7A9C9"></div><div style="background:#F0B98E"></div><div style="background:#B4D6A8"></div><div style="background:#BDB2E8"></div></div><div class="lbl">Experiments</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#CFD6A3"></div><div style="background:#DCC194"></div><div style="background:#D9CF9A"></div><div style="background:#E0AEA6"></div></div><div class="lbl">Tea</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#9FC3F0"></div><div style="background:#97D8C4"></div><div style="background:#A6D6E8"></div><div style="background:#B4D6A8"></div></div><div class="lbl">Single pour</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#F0A0AB"></div><div style="background:#E7A9C9"></div><div style="background:#F0B98E"></div><div style="background:#BDB2E8"></div></div><div class="lbl">Best rated</div></div>
+        <div class="sh" style="height:40px"><div class="mos" style="width:40px;height:40px;flex:0 0 40px"><div style="background:#B4D6A8"></div><div style="background:#A6D6E8"></div><div style="background:#E7A9C9"></div><div style="background:#F0B98E"></div></div><div class="lbl">BrewMind</div></div>
+      </div>
+      <p class="verd" style="margin-top:11px"><span class="y">✓</span> Colourful and always available.<br><span class="n">✗</span> Eight of them look like eight of the same thing.<br><span class="n">✗</span> The picture tells you nothing about the shelf.</p>
+    </div>
+
+    <div class="opt pick">
+      <div class="oh"><div class="ltr">B</div><h4>Pour shapes</h4></div>
+      <p>The pour profiles of the recipes on the shelf, stacked, each in its own colour.</p>
+      <div class="shelves" style="gap:6px">
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 34 L14 34 L14 22 L28 22 L28 12 L44 12" fill="none" stroke="#9FC3F0" stroke-width="1.9" opacity=".9"/><path d="M0 37 L18 37 L18 26 L44 26" fill="none" stroke="#B4D6A8" stroke-width="1.9" opacity=".75"/><path d="M0 31 L10 31 L10 19 L24 19 L24 9 L44 9" fill="none" stroke="#E7A9C9" stroke-width="1.9" opacity=".6"/></svg></div><div class="lbl">Morning</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 36 L8 36 L8 30 L16 30 L16 20 L26 20 L26 12 L44 12" fill="none" stroke="#F0B98E" stroke-width="1.9" opacity=".9"/><path d="M0 38 L10 38 L10 28 L22 28 L22 16 L44 16" fill="none" stroke="#BDB2E8" stroke-width="1.9" opacity=".7"/></svg></div><div class="lbl">Kalita</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 32 L22 32 L22 14 L44 14" fill="none" stroke="#97D8C4" stroke-width="1.9" opacity=".9"/><path d="M0 35 L20 35 L20 18 L44 18" fill="none" stroke="#9FC3F0" stroke-width="1.9" opacity=".7"/><path d="M0 29 L24 29 L24 11 L44 11" fill="none" stroke="#CFD6A3" stroke-width="1.9" opacity=".55"/></svg></div><div class="lbl">Guests</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 38 L6 38 L6 32 L13 32 L13 24 L20 24 L20 17 L28 17 L28 8 L44 8" fill="none" stroke="#E7A9C9" stroke-width="1.8" opacity=".85"/><path d="M0 35 L9 35 L9 27 L18 27 L18 20 L30 20 L30 13 L44 13" fill="none" stroke="#F0B98E" stroke-width="1.8" opacity=".7"/><path d="M0 40 L12 40 L12 30 L24 30 L24 18 L44 18" fill="none" stroke="#B4D6A8" stroke-width="1.8" opacity=".55"/></svg></div><div class="lbl">Experiments</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 28 L26 28 L26 16 L44 16" fill="none" stroke="#CFD6A3" stroke-width="1.9" opacity=".9"/><path d="M0 31 L28 31 L28 19 L44 19" fill="none" stroke="#DCC194" stroke-width="1.9" opacity=".72"/><path d="M0 25 L24 25 L24 13 L44 13" fill="none" stroke="#E0AEA6" stroke-width="1.9" opacity=".55"/></svg></div><div class="lbl">Tea</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 33 L20 33 L20 13 L44 13" fill="none" stroke="#9FC3F0" stroke-width="1.9" opacity=".9"/><path d="M0 36 L22 36 L22 17 L44 17" fill="none" stroke="#97D8C4" stroke-width="1.9" opacity=".72"/><path d="M0 30 L18 30 L18 10 L44 10" fill="none" stroke="#A6D6E8" stroke-width="1.9" opacity=".55"/></svg></div><div class="lbl">Single pour</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 36 L11 36 L11 25 L22 25 L22 14 L44 14" fill="none" stroke="#F0A0AB" stroke-width="1.9" opacity=".9"/><path d="M0 33 L14 33 L14 21 L30 21 L30 10 L44 10" fill="none" stroke="#E7A9C9" stroke-width="1.9" opacity=".7"/><path d="M0 39 L16 39 L16 28 L44 28" fill="none" stroke="#BDB2E8" stroke-width="1.9" opacity=".55"/></svg></div><div class="lbl">Best rated</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#0e0e0e"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M0 37 L7 37 L7 29 L15 29 L15 21 L24 21 L24 11 L44 11" fill="none" stroke="#B4D6A8" stroke-width="1.8" opacity=".88"/><path d="M0 34 L12 34 L12 24 L26 24 L26 15 L44 15" fill="none" stroke="#A6D6E8" stroke-width="1.8" opacity=".68"/></svg></div><div class="lbl">BrewMind</div></div>
+      </div>
+      <p class="verd" style="margin-top:11px"><span class="y">✓</span> Eight genuinely different marks.<br><span class="y">✓</span> The shape is <em>true</em>: a shelf of simple recipes looks flat, a shelf of fiddly ones looks busy.<br><span class="n">✗</span> Quieter, and the same shapes already appear on the cards below.</p>
+    </div>
+
+    <div class="opt">
+      <div class="oh"><div class="ltr">C</div><h4>Symbols</h4></div>
+      <p>A drawn symbol on a colour field, in the app's dot matrix style.</p>
+      <div class="shelves" style="gap:6px">
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#9FC3F0"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="0" width="1" height="1"/><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="5" height="1"/><rect x="1" y="3" width="7" height="1"/><rect x="2" y="4" width="5" height="1"/><rect x="3" y="5" width="3" height="1"/><rect x="4" y="6" width="1" height="1"/></g></svg></div><div class="lbl">Morning</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#F0B98E"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="1" y="1" width="7" height="1"/><rect x="1" y="4" width="7" height="1"/><rect x="1" y="7" width="7" height="1"/></g></svg></div><div class="lbl">Kalita</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#97D8C4"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="2" y="2" width="5" height="5"/></g></svg></div><div class="lbl">Guests</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#E7A9C9"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="0" y="4" width="9" height="1"/><rect x="4" y="0" width="1" height="9"/></g></svg></div><div class="lbl">Experiments</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#CFD6A3"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="1" width="1" height="7"/><rect x="2" y="3" width="2" height="1"/><rect x="5" y="5" width="2" height="1"/></g></svg></div><div class="lbl">Tea</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#9FC3F0"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="1" width="1" height="2"/><rect x="3" y="3" width="3" height="3"/><rect x="4" y="6" width="1" height="1"/></g></svg></div><div class="lbl">Single pour</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#F0A0AB"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="4" y="0" width="1" height="2"/><rect x="3" y="2" width="3" height="1"/><rect x="2" y="3" width="5" height="2"/><rect x="1" y="5" width="7" height="1"/><rect x="3" y="6" width="3" height="2"/></g></svg></div><div class="lbl">Best rated</div></div>
+        <div class="sh" style="height:40px"><div class="art" style="width:40px;height:40px;flex:0 0 40px;background:#B4D6A8"><svg width="19" height="19" viewBox="0 0 9 9"><g fill="#0C0C0C"><rect x="1" y="2" width="7" height="1"/><rect x="1" y="2" width="1" height="5"/><rect x="7" y="2" width="1" height="5"/><rect x="1" y="6" width="7" height="1"/></g></svg></div><div class="lbl">BrewMind</div></div>
+      </div>
+      <p class="verd" style="margin-top:11px"><span class="y">✓</span> The easiest to pick out at a glance.<br><span class="y">✓</span> Looks unmistakably like this app.<br><span class="n">✗</span> Someone has to choose a symbol for every shelf they make.</p>
+    </div>
+  </div>
+
+  <div class="call ask">
+    <h4>There is also a fourth answer: use two of them</h4>
+    <p>Give <strong>auto shelves symbols</strong> and <strong>your shelves pour shapes</strong>. Auto shelves are a fixed set that ships with the app, so we draw those symbols once and you never pick one. Your own shelves get the shape treatment, so nothing ever needs choosing.</p>
+    <p>That also makes the picture mean something extra: a symbol says the app found this shelf, a shape says you built it.</p>
+  </div>
+
+  <div class="call ask">
+    <h4>What would help most</h4>
+    <p>Not "which is prettiest". The real question is: <strong>looking at a screen of a dozen shelves, could you find the one you wanted without reading the labels?</strong> If the answer is no for all of them, that is the most useful thing you could tell us, because then the grid is not worth having and a plain list is better.</p>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">07</p>
+  <h2>Rating a brew, even one we did not see</h2>
+  <p>Ratings belong to a <em>brew</em>, not to a recipe, so that a recipe you retuned is not stuck wearing a score you gave it in March. A recipe's rating is the average of its brews, and it moves as you learn.</p>
+  <p>That creates an obvious problem: if you write cards and brew at the machine, the app never sees a brew, so you could never rate anything.</p>
+  <p>So you can rate a recipe directly, and what happens underneath is that the app records <strong>a brew it did not watch</strong>. It counts for your rating, for how many times you have brewed it and for when you last did. It counts for nothing the machine would have measured, because we did not measure it. Its record says so plainly rather than pretending.</p>
+  <p>The side effect is the good bit: if you have never brewed over Bluetooth, you get a brew history for the first time.</p>
+  <div class="call note">
+    <p>Five stars, whole steps. "Not rated yet" is a real state and is not the same as one star, otherwise every average would be wrong.</p>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">08</p>
+  <h2>The recipe screen gets a third tab</h2>
+  <p>The recipe screen has BREW and STAGES. Once a recipe can carry a description, a favourite, a rating and a history, those need somewhere to live that is not "the bottom of an existing tab".</p>
+  <p>ABOUT is not just a place to put new things. It also takes two things <em>out</em> of the brew tab that were never brew settings: the recipe's name and its xBloom pod ID, which currently sit below the temperature controls because there was nowhere else for them.</p>
+
+  <div class="stage">
+    <div>
+      <p class="cap">The ABOUT tab</p>
+      <div class="phone">
+        <div class="hdrbar">
+          <div class="g">‹</div>
+          <div class="ttl">Ethiopia Guji <span class="pen">✎</span></div>
+          <div class="g star">★</div>
+        </div>
+        <div class="dsw"><div>BREW</div><div>STAGES · 4</div><div class="on">ABOUT</div></div>
+        <div class="fr"><span class="l">NOTE</span><span class="v ph">Say what this is for…</span></div>
+        <p class="secthead" style="margin:13px 0 7px">xBloom pod</p>
+        <div class="fr"><span class="l">RECIPE ID</span><span class="v">GUJI2024</span></div>
+        <div class="pod"><div class="img"></div><div><div class="n">Ethiopia Guji</div><div class="s">Washed · floral</div></div></div>
+        <span class="tag">✓ USING THIS NAME</span>
+        <p class="secthead" style="margin:15px 0 7px">How it has gone</p>
+        <div class="fr"><span class="l">RATING</span><span class="v">★ 4.3 · 12 brews · 3 days ago</span></div>
+      </div>
+    </div>
+    <div style="flex:1 1 240px;min-width:0">
+      <h4 style="margin-top:0">Tap the name to rename it</h4>
+      <p>From any tab, whether you are looking at stages or brew settings. It opens a small sheet rather than editing in place, which means it also works when the header has shrunk away on scroll.</p>
+      <h4>The pod section stays put</h4>
+      <p>The pod ID is a lookup key, not a name, and nobody hunting for it would think to tap a title they are happy with. So it gets its own section, always in the same place, with the pod's picture and its own name.</p>
+      <p>If you rename a recipe, the pod's name is still shown with a <strong>USE THIS NAME</strong> button. Pressing it does not copy the name, it removes your override, so the title follows the pod from then on. One tap in, one tap out.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================== -->
+<section>
+  <p class="num">09</p>
+  <h2>What this is deliberately not doing</h2>
+  <ul>
+    <li><strong>No bottom tab bar and no hamburger menu.</strong> Nothing in this app hides in a drawer, and that is not changing.</li>
+    <li><strong>No dragging shelves into your own order,</strong> yet. Parked until we know the automatic order is not good enough.</li>
+    <li><strong>No nested shelves, no shelf sharing, no build-your-own-query shelves.</strong></li>
+    <li><strong>No big recipe photos.</strong> There is a setting to try small pod pictures on rows, off by default, and that is the whole of it.</li>
+    <li><strong>Brew comparison, brew tagging and the fuller history</strong> belong to a separate piece of work. ABOUT leaves a space for them.</li>
+  </ul>
+</section>
+
+<!-- =================================================== -->
+<div class="end">
+  <p><strong style="color:var(--ink)">The one thing we most want back from you is section 06.</strong></p>
+  <p>Everything else, tell us if something looks wrong, confusing, or like it would annoy you by the second week. Second week annoyance is the hardest thing to see from the inside and the most useful thing you can report.</p>
+  <p class="meta" style="margin-top:26px">XBRW++ · Library design preview · 16 September 2026</p>
+</div>
+
+</div>
+</body>
+</html>
