@@ -510,6 +510,26 @@ describe("rebuild", () => {
         expect(() => new RecipeDatabase()).toThrow();
         expect(storedHash()).toBe("stale");
     });
+
+    it("adds the M5 columns to a database written before them", () => {
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.favourite = true;
+        db.insertRecipe(recipe);
+
+        // Simulate the pre-M5 case: the columns exist (this mock database
+        // always has the current schema) but hold no derived value yet,
+        // exactly what a real ADD COLUMN leaves on an existing row. Staling
+        // the hash forces the same rebuild a real version upgrade triggers.
+        mockBacking.runSync("UPDATE recipes SET favourite = NULL;");
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        new RecipeDatabase();
+
+        const row = mockBacking.getFirstSync(
+            "SELECT favourite FROM recipes WHERE uuid = ?;", [recipe.uuid]
+        ) as {favourite: number};
+        expect(row.favourite).toBe(1);
+    });
 });
 
 describe("accent assignment", () => {

@@ -75,7 +75,11 @@ Repository rules that bite here specifically:
 
 ---
 
-### Task 1: Land the recipe index
+### Task 1: Land the recipe index — DONE
+
+Merged as #116 (`03fa592`). Five review findings were fixed before it landed;
+all five were data-loss paths nothing would have reported, and the two worth
+carrying forward are recorded under Task 2 below.
 
 The index is built. It is 28 commits on `origin/recipe-index`, branched from
 `3e1b956` on 14 September, and it was never opened as a PR. This task rebases it
@@ -192,7 +196,7 @@ Every task below runs in this worktree.
 
 ---
 
-### Task 2: `favourite` and `description` on `Recipe`
+### Task 2: `favourite` and `description` on `Recipe` — DONE
 
 **Files:**
 - Modify: `library/Recipe.ts`
@@ -333,16 +337,42 @@ Run: `npx jest library/__tests__/Recipe`
 Expected: PASS. The card-format characterisation tests must be untouched. If any
 byte expectation changed, you have added a field to `getData` by mistake.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Carry both fields across a cloud refresh**
+
+Added to this task after #116, and not optional. `buildImportPlan` replaces a
+local recipe with a whole freshly mapped one, so every field the cloud cannot
+supply starts empty on it and is written over the local copy. The review caught
+this for `tags`; `favourite` and `description` have it the moment they exist,
+and the failure is silent — the recipe keeps its name, its uuid and everything
+the screen shows.
+
+In `library/cloud/importPlan.ts`, in the `if (replacing !== undefined)` block
+beside `recipe.setTags(replacing.tags)`:
+
+```ts
+            recipe.favourite = replacing.favourite;
+            recipe.description = replacing.description;
+```
+
+Safe by construction: `library/cloud/fingerprint.ts` covers brew content only,
+so carrying an authored field cannot make a recipe read as edited. Pin that with
+a second test as well as the preservation one.
+
+**The general rule, for every later task and every later field:** anything the
+user authors and the cloud cannot supply belongs in that block. Task 4's index
+columns are derived and need nothing here; a new *stored* field does.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add library/Recipe.ts library/__tests__/Recipe.authored.test.ts
+git add library/Recipe.ts library/__tests__/Recipe.authored.test.ts \
+        library/cloud/importPlan.ts library/cloud/__tests__/importPlan.test.ts
 git commit -m "feat: a description and a favourite on the recipe"
 ```
 
 ---
 
-### Task 3: Carry both fields through backup
+### Task 3: Carry both fields through backup — DONE
 
 `library/backup.ts` is a trust boundary. The `Recipe` constructor is deliberately
 forgiving so it can migrate its own old shapes, which makes it useless as a
@@ -464,7 +494,7 @@ git commit -m "feat: carry the description and favourite through backups"
 
 ---
 
-### Task 4: Index columns
+### Task 4: Index columns — DONE
 
 Four descriptors, one revision bump. `xid` and `sharedBy` serve shelves that
 arrive later; they are added now because adding a descriptor forces a rebuild of
@@ -636,7 +666,7 @@ git commit -m "feat: index the xid, author, favourite and note-presence columns"
 
 ---
 
-### Task 5: A star glyph
+### Task 5: A star glyph — DONE
 
 `constants/dotIcons.ts` has no star. Its header says adding an icon means drawing
 one and to keep the set small; this is the one M5 needs.
@@ -724,7 +754,7 @@ git commit -m "feat: a star glyph for favourites"
 
 ---
 
-### Task 6: The star on the card
+### Task 6: The star on the card — DONE
 
 A filled star at the **leading** end of the stats row. Evidence takes the
 trailing end later; the favourite takes the front. Both are free, and the two
@@ -821,7 +851,7 @@ git commit -m "feat: a star on a favourite recipe's card"
 
 ---
 
-### Task 7: The swipe tile
+### Task 7: The swipe tile — DONE
 
 A third tile beside COPY and DELETE. `components/SwipeableRecipeRow.tsx:38`
 already works out that three tiles fit at 320 pt and four would not, so this
@@ -852,24 +882,24 @@ it("offers a favourite tile", async () => {
     expect(onToggleFavourite).toHaveBeenCalledTimes(1);
 });
 
-it("reads as KEEP on a recipe that is not a favourite", async () => {
+it("reads as STAR on a recipe that is not starred", async () => {
     await renderWithProviders(
         <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
                             onDelete={() => {}} onDuplicate={() => {}}
                             onToggleFavourite={() => {}}/>
     );
 
-    expect(await screen.findByText("KEEP")).toBeTruthy();
+    expect(await screen.findByText("STAR")).toBeTruthy();
 });
 
-it("reads as KEPT on a recipe that is one", async () => {
+it("reads as STARRED on a recipe that is", async () => {
     await renderWithProviders(
         <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
                             onDelete={() => {}} onDuplicate={() => {}}
                             onToggleFavourite={() => {}}/>
     );
 
-    expect(await screen.findByText("KEPT")).toBeTruthy();
+    expect(await screen.findByText("STARRED")).toBeTruthy();
 });
 
 it("omits the tile when no handler is given", async () => {
@@ -907,11 +937,14 @@ In `renderRightActions`, after the DELETE tile:
 ```ts
                 {onToggleFavourite !== undefined && (
                     <Tile icon="favourite"
-                          // Verbs, like the two beside it. KEEP is what the tap
-                          // does and KEPT is what it has done, so the tile reads
-                          // as an action either way. "FAVOURITE" is a noun and
-                          // would be the only label in either tray that is.
-                          caption={recipe.favourite ? "KEPT" : "KEEP"}
+                          // Verbs, like the two beside it, and this one names
+                          // the glyph, so the tile, the card marker and the
+                          // caption are all the same star. "FAVOURITE" is a
+                          // noun and would be the only label in either tray
+                          // that is. Not KEEP/KEPT: nothing is discarded here,
+                          // and KEPT already means retained elsewhere in the
+                          // app ("KEPT IN YOUR BREW HISTORY").
+                          caption={recipe.favourite ? "STARRED" : "STAR"}
                           tone={resolveAccent(recipe)}
                           label={recipe.favourite
                               ? "Remove from favourites"
@@ -940,7 +973,7 @@ git commit -m "feat: a keep tile in the row's management tray"
 
 ---
 
-### Task 8: Wire it to the library
+### Task 8: Wire it to the library — DONE
 
 **Files:**
 - Modify: `hooks/useRecipeLibrary.ts:19-26`, `:104-108`, `:153`

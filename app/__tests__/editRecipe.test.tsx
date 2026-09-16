@@ -1,11 +1,13 @@
 import React from "react";
 import {Share, StyleSheet, TextInput} from "react-native";
-import {act, fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {palette} from "@/constants/colors";
+import {resolveAccent} from "@/library/accent";
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
 // shapes rather than inventing new ones. Note the comment there about reading a
@@ -156,6 +158,38 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
         </>
     );
     return view;
+}
+
+/**
+ * A pinned accent, and the recipe that carries it.
+ *
+ * A recipe with no accent of its own is assigned one on hydration, and which
+ * one is not fixed from run to run -- so any test that checks a button wears
+ * the accent has to say which accent it means.
+ */
+const PINNED_ACCENT_INDEX = 3;
+
+function pinnedAccent(): string {
+    const r = fixture();
+    r.accentIndex = PINNED_ACCENT_INDEX;
+    return resolveAccent(r);
+}
+
+/**
+ * The ink one of the action bar's words is set in.
+ *
+ * Found by the button's own label, not by the word: BREW is also a deck title,
+ * and a bare text query matches both.
+ */
+function inkOf(accessibilityLabel: string, word: string): string | undefined {
+    const text = within(screen.getByLabelText(accessibilityLabel)).getByText(word);
+    const style = StyleSheet.flatten(text.props.style) as {color?: string} | undefined;
+    return style?.color;
+}
+
+/** The fill of the tile inside one of the action bar's buttons. */
+function fillOf(accessibilityLabel: string): string | undefined {
+    return fillsWithin(screen.getByLabelText(accessibilityLabel))[0];
 }
 
 /** Every background colour painted anywhere inside an element. */
@@ -1056,6 +1090,52 @@ describe("the action bar", () => {
         await renderEditor();
         expect(screen.getByLabelText("Brew")).toBeTruthy();
         expect(screen.getByLabelText("Write card")).toBeTruthy();
+    });
+
+    it("tells its three buttons apart by fill, not by one step of grey", async () => {
+        rememberMachine("AA:BB");
+        // A refused BREW, a live WRITE and a refused WRITE all sat on the same
+        // raised fill and differed only in ink. All three read as pressable.
+        // The law now: pressable means filled, refused means empty.
+        await renderEditor({dosage: 30});
+
+        expect(inkOf("Brew", "BREW")).toBe(palette.muted);
+        expect(fillOf("Brew")).toBe("transparent");
+        expect(inkOf("Write card", "WRITE")).toBe(palette.muted);
+        expect(fillOf("Write card")).toBe("transparent");
+        // SAVE is never refused -- a half-finished recipe is still worth
+        // keeping -- so it is the live neutral the other two are read against.
+        expect(inkOf("Save", "SAVE")).toBe(palette.text);
+        expect(fillOf("Save")).toBe(palette.raised);
+    });
+
+    it("fills what can be pressed, and gives the accent to the one act", async () => {
+        rememberMachine("AA:BB");
+        await renderEditor({accentIndex: PINNED_ACCENT_INDEX});
+
+        // BREW runs the recipe, so it wears the recipe's own colour.
+        expect(fillOf("Brew")).toBe(pinnedAccent());
+        expect(inkOf("Brew", "BREW")).toBe(palette.base);
+        // WRITE and SAVE are live but secondary: filled, not accented.
+        expect(fillOf("Write card")).toBe(palette.raised);
+        expect(inkOf("Write card", "WRITE")).toBe(palette.text);
+    });
+
+    it("hands the accent to WRITE when there is no machine to brew on", async () => {
+        // Nothing to run the recipe on, so putting it on a card is the act.
+        await renderEditor({accentIndex: PINNED_ACCENT_INDEX});
+
+        expect(fillOf("Write card")).toBe(pinnedAccent());
+        expect(inkOf("Write card", "WRITE")).toBe(palette.base);
+    });
+
+    it("empties WRITE with no machine paired too", async () => {
+        await renderEditor({dosage: 30});
+
+        expect(fillOf("Write card")).toBe("transparent");
+        expect(inkOf("Write card", "WRITE")).toBe(palette.muted);
+        // The word is still there to read. Dimming is not hiding.
+        expect(within(screen.getByLabelText("Write card")).getByText("WRITE")).toBeTruthy();
     });
 
     it("refuses to brew a recipe the machine would reject", async () => {

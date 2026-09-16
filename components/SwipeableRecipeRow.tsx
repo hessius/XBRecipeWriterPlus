@@ -9,6 +9,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import RecipeCard from "@/components/RecipeCard";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
+import {canWriteToCard} from "@/library/cardLimits";
 import {resolveAccent} from "@/library/accent";
 
 type Props = {
@@ -30,6 +31,12 @@ type Props = {
     onShare?: () => void;
     /** Write this recipe to an NFC card. */
     onWrite?: () => void;
+    /**
+     * Mark or unmark the recipe. Optional, and the tile is absent rather than
+     * disabled without it, which is the same rule the gated cloud import row
+     * follows: a control that cannot do anything should not be drawn.
+     */
+    onToggleFavourite?: () => void;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -38,7 +45,7 @@ const BOUNCE_CLOSE_DELAY = 1000;
 /**
  * The width of one action tile.
  *
- * The action tray is the widest, at three tiles. On the smallest supported
+ * Both trays are three tiles wide. On the smallest supported
  * device — an iPhone SE class phone at 320 pt — the row sits inside 12 pt of
  * horizontal padding on each side, leaving 296 pt. The tray is
  * `3·TILE_WIDTH + 2·gap + 2·padding`; with the `$2` (7 pt) gap and padding that
@@ -67,6 +74,8 @@ type TileProps = {
     label: string;
     testID: string;
     onPress: () => void;
+    /** Drawn, but inert: the action exists and this recipe cannot have it. */
+    disabled?: boolean;
 };
 
 /**
@@ -80,14 +89,21 @@ type TileProps = {
  * Captioned, because a glyph on its own asks the user to guess, and one of the
  * management tray's two guesses is unrecoverable.
  */
-function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
+function Tile({icon, caption, tone, label, testID, onPress, disabled = false}: TileProps) {
     return (
         <YStack
             accessible
             accessibilityRole="button"
             accessibilityLabel={label}
-            onPress={onPress}
-            pressStyle={{opacity: 0.6}}
+            // A Tamagui stack is not a Pressable, so nothing derives this from
+            // the absent `onPress` below: without it the tile is announced as
+            // an ordinary button and answers a screen reader with silence.
+            accessibilityState={{disabled}}
+            onPress={disabled ? undefined : onPress}
+            pressStyle={disabled ? undefined : {opacity: 0.6}}
+            // CtaTile's dim, to the value, so a control that cannot be used
+            // looks the same everywhere in the app.
+            opacity={disabled ? 0.4 : 1}
             width={TILE_WIDTH}
             alignItems="center"
             justifyContent="center"
@@ -96,9 +112,10 @@ function Tile({icon, caption, tone, label, testID, onPress}: TileProps) {
             // objects of the same kind, rather than as chrome behind it.
             borderRadius="$8"
             backgroundColor={palette.surface}>
-            <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE} color={tone}/>
+            <DotIcon testID={testID} name={icon} size={TILE_GLYPH_SIZE}
+                     color={disabled ? palette.muted : tone}/>
             <DotMatrixText fontSize={11} weight="bold"
-                           letterSpacing={1.2} color={tone}>
+                           letterSpacing={1.2} color={disabled ? palette.muted : tone}>
                 {caption}
             </DotMatrixText>
         </YStack>
@@ -116,9 +133,14 @@ export default function SwipeableRecipeRow({
                                                dottedProfile = false,
                                                onBrew,
                                                onShare,
-                                               onWrite
+                                               onWrite,
+                                               onToggleFavourite
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
+
+    // The same authority as the editor's WRITE gate. Asking only whether the
+    // volumes summed marked a recipe with a 3100 ml stage as writable.
+    const writable = canWriteToCard(recipe);
 
     useEffect(() => {
         if (!bounceOnMount) {
@@ -171,6 +193,35 @@ export default function SwipeableRecipeRow({
                           swipeableRef.current?.close();
                           onDelete();
                       }}/>
+                {onToggleFavourite !== undefined && (
+                    <Tile icon="favourite"
+                          // Verbs, like the two beside it, and this one names
+                          // the glyph: the tile, the card marker and the
+                          // caption are all the same star, so there is
+                          // nothing to learn. "FAVOURITE" is a noun and would
+                          // be the only label in either tray that is.
+                          //
+                          // Not KEEP/KEPT, which was the first try. Nothing is
+                          // discarded here, so "keep" implies an alternative
+                          // that does not exist, and KEPT already means
+                          // retained elsewhere in the app ("KEPT IN YOUR BREW
+                          // HISTORY", "NO TRACE KEPT").
+                          caption={recipe.favourite ? "STARRED" : "STAR"}
+                          tone={resolveAccent(recipe)}
+                          // Named, like every other tile in both trays. A tray
+                          // is reached by swiping one row among many, so a
+                          // label that omits the recipe leaves a screen reader
+                          // user holding the one control that will not say
+                          // what it is about to act on.
+                          label={recipe.favourite
+                              ? `Remove star from ${recipe.displayName()}`
+                              : `Star ${recipe.displayName()}`}
+                          testID="recipe-row-favourite"
+                          onPress={() => {
+                              swipeableRef.current?.close();
+                              onToggleFavourite();
+                          }}/>
+                )}
             </XStack>
         );
     }
@@ -214,9 +265,18 @@ export default function SwipeableRecipeRow({
                           }}/>
                 )}
                 {onWrite !== undefined && (
+                    // The one tile that can be present and still refuse. A
+                    // recipe holding a value no card can carry used to be
+                    // marked with a small X in the card's badge corner, which
+                    // read as a dismiss button and said nothing about what was
+                    // wrong. The refusal belongs on the control it refuses:
+                    // WRITE is dimmed, and a screen reader hears why.
                     <Tile icon="write" caption="WRITE" tone={palette.text}
                           testID="row-action-write"
-                          label={`Write ${recipe.displayName()} to a card`}
+                          disabled={!writable}
+                          label={writable
+                              ? `Write ${recipe.displayName()} to a card`
+                              : `${recipe.displayName()} cannot be written to a card`}
                           onPress={() => {
                               swipeableRef.current?.close();
                               onWrite();
@@ -252,7 +312,8 @@ export default function SwipeableRecipeRow({
                             dottedProfile={dottedProfile}
                             onBrew={onBrew}
                             onShare={onShare} onWrite={onWrite}
-                            onDelete={onDelete} onDuplicate={onDuplicate}/>
+                            onDelete={onDelete} onDuplicate={onDuplicate}
+                            onToggleFavourite={onToggleFavourite}/>
             </Swipeable>
         </View>
     );

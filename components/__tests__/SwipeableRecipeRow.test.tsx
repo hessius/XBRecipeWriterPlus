@@ -2,7 +2,8 @@ import React from "react";
 import {fireEvent, screen, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {resolveAccent} from "@/library/accent";
@@ -24,18 +25,53 @@ function dotCountOf(testID: string): number {
         .getAllByTestId("dot-icon-dot", {includeHiddenElements: true}).length;
 }
 
+/**
+ * A recipe a card can hold.
+ *
+ * Balanced on purpose: 18 g at 1:16 asks for 288 ml and the two stages pour
+ * exactly that, 144 ml each -- one stage of 288 exceeds the 240 ml a card can
+ * carry. WRITE is dimmed on anything `cardWriteProblems` rejects, so a fixture
+ * without stages would silently test the disabled tile everywhere.
+ */
 function makeRecipe(title = "Ethiopia Guji") {
-    const recipe = new Recipe();
-    recipe.name = title;
-    return recipe;
-}
-
-function recipe(): Recipe {
     const r = new Recipe();
-    r.name = "Ethiopia Guji";
+    r.name = title;
+    r.cupType = CUP_TYPE.XPOD;
     r.dosage = 18;
     r.ratio = 16;
     r.grindSize = 62;
+    r.grindRPM = 90;
+    r.pours = [
+        new Pour(0, 144, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0),
+        new Pour(1, 144, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)
+    ];
+    return r;
+}
+
+function recipe(): Recipe {
+    return makeRecipe();
+}
+
+/** The same recipe with a stage volume no card byte can carry. */
+function unwritableRecipe(): Recipe {
+    const r = makeRecipe();
+    r.dosage = 31;
+    r.ratio = 100;
+    r.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+    return r;
+}
+
+/** A recipe that has not been starred. */
+function plainRecipe(): Recipe {
+    const r = recipe();
+    r.favourite = false;
+    return r;
+}
+
+/** A recipe the user has starred. */
+function favouriteRecipe(): Recipe {
+    const r = recipe();
+    r.favourite = true;
     return r;
 }
 
@@ -158,6 +194,55 @@ describe("SwipeableRecipeRow", () => {
         expect(dotColourOf("row-action-write")).toBe(palette.text);
     });
 
+    it("dims WRITE on a recipe no card can hold, and says why", async () => {
+        // The refusal used to be a small X in the card's badge corner, which
+        // read as a dismiss button and named neither the problem nor the
+        // control it applied to. It belongs on WRITE itself.
+        const onWrite = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            recipe: unwritableRecipe(), onWrite
+        })}/>);
+
+        expect(dotColourOf("row-action-write")).toBe(palette.muted);
+
+        const tile = screen.getByLabelText(
+            "Ethiopia Guji cannot be written to a card", {includeHiddenElements: true}
+        );
+        // A Tamagui stack is not a Pressable, so nothing derives this from the
+        // missing handler: without the explicit state the tile is announced as
+        // an ordinary button that happens to do nothing.
+        expect(tile.props.accessibilityState).toEqual(
+            expect.objectContaining({disabled: true})
+        );
+
+        // Not "pressing it calls nothing": RNTL resolves a press through the
+        // composite Tile's own `onPress` prop, which is handed in either way
+        // and gated inside, so that assertion would pass on a tile that was
+        // still live. What the device actually obeys is the responder, and a
+        // tile that claims no touch cannot fire one -- nor swallow a press
+        // meant for something behind it. Same check CtaTile makes.
+        expect(tile.props.onStartShouldSetResponder).toBeUndefined();
+        expect(tile.props.onPress).toBeUndefined();
+        expect(onWrite).not.toHaveBeenCalled();
+    });
+
+    it("leaves WRITE live on a recipe a card can hold", async () => {
+        const onWrite = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({onWrite})}/>);
+
+        const tile = screen.getByLabelText(
+            "Write Ethiopia Guji to a card", {includeHiddenElements: true}
+        );
+        expect(tile.props.accessibilityState).toEqual(
+            expect.objectContaining({disabled: false})
+        );
+
+        expect(tile.props.onStartShouldSetResponder).toBeDefined();
+
+        await fireEvent.press(tile);
+        expect(onWrite).toHaveBeenCalledTimes(1);
+    });
+
     it("draws a distinct mark on every action, so none is a guess", async () => {
         // Reusing `scan` for WRITE was the tempting shortcut and would have been
         // wrong: `scan` already means READ CARD on the same screen, so the one
@@ -185,6 +270,75 @@ describe("SwipeableRecipeRow", () => {
             DOT_ICONS[["brew", "share", "write", "duplicate", "delete"][i] as
                 keyof typeof DOT_ICONS]
         ).length).toBeGreaterThan(4));
+    });
+
+    it("offers a favourite tile", async () => {
+        const onToggleFavourite = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={onToggleFavourite}/>
+        );
+
+        await fireEvent.press(
+            await screen.findByTestId("recipe-row-favourite", {includeHiddenElements: true})
+        );
+
+        expect(onToggleFavourite).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads as STAR on a recipe that is not starred", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(await screen.findByText("STAR")).toBeTruthy();
+    });
+
+    it("reads as STARRED on a recipe that is", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(await screen.findByText("STARRED")).toBeTruthy();
+    });
+
+    it("names the recipe to a screen reader, like every other tile", async () => {
+        // A tray is reached by swiping one row among many, so a label that
+        // omits the recipe leaves the one control that will not say what it
+        // is about to act on. The tiles beside this one all name it.
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(screen.getByLabelText("Star Ethiopia Guji"))
+            .toBeTruthy();
+    });
+
+    it("says removing, not adding, once the recipe is one", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(screen.getByLabelText("Remove star from Ethiopia Guji"))
+            .toBeTruthy();
+    });
+
+    it("omits the tile when no handler is given", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}/>
+        );
+
+        expect(screen.queryByTestId("recipe-row-favourite")).toBeNull();
     });
 
     it("captions the actions, since a glyph alone is a guess", async () => {

@@ -412,6 +412,32 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
+     * A five-pointed star, filled: a recipe the user has picked out.
+     *
+     * The riskiest shape in this set, for the reason the file header gives
+     * about the gear: a star is close to radially symmetric and its points are
+     * one dot wide. It survives where the gear did not only because it is drawn
+     * solid, so the silhouette carries the meaning and no interior detail has
+     * to.
+     *
+     * It was briefly replaced by a heart on the theory that it was being read
+     * as a close button. It was not: the X people were seeing is the "will not
+     * write" badge, which is `error`, sitting on the other side of the same
+     * marker. Worth recording, because the star does share its bottom rows with
+     * `close` and the coincidence is convincing until you look at a real card.
+     */
+    favourite: [
+        "....#....",
+        "...###...",
+        "...###...",
+        "#########",
+        ".#######.",
+        "..#####..",
+        "..#####..",
+        ".##...##.",
+        ".#.....#."
+    ],
+    /**
      * A circular arrow: ask again for a fresh reading.
      *
      * Three-quarter arc of dots, open at the bottom-right, with a small

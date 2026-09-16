@@ -100,8 +100,8 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 /**
  * A recipe that passes every field check in cardWriteProblems.
  *
- * Used by tests that need a balanced AND writable recipe to verify the
- * absence of the "Will not write" marker.
+ * Used by tests that need a balanced AND writable recipe, to tell a card that
+ * refuses to write apart from one that simply cannot.
  */
 function makeWritableRecipe(): Recipe {
     const recipe = new Recipe();
@@ -112,6 +112,16 @@ function makeWritableRecipe(): Recipe {
     recipe.grindRPM = 90;
     recipe.pours = [new Pour(0, 225, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
     return recipe;
+}
+
+/** A recipe the user has starred. */
+function favouriteRecipe(): Recipe {
+    return makeRecipe({favourite: true});
+}
+
+/** A recipe that has not been starred, which is every recipe until Task 8 wires the toggle up. */
+function plainRecipe(): Recipe {
+    return makeRecipe({favourite: false});
 }
 
 describe("RecipeCard", () => {
@@ -655,25 +665,45 @@ describe("RecipeCard", () => {
         expect(onDuplicate).toHaveBeenCalledTimes(1);
     });
 
-    it("leaves a balanced one unmarked", async () => {
-        await renderWithProviders(<RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}/>);
-
-        expect(screen.queryByLabelText("Will not write")).toBeNull();
-    });
-
-    it("marks a recipe the machine would reject due to volume imbalance", async () => {
-        // Build from the writable fixture: imbalance is the only difference
-        // between this and the "leaves a balanced one unmarked" test above.
-        // dosage=15, ratio=15 → target=225 ml; setting volume to 10 breaks the balance.
+    it("draws no write warning on the card", async () => {
+        // There used to be a small X in the badge corner here. It read as a
+        // dismiss button, and it said only that something was wrong, never
+        // what. The refusal now lives on the WRITE tile in the swipe tray.
         const recipe = makeWritableRecipe();
         recipe.pours[0].volume = 10;
 
         await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()}/>);
 
-        expect(screen.getByLabelText("Will not write")).toBeTruthy();
+        expect(screen.queryByLabelText("Will not write")).toBeNull();
     });
 
-    it("marks a balanced recipe whose fields are out of range as unwritable", async () => {
+    it("offers the write action on a recipe a card can hold", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()} onWrite={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "write", label: "Write recipe to card"}])
+        );
+    });
+
+    it("withdraws it from a recipe the machine would reject as imbalanced", async () => {
+        // Build from the writable fixture: imbalance is the only difference
+        // between this and the test above. dosage=15, ratio=15 -> target=225 ml;
+        // setting volume to 10 breaks the balance.
+        const recipe = makeWritableRecipe();
+        recipe.pours[0].volume = 10;
+
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()} onWrite={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({name: "write"})])
+        );
+    });
+
+    it("withdraws it from a balanced recipe whose fields are out of range", async () => {
         // The card used to ask only whether the volumes summed, so this recipe --
         // balanced, and holding a stage volume no byte can carry -- was shown as
         // writable while writing it would emit nonsense.
@@ -683,9 +713,13 @@ describe("RecipeCard", () => {
         recipe.ratio = 100;
         recipe.pours = [new Pour(1, 3100, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
 
-        await renderWithProviders(<RecipeCard recipe={recipe} onPress={jest.fn()} showCoffeeMarker/>);
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()} onWrite={jest.fn()} showCoffeeMarker/>
+        );
 
-        expect(await screen.findByLabelText("Will not write")).toBeTruthy();
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({name: "write"})])
+        );
     });
 
     it("carries the BREW accessibility action when a machine is remembered", async () => {
@@ -751,8 +785,10 @@ describe("RecipeCard", () => {
         // user to hand out a link or put a recipe on a card.
         const onShare = jest.fn();
         const onWrite = jest.fn();
+        // Writable, because WRITE is withdrawn from a recipe no card can hold
+        // -- the mirror of the dimmed tile.
         await renderWithProviders(
-            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+            <RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}
                         onShare={onShare} onWrite={onWrite}/>
         );
         const card = screen.getByTestId("recipe-card");
@@ -797,5 +833,109 @@ describe("RecipeCard", () => {
         expect(card.props.accessibilityActions).not.toEqual(
             expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
         );
+    });
+
+    it("mirrors the STAR tile as an accessibility action", async () => {
+        // The tile lives in the management tray, behind a pan gesture, inside
+        // this card's accessibility group. Without this action the star is
+        // something a screen reader user can hear but never set.
+        const onToggleFavourite = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onToggleFavourite={onToggleFavourite}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "favourite", label: "Star recipe"}
+            ])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "favourite"}});
+        expect(onToggleFavourite).toHaveBeenCalledTimes(1);
+    });
+
+    it("names the favourite action for what it will do", async () => {
+        // The label has to read the current state, or a favourited recipe
+        // offers to favourite itself again.
+        const recipe = makeRecipe();
+        recipe.favourite = true;
+        await renderWithProviders(
+            <RecipeCard recipe={recipe} onPress={jest.fn()}
+                        onToggleFavourite={jest.fn()}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
+            expect.arrayContaining([
+                {name: "favourite", label: "Remove star from recipe"}
+            ])
+        );
+    });
+
+    it("publishes no favourite action when the screen cannot perform it", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()} onDelete={jest.fn()}/>
+        );
+        const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
+            {name: string}[]).map((a) => a.name);
+        expect(names).toContain("delete");
+        expect(names).not.toContain("starred");
+    });
+
+    it("marks a favourite recipe", async () => {
+        // Queried with hidden elements included: the star is hidden from the
+        // accessibility tree (its word is already in the card's own label), so
+        // a default query would report it absent while it is still on screen.
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        expect(await screen.findByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeTruthy();
+    });
+
+    it("draws the star in the badge corner, not among the numbers", async () => {
+        // Deliberate, and worth pinning. The stats row is about to grow when
+        // the library view is rebuilt, so the star sits with the marker and the
+        // write warning instead and the numbers keep their full width.
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        expect(within(screen.getByTestId("recipe-card-title-row")).getByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeTruthy();
+    });
+
+    it("draws no star on a recipe that is not a favourite", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
+        );
+
+        expect(screen.queryByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeNull();
+    });
+
+    it("says so to a screen reader", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        // The card is one accessibility element, so anything not in this label is
+        // conveyed by a glyph alone.
+        const label = (await screen.findByLabelText(/starred/i));
+        expect(label).toBeTruthy();
+    });
+
+    it("says nothing about starring when there is nothing to say", async () => {
+        // A golden-string guard: adding the star must not change the summary
+        // of a recipe that was never starred.
+        await renderWithProviders(
+            <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .not.toContain("starred");
     });
 });

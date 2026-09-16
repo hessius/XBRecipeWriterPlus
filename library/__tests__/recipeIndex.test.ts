@@ -52,7 +52,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("f409112d");
+        expect(schemaHash()).toBe("aa6ceae1");
     });
 
     it("folds the revision into the hash", () => {
@@ -101,7 +101,11 @@ describe("projectRecipe", () => {
             minTemp: 88,
             maxTemp: 93,
             bypassEnabled: 0,
-            sharedTableId: null
+            sharedTableId: null,
+            xid: null,
+            sharedBy: null,
+            favourite: 0,
+            hasDescription: 0
         });
     });
 
@@ -191,5 +195,47 @@ describe("projectRecipe", () => {
         const recipe = new Recipe();
         recipe.accentIndex = undefined;
         expect(projectRecipe(recipe).accentIndex).toBeNull();
+    });
+});
+
+describe("M5 descriptors", () => {
+    it("projects every authored and attribution field", () => {
+        const recipe = new Recipe();
+        recipe.xid = "ABC12345";
+        recipe.sharedBy = "BrewMind";
+        recipe.favourite = true;
+        recipe.description = "Sunday morning";
+
+        const projected = projectRecipe(recipe);
+
+        expect(projected.xid).toBe("ABC12345");
+        expect(projected.sharedBy).toBe("BrewMind");
+        expect(projected.favourite).toBe(1);
+        expect(projected.hasDescription).toBe(1);
+    });
+
+    it("stores absence as null rather than an empty string", () => {
+        const recipe = new Recipe();
+
+        const projected = projectRecipe(recipe);
+
+        // An empty string sorts and groups as a value. Null does not, which is
+        // what "this recipe has no XID" has to mean to a shelf query.
+        expect(projected.xid).toBeNull();
+        expect(projected.sharedBy).toBeNull();
+        expect(projected.favourite).toBe(0);
+        expect(projected.hasDescription).toBe(0);
+    });
+
+    it("indexes the three columns a shelf groups by", () => {
+        const indexed = INDEX_COLUMNS
+            .filter((column) => column.indexed)
+            .map((column) => column.name);
+
+        expect(indexed).toEqual(expect.arrayContaining(
+            ["xid", "sharedBy", "favourite"]
+        ));
+        // Presence only, never grouped by, so it earns no index of its own.
+        expect(indexed).not.toContain("hasDescription");
     });
 });

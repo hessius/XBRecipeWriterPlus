@@ -119,6 +119,32 @@ describe("buildImportPlan", () => {
         expect(plan.entries[0].recipe.tags).toEqual(["filter", "morning"]);
     });
 
+    it("keeps a local favourite and description across a cloud refresh", async () => {
+        // The same hazard as the tags above, and the reason that block names
+        // the rule rather than the field: xBloom cannot supply either of
+        // these, so a freshly mapped replacement carries `false` and `""` and
+        // would write both straight over the user's own words.
+        const local = imported();
+        local.favourite = true;
+        local.description = "Sunday morning";
+
+        const plan = buildImportPlan([row({dose: 20})], [local]);
+
+        expect(plan.entries[0].status).toBe("updated");
+        expect(plan.entries[0].recipe.favourite).toBe(true);
+        expect(plan.entries[0].recipe.description).toBe("Sunday morning");
+    });
+
+    it("does not let an authored field change what counts as a change", async () => {
+        const local = imported();
+        local.favourite = true;
+        local.description = "Sunday morning";
+
+        const plan = buildImportPlan([row()], [local]);
+
+        expect(plan.entries[0].status).toBe("unchanged");
+    });
+
     it("does not let local tags change what counts as a change", async () => {
         // The fingerprint covers brew content only, so tagging a recipe must
         // not make it read as edited. Otherwise every tagged recipe would be
