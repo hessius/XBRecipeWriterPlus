@@ -114,6 +114,16 @@ function makeWritableRecipe(): Recipe {
     return recipe;
 }
 
+/** A recipe the user has starred. */
+function favouriteRecipe(): Recipe {
+    return makeRecipe({favourite: true});
+}
+
+/** A recipe that has not been starred, which is every recipe until Task 8 wires the toggle up. */
+function plainRecipe(): Recipe {
+    return makeRecipe({favourite: false});
+}
+
 describe("RecipeCard", () => {
     it("renders the recipe name", async () => {
         await renderWithProviders(
@@ -797,5 +807,49 @@ describe("RecipeCard", () => {
         expect(card.props.accessibilityActions).not.toEqual(
             expect.arrayContaining([{name: "brew", label: "Brew this recipe"}])
         );
+    });
+
+    it("marks a favourite recipe", async () => {
+        // Queried with hidden elements included: the star is hidden from the
+        // accessibility tree (its word is already in the card's own label), so
+        // a default query would report it absent while it is still on screen.
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        expect(await screen.findByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeTruthy();
+    });
+
+    it("draws no star on a recipe that is not a favourite", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
+        );
+
+        expect(screen.queryByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeNull();
+    });
+
+    it("says so to a screen reader", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        // The card is one accessibility element, so anything not in this label is
+        // conveyed by a glyph alone.
+        const label = (await screen.findByLabelText(/favourite/i));
+        expect(label).toBeTruthy();
+    });
+
+    it("says nothing about favourites when there is nothing to say", async () => {
+        // A golden-string guard: adding the star must not change the summary
+        // of a recipe that was never starred.
+        await renderWithProviders(
+            <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
+        );
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .not.toContain("favourite");
     });
 });

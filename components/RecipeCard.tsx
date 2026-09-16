@@ -175,6 +175,7 @@ export default function RecipeCard({
     const summary = [
         recipe.displayName(),
         marker.toLowerCase(),
+        recipe.favourite ? "favourite" : undefined,
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
         !isTea && !recipe.grinder ? "grinder off" : undefined,
@@ -301,7 +302,17 @@ export default function RecipeCard({
                 </XStack>
 
                 <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
-                    <XStack gap="$5">
+                    <XStack gap="$5" alignItems="flex-end">
+                        {recipe.favourite && (
+                            // Aligned to the values rather than the labels: it sits on
+                            // the baseline the numbers sit on, so the row reads as one
+                            // line and not as a glyph with statistics after it. Hidden
+                            // from accessibility on purpose -- the word is already in
+                            // the card's own label above, and announcing it twice is
+                            // worse than not at all.
+                            <DotIcon testID="recipe-card-favourite" name="favourite"
+                                     size={14} color={onAccent.text}/>
+                        )}
                         <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
                         <Stat label="RATIO" value={recipe.ratio}/>
                         {!isTea && <Stat label="GRIND" value={recipe.grindSize}
