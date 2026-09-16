@@ -67,6 +67,16 @@ describe("DotIcon", () => {
         );
         expect(screen.getByLabelText("Edit recipes")).toBeTruthy();
     });
+
+    it("renders the favourite glyph", async () => {
+        await renderWithProviders(
+            <DotIcon name="favourite" size={24} accessibilityLabel="Favourite"/>
+        );
+
+        expect(await screen.findByLabelText("Favourite")).toBeTruthy();
+        expect(screen.getAllByTestId("dot-icon-dot", includeHidden))
+            .toHaveLength(litCells(DOT_ICONS.favourite).length);
+    });
 });
 
 describe("dotRatio", () => {

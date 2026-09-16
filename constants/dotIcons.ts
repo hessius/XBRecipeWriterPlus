@@ -412,6 +412,25 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
+     * A five-pointed star, filled: a recipe the user has kept.
+     *
+     * The riskiest shape in this set, for the reason the file header gives about
+     * the gear: a star is close to radially symmetric and its points are one dot
+     * wide. It survives where the gear did not only because it is drawn solid,
+     * so the silhouette carries the meaning and no interior detail has to.
+     */
+    favourite: [
+        "....#....",
+        "...###...",
+        "...###...",
+        "#########",
+        ".#######.",
+        "..#####..",
+        "..#####..",
+        ".##...##.",
+        ".#.....#."
+    ],
+    /**
      * A circular arrow: ask again for a fresh reading.
      *
      * Three-quarter arc of dots, open at the bottom-right, with a small
