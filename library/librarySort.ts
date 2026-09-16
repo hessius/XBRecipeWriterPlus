@@ -90,6 +90,15 @@ type AxisSpec = {
     /** The two direction words, taken verbatim from the design's table. */
     directionLabels: Record<SortDirection, string>;
     /**
+     * The same vocabulary as a screen reader says it, because Doto caps are a
+     * typographic choice and not a sentence: "LAST BREWED" / "RECENT" is a chip,
+     * "last brewed, most recent first" is speech. It lives in this table rather
+     * than in a map beside the rail so there is still exactly one place an axis
+     * is described. A second table would typecheck forever and drift silently
+     * the first time a word here changed without it.
+     */
+    spoken: {axis: string; directions: Record<SortDirection, string>};
+    /**
      * The direction applied when this axis is first chosen, picked so one tap is
      * useful: the newest additions, the most recent brews, the most-brewed, the
      * lowest ratios, and names from A.
@@ -109,12 +118,14 @@ type AxisSpec = {
 export const SORT_AXES: Record<SortAxis, AxisSpec> = {
     name: {
         label: "NAME",
+        spoken: {axis: "name", directions: {asc: "A to Z", desc: "Z to A"}},
         directionLabels: {asc: "A TO Z", desc: "Z TO A"},
         defaultDirection: "asc",
         orderBy: nameOrder
     },
     added: {
         label: "ADDED",
+        spoken: {axis: "date added", directions: {asc: "oldest first", desc: "newest first"}},
         directionLabels: {asc: "OLDEST", desc: "NEWEST"},
         defaultDirection: "desc",
         orderBy: (direction) =>
@@ -122,18 +133,21 @@ export const SORT_AXES: Record<SortAxis, AxisSpec> = {
     },
     lastBrewed: {
         label: "LAST BREWED",
+        spoken: {axis: "last brewed", directions: {asc: "longest ago first", desc: "most recent first"}},
         directionLabels: {asc: "LONGEST AGO", desc: "RECENT"},
         defaultDirection: "desc",
         orderBy: brewedOrder
     },
     timesBrewed: {
         label: "TIMES BREWED",
+        spoken: {axis: "times brewed", directions: {asc: "least brewed first", desc: "most brewed first"}},
         directionLabels: {asc: "LEAST", desc: "MOST"},
         defaultDirection: "desc",
         orderBy: countOrder
     },
     ratio: {
         label: "RATIO",
+        spoken: {axis: "ratio", directions: {asc: "low to high", desc: "high to low"}},
         directionLabels: {asc: "LOW TO HIGH", desc: "HIGH TO LOW"},
         defaultDirection: "asc",
         orderBy: (direction) =>

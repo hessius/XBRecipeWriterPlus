@@ -10,6 +10,7 @@ import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 import {
     chipLabel,
     isDefaultSort,
+    SORT_AXES,
     type SortAxis,
     type SortDirection
 } from "@/library/librarySort";
@@ -54,30 +55,6 @@ type Props = {
     hint?: string;
 };
 
-const SORT_AXIS_ACCESSIBILITY: Record<SortAxis, string> = {
-    name:        "name",
-    added:       "date added",
-    lastBrewed:  "last brewed",
-    timesBrewed: "times brewed",
-    ratio:       "ratio"
-};
-
-const SORT_DIRECTION_ACCESSIBILITY: Record<SortAxis, Record<SortDirection, string>> = {
-    name:        {asc: "A to Z", desc: "Z to A"},
-    added:       {asc: "oldest first", desc: "newest first"},
-    lastBrewed:  {asc: "longest ago first", desc: "most recent first"},
-    timesBrewed: {asc: "least brewed first", desc: "most brewed first"},
-    ratio:       {asc: "low to high", desc: "high to low"}
-};
-
-/**
- * A Doto-caps chip label spoken as a sentence.
- *
- * The brand fix has to come after the capitalisation, not before it: applied
- * first, capitalising the sentence immediately undoes it and "XBLOOM PODS" is
- * announced as "XBloom pods". The brand is lowercase-x by definition, so it is
- * the one word here that must survive sitting first.
- */
 function sentenceCase(label: string): string {
     const lower = label.toLocaleLowerCase();
     const sentence = `${lower.charAt(0).toLocaleUpperCase()}${lower.slice(1)}`;
@@ -85,7 +62,8 @@ function sentenceCase(label: string): string {
 }
 
 function sortAccessibilityLabel(sort: SortAxis, direction: SortDirection): string {
-    return `Sort by ${SORT_AXIS_ACCESSIBILITY[sort]}, ${SORT_DIRECTION_ACCESSIBILITY[sort][direction]}`;
+    const {axis, directions} = SORT_AXES[sort].spoken;
+    return `Sort by ${axis}, ${directions[direction]}`;
 }
 
 function filterAccessibilityLabel(filter: RailFilter): string {

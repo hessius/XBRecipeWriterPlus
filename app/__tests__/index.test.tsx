@@ -386,11 +386,51 @@ describe("HomeScreen", () => {
     });
 
     it("leaves the rail hint hidden while the library is still small", async () => {
+        // Five recipes, three of them tea, so the filter row does have a chip to
+        // explain. That is what isolates the size threshold: a fixture of five
+        // plain recipes would also offer no chip, and would go on passing if the
+        // size clause were deleted.
         await renderHome({
-            recipes:  ["A", "B", "C", "D", "E"].map(named),
+            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E")],
             settings: new Settings(memoryStorage({showHints: true}))
         });
         expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
+    it("leaves the rail hint hidden when there is no filter chip to explain", async () => {
+        // Six recipes, past the size threshold, but all alike, so every stock
+        // shelf either matches nothing or matches nearly all of them and is
+        // suppressed. A hint pointing at an empty filter row teaches nothing.
+        await renderHome({
+            recipes:  ["A", "B", "C", "D", "E", "F"].map(named),
+            settings: new Settings(memoryStorage({showHints: true}))
+        });
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
+    it("writes the dismissal once, not on every later tap of the rail", async () => {
+        // The rail reports every use and `Settings.set` writes unconditionally,
+        // so a callback left wired after the hint is gone spends a SQLite write
+        // and a global notification per tap, forever, setting true to true.
+        const writes: string[] = [];
+        const backing = memoryStorage({showHints: true});
+        const settings = new Settings({
+            read:  backing.read,
+            write: (key, value) => {
+                writes.push(key);
+                backing.write(key, value);
+            }
+        });
+        await renderHome({
+            recipes: [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
+            settings
+        });
+
+        await fireEvent.press(screen.getByLabelText("Sort by name, A to Z"));
+        await fireEvent.press(screen.getByLabelText("Tea filter"));
+        await fireEvent.press(screen.getByLabelText("Tea filter"));
+
+        expect(writes.filter((key) => key === "libraryRailHintDismissed")).toHaveLength(1);
     });
 
     it("dismisses the rail hint across a home screen remount once the rail is used", async () => {

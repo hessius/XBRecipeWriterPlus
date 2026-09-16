@@ -208,7 +208,7 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | Single pour | `pourCount = 1` |
 | Many stages | `pourCount >= 4` |
 | Grinder off | `grinder = 0` |
-| xBloom recipes | `xid <> ''` |
+| xBloom recipes | `xid IS NOT NULL` |
 | Strong | `ratio <= 14` |
 | Long | `ratio >= 17` |
 | Hot | `maxTemp >= 94` |

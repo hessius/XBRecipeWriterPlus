@@ -736,7 +736,15 @@ export default function HomeScreen({db, settings}: Props) {
                         onSortPress={() => setSortOpen(true)}
                         filters={railFilters}
                         onFilterPress={libraryQuery.toggleFilter}
-                        onUse={() => setRailHintDismissed(true)}
+                        // Only while there is still a hint to put away. The rail
+                        // reports every use, and `Settings.set` writes and
+                        // notifies unconditionally, so a permanently-wired
+                        // callback would run a SQLite write and a global settings
+                        // notification on every sort, filter and search tap for
+                        // the life of the install, to set true to true.
+                        onUse={railHintDismissed
+                            ? undefined
+                            : () => setRailHintDismissed(true)}
                         hint={showRailHint ? RAIL_HINT : undefined}/>
                 )}
 

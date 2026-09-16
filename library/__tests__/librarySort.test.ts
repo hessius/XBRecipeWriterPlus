@@ -59,6 +59,33 @@ describe("the vocabulary", () => {
     });
 });
 
+describe("the spoken vocabulary", () => {
+    it("gives every axis a spoken name and both spoken directions", () => {
+        // The rail builds its accessibility labels from this table rather than
+        // a map of its own, so a new axis cannot ship announcing "undefined".
+        for (const axis of SORT_AXIS_ORDER) {
+            const {spoken} = SORT_AXES[axis];
+            expect(spoken.axis).toMatch(/\S/);
+            expect(spoken.directions.asc).toMatch(/\S/);
+            expect(spoken.directions.desc).toMatch(/\S/);
+        }
+    });
+
+    it("says the directions as sentences, not in the chip's caps", () => {
+        // The chip says "NEWEST" because Doto is a caps face. Handing that
+        // string to a reader shouts an abbreviation at somebody. "Low to high"
+        // is allowed to match its chip once lowercased: the caps are the only
+        // thing wrong with it.
+        for (const axis of SORT_AXIS_ORDER) {
+            const {spoken} = SORT_AXES[axis];
+            for (const direction of ["asc", "desc"] as const) {
+                const word = spoken.directions[direction];
+                expect(word).not.toBe(word.toLocaleUpperCase());
+            }
+        }
+    });
+});
+
 describe("isDefaultSort", () => {
     it("is true only for name ascending", () => {
         expect(isDefaultSort("name", "asc")).toBe(true);
