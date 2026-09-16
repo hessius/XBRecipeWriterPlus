@@ -87,17 +87,20 @@ function escapeLike(term: string): string {
  * own, which is what "case insensitively" asks for; the NOCASE columns get the
  * same treatment for free.
  */
-function searchClause(): FilterClause {
+function searchClause(pattern: string): FilterClause {
+    const columns = ["sortName", "sharedBy", "xid", "description"];
     return {
         where: `(
-            sortName LIKE ? ESCAPE '\\'
-            OR sharedBy LIKE ? ESCAPE '\\'
-            OR xid LIKE ? ESCAPE '\\'
-            OR description LIKE ? ESCAPE '\\'
+            ${columns.map((c) => `${c} LIKE ? ESCAPE '\\'`).join("\n            OR ")}
             OR recipes.uuid IN (
                 SELECT uuid FROM recipe_tags WHERE tag LIKE ? ESCAPE '\\'
             )
-        )`
+        )`,
+        // The clause carries its own bindings, like every resolver clause does,
+        // so the count cannot drift from the SQL when a column is added to the
+        // list above. Counting placeholders by hand at the call site is how a
+        // fifth column arrives bound to four values.
+        params: columns.map(() => pattern).concat(pattern)
     };
 }
 
@@ -123,10 +126,9 @@ export function buildLibraryQuery(
 
     const term = query.search.trim();
     if (term.length > 0) {
-        const pattern = `%${escapeLike(term)}%`;
-        conditions.push(searchClause().where);
-        // One bound value per `?` in the clause: five columns, five copies.
-        params.push(pattern, pattern, pattern, pattern, pattern);
+        const clause = searchClause(`%${escapeLike(term)}%`);
+        conditions.push(clause.where);
+        params.push(...(clause.params ?? []));
     }
 
     for (const id of query.filters) {

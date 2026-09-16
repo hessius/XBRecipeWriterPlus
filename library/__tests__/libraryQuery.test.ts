@@ -70,8 +70,12 @@ describe("the built statement", () => {
         expect(sql).not.toContain(hostile);
         expect(sql).not.toContain("DROP TABLE recipes");
         expect(params).toContain(`%${hostile}%`);
-        // Five LIKE columns, five copies of the one pattern.
-        expect(params.filter((p) => p === `%${hostile}%`)).toHaveLength(5);
+        // One bound copy per `?`. Order is not asserted because every column
+        // binds the same pattern, so a swap is a semantic no-op; a miscount is
+        // not, and SQLite would reject it anyway.
+        const placeholders = (sql.match(/LIKE \? ESCAPE/g) ?? []).length;
+        expect(params.filter((p) => p === `%${hostile}%`))
+            .toHaveLength(placeholders);
     });
 
     it("escapes LIKE wildcards so a literal percent is a literal percent", () => {
