@@ -51,6 +51,15 @@ export const DEFAULT_GRIND_SIZE = 50;
 export const MAX_TAG_LENGTH = 32;
 /** Tags per recipe. Bounds a hostile backup, not the user. */
 export const MAX_TAGS_PER_RECIPE = 20;
+/**
+ * The description's ceiling, in characters.
+ *
+ * Enforced in the editor with a live counter, not here. A limit a user can see
+ * is a limit; a limit they discover by having their words vanish is a bug. This
+ * constant is what the editor and the backup validator both read, so the two
+ * cannot drift.
+ */
+export const MAX_DESCRIPTION = 60;
 
 const POLY_TABLE = [
     0x00, 0x5E, 0xBC, 0xE2, 0x61, 0x3F, 0xDD, 0x83,
@@ -207,6 +216,24 @@ class Recipe {
     public sharedByAvatar?: string;
     /** The pod artwork, likewise only ever present in the import response. */
     public imageURL?: string;
+    /**
+     * The authored one line answering "why is this recipe", capped at
+     * `MAX_DESCRIPTION` where it is typed rather than clipped here.
+     *
+     * Defaulted to the empty string rather than left undefined, because the
+     * library row asks `description.length` on every recipe it draws and an
+     * absent one would crash the list rather than read as unwritten. That is
+     * the same reasoning as `xid` above.
+     *
+     * Metadata only: not in `getData`/`parseData`, no card bytes, not in the CRC.
+     */
+    public description: string = "";
+    /**
+     * Authored intent, not evidence. Kept off the card for the same reason as
+     * the description, and kept off the brew record because #95 is explicit
+     * that a brew is an observation and a recipe is an inference.
+     */
+    public favourite: boolean = false;
 
     constructor(data?: number[], json?: string, hasSignature: boolean = true) {
         this.uuid = (uuid.v4() as string);
@@ -301,6 +328,15 @@ class Recipe {
                 this.sharedByAvatar = jsonRecipe.sharedByAvatar;
             }
             if (typeof jsonRecipe.imageURL === "string") this.imageURL = jsonRecipe.imageURL;
+            // Read the forgiving way the three above are: a wrong type means
+            // the default, not a throw. Every recipe stored before M5 is this
+            // case, so this is the ordinary path rather than the hostile one.
+            if (typeof jsonRecipe.description === "string") {
+                this.description = jsonRecipe.description;
+            }
+            if (typeof jsonRecipe.favourite === "boolean") {
+                this.favourite = jsonRecipe.favourite;
+            }
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;

@@ -222,6 +222,8 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
             // added to Recipe that the user authors and the cloud cannot
             // supply belongs on this list.
             recipe.setTags(replacing.tags);
+            recipe.favourite = replacing.favourite;
+            recipe.description = replacing.description;
         }
 
         applyAccent(recipe, color, assignedSoFar);

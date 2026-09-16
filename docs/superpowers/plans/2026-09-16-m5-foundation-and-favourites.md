@@ -75,7 +75,11 @@ Repository rules that bite here specifically:
 
 ---
 
-### Task 1: Land the recipe index
+### Task 1: Land the recipe index — DONE
+
+Merged as #116 (`03fa592`). Five review findings were fixed before it landed;
+all five were data-loss paths nothing would have reported, and the two worth
+carrying forward are recorded under Task 2 below.
 
 The index is built. It is 28 commits on `origin/recipe-index`, branched from
 `3e1b956` on 14 September, and it was never opened as a PR. This task rebases it
@@ -333,10 +337,36 @@ Run: `npx jest library/__tests__/Recipe`
 Expected: PASS. The card-format characterisation tests must be untouched. If any
 byte expectation changed, you have added a field to `getData` by mistake.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Carry both fields across a cloud refresh**
+
+Added to this task after #116, and not optional. `buildImportPlan` replaces a
+local recipe with a whole freshly mapped one, so every field the cloud cannot
+supply starts empty on it and is written over the local copy. The review caught
+this for `tags`; `favourite` and `description` have it the moment they exist,
+and the failure is silent — the recipe keeps its name, its uuid and everything
+the screen shows.
+
+In `library/cloud/importPlan.ts`, in the `if (replacing !== undefined)` block
+beside `recipe.setTags(replacing.tags)`:
+
+```ts
+            recipe.favourite = replacing.favourite;
+            recipe.description = replacing.description;
+```
+
+Safe by construction: `library/cloud/fingerprint.ts` covers brew content only,
+so carrying an authored field cannot make a recipe read as edited. Pin that with
+a second test as well as the preservation one.
+
+**The general rule, for every later task and every later field:** anything the
+user authors and the cloud cannot supply belongs in that block. Task 4's index
+columns are derived and need nothing here; a new *stored* field does.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add library/Recipe.ts library/__tests__/Recipe.authored.test.ts
+git add library/Recipe.ts library/__tests__/Recipe.authored.test.ts \
+        library/cloud/importPlan.ts library/cloud/__tests__/importPlan.test.ts
 git commit -m "feat: a description and a favourite on the recipe"
 ```
 
