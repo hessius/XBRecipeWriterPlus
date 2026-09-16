@@ -80,4 +80,19 @@ describe("useRecipeLibrary against a real database", () => {
         expect(() => db.insertRecipe(first)).not.toThrow();
         expect(db.retrieveAllRecipes()).toHaveLength(1);
     });
+
+    it("survives a round trip through SQLite when toggled", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.toggleFavourite(result.current.recipes[0]);
+        });
+
+        // Read straight off the database rather than the hook's own state, so
+        // this actually exercises updateRecipe's write path and not just the
+        // in-memory mutation toggleFavourite makes before it writes.
+        expect(db.retrieveAllRecipes()?.[0].favourite).toBe(true);
+    });
 });

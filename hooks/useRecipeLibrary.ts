@@ -20,6 +20,7 @@ export type RecipeStore = {
     retrieveAllRecipes: () => Recipe[] | null;
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
+    updateRecipe: (uuid: string, recipe: Recipe) => void;
     deleteAllRecipes?: () => void;
     insertRecipes?: (recipes: Recipe[]) => void;
     replaceAllRecipes?: (recipes: Recipe[]) => void;
@@ -58,6 +59,7 @@ export type RecipeLibrary = {
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
     duplicateRecipe: (recipe: Recipe) => void;
+    toggleFavourite: (recipe: Recipe) => void;
     deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
@@ -106,6 +108,29 @@ export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
         reload();
     }
 
+    /**
+     * Mark or unmark a recipe.
+     *
+     * Mutates in place and writes through, which is the house pattern: the
+     * editor does the same and bumps a key counter. Here the reload does that
+     * job, so no counter is needed.
+     *
+     * The mutation happens before the write, so a failed write must still
+     * reload: `reload()` reads a fresh Recipe back from the store, which
+     * restores the true, unwritten value. Skipping it on the throw path (as a
+     * bare call would) leaves the mutated object in state with nothing to put
+     * it right, since nothing else refreshes the library on its own.
+     */
+    function toggleFavourite(recipe: Recipe) {
+        recipe.favourite = !recipe.favourite;
+        try {
+            store.updateRecipe(recipe.uuid, recipe);
+        } catch {
+            // Deliberately empty: reload() below restores the true value.
+        }
+        reload();
+    }
+
     function deleteAll(): DeleteAllOutcome {
         const removed = recipes.length;
         // The same shape as `applyRestore` below, and for the same reason: a
@@ -150,7 +175,7 @@ export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
         return {status: "restored", added: toAdd.length};
     }
 
-    return {recipes, refresh: reload, deleteRecipe, duplicateRecipe, deleteAll, applyRestore};
+    return {recipes, refresh: reload, deleteRecipe, duplicateRecipe, toggleFavourite, deleteAll, applyRestore};
 }
 
 /**

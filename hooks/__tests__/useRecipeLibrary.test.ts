@@ -11,6 +11,12 @@ function stubDb(recipes: Recipe[]) {
         retrieveAllRecipes: jest.fn(() => recipes),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
+        // Writes through to the backing array so a reload after the write
+        // returns the changed recipe, the same as the real database does.
+        updateRecipe:       jest.fn((uuid: string, updated: Recipe) => {
+            const index = recipes.findIndex((r) => r.uuid === uuid);
+            if (index !== -1) recipes[index] = updated;
+        }),
         deleteAllRecipes:   jest.fn(),
         insertRecipes:      jest.fn(),
         replaceAllRecipes:  jest.fn()
@@ -20,6 +26,16 @@ function stubDb(recipes: Recipe[]) {
 function named(name: string): Recipe {
     const r = new Recipe();
     r.name = name;
+    return r;
+}
+
+function plainRecipe(): Recipe {
+    return named("Ethiopia");
+}
+
+function favouriteRecipe(): Recipe {
+    const r = named("Ethiopia");
+    r.favourite = true;
     return r;
 }
 
@@ -61,6 +77,57 @@ describe("useRecipeLibrary", () => {
 
         expect(db.cloneRecipe).toHaveBeenCalledTimes(1);
         expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+    });
+
+    it("toggles a favourite and persists it", async () => {
+        const db = stubDb([plainRecipe()]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        await act(async () => {
+            result.current.toggleFavourite(result.current.recipes[0]);
+        });
+
+        expect(db.updateRecipe).toHaveBeenCalledTimes(1);
+        expect(result.current.recipes[0].favourite).toBe(true);
+    });
+
+    it("toggles back off", async () => {
+        const db = stubDb([favouriteRecipe()]);
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        await act(async () => {
+            result.current.toggleFavourite(result.current.recipes[0]);
+        });
+
+        expect(result.current.recipes[0].favourite).toBe(false);
+    });
+
+    it("reloads to the true value instead of throwing when the write fails", async () => {
+        // toggleFavourite mutates before it writes, so a throw here must not
+        // skip the reload. stubDb's retrieveAllRecipes hands back the same
+        // live object every call, which would hide this bug (the mutation
+        // would just look "restored" because it never left in the first
+        // place), so this store keeps its own serialized copy and rebuilds a
+        // fresh Recipe on every read, the way the real database does.
+        const original = plainRecipe();
+        const stored = JSON.stringify(original);
+        const db = {
+            retrieveAllRecipes: jest.fn(() => [new Recipe(undefined, stored)]),
+            deleteRecipe:       jest.fn(),
+            cloneRecipe:        jest.fn(),
+            updateRecipe:       jest.fn(() => {
+                throw new Error("database is locked");
+            })
+        };
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        await act(async () => {
+            expect(() => {
+                result.current.toggleFavourite(result.current.recipes[0]);
+            }).not.toThrow();
+        });
+
+        expect(result.current.recipes[0].favourite).toBe(false);
     });
 
     it("re-reads on refresh", async () => {

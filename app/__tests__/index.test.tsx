@@ -199,7 +199,8 @@ function store(recipes: Recipe[]) {
     return {
         retrieveAllRecipes: jest.fn(() => (recipes.length > 0 ? recipes : null)),
         deleteRecipe:       jest.fn(),
-        cloneRecipe:        jest.fn()
+        cloneRecipe:        jest.fn(),
+        updateRecipe:       jest.fn()
     };
 }
 

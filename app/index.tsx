@@ -635,6 +635,10 @@ export default function HomeScreen({db, settings}: Props) {
                                 onDuplicate={() => {
                                     setBounceFirstRow(false);
                                     library.duplicateRecipe(item);
+                                }}
+                                onToggleFavourite={() => {
+                                    setBounceFirstRow(false);
+                                    library.toggleFavourite(item);
                                 }}/>
                         )}/>
                 )}
