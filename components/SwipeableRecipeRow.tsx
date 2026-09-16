@@ -182,7 +182,7 @@ export default function SwipeableRecipeRow({
                     <Tile icon="favourite"
                           // Verbs, like the two beside it, and this one names
                           // the glyph: the tile, the card marker and the
-                          // caption are all the same heart, so there is
+                          // caption are all the same star, so there is
                           // nothing to learn. "FAVOURITE" is a noun and would
                           // be the only label in either tray that is.
                           //
@@ -191,7 +191,7 @@ export default function SwipeableRecipeRow({
                           // that does not exist, and KEPT already means
                           // retained elsewhere in the app ("KEPT IN YOUR BREW
                           // HISTORY", "NO TRACE KEPT").
-                          caption={recipe.favourite ? "LIKED" : "LIKE"}
+                          caption={recipe.favourite ? "STARRED" : "STAR"}
                           tone={resolveAccent(recipe)}
                           // Named, like every other tile in both trays. A tray
                           // is reached by swiping one row among many, so a
@@ -199,8 +199,8 @@ export default function SwipeableRecipeRow({
                           // user holding the one control that will not say
                           // what it is about to act on.
                           label={recipe.favourite
-                              ? `Unlike ${recipe.displayName()}`
-                              : `Like ${recipe.displayName()}`}
+                              ? `Remove star from ${recipe.displayName()}`
+                              : `Star ${recipe.displayName()}`}
                           testID="recipe-row-favourite"
                           onPress={() => {
                               swipeableRef.current?.close();

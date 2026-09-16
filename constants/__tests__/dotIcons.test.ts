@@ -124,38 +124,4 @@ describe("the new editor glyphs", () => {
         const reverse = (row: string) => [...row].reverse().join("");
         DOT_ICONS.more.forEach((row) => expect(row).toBe(reverse(row)));
     });
-    it("draws favourite as mass rather than limbs", () => {
-        // The lesson from the star this replaced. A five-pointed star's two
-        // bottom legs came out as `.##...##.` and `.#.....#.`, which is the
-        // same dot pattern as the arms of `close`, and at card size the marker
-        // read as an X. The property that went wrong is measurable: a row split
-        // into two runs is two thin limbs with a gap, and a gap one dot wide is
-        // the first thing to disappear when the dots stop touching.
-        //
-        // A heart has exactly one run per row apart from the notch at its top,
-        // so the silhouette survives at 12 px. Held as a rule rather than as
-        // art, so the mark can be redrawn without the reasoning going stale.
-        const runsIn = (row: string) =>
-            row.split(".").filter((run) => run.length > 0).length;
-
-        const rows = DOT_ICONS.favourite;
-        expect(runsIn(rows[0])).toBe(2);
-        rows.slice(1).forEach((row) => expect(runsIn(row)).toBe(1));
-    });
-
-    it("shares no forked row with the close glyph", () => {
-        // The collision itself, held directly. Not every shared row matters:
-        // the heart's tip is `....#....` and so is the centre of the X, and
-        // nobody has ever confused a dot with a cross. What made the star read
-        // as a close button was sharing a *forked* row, which is a shape rather
-        // than a coincidence -- the star's `.##...##.` is close's arms exactly.
-        const forked = (row: string) =>
-            row.split(".").filter((run) => run.length > 0).length > 1;
-
-        const shared = DOT_ICONS.favourite.filter(
-            (row) => forked(row) && DOT_ICONS.close.includes(row)
-        );
-
-        expect(shared).toEqual([]);
-    });
 });

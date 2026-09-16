@@ -809,7 +809,7 @@ describe("RecipeCard", () => {
         );
     });
 
-    it("mirrors the LIKE tile as an accessibility action", async () => {
+    it("mirrors the STAR tile as an accessibility action", async () => {
         // The tile lives in the management tray, behind a pan gesture, inside
         // this card's accessibility group. Without this action the star is
         // something a screen reader user can hear but never set.
@@ -821,7 +821,7 @@ describe("RecipeCard", () => {
         const card = screen.getByTestId("recipe-card");
         expect(card.props.accessibilityActions).toEqual(
             expect.arrayContaining([
-                {name: "favourite", label: "Like recipe"}
+                {name: "favourite", label: "Star recipe"}
             ])
         );
 
@@ -841,7 +841,7 @@ describe("RecipeCard", () => {
         );
         expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
             expect.arrayContaining([
-                {name: "favourite", label: "Unlike recipe"}
+                {name: "favourite", label: "Remove star from recipe"}
             ])
         );
     });
@@ -853,10 +853,10 @@ describe("RecipeCard", () => {
         const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
             {name: string}[]).map((a) => a.name);
         expect(names).toContain("delete");
-        expect(names).not.toContain("liked");
+        expect(names).not.toContain("starred");
     });
 
-    it("marks a liked recipe", async () => {
+    it("marks a favourite recipe", async () => {
         // Queried with hidden elements included: the star is hidden from the
         // accessibility tree (its word is already in the card's own label), so
         // a default query would report it absent while it is still on screen.
@@ -869,9 +869,9 @@ describe("RecipeCard", () => {
         )).toBeTruthy();
     });
 
-    it("draws the heart in the badge corner, not among the numbers", async () => {
+    it("draws the star in the badge corner, not among the numbers", async () => {
         // Deliberate, and worth pinning. The stats row is about to grow when
-        // the library view is rebuilt, so the heart sits with the marker and the
+        // the library view is rebuilt, so the star sits with the marker and the
         // write warning instead and the numbers keep their full width.
         await renderWithProviders(
             <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
@@ -882,7 +882,7 @@ describe("RecipeCard", () => {
         )).toBeTruthy();
     });
 
-    it("draws no heart on a recipe that is not liked", async () => {
+    it("draws no star on a recipe that is not a favourite", async () => {
         await renderWithProviders(
             <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
         );
@@ -899,17 +899,17 @@ describe("RecipeCard", () => {
 
         // The card is one accessibility element, so anything not in this label is
         // conveyed by a glyph alone.
-        const label = (await screen.findByLabelText(/liked/i));
+        const label = (await screen.findByLabelText(/starred/i));
         expect(label).toBeTruthy();
     });
 
-    it("says nothing about liking when there is nothing to say", async () => {
+    it("says nothing about starring when there is nothing to say", async () => {
         // A golden-string guard: adding the star must not change the summary
         // of a recipe that was never starred.
         await renderWithProviders(
             <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
         );
         expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
-            .not.toContain("liked");
+            .not.toContain("starred");
     });
 });
