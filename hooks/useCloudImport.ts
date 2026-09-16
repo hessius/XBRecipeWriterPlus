@@ -42,17 +42,29 @@ export function useCloudImport(deps: CloudImportDeps) {
     const [imported, setImported] = useState(0);
     // Not state: nothing renders from it, and every async path reads it after
     // an await, where a captured render's value would already be stale.
-    const gone = useRef(false);
+    //
+    // A counter rather than a boolean, for the same reason `useCloudSession`
+    // uses one. A boolean can only answer "is the screen gone", which is not
+    // the question: signing out while a listing is in flight leaves the screen
+    // very much present, so the flag stays clear and the abandoned fetch
+    // walks straight through the guard to set a plan and `choosing` on top of
+    // the sign-out it never heard about. What each await needs to ask is
+    // whether the work it belongs to is still the work being done, and only an
+    // identity can answer that.
+    //
+    // Bumped on unmount and on sign-out; `list` bumps it for itself, so a
+    // second listing also retires the first.
+    const generation = useRef(0);
     const written = useRef(false);
 
     useEffect(() => {
-        gone.current = false;
+        const mine = generation.current;
         void (async () => {
             const stored = await loadSession();
             // A restore that lands after the screen is gone must not touch
             // state: React warns, and worse, it would fetch on behalf of a hook
             // nobody is watching.
-            if (gone.current) return;
+            if (generation.current !== mine) return;
             if (!stored) {
                 setStatus("signedOut");
                 return;
@@ -61,31 +73,49 @@ export function useCloudImport(deps: CloudImportDeps) {
             await list(stored);
         })();
         return () => {
-            gone.current = true;
+            generation.current += 1;
         };
         // Once, on mount. The hook owns the session from here.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     async function list(active: Session) {
+        const mine = ++generation.current;
         setStatus("listing");
         setError(null);
         try {
             const rows = await fetchCloudRecipes(active);
-            if (gone.current) return;
+            if (generation.current !== mine) return;
             setPlan(buildImportPlan(rows, localRecipes()));
             // A new plan is a new decision, and may be taken up to once.
             written.current = false;
             setStatus("choosing");
         } catch (caught) {
-            if (gone.current) return;
+            if (generation.current !== mine) return;
             const kind = caught instanceof CloudError ? caught.kind : "server";
             setError(kind);
             if (kind === "unauthorised") {
                 // A token-only design has exactly one failure that matters,
                 // and this is it. Drop the dead session and ask again rather
                 // than leaving the user on an error with no way out.
-                await signOut();
+                //
+                // The delete is allowed to fail. `signOut` propagates a locked
+                // keychain deliberately, because a user who believes they
+                // signed out and did not is the one failure here with a
+                // privacy cost -- but that reasoning is about a sign-out the
+                // user asked for. This is an expiry: the server has already
+                // refused the token, so it is dead whether or not the keychain
+                // lets go of it, and the next sign-in overwrites it. Letting
+                // the rejection escape instead left the screen stranded on
+                // `listing` with an unhandled rejection behind it, which is
+                // the one outcome with no way out at all.
+                try {
+                    await signOut();
+                } catch {
+                    // Nothing to tell the user: the account is signed out
+                    // either way, and the residue is a token that no longer
+                    // opens anything.
+                }
                 setSession(null);
                 setStatus("signedOut");
             } else {
@@ -104,15 +134,16 @@ export function useCloudImport(deps: CloudImportDeps) {
     }
 
     async function submitSignIn(email: string, password: string) {
+        const mine = generation.current;
         setStatus("signingIn");
         setError(null);
         try {
             const next = await signIn(email, password);
-            if (gone.current) return;
+            if (generation.current !== mine) return;
             setSession(next);
             await list(next);
         } catch (caught) {
-            if (gone.current) return;
+            if (generation.current !== mine) return;
             setError(caught instanceof CloudError ? caught.kind : "server");
             setStatus("signedOut");
         }
@@ -187,6 +218,12 @@ export function useCloudImport(deps: CloudImportDeps) {
     }
 
     async function forgetAccount() {
+        // Before the delete, not after. Signing out while a listing is in
+        // flight is the ordinary way to leave this screen, and the fetch does
+        // not stop just because the session did: retiring the generation here
+        // is what stops it landing a plan and `choosing` on top of a user who
+        // has signed out.
+        generation.current += 1;
         await signOut();
         setSession(null);
         setPlan(null);

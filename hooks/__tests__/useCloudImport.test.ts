@@ -51,8 +51,12 @@ const deps = () => ({
 
 describe("useCloudImport", () => {
     beforeEach(() => {
+        // `clearAllMocks` clears calls but keeps implementations, so a test
+        // that makes one of these reject would otherwise poison every test
+        // after it. Both defaults are restated rather than assumed.
         jest.clearAllMocks();
         mockLoad.mockResolvedValue(null);
+        mockSignOut.mockResolvedValue(undefined);
     });
 
     it("starts signed out when there is no stored session", async () => {
@@ -651,5 +655,105 @@ describe("useCloudImport", () => {
         });
 
         expect(outcome).toBeNull();
+    });
+    /**
+     * The race a boolean could not see.
+     *
+     * Signing out while the listing is in flight leaves the screen present, so
+     * a "has the screen gone" flag stays clear and the abandoned fetch walks
+     * through the guard: it sets a plan and `choosing` on top of a user who
+     * has just signed out, handing back a list of their recipes after the
+     * session was deleted.
+     */
+    it("does not list a signed-out user back in", async () => {
+        let release: (rows: unknown[]) => void = () => {};
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockReturnValue(new Promise((resolve) => {
+            release = resolve as (rows: unknown[]) => void;
+        }) as ReturnType<typeof fetchCloudRecipes>);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("listing"));
+
+        await act(async () => {
+            await result.current.forgetAccount();
+        });
+        await act(async () => {
+            release([row]);
+        });
+
+        expect(result.current.status).toBe("signedOut");
+        expect(result.current.plan).toBeNull();
+    });
+
+    /** The same race, seen from the failure side of the fetch. */
+    it("does not show a listing error to a signed-out user", async () => {
+        let reject: (reason: unknown) => void = () => {};
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockReturnValue(new Promise((_resolve, rej) => {
+            reject = rej;
+        }) as ReturnType<typeof fetchCloudRecipes>);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("listing"));
+
+        await act(async () => {
+            await result.current.forgetAccount();
+        });
+        await act(async () => {
+            reject(new Error("offline"));
+        });
+
+        expect(result.current.status).toBe("signedOut");
+        expect(result.current.error).toBeNull();
+    });
+
+    /**
+     * A second listing retires the first, so the slower of two overlapping
+     * refreshes cannot overwrite the newer answer.
+     */
+    it("keeps the newer of two overlapping listings", async () => {
+        mockLoad.mockResolvedValue(session);
+        let releaseFirst: (rows: unknown[]) => void = () => {};
+        mockFetch.mockReturnValueOnce(new Promise((resolve) => {
+            releaseFirst = resolve as (rows: unknown[]) => void;
+        }) as ReturnType<typeof fetchCloudRecipes>);
+        mockFetch.mockResolvedValue([row, {...row, tableId: 2}]);
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+        await waitFor(() => expect(result.current.status).toBe("listing"));
+
+        await act(async () => {
+            await result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.plan?.entries).toHaveLength(2));
+
+        await act(async () => {
+            releaseFirst([row]);
+        });
+
+        expect(result.current.plan?.entries).toHaveLength(2);
+    });
+
+    /**
+     * An expired token with a keychain that will not let go of it.
+     *
+     * `signOut` propagates that failure deliberately, because a user who
+     * believes they signed out and did not is the one failure with a privacy
+     * cost. That reasoning is about a sign-out the user asked for; this is an
+     * expiry, and the token is dead whether or not the keychain drops it.
+     * Letting the rejection escape stranded the screen on `listing` with an
+     * unhandled rejection behind it, which is the one outcome with no way out.
+     */
+    it("signs out of an expired session even when the keychain refuses", async () => {
+        const {CloudError} = jest.requireActual("@/library/cloud/transport");
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockRejectedValue(new CloudError("unauthorised", "stale"));
+        mockSignOut.mockRejectedValue(new Error("keychain locked"));
+
+        const {result} = await renderHook(() => useCloudImport(deps()));
+
+        await waitFor(() => expect(result.current.status).toBe("signedOut"));
+        expect(result.current.session).toBeNull();
     });
 });
