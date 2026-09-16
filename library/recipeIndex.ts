@@ -108,15 +108,19 @@ export const INDEX_COLUMNS: IndexColumn[] = [
     // filterable recipe property. Sync state is not recipe content, so it is
     // a real column under any scheme.
     {name: "sharedTableId", type: "INTEGER", from: (r) => r.sharedTableId ?? null},
-    // `|| null` rather than `?? null` throughout: these fields default to the
-    // empty string on the model, and an empty string is a value to SQL. A shelf
-    // asking "which recipes came from someone" must not match every recipe that
-    // came from nobody.
+    // `|| null` rather than `?? null` throughout, and the two fields below do
+    // not even reach it the same way: `xid` defaults to the empty string while
+    // `sharedBy` is optional and defaults to undefined. `??` would be enough
+    // for the second and wrong for the first, because an empty string is a
+    // value to SQL just as much as a real one, and a shelf asking "which
+    // recipes came from someone" must not match every recipe that came from
+    // nobody. `||` covers both, so the two columns answer that question
+    // identically instead of a reader having to remember which needs which.
     {name: "xid", type: "TEXT", indexed: true, from: (r) => r.xid || null},
     {
         name: "sharedBy", type: "TEXT", collate: "NOCASE", indexed: true,
         // NOCASE folds ASCII only, so "CAFE" and "cafe" group together but
-        // "CAFÉ" and "café" do not -- the same latent bug that recipe_tags
+        // "CAFÉ" and "café" do not, the same latent bug that recipe_tags
         // had before tagKey.ts gave it a JS-folded key column. No shelf
         // queries sharedBy yet; when one does, it needs that same treatment
         // rather than trusting this collation.
