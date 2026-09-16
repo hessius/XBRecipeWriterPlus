@@ -869,6 +869,19 @@ describe("RecipeCard", () => {
         )).toBeTruthy();
     });
 
+    it("draws the star in the badge corner, not among the numbers", async () => {
+        // Deliberate, and worth pinning. The stats row is about to grow when
+        // the library view is rebuilt, so the star sits with the marker and the
+        // write warning instead and the numbers keep their full width.
+        await renderWithProviders(
+            <RecipeCard recipe={favouriteRecipe()} onPress={() => {}}/>
+        );
+
+        expect(within(screen.getByTestId("recipe-card-title-row")).getByTestId(
+            "recipe-card-favourite", {includeHiddenElements: true}
+        )).toBeTruthy();
+    });
+
     it("draws no star on a recipe that is not a favourite", async () => {
         await renderWithProviders(
             <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>

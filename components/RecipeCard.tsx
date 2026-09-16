@@ -302,6 +302,19 @@ export default function RecipeCard({
                         {recipe.displayName()}
                     </Text>
                     <XStack alignItems="center" gap="$1.5">
+                        {/* The card's badge corner: the star joins the marker and
+                            the write warning rather than the stats row, so the
+                            numbers keep their full width for the library view to
+                            build on. It leads the cluster, pushing the marker
+                            left, the way the write warning already trails it.
+
+                            Hidden from accessibility on purpose: the word is
+                            already in the card's own label above, and announcing
+                            it twice is worse than not at all. */}
+                        {recipe.favourite && (
+                            <DotIcon testID="recipe-card-favourite" name="favourite"
+                                     size={12} color={onAccent.marker}/>
+                        )}
                         {showMarker && (
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
                                            color={onAccent.marker}>
@@ -320,16 +333,6 @@ export default function RecipeCard({
 
                 <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
                     <XStack gap="$5" alignItems="flex-end">
-                        {recipe.favourite && (
-                            // Aligned to the values rather than the labels: it sits on
-                            // the baseline the numbers sit on, so the row reads as one
-                            // line and not as a glyph with statistics after it. Hidden
-                            // from accessibility on purpose -- the word is already in
-                            // the card's own label above, and announcing it twice is
-                            // worse than not at all.
-                            <DotIcon testID="recipe-card-favourite" name="favourite"
-                                     size={14} color={onAccent.text}/>
-                        )}
                         <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
                         <Stat label="RATIO" value={recipe.ratio}/>
                         {!isTea && <Stat label="GRIND" value={recipe.grindSize}
