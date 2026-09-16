@@ -267,6 +267,15 @@ export default function HomeScreen({db, settings}: Props) {
     }));
     const activeFilterLabels =
         asStockFilters(libraryQuery.query.filters).map((id) => STOCK_FILTERS[id].label);
+    // Deliberately dismissed by *using* the rail, not by having been seen once.
+    // A spec reviewer read "one line, not four" as "once per install" and called
+    // the difference a gap; it is a choice. Every other hint in the app (the
+    // editor's whole field set, via `FieldRow`) shows for as long as `showHints`
+    // is on and is never dismissed at all, so a hint that leaves the moment the
+    // user touches the rail is already the strictest one here. "One, not four"
+    // is about how many lines the rail earns, not how many launches they last.
+    // The user who keeps seeing it is the user who has not yet found the thing
+    // it points at, and they have a global switch for hints either way.
     const showRailHint = showHints
         && !railHintDismissed
         && library.librarySize >= RAIL_HINT_MIN_LIBRARY_SIZE
