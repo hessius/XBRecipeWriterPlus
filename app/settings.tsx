@@ -20,7 +20,7 @@ import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
-import {SORT_AXES, type SortAxis} from "@/library/librarySort";
+import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -187,13 +187,15 @@ export default function SettingsScreen({settings}: Props) {
         if (typeof incoming.brewTraceRetention === "number") {
             setBrewTraceRetention(incoming.brewTraceRetention);
         }
-        // Checked against the axis table rather than "is a string", so a backup
-        // naming an axis this build has no fragment for is dropped rather than
-        // let through to an ORDER BY that would break.
-        if (typeof incoming.librarySort === "string" && incoming.librarySort in SORT_AXES) {
-            setLibrarySort(incoming.librarySort as SortAxis);
+        // The same `isSortAxis` the ordinary read path narrows through, so the
+        // two places that decide what a valid axis is cannot come to disagree.
+        // Still a drop and not a fallback: a hostile backup naming an unknown
+        // axis leaves the current sort untouched rather than silently resetting
+        // it to name, which is what `asSortAxis` would do on the read path.
+        if (isSortAxis(incoming.librarySort)) {
+            setLibrarySort(incoming.librarySort);
         }
-        if (incoming.librarySortDirection === "asc" || incoming.librarySortDirection === "desc") {
+        if (isSortDirection(incoming.librarySortDirection)) {
             setLibrarySortDirection(incoming.librarySortDirection);
         }
         if (typeof incoming.libraryFavouritesFirst === "boolean") {

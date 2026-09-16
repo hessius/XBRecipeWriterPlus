@@ -1,10 +1,14 @@
 import {
     SORT_AXES,
     SORT_AXIS_ORDER,
+    asSortAxis,
+    asSortDirection,
     chipLabel,
     defaultDirection,
     directionLabels,
     isDefaultSort,
+    isSortAxis,
+    isSortDirection,
     orderByFragment,
     type SortAxis,
     type SortDirection
@@ -68,6 +72,16 @@ describe("isDefaultSort", () => {
 });
 
 describe("a sort never hides a recipe", () => {
+    // These assert on the *shape* of the fragment, not on the order real rows
+    // come out in. They cannot do the latter: proving a never-brewed recipe
+    // actually trails requires a database and the query builder that joins to
+    // the brews aggregate, and neither exists in this task. So they pin that the
+    // guard is the leading term and covers the value the join yields for a
+    // never-brewed recipe -- NULL for a MAX(date), zero or NULL for a COUNT.
+    // The behavioural proof, with real rows through a real ORDER BY, belongs in
+    // `library/libraryQuery`'s own test. Do not fake a SQL engine here to fake
+    // that proof; a string that matches the CASE it was built from proves only
+    // that the string was built.
     it("puts a never-brewed recipe last under last brewed, both directions", () => {
         // Deliberately last, not last by accident of NULL ordering: the CASE is
         // the first term and is identical for RECENT and LONGEST AGO, so a
@@ -81,10 +95,17 @@ describe("a sort never hides a recipe", () => {
         expect(orderByFragment("lastBrewed", "asc")).toContain("lastBrewedAt ASC");
     });
 
-    it("puts a never-brewed recipe last under times brewed, both directions", () => {
+    it("guards times brewed against both NULL and zero, both directions", () => {
+        // COUNT over a recipe with no brews is 0, not NULL, so `IS NULL` alone
+        // would be a dead no-op and never-brewed recipes would lead under LEAST.
+        // The COALESCE guard treats zero as never brewed too, so it holds
+        // whichever shape the eventual join hands back.
         for (const direction of DIRECTIONS) {
             expect(orderByFragment("timesBrewed", direction)).toMatch(
-                /^CASE WHEN brewCount IS NULL THEN 1 ELSE 0 END,/
+                /^CASE WHEN COALESCE\(brewCount, 0\) = 0 THEN 1 ELSE 0 END,/
+            );
+            expect(orderByFragment("timesBrewed", direction)).not.toContain(
+                "brewCount IS NULL"
             );
         }
         expect(orderByFragment("timesBrewed", "desc")).toContain("brewCount DESC");
@@ -115,5 +136,61 @@ describe("ties never reshuffle between launches", () => {
     it("directs the name term itself, not just the tie break", () => {
         expect(orderByFragment("name", "asc")).toContain("sortName COLLATE NOCASE ASC");
         expect(orderByFragment("name", "desc")).toContain("sortName COLLATE NOCASE DESC");
+    });
+});
+
+describe("an unknown axis survives the read boundary", () => {
+    // `Settings.get("librarySort")` is typed `string`, not `SortAxis`: the union
+    // is widened away and only `typeof` is checked, so a stale row can hand back
+    // "banana". These prove the narrowing readers catch that before it indexes
+    // SORT_AXES, so a bad setting is a sort by name and not a crashed screen.
+    it("narrows a known axis to itself and anything else to name", () => {
+        for (const axis of AXES) {
+            expect(asSortAxis(axis)).toBe(axis);
+        }
+        for (const bad of ["banana", "", "NAME", null, undefined, 3, {}]) {
+            expect(asSortAxis(bad)).toBe("name");
+        }
+    });
+
+    it("narrows a direction to itself and anything else to asc", () => {
+        expect(asSortDirection("asc")).toBe("asc");
+        expect(asSortDirection("desc")).toBe("desc");
+        for (const bad of ["up", "", null, undefined, 0, {}]) {
+            expect(asSortDirection(bad)).toBe("asc");
+        }
+    });
+
+    it("recognises exactly the known axes and directions", () => {
+        for (const axis of AXES) {
+            expect(isSortAxis(axis)).toBe(true);
+        }
+        for (const bad of ["banana", "", null, undefined, 7]) {
+            expect(isSortAxis(bad)).toBe(false);
+        }
+        expect(isSortDirection("asc")).toBe(true);
+        expect(isSortDirection("desc")).toBe(true);
+        for (const bad of ["ASC", "", null, undefined, 1]) {
+            expect(isSortDirection(bad)).toBe(false);
+        }
+    });
+
+    it("falls orderByFragment back to name rather than throwing on an unknown axis", () => {
+        const unknownAxis = "banana" as unknown as SortAxis;
+        expect(() => orderByFragment(unknownAxis, "asc")).not.toThrow();
+        // The name fragment, because the axis fell back to name.
+        expect(orderByFragment(unknownAxis, "asc")).toBe(orderByFragment("name", "asc"));
+    });
+
+    it("falls the sibling accessors back to name on an unknown axis", () => {
+        const unknownAxis = "banana" as unknown as SortAxis;
+        expect(chipLabel(unknownAxis)).toBe(chipLabel("name"));
+        expect(directionLabels(unknownAxis)).toEqual(directionLabels("name"));
+        expect(defaultDirection(unknownAxis)).toBe(defaultDirection("name"));
+    });
+
+    it("falls orderByFragment back to ascending on an unknown direction", () => {
+        const unknownDirection = "sideways" as unknown as SortDirection;
+        expect(orderByFragment("ratio", unknownDirection)).toBe(orderByFragment("ratio", "asc"));
     });
 });

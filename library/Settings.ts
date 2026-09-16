@@ -130,10 +130,15 @@ export const DEFAULTS = {
      * touched. Name is the default the sort chip stays a bare glyph for; any
      * other axis takes the accent fill and names itself.
      *
-     * A union rather than a bare string so a stale or hand-edited row cannot put
-     * an axis the query builder has no fragment for into an ORDER BY. The list
-     * is `librarySort.ts`'s, imported rather than restated, so the two cannot
-     * drift into disagreeing about which axes exist.
+     * A `SortAxis` union documents the intended values, but it cannot enforce
+     * them at the read boundary: `SettingValue` widens the union back to
+     * `string` and `get()` checks only `typeof`, so a stale or hand-edited row
+     * can still return an axis this build has no fragment for. The real guard is
+     * `asSortAxis` in `librarySort.ts`, which every reader narrows through
+     * before an axis reaches an ORDER BY, so a bad value sorts by name rather
+     * than crashing the query. The list is `librarySort.ts`'s, imported rather
+     * than restated, so the two cannot drift into disagreeing about which axes
+     * exist.
      */
     librarySort: "name" as SortAxis,
     /**

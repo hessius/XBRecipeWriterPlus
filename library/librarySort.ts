@@ -51,10 +51,23 @@ function brewedOrder(direction: SortDirection): string {
     return withTieBreaks(`CASE WHEN lastBrewedAt IS NULL THEN 1 ELSE 0 END, ${term}`);
 }
 
-/** The same never-brewed-last guard as `brewedOrder`, over the count instead. */
+/**
+ * The same never-brewed-last intent as `brewedOrder`, but the guard is not the
+ * same shape, and the difference is not decoration. `MAX(date)` over a recipe's
+ * empty set of brews really is NULL, so `brewedOrder` can test `IS NULL` and be
+ * right. A COUNT over that same empty set is 0, not NULL -- so a bare `IS NULL`
+ * test here would never fire, the CASE would be a dead no-op, and under LEAST
+ * the never-brewed recipes would lead the list rather than trail it, breaking
+ * the invariant in exactly the direction it is meant to prevent. This module
+ * cannot see how the query builder in the sibling task will aggregate: a plain
+ * grouped LEFT JOIN hands back 0, a correlated subquery that never matched
+ * could hand back NULL. Treating both as never brewed is belt and braces on
+ * purpose, so the guard holds whichever shape arrives and nobody has to
+ * remember to "simplify" it back the day the join changes.
+ */
 function countOrder(direction: SortDirection): string {
     const term = direction === "asc" ? "brewCount ASC" : "brewCount DESC";
-    return withTieBreaks(`CASE WHEN brewCount IS NULL THEN 1 ELSE 0 END, ${term}`);
+    return withTieBreaks(`CASE WHEN COALESCE(brewCount, 0) = 0 THEN 1 ELSE 0 END, ${term}`);
 }
 
 /**
@@ -133,24 +146,55 @@ export const SORT_AXIS_ORDER: readonly SortAxis[] = [
     "name", "added", "lastBrewed", "timesBrewed", "ratio"
 ];
 
+/** Whether a value is one of the known sort axes. */
+export function isSortAxis(value: unknown): value is SortAxis {
+    return typeof value === "string" && value in SORT_AXES;
+}
+
+/** Whether a value is one of the two directions. */
+export function isSortDirection(value: unknown): value is SortDirection {
+    return value === "asc" || value === "desc";
+}
+
+/**
+ * Narrows an unchecked value to a `SortAxis`, falling back to name.
+ *
+ * The `SortAxis` union documents intent but cannot enforce it at the read
+ * boundary: `Settings.get` returns the value widened back to `string` and
+ * checks only `typeof`, so `settings.get("librarySort")` can hand back any
+ * string a stale or hand-edited row holds. Every reader that indexes
+ * `SORT_AXES` narrows through here first, so an unknown axis becomes a sort by
+ * name -- a quiet, correct fallback -- rather than an index into `undefined`
+ * that throws while assembling a query and takes the whole library screen down.
+ * The same shape as `asTemperatureUnit` in `units.ts`, for the same reason.
+ */
+export function asSortAxis(value: unknown): SortAxis {
+    return isSortAxis(value) ? value : "name";
+}
+
+/** Narrows an unchecked value to a `SortDirection`, falling back to ascending. */
+export function asSortDirection(value: unknown): SortDirection {
+    return isSortDirection(value) ? value : "asc";
+}
+
 /** The ORDER BY body for an axis and direction. */
-export function orderByFragment(axis: SortAxis, direction: SortDirection): string {
-    return SORT_AXES[axis].orderBy(direction);
+export function orderByFragment(axis: unknown, direction: unknown): string {
+    return SORT_AXES[asSortAxis(axis)].orderBy(asSortDirection(direction));
 }
 
 /** The two direction words under a given axis, so a control can label itself. */
-export function directionLabels(axis: SortAxis): Record<SortDirection, string> {
-    return SORT_AXES[axis].directionLabels;
+export function directionLabels(axis: unknown): Record<SortDirection, string> {
+    return SORT_AXES[asSortAxis(axis)].directionLabels;
 }
 
 /** The direction to apply when an axis is first chosen. */
-export function defaultDirection(axis: SortAxis): SortDirection {
-    return SORT_AXES[axis].defaultDirection;
+export function defaultDirection(axis: unknown): SortDirection {
+    return SORT_AXES[asSortAxis(axis)].defaultDirection;
 }
 
 /** The chip label for an axis, in Doto caps. */
-export function chipLabel(axis: SortAxis): string {
-    return SORT_AXES[axis].label;
+export function chipLabel(axis: unknown): string {
+    return SORT_AXES[asSortAxis(axis)].label;
 }
 
 /**
