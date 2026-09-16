@@ -1,5 +1,6 @@
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 import {INDEX_COLUMNS, schemaHash} from "@/library/recipeIndex";
+import {tagKey} from "@/library/tagKey";
 
 /**
  * Unlike RecipeDatabase.test.ts, these tests need to reach the underlying
@@ -174,8 +175,6 @@ describe("write path", () => {
     });
 
     it("finds tags case-insensitively", () => {
-        // recipe_tags.tag is collated NOCASE so that filtering agrees with
-        // Recipe.setTags' case-insensitive dedupe.
         const db = new RecipeDatabase();
         const recipe = new Recipe();
         recipe.name = "Tagged";
@@ -183,9 +182,41 @@ describe("write path", () => {
         db.insertRecipe(recipe);
 
         const found = mockBacking.getAllSync(
-            "SELECT uuid FROM recipe_tags WHERE tag = ?;", ["ESPRESSO"]
+            "SELECT uuid FROM recipe_tags WHERE tagKey = ?;", [tagKey("ESPRESSO")]
         );
         expect(found).toHaveLength(1);
+    });
+
+    it("finds a tag whose case folds outside ASCII", () => {
+        // The reason the lookup key is computed in JavaScript rather than left
+        // to a collation. SQLite's NOCASE folds ASCII only, so it considers
+        // CAFE and cafe equal and CAFÉ and café different. Recipe.normaliseTags
+        // uses toLowerCase(), which folds both. With NOCASE the model and the
+        // table disagreed for exactly the tags a non-English user would write:
+        // setTags would treat two spellings as one tag while a filter found
+        // neither.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["CAFÉ"]);
+        db.insertRecipe(recipe);
+
+        const found = mockBacking.getAllSync(
+            "SELECT uuid FROM recipe_tags WHERE tagKey = ?;", [tagKey("café")]
+        );
+        expect(found).toHaveLength(1);
+    });
+
+    it("keeps the spelling the user typed", () => {
+        // The key is for matching, not for display. A shelf named from a tag
+        // has to read the way the user wrote it.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Tagged";
+        recipe.setTags(["CAFÉ"]);
+        db.insertRecipe(recipe);
+
+        expect(tagRows().map((r) => r.tag)).toEqual(["CAFÉ"]);
     });
 
     it("rolls back the index and the tags, not just the blob", () => {
@@ -361,6 +392,90 @@ describe("rebuild", () => {
         expect(mockBacking.getFirstSync(
             "SELECT recipeJSON FROM recipes WHERE uuid = ?;", [bad.uuid]
         )).toEqual({recipeJSON: "{{{"});
+    });
+
+    it("refuses to rewrite a uuid rather than clobber the recipe holding it", () => {
+        const db = new RecipeDatabase();
+        const moving = new Recipe();
+        moving.name = "Moving";
+        const bystander = new Recipe();
+        bystander.name = "Bystander";
+        db.insertRecipe(moving);
+        db.insertRecipe(bystander);
+
+        // The dormant path: the row is found by the uuid passed in, but the
+        // recipe now carries a different one, and that different one already
+        // belongs to another recipe. The old row would be deleted and
+        // writeRow's INSERT OR REPLACE would then land on the bystander, so
+        // one call destroys two recipes and reports nothing.
+        const originalUuid = moving.uuid;
+        moving.uuid = bystander.uuid;
+
+        expect(() => db.updateRecipe(originalUuid, moving)).toThrow(/uuid/i);
+
+        const names = (mockBacking.getAllSync(
+            "SELECT sortName FROM recipes ORDER BY sortName;"
+        ) as {sortName: string}[]).map((r) => r.sortName);
+        expect(names).toEqual(["Bystander", "Moving"]);
+    });
+
+    it("survives a blob that parses but cannot be projected", () => {
+        const db = new RecipeDatabase();
+        const good = new Recipe();
+        good.name = "Morning";
+        const bad = new Recipe();
+        db.insertRecipe(good);
+        db.insertRecipe(bad);
+
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        // Syntactically valid JSON that Recipe accepts and projectRecipe cannot
+        // survive: `name` is read with `??`, so a number lands on the field
+        // intact, and hasName() then calls .trim() on it. The parse boundary is
+        // not the projection boundary, and this is the gap between them.
+        const parsedButUnprojectable = JSON.stringify({
+            ...JSON.parse(JSON.stringify(bad)), name: 42
+        });
+        mockBacking.runSync(
+            "UPDATE recipes SET recipeJSON = ? WHERE uuid = ?;",
+            [parsedButUnprojectable, bad.uuid]
+        );
+
+        expect(() => new RecipeDatabase()).not.toThrow();
+
+        const named = mockBacking.getAllSync(
+            "SELECT uuid, sortName FROM recipes ORDER BY uuid;"
+        ) as {uuid: string; sortName: string | null}[];
+        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("Morning");
+        expect(named.find((r) => r.uuid === bad.uuid)?.sortName).toBeNull();
+    });
+
+    it("clears a skipped row's stale index rather than leaving it to match filters", () => {
+        const db = new RecipeDatabase();
+        const bad = new Recipe();
+        bad.name = "Morning";
+        bad.setTags(["filter"]);
+        db.insertRecipe(bad);
+
+        // Indexed correctly first, then the blob goes bad underneath it. The
+        // previous open's values are still in the columns and in recipe_tags.
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+        mockBacking.runSync(
+            "UPDATE recipes SET recipeJSON = '{{{' WHERE uuid = ?;", [bad.uuid]
+        );
+
+        new RecipeDatabase();
+
+        // Skipping must mean unindexed, not "indexed as it used to be". A row
+        // whose blob is unreadable cannot be allowed to keep answering "yes" to
+        // a filter on the strength of a reading nobody can reproduce.
+        const row = mockBacking.getFirstSync(
+            "SELECT sortName, pourCount FROM recipes WHERE uuid = ?;", [bad.uuid]
+        ) as {sortName: string | null; pourCount: number | null};
+        expect(row.sortName).toBeNull();
+        expect(row.pourCount).toBeNull();
+        expect(mockBacking.getAllSync(
+            "SELECT tag FROM recipe_tags WHERE uuid = ?;", [bad.uuid]
+        )).toEqual([]);
     });
 
     it("stores the hash after skipping, so a permanently bad row cannot loop forever", () => {

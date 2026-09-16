@@ -106,6 +106,39 @@ describe("migrating a pre-index database", () => {
         expect(new RecipeDatabase().getRecipe("uuid-a")!.tags).toEqual([]);
     });
 
+    it("replaces a NOCASE tag table and rebuilds what was in it", () => {
+        // The one shape that is not "legacy" but still wrong: an install from
+        // this branch before the folded key existed. Its rows match ASCII-only,
+        // so they have to go, and because the table is derived they can simply
+        // be recomputed rather than converted.
+        buildLegacyDatabase([legacyBlob("uuid-a", "Legacy Coffee", 0)]);
+        mockBacking.execSync(`
+            CREATE TABLE recipe_tags (
+                uuid TEXT NOT NULL,
+                tag TEXT NOT NULL COLLATE NOCASE,
+                PRIMARY KEY (uuid, tag)
+            );`
+        );
+        mockBacking.runSync(
+            "INSERT INTO recipe_tags (uuid, tag) VALUES (?, ?);", ["uuid-a", "stale"]
+        );
+
+        const db = new RecipeDatabase();
+        const tagged = db.getRecipe("uuid-a")!;
+        tagged.setTags(["CAFÉ"]);
+        db.updateRecipe(tagged.uuid, tagged);
+
+        const columns = (mockBacking.getAllSync(
+            "PRAGMA table_info(recipe_tags);"
+        ) as {name: string}[]).map((c) => c.name);
+        expect(columns).toContain("tagKey");
+
+        const found = mockBacking.getAllSync(
+            "SELECT tag FROM recipe_tags WHERE tagKey = ?;", ["café"]
+        );
+        expect(found).toEqual([{tag: "CAFÉ"}]);
+    });
+
     it("is safe to open repeatedly", () => {
         buildLegacyDatabase([legacyBlob("uuid-a", "Legacy Coffee", 0)]);
 

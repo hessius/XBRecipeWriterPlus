@@ -2,6 +2,7 @@ import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
+import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
 
 export const CUP_TYPE = {
@@ -338,7 +339,7 @@ class Recipe {
             if (typeof entry !== "string") continue;
             const tag = entry.trim();
             if (tag.length === 0 || tag.length > MAX_TAG_LENGTH) continue;
-            const key = tag.toLowerCase();
+            const key = tagKey(tag);
             if (seen.has(key)) continue;
             seen.add(key);
             kept.push(tag);

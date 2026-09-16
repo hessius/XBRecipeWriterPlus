@@ -129,8 +129,38 @@ export function indexStatements(): string[] {
 
 export function projectRecipe(recipe: Recipe): Record<string, IndexValue> {
     const projected: Record<string, IndexValue> = {};
-    for (const column of INDEX_COLUMNS) projected[column.name] = column.from(recipe);
+    for (const column of INDEX_COLUMNS) {
+        const value = column.from(recipe);
+        if (!isIndexValue(value)) {
+            throw new TypeError(
+                `index column ${column.name} projected a value SQLite cannot bind`
+            );
+        }
+        projected[column.name] = value;
+    }
     return projected;
+}
+
+/**
+ * Whether a projected value is something SQLite can actually bind.
+ *
+ * `IndexValue` says string, number or null, but a type is a claim about
+ * well-formed input and a blob is not that. `Recipe`'s constructor is
+ * deliberately forgiving so it can migrate its own old shapes, so a corrupt
+ * blob can put a number where a string belongs and reach a `from` intact. The
+ * resulting value then fails at the bind, which is inside the rebuild's
+ * transaction, which is where a recoverable problem turns into an unopenable
+ * database.
+ *
+ * Checking here moves that failure back into JavaScript, where the caller can
+ * treat the row the way it already treats an unparseable one. NaN and Infinity
+ * are excluded for the same reason: they are numbers to TypeScript and not
+ * values SQLite stores meaningfully.
+ */
+export function isIndexValue(value: unknown): value is IndexValue {
+    if (value === null) return true;
+    if (typeof value === "string") return true;
+    return typeof value === "number" && Number.isFinite(value);
 }
 
 /**

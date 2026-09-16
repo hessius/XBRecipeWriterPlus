@@ -209,6 +209,19 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
             // it from `uuid` and never reads a stored one, so this aligns the
             // object the caller is holding and nothing more. Not load-bearing.
             recipe.key = replacing.uuid;
+            // Local-only fields are carried across too, and for a different
+            // reason than the uuid. A replacement is a whole freshly mapped
+            // Recipe, so anything the cloud does not know about starts empty on
+            // it and would be written straight over the local copy. xBloom has
+            // no notion of tags, so a refresh would silently serialise `[]`
+            // over work the user did by hand, on a recipe that still looks
+            // identical on screen.
+            //
+            // The fingerprint deliberately covers brew content only, so
+            // carrying these cannot change what counts as an edit. Anything
+            // added to Recipe that the user authors and the cloud cannot
+            // supply belongs on this list.
+            recipe.setTags(replacing.tags);
         }
 
         applyAccent(recipe, color, assignedSoFar);
