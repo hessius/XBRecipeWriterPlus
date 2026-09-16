@@ -27,6 +27,9 @@ module.exports = {
         "react-native-gesture-handler/jestSetup",
         "<rootDir>/jest.setup.js"
     ],
+    // Anything needing `beforeEach` and friends: `setupFiles` runs before the
+    // test framework installs them.
+    setupFilesAfterEnv: ["<rootDir>/jest.afterEnv.js"],
     // Reanimated 4 pulls in react-native-worklets, whose `.native.ts` entry points
     // reach for a TurboModule that does not exist under jest. Its own resolver
     // steers those imports at the plain (non-native) files instead.

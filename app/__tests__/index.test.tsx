@@ -207,7 +207,7 @@ beforeEach(() => {
     mockPush.mockClear();
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
-    (XBloomRecipe as jest.Mock).mockClear();
+    (XBloomRecipe as unknown as jest.Mock).mockClear();
     mockFetchRecipeDetail = () => Promise.resolve();
     mockGetRecipe = () => undefined;
     mockNativePasteOnPress = undefined;

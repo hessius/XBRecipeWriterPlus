@@ -4,17 +4,25 @@ type PluginEntry = string | [string, Record<string, unknown>];
 
 describe("native release configuration", () => {
     /**
-     * 1.6.0.
+     * 1.6.0, and deliberately not bumped by this branch.
+     *
+     * Main owns the version. 1.6.0 is the create-recipe release and is shipping
+     * from main; this branch merges underneath it with its feature gated off,
+     * so it adds nothing a user can see and has no release of its own to name.
+     * Under the agreed ladder 1.7.0 belongs to M5 and the account import gets
+     * 2.0.0 when it is ungated, the major marking credentials leaving the
+     * device for the first time (see issue #76).
      *
      * `runtimeVersion.policy` is `appVersion`, so the version string is also
-     * the runtime version: an over-the-air update built against new native code
-     * must never land on a binary that does not have it. This release adds no
-     * native code — it is a sheet, a tile, a header glyph and domain logic —
-     * but it follows 1.5.0 into the store, and a released version is not
-     * reused.
-     *
-     * 1.5.0 build 9 is the M4 release candidate; the 1.5.1 builds 7 and 8 that
-     * preceded it have been retired. This release is 1.6.0 build 1.
+     * the runtime version. Normally that would make this branch's two new
+     * native modules, `expo-secure-store` and `expo-crypto`, a reason the bump
+     * was mandatory rather than optional: an over-the-air update built against
+     * new native code must never land on a binary without it. It is not a
+     * reason here, because `expo-updates` is not a dependency of this app at
+     * all. Nothing is ever delivered over the air, so `runtimeVersion` names a
+     * mechanism that is not in the build, and the version string is a store
+     * version and nothing more. If OTA updates are ever adopted, this is the
+     * paragraph that stops being true.
      */
     it("ships the create-recipe release as 1.6.0, on the appVersion runtime policy", () => {
         expect(appConfig.expo.version).toBe("1.6.0");

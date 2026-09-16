@@ -1,6 +1,6 @@
 import * as Application from "expo-application";
 import {router} from "expo-router";
-import React from "react";
+import React, {useState} from "react";
 import {Linking, Pressable} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
 
@@ -12,6 +12,13 @@ import Wordmark from "@/components/Wordmark";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {LICENCES} from "@/constants/licences";
+import {useSetting} from "@/hooks/useSetting";
+import type {Settings} from "@/library/Settings";
+
+type Props = {
+    /** Injected by tests. The route renders with the shared store. */
+    settings?: Settings;
+};
 
 const REPO_URL = "https://github.com/hessius/XBRecipeWriterPlus";
 const ISSUES_URL = "https://github.com/hessius/XBRecipeWriterPlus/issues";
@@ -61,6 +68,15 @@ const TICKER_LINES = [
     "OVERFLOW PROTECTION OFF: LIVE A LITTLE",
     "NO DATA COLLECTION BECAUSE NO ONE CARES ABOUT YOUR COFFEE"
 ];
+/**
+ * How many taps on the version line open LABS.
+ *
+ * Seven, which is the number every app that has ever done this uses, so the
+ * one person who thinks to try it will try the right number. Long enough that
+ * nobody arrives by accident, short enough to be told over a message.
+ */
+const TAPS_TO_UNLOCK = 7;
+
 const VERSION = Application.nativeApplicationVersion ?? "unknown";
 const BUILD = Application.nativeBuildVersion ?? "unknown";
 
@@ -76,7 +92,43 @@ const BUILD = Application.nativeBuildVersion ?? "unknown";
  * reads their cards and calls their undocumented API, and it has never said so
  * anywhere.
  */
-export default function AboutScreen() {
+export default function AboutScreen({settings}: Props = {}) {
+    const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
+    const [taps, setTaps] = useState(0);
+
+    /**
+     * The way into LABS, and deliberately the only one.
+     *
+     * No hint, no caption, no chevron, and no accessibility role: a control
+     * that announces itself is not hidden, and LABS holds things that are
+     * unfinished and unsupported. Anybody who needs to be told where it is
+     * should not be in it. The version line is the traditional place, so the
+     * one person who thinks to try will try here.
+     *
+     * Idempotent. Tapping seven more times when LABS is already open says so
+     * rather than closing it again: a hidden toggle that flips on every seventh
+     * tap is a control nobody can aim, and somebody arriving at this screen to
+     * read a build number would shut off a section they are using. The way
+     * back is a row inside LABS itself, where it can be labelled.
+     *
+     * No timer resetting the count. A window would only mean that a slow
+     * seventh tap did nothing, with no way to tell that from a wrong count.
+     */
+    function tapVersion() {
+        const next = taps + 1;
+        if (next < TAPS_TO_UNLOCK) {
+            setTaps(next);
+            return;
+        }
+        setTaps(0);
+        if (labsUnlocked) {
+            notify({tone: "info", message: "Labs is already open. It is in settings."});
+            return;
+        }
+        setLabsUnlocked(true);
+        notify({tone: "success", message: "Labs unlocked. It is at the bottom of settings."});
+    }
+
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="About" onBack={() => router.back()}/>
@@ -90,9 +142,15 @@ export default function AboutScreen() {
                         paddingVertical="$6" paddingHorizontal="$4" marginBottom="$5">
                     <LivingMark size={168} decorative/>
                     <Wordmark fontSize={22} plusColor={palette.brand}/>
-                    <DotMatrixText fontSize={11} letterSpacing={1.6} color={palette.dim}>
-                        {`V${VERSION}  \u00B7  BUILD ${BUILD}`}
-                    </DotMatrixText>
+                    {/* A bare `Pressable` with no role and no label: this
+                        must read to a screen reader exactly as the line of
+                        text it was before, because the whole value of the
+                        gesture is that nothing advertises it. */}
+                    <Pressable testID="about-version" onPress={tapVersion}>
+                        <DotMatrixText fontSize={11} letterSpacing={1.6} color={palette.dim}>
+                            {`V${VERSION}  \u00B7  BUILD ${BUILD}`}
+                        </DotMatrixText>
+                    </Pressable>
                     <AboutTicker lines={TICKER_LINES}/>
                 </YStack>
 

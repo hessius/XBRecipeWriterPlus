@@ -15,6 +15,7 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
+import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
@@ -48,6 +49,30 @@ const VERSION = Application.nativeApplicationVersion ?? "unknown";
  */
 export default function SettingsScreen({settings}: Props) {
     const router = useRouter();
+    const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
+    const [cloudAccountEnabled, setCloudAccountEnabled] =
+        useSetting("cloudAccountEnabled", settings);
+    // The gate is passed in rather than wrapped around the call, because a hook
+    // cannot be called conditionally. See the hook: while this is false it does
+    // not read the keychain, so a user who never opens LABS is never asked
+    // about one.
+    const cloud = useCloudSession(cloudAccountEnabled);
+
+    async function signOutOfCloud() {
+        try {
+            await cloud.forget();
+        } catch {
+            // `signOut` is undefended on purpose: a locked keychain leaves the
+            // token in place. Saying nothing would leave someone believing they
+            // had signed out of an account they had not, which is the one
+            // failure here with a privacy cost. The row stays as it was,
+            // because it truthfully still describes a connected account.
+            notify({
+                tone:    "error",
+                message: "Could not sign out. The account is still connected."
+            });
+        }
+    }
     const [showCoffeeMarker, setShowCoffeeMarker] =
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
@@ -273,6 +298,36 @@ export default function SettingsScreen({settings}: Props) {
 
                 <MachineSection settings={settings}/>
 
+                {/* Its own section above Library, not a line inside it: Library
+                    is the recipes you hold, and this is where some of them can
+                    come from.
+
+                    Unlike the import sheet's door, this section knows whether
+                    anyone is signed in, because this is where someone comes
+                    looking to disconnect. The sheet must never carry that: it
+                    is a place to bring something in, not a place to sever an
+                    account. */}
+                {cloudAccountEnabled && <SettingsSection title="xBloom account">
+                    {cloud.session === null ? (
+                        <SettingsActionRow label="Sign in"
+                                           detail="Bring across the recipes you made in the xBloom app."
+                                           onPress={() => router.push("/importCloud")}/>
+                    ) : (
+                        <SettingsActionRow label="Import recipes"
+                                           detail={cloud.session.email}
+                                           onPress={() => router.push("/importCloud")}/>
+                    )}
+                    {cloud.session !== null && (
+                        // `danger`, like "Delete all recipes": signing out
+                        // discards the only copy of a token that cannot be
+                        // recovered without the password again.
+                        <SettingsActionRow label="Sign out" tone="danger"
+                                           onPress={() => {
+                                               void signOutOfCloud();
+                                           }}/>
+                    )}
+                </SettingsSection>}
+
                 <SettingsSection title="Library">
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
@@ -289,6 +344,31 @@ export default function SettingsScreen({settings}: Props) {
                     invisible until a user opens the developer area — see the
                     component. */}
                 <CardReadDiagnostic settings={settings}/>
+
+                {/* Last, under everything a user came here for, and absent
+                    until seven taps on the version line open it.
+
+                    The rows here are unfinished work that is in the build so it
+                    cannot rot on a branch, not features. The caption on each
+                    one says so plainly rather than hedging: somebody who turns
+                    one on and then hits a wall should have been told, in the
+                    same breath as being offered it, that a wall was there.
+
+                    Closing it again is a row, not a second hidden gesture. The
+                    way in can afford to be undiscoverable because nobody
+                    arrives at it by accident; a way out that nobody can find is
+                    just a trap. Note it hides the section and changes nothing
+                    inside it -- what you switched on stays on, which is the
+                    honest reading of two separate switches. */}
+                {labsUnlocked && <SettingsSection title="Labs">
+                    <SettingsToggleRow
+                        label="xBloom account import"
+                        description="Unfinished and unsupported. Brings your xBloom recipes across."
+                        value={cloudAccountEnabled} onChange={setCloudAccountEnabled}/>
+                    <SettingsActionRow label="Hide Labs"
+                                       detail="Anything you switched on here stays on."
+                                       onPress={() => setLabsUnlocked(false)}/>
+                </SettingsSection>}
             </YStack>
             </ScrollView>
         </YStack>

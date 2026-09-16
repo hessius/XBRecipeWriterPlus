@@ -4,6 +4,7 @@
  */
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
+import {router} from "expo-router";
 import {Keyboard, TextInput} from "react-native";
 
 import ImportSheet from "@/components/ImportSheet";
@@ -11,6 +12,11 @@ import type {RecipeImport} from "@/hooks/useRecipeImport";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
+import {sharedSettings} from "@/hooks/useSetting";
+
+// The sheet reads the account feature's gate, and `useSetting` reaches for the
+// shared SQLite-backed store, which cannot open under Jest.
+jest.mock("@/hooks/useSetting", () => require("@/test-utils/settingsMock").settingsMock());
 
 jest.mock("expo-clipboard", () => ({
     hasStringAsync:         jest.fn(async () => false),
@@ -29,7 +35,20 @@ jest.mock("expo-clipboard", () => ({
 
 let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
 
+// The sheet pushes the account route directly, so `router` is mocked rather
+// than `useRouter` -- see app/__tests__/settings.test.tsx for the spread that
+// keeps the typed-route helpers real.
+jest.mock("expo-router", () => ({
+    ...jest.requireActual("expo-router"),
+    router: {push: jest.fn()}
+}));
+
 beforeEach(() => {
+    jest.clearAllMocks();
+    // The account feature is gated off by default, and is not under test here.
+    // Turned on rather than the tests deleted: gated code still needs its
+    // coverage, and the gate is tested separately below.
+    sharedSettings().set("cloudAccountEnabled", true);
     (Clipboard.isPasteButtonAvailable as unknown as boolean) = false;
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(false);
     mockNativePasteOnPress = undefined;
@@ -457,4 +476,120 @@ it("does not dismiss the keyboard when a shortcut degrades to the found panel", 
     expect(dismiss).not.toHaveBeenCalled();
 
     dismiss.mockRestore();
+});
+
+const ACCOUNT = /YOUR XBLOOM ACCOUNT/i;
+
+it("offers the xBloom account as a way in, as a row that promises departure", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    // The spec's row, not a filled button: a rule, the dot-matrix label in the
+    // sheet's own chrome register, and a caption saying what lies through it.
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
+    expect(screen.getByTestId("import-account-label")).toBeTruthy();
+    expect(screen.getByText("Bring in the recipes you've made")).toBeTruthy();
+});
+
+it("names the row by both its lines, so it is not just an account", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByLabelText(
+        "YOUR XBLOOM ACCOUNT, Bring in the recipes you've made"
+    )).toBeTruthy();
+});
+
+it("leaves the sheet and opens the account screen", async () => {
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
+    );
+
+    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(router.push).toHaveBeenCalledWith("/importCloud");
+});
+
+it("closes before it pushes, not merely as well as", async () => {
+    // Order is the whole point. A sheet left open behind the pushed screen is
+    // still there, over it, when the user comes back -- so "both happened" is
+    // not the guarantee; "closed first" is.
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
+    );
+
+    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
+
+    expect(onOpenChange.mock.invocationCallOrder[0])
+        .toBeLessThan((router.push as jest.Mock).mock.invocationCallOrder[0]);
+});
+
+it.each([
+    ["a lookup is in flight", {status: "resolving"} as const],
+    ["a lookup has failed",
+        {status: "error", reason: "notFound", message: "No such pod code."} as const],
+    ["a recipe has been found", undefined]
+])("does not offer the account door while %s", async (_name, state) => {
+    // The sheet then has one subject. A second import route competing with a
+    // found recipe is noise at the moment of decision, and under a running
+    // lookup it competes with the spinner.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({state: state ?? foundState()})}/>
+    );
+
+    expect(screen.queryByRole("button", {name: ACCOUNT})).toBeNull();
+});
+
+it("offers the door even when the field is hidden, because it is not part of the field", async () => {
+    // The door is gated on the lookup's status alone. Coupling it to
+    // `showField` would take it away from someone who arrived by a share,
+    // which is the one route where an account is most likely what they wanted.
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({showField: false})}/>
+    );
+
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+});
+
+/**
+ * The gate, from the sheet's side.
+ *
+ * Absent rather than disabled, and the rule above it absent too: a greyed-out
+ * row is still an advertisement for something a user cannot have, and the
+ * promise of the gate is that this sheet looks exactly as it did before the
+ * feature existed.
+ */
+it("draws no account door at all while the feature is gated off", async () => {
+    sharedSettings().set("cloudAccountEnabled", false);
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.queryByRole("button", {name: ACCOUNT})).toBeNull();
+    expect(screen.queryByTestId("import-account-label")).toBeNull();
+    expect(screen.queryByTestId("import-account-caption")).toBeNull();
+    // The rule is the part a gate is most likely to leave behind: it belongs to
+    // the row rather than to the sheet, so a hairline with nothing under it is
+    // what a half-done gate looks like.
+    expect(screen.queryByTestId("import-account-rule")).toBeNull();
+});
+
+it("draws the account door once the feature is switched on", async () => {
+    sharedSettings().set("cloudAccountEnabled", true);
+
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
 });

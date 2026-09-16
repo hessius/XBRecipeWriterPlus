@@ -1,0 +1,107 @@
+import * as SecureStore from "expo-secure-store";
+import {CloudError, post} from "./transport";
+
+/**
+ * The signed-in account.
+ *
+ * This is the only file in the app that ever holds a credential, which is the
+ * point of it being its own file: "does the app store my password" is a
+ * question answerable by reading one short module rather than auditing five.
+ *
+ * The password is an argument to `signIn` and nothing else. It is never
+ * written, never returned, and never held beyond the call.
+ *
+ * What is stored is three things: the token, which xBloom can revoke and which
+ * grants nothing on any other service; `memberId`, which the encrypted calls
+ * need; and the account's email address, because Settings shows which account
+ * is connected and an account the user cannot identify is one they cannot
+ * decide to sign out of.
+ *
+ * The email is the reason this list is written out rather than summarised. The
+ * screen's own disclosure once said only a token was kept, which was not true,
+ * and nothing connected the two sentences. Anything added here has to be added
+ * to `app/importCloud.tsx`'s caveat in the same commit, or the app is lying to
+ * the user about a credential store.
+ */
+
+const KEY = "xbloom.session";
+
+export type Session = {
+    memberId: number;
+    token: string;
+    /** Shown in Settings so the user can see which account is connected. */
+    email: string;
+};
+
+function isSession(value: unknown): value is Session {
+    if (typeof value !== "object" || value === null) return false;
+    const s = value as Partial<Session>;
+    return (
+        typeof s.memberId === "number" &&
+        typeof s.token === "string" &&
+        s.token.length > 0 &&
+        typeof s.email === "string"
+    );
+}
+
+export async function signIn(email: string, password: string): Promise<Session> {
+    const response = await post(
+        "tMemberLogin.thtml",
+        {
+            email,
+            password,
+            interfaceVersion: 20240918,
+            skey: "testskey",
+            phoneType: "Android",
+            clientType: 2,
+            languageType: 1,
+            jpushId: "",
+        },
+        false
+    );
+
+    const token = response.token;
+    const memberId = (response.member as {tableId?: unknown} | undefined)?.tableId;
+
+    // A `result: success` carrying neither of the two things the session is
+    // made of means their shape has moved. Failing here is much cheaper than
+    // storing a session whose every later use fails for no visible reason.
+    if (typeof token !== "string" || !token || typeof memberId !== "number") {
+        throw new CloudError("server", "xBloom signed in but returned no session");
+    }
+
+    const session: Session = {memberId, token, email};
+    await SecureStore.setItemAsync(KEY, JSON.stringify(session));
+    return session;
+}
+
+export async function loadSession(): Promise<Session | null> {
+    let raw: string | null;
+    try {
+        raw = await SecureStore.getItemAsync(KEY);
+    } catch {
+        // The keychain can be unavailable before first unlock. That is not a
+        // reason to fail; it is a reason to look signed out.
+        return null;
+    }
+    if (!raw) return null;
+
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        return isSession(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Not defended like `loadSession` is, deliberately.
+ *
+ * If the keychain refuses the delete — it is locked, say — the session is
+ * still there, and the honest answer is to say so. Swallowing it would leave
+ * the user believing they had signed out of an account they had not, which is
+ * the one failure here with a privacy cost.
+ */
+export async function signOut(): Promise<void> {
+    await SecureStore.deleteItemAsync(KEY);
+}

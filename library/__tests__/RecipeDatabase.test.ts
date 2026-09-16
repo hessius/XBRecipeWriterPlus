@@ -175,6 +175,31 @@ describe("duplicating a recipe", () => {
         expect(names).toContain("Kenya Sakami (Copy)");
     });
 
+    it("does not let a duplicate claim the original's account recipe", () => {
+        // The import matches a local recipe to an account recipe by `cloudId`.
+        // A duplicate that kept the id would leave two rows both claiming to
+        // be the same xBloom recipe, and the next sync would have two
+        // candidates for one account row and no basis to choose.
+        const database = new RecipeDatabase();
+        const original = imported();
+        original.cloudId = 4242;
+        original.cloudFingerprint = "abc123";
+        database.insertRecipe(original);
+
+        database.duplicateRecipe(original);
+
+        const copy = (database.retrieveAllRecipes() ?? []).find(
+            (r) => r.uuid !== original.uuid
+        );
+        expect(copy).toBeDefined();
+        expect(copy!.cloudId).toBeUndefined();
+        expect(copy!.cloudFingerprint).toBeUndefined();
+        // The original is untouched -- it is still the one that came down.
+        const kept = database.getRecipe(original.uuid);
+        expect(kept?.cloudId).toBe(4242);
+        expect(kept?.cloudFingerprint).toBe("abc123");
+    });
+
     it("numbers further copies instead of repeating one name", () => {
         const database = new RecipeDatabase();
         const original = imported();

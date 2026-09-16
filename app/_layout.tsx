@@ -124,7 +124,7 @@ export default function RootLayout() {
                                                               headerShown: false,
                                                               animation: "slide_from_right"
                                                           }}/>
-                                            {/* These four draw ScreenHeader
+                                            {/* These five draw ScreenHeader
                                                 instead, for the same reason
                                                 and declared in the same
                                                 place. */}
@@ -132,6 +132,7 @@ export default function RootLayout() {
                                             <Stack.Screen name="about" options={{headerShown: false}}/>
                                             <Stack.Screen name="licences" options={{headerShown: false}}/>
                                             <Stack.Screen name="machine" options={{headerShown: false}}/>
+                                            <Stack.Screen name="importCloud" options={{headerShown: false}}/>
                                             {/* The history list and one brew's
                                                 record. These were registered
                                                 nowhere, so they fell through to

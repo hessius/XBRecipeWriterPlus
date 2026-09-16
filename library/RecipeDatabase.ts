@@ -158,6 +158,14 @@ class RecipeDatabase {
         // Cleared so the copy is assigned its own colour on insert rather
         // than sitting on the original's.
         copy.accentIndex = undefined;
+        // A duplicate is a new local recipe, not a second copy of the account
+        // recipe. Carrying the id over would leave two rows both claiming to
+        // be the same xBloom recipe, and the import matches on exactly that
+        // id: the next sync would find two locals for one account row and
+        // have no basis to choose between them. The fingerprint records what
+        // the account's copy looked like, so it goes with the id it belongs to.
+        copy.cloudId = undefined;
+        copy.cloudFingerprint = undefined;
         this.insertRecipe(copy);
     }
 

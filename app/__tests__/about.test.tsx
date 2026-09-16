@@ -3,6 +3,14 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutScreen from "@/app/about";
 import {renderWithProviders} from "@/test-utils/render";
+import {sharedSettings} from "@/hooks/useSetting";
+import {notify} from "@/components/XbrwToast";
+
+jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+
+// The screen reads and writes `labsUnlocked`, and `useSetting` reaches for the
+// shared SQLite-backed store, which cannot open under Jest.
+jest.mock("@/hooks/useSetting", () => require("@/test-utils/settingsMock").settingsMock());
 
 jest.mock("expo-application", () => ({
     nativeApplicationVersion: "2.6.0",
@@ -14,7 +22,16 @@ jest.mock("expo-router", () => ({router: {push: (path: string) => mockPush(path)
 
 beforeEach(() => {
     mockPush.mockClear();
+    (notify as jest.Mock).mockClear();
+    sharedSettings().set("labsUnlocked", false);
 });
+
+/** Tap the version line `times` times. */
+async function tapVersion(times: number): Promise<void> {
+    for (let i = 0; i < times; i++) {
+        await fireEvent.press(screen.getByTestId("about-version"));
+    }
+}
 
 describe("AboutScreen", () => {
     it("says which version this is, because a bug report without one is useless", async () => {
@@ -97,5 +114,64 @@ describe("AboutScreen", () => {
         // this screen is the only place that claim is made to a user.
         await renderWithProviders(<AboutScreen/>);
         expect(screen.getByText(/never writes those bytes at all/)).toBeTruthy();
+    });
+
+    describe("the way into Labs", () => {
+        /**
+         * Six taps is not five-sixths of the way in. The count exists so that
+         * nobody arrives here by accident, and a screen that opened on the
+         * first few taps would be reached by anyone who double-tapped a build
+         * number to select it.
+         */
+        it("stays shut short of the seventh tap, and says nothing", async () => {
+            await renderWithProviders(<AboutScreen/>);
+
+            await tapVersion(6);
+
+            expect(sharedSettings().get("labsUnlocked")).toBe(false);
+            expect(notify).not.toHaveBeenCalled();
+        });
+
+        it("opens Labs on the seventh tap, and says where it went", async () => {
+            await renderWithProviders(<AboutScreen/>);
+
+            await tapVersion(7);
+
+            expect(sharedSettings().get("labsUnlocked")).toBe(true);
+            // Told where, not just that: a section that appears silently at the
+            // bottom of another screen is one nobody finds twice.
+            expect(notify).toHaveBeenCalledWith({
+                tone:    "success",
+                message: "Labs unlocked. It is at the bottom of settings."
+            });
+        });
+
+        it("says so rather than closing Labs again on a second seven taps", async () => {
+            // The idempotence that makes this safe to stumble onto twice. A
+            // hidden toggle flipping on every seventh tap would be a control
+            // nobody could aim, and somebody here to read a build number would
+            // switch off a section they were using.
+            sharedSettings().set("labsUnlocked", true);
+            await renderWithProviders(<AboutScreen/>);
+
+            await tapVersion(7);
+
+            expect(sharedSettings().get("labsUnlocked")).toBe(true);
+            expect(notify).toHaveBeenCalledWith({
+                tone:    "info",
+                message: "Labs is already open. It is in settings."
+            });
+        });
+
+        it("keeps the way in unadvertised", async () => {
+            // The whole value of the gesture is that nothing points at it. A
+            // caption, a role or a label would each be an invitation, and Labs
+            // holds things that are unfinished and unsupported.
+            await renderWithProviders(<AboutScreen/>);
+
+            expect(screen.queryByText(/labs/i)).toBeNull();
+            expect(screen.getByTestId("about-version").props.accessibilityRole)
+                .toBeUndefined();
+        });
     });
 });

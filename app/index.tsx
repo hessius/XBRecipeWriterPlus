@@ -643,6 +643,7 @@ export default function HomeScreen({db, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
+                settings={settings}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {

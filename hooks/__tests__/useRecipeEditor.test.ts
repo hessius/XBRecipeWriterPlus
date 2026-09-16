@@ -165,6 +165,43 @@ describe("the two gates", () => {
     });
 });
 
+describe("what a revert keeps", () => {
+    it("keeps the account identity, which a restore does not replace", async () => {
+        // A revert replaces the brew parameters, not the recipe's identity.
+        // `cloudId` is identity by definition -- it says which xBloom account
+        // recipe this row IS -- so a restore that dropped it would quietly
+        // orphan the row, and the next sync would import the same recipe a
+        // second time as though it had never been seen.
+        const recipe = new Recipe();
+        recipe.dosage = 15;
+        recipe.ratio = 16;
+        recipe.grindSize = 60;
+        recipe.grindRPM = 90;
+        recipe.addPour(0, false);
+        recipe.autoFixPourVolumes();
+        recipe.pours.forEach(p => { p.flowRate = 30; });
+        recipe.offline_backup = recipe.getData([]);
+        recipe.cloudId = 4242;
+        recipe.cloudFingerprint = "abc123";
+
+        const {result} = await renderHook(() => useRecipeEditor({
+            recipeJSON:      JSON.stringify(recipe),
+            temperatureUnit: "C",
+            onSaved:         jest.fn()
+        }));
+
+        const saved = result.current.revertSources.find((s) => s.id === "saved");
+        expect(saved?.available).toBe(true);
+
+        await act(async () => {
+            await saved!.action();
+        });
+
+        expect(result.current.recipe?.cloudId).toBe(4242);
+        expect(result.current.recipe?.cloudFingerprint).toBe("abc123");
+    });
+});
+
 describe("revert sources", () => {
     it("names all four whether or not it has them", async () => {
         const {result} = await renderEditor();

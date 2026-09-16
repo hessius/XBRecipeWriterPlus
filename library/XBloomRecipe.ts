@@ -21,6 +21,23 @@ export class XBloomRecipe {
         this.id = source.kind === "xid" ? source.xid : source.id;
     }
 
+    /**
+     * Wrap a `recipeVo` this app already holds.
+     *
+     * The account list returns complete `recipeVo` objects — the #74 spike
+     * checked every field `getRecipe` reads — so an account import is one
+     * request, not one per recipe. The rows are entered as `xid` sources
+     * because that path reads `shareRecipeLink`, which is where a row carries
+     * its share id.
+     */
+    public static fromAccountRow(row: Record<string, unknown>): XBloomRecipe {
+        const pods = row.podsVo as {id?: unknown} | undefined;
+        const xid = typeof pods?.id === "string" ? pods.id : "";
+        const instance = new XBloomRecipe({kind: "xid", xid});
+        instance.xbRecipeJSON = {recipeVo: row};
+        return instance;
+    }
+
     private containsChineseCustomChars(inputString: string) {
         // Define the Unicode values for the characters
         const unicodeCharacters = [0x660E, 0x8C26]; // Unicode for "明" and "谦"
@@ -54,6 +71,24 @@ export class XBloomRecipe {
             recipe.dosage = dosage;
             recipe.xbloomName = title;
             recipe.source = "import";
+
+            // Attribution and artwork live only in the response. `imagePath`
+            // was already being read into a private field that nothing
+            // persisted, so it was reaching the screen and then being thrown
+            // away; the two `shareMember` keys were not read at all. They sit
+            // beside `recipeVo`, not inside it, which is why an account row --
+            // which is a bare `recipeVo` -- carries the artwork but no sharer.
+            const detail = this.xbRecipeJSON as Record<string, unknown>;
+            if (typeof detail.shareMemberName === "string") {
+                recipe.sharedBy = detail.shareMemberName;
+            }
+            if (typeof detail.shareMemberHead === "string") {
+                recipe.sharedByAvatar = detail.shareMemberHead;
+            }
+            const imagePath = this.xbRecipeJSON.recipeVo.podsVo?.imagePath;
+            if (typeof imagePath === "string") {
+                recipe.imageURL = imagePath;
+            }
             recipe.grindSize = grindSize;
             recipe.xid = xid;
 

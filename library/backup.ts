@@ -214,6 +214,51 @@ function isShareUrl(value: unknown): boolean {
         && (url.searchParams.get("id") ?? "") !== "";
 }
 
+/** A plausible display name. Long enough for any real one, short enough that a
+ * backup cannot smuggle a document in through it. */
+const MAX_SHARED_BY = 120;
+
+/**
+ * An HTTPS URL, and nothing else.
+ *
+ * These two are the only fields in a backup that the app will hand to an image
+ * loader, so they are the only ones where a bad value becomes a request. A
+ * `http://` avatar would be a downgrade a user cannot see, and the other
+ * schemes are worse: `file://` aims the loader at the device's own storage and
+ * `data:` lets the file carry its own payload. The host is deliberately not
+ * pinned the way `isShareUrl` pins it -- xBloom serves this artwork from at
+ * least one S3 bucket that is not theirs to promise, and a wrongly-pinned host
+ * would silently drop every legitimate avatar.
+ */
+function isHttpsUrl(value: unknown): boolean {
+    if (typeof value !== "string" || value === "") return false;
+    try {
+        return new URL(value).protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Fields a bad value costs, rather than costing the recipe.
+ *
+ * Everything in `RECIPE_FIELDS` is load-bearing: a malformed one means the file
+ * is not what it claims, and `looksLikeRecipe` rejects the whole entry. These
+ * three are different in kind. They are decoration -- who shared a recipe and
+ * what the pod looked like -- and they arrive from a third party's server, so a
+ * value that fails here is a plausible thing to find in an honest file, not
+ * evidence of tampering. Rejecting the recipe over an avatar would lose a real
+ * recipe, with real card bytes, over a picture.
+ *
+ * So these are stripped and the recipe is kept. That asymmetry is the point,
+ * and it is why they are not simply added to the map above.
+ */
+const DROPPABLE_RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
+    sharedBy:       (v) => typeof v === "string" && v.length <= MAX_SHARED_BY,
+    sharedByAvatar: isHttpsUrl,
+    imageURL:       isHttpsUrl
+};
+
 const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     uuid:        (v) => typeof v === "string",
     name:        (v) => typeof v === "string",
@@ -225,6 +270,11 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     shareUrl:    isShareUrl,
     shareSnapshot: (v) => typeof v === "string",
     sharedTableId: isNumber,
+    // Stricter than the sibling ids: a tableId is an account row's primary
+    // key, so a negative one is not a plausible value that happens to be
+    // wrong, it is a file that has been tampered with or corrupted.
+    cloudId:          (v) => isNumber(v) && (v as number) >= 0,
+    cloudFingerprint: (v) => typeof v === "string",
     grinder:     (v) => typeof v === "boolean",
     dosage:      isNumber,
     ratio:       isNumber,
@@ -298,6 +348,25 @@ function looksLikeRecipe(entry: Record<string, unknown>): boolean {
 function reviveRecipe(entry: unknown): Recipe | null {
     if (!isPlainObject(entry)) return null;
     if (!looksLikeRecipe(entry)) return null;
+
+    // Strip the droppable fields before the constructor sees them, not after:
+    // the constructor is deliberately forgiving and would keep whatever it was
+    // given.
+    //
+    // The copy is hygiene rather than a guarantee anyone can observe, and no
+    // test covers it: `parseBackup` takes a string, so the object being
+    // stripped was parsed here and is discarded when the loop ends. It is kept
+    // because `reviveRecipe` reads as though it takes someone else's object,
+    // and the day it does, deleting from it would mean reading a backup
+    // quietly rewrote it.
+    let cleaned = entry;
+    for (const [field, ok] of Object.entries(DROPPABLE_RECIPE_FIELDS)) {
+        if (cleaned[field] !== undefined && !ok(cleaned[field])) {
+            if (cleaned === entry) cleaned = {...entry};
+            delete cleaned[field];
+        }
+    }
+
     try {
         // The constructor's `json` parameter is a string, not the parsed
         // object the envelope already gives us — re-stringifying here is
@@ -310,7 +379,7 @@ function reviveRecipe(entry: unknown): Recipe | null {
         // regenerate is gone. The shape has already been checked above, so
         // what survives this call is a recipe rather than merely an object
         // that did not make the constructor throw.
-        const recipe = new Recipe(undefined, JSON.stringify(entry));
+        const recipe = new Recipe(undefined, JSON.stringify(cleaned));
         return typeof recipe.uuid === "string" && recipe.uuid !== "" ? recipe : null;
     } catch {
         return null;

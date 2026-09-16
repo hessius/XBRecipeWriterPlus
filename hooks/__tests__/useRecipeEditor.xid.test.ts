@@ -9,7 +9,7 @@ jest.mock("@/library/XBloomRecipe");
 
 describe("XID lookup failure", () => {
     it("reports a lookup that failed", async () => {
-        (XBloomRecipe as jest.Mock).mockImplementation(() => ({
+        (XBloomRecipe as unknown as jest.Mock).mockImplementation(() => ({
             fetchRecipeDetail: () => Promise.reject(new Error("offline")),
             getRecipeTitle:    () => "",
             getRecipe:         () => null
@@ -25,7 +25,7 @@ describe("XID lookup failure", () => {
     });
 
     it("reports nothing when the lookup succeeds", async () => {
-        (XBloomRecipe as jest.Mock).mockImplementation(() => ({
+        (XBloomRecipe as unknown as jest.Mock).mockImplementation(() => ({
             fetchRecipeDetail: () => Promise.resolve(),
             getRecipeTitle:    () => "Ethiopia Guji",
             getRecipe:         () => null
