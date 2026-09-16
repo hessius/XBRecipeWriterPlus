@@ -30,6 +30,12 @@ type Props = {
     onShare?: () => void;
     /** Write this recipe to an NFC card. */
     onWrite?: () => void;
+    /**
+     * Mark or unmark the recipe. Optional, and the tile is absent rather than
+     * disabled without it, which is the same rule the gated cloud import row
+     * follows: a control that cannot do anything should not be drawn.
+     */
+    onToggleFavourite?: () => void;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -116,7 +122,8 @@ export default function SwipeableRecipeRow({
                                                dottedProfile = false,
                                                onBrew,
                                                onShare,
-                                               onWrite
+                                               onWrite,
+                                               onToggleFavourite
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -171,6 +178,23 @@ export default function SwipeableRecipeRow({
                           swipeableRef.current?.close();
                           onDelete();
                       }}/>
+                {onToggleFavourite !== undefined && (
+                    <Tile icon="favourite"
+                          // Verbs, like the two beside it. KEEP is what the tap
+                          // does and KEPT is what it has done, so the tile reads
+                          // as an action either way. "FAVOURITE" is a noun and
+                          // would be the only label in either tray that is.
+                          caption={recipe.favourite ? "KEPT" : "KEEP"}
+                          tone={resolveAccent(recipe)}
+                          label={recipe.favourite
+                              ? "Remove from favourites"
+                              : "Add to favourites"}
+                          testID="recipe-row-favourite"
+                          onPress={() => {
+                              swipeableRef.current?.close();
+                              onToggleFavourite();
+                          }}/>
+                )}
             </XStack>
         );
     }

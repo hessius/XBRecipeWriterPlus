@@ -39,6 +39,20 @@ function recipe(): Recipe {
     return r;
 }
 
+/** A recipe that has not been starred. */
+function plainRecipe(): Recipe {
+    const r = recipe();
+    r.favourite = false;
+    return r;
+}
+
+/** A recipe the user has starred. */
+function favouriteRecipe(): Recipe {
+    const r = recipe();
+    r.favourite = true;
+    return r;
+}
+
 function props(overrides = {}) {
     return {
         recipe: recipe(),
@@ -185,6 +199,50 @@ describe("SwipeableRecipeRow", () => {
             DOT_ICONS[["brew", "share", "write", "duplicate", "delete"][i] as
                 keyof typeof DOT_ICONS]
         ).length).toBeGreaterThan(4));
+    });
+
+    it("offers a favourite tile", async () => {
+        const onToggleFavourite = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={onToggleFavourite}/>
+        );
+
+        await fireEvent.press(
+            await screen.findByTestId("recipe-row-favourite", {includeHiddenElements: true})
+        );
+
+        expect(onToggleFavourite).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads as KEEP on a recipe that is not a favourite", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(await screen.findByText("KEEP")).toBeTruthy();
+    });
+
+    it("reads as KEPT on a recipe that is one", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(await screen.findByText("KEPT")).toBeTruthy();
+    });
+
+    it("omits the tile when no handler is given", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}/>
+        );
+
+        expect(screen.queryByTestId("recipe-row-favourite")).toBeNull();
     });
 
     it("captions the actions, since a glyph alone is a guess", async () => {
