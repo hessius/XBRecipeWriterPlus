@@ -40,6 +40,21 @@ export type ImportEntry = {
     existingUuid?: string;
     /** Pre-ticked for `new` and `updated`; never for `unchanged` or `edited`. */
     selected: boolean;
+    /**
+     * False when this row cannot be acted on at all.
+     *
+     * Only one case reaches it: two local recipes carry this cloud id, or this
+     * share id, and nothing here can say which one the row means. Such a row
+     * names no local to replace, so a tick would not replace either copy -- it
+     * would insert a third recipe carrying the same id, making the ambiguity
+     * worse and permanent. The one honest move is to decline the tick and let
+     * the user resolve it in the library, where both copies are visible.
+     *
+     * Every other row stays selectable, including `edited`: declining to
+     * pre-tick is the app's opinion, and spec 4.4 is explicit that the tick is
+     * the user's to give.
+     */
+    selectable: boolean;
 };
 
 export type ImportPlan = {
@@ -215,6 +230,7 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
             // may still tick it by hand, and a write aimed at a coin-flip
             // winner is worse than one the caller has to resolve.
             existingUuid: replacing?.uuid,
+            selectable: !undecidable,
             selected: status === "new" || status === "updated",
         });
     }

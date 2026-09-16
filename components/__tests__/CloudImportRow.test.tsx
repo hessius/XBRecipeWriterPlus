@@ -15,6 +15,7 @@ const entry = (over: Partial<ImportEntry> = {}): ImportEntry => {
         status: "new",
         recipe,
         selected: true,
+        selectable: true,
         ...over,
     };
 };
@@ -279,5 +280,79 @@ describe("CloudImportRow", () => {
 
         expect(styleOf("cloud-import-name").color).toBe(palette.text);
         expect(styleOf("cloud-import-caption").color).toBe(palette.dim);
+    });
+    /**
+     * A row the plan cannot place must be inert, and must look and sound it.
+     *
+     * Two local recipes claim this cloud id, so the entry names no local to
+     * replace: a tick would insert a third copy carrying the same id. The hook
+     * refuses the toggle as well, but a control that silently ignores taps is
+     * its own bug, so the row declines the press and says why.
+     */
+    it("does not report a press on a row that cannot be ticked", async () => {
+        const onToggle = jest.fn();
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selectable: false})} onToggle={onToggle}/>
+        );
+
+        fireEvent.press(screen.getByRole("checkbox"));
+
+        expect(onToggle).not.toHaveBeenCalled();
+    });
+
+    /**
+     * `Pressable` merges its own `disabled` into the announced state, so this
+     * needs no second declaration -- but it is worth pinning, because the
+     * alternative is a row announced as an ordinary tickable checkbox that
+     * silently does nothing when tapped.
+     */
+    it("tells a screen reader the row is disabled", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selectable: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityState.disabled).toBe(true);
+    });
+
+    it("leaves an ordinary row undisabled", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited"})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityState.disabled).toBe(false);
+    });
+
+    it("explains why a row cannot be ticked, and where to fix it", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selectable: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("cloud-import-caption").props.children).toBe(
+            "Two recipes here claim this one. Remove one in your library first"
+        );
+    });
+
+    /**
+     * The caption a row cannot act on replaces the status caption rather than
+     * joining it: two explanations of the same row, one of which describes a
+     * tick that is not on offer, is worse than either alone.
+     */
+    it("drops the edited caption on a row that cannot be ticked", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selectable: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.queryByText("Importing replaces the changes you made here")).toBeNull();
+    });
+
+    /** The announced name has to match what is drawn, or they drift. */
+    it("announces the reason it cannot be ticked", async () => {
+        await renderWithProviders(
+            <CloudImportRow entry={entry({status: "edited", selectable: false})} onToggle={jest.fn()}/>
+        );
+
+        expect(screen.getByRole("checkbox").props.accessibilityLabel).toContain(
+            "Remove one in your library first"
+        );
     });
 });

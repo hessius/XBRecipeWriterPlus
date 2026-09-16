@@ -32,6 +32,7 @@ const entry = (over: Record<string, unknown> = {}) => ({
     name: "Kenya",
     status: "new",
     selected: true,
+    selectable: true,
     recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
     ...over,
 });
@@ -100,6 +101,7 @@ describe("importCloud", () => {
                     name: "Kenya",
                     status: "new",
                     selected: true,
+                    selectable: true,
                     recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
                 },
             ],
@@ -144,6 +146,7 @@ describe("importCloud", () => {
                     name: "Kenya",
                     status: "new",
                     selected: true,
+                    selectable: true,
                     recipe: {uuid: "u-1", accentIndex: 0, cupType: 1, isTea: () => false},
                 },
             ],

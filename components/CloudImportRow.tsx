@@ -41,6 +41,15 @@ const CAPTIONS: Partial<Record<ImportStatus, string>> = {
     edited: "Importing replaces the changes you made here",
 };
 
+/**
+ * Replaces the status caption on a row that cannot be ticked.
+ *
+ * Two local recipes claim this one, and nothing here can say which. The row
+ * has to explain why it is inert, or it reads as a bug; and it has to say
+ * where the fix is, because the fix is not on this screen.
+ */
+const UNSELECTABLE_CAPTION = "Two recipes here claim this one. Remove one in your library first";
+
 // `unchanged` and `edited` step back to secondary text. `dim` rather than
 // `muted`: `muted` is 4.12:1 on `base` and documented as a non-text colour, so
 // a status line drawn in it would fall under AA.
@@ -59,6 +68,7 @@ type Props = {
 };
 
 export default function CloudImportRow({entry, onToggle}: Props) {
+    const caption = entry.selectable ? CAPTIONS[entry.status] : UNSELECTABLE_CAPTION;
     // The library's own resolver, not a local lookup: it validates the index
     // and falls back to the same hash every other screen uses, so a recipe
     // with a missing or bogus index is the same colour here as it will be in
@@ -69,9 +79,15 @@ export default function CloudImportRow({entry, onToggle}: Props) {
         <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{checked: entry.selected}}
-            accessibilityLabel={[entry.name, LABELS[entry.status], CAPTIONS[entry.status]]
+            accessibilityLabel={[entry.name, LABELS[entry.status], caption]
                 .filter(Boolean)
                 .join(", ")}
+            // One prop, two jobs: `Pressable` both stops calling `onPress`
+            // and merges `disabled` into the announced accessibility state, so
+            // the row goes inert and says so without a second declaration.
+            // (Unlike Tamagui's `Button`, which mirrors nothing and has to be
+            // told twice.)
+            disabled={!entry.selectable}
             onPress={() => onToggle(entry.cloudId)}
             style={({pressed}) => ({
                 opacity: pressed ? 0.7 : 1,
@@ -97,9 +113,9 @@ export default function CloudImportRow({entry, onToggle}: Props) {
                     <Text testID="cloud-import-status" color={TONES[entry.status]} fontSize={13}>
                         {LABELS[entry.status]}
                     </Text>
-                    {CAPTIONS[entry.status] ? (
+                    {caption ? (
                         <Text testID="cloud-import-caption" color={palette.dim} fontSize={12}>
-                            {CAPTIONS[entry.status]}
+                            {caption}
                         </Text>
                     ) : null}
                 </YStack>

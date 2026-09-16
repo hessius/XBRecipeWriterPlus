@@ -125,6 +125,60 @@ describe("useCloudImport", () => {
         expect(result.current.plan!.entries[0].selected).toBe(false);
     });
 
+    /**
+     * The one row a tick cannot help.
+     *
+     * Two local recipes carry this cloud id, so the plan names no local to
+     * replace. Before this guard the row was an ordinary tickable one: ticking
+     * it took the insert path and added a *third* recipe carrying the same
+     * id, making the ambiguity worse and permanent. Refusing to pre-tick it
+     * was never enough, because the tick was still there to give.
+     */
+    const twoCopies = () => {
+        const first = new Recipe();
+        first.uuid = "local-1";
+        first.cloudId = 1;
+        const second = new Recipe();
+        second.uuid = "local-2";
+        second.cloudId = 1;
+        return [first, second];
+    };
+
+    it("refuses to tick a row that names no recipe to replace", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = {...deps(), localRecipes: twoCopies};
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        expect(result.current.plan!.entries[0].selectable).toBe(false);
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        expect(result.current.plan!.entries[0].selected).toBe(false);
+    });
+
+    /** The consequence of the guard above: no third copy can be written. */
+    it("writes nothing when the only row is one it cannot place", async () => {
+        mockLoad.mockResolvedValue(session);
+        mockFetch.mockResolvedValue([row]);
+        const d = {...deps(), localRecipes: twoCopies};
+
+        const {result} = await renderHook(() => useCloudImport(d));
+        await waitFor(() => expect(result.current.status).toBe("choosing"));
+
+        await act(async () => {
+            result.current.toggle(1);
+        });
+        await act(async () => {
+            await result.current.confirm();
+        });
+
+        expect(d.saveRecipes).not.toHaveBeenCalled();
+        expect(d.replaceRecipe).not.toHaveBeenCalled();
+    });
+
     it("writes only the selected entries", async () => {
         mockLoad.mockResolvedValue(session);
         mockFetch.mockResolvedValue([row, {...row, tableId: 2}]);

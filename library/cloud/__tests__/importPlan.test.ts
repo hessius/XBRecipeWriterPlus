@@ -494,6 +494,50 @@ describe("buildImportPlan", () => {
     });
 
     /**
+     * A row nobody can act on must not be actionable.
+     *
+     * An ambiguous row names no local to replace, so a tick cannot replace
+     * either copy: it inserts a third recipe carrying the same cloud id, which
+     * makes the ambiguity worse and permanent. Declining to pre-tick it was
+     * not enough, because the tick was still there to give.
+     */
+    it("refuses to let an ambiguous cloud id be ticked at all", async () => {
+        const first = imported();
+        first.uuid = "local-1";
+        const second = imported();
+        second.uuid = "local-2";
+
+        const plan = buildImportPlan([row()], [first, second]);
+
+        expect(plan.entries[0].selectable).toBe(false);
+    });
+
+    it("refuses to let an ambiguous share id be ticked at all", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1"), fromShareLink("local-2")]
+        );
+
+        expect(plan.entries[0].selectable).toBe(false);
+    });
+
+    /**
+     * `edited` is the app's opinion, not a veto. Spec 4.4 is explicit that the
+     * tick is the user's to give, and an edited row names a local to replace,
+     * so ticking it does what it says.
+     */
+    it("leaves an edited row the user's to tick", async () => {
+        const local = imported();
+        local.uuid = "local-1";
+        local.name = "Renamed here";
+
+        const plan = buildImportPlan([row()], [local]);
+
+        expect(plan.entries[0].status).toBe("edited");
+        expect(plan.entries[0].selectable).toBe(true);
+    });
+
+    /**
      * A local that has been through an account import is spoken for. Its share
      * id may still name the link it first arrived by, but it belongs to the
      * cloud recipe it was last imported as, and letting a different row claim

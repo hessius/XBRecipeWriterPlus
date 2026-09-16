@@ -125,7 +125,7 @@ export function useCloudImport(deps: CloudImportDeps) {
                 : {
                       ...current,
                       entries: current.entries.map((entry) =>
-                          entry.cloudId === cloudId
+                          entry.cloudId === cloudId && entry.selectable
                               ? {...entry, selected: !entry.selected}
                               : entry
                       ),
