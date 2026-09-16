@@ -371,4 +371,169 @@ describe("buildImportPlan", () => {
         expect(plan.entries[0].status).toBe("new");
         expect(plan.entries[0].recipe.accentIndex).not.toBe(0);
     });
+    /**
+     * The case the device pass found.
+     *
+     * A recipe can reach the library by two roads: an account import, which
+     * stamps `cloudId`, and a share link, which does not. Opening your own
+     * recipe's link takes the second road, so the local copy carries no cloud
+     * id at all and the first account import offers it back as `new` -- and a
+     * tick then inserts a second copy of a recipe already sitting there.
+     *
+     * The bridge is not a heuristic. Both roads store the same value: the
+     * account row's `shareRecipeLink` carries a `?id=` token, `mapRow` decodes
+     * it into `shareId`, and `parseImportInput` decodes the pasted link into
+     * exactly the same string. It is the server's own name for the row, so a
+     * match is identity rather than resemblance.
+     */
+    const SHARE_LINK = "https://share-h5.xbloom.com/?id=hmFKjxldtOFbZ2Kve%2BlxKw%3D%3D";
+    const SHARE_ID = "hmFKjxldtOFbZ2Kve+lxKw==";
+
+    /** What a share-link import leaves behind: a share id and no cloud id. */
+    function fromShareLink(uuid: string): Recipe {
+        const local = imported();
+        local.uuid = uuid;
+        local.cloudId = undefined;
+        local.cloudFingerprint = undefined;
+        local.shareId = SHARE_ID;
+        return local;
+    }
+
+    it("recognises a local that arrived by share link", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1")]
+        );
+
+        expect(plan.entries[0].status).not.toBe("new");
+    });
+
+    it("names the share-link local as the one it would replace", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1")]
+        );
+
+        expect(plan.entries[0].existingUuid).toBe("local-1");
+    });
+
+    /**
+     * `edited`, not `unchanged`, and this is the honest answer rather than a
+     * shortcut. A share-link import stores no `cloudFingerprint`, so there is
+     * no record of the state the recipe arrived in and no way to show it has
+     * not been touched since. `classify` already draws exactly that
+     * conclusion for a local with no fingerprint; adoption simply lets it see
+     * the recipe at all.
+     */
+    it("leaves a share-link local unticked, having no proof it is untouched", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1")]
+        );
+
+        expect(plan.entries[0].status).toBe("edited");
+        expect(plan.entries[0].selected).toBe(false);
+    });
+
+    /**
+     * The fork guard, on the adoption path. `updateRecipe` finds the row by
+     * the uuid it is handed but stores the recipe's own, so an entry naming a
+     * local uuid while carrying a fresh one splits the recipe in two the
+     * moment somebody ticks it.
+     */
+    it("carries the local uuid, so an adopted recipe cannot fork", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1")]
+        );
+
+        expect(plan.entries[0].recipe.uuid).toBe("local-1");
+    });
+
+    it("ignores a local whose share id names some other recipe", async () => {
+        const stranger = fromShareLink("local-1");
+        stranger.shareId = "a-different-token";
+
+        const plan = buildImportPlan([row({shareRecipeLink: SHARE_LINK})], [stranger]);
+
+        expect(plan.entries[0].status).toBe("new");
+        expect(plan.entries[0].existingUuid).toBeUndefined();
+    });
+
+    /**
+     * An empty share id is the value every hand-made recipe carries, so
+     * matching on it would adopt an arbitrary local into a stranger's recipe.
+     * This is the same rule as `cloudId: 0` never matching.
+     */
+    it("never matches on an empty share id", async () => {
+        const handMade = new Recipe();
+        handMade.uuid = "local-1";
+        handMade.shareId = "";
+
+        const plan = buildImportPlan([row({shareRecipeLink: ""})], [handMade]);
+
+        expect(plan.entries[0].status).toBe("new");
+        expect(plan.entries[0].existingUuid).toBeUndefined();
+    });
+
+    /**
+     * Cloud id first. A local that carries one has been through an account
+     * import, which is the stronger statement of the two, and a share id left
+     * over from an earlier road must not pull the row onto a different local.
+     */
+    it("prefers the cloud id when a local carries both", async () => {
+        const byCloud = imported();
+        byCloud.uuid = "by-cloud";
+        byCloud.cloudId = 1;
+
+        const byShare = fromShareLink("by-share");
+
+        const plan = buildImportPlan([row({shareRecipeLink: SHARE_LINK})], [byCloud, byShare]);
+
+        expect(plan.entries[0].existingUuid).toBe("by-cloud");
+    });
+
+    /**
+     * A local that has been through an account import is spoken for. Its share
+     * id may still name the link it first arrived by, but it belongs to the
+     * cloud recipe it was last imported as, and letting a different row claim
+     * it on the strength of that leftover would overwrite one recipe with
+     * another.
+     */
+    it("ignores a local already claimed by a different cloud id", async () => {
+        const claimed = fromShareLink("local-1");
+        claimed.cloudId = 99;
+
+        const plan = buildImportPlan([row({shareRecipeLink: SHARE_LINK})], [claimed]);
+
+        expect(plan.entries[0].status).toBe("new");
+        expect(plan.entries[0].existingUuid).toBeUndefined();
+    });
+
+    it("declines to choose between two locals holding the same share id", async () => {
+        const plan = buildImportPlan(
+            [row({shareRecipeLink: SHARE_LINK})],
+            [fromShareLink("local-1"), fromShareLink("local-2")]
+        );
+
+        expect(plan.entries[0].status).toBe("edited");
+        expect(plan.entries[0].existingUuid).toBeUndefined();
+    });
+
+    /**
+     * One local, one adopter. Two rows sharing a link would otherwise both
+     * name the same local, and the second write would silently undo the first.
+     */
+    it("lets only the first row adopt a given local", async () => {
+        const plan = buildImportPlan(
+            [
+                row({tableId: 1, shareRecipeLink: SHARE_LINK}),
+                row({tableId: 2, shareRecipeLink: SHARE_LINK}),
+            ],
+            [fromShareLink("local-1")]
+        );
+
+        expect(plan.entries[0].existingUuid).toBe("local-1");
+        expect(plan.entries[1].existingUuid).toBeUndefined();
+    });
 });

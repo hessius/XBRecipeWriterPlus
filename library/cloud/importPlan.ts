@@ -75,11 +75,48 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
     // could auto-select an update while another copy holds the user's edits --
     // every copy is treated as edited and nothing is pre-selected.
     const ambiguous = new Set<number>();
+    // The second road into the library.
+    //
+    // A recipe can arrive here two ways: an account import, which stamps
+    // `cloudId`, and a share link, which does not. Opening your own recipe's
+    // link takes the second road, so the local copy carries no cloud id and
+    // the first account import offers it back as `new` -- a tick then inserts
+    // a second copy of a recipe already sitting in the library. The device
+    // pass found exactly this.
+    //
+    // Matching on the share id is identity, not resemblance. The account row
+    // carries `shareRecipeLink`, whose `?id=` token is the server's own name
+    // for that row; `mapRow` decodes it into `shareId`, and `parseImportInput`
+    // decodes a pasted link into the same string. Nothing is being guessed
+    // from names or contents, which is what keeps this on the right side of
+    // the rule below about never adopting a recipe we cannot identify.
+    const byShareId = new Map<string, Recipe>();
+    const ambiguousShare = new Set<string>();
     for (const recipe of local) {
         const id = recipe.cloudId;
-        if (typeof id !== "number" || id <= 0) continue;
-        if (byCloudId.has(id)) ambiguous.add(id);
-        else byCloudId.set(id, recipe);
+        if (typeof id === "number" && id > 0) {
+            if (byCloudId.has(id)) ambiguous.add(id);
+            else byCloudId.set(id, recipe);
+            // Indexed by cloud id *or* share id, never both. A local that has
+            // been through an account import is identified by the stronger of
+            // the two, and leaving a stale share id in the second index would
+            // let some other row pull this same local onto itself.
+            continue;
+        }
+
+        // The empty string is what every hand-made recipe carries, so matching
+        // on it would adopt an arbitrary local into a stranger's recipe. Same
+        // rule as `cloudId: 0` never matching, and the same reason.
+        //
+        // No test can currently kill this line, and that is deliberate rather
+        // than an oversight: the lookup below refuses an empty share id too,
+        // so the miss happens there first. It is kept as the second of two
+        // independent locks on the rule this module must never break, exactly
+        // as the `cloudId` guard above is.
+        const share = typeof recipe.shareId === "string" ? recipe.shareId.trim() : "";
+        if (share.length === 0) continue;
+        if (byShareId.has(share)) ambiguousShare.add(share);
+        else byShareId.set(share, recipe);
     }
 
     const entries: ImportEntry[] = [];
@@ -111,8 +148,27 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         }
         seen.add(cloudId);
 
-        const existing = byCloudId.get(cloudId);
-        const status = ambiguous.has(cloudId) ? "edited" : classify(existing, recipe);
+        // Cloud id first: a local that carries one has already been through an
+        // account import, which is the stronger statement of the two.
+        let existing = byCloudId.get(cloudId);
+        let undecidable = ambiguous.has(cloudId);
+
+        if (existing === undefined && !undecidable) {
+            const share = recipe.shareId.trim();
+            if (share.length > 0) {
+                if (ambiguousShare.has(share)) {
+                    undecidable = true;
+                } else {
+                    existing = byShareId.get(share);
+                    // One local, one adopter. Two rows carrying the same link
+                    // would otherwise both name this local, and the second
+                    // write would silently undo the first.
+                    if (existing !== undefined) byShareId.delete(share);
+                }
+            }
+        }
+
+        const status = undecidable ? "edited" : classify(existing, recipe);
 
         // A replacement keeps the local recipe's identity. `updateRecipe`
         // finds the row by the uuid it is passed but stores the recipe's own,
@@ -122,19 +178,22 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
         //
         // The test is not the status. It is whether this entry will name a
         // local recipe to replace, because that is what decides which write
-        // path it takes -- and `existingUuid` below is set on exactly this
-        // condition. Keying the realignment off the status instead let the two
-        // drift apart, and they did: `edited` named a local uuid while
+        // path it takes. Keying the realignment off the status instead let the
+        // two drift apart, and they did: `edited` named a local uuid while
         // carrying a fresh one, so the recipe forked the moment somebody
         // ticked the box. `unchanged` and `edited` are both reached only by a
         // deliberate tick, and neither may be the path that forks.
-        const replacing = !ambiguous.has(cloudId) && existing !== undefined;
-        if (replacing) {
-            recipe.uuid = existing.uuid;
+        //
+        // So `existingUuid` below is not merely set on the same condition, it
+        // is read off this same binding. There is no longer a second
+        // expression for the two to disagree about.
+        const replacing = undecidable ? undefined : existing;
+        if (replacing !== undefined) {
+            recipe.uuid = replacing.uuid;
             // `key` only matters in memory: the JSON constructor always sets
             // it from `uuid` and never reads a stored one, so this aligns the
             // object the caller is holding and nothing more. Not load-bearing.
-            recipe.key = existing.uuid;
+            recipe.key = replacing.uuid;
         }
 
         applyAccent(recipe, color, assignedSoFar);
@@ -155,7 +214,7 @@ export function buildImportPlan(rows: CloudRow[], local: Recipe[]): ImportPlan {
             // happened to return first. The entry is unselected, but a user
             // may still tick it by hand, and a write aimed at a coin-flip
             // winner is worse than one the caller has to resolve.
-            existingUuid: ambiguous.has(cloudId) ? undefined : existing?.uuid,
+            existingUuid: replacing?.uuid,
             selected: status === "new" || status === "updated",
         });
     }
