@@ -38,8 +38,8 @@ Where the app stopped being a card writer.
 | M2 · Share your recipe | Outbound share links | `2026-08-31-share-link-design.md` | done |
 | M3 · Brew from the app | BLE connection, brewing, the machine console | `2026-08-31-ble-brew-design.md` | done |
 | M4 · Watch it brew | Live telemetry, brew history, the machine as app-wide state | `2026-09-03-machine-ux-design.md` | **done** — hardware verification outstanding; see below |
-| M5 · A library worth keeping | Tags, filtering, search; post-brew notes and rating | — | not started |
-| M6 · Your xBloom library | Cloud library import and push, authentication, a "what leaves this device" screen | — | not started |
+| M5 · A library worth keeping | Shelves, the rail (search, sort, filter), the recipe screen; post-brew notes and rating | `2026-09-16-library-shelves-design.md` | **in progress** — phase 1 and the favourite are done; see below |
+| M6 · Your xBloom library | Cloud library import and push, authentication, a "what leaves this device" screen | `2026-09-15-xbloom-account-import-design.md` | account import done and gated; push and the disclosure screen outstanding |
 
 M4 grew during design. It was scoped as one issue about telemetry (#63) and
 became the milestone in which the machine stops living inside Settings: a status
@@ -73,6 +73,24 @@ real J15:
   hand.
 - The status dot's states, and the popover's water refresh.
 - Export: a PNG that is legible when shared, and a JSON file that opens.
+
+**M5 ships in five phases**, whose dependency order is stated in the design's
+own "Shipping order" and not repeated here. Phase 1 (the recipe index, the new
+`Recipe` fields and their validators, the index columns, the new settings) and
+the favourite from phase 2 shipped together in #116 and #118, planned in
+[`2026-09-16-m5-foundation-and-favourites.md`](../plans/2026-09-16-m5-foundation-and-favourites.md).
+
+What remains of phase 2 is blocked, and deliberately so: the description has
+nowhere to be typed until the ABOUT deck (phase 5), and the evidence suffix
+reads an average rating that does not exist until #99. So the next buildable
+phase is **3, the rail** — search, sort with direction and favourites first,
+filter chips, and the view segmented pair — which phase 4 then needs, because
+the shelf picker is the library screen wearing its rail.
+
+**M6 arrived out of order.** The account import was built and gated behind a
+setting while M5's foundation was in flight, rather than held back for it. #59
+(push back to the cloud) and #76 (the "what leaves this device" screen) are
+still open.
 
 ## Constraints that apply throughout
 
