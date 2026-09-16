@@ -8,6 +8,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
+import {resolveStockFilter} from "@/library/libraryFilters";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
 
@@ -215,10 +216,16 @@ function writable(name: string): Recipe {
 
 function store(recipes: Recipe[]) {
     return {
-        // Emulates the name-ascending default the SQL query returns, which is
-        // the order this screen used to get from the hook's own JavaScript sort.
+        // Stands in for the SQL name-ascending default. Not identical to the old
+        // JavaScript sort this screen used to run: the query orders by `sortName
+        // COLLATE NOCASE`, which folds only ASCII case, so accented names land
+        // differently and unnamed recipes sink to the bottom. That divergence is
+        // exercised where the query is built; here the fixtures are plain ASCII
+        // names, so a localeCompare stands in for the visible order faithfully
+        // enough to lay the screen out.
         queryRecipes: jest.fn(() =>
             [...recipes].sort((a, b) => a.displayName().localeCompare(b.displayName()))),
+        retrieveAllRecipes: jest.fn(() => recipes),
         deleteRecipe: jest.fn(),
         cloneRecipe:  jest.fn(),
         updateRecipe: jest.fn()
@@ -285,6 +292,22 @@ describe("HomeScreen", () => {
     it("counts them in the title", async () => {
         await renderWithProviders(<HomeScreen db={store([named("Ethiopia"), named("Kenya")])} settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText("2")).toBeTruthy();
+    });
+
+    it("runs the list through queryRecipes with the query and the filter resolver", async () => {
+        // The list is only the recipes queryRecipes returns, so the query the
+        // screen hands down is the whole feature. A mock that returned a fixed
+        // array regardless of its arguments let a reviewer swap the real query
+        // for a different one with every test still green -- the gap the wiring
+        // task would then fall straight into. This pins both arguments: the
+        // whole-library default the screen passes today, and the resolver that
+        // turns filter ids into WHERE fragments.
+        const db = store([named("Ethiopia")]);
+        await renderWithProviders(<HomeScreen db={db} settings={new Settings(memoryStorage())}/>);
+        expect(db.queryRecipes).toHaveBeenCalledWith(
+            {search: "", filters: [], sort: "name", direction: "asc", favouritesFirst: false},
+            resolveStockFilter
+        );
     });
 
     it("shows the empty state instead of the list when there is nothing saved", async () => {

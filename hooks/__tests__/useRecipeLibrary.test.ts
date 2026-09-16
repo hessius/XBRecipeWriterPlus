@@ -2,6 +2,8 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
+import {resolveStockFilter} from "@/library/libraryFilters";
+import type {LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
@@ -9,6 +11,7 @@ jest.mock("@/library/RecipeDatabase");
 function stubDb(recipes: Recipe[]) {
     return {
         queryRecipes:       jest.fn(() => recipes),
+        retrieveAllRecipes: jest.fn(() => recipes),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
         // Writes through to the backing array so a reload after the write
@@ -53,6 +56,48 @@ describe("useRecipeLibrary", () => {
         const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes.map((r) => r.displayName()))
             .toEqual(["Zambia", "Ethiopia", "Kenya"]);
+    });
+
+    it("runs the exact query and filter resolver through queryRecipes", async () => {
+        // The hook's one job on the read path is to hand the query straight to
+        // the store. A stub that ignored its arguments let a reviewer replace the
+        // real query with a different one and watch every test stay green, so the
+        // wiring task that hands a live query down this path would have no test
+        // that could see it working. Pin both arguments to what was passed in.
+        const query: LibraryQuery = {
+            search: "ethiopia",
+            filters: [],
+            sort: "ratio",
+            direction: "desc",
+            favouritesFirst: true
+        };
+        const db = stubDb([named("Ethiopia")]);
+        await renderHook(() => useRecipeLibrary(db, query));
+        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
+    });
+
+    it("backs up the whole table even while the list holds a narrowing query", async () => {
+        // The moment a caller hands the rail's live query in, `recipes` is only
+        // what a search left on screen. A backup taken from that would silently
+        // drop everything the filter hid -- data loss dressed as an export. The
+        // whole library must reach the backup regardless of the query, so the two
+        // reads are pointed at different store methods: the list at a narrowing
+        // `queryRecipes`, the backup at `retrieveAllRecipes`.
+        const whole = [named("Ethiopia"), named("Kenya"), named("Zambia")];
+        const db = stubDb(whole);
+        db.queryRecipes.mockReturnValue([named("Ethiopia")]);
+        const narrowing: LibraryQuery = {
+            search: "eth",
+            filters: [],
+            sort: "name",
+            direction: "asc",
+            favouritesFirst: false
+        };
+        const {result} = await renderHook(() => useRecipeLibrary(db, narrowing));
+
+        expect(result.current.recipes.map((r) => r.displayName())).toEqual(["Ethiopia"]);
+        expect(result.current.allRecipes().map((r) => r.displayName()))
+            .toEqual(["Ethiopia", "Kenya", "Zambia"]);
     });
 
     it("reports an empty library as an empty list", async () => {

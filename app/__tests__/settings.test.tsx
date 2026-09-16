@@ -73,6 +73,7 @@ const mockApplyRestore = jest.fn();
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({
         recipes:         mockLibraryRecipes,
+        allRecipes:      () => mockLibraryRecipes,
         refresh:         mockRefresh,
         deleteRecipe:    jest.fn(),
         duplicateRecipe: jest.fn(),

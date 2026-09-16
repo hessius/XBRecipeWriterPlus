@@ -15,22 +15,24 @@ import RecipeDatabase from "@/library/RecipeDatabase";
  *
  * The list is a `queryRecipes`, not a `retrieveAllRecipes`: the library stopped
  * being "every recipe, sorted in JavaScript" and became the answer to the
- * rail's query, sorted and filtered in SQL. `retrieveAllRecipes` still lives on
- * `RecipeDatabase` for the callers that genuinely want the whole table
- * regardless of the rail (backup export, accent tallies), but this hook reads
- * one way only -- two paths to the same list would disagree the first time
- * someone edited one.
+ * rail's query, sorted and filtered in SQL. `retrieveAllRecipes` is a separate
+ * question, not a second way to build the same list: `allRecipes()` uses it so a
+ * backup can hold the whole table regardless of what the rail narrowed the list
+ * to. The two never stand in for one another, so they cannot disagree.
  *
  * The restore/delete-all members are optional because not every caller reaches
  * for them — the home screen only reads, deletes one and clones one — and a
  * test store for that screen should not have to stub a transaction it never
- * calls. The production store (`RecipeDatabase`) provides all of them.
+ * calls. `retrieveAllRecipes` is optional for the same reason: only the backup
+ * needs it, and a store without it simply has an empty backup to give. The
+ * production store (`RecipeDatabase`) provides all of them.
  */
 export type RecipeStore = {
     queryRecipes: (query: LibraryQuery, resolveFilter?: FilterResolver) => Recipe[];
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
+    retrieveAllRecipes?: () => Recipe[] | null;
     deleteAllRecipes?: () => void;
     insertRecipes?: (recipes: Recipe[]) => void;
     replaceAllRecipes?: (recipes: Recipe[]) => void;
@@ -41,9 +43,21 @@ export type RecipeStore = {
  *
  * Kept at module scope so its identity is stable across renders. The wiring task
  * hands `useRecipeLibrary` the rail's live query instead; until then, and in the
- * tests that exercise the mutation paths, this is the standing question -- name
- * A to Z, nothing searched, nothing filtered -- which is the order the hook used
- * to produce in JavaScript, now produced in SQL.
+ * tests that exercise the mutation paths, this is the standing question: name A
+ * to Z, nothing searched, nothing filtered.
+ *
+ * This is close to but not exactly the order the hook used to produce in
+ * JavaScript, and the difference is a one-time visible reorder for existing
+ * users that is cosmetic and destroys nothing. The old order sorted on
+ * `displayName().localeCompare(...)`; this sorts on `sortName COLLATE NOCASE
+ * ASC`, and `COLLATE NOCASE` folds only ASCII case, so an accented name such as
+ * "Etna" spelled with an accented E now sorts after "Zambia" rather than near
+ * "E". True locale ordering is not simply available: SQLite ships no ICU
+ * collation by default, and sorting in SQL is the whole point of this change --
+ * the alternative is reading every recipe back to sort it in JavaScript, which
+ * is what the library stopped doing. Unnamed recipes, once interspersed by their
+ * formatted-date placeholder, now sink to the bottom; that is deliberate and
+ * documented with the sort itself.
  */
 const WHOLE_LIBRARY: LibraryQuery = {
     search: "",
@@ -83,6 +97,7 @@ export type RestoreOutcome =
 
 export type RecipeLibrary = {
     recipes: Recipe[];
+    allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
     duplicateRecipe: (recipe: Recipe) => void;
@@ -141,6 +156,22 @@ export function useRecipeLibrary(
 
     function reload() {
         setRevision((r) => r + 1);
+    }
+
+    /**
+     * The whole table, not the current view.
+     *
+     * `recipes` is the answer to `query`, so once a caller hands the rail's live
+     * query in, it is only what a search and a filter left on screen. A backup
+     * must not inherit that narrowing: a file that says it holds your recipes and
+     * silently holds the seven you last filtered to is data loss wearing the
+     * costume of an export. This reads the table directly, so what the backup
+     * contains never depends on what the library was last filtered by. Kept as a
+     * function, not a field, so the read happens when the backup is taken rather
+     * than on every render of a screen that never exports.
+     */
+    function allRecipes(): Recipe[] {
+        return store.retrieveAllRecipes?.() ?? [];
     }
 
     function deleteRecipe(recipe: Recipe) {
@@ -220,7 +251,7 @@ export function useRecipeLibrary(
         return {status: "restored", added: toAdd.length};
     }
 
-    return {recipes, refresh: reload, deleteRecipe, duplicateRecipe, toggleFavourite, deleteAll, applyRestore};
+    return {recipes, allRecipes, refresh: reload, deleteRecipe, duplicateRecipe, toggleFavourite, deleteAll, applyRestore};
 }
 
 /**

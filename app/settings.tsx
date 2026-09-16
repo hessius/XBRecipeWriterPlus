@@ -133,7 +133,11 @@ export default function SettingsScreen({settings}: Props) {
     }
 
     async function onBackUp() {
-        const outcome = await exportBackup(library.recipes, settingsSnapshot(), VERSION);
+        // The whole table, not `library.recipes`: the list is the answer to the
+        // rail's query, and a backup must hold every recipe regardless of what
+        // the user last searched or filtered by. `allRecipes()` asks a different
+        // question from the list on purpose.
+        const outcome = await exportBackup(library.allRecipes(), settingsSnapshot(), VERSION);
         if (!outcome.ok) notify({tone: "error", message: outcome.reason});
     }
 
