@@ -691,12 +691,19 @@ worth stating so the plan does not have to rediscover it.
    and its swipe tile, and evidence as a stats row suffix. Useful on its own:
    it answers "remembering what a recipe is" without any of the rest.
 3. **The rail.** Search, sort with direction and favourites first, filter chips,
-   the view segmented pair. Useful on its own.
+   the view segmented pair. Useful on its own. Planned in
+   [`2026-09-16-m5-rail.md`](../plans/2026-09-16-m5-rail.md), which cuts two
+   things from this bullet and says why: the view pair goes with phase 4,
+   because the half it switches to is the shelf grid, and the Rating axis goes
+   with #99, because until a rating exists the axis sorts nothing.
 4. **Shelves.** The query model, the grid, the stock auto shelves, shelf
    creation and the selection mode picker. Needs 3, because the picker is the
    library screen with its rail.
 5. **The recipe screen.** The third deck, the header rename sheet, the pod
-   section. Independent of 3 and 4; needs only 1.
+   section. Independent of 3 and 4; needs only 1. Planned in
+   [`2026-09-16-m5-recipe-screen.md`](../plans/2026-09-16-m5-recipe-screen.md),
+   which also picks up the description and the card's line budget left behind
+   by phase 1.
 
 `ShelfMark` variants and the avatar setting ride along with 4 and 2
 respectively, and both are behind switches, so neither blocks a release.
