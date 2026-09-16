@@ -21,10 +21,11 @@ import RecipeDatabase from "@/library/RecipeDatabase";
  * to. The two never stand in for one another, so they cannot disagree.
  *
  * The restore/delete-all members are optional because not every caller reaches
- * for them — the home screen only reads, deletes one and clones one — and a
- * test store for that screen should not have to stub a transaction it never
- * calls. `retrieveAllRecipes` is optional for the same reason: only the backup
- * needs it, and a store without it simply has an empty backup to give. The
+ * for them: the home screen only reads, deletes one and clones one, and a test
+ * store for that screen should not have to stub a transaction it never calls.
+ * `retrieveAllRecipes` is optional on the same grounds, but `allRecipes()`
+ * throws when it is missing rather than returning nothing, because the failure
+ * it would otherwise cause is a backup file that is silently empty. The
  * production store (`RecipeDatabase`) provides all of them.
  */
 export type RecipeStore = {
@@ -171,7 +172,14 @@ export function useRecipeLibrary(
      * than on every render of a screen that never exports.
      */
     function allRecipes(): Recipe[] {
-        return store.retrieveAllRecipes?.() ?? [];
+        // Throws rather than falling back to an empty list. A store that cannot
+        // answer this is a programmer error, and the alternative is a backup
+        // file that is silently empty, which the user only discovers on the day
+        // they have nothing else left.
+        if (!store.retrieveAllRecipes) {
+            throw new Error("This store cannot read the whole library");
+        }
+        return store.retrieveAllRecipes() ?? [];
     }
 
     function deleteRecipe(recipe: Recipe) {

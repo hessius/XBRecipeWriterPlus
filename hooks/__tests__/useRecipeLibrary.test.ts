@@ -76,6 +76,15 @@ describe("useRecipeLibrary", () => {
         expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
     });
 
+    it("refuses to build a backup from a store that cannot read the table", async () => {
+        // An empty backup is the one outcome worse than a failed one: it looks
+        // like it worked, and the user finds out on the day it is all they have.
+        const {retrieveAllRecipes: _omitted, ...withoutIt} = stubDb([named("Ethiopia")]);
+        const {result} = await renderHook(() => useRecipeLibrary(withoutIt as never));
+
+        expect(() => result.current.allRecipes()).toThrow();
+    });
+
     it("backs up the whole table even while the list holds a narrowing query", async () => {
         // The moment a caller hands the rail's live query in, `recipes` is only
         // what a search left on screen. A backup taken from that would silently
