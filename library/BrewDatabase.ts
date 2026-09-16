@@ -32,27 +32,23 @@ type BrewRow = {
 };
 
 /**
- * Brew history, in two tables because they have two lifetimes.
+ * Create the brew tables if they are not already there.
  *
- * `brews` is one short row per brew and is kept until the user deletes it.
- * `brew_samples` is roughly 2 400 rows per brew and is swept by the retention
- * setting, which is why `hasStream` exists: a record whose stream has gone
- * still shows its figures, it just has no trace to draw.
- *
- * The values are copied, not joined to the recipe. A brew is a thing that
- * happened; editing the recipe afterwards, or deleting it, must not rewrite
- * history.
+ * Exported and shared because two database objects need these tables to exist,
+ * and only one of them owns the writes. `RecipeDatabase.queryRecipes` joins the
+ * recipe index to an aggregate over `brews` -- both classes open the same
+ * `xbrecipewriter.db` file, which is what makes that join possible -- but the
+ * library screen opens `RecipeDatabase` before any brew screen has mounted a
+ * `BrewDatabase`, so on a fresh install the join would reference a table that
+ * does not exist yet and every library render would throw. Ensuring the schema
+ * from both entry points fixes that without either duplicating or drifting from
+ * the other, since there is exactly one copy of the DDL and it lives here with
+ * the class that owns it. A partial stand-in would be worse than nothing: the
+ * inserts below name every column, so a `brews` created with a subset would
+ * make this class's own writes fail.
  */
-class BrewDatabase {
-    private db: SQLite.SQLiteDatabase;
-
-    constructor() {
-        this.db = SQLite.openDatabaseSync("xbrecipewriter.db");
-        this.createTable();
-    }
-
-    private createTable(): void {
-        this.db.execSync(`
+export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
+    db.execSync(`
             PRAGMA journal_mode = WAL;
             CREATE TABLE IF NOT EXISTS brews (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -81,36 +77,56 @@ class BrewDatabase {
                 brewId TEXT PRIMARY KEY NOT NULL,
                 frames TEXT NOT NULL
             );`);
-        // Rows written before `pouringAt` existed keep the 0 default, which
-        // reads as "no first drop recorded" and falls back to `startedAt`.
-        // `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite
-        // versions Expo ships, so the failure is caught instead.
-        try {
-            this.db.execSync("ALTER TABLE brews ADD COLUMN pouringAt INTEGER NOT NULL DEFAULT 0;");
-        } catch {
-            // Already there.
-        }
-        // Rows written before `stalls` existed get an empty list, which reads
-        // as "nothing recorded" rather than "nothing happened" -- a brew from
-        // before this column simply draws no amber.
-        try {
-            this.db.execSync("ALTER TABLE brews ADD COLUMN stalls TEXT NOT NULL DEFAULT '[]';");
-        } catch {
-            // Already there.
-        }
-        // Rows written before these two fall back to the live recipe, exactly
-        // as every row did until now.
-        try {
-            this.db.execSync("ALTER TABLE brews ADD COLUMN plan TEXT NOT NULL DEFAULT '[]';");
-        } catch {
-            // Already there.
-        }
-        try {
-            this.db.execSync(
-                "ALTER TABLE brews ADD COLUMN stageWater TEXT NOT NULL DEFAULT '[]';");
-        } catch {
-            // Already there.
-        }
+    // Rows written before `pouringAt` existed keep the 0 default, which
+    // reads as "no first drop recorded" and falls back to `startedAt`.
+    // `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite
+    // versions Expo ships, so the failure is caught instead.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN pouringAt INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    // Rows written before `stalls` existed get an empty list, which reads
+    // as "nothing recorded" rather than "nothing happened" -- a brew from
+    // before this column simply draws no amber.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN stalls TEXT NOT NULL DEFAULT '[]';");
+    } catch {
+        // Already there.
+    }
+    // Rows written before these two fall back to the live recipe, exactly
+    // as every row did until now.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN plan TEXT NOT NULL DEFAULT '[]';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync(
+            "ALTER TABLE brews ADD COLUMN stageWater TEXT NOT NULL DEFAULT '[]';");
+    } catch {
+        // Already there.
+    }
+}
+
+/**
+ * Brew history, in two tables because they have two lifetimes.
+ *
+ * `brews` is one short row per brew and is kept until the user deletes it.
+ * `brew_samples` is roughly 2 400 rows per brew and is swept by the retention
+ * setting, which is why `hasStream` exists: a record whose stream has gone
+ * still shows its figures, it just has no trace to draw.
+ *
+ * The values are copied, not joined to the recipe. A brew is a thing that
+ * happened; editing the recipe afterwards, or deleting it, must not rewrite
+ * history.
+ */
+class BrewDatabase {
+    private db: SQLite.SQLiteDatabase;
+
+    constructor() {
+        this.db = SQLite.openDatabaseSync("xbrecipewriter.db");
+        ensureBrewTables(this.db);
     }
 
     /**

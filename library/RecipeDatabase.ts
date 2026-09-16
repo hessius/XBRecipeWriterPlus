@@ -4,6 +4,8 @@ import Recipe from './Recipe';
 import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
+import {ensureBrewTables} from './BrewDatabase';
+import {buildLibraryQuery, type FilterResolver, type LibraryQuery} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
         projectRecipe, schemaHash} from './recipeIndex';
 
@@ -123,6 +125,13 @@ class RecipeDatabase {
     constructor() {
         this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
         this.createTable();
+        // The library query joins the recipe index to an aggregate over the
+        // brew tables, which `BrewDatabase` owns. On a fresh install the
+        // library screen opens this class before any brew screen has created
+        // those tables, so ensure them here too: the join would otherwise
+        // reference a table that does not exist and throw on first render. The
+        // DDL is shared, not copied, so the two openers cannot drift.
+        ensureBrewTables(this.db);
         this.migrateIndex();
     }
 
@@ -459,6 +468,28 @@ class RecipeDatabase {
         }
     }
 
+
+    /**
+     * The library, as the answer to a rail query rather than "everything,
+     * sorted in JavaScript".
+     *
+     * The statement selects each matching recipe's blob and hydrates it, so the
+     * result is whole `Recipe` objects in the query's ORDER BY order, not the
+     * index rows the query sorts on. The index columns are a derived, lossy
+     * cache; the screen needs the real recipe, and the blob is the only source
+     * of truth. Selecting the blob alongside the uuid lets this build every
+     * result from one pass over the rows, in order, rather than re-reading each
+     * recipe by uuid.
+     *
+     * `resolveFilter` is injected so the pure builder need not know the filter
+     * vocabulary; until that vocabulary is wired in, callers pass no filters and
+     * the default resolver is never consulted.
+     */
+    public queryRecipes(query: LibraryQuery, resolveFilter?: FilterResolver): Recipe[] {
+        const {sql, params} = buildLibraryQuery(query, resolveFilter);
+        const rows = this.db.getAllSync(sql, params) as {recipeJSON: string}[];
+        return rows.map((row) => new Recipe(undefined, row.recipeJSON));
+    }
 
     public retrieveAllRecipes(): Recipe[] | null {
         let recipesJSON: any[] = this.db.getAllSync(
