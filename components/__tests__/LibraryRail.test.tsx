@@ -57,6 +57,20 @@ describe("LibraryRail", () => {
             ]);
     });
 
+    it("keeps the brand lowercase when its label opens the sentence", async () => {
+        // "XBLOOM PODS" is the one label whose first word must not be
+        // capitalised. Fixing the brand before building the sentence gets it
+        // capitalised right back, and a reader announces "XBloom".
+        await renderWithProviders(
+            <LibraryRail {...railProps({
+                filters: [{id: "pods", label: "XBLOOM PODS", active: false}]
+            })}/>
+        );
+
+        expect(screen.getAllByRole("button").map((button) => button.props.accessibilityLabel))
+            .toContain("xBloom pods filter");
+    });
+
     it("keeps the horizontal filter row visible to screen readers as one reachable group", async () => {
         await renderWithProviders(<LibraryRail {...railProps()}/>);
 

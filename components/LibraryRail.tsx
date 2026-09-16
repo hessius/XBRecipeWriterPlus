@@ -70,9 +70,18 @@ const SORT_DIRECTION_ACCESSIBILITY: Record<SortAxis, Record<SortDirection, strin
     ratio:       {asc: "low to high", desc: "high to low"}
 };
 
+/**
+ * A Doto-caps chip label spoken as a sentence.
+ *
+ * The brand fix has to come after the capitalisation, not before it: applied
+ * first, capitalising the sentence immediately undoes it and "XBLOOM PODS" is
+ * announced as "XBloom pods". The brand is lowercase-x by definition, so it is
+ * the one word here that must survive sitting first.
+ */
 function sentenceCase(label: string): string {
-    const lower = label.toLocaleLowerCase().replace("xbloom", "xBloom");
-    return `${lower.charAt(0).toLocaleUpperCase()}${lower.slice(1)}`;
+    const lower = label.toLocaleLowerCase();
+    const sentence = `${lower.charAt(0).toLocaleUpperCase()}${lower.slice(1)}`;
+    return sentence.replace(/xbloom/i, "xBloom");
 }
 
 function sortAccessibilityLabel(sort: SortAxis, direction: SortDirection): string {
