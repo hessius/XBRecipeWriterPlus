@@ -17,8 +17,17 @@ export const DURATION = {
     deliberate: 400
 } as const;
 
-/** Timing curves, for anything the system drives. */
-export const EASING = {
+/**
+ * How long a field that acts as you type waits before acting.
+ *
+ * Here rather than in either hook because the app has two such fields, the
+ * import field and the library search, and two different waits would make the
+ * same gesture feel like two different apps. Kept apart from `DURATION`, which
+ * is how long motion takes: this is how long the app listens before it moves.
+ */
+export const TYPING_DEBOUNCE_MS = 600;
+
+/** Timing curves, for anything the system drives. */export const EASING = {
     /** Entering. */
     out:   Easing.bezier(0.2, 0.85, 0.3, 1),
     /** Leaving. */

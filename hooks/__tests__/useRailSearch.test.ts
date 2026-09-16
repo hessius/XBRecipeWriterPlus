@@ -84,6 +84,45 @@ describe("useRailSearch", () => {
         expect(result.current.active).toBe(false);
     });
 
+    it("cannot be overtaken by a keystroke still in flight when cleared", async () => {
+        const onTerm = jest.fn();
+        const {result} = await renderHook(() => useRailSearch(onTerm));
+
+        await act(async () => result.current.onChangeText("eth"));
+        await act(async () => {
+            jest.advanceTimersByTime(300);
+        });
+
+        // Cleared mid-window. If the armed timer survived, it would land after
+        // the clear and leave the library filtered by a term the user deleted,
+        // with nothing on screen saying so.
+        await act(async () => result.current.onClear());
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        expect(onTerm).toHaveBeenCalledTimes(1);
+        expect(onTerm).toHaveBeenCalledWith("");
+    });
+
+    it("does not fire into an owner that has gone away", async () => {
+        const onTerm = jest.fn();
+        const {result, unmount} = await renderHook(() => useRailSearch(onTerm));
+
+        await act(async () => result.current.onChangeText("eth"));
+        // Act-wrapped like every other interaction here. Called bare, the
+        // cleanup has not run by the time the clock is advanced and the test
+        // fails against a hook that is in fact correct.
+        await act(async () => {
+            unmount();
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(600);
+        });
+
+        expect(onTerm).not.toHaveBeenCalled();
+    });
+
     it("marks a held term active from the first keystroke, not the debounce", async () => {
         const onTerm = jest.fn();
         const {result} = await renderHook(() => useRailSearch(onTerm));

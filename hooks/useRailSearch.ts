@@ -1,14 +1,15 @@
 import {useEffect, useRef, useState} from "react";
 
+import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
+
 /**
  * The wait before a keystroke reaches the query.
  *
- * Deliberately the same value `hooks/useRecipeImport.ts` gives its field: the
- * app has two text fields that filter as you type, and two different debounces
- * would make the same gesture feel like two different apps. If one moves the
- * other should too.
+ * The same constant the import field waits on, read from one place rather than
+ * matched by hand: the app has two fields that act as you type, and two
+ * different waits would make the same gesture feel like two different apps.
  */
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = TYPING_DEBOUNCE_MS;
 
 export type RailSearch = {
     /** Whether the field is drawn in place of the icon chip. */

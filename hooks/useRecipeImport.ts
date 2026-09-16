@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 
+import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput, type ImportSource} from "@/library/importInput";
 import type Recipe from "@/library/Recipe";
@@ -17,8 +18,11 @@ import {XBloomRecipe} from "@/library/XBloomRecipe";
  * That is survivable only because a typed result does not navigate. A premature
  * resolve costs one wasted request and shows a name the user can see is wrong.
  * If typing is ever made to navigate, this constant becomes dangerous.
+ *
+ * Shared with the library search field, so the app's two act-as-you-type
+ * fields cannot answer at two different speeds.
  */
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = TYPING_DEBOUNCE_MS;
 
 /**
  * How long a non-parsing value sits before the format is explained.

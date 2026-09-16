@@ -103,9 +103,11 @@ export default function RailSearch({onTermChange}: Props) {
                     autoCapitalize="none"
                     autoCorrect={false}
                     color={palette.text}/>
+                {/* No `hitSlop`. The square is already 44, and slop here would
+                    reach back into the field's trailing edge, where a tap meant
+                    to place the cursor would wipe the term instead. */}
                 <Pressable testID="rail-search-clear" accessibilityRole="button"
                            accessibilityLabel="Clear search" onPress={onClear}
-                           hitSlop={8}
                            style={{width: CHIP_HEIGHT, height: CHIP_HEIGHT,
                                    alignItems: "center", justifyContent: "center"}}>
                     <DotIcon name="close" size={ICON_SIZE} color={palette.dim}/>
