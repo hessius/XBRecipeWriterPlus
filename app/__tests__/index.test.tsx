@@ -374,7 +374,7 @@ describe("HomeScreen", () => {
 
         await fireEvent.press(screen.getByTestId("rail-search"));
         await act(async () => {
-            fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzz");
+            await fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzz");
             jest.advanceTimersByTime(TYPING_DEBOUNCE_MS);
         });
 
