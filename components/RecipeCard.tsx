@@ -49,16 +49,32 @@ type StatProps = {
     label: string;
     value: number;
     suffix?: string;
+    /**
+     * A word to show in place of the number.
+     *
+     * Only the grinder needs this, and it needs it because off is not a
+     * coarseness: a recipe with the grinder disabled still carries whatever
+     * `grindSize` it was last given, so the number is stale rather than wrong
+     * and drawing it says the opposite of what is true. `DigitRoll` is built
+     * out of `DotMatrixText`, so a word rendered here lands in the same Doto at
+     * the same size and the stat row does not change shape.
+     */
+    text?: string;
 };
 
-function Stat({label, value, suffix}: StatProps) {
+function Stat({label, value, suffix, text}: StatProps) {
     return (
         <YStack gap="$0.5">
             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
                            color={onAccent.label}>
                 {label}
             </DotMatrixText>
-            {isSet(value) ? (
+            {text !== undefined ? (
+                <DotMatrixText fontSize={18} weight="extrabold"
+                               color={onAccent.text}>
+                    {text}
+                </DotMatrixText>
+            ) : isSet(value) ? (
                 <DigitRoll value={value} suffix={suffix} fontSize={18}
                            weight="extrabold" color={onAccent.text}/>
             ) : (
@@ -161,7 +177,10 @@ export default function RecipeCard({
         marker.toLowerCase(),
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
-        !isTea && isSet(recipe.grindSize) ? `grind ${recipe.grindSize}` : undefined
+        !isTea && !recipe.grinder ? "grinder off" : undefined,
+        !isTea && recipe.grinder && isSet(recipe.grindSize)
+            ? `grind ${recipe.grindSize}`
+            : undefined
     ].filter((part) => part !== undefined).join(", ");
 
     // The row actions are nested inside that same group, so VoiceOver cannot
@@ -285,7 +304,8 @@ export default function RecipeCard({
                     <XStack gap="$5">
                         <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
                         <Stat label="RATIO" value={recipe.ratio}/>
-                        {!isTea && <Stat label="GRIND" value={recipe.grindSize}/>}
+                        {!isTea && <Stat label="GRIND" value={recipe.grindSize}
+                                         text={recipe.grinder ? undefined : "OFF"}/>}
                     </XStack>
 
                     {editing && (
