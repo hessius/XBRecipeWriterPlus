@@ -454,6 +454,43 @@ export const DOT_ICONS = {
         "...##....",
         "......##.",
         "....####."
+    ],
+    /**
+     * A magnifying glass: search the library.
+     *
+     * A five-dot ring with a handle struck off its lower-right corner on a pure
+     * 45-degree diagonal, the one non-axis-aligned stroke this grid renders
+     * cleanly. Drawn rather than borrowed from a font because the rail's search
+     * chip is icon-only, so this glyph is the whole of what the control says.
+     */
+    search: [
+        "..###....",
+        ".#...#...",
+        ".#...#...",
+        ".#...#...",
+        "..###....",
+        ".....#...",
+        "......#..",
+        ".......#.",
+        "........."
+    ],
+    /**
+     * Two arrows, one up and one down: reorder the library.
+     *
+     * The house glyph for sort, kept axis-aligned save for the two arrowheads so
+     * every dot lands on the grid. The pair reads as "this can go either way",
+     * which is exactly the sort chip's job before a direction is chosen.
+     */
+    sort: [
+        "..#...#..",
+        ".###..#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#..###.",
+        "..#...#.."
     ]
 } as const satisfies Record<string, readonly string[]>;
 

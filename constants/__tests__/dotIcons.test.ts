@@ -8,7 +8,7 @@ describe("DOT_ICONS", () => {
             ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
              "duplicate", "edit", "error", "favourite", "help", "import", "info", "link-off",
              "link-on", "link-wait", "minus", "more", "overflow", "plus", "refresh", "revert",
-             "scan", "settings", "share", "success", "write"]
+             "scan", "search", "settings", "share", "sort", "success", "write"]
         );
     });
 
