@@ -809,7 +809,7 @@ describe("RecipeCard", () => {
         );
     });
 
-    it("mirrors the KEEP tile as an accessibility action", async () => {
+    it("mirrors the STAR tile as an accessibility action", async () => {
         // The tile lives in the management tray, behind a pan gesture, inside
         // this card's accessibility group. Without this action the star is
         // something a screen reader user can hear but never set.
@@ -821,7 +821,7 @@ describe("RecipeCard", () => {
         const card = screen.getByTestId("recipe-card");
         expect(card.props.accessibilityActions).toEqual(
             expect.arrayContaining([
-                {name: "favourite", label: "Add recipe to favourites"}
+                {name: "favourite", label: "Star recipe"}
             ])
         );
 
@@ -841,7 +841,7 @@ describe("RecipeCard", () => {
         );
         expect(screen.getByTestId("recipe-card").props.accessibilityActions).toEqual(
             expect.arrayContaining([
-                {name: "favourite", label: "Remove recipe from favourites"}
+                {name: "favourite", label: "Remove star from recipe"}
             ])
         );
     });
@@ -853,7 +853,7 @@ describe("RecipeCard", () => {
         const names = (screen.getByTestId("recipe-card").props.accessibilityActions as
             {name: string}[]).map((a) => a.name);
         expect(names).toContain("delete");
-        expect(names).not.toContain("favourite");
+        expect(names).not.toContain("starred");
     });
 
     it("marks a favourite recipe", async () => {
@@ -886,17 +886,17 @@ describe("RecipeCard", () => {
 
         // The card is one accessibility element, so anything not in this label is
         // conveyed by a glyph alone.
-        const label = (await screen.findByLabelText(/favourite/i));
+        const label = (await screen.findByLabelText(/starred/i));
         expect(label).toBeTruthy();
     });
 
-    it("says nothing about favourites when there is nothing to say", async () => {
+    it("says nothing about starring when there is nothing to say", async () => {
         // A golden-string guard: adding the star must not change the summary
         // of a recipe that was never starred.
         await renderWithProviders(
             <RecipeCard recipe={plainRecipe()} onPress={() => {}}/>
         );
         expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
-            .not.toContain("favourite");
+            .not.toContain("starred");
     });
 });

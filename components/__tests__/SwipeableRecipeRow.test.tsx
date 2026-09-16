@@ -216,24 +216,24 @@ describe("SwipeableRecipeRow", () => {
         expect(onToggleFavourite).toHaveBeenCalledTimes(1);
     });
 
-    it("reads as KEEP on a recipe that is not a favourite", async () => {
+    it("reads as STAR on a recipe that is not starred", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
                                 onDelete={() => {}} onDuplicate={() => {}}
                                 onToggleFavourite={() => {}}/>
         );
 
-        expect(await screen.findByText("KEEP")).toBeTruthy();
+        expect(await screen.findByText("STAR")).toBeTruthy();
     });
 
-    it("reads as KEPT on a recipe that is one", async () => {
+    it("reads as STARRED on a recipe that is", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
                                 onDelete={() => {}} onDuplicate={() => {}}
                                 onToggleFavourite={() => {}}/>
         );
 
-        expect(await screen.findByText("KEPT")).toBeTruthy();
+        expect(await screen.findByText("STARRED")).toBeTruthy();
     });
 
     it("names the recipe to a screen reader, like every other tile", async () => {
@@ -246,7 +246,7 @@ describe("SwipeableRecipeRow", () => {
                                 onToggleFavourite={() => {}}/>
         );
 
-        expect(screen.getByLabelText("Add Ethiopia Guji to favourites"))
+        expect(screen.getByLabelText("Star Ethiopia Guji"))
             .toBeTruthy();
     });
 
@@ -257,7 +257,7 @@ describe("SwipeableRecipeRow", () => {
                                 onToggleFavourite={() => {}}/>
         );
 
-        expect(screen.getByLabelText("Remove Ethiopia Guji from favourites"))
+        expect(screen.getByLabelText("Remove star from Ethiopia Guji"))
             .toBeTruthy();
     });
 

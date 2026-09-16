@@ -180,11 +180,18 @@ export default function SwipeableRecipeRow({
                       }}/>
                 {onToggleFavourite !== undefined && (
                     <Tile icon="favourite"
-                          // Verbs, like the two beside it. KEEP is what the tap
-                          // does and KEPT is what it has done, so the tile reads
-                          // as an action either way. "FAVOURITE" is a noun and
-                          // would be the only label in either tray that is.
-                          caption={recipe.favourite ? "KEPT" : "KEEP"}
+                          // Verbs, like the two beside it, and this one names
+                          // the glyph: the tile, the card marker and the
+                          // caption are all the same star, so there is nothing
+                          // to learn. "FAVOURITE" is a noun and would be the
+                          // only label in either tray that is.
+                          //
+                          // Not KEEP/KEPT, which was the first try. Nothing is
+                          // discarded here, so "keep" implies an alternative
+                          // that does not exist, and KEPT already means
+                          // retained elsewhere in the app ("KEPT IN YOUR BREW
+                          // HISTORY", "NO TRACE KEPT").
+                          caption={recipe.favourite ? "STARRED" : "STAR"}
                           tone={resolveAccent(recipe)}
                           // Named, like every other tile in both trays. A tray
                           // is reached by swiping one row among many, so a
@@ -192,8 +199,8 @@ export default function SwipeableRecipeRow({
                           // user holding the one control that will not say
                           // what it is about to act on.
                           label={recipe.favourite
-                              ? `Remove ${recipe.displayName()} from favourites`
-                              : `Add ${recipe.displayName()} to favourites`}
+                              ? `Remove star from ${recipe.displayName()}`
+                              : `Star ${recipe.displayName()}`}
                           testID="recipe-row-favourite"
                           onPress={() => {
                               swipeableRef.current?.close();

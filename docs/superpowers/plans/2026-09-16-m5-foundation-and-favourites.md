@@ -882,24 +882,24 @@ it("offers a favourite tile", async () => {
     expect(onToggleFavourite).toHaveBeenCalledTimes(1);
 });
 
-it("reads as KEEP on a recipe that is not a favourite", async () => {
+it("reads as STAR on a recipe that is not starred", async () => {
     await renderWithProviders(
         <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
                             onDelete={() => {}} onDuplicate={() => {}}
                             onToggleFavourite={() => {}}/>
     );
 
-    expect(await screen.findByText("KEEP")).toBeTruthy();
+    expect(await screen.findByText("STAR")).toBeTruthy();
 });
 
-it("reads as KEPT on a recipe that is one", async () => {
+it("reads as STARRED on a recipe that is", async () => {
     await renderWithProviders(
         <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
                             onDelete={() => {}} onDuplicate={() => {}}
                             onToggleFavourite={() => {}}/>
     );
 
-    expect(await screen.findByText("KEPT")).toBeTruthy();
+    expect(await screen.findByText("STARRED")).toBeTruthy();
 });
 
 it("omits the tile when no handler is given", async () => {
@@ -937,11 +937,14 @@ In `renderRightActions`, after the DELETE tile:
 ```ts
                 {onToggleFavourite !== undefined && (
                     <Tile icon="favourite"
-                          // Verbs, like the two beside it. KEEP is what the tap
-                          // does and KEPT is what it has done, so the tile reads
-                          // as an action either way. "FAVOURITE" is a noun and
-                          // would be the only label in either tray that is.
-                          caption={recipe.favourite ? "KEPT" : "KEEP"}
+                          // Verbs, like the two beside it, and this one names
+                          // the glyph, so the tile, the card marker and the
+                          // caption are all the same star. "FAVOURITE" is a
+                          // noun and would be the only label in either tray
+                          // that is. Not KEEP/KEPT: nothing is discarded here,
+                          // and KEPT already means retained elsewhere in the
+                          // app ("KEPT IN YOUR BREW HISTORY").
+                          caption={recipe.favourite ? "STARRED" : "STAR"}
                           tone={resolveAccent(recipe)}
                           label={recipe.favourite
                               ? "Remove from favourites"
