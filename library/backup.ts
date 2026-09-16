@@ -324,6 +324,29 @@ const POUR_FIELDS = ["volume", "temperature", "flowRate", "agitation",
                      "pourPattern", "pauseTime"] as const;
 
 /**
+ * The two fields a recipe cannot reach a card without.
+ *
+ * `RECIPE_FIELDS` above checks a field's type only when it is present, on
+ * purpose: the constructor repairs a long tail of legacy omissions and this
+ * feature exists so a user does not lose recipes, so a field the model can
+ * regenerate must never cost the recipe. These two are the exception, and the
+ * reason the whole file is severe. The constructor assigns `jsonRecipe.grindSize`
+ * and `jsonRecipe.ratio` straight through with no fallback, and `getData` does
+ * unguarded arithmetic on the result on its way to a genuine card:
+ * `this.grindSize - GRIND_SIZE_OFFSET` becomes NaN, and `this.ratio` is pushed
+ * into the byte array as an undefined hole. A malformed write to a real card is
+ * not trivially recoverable, so an absent one has to be stopped at the door
+ * rather than repaired past it.
+ *
+ * Requiring presence cannot reject an honest file: both are plain `Recipe`
+ * properties with numeric initialisers, so `JSON.stringify` emits them for every
+ * recipe this app has ever exported, and even the oldest legacy blob in
+ * RecipeDatabase.migration.test carries both. A file missing one did not come
+ * from here.
+ */
+const REQUIRED_RECIPE_FIELDS = ["grindSize", "ratio"] as const;
+
+/**
  * Whether an entry is shaped like a recipe.
  *
  * `new Recipe(...)` cannot be used as the validator, which is what this replaces.
@@ -336,6 +359,15 @@ const POUR_FIELDS = ["volume", "temperature", "flowRate", "agitation",
 function looksLikeRecipe(entry: Record<string, unknown>): boolean {
     for (const [field, ok] of Object.entries(RECIPE_FIELDS)) {
         if (entry[field] !== undefined && !ok(entry[field])) return false;
+    }
+
+    // Presence, not just type. The loop above lets an absent field through
+    // because for almost every field that is the safe and correct thing to do;
+    // for these two it is the bug, so they are checked a second time for being
+    // there at all. `RECIPE_FIELDS` already has their type, so once present
+    // that check confirms it is a real number.
+    for (const field of REQUIRED_RECIPE_FIELDS) {
+        if (entry[field] === undefined) return false;
     }
 
     if (!Array.isArray(entry.pours)) return false;

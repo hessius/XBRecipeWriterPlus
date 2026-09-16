@@ -16,7 +16,7 @@ function recipeNamed(name: string, uuid: string): Recipe {
 function backupFileWithRecipeFields(extra: Record<string, unknown>): string {
     const valid = JSON.parse(
         buildBackup([new Recipe(undefined,
-            JSON.stringify({pours: [], ratio: 16, dosage: 18}))], {})
+            JSON.stringify({pours: [], ratio: 16, dosage: 18, grindSize: 60}))], {})
     );
     valid.recipes[0] = {...valid.recipes[0], ...extra};
     return JSON.stringify(valid);
@@ -293,6 +293,103 @@ describe("parseBackup refuses, with a reason", () => {
     });
 });
 
+describe("the fields a card cannot do without", () => {
+    // The complement of the "leaves fields out" case above, and the sharper
+    // edge of it. Most absent fields are safe because the constructor has a
+    // fallback the model can live with. These two do not: the constructor
+    // assigns `jsonRecipe.grindSize` and `jsonRecipe.ratio` straight through
+    // with no default, and `getData` then does unguarded arithmetic on the
+    // result on its way to a genuine card -- so an absent one is not repaired,
+    // it is written to the card as a broken byte a user cannot un-brew.
+    //
+    // Requiring presence here is only safe because it can never reject an
+    // honest file: both are plain `Recipe` properties with numeric
+    // initialisers, so `JSON.stringify` emits them for every recipe this app
+    // has ever exported, and even the oldest legacy blob in
+    // RecipeDatabase.migration.test carries both.
+    function backupMissing(field: string): string {
+        const good = JSON.parse(buildBackup([new Recipe(undefined, JSON.stringify({
+            pours: [{pourNumber: 0, volume: 120, temperature: 93, flowRate: 3,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}],
+            ratio: 16, dosage: 18, grindSize: 60
+        }))], {})).recipes[0];
+        delete good[field];
+        return JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION, recipes: [good]
+        });
+    }
+
+    it("refuses a recipe with no grindSize instead of writing NaN to a card", () => {
+        // grindSize absent leaves `this.grindSize` undefined, and
+        // `this.grindSize - GRIND_SIZE_OFFSET` in getData is NaN.
+        const result = parseBackup(backupMissing("grindSize"));
+        expect(result.ok).toBe(false);
+    });
+
+    it("refuses a recipe with no ratio instead of writing a hole to a card", () => {
+        // ratio absent leaves `this.ratio` undefined, which getData pushes
+        // straight into the byte array as an undefined byte.
+        const result = parseBackup(backupMissing("ratio"));
+        expect(result.ok).toBe(false);
+    });
+
+    it("never lets a recipe it accepted produce a broken card byte", () => {
+        // The property that actually matters, asserted directly so it keeps
+        // holding as the card format changes: whatever survives parseBackup can
+        // be handed to the NFC write path, so every byte getData emits must be a
+        // real number. getData takes the 32-byte card signature as its prefix.
+        const good = JSON.parse(buildBackup([new Recipe(undefined, JSON.stringify({
+            pours: [{pourNumber: 0, volume: 120, temperature: 93, flowRate: 3,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}],
+            ratio: 16, dosage: 18, grindSize: 60
+        }))], {})).recipes[0];
+        const entries: Record<string, unknown>[] = [good];
+        for (const field of ["grindSize", "ratio", "dosage", "grindRPM", "cupType", "xid"]) {
+            const stripped = {...good};
+            delete stripped[field];
+            entries.push(stripped);
+        }
+
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION, recipes: entries
+        }));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        for (const recipe of result.payload.recipes) {
+            const data = recipe.getData(new Array(32).fill(0));
+            expect(data.every((byte) => Number.isFinite(byte))).toBe(true);
+        }
+    });
+
+    it("still accepts a complete legacy backup that carries both", () => {
+        // The regression guard: the fix must not turn a real backup into a
+        // corruption report. A legacy recipe shape -- `title` not `name`, a
+        // pre-rename cup byte, no createdAt or tags -- but with the two fields
+        // this fix requires, and with a fully serialised pour, which is what
+        // buildBackup has always emitted because Pour holds all six as plain
+        // properties.
+        const legacy = {
+            uuid: "uuid-a",
+            title: "Legacy Coffee",
+            cupType: 0,
+            ratio: 16,
+            dosage: 15,
+            grindSize: 60,
+            grindRPM: 120,
+            pours: [JSON.stringify({pourNumber: 0, volume: 120, temperature: 93,
+                                    flowRate: 3, agitation: 0, pourPattern: 0,
+                                    pauseTime: 0})]
+        };
+        const result = parseBackup(JSON.stringify({
+            format: BACKUP_FORMAT, version: BACKUP_VERSION, recipes: [legacy]
+        }));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.skipped).toBe(0);
+        expect(result.payload.recipes[0].name).toBe("Legacy Coffee");
+    });
+});
+
 describe("the share fields survive a backup", () => {
     it("carries them through the round trip", () => {
         const recipe = recipeNamed("Shared", "u1");
@@ -468,7 +565,7 @@ describe("tags", () => {
 describe("authored fields through backup", () => {
     it("round-trips a description and a favourite", () => {
         const recipe = new Recipe(undefined, JSON.stringify({
-            pours: [], ratio: 16, dosage: 18,
+            pours: [], ratio: 16, dosage: 18, grindSize: 60,
             favourite: true, description: "Sunday morning"
         }));
 
