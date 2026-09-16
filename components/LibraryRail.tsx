@@ -1,13 +1,18 @@
 import React, {useEffect} from "react";
 import {ScrollView} from "react-native";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
-import {XStack, YStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
 import RailChip, {CHIP_HEIGHT} from "@/components/RailChip";
 import RailSearch from "@/components/RailSearch";
 import {palette} from "@/constants/colors";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
-import {chipLabel, isDefaultSort, type SortAxis, type SortDirection} from "@/library/librarySort";
+import {
+    chipLabel,
+    isDefaultSort,
+    type SortAxis,
+    type SortDirection
+} from "@/library/librarySort";
 
 /** The rail's own vertical padding when expanded, and when shrunk to make room. */
 const RAIL_PADDING = 10;
@@ -43,7 +48,43 @@ type Props = {
     /** The filter chips to draw, in the order they should appear. */
     filters: readonly RailFilter[];
     onFilterPress: (id: string) => void;
+    /** One-line guidance, gated by the owner through the existing hints setting. */
+    hint?: string;
 };
+
+const SORT_AXIS_ACCESSIBILITY: Record<SortAxis, string> = {
+    name:        "name",
+    added:       "date added",
+    lastBrewed:  "last brewed",
+    timesBrewed: "times brewed",
+    ratio:       "ratio"
+};
+
+const SORT_DIRECTION_ACCESSIBILITY: Record<SortAxis, Record<SortDirection, string>> = {
+    name:        {asc: "A to Z", desc: "Z to A"},
+    added:       {asc: "oldest first", desc: "newest first"},
+    lastBrewed:  {asc: "longest ago first", desc: "most recent first"},
+    timesBrewed: {asc: "least brewed first", desc: "most brewed first"},
+    ratio:       {asc: "low to high", desc: "high to low"}
+};
+
+function sentenceCase(label: string): string {
+    const lower = label.toLocaleLowerCase().replace("xbloom", "xBloom");
+    return `${lower.charAt(0).toLocaleUpperCase()}${lower.slice(1)}`;
+}
+
+function sortAccessibilityLabel(sort: SortAxis, direction: SortDirection): string {
+    return `Sort by ${SORT_AXIS_ACCESSIBILITY[sort]}, ${SORT_DIRECTION_ACCESSIBILITY[sort][direction]}`;
+}
+
+function filterAccessibilityLabel(filter: RailFilter): string {
+    const state = filter.active ? "applied" : "not applied";
+    if (filter.id.startsWith("sharedBy:")) {
+        const name = filter.id.slice("sharedBy:".length).trim() || sentenceCase(filter.label);
+        return `Recipes that arrived from ${name} filter ${state}`;
+    }
+    return `${sentenceCase(filter.label)} filter ${state}`;
+}
 
 /**
  * The rail: one row of chrome above the library that can search it, sort it and
@@ -71,7 +112,8 @@ export default function LibraryRail({
     direction,
     onSortPress,
     filters,
-    onFilterPress
+    onFilterPress,
+    hint
 }: Props) {
     const reduced = useReducedMotion();
 
@@ -103,7 +145,7 @@ export default function LibraryRail({
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortActive ? chipLabel(sort) : undefined}
-                  accessibilityLabel="Sort recipes"
+                  accessibilityLabel={sortAccessibilityLabel(sort, direction)}
                   onPress={onSortPress}/>
     ];
 
@@ -126,17 +168,27 @@ export default function LibraryRail({
                     never be pushed off screen. Unbounded, the chips would simply
                     run past the edge and the row would not scroll at all, which
                     is the half of the rail that has to. */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                <ScrollView testID="rail-filter-row"
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            accessibilityRole="list"
+                            accessibilityLabel="Recipe filters"
                             style={{flexShrink: 1}}
                             contentContainerStyle={{gap: CHIP_GAP, alignItems: "center"}}>
                     {filters.map((filter) => (
                         <RailChip key={filter.id} testID={`rail-filter-${filter.id}`}
                                   active={filter.active} label={filter.label}
-                                  accessibilityLabel={filter.label}
+                                  accessibilityLabel={filterAccessibilityLabel(filter)}
                                   onPress={() => onFilterPress(filter.id)}/>
                     ))}
                 </ScrollView>
             </XStack>
+            {hint !== undefined && (
+                <Text color={palette.dim} fontSize={13} paddingHorizontal="$3" paddingTop="$1"
+                      accessibilityLiveRegion="polite">
+                    {hint}
+                </Text>
+            )}
         </Animated.View>
     );
 }

@@ -43,6 +43,7 @@ type Props = {
 export default function RailSearch({onTermChange}: Props) {
     const {expanded, text, active, onExpand, onChangeText, onClear} = useRailSearch(onTermChange);
     const reduced = useReducedMotion();
+    const searchState = active ? `term ${text} active` : "no search term";
 
     const open = useSharedValue(0);
     const inputRef = useRef<TextInput | null>(null);
@@ -75,7 +76,8 @@ export default function RailSearch({onTermChange}: Props) {
     if (!expanded) {
         return (
             <RailChip testID="rail-search" icon="search" active={false}
-                      accessibilityLabel="Search recipes" onPress={onExpand}/>
+                      accessibilityLabel={`Search recipes, collapsed, ${searchState}`}
+                      onPress={onExpand}/>
         );
     }
 
@@ -93,7 +95,7 @@ export default function RailSearch({onTermChange}: Props) {
                 <Input
                     ref={inputRef}
                     testID="rail-search-input"
-                    accessibilityLabel="Search recipes"
+                    accessibilityLabel={`Search recipes, expanded, ${searchState}`}
                     flex={1}
                     unstyled
                     placeholder="Search"

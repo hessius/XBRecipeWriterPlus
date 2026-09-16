@@ -87,6 +87,15 @@ type RecipeListItem =
     | {kind: "heading"; id: string; label: string}
     | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
 
+/**
+ * Six is the first point where the rail earns teaching: on the smallest target
+ * phone the initial library view is no longer scannable at a glance, and with a
+ * 3-of-6 stock shelf the filter row has a real chip to explain rather than a
+ * future affordance.
+ */
+const RAIL_HINT_MIN_LIBRARY_SIZE = 6;
+const RAIL_HINT = "Search, sort and filter recipes from this row.";
+
 function SectionHeading({label}: {label: string}) {
     return (
         <YStack paddingHorizontal="$3" paddingTop="$4" paddingBottom="$1">
@@ -154,6 +163,7 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+    const [showHints] = useSetting("showHints", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -175,6 +185,7 @@ export default function HomeScreen({db, settings}: Props) {
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [popoverNow, setPopoverNow] = useState(0);
     const [sortOpen, setSortOpen] = useState(false);
+    const [railHintDismissed, setRailHintDismissed] = useState(false);
 
     // Advance the displayed age while the popover is open.
     //
@@ -255,6 +266,10 @@ export default function HomeScreen({db, settings}: Props) {
     }));
     const activeFilterLabels =
         asStockFilters(libraryQuery.query.filters).map((id) => STOCK_FILTERS[id].label);
+    const showRailHint = showHints
+        && !railHintDismissed
+        && library.librarySize >= RAIL_HINT_MIN_LIBRARY_SIZE
+        && railFilters.length > 0;
     const favouriteRecipes = library.recipes.filter((recipe) => recipe.favourite);
     const otherRecipes = library.recipes.filter((recipe) => !recipe.favourite);
     const drawSections =
@@ -705,12 +720,22 @@ export default function HomeScreen({db, settings}: Props) {
                     <LibraryRail
                         key={libraryQuery.clearToken}
                         collapsed={collapsed}
-                        onSearchChange={libraryQuery.onSearchChange}
+                        onSearchChange={(term) => {
+                            setRailHintDismissed(true);
+                            libraryQuery.onSearchChange(term);
+                        }}
                         sort={libraryQuery.sort}
                         direction={libraryQuery.direction}
-                        onSortPress={() => setSortOpen(true)}
+                        onSortPress={() => {
+                            setRailHintDismissed(true);
+                            setSortOpen(true);
+                        }}
                         filters={railFilters}
-                        onFilterPress={libraryQuery.toggleFilter}/>
+                        onFilterPress={(id) => {
+                            setRailHintDismissed(true);
+                            libraryQuery.toggleFilter(id);
+                        }}
+                        hint={showRailHint ? RAIL_HINT : undefined}/>
                 )}
 
                 {wholeLibraryEmpty ? (

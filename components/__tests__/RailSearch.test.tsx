@@ -27,6 +27,22 @@ async function expand() {
 }
 
 describe("RailSearch", () => {
+    it("announces that the collapsed chip has no active term", async () => {
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+
+        expect(screen.getByRole("button", {
+            name: "Search recipes, collapsed, no search term"
+        })).toBeTruthy();
+    });
+
+    it("announces that the expanded field has an active term", async () => {
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await expand();
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
+
+        expect(screen.getByLabelText("Search recipes, expanded, term eth active")).toBeTruthy();
+    });
+
     it("shows a bare glyph until it is tapped", async () => {
         await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
         expect(screen.getByTestId("rail-search")).toBeTruthy();

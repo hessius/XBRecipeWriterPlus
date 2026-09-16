@@ -364,6 +364,48 @@ describe("HomeScreen", () => {
         expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
     });
 
+    it("shows one rail hint when hints are on and the library is large enough", async () => {
+        const recipes = [
+            tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")
+        ];
+        await renderHome({
+            recipes,
+            settings: new Settings(memoryStorage({showHints: true}))
+        });
+
+        expect(screen.getByText("Search, sort and filter recipes from this row.")).toBeTruthy();
+        expect(screen.getAllByText("Search, sort and filter recipes from this row.")).toHaveLength(1);
+    });
+
+    it("leaves the rail hint hidden when hints are off", async () => {
+        await renderHome({
+            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
+            settings: new Settings(memoryStorage({showHints: false}))
+        });
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
+    it("leaves the rail hint hidden while the library is still small", async () => {
+        await renderHome({
+            recipes:  ["A", "B", "C", "D", "E"].map(named),
+            settings: new Settings(memoryStorage({showHints: true}))
+        });
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
+    it("shows the rail hint only until the rail is used", async () => {
+        await renderHome({
+            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
+            settings: new Settings(memoryStorage({showHints: true}))
+        });
+
+        expect(screen.getByText("Search, sort and filter recipes from this row.")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Sort by name, A to Z"));
+
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
     it("keeps the header count on the whole library when a search matches nothing", async () => {
         // The count beside the wordmark says how many recipes you have, not how
         // many survived the last search. Reading it off the queried list makes

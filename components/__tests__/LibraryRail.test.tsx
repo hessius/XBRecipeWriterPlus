@@ -43,6 +43,57 @@ function railProps(overrides: Partial<React.ComponentProps<typeof LibraryRail>> 
 }
 
 describe("LibraryRail", () => {
+    it("announces search, sort and filters in traversal order with their state", async () => {
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+
+        expect(screen.getAllByRole("button").map((button) => button.props.accessibilityLabel))
+            .toEqual([
+                "Search recipes, collapsed, no search term",
+                "Sort by date added, newest first",
+                "Tea filter not applied",
+                "Single pour filter applied"
+            ]);
+    });
+
+    it("keeps the horizontal filter row visible to screen readers as one reachable group", async () => {
+        await renderWithProviders(<LibraryRail {...railProps()}/>);
+
+        const row = screen.getByTestId("rail-filter-row");
+        expect(row.props.accessibilityLabel).toBe("Recipe filters");
+        expect(row.props.accessibilityRole).toBe("list");
+        expect(row.props.accessibilityElementsHidden).not.toBe(true);
+        expect(row.props.importantForAccessibility).not.toBe("no-hide-descendants");
+    });
+
+    it("describes shared-by filters as recipes that arrived from someone", async () => {
+        await renderWithProviders(
+            <LibraryRail {...railProps({
+                filters: [{id: "sharedBy:Guji Roasters", label: "GUJI ROASTERS", active: false}]
+            })}/>
+        );
+
+        expect(screen.getByRole("button", {
+            name: "Recipes that arrived from Guji Roasters filter not applied"
+        })).toBeTruthy();
+    });
+
+    it("uses natural state words for every sort direction", async () => {
+        const {rerender} = await renderWithProviders(
+            <LibraryRail {...railProps({sort: "ratio", direction: "asc"})}/>
+        );
+
+        expect(screen.getByRole("button", {name: "Sort by ratio, low to high"})).toBeTruthy();
+
+        await rerender(
+            <LibraryRail {...railProps({sort: "timesBrewed", direction: "desc"})}/>
+        );
+
+        expect(screen.getByRole("button", {name: "Sort by times brewed, most brewed first"}))
+            .toBeTruthy();
+    });
+
     it("draws the divider that tells a user part of the row scrolls", async () => {
         await renderWithProviders(<LibraryRail {...railProps()}/>);
         const divider = screen.getByTestId("rail-divider");
