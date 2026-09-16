@@ -1,71 +1,351 @@
 import * as SQLite from 'expo-sqlite';
 
 import Recipe from './Recipe';
-import {assignAccent} from './accent';
+import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
+import {tagKey} from './tagKey';
+import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
+        projectRecipe, schemaHash} from './recipeIndex';
 
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
+    private inTransaction = false;
+
+    /** SQLite has no nested transactions; the outermost one wins. */
+    private atomically(task: () => void): void {
+        if (this.inTransaction) {
+            task();
+            return;
+        }
+        this.inTransaction = true;
+        try {
+            this.db.withTransactionSync(task);
+        } finally {
+            this.inTransaction = false;
+        }
+    }
+
+    /**
+     * Write a recipe's blob, its index columns and its tags as one unit.
+     *
+     * One statement rather than a blob write followed by an index write: a row
+     * must never carry an index describing a different recipe than its blob.
+     * `INSERT OR REPLACE` covers both insert and update, so the projection is
+     * expressed once.
+     */
+    private writeRow(recipe: Recipe): void {
+        const projected = projectRecipe(recipe);
+        const names = Object.keys(projected);
+        const placeholders = names.map(() => "?").join(", ");
+
+        this.db.runSync(
+            `INSERT OR REPLACE INTO recipes (uuid, recipeJSON, ${names.join(", ")})
+             VALUES (?, ?, ${placeholders});`,
+            [recipe.uuid, JSON.stringify(recipe), ...names.map((name) => projected[name])]
+        );
+
+        this.writeTags(recipe.uuid, recipe.tags);
+    }
+
+    /**
+     * Replace a recipe's rows in `recipe_tags`, delete-then-insert.
+     *
+     * Shared by `writeRow` and `reindexRow` so the tag projection lives in one
+     * place: an update and a rebuild must produce identical tag rows for the
+     * same recipe, and the surest way to guarantee that is to have them run the
+     * same code.
+     */
+    private writeTags(uuid: string, tags: string[]): void {
+        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+        for (const tag of tags) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO recipe_tags (uuid, tag, tagKey) VALUES (?, ?, ?);",
+                [uuid, tag, tagKey(tag)]
+            );
+        }
+    }
+
+    /**
+     * Rewrite one row's index columns and tags from an already-parsed recipe,
+     * without touching its blob.
+     *
+     * This is the rebuild's counterpart to `writeRow`, and the difference is
+     * the whole point: it never names `recipeJSON` and uses UPDATE, not
+     * INSERT OR REPLACE, so it cannot rewrite the blob under any circumstance —
+     * not even a bug in the projection. A rebuild touches every recipe in the
+     * library at once; routing every blob through parse-then-reserialise would
+     * mean a single serialisation regression rewrites the user's whole library
+     * with no backup, which is the one unrecoverable outcome the "blob is the
+     * only truth" rule exists to prevent. The `recipe` here is read-only.
+     *
+     * The SET clause is generated from `projectRecipe`'s keys so the column
+     * list still lives only in recipeIndex.ts.
+     */
+    private applyIndex(
+        uuid: string,
+        projected: Record<string, IndexValue>,
+        tags: string[]
+    ): void {
+        const names = Object.keys(projected);
+        const assignments = names.map((name) => `${name} = ?`).join(", ");
+
+        this.db.runSync(
+            `UPDATE recipes SET ${assignments} WHERE uuid = ?;`,
+            [...names.map((name) => projected[name]), uuid]
+        );
+
+        this.writeTags(uuid, tags);
+    }
+
+    /**
+     * Blank every derived value for one row.
+     *
+     * The counterpart to `applyIndex`, for a row the rebuild cannot read.
+     * Skipping such a row must leave it *unindexed*, and doing nothing does not
+     * achieve that: the columns and tag rows from the previous schema are still
+     * sitting there, so a recipe whose blob has since become unreadable would
+     * go on matching filters and appearing in shelves on the strength of a
+     * reading nobody can reproduce or correct. Worse, it would do so silently,
+     * because the row looks indexed.
+     *
+     * The column list comes from the descriptor array like every other one
+     * here, so this cannot drift out of step with what `applyIndex` writes.
+     */
+    private clearIndex(uuid: string): void {
+        const assignments = INDEX_COLUMNS
+            .map((column) => `${column.name} = NULL`)
+            .join(", ");
+
+        this.db.runSync(`UPDATE recipes SET ${assignments} WHERE uuid = ?;`, [uuid]);
+        this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+    }
 
     constructor() {
         this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
         this.createTable();
+        this.migrateIndex();
     }
 
 
+    /**
+     * Bring the schema up to date.
+     *
+     * The base table is created exactly as it always was, so an existing
+     * database is untouched by the first statement. Everything after it is
+     * additive: every index column is nullable with no default, which makes
+     * this method a no-op on re-run and makes a partially completed previous
+     * run self-healing.
+     *
+     * `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite versions
+     * Expo ships, so a duplicate is caught rather than avoided — the same
+     * pattern BrewDatabase already uses.
+     */
     private createTable(): void {
+        this.dropLegacyTagTable();
         this.db.execSync(`
             PRAGMA journal_mode = WAL;
-            CREATE TABLE IF NOT EXISTS recipes (uuid TEXT PRIMARY KEY NOT NULL,recipeJSON TEXT);`
+            CREATE TABLE IF NOT EXISTS recipes (uuid TEXT PRIMARY KEY NOT NULL,recipeJSON TEXT);
+            CREATE TABLE IF NOT EXISTS recipe_tags (
+                uuid TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                tagKey TEXT NOT NULL,
+                PRIMARY KEY (uuid, tagKey)
+            );
+            CREATE INDEX IF NOT EXISTS idx_recipe_tags_key ON recipe_tags(tagKey);
+            CREATE TABLE IF NOT EXISTS schema_meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL
+            );`
         );
+
+        for (const definition of columnDefinitions()) {
+            try {
+                this.db.execSync(`ALTER TABLE recipes ADD COLUMN ${definition};`);
+            } catch {
+                // Already there.
+            }
+        }
+
+        for (const statement of indexStatements()) {
+            this.db.execSync(statement);
+        }
+    }
+
+    /**
+     * Replace the first shape of `recipe_tags`, which matched with COLLATE
+     * NOCASE, with the one that carries a folded `tagKey`.
+     *
+     * Dropped rather than altered because the table is derived: every row in it
+     * can be recomputed from the blobs, so there is nothing in it to preserve
+     * and a rebuild is the simplest correct migration. Clearing the stored
+     * schema hash is what books that rebuild — `migrateIndex` runs immediately
+     * after this and will find its hash missing.
+     *
+     * Detected by column rather than by a version number so it is idempotent
+     * and self-healing: a run interrupted between the drop and the rebuild
+     * leaves no `tagKey` to find, and the next open simply does it again.
+     */
+    private dropLegacyTagTable(): void {
+        const columns = this.db.getAllSync(
+            "PRAGMA table_info(recipe_tags);"
+        ) as {name: string}[];
+
+        if (columns.length === 0) return;
+        if (columns.some((column) => column.name === "tagKey")) return;
+
+        this.db.execSync("DROP TABLE recipe_tags;");
+        this.db.execSync(`
+            CREATE TABLE IF NOT EXISTS schema_meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL
+            );
+            DELETE FROM schema_meta WHERE key = 'indexHash';`
+        );
+    }
+
+    /**
+     * Rebuild the index when the descriptor array has changed.
+     *
+     * The blob is never written here — `reindexRow` updates only the index
+     * columns and tags — so the worst a wrong descriptor can do is produce a
+     * wrong index over intact data, which the next rebuild corrects.
+     *
+     * A row whose blob will not parse is skipped rather than allowed to throw.
+     * This runs unattended on launch, before anything can be shown, so a single
+     * corrupt blob would otherwise make the database unopenable — and because a
+     * failed rebuild deliberately leaves the hash stale, it would retry and
+     * fail again on every subsequent launch. Skipping leaves that row's index
+     * columns NULL, which is the recoverable failure this whole design is built
+     * around; the blob is untouched and still there to be recovered from.
+     *
+     * The hash is stored last and inside the same transaction, so a failure
+     * that is *not* one bad row — a genuine SQL error — leaves it stale and the
+     * next open simply tries again: a half-rebuilt index cannot persist. Those
+     * are two independent defences — ordering alone survives a lost
+     * transaction, and the transaction alone survives a reordering — so a test
+     * can only catch losing both at once, which is what "leaves the hash
+     * unstored when a rebuild fails" does. Keep both.
+     *
+     * A legacy blob is not upgraded in place by a rebuild, deliberately. That
+     * is the status quo: Recipe's constructor migrates lazily on every read,
+     * and an actual save writes the upgraded form through writeRow.
+     */
+    private migrateIndex(): void {
+        const current = schemaHash();
+        const stored = this.db.getFirstSync(
+            "SELECT value FROM schema_meta WHERE key = 'indexHash';"
+        ) as {value: string} | null;
+
+        if (stored && stored.value === current) return;
+
+        this.atomically(() => {
+            const rows = this.db.getAllSync(
+                "SELECT uuid, recipeJSON FROM recipes;"
+            ) as {uuid: string; recipeJSON: string}[];
+
+            for (const row of rows) {
+                let projected: Record<string, IndexValue>;
+                let tags: string[];
+                try {
+                    const recipe = new Recipe(undefined, row.recipeJSON);
+                    projected = projectRecipe(recipe);
+                    tags = recipe.tags;
+                } catch {
+                    // Unreadable blob: leave this row unindexed and carry on,
+                    // rather than take the whole library down with it.
+                    //
+                    // Both statements are inside the try on purpose. Parsing is
+                    // not the boundary -- `Recipe` is forgiving by design, so a
+                    // corrupt blob can construct successfully and only fail in
+                    // a projection, as a numeric `name` does by reaching
+                    // `hasName().trim()`. Catching the parse alone left that
+                    // second failure to escape into the transaction and take
+                    // the library down on this and every later launch, which is
+                    // precisely the outcome this catch exists to prevent.
+                    this.clearIndex(row.uuid);
+                    continue;
+                }
+                // Outside the try, and that is the other half of the rule. A
+                // failure here is SQL failing, not a bad row, and it must stay
+                // fatal: it rolls the transaction back and leaves the hash
+                // unstored so the next open retries. Widening the catch to
+                // cover these would turn a transient database error into a
+                // permanently half-built index that believes it is complete.
+                this.applyIndex(row.uuid, projected, tags);
+            }
+
+            this.db.runSync(
+                `INSERT INTO schema_meta (key, value) VALUES ('indexHash', ?)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+                [current]
+            );
+        });
+    }
+
+    /**
+     * The accent indices already taken in a recipe's half of the palette.
+     *
+     * The SQL half of `accentsInUseAmong`. `isTea` is a column precisely so
+     * this does not reimplement `Recipe.isTea()`, which owns the 0x13/0x23
+     * legacy normalisations -- `accent.ts` warns that a second copy of that
+     * predicate would silently miss the next such fix.
+     *
+     * The recipe is excluded from its own tally, or it would count as
+     * competition for the colour it already holds. Repeats are kept: a
+     * repeated index is what makes one colour more used than another.
+     */
+    private accentsInUse(recipe: Recipe): number[] {
+        const rows = this.db.getAllSync(
+            `SELECT accentIndex FROM recipes
+             WHERE isTea = ? AND uuid != ? AND accentIndex IS NOT NULL;`,
+            [recipe.isTea() ? 1 : 0, recipe.uuid]
+        ) as {accentIndex: number}[];
+        return rows.map((row) => row.accentIndex);
     }
 
     public insertRecipe(recipe: Recipe): void {
         if (recipe && !this.getRecipe(recipe.uuid)) {
-            assignAccent(recipe, this.retrieveAllRecipes() ?? []);
-            let recipeJson = JSON.stringify(recipe);
-            this.db.runSync(`
-                        INSERT INTO recipes (uuid, recipeJSON)
-                        VALUES (?, ?);`,
-                [
-                    recipe.uuid,
-                    recipeJson
-                ]
-            );
+            recipe.accentIndex = reassignIfCrossed(recipe, this.accentsInUse(recipe));
+            this.atomically(() => this.writeRow(recipe));
         } else {
             throw new Error("DB: Recipe already exists");
         }
     }
 
     public updateRecipe(uuid: string, updatedRecipe: Recipe): void {
+        // Refused rather than handled. An earlier version deleted the old row
+        // and let writeRow insert the new one, which is correct only while no
+        // caller ever does it: writeRow's INSERT OR REPLACE keys on the blob's
+        // own uuid, so if the new uuid already belongs to another recipe, that
+        // recipe is replaced immediately after the original was deleted. One
+        // call, two recipes gone, no error.
+        //
+        // No caller rewrites a uuid, and the cloud import path goes out of its
+        // way not to: importPlan.ts assigns `recipe.uuid = replacing.uuid`
+        // precisely so this stays true. So there is nothing to support here,
+        // only a dormant way to lose data, and a throw is cheaper than the
+        // uniqueness check the working version would need.
+        if (updatedRecipe.uuid !== uuid) {
+            throw new Error(
+                `updateRecipe cannot rewrite a uuid (${uuid} -> ${updatedRecipe.uuid})`
+            );
+        }
+
         let recipe = this.getRecipe(uuid);
         if (!recipe) {
             this.insertRecipe(updatedRecipe);
             return;
-        } else {
-            assignAccent(updatedRecipe, this.retrieveAllRecipes() ?? []);
-            let updatedRecipeJson = JSON.stringify(updatedRecipe);
-            this.db.runSync(`
-                        UPDATE recipes
-                        SET recipeJSON = ?
-                        WHERE uuid = ?;`,
-                [
-                    updatedRecipeJson,
-                    uuid
-                ]
-            );
         }
+        updatedRecipe.accentIndex =
+            reassignIfCrossed(updatedRecipe, this.accentsInUse(updatedRecipe));
+        this.atomically(() => this.writeRow(updatedRecipe));
     }
 
     public deleteRecipe(uuid: string): void {
-        this.db.runSync(`
-                    DELETE
-                    FROM recipes
-                    WHERE uuid = ?;`,
-            [
-                uuid
-            ]
-        );
+        this.atomically(() => {
+            this.db.runSync("DELETE FROM recipes WHERE uuid = ?;", [uuid]);
+            this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+        });
     }
 
     /**
@@ -76,7 +356,10 @@ class RecipeDatabase {
      * this process holding a handle to something that no longer exists.
      */
     public deleteAllRecipes(): void {
-        this.db.runSync("DELETE FROM recipes");
+        this.atomically(() => {
+            this.db.runSync("DELETE FROM recipes");
+            this.db.runSync("DELETE FROM recipe_tags");
+        });
     }
 
     /**
@@ -90,7 +373,7 @@ class RecipeDatabase {
      * rather than swallowed.
      */
     public insertRecipes(recipes: Recipe[]): void {
-        this.db.withTransactionSync(() => {
+        this.atomically(() => {
             for (const recipe of recipes) this.insertRecipe(recipe);
         });
     }
@@ -104,7 +387,7 @@ class RecipeDatabase {
      * original library exactly as it was instead of an emptied, half-filled one.
      */
     public replaceAllRecipes(recipes: Recipe[]): void {
-        this.db.withTransactionSync(() => {
+        this.atomically(() => {
             this.deleteAllRecipes();
             for (const recipe of recipes) this.insertRecipe(recipe);
         });

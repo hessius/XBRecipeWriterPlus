@@ -83,10 +83,15 @@ export function nextAccentIndex(group: AccentGroup, inUse: number[]): number {
  * The accent index a recipe should hold, given the accents already in use in
  * its half of the palette.
  *
- * Returns the existing index unchanged when it is still valid. A recipe whose
- * cup type has crossed between coffee and tea gets a fresh one, because the two
- * halves are disjoint: a coffee index can point past the end of the shorter tea
- * half, and even when it does not it names a colour from the wrong group.
+ * Returns the existing index unchanged whenever it is in range for the half
+ * the recipe now belongs to — including across a crossing between coffee and
+ * tea. The index is looked up in the current half, so a coffee index of 0-3
+ * already names a real tea colour and keeping it is what stops an accent
+ * moving under the user.
+ *
+ * A fresh index is taken only when the current one is out of range, which is
+ * what a crossing can cause: coffee has more accents than tea, so 4-7 point
+ * past the end of the shorter half.
  *
  * @param inUse Accent indices held by other recipes in the same half.
  */
@@ -134,10 +139,12 @@ export function accentsInUseAmong(recipe: Recipe, others: Recipe[]): number[] {
  * editor and again on save without the colour moving. That is the point of it —
  * the colour the user edits under is the colour the library row gets.
  *
- * The one exception is a recipe that changes cup type between the two calls:
- * crossing between coffee and tea is exactly what makes the old index name a
- * colour in the wrong half, so `reassignIfCrossed` picks a fresh one. Moving the
- * accent then is the correct answer rather than a broken promise.
+ * The one exception is a recipe that changes cup type between the two calls
+ * *and* whose index does not fit the half it moves into — coffee has more
+ * accents than tea, so a high coffee index has nowhere to land. Then
+ * `reassignIfCrossed` picks a fresh one, and moving the accent is the correct
+ * answer rather than a broken promise. A crossing that keeps its index in
+ * range keeps its colour.
  */
 export function assignAccent(recipe: Recipe, others: Recipe[]): void {
     recipe.accentIndex = reassignIfCrossed(recipe, accentsInUseAmong(recipe, others));

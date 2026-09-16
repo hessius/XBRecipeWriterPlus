@@ -104,6 +104,33 @@ describe("buildImportPlan", () => {
         expect(plan.entries[0].recipe.uuid).toBe(local.uuid);
     });
 
+    it("keeps local tags when a cloud row replaces the recipe carrying them", async () => {
+        // Tags are local. xBloom has no concept of them, so a freshly mapped
+        // cloud recipe always carries none, and a refresh that let that stand
+        // would serialise an empty array over work the user did by hand. The
+        // recipe would look untouched: same name, same uuid, same everything
+        // the screen shows.
+        const local = imported();
+        local.setTags(["filter", "morning"]);
+
+        const plan = buildImportPlan([row({dose: 20})], [local]);
+
+        expect(plan.entries[0].status).toBe("updated");
+        expect(plan.entries[0].recipe.tags).toEqual(["filter", "morning"]);
+    });
+
+    it("does not let local tags change what counts as a change", async () => {
+        // The fingerprint covers brew content only, so tagging a recipe must
+        // not make it read as edited. Otherwise every tagged recipe would be
+        // permanently "edited" and unselectable on every refresh.
+        const local = imported();
+        local.setTags(["filter"]);
+
+        const plan = buildImportPlan([row()], [local]);
+
+        expect(plan.entries[0].status).toBe("unchanged");
+    });
+
     it("calls a changed row updated when the local copy is untouched", async () => {
         const plan = buildImportPlan([row({dose: 20})], [imported()]);
         expect(plan.entries[0].status).toBe("updated");

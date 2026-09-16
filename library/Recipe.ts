@@ -2,6 +2,7 @@ import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
+import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
 
 export const CUP_TYPE = {
@@ -40,6 +41,16 @@ export function isValidXID(xid: string): boolean {
     return trimmed.length <= XID_LENGTH && /^[A-Za-z]{2,}T?[0-9]{2,}$/.test(trimmed);
 }
 export const DEFAULT_GRIND_SIZE = 50;
+
+/**
+ * UTF-16 code units, not glyphs — an emoji costs two and a family emoji eight.
+ * A deliberately coarse bound: it exists to cap a hostile backup, not to ration
+ * the user. Longer tags are dropped on import rather than truncated, because a
+ * truncated tag is a plausible-looking wrong tag.
+ */
+export const MAX_TAG_LENGTH = 32;
+/** Tags per recipe. Bounds a hostile backup, not the user. */
+export const MAX_TAGS_PER_RECIPE = 20;
 
 const POLY_TABLE = [
     0x00, 0x5E, 0xBC, 0xE2, 0x61, 0x3F, 0xDD, 0x83,
@@ -116,6 +127,18 @@ class Recipe {
      * `library/accent.ts`.
      */
     public accentIndex?: number;
+    /**
+     * Free-text labels the user applied.
+     *
+     * On the model rather than in a table of their own so that a tag travels
+     * with the recipe everywhere a recipe already goes: `buildBackup`
+     * serialises the object, `duplicateRecipe` copies it through its own JSON
+     * form, and a later sync will carry it. A separate table would have been
+     * invisible to all three, and export would have dropped tags silently.
+     *
+     * Always normalised — write through `setTags`, never by assignment.
+     */
+    public tags: string[] = [];
     /**
      * The xBloom row id a share link was minted from, and the link itself.
      *
@@ -250,6 +273,7 @@ class Recipe {
             this.createdAt = jsonRecipe.createdAt ?? 0;
             this.source = jsonRecipe.source ?? "manual";
             this.accentIndex = jsonRecipe.accentIndex;
+            this.tags = Recipe.normaliseTags(jsonRecipe.tags);
             // Defaulted like the other strings above: `displayName()` and
             // `hasName()` call `xid.trim()` on every row of the library, so a
             // record without one would crash the list rather than read as
@@ -288,6 +312,40 @@ class Recipe {
             this.bypassTemp    = jsonRecipe.bypassTemp    ?? 85;
         }
 
+    }
+
+    /**
+     * Normalise and store a set of tags.
+     *
+     * Deduplication is case-insensitive but keeps the first spelling the user
+     * typed, so "Espresso" and "espresso" are one tag and it stays capitalised
+     * the way they wrote it.
+     *
+     * The folding is JavaScript's, which is full Unicode: "CAFÉ" and "café"
+     * are one tag here. SQLite's built-in NOCASE folds ASCII only and would
+     * call them two. So a tag column that needs to agree with this must store
+     * a key folded by this function, not lean on COLLATE NOCASE — otherwise
+     * filtering disagrees with what the user sees.
+     */
+    public setTags(tags: unknown): void {
+        this.tags = Recipe.normaliseTags(tags);
+    }
+
+    public static normaliseTags(tags: unknown): string[] {
+        if (!Array.isArray(tags)) return [];
+        const seen = new Set<string>();
+        const kept: string[] = [];
+        for (const entry of tags) {
+            if (typeof entry !== "string") continue;
+            const tag = entry.trim();
+            if (tag.length === 0 || tag.length > MAX_TAG_LENGTH) continue;
+            const key = tagKey(tag);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            kept.push(tag);
+            if (kept.length === MAX_TAGS_PER_RECIPE) break;
+        }
+        return kept;
     }
 
     /**
