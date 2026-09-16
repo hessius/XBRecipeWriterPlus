@@ -2,7 +2,7 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
-import {resolveStockFilter} from "@/library/libraryFilters";
+import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
@@ -12,6 +12,7 @@ function stubDb(recipes: Recipe[]) {
     return {
         queryRecipes:       jest.fn(() => recipes),
         retrieveAllRecipes: jest.fn(() => recipes),
+        countRecipes:       jest.fn(() => recipes.length),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
         // Writes through to the backing array so a reload after the write
@@ -22,7 +23,10 @@ function stubDb(recipes: Recipe[]) {
         }),
         deleteAllRecipes:   jest.fn(),
         insertRecipes:      jest.fn(),
-        replaceAllRecipes:  jest.fn()
+        replaceAllRecipes:  jest.fn(),
+        countRecipesByFilter: jest.fn((ids: readonly string[]) =>
+            Object.fromEntries(ids.map((id) => [id, 0]))
+        )
     };
 }
 
@@ -74,6 +78,24 @@ describe("useRecipeLibrary", () => {
         const db = stubDb([named("Ethiopia")]);
         await renderHook(() => useRecipeLibrary(db, query));
         expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
+    });
+
+    it("reads stock filter counts through the store's count method", async () => {
+        const db = stubDb([named("Ethiopia")]);
+        await renderHook(() => useRecipeLibrary(db));
+
+        expect(db.countRecipesByFilter).toHaveBeenCalledWith(
+            STOCK_FILTER_ORDER,
+            resolveStockFilter
+        );
+    });
+
+    it("throws when a store cannot count stock filters", async () => {
+        const {countRecipesByFilter: _omitted, ...withoutCounts} = stubDb([named("Ethiopia")]);
+
+        await expect(renderHook(() => useRecipeLibrary(withoutCounts))).rejects.toThrow(
+            "This store cannot count stock filters"
+        );
     });
 
     it("refuses to build a backup from a store that cannot read the table", async () => {
@@ -171,6 +193,10 @@ describe("useRecipeLibrary", () => {
         const stored = JSON.stringify(original);
         const db = {
             queryRecipes:       jest.fn(() => [new Recipe(undefined, stored)]),
+            countRecipes:       jest.fn(() => 1),
+            countRecipesByFilter: jest.fn((ids: readonly string[]) =>
+                Object.fromEntries(ids.map((id) => [id, 0]))
+            ),
             deleteRecipe:       jest.fn(),
             cloneRecipe:        jest.fn(),
             updateRecipe:       jest.fn(() => {

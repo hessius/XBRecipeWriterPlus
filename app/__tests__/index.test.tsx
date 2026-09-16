@@ -386,6 +386,36 @@ describe("HomeScreen", () => {
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
     });
 
+    it("draws no section heading when every visible recipe is a favourite", async () => {
+        const ethiopia = named("Ethiopia");
+        ethiopia.favourite = true;
+        const kenya = named("Kenya");
+        kenya.favourite = true;
+
+        await renderHome({
+            recipes:  [ethiopia, kenya],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
+        });
+
+        expect(screen.queryByText("FAVOURITES")).toBeNull();
+        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("draws no section heading when favourites first is off", async () => {
+        const favourite = named("Ethiopia");
+        favourite.favourite = true;
+
+        await renderHome({
+            recipes:  [favourite, named("Kenya")],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: false}))
+        });
+
+        expect(screen.queryByText("FAVOURITES")).toBeNull();
+        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
     it("separates an empty query result from an empty library and can clear it", async () => {
         jest.useFakeTimers();
         await renderHome({

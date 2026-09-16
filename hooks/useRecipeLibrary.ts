@@ -23,10 +23,11 @@ import RecipeDatabase from "@/library/RecipeDatabase";
  * The restore/delete-all members are optional because not every caller reaches
  * for them: the home screen only reads, deletes one and clones one, and a test
  * store for that screen should not have to stub a transaction it never calls.
- * `retrieveAllRecipes` is optional on the same grounds, but `allRecipes()`
- * throws when it is missing rather than returning nothing, because the failure
- * it would otherwise cause is a backup file that is silently empty. The
- * production store (`RecipeDatabase`) provides all of them.
+ * `retrieveAllRecipes` and `countRecipesByFilter` are optional on the same
+ * grounds, but their callers throw when either is missing rather than returning
+ * nothing, because the failures they would otherwise cause are plausible
+ * success-shaped lies: an empty backup, or a rail whose filters silently
+ * vanished. The production store (`RecipeDatabase`) provides all of them.
  */
 export type RecipeStore = {
     queryRecipes: (query: LibraryQuery, resolveFilter?: FilterResolver) => Recipe[];
@@ -313,10 +314,10 @@ function readLibrarySize(db: RecipeStore, revision: number): number {
 
 function readFilterCounts(db: RecipeStore, revision: number): Record<string, number> {
     void revision;
-    if (db.countRecipesByFilter) {
-        return db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+    if (!db.countRecipesByFilter) {
+        throw new Error("This store cannot count stock filters");
     }
-    return {};
+    return db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
 }
 
 export default useRecipeLibrary;

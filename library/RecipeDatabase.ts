@@ -501,18 +501,27 @@ class RecipeDatabase {
         ids: readonly string[],
         resolveFilter: FilterResolver = () => null
     ): Record<string, number> {
-        const counts: Record<string, number> = {};
-        for (const id of ids) {
+        if (ids.length === 0) return {};
+
+        const params: IndexValue[] = [];
+        const selections = ids.map((id, index) => {
             const clause = resolveFilter(id);
             if (clause === null) {
                 throw new Error(`RecipeDatabase: unknown filter id "${id}"`);
             }
-            const row = this.db.getFirstSync(
-                `SELECT COUNT(*) AS count FROM recipes WHERE (${clause.where});`,
-                [...(clause.params ?? [])]
-            ) as {count: number} | null;
-            counts[id] = row?.count ?? 0;
-        }
+            params.push(...(clause.params ?? []));
+            return `COALESCE(SUM(CASE WHEN (${clause.where}) THEN 1 ELSE 0 END), 0) AS c${index}`;
+        });
+
+        const row = this.db.getFirstSync(
+            `SELECT ${selections.join(", ")} FROM recipes;`,
+            params
+        ) as Record<string, number> | null;
+
+        const counts: Record<string, number> = {};
+        ids.forEach((id, index) => {
+            counts[id] = row?.[`c${index}`] ?? 0;
+        });
         return counts;
     }
 

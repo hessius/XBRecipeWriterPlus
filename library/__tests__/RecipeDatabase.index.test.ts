@@ -20,6 +20,7 @@ jest.mock("expo-sqlite", () => ({
 /* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
 /* eslint-enable import/first */
 
 beforeEach(() => {
@@ -617,5 +618,23 @@ describe("accent assignment", () => {
         const settled = db.getRecipe(overflowing.uuid)!.accentIndex!;
         expect(settled).toBeGreaterThanOrEqual(0);
         expect(settled).toBeLessThan(4);
+    });
+});
+
+describe("filter counts", () => {
+    it("counts every stock filter in one SQLite read", () => {
+        const db = new RecipeDatabase();
+        const tea = new Recipe();
+        tea.name = "Tea";
+        tea.cupType = CUP_TYPE.TEA;
+        db.insertRecipe(tea);
+
+        const getFirst = jest.spyOn(mockBacking, "getFirstSync");
+
+        const counts = db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+
+        expect(getFirst).toHaveBeenCalledTimes(1);
+        expect(counts.tea).toBe(1);
+        expect(counts.pods).toBe(0);
     });
 });
