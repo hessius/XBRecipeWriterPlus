@@ -280,6 +280,28 @@ describe("RecipeCard", () => {
         expect(screen.queryByText("GRIND")).toBeNull();
     });
 
+    it("reads OFF rather than a coarseness when the grinder is disabled", async () => {
+        // A grinder-off recipe keeps whatever grindSize it was last given, so
+        // the number is stale rather than meaningful: drawing it says the
+        // recipe grinds to 25 when it does not grind at all.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({grinder: false})} onPress={jest.fn()}/>
+        );
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("OFF")).toBeTruthy();
+        expect(screen.queryByLabelText("25")).toBeNull();
+    });
+
+    it("announces the grinder as off rather than reading out the stale number", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({grinder: false})} onPress={jest.fn()}/>
+        );
+        const label = screen.getByTestId("recipe-card").props
+            .accessibilityLabel as string;
+        expect(label).toContain("grinder off");
+        expect(label).not.toContain("grind 25");
+    });
+
     it("is a card of at least a card's height, clipped to its corners", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
