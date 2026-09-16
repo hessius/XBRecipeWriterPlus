@@ -1,4 +1,4 @@
-import Recipe from "./Recipe";
+import Recipe, {MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
 /**
@@ -256,7 +256,11 @@ function isHttpsUrl(value: unknown): boolean {
 const DROPPABLE_RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     sharedBy:       (v) => typeof v === "string" && v.length <= MAX_SHARED_BY,
     sharedByAvatar: isHttpsUrl,
-    imageURL:       isHttpsUrl
+    imageURL:       isHttpsUrl,
+    // Both authored, both droppable: a malformed one costs a note or a star,
+    // and dropping the whole recipe would cost the recipe.
+    description:    (v) => typeof v === "string" && v.length <= MAX_DESCRIPTION,
+    favourite:      (v) => typeof v === "boolean"
 };
 
 const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {

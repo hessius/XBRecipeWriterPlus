@@ -1,12 +1,25 @@
 import {buildBackup, mergeRecipes, parseBackup, BACKUP_FORMAT, BACKUP_VERSION}
     from "@/library/backup";
-import Recipe from "@/library/Recipe";
+import Recipe, {MAX_DESCRIPTION} from "@/library/Recipe";
 
 function recipeNamed(name: string, uuid: string): Recipe {
     const recipe = new Recipe();
     recipe.name = name;
     recipe.uuid = uuid;
     return recipe;
+}
+
+/**
+ * A backup file whose single recipe carries the given extra keys verbatim,
+ * bypassing `Recipe` so a value the model would never produce can be tested.
+ */
+function backupFileWithRecipeFields(extra: Record<string, unknown>): string {
+    const valid = JSON.parse(
+        buildBackup([new Recipe(undefined,
+            JSON.stringify({pours: [], ratio: 16, dosage: 18}))], {})
+    );
+    valid.recipes[0] = {...valid.recipes[0], ...extra};
+    return JSON.stringify(valid);
 }
 
 describe("buildBackup", () => {
@@ -449,5 +462,45 @@ describe("tags", () => {
         expect(result.ok).toBe(true);
         if (!result.ok) return;
         expect(result.payload.recipes[0].tags).toEqual(["ok"]);
+    });
+});
+
+describe("authored fields through backup", () => {
+    it("round-trips a description and a favourite", () => {
+        const recipe = new Recipe(undefined, JSON.stringify({
+            pours: [], ratio: 16, dosage: 18,
+            favourite: true, description: "Sunday morning"
+        }));
+
+        const parsed = parseBackup(buildBackup([recipe], {}));
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+        expect(parsed.payload.recipes[0].favourite).toBe(true);
+        expect(parsed.payload.recipes[0].description).toBe("Sunday morning");
+    });
+
+    it("drops an over-long description and keeps the recipe", () => {
+        const file = backupFileWithRecipeFields({
+            description: "x".repeat(MAX_DESCRIPTION + 1)
+        });
+
+        const parsed = parseBackup(file);
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+        expect(parsed.payload.recipes).toHaveLength(1);
+        expect(parsed.payload.recipes[0].description).toBe("");
+    });
+
+    it("drops a non-boolean favourite and keeps the recipe", () => {
+        const file = backupFileWithRecipeFields({favourite: "yes"});
+
+        const parsed = parseBackup(file);
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+        expect(parsed.payload.recipes).toHaveLength(1);
+        expect(parsed.payload.recipes[0].favourite).toBe(false);
     });
 });
