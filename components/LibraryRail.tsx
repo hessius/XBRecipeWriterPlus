@@ -48,6 +48,8 @@ type Props = {
     /** The filter chips to draw, in the order they should appear. */
     filters: readonly RailFilter[];
     onFilterPress: (id: string) => void;
+    /** Called once a rail control is used, so the owner can dismiss onboarding. */
+    onUse?: () => void;
     /** One-line guidance, gated by the owner through the existing hints setting. */
     hint?: string;
 };
@@ -78,12 +80,11 @@ function sortAccessibilityLabel(sort: SortAxis, direction: SortDirection): strin
 }
 
 function filterAccessibilityLabel(filter: RailFilter): string {
-    const state = filter.active ? "applied" : "not applied";
     if (filter.id.startsWith("sharedBy:")) {
         const name = filter.id.slice("sharedBy:".length).trim() || sentenceCase(filter.label);
-        return `Recipes that arrived from ${name} filter ${state}`;
+        return `Recipes that arrived from ${name}`;
     }
-    return `${sentenceCase(filter.label)} filter ${state}`;
+    return `${sentenceCase(filter.label)} filter`;
 }
 
 /**
@@ -113,6 +114,7 @@ export default function LibraryRail({
     onSortPress,
     filters,
     onFilterPress,
+    onUse,
     hint
 }: Props) {
     const reduced = useReducedMotion();
@@ -141,12 +143,15 @@ export default function LibraryRail({
     // the view segmented pair into it without restructuring the rail. Do not add
     // the view pair here; that is phase 4's job.
     const cluster = [
-        <RailSearch key="search" onTermChange={onSearchChange}/>,
+        <RailSearch key="search" onTermChange={onSearchChange} onUse={onUse}/>,
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortActive ? chipLabel(sort) : undefined}
                   accessibilityLabel={sortAccessibilityLabel(sort, direction)}
-                  onPress={onSortPress}/>
+                  onPress={() => {
+                      onUse?.();
+                      onSortPress();
+                  }}/>
     ];
 
     return (
@@ -179,7 +184,10 @@ export default function LibraryRail({
                         <RailChip key={filter.id} testID={`rail-filter-${filter.id}`}
                                   active={filter.active} label={filter.label}
                                   accessibilityLabel={filterAccessibilityLabel(filter)}
-                                  onPress={() => onFilterPress(filter.id)}/>
+                                  onPress={() => {
+                                      onUse?.();
+                                      onFilterPress(filter.id);
+                                  }}/>
                     ))}
                 </ScrollView>
             </XStack>

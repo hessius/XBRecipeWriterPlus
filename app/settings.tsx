@@ -97,12 +97,14 @@ export default function SettingsScreen({settings}: Props) {
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
     // Owned by the library rail, not shown as rows here. Read anyway, because a
-    // backup carries every preference and these are three.
+    // backup carries every preference and these are four.
     const [librarySort, setLibrarySort] = useSetting("librarySort", settings);
     const [librarySortDirection, setLibrarySortDirection] =
         useSetting("librarySortDirection", settings);
     const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
+    const [libraryRailHintDismissed, setLibraryRailHintDismissed] =
+        useSetting("libraryRailHintDismissed", settings);
 
     // Deliberately given no query: this screen's questions are all about the
     // whole library, never about a view of it. That is what lets the restore
@@ -133,7 +135,8 @@ export default function SettingsScreen({settings}: Props) {
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
-            librarySort, librarySortDirection, libraryFavouritesFirst
+            librarySort, librarySortDirection, libraryFavouritesFirst,
+            libraryRailHintDismissed
         };
     }
 
@@ -209,6 +212,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.libraryFavouritesFirst === "boolean") {
             setLibraryFavouritesFirst(incoming.libraryFavouritesFirst);
+        }
+        if (typeof incoming.libraryRailHintDismissed === "boolean") {
+            setLibraryRailHintDismissed(incoming.libraryRailHintDismissed);
         }
     }
 

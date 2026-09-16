@@ -162,6 +162,15 @@ export const DEFAULTS = {
      */
     libraryFavouritesFirst: false,
     /**
+     * Whether the library rail's one-line hint has done its job.
+     *
+     * Persisted because the hint is onboarding, not a screen decoration: once a
+     * user has used the rail, a cold launch must not teach it again. It stays in
+     * backups with the rest of the library preferences so a restore does not
+     * bring back a hint the user already dismissed.
+     */
+    libraryRailHintDismissed: false,
+    /**
      * Whether the xBloom account import exists at all.
      *
      * Off, and off for everybody until it is finished. The feature is built and

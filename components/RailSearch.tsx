@@ -27,6 +27,8 @@ type Props = {
      * which is what lets the rail be tested without the query behind it.
      */
     onTermChange: (term: string) => void;
+    /** Called when the search chip itself is used, before any term is typed. */
+    onUse?: () => void;
 };
 
 /**
@@ -40,10 +42,15 @@ type Props = {
  * declared inside another's body is a fresh type every render, so React remounts
  * it and the field loses what was typed. That bug has been fixed twice here.
  */
-export default function RailSearch({onTermChange}: Props) {
+export default function RailSearch({onTermChange, onUse}: Props) {
     const {expanded, text, active, onExpand, onChangeText, onClear} = useRailSearch(onTermChange);
     const reduced = useReducedMotion();
     const searchState = active ? `term ${text} active` : "no search term";
+
+    function expand() {
+        onUse?.();
+        onExpand();
+    }
 
     const open = useSharedValue(0);
     const inputRef = useRef<TextInput | null>(null);
@@ -77,7 +84,7 @@ export default function RailSearch({onTermChange}: Props) {
         return (
             <RailChip testID="rail-search" icon="search" active={false}
                       accessibilityLabel={`Search recipes, collapsed, ${searchState}`}
-                      onPress={onExpand}/>
+                      onPress={expand}/>
         );
     }
 

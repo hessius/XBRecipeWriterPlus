@@ -43,7 +43,7 @@ function railProps(overrides: Partial<React.ComponentProps<typeof LibraryRail>> 
 }
 
 describe("LibraryRail", () => {
-    it("announces search, sort and filters in traversal order with their state", async () => {
+    it("announces search, sort and filters in traversal order without duplicating selected state", async () => {
         await renderWithProviders(
             <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
         );
@@ -52,8 +52,8 @@ describe("LibraryRail", () => {
             .toEqual([
                 "Search recipes, collapsed, no search term",
                 "Sort by date added, newest first",
-                "Tea filter not applied",
-                "Single pour filter applied"
+                "Tea filter",
+                "Single pour filter"
             ]);
     });
 
@@ -75,7 +75,7 @@ describe("LibraryRail", () => {
         );
 
         expect(screen.getByRole("button", {
-            name: "Recipes that arrived from Guji Roasters filter not applied"
+            name: "Recipes that arrived from Guji Roasters"
         })).toBeTruthy();
     });
 

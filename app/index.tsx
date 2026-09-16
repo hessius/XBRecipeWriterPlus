@@ -164,6 +164,8 @@ export default function HomeScreen({db, settings}: Props) {
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [showHints] = useSetting("showHints", settings);
+    const [railHintDismissed, setRailHintDismissed] =
+        useSetting("libraryRailHintDismissed", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -185,7 +187,6 @@ export default function HomeScreen({db, settings}: Props) {
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [popoverNow, setPopoverNow] = useState(0);
     const [sortOpen, setSortOpen] = useState(false);
-    const [railHintDismissed, setRailHintDismissed] = useState(false);
 
     // Advance the displayed age while the popover is open.
     //
@@ -720,21 +721,13 @@ export default function HomeScreen({db, settings}: Props) {
                     <LibraryRail
                         key={libraryQuery.clearToken}
                         collapsed={collapsed}
-                        onSearchChange={(term) => {
-                            setRailHintDismissed(true);
-                            libraryQuery.onSearchChange(term);
-                        }}
+                        onSearchChange={libraryQuery.onSearchChange}
                         sort={libraryQuery.sort}
                         direction={libraryQuery.direction}
-                        onSortPress={() => {
-                            setRailHintDismissed(true);
-                            setSortOpen(true);
-                        }}
+                        onSortPress={() => setSortOpen(true)}
                         filters={railFilters}
-                        onFilterPress={(id) => {
-                            setRailHintDismissed(true);
-                            libraryQuery.toggleFilter(id);
-                        }}
+                        onFilterPress={libraryQuery.toggleFilter}
+                        onUse={() => setRailHintDismissed(true)}
                         hint={showRailHint ? RAIL_HINT : undefined}/>
                 )}
 

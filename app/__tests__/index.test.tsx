@@ -393,15 +393,40 @@ describe("HomeScreen", () => {
         expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
     });
 
-    it("shows the rail hint only until the rail is used", async () => {
-        await renderHome({
-            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
-            settings: new Settings(memoryStorage({showHints: true}))
-        });
+    it("dismisses the rail hint across a home screen remount once the rail is used", async () => {
+        const recipes = [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")];
+        const db = store(recipes);
+        const settings = new Settings(memoryStorage({showHints: true}));
+        const {rerender} = await renderWithProviders(
+            <HomeScreen key="first" db={db} settings={settings}/>
+        );
 
         expect(screen.getByText("Search, sort and filter recipes from this row.")).toBeTruthy();
 
         await fireEvent.press(screen.getByLabelText("Sort by name, A to Z"));
+
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+
+        await act(async () => {
+            rerender(<HomeScreen key="second" db={db} settings={settings}/>);
+        });
+
+        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
+    });
+
+    it("dismisses the rail hint when search is opened, before a term is typed", async () => {
+        const recipes = [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")];
+        const db = store(recipes);
+        const settings = new Settings(memoryStorage({showHints: true}));
+        const {rerender} = await renderWithProviders(
+            <HomeScreen key="first" db={db} settings={settings}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Search recipes, collapsed, no search term"));
+
+        await act(async () => {
+            rerender(<HomeScreen key="second" db={db} settings={settings}/>);
+        });
 
         expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
     });
