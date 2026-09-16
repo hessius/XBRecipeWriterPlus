@@ -142,7 +142,7 @@ type Props = {
      */
     onShare?: () => void;
     onWrite?: () => void;
-    /** Same again for the management tray's STAR tile. */
+    /** Same again for the management tray's LIKE tile. */
     onToggleFavourite?: () => void;
 };
 
@@ -178,7 +178,7 @@ export default function RecipeCard({
     const summary = [
         recipe.displayName(),
         marker.toLowerCase(),
-        recipe.favourite ? "starred" : undefined,
+        recipe.favourite ? "liked" : undefined,
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
         !isTea && !recipe.grinder ? "grinder off" : undefined,
@@ -208,15 +208,15 @@ export default function RecipeCard({
         ...(onShare !== undefined ? [{name: "share", label: "Share recipe"}] : []),
         ...(onWrite !== undefined ? [{name: "write", label: "Write recipe to card"}] : []),
         // And the same again for the management tray, which is the only place
-        // the STAR tile lives. The star this toggles is in the label above, so
+        // the LIKE tile lives. The heart this toggles is in the label above, so
         // without an action a screen reader user can hear that a recipe is
-        // starred but has no way to star one.
+        // liked but has no way to like one.
         ...(onToggleFavourite !== undefined
             ? [{
                 name:  "favourite",
                 label: recipe.favourite
-                    ? "Remove star from recipe"
-                    : "Star recipe"
+                    ? "Unlike recipe"
+                    : "Like recipe"
             }]
             : [])
     ];
@@ -302,7 +302,7 @@ export default function RecipeCard({
                         {recipe.displayName()}
                     </Text>
                     <XStack alignItems="center" gap="$1.5">
-                        {/* The card's badge corner: the star joins the marker and
+                        {/* The card's badge corner: the heart joins the marker and
                             the write warning rather than the stats row, so the
                             numbers keep their full width for the library view to
                             build on. It leads the cluster, pushing the marker

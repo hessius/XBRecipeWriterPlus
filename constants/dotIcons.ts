@@ -412,23 +412,29 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
-     * A five-pointed star, filled: a recipe the user has kept.
+     * A heart, filled: a recipe the user has liked.
      *
-     * The riskiest shape in this set, for the reason the file header gives about
-     * the gear: a star is close to radially symmetric and its points are one dot
-     * wide. It survives where the gear did not only because it is drawn solid,
-     * so the silhouette carries the meaning and no interior detail has to.
+     * This was a five-pointed star first, and the star did not work. Its two
+     * bottom legs came out as `.##...##.` and `.#.....#.`, which is the same
+     * dot pattern as the arms of `close` -- so at card size the two glyphs
+     * genuinely shared a shape and the marker read as an X. The file header
+     * says why: a star's points are one dot wide and run at angles this grid
+     * cannot hold, exactly as the gear's teeth did.
+     *
+     * A heart survives because it is mass rather than limbs. One notch at the
+     * top, a pure diagonal taper to a point, and no interior detail that has to
+     * resolve for the silhouette to read.
      */
     favourite: [
-        "....#....",
-        "...###...",
-        "...###...",
+        ".###.###.",
+        "#########",
+        "#########",
         "#########",
         ".#######.",
+        ".#######.",
         "..#####..",
-        "..#####..",
-        ".##...##.",
-        ".#.....#."
+        "...###...",
+        "....#...."
     ],
     /**
      * A circular arrow: ask again for a fresh reading.
