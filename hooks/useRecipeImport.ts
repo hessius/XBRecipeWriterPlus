@@ -101,7 +101,7 @@ export type SelectionChangeEvent = {
 
 type Options = {
     /** The library, for de-duplication. Passed in rather than re-opened here. */
-    stored: Recipe[];
+    stored: Recipe[] | (() => Recipe[]);
     /** Navigation belongs to the screen; the timing rule belongs here. */
     onOpenRecipe: (recipe: Recipe, isExisting: boolean) => void;
 };
@@ -226,7 +226,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
      * The library, read at the moment a result lands rather than captured when
      * the lookup started -- a save can happen in between.
      */
-    const storedRef = useRef(stored);
+    const storedRef = useRef<Recipe[] | (() => Recipe[])>(stored);
     useEffect(() => {
         storedRef.current = stored;
     }, [stored]);
@@ -325,7 +325,10 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         // user the stored twin without the dilution and calls it the same
         // recipe. A card read keeps the loose match, for the mirror-image
         // reason -- see `Identity`.
-        const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate, "brew");
+        const storedNow = typeof storedRef.current === "function"
+            ? storedRef.current()
+            : storedRef.current;
+        const {recipe, isExisting} = resolveOnOpen(storedNow, candidate, "brew");
 
         // A paste into the field and a share intent both navigate on their own.
         // A shortcut navigates only for a recipe not already held: the tile's

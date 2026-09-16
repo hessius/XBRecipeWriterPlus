@@ -6,26 +6,30 @@ import {FlatList} from "react-native-gesture-handler";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useNavigation, useRouter} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
-import {XStack, YStack} from "tamagui";
+import {Button, Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
 import CtaTile from "@/components/CtaTile";
+import DotMatrixText from "@/components/DotMatrixText";
 import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import LibraryRail, {type RailFilter} from "@/components/LibraryRail";
 import MachinePanel from "@/components/MachinePanel";
 import NewRecipeSheet from "@/components/NewRecipeSheet";
 import NfcOverlay from "@/components/NfcOverlay";
+import SortSheet from "@/components/SortSheet";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
 import {ALREADY_IN_LIBRARY, CARD_READ_FAILED, HOLD_CARD} from "@/constants/copy";
-import {palette, type AccentGroup} from "@/constants/colors";
+import {onAccent, palette, type AccentGroup} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useMachine} from "@/hooks/useMachine";
+import {useLibraryQuery} from "@/hooks/useLibraryQuery";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
@@ -39,6 +43,11 @@ import {blankRecipe} from "@/library/newRecipe";
 import {assignAccent} from "@/library/accent";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
+import {
+    asStockFilters,
+    availableFilters,
+    STOCK_FILTERS
+} from "@/library/libraryFilters";
 import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
 
@@ -74,12 +83,74 @@ export const EDITOR_PUSH_GUARD_MS = 2000;
 /** When the editor was last pushed, so a second push in that window is refused. */
 let lastEditorPushAt = 0;
 
+type RecipeListItem =
+    | {kind: "heading"; id: string; label: string}
+    | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
+
+function SectionHeading({label}: {label: string}) {
+    return (
+        <YStack paddingHorizontal="$3" paddingTop="$4" paddingBottom="$1">
+            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                           color={palette.dim}>
+                {label}
+            </DotMatrixText>
+        </YStack>
+    );
+}
+
+function EmptyQuery({
+    search,
+    filters,
+    onClear
+}: {
+    search: string;
+    filters: readonly string[];
+    onClear: () => void;
+}) {
+    const term = search.trim();
+    const filterCopy = filters.length > 0 ? filters.join(", ") : "";
+
+    return (
+        <YStack flex={1} alignItems="center" justifyContent="center"
+                gap="$4" paddingHorizontal="$6" paddingVertical="$8">
+            <YStack alignItems="center" gap="$2">
+                <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                               color={palette.dim}>
+                    NO MATCHES
+                </DotMatrixText>
+                <Text fontSize={13} textAlign="center" color={palette.muted}>
+                    No recipes match the current search or filters.
+                </Text>
+                {term.length > 0 && (
+                    <Text fontSize={13} textAlign="center" color={palette.text}>
+                        {term}
+                    </Text>
+                )}
+                {filterCopy.length > 0 && (
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
+                                   color={palette.text}>
+                        {filterCopy}
+                    </DotMatrixText>
+                )}
+            </YStack>
+            <Button accessibilityLabel="Clear search and filters"
+                    backgroundColor={palette.text}
+                    color={onAccent.text}
+                    borderRadius="$4"
+                    onPress={onClear}>
+                CLEAR SEARCH AND FILTERS
+            </Button>
+        </YStack>
+    );
+}
+
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const navigation = useNavigation();
 
-    const library = useRecipeLibrary(db);
+    const libraryQuery = useLibraryQuery(settings);
+    const library = useRecipeLibrary(db, libraryQuery.query);
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
@@ -103,6 +174,7 @@ export default function HomeScreen({db, settings}: Props) {
 
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [popoverNow, setPopoverNow] = useState(0);
+    const [sortOpen, setSortOpen] = useState(false);
 
     // Advance the displayed age while the popover is open.
     //
@@ -172,7 +244,35 @@ export default function HomeScreen({db, settings}: Props) {
         notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
 
-    const isEmpty = library.recipes.length === 0;
+    const wholeLibraryEmpty = library.librarySize === 0;
+    const visibleEmpty = library.recipes.length === 0;
+    const offeredFilterIds =
+        asStockFilters(availableFilters(library.filterCounts, library.librarySize));
+    const railFilters: RailFilter[] = offeredFilterIds.map((id) => ({
+        id,
+        label:  STOCK_FILTERS[id].label,
+        active: libraryQuery.isFilterActive(id)
+    }));
+    const activeFilterLabels =
+        asStockFilters(libraryQuery.query.filters).map((id) => STOCK_FILTERS[id].label);
+    const favouriteRecipes = library.recipes.filter((recipe) => recipe.favourite);
+    const otherRecipes = library.recipes.filter((recipe) => !recipe.favourite);
+    const drawSections =
+        libraryQuery.favouritesFirst && favouriteRecipes.length > 0 && otherRecipes.length > 0;
+    const listItems: RecipeListItem[] = drawSections
+        ? [
+            {kind: "heading", id: "favourites", label: "FAVOURITES"},
+            ...favouriteRecipes.map((recipe, recipeIndex) => (
+                {kind: "recipe" as const, recipe, recipeIndex}
+            )),
+            {kind: "heading", id: "all", label: "ALL RECIPES"},
+            ...otherRecipes.map((recipe, index) => (
+                {kind: "recipe" as const, recipe, recipeIndex: favouriteRecipes.length + index}
+            ))
+        ]
+        : library.recipes.map((recipe, recipeIndex) => (
+            {kind: "recipe" as const, recipe, recipeIndex}
+        ));
 
     // `importId` used to do double duty -- "is the sheet open" and "what to
     // import" -- which is why `""` meant open-with-nothing and `null` meant
@@ -232,7 +332,7 @@ export default function HomeScreen({db, settings}: Props) {
     // what holds if anything ever mounts a second one again.
 
     const importer = useRecipeImport({
-        stored:       library.recipes,
+        stored:       () => library.allRecipes(),
         onOpenRecipe: (recipe, isExisting) => {
             setImportOpen(false);
             // Ask to navigate first: a recipe that arrives while an editor is
@@ -392,7 +492,7 @@ export default function HomeScreen({db, settings}: Props) {
             // Stamped before serialising: the editor rebuilds the recipe from
             // this JSON, so anything set afterwards would be lost.
             recipe.source = "read";
-            const {recipe: toOpen, isExisting} = resolveOnOpen(library.recipes, recipe);
+            const {recipe: toOpen, isExisting} = resolveOnOpen(library.allRecipes(), recipe);
 
             // A successful read needs no announcement: the editor opens on top
             // of this screen with the recipe in it, which says it better than a
@@ -453,7 +553,7 @@ export default function HomeScreen({db, settings}: Props) {
         // two rows it does touch are a legacy recipe saved before the index
         // existed and one whose cup type has crossed between coffee and tea;
         // both then match the editor, which is what we want.
-        assignAccent(recipe, library.recipes);
+        assignAccent(recipe, library.allRecipes());
         router.push({
             pathname: "/editRecipe",
             params:   {recipeJSON: JSON.stringify(recipe)}
@@ -551,7 +651,7 @@ export default function HomeScreen({db, settings}: Props) {
                     count={library.recipes.length}
                     collapsed={collapsed}
                     editing={editing}
-                    showEdit={!isEmpty}
+                    showEdit={!wholeLibraryEmpty}
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
                     machinePanel={remembered ? (
@@ -601,12 +701,30 @@ export default function HomeScreen({db, settings}: Props) {
                     </XStack>
                 </Collapsible>
 
-                {isEmpty ? (
+                {!wholeLibraryEmpty && (
+                    <LibraryRail
+                        key={libraryQuery.clearToken}
+                        collapsed={collapsed}
+                        onSearchChange={libraryQuery.onSearchChange}
+                        sort={libraryQuery.sort}
+                        direction={libraryQuery.direction}
+                        onSortPress={() => setSortOpen(true)}
+                        filters={railFilters}
+                        onFilterPress={libraryQuery.toggleFilter}/>
+                )}
+
+                {wholeLibraryEmpty ? (
                     <EmptyLibrary/>
+                ) : visibleEmpty ? (
+                    <EmptyQuery
+                        search={libraryQuery.query.search}
+                        filters={activeFilterLabels}
+                        onClear={libraryQuery.clear}/>
                 ) : (
                     <FlatList
-                        data={library.recipes}
-                        keyExtractor={(item: Recipe) => item.key}
+                        data={listItems}
+                        keyExtractor={(item: RecipeListItem) =>
+                            item.kind === "heading" ? item.id : item.recipe.key}
                         onScroll={onScroll}
                         scrollEventThrottle={16}
                         showsVerticalScrollIndicator={false}
@@ -614,35 +732,46 @@ export default function HomeScreen({db, settings}: Props) {
                         // last card scrolls clear of the home indicator, rather
                         // than the whole screen stopping short of it.
                         contentContainerStyle={{paddingBottom: insets.bottom + 8}}
-                        renderItem={({item, index}: {item: Recipe; index: number}) => (
+                        renderItem={({item}: {item: RecipeListItem}) => item.kind === "heading" ? (
+                            <SectionHeading label={item.label}/>
+                        ) : (
                             <SwipeableRecipeRow
-                                recipe={item}
+                                recipe={item.recipe}
                                 editing={editing}
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
-                                bounceOnMount={index === 0 && bounceFirstRow}
+                                bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
                                 // Gated on a machine: a dead BREW in every row's
                                 // tray is worse than none. Share and write need
                                 // no machine, so they are always offered.
-                                onBrew={remembered !== "" ? () => openBrew(item) : undefined}
-                                onShare={() => shareFromHome(item)}
-                                onWrite={() => writeCard(item)}
-                                onPress={() => openRecipe(item)}
+                                onBrew={remembered !== "" ? () => openBrew(item.recipe) : undefined}
+                                onShare={() => shareFromHome(item.recipe)}
+                                onWrite={() => writeCard(item.recipe)}
+                                onPress={() => openRecipe(item.recipe)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
-                                    library.deleteRecipe(item);
+                                    library.deleteRecipe(item.recipe);
                                 }}
                                 onDuplicate={() => {
                                     setBounceFirstRow(false);
-                                    library.duplicateRecipe(item);
+                                    library.duplicateRecipe(item.recipe);
                                 }}
                                 onToggleFavourite={() => {
                                     setBounceFirstRow(false);
-                                    library.toggleFavourite(item);
+                                    library.toggleFavourite(item.recipe);
                                 }}/>
                         )}/>
                 )}
             </YStack>
+
+            <SortSheet
+                open={sortOpen}
+                onOpenChange={setSortOpen}
+                sort={libraryQuery.sort}
+                direction={libraryQuery.direction}
+                favouritesFirst={libraryQuery.favouritesFirst}
+                onSortChange={libraryQuery.onSortChange}
+                onFavouritesFirstChange={libraryQuery.onFavouritesFirstChange}/>
 
             <ImportSheet
                 open={importOpen}

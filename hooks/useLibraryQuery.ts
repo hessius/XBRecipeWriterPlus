@@ -30,6 +30,10 @@ export type LibraryController = {
     /** Axis and direction together, because the two only mean anything as a pair. */
     onSortChange: (axis: SortAxis, direction: SortDirection) => void;
     onFavouritesFirstChange: (value: boolean) => void;
+    /** Drop every transient narrowing and remount the rail's field. */
+    clear: () => void;
+    /** Changes only when clear() is taken, so an uncontrolled search field can reset by key. */
+    clearToken: number;
 };
 
 /**
@@ -64,6 +68,7 @@ export type LibraryController = {
 export function useLibraryQuery(settings?: Settings): LibraryController {
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState<string[]>([]);
+    const [clearToken, setClearToken] = useState(0);
 
     const [sortRaw, setSort] = useSetting("librarySort", settings);
     const [directionRaw, setDirection] = useSetting("librarySortDirection", settings);
@@ -111,6 +116,12 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         setFavouritesFirst(value);
     }
 
+    function clear() {
+        setSearch("");
+        setFilters([]);
+        setClearToken((current) => current + 1);
+    }
+
     return {
         query,
         onSearchChange,
@@ -120,7 +131,9 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         direction,
         favouritesFirst,
         onSortChange,
-        onFavouritesFirstChange
+        onFavouritesFirstChange,
+        clear,
+        clearToken
     };
 }
 

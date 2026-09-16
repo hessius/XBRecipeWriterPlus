@@ -491,6 +491,31 @@ class RecipeDatabase {
         return rows.map((row) => new Recipe(undefined, row.recipeJSON));
     }
 
+    public countRecipes(): number {
+        const row = this.db.getFirstSync("SELECT COUNT(*) AS count FROM recipes;") as
+            {count: number} | null;
+        return row?.count ?? 0;
+    }
+
+    public countRecipesByFilter(
+        ids: readonly string[],
+        resolveFilter: FilterResolver = () => null
+    ): Record<string, number> {
+        const counts: Record<string, number> = {};
+        for (const id of ids) {
+            const clause = resolveFilter(id);
+            if (clause === null) {
+                throw new Error(`RecipeDatabase: unknown filter id "${id}"`);
+            }
+            const row = this.db.getFirstSync(
+                `SELECT COUNT(*) AS count FROM recipes WHERE (${clause.where});`,
+                [...(clause.params ?? [])]
+            ) as {count: number} | null;
+            counts[id] = row?.count ?? 0;
+        }
+        return counts;
+    }
+
     public retrieveAllRecipes(): Recipe[] | null {
         let recipesJSON: any[] = this.db.getAllSync(
             `SELECT *

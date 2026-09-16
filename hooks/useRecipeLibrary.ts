@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
-import {resolveStockFilter} from "@/library/libraryFilters";
+import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -30,6 +30,11 @@ import RecipeDatabase from "@/library/RecipeDatabase";
  */
 export type RecipeStore = {
     queryRecipes: (query: LibraryQuery, resolveFilter?: FilterResolver) => Recipe[];
+    countRecipes?: () => number;
+    countRecipesByFilter?: (
+        ids: readonly string[],
+        resolveFilter?: FilterResolver
+    ) => Record<string, number>;
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -98,6 +103,10 @@ export type RestoreOutcome =
 
 export type RecipeLibrary = {
     recipes: Recipe[];
+    /** The whole table size, read without hydrating every recipe. */
+    librarySize: number;
+    /** Whole-table counts for stock filters, keyed by filter id. */
+    filterCounts: Record<string, number>;
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
@@ -144,6 +153,8 @@ export function useRecipeLibrary(
     // rendered, so a slower older query can never land after a newer one.
     const [revision, setRevision] = useState(0);
     const recipes = readLibrary(store, query, revision);
+    const librarySize = readLibrarySize(store, revision);
+    const filterCounts = readFilterCounts(store, revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -261,7 +272,18 @@ export function useRecipeLibrary(
         return {status: "restored", added: toAdd.length};
     }
 
-    return {recipes, allRecipes, refresh: reload, deleteRecipe, duplicateRecipe, toggleFavourite, deleteAll, applyRestore};
+    return {
+        recipes,
+        librarySize,
+        filterCounts,
+        allRecipes,
+        refresh: reload,
+        deleteRecipe,
+        duplicateRecipe,
+        toggleFavourite,
+        deleteAll,
+        applyRestore
+    };
 }
 
 /**
@@ -281,6 +303,20 @@ export function useRecipeLibrary(
 function readLibrary(db: RecipeStore, query: LibraryQuery, revision: number): Recipe[] {
     void revision;
     return db.queryRecipes(query, resolveStockFilter);
+}
+
+function readLibrarySize(db: RecipeStore, revision: number): number {
+    void revision;
+    if (db.countRecipes) return db.countRecipes();
+    return db.retrieveAllRecipes?.()?.length ?? 0;
+}
+
+function readFilterCounts(db: RecipeStore, revision: number): Record<string, number> {
+    void revision;
+    if (db.countRecipesByFilter) {
+        return db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+    }
+    return {};
 }
 
 export default useRecipeLibrary;
