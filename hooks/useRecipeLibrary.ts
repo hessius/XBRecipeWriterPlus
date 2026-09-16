@@ -238,9 +238,11 @@ export function useRecipeLibrary(
         inFlight.current = true;
 
         // Replace starts from an empty library so the dedupe is against nothing;
-        // a merge starts from what is already there. Either way the recipes that
-        // reach the store are the ones the preview promised.
-        const {toAdd} = mergeRecipes(choice.replace ? [] : recipes, payload.recipes);
+        // a merge starts from what is already there. "There" is the whole table,
+        // not `recipes`: that list is the answer to a query, and deduping a
+        // restore against a filtered view would re-insert every recipe the view
+        // happened to hide.
+        const {toAdd} = mergeRecipes(choice.replace ? [] : allRecipes(), payload.recipes);
 
         // Plain try/catch rather than try/finally: a finally in a React file
         // makes the compiler bail out of the whole hook. The flag is cleared on

@@ -104,6 +104,11 @@ export default function SettingsScreen({settings}: Props) {
     const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
 
+    // Deliberately given no query: this screen's questions are all about the
+    // whole library, never about a view of it. That is what lets the restore
+    // preview and the delete count read `library.recipes` directly instead of
+    // paying for a table read on every render. Hand this a rail query and both
+    // would quietly narrow with it.
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
     // The sheet is mounted for the screen's whole life and only toggled open,

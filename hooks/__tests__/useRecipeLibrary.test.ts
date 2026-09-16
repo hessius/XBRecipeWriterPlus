@@ -250,6 +250,31 @@ describe("useRecipeLibrary", () => {
         expect(db.replaceAllRecipes).not.toHaveBeenCalled();
     });
 
+    it("dedupes a restore against the whole table, not the list on screen", async () => {
+        // A recipe the rail filtered out is still in the library. Deduping
+        // against the view would hand it back as an insert and collide.
+        const hidden = named("Ethiopia");
+        const shown = named("Kenya");
+        const db = stubDb([shown]);
+        db.retrieveAllRecipes.mockReturnValue([shown, hidden]);
+        const {result} = await renderHook(() =>
+            useRecipeLibrary(db, {
+                search:          "kenya",
+                filters:         [],
+                sort:            "name",
+                direction:       "asc",
+                favouritesFirst: false
+            })
+        );
+
+        await act(async () => {
+            result.current.applyRestore(payloadOf([hidden, shown]), {replace: false});
+        });
+
+        expect(db.insertRecipes).toHaveBeenCalledTimes(1);
+        expect(db.insertRecipes.mock.calls[0][0]).toEqual([]);
+    });
+
     it("replaces a restore through the transactional replaceAllRecipes", async () => {
         const db = stubDb([named("Ethiopia")]);
         const {result} = await renderHook(() => useRecipeLibrary(db));
