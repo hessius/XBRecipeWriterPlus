@@ -148,10 +148,33 @@ treats that gap as a stall will report a failure that did not happen.
 
 | Issue | |
 |---|---|
-| #55 | Post-brew notes and rating *(moved out of deferred)* |
 | #72 | Library management: tags, filtering and search |
 | #106 | Library groups: manual shelves and automatic ones |
 | #73 | Browse the community recipe hub |
+| #111 | Shelf ordering *(deferred out of the design, deliberately)* |
+
+**Designed.** [`2026-09-16-library-shelves-design.md`][m5-design] is the full
+design, and [`2026-09-16-library-shelves-visual.html`][m5-visual] is the drawn
+version written for the beta tester group. Both live on branch `m5-library`.
+Implementation has not started and no plan has been written yet.
+
+[m5-design]: ../superpowers/specs/2026-09-16-library-shelves-design.md
+[m5-visual]: ../superpowers/specs/2026-09-16-library-shelves-visual.html
+
+The design resolves #72 and #106 into one mechanism: **every shelf is a query.**
+An automatic shelf queries index columns, a manual shelf queries a tag, and
+there is no shelf table at all. It also settles sorting, favourites, what a row
+says about itself, and a third deck on the recipe screen for everything that is
+neither a brew parameter nor a stage.
+
+One question is deliberately unsettled and is going to testers: what a shelf's
+mark looks like. Three candidates ship behind one dev switch.
+
+#55 was the original post-brew notes and rating issue. It was closed as not
+planned on 14 September, superseded by the #95 chain, which owns rating capture
+properly. This design consumes a rating and does not capture one, except for the
+hand-entered case, where rating a recipe writes a brew the app did not watch so
+that a card-only user is not locked out of every rating-derived feature.
 
 All local, all offline, all available to someone who never logs in. This is the
 milestone that improves on the official app rather than catching up to it —
@@ -171,6 +194,10 @@ each recipe as an opaque JSON blob keyed by uuid, which cannot support filtering
 or tags, and has nowhere to put M6's sync state. Doing that migration here —
 promoting filterable fields to columns and adding a side table for sync — means
 doing it once rather than twice.
+
+**That last paragraph is now a live risk rather than a plan.** M6 is being built
+first, so the migration it was supposed to inherit does not exist yet. See the
+note under M6.
 
 ### M6 · Your xBloom library
 
@@ -195,6 +222,24 @@ confirmed against a real account before the rest of M6 is designed.
 Push is deliberately create-only against name clashes rather than an update, so
 M6 has no conflict cases to resolve at all. Resolving them is the next project,
 not this one.
+
+**M6 is being built before M5, which inverts the order this roadmap assumed.**
+That is a legitimate choice, and it has one cost worth naming: M5 was carrying
+the `RecipeDatabase` migration *explicitly so it would happen once rather than
+twice*, and M6 now arrives before it. Two consequences follow.
+
+The first is cheap to avoid. Three values exist only in the xBloom API response
+at the moment of import: `shareMemberName`, `shareMemberHead` and
+`podsVo.imagePath`. A recipe imported before those fields exist has lost them
+permanently, and recovering them would mean re-fetching every share link a user
+has ever imported. M5's design depends on the first of them for author shelves.
+Capturing them during M6 costs almost nothing; retrofitting them costs a
+re-import.
+
+The second is unavoidable and should simply be expected: the index migration
+will run twice, once for whatever state M6 needs and once for M5's descriptor
+columns. `INDEX_REVISION` exists for exactly this and will handle it, but the
+"do it once" saving in the paragraph above is spent.
 
 ## Not scheduled
 
