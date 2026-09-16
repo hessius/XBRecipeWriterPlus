@@ -52,6 +52,52 @@ export default function ImportCloudScreen() {
     const selected = cloud.plan?.entries.filter((e) => e.selected) ?? [];
 
     /**
+     * Take the password, then let go of it.
+     *
+     * The caveat above promises the password is used for the request and not
+     * stored. React state is storage: left in place it lived as long as the
+     * screen did, sitting in a rendered component for the rest of the session,
+     * which is not what the caveat says and not what the rest of this feature
+     * does. Cleared before the await rather than after, so a sign-in that
+     * fails, hangs or is walked away from does not leave it behind either.
+     *
+     * `secret` is copied out first not because `setPassword` would blank the
+     * argument -- it would not, `password` here is this render's value and the
+     * two lines are interchangeable -- but so that they stay interchangeable.
+     * Read in the other order this looks like a use-after-clear, which invites
+     * a reordering that would then be load-bearing.
+     *
+     * The field emptying on submit is also the honest reading of what happened
+     * to it, and a failed sign-in asks for the password again, which is what
+     * every sign-in form does.
+     */
+    function submit() {
+        const secret = password;
+        setPassword("");
+        void cloud.submitSignIn(email, secret);
+    }
+
+    /**
+     * The same reasoning as the Settings sign-out, and the same words.
+     *
+     * `signOut` propagates a locked keychain deliberately: someone believing
+     * they signed out of an account they had not is the one failure here with
+     * a privacy cost. So the failure has to be said out loud, and the screen
+     * has to keep showing a connected account, because that is still true.
+     * Unhandled, it was an unhandled rejection and no warning at all.
+     */
+    async function signOutOfCloud() {
+        try {
+            await cloud.forgetAccount();
+        } catch {
+            notify({
+                tone:    "error",
+                message: "Could not sign out. The account is still connected."
+            });
+        }
+    }
+
+    /**
      * Import, say what happened, and leave.
      *
      * The toast rather than a screen the user has to dismiss: the library is
@@ -96,9 +142,10 @@ export default function ImportCloudScreen() {
                             <Text color={palette.dim} fontSize={13}>
                                 This is not an official xBloom feature. It signs in
                                 the way the xBloom app does, using endpoints xBloom
-                                has never published, so there is some risk to your
-                                account in using it — they could change or withdraw
-                                them at any time, and have not sanctioned this use.
+                                has never published. There is some risk to your
+                                account in using it. They could change or withdraw
+                                those endpoints at any time, and have not
+                                sanctioned this use.
                             </Text>
 
                             {/* A second node, not a blank line inside the first:
@@ -106,8 +153,9 @@ export default function ImportCloudScreen() {
                                 reassurance would run straight on from the risk. */}
                             <Text color={palette.dim} fontSize={13}>
                                 Your email and password go directly to xBloom, never
-                                to us or to anyone else. Only a revocable token is
-                                kept on this phone — your password is never stored.
+                                to us or to anyone else. This phone keeps your email
+                                address and a revocable token, in the device
+                                keychain. Your password is never stored.
                             </Text>
 
                             <Input
@@ -136,7 +184,7 @@ export default function ImportCloudScreen() {
                                 disabled={cloud.status === "signingIn"}
                                 backgroundColor={palette.raised}
                                 color={palette.text}
-                                onPress={() => cloud.submitSignIn(email, password)}>
+                                onPress={() => submit()}>
                                 {cloud.status === "signingIn" ? "Signing in…" : "Sign in"}
                             </Button>
                         </>
@@ -235,7 +283,9 @@ export default function ImportCloudScreen() {
                             accessibilityLabel="Sign out"
                             chromeless
                             color={palette.danger}
-                            onPress={() => cloud.forgetAccount()}>
+                            onPress={() => {
+                                void signOutOfCloud();
+                            }}>
                             Sign out
                         </Button>
                     )}

@@ -335,7 +335,18 @@ within `MAX_ACCENT_DISTANCE`. On `null` the caller falls back to the existing
 
 ### 6.1 What is stored
 
-One entry in `expo-secure-store`: `memberId` and token. Nothing else.
+One entry in `expo-secure-store`: `memberId`, the token, and the account's
+email address. Nothing else, and in particular never the password.
+
+The email is there because Settings shows which account is connected, and an
+account the user cannot identify is one they cannot decide to sign out of. It
+is the one piece of this the user typed themselves, so it is also the one they
+can check against; it is deleted with the rest on sign-out.
+
+An earlier draft of this section said "`memberId` and token, nothing else"
+while the code stored the email as well. The disclosure the user reads is
+generated from no such source, so the two could drift and did. Both now say
+the same thing, and both name the keychain.
 
 `session.ts` is the only file that reads or writes it, so "we never store your
 password" is checkable by reading one short file rather than auditing five.

@@ -52,7 +52,11 @@ const choosing = (over: Record<string, unknown> = {}) => {
 
 describe("importCloud", () => {
     beforeEach(() => {
+        // `clearAllMocks` clears calls but keeps implementations, so a test
+        // that makes this reject would poison every test after it. Restated
+        // rather than assumed.
         jest.clearAllMocks();
+        mockHook.forgetAccount.mockResolvedValue(undefined);
         Object.assign(mockHook, {
             status: "signedOut",
             session: null,
@@ -427,5 +431,107 @@ describe("importCloud", () => {
         expect(screen.getByText(
             "1 recipe appeared twice in your account and was listed once."
         )).toBeTruthy();
+    });
+    /**
+     * The caveat promises the password is used for the request and not stored.
+     * React state is storage: left in place it lived as long as the screen
+     * did. Cleared before the call rather than after, so a sign-in that fails,
+     * hangs, or is walked away from does not leave it behind either.
+     */
+    it("lets go of the password when it is submitted", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.changeText(screen.getByLabelText("Email"), "a@b.c");
+        await fireEvent.changeText(screen.getByLabelText("Password"), "hunter2");
+        await fireEvent.press(screen.getByLabelText("Sign in"));
+
+        expect(screen.getByLabelText("Password").props.value).toBe("");
+    });
+
+    /** Letting go of it must not mean signing in without it. */
+    it("still signs in with the password it let go of", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.changeText(screen.getByLabelText("Email"), "a@b.c");
+        await fireEvent.changeText(screen.getByLabelText("Password"), "hunter2");
+        await fireEvent.press(screen.getByLabelText("Sign in"));
+
+        expect(mockHook.submitSignIn).toHaveBeenCalledWith("a@b.c", "hunter2");
+    });
+
+    /** The email is not a secret and is the slowest thing here to retype. */
+    it("keeps the email after a failed sign-in", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.changeText(screen.getByLabelText("Email"), "a@b.c");
+        await fireEvent.changeText(screen.getByLabelText("Password"), "hunter2");
+        await fireEvent.press(screen.getByLabelText("Sign in"));
+
+        expect(screen.getByLabelText("Email").props.value).toBe("a@b.c");
+    });
+
+    /**
+     * `signOut` propagates a locked keychain deliberately: someone believing
+     * they signed out of an account they had not is the one failure here with
+     * a privacy cost. Unhandled this was an unhandled rejection and no warning
+     * at all, unlike the same button in Settings.
+     */
+    it("says so when the keychain will not let go of the session", async () => {
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        mockHook.forgetAccount.mockRejectedValue(new Error("keychain locked"));
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign out"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: "Could not sign out. The account is still connected.",
+        }));
+    });
+
+    /** And goes on saying the account is connected, because it still is. */
+    it("keeps showing the account when signing out fails", async () => {
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        mockHook.forgetAccount.mockRejectedValue(new Error("keychain locked"));
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign out"));
+
+        await waitFor(() => expect(notify).toHaveBeenCalled());
+        expect(screen.getByText("Signed in as a@b.c")).toBeTruthy();
+    });
+
+    it("says nothing when signing out works", async () => {
+        mockHook.session = {memberId: 7, token: "t", email: "a@b.c"};
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        await fireEvent.press(screen.getByLabelText("Sign out"));
+
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The disclosure and `library/cloud/session.ts` have to agree, and once
+     * did not: this said only a token was kept while the session also carried
+     * the email. Pinned here because nothing else connects the two files.
+     */
+    it("names everything the phone keeps", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.getByText(/email address and a revocable token/i)).toBeTruthy();
+        expect(screen.getByText(/password is never stored/i)).toBeTruthy();
+    });
+
+    /** House style: dashes read as AI copy, so the screen carries none. */
+    it("writes its caveats without dashes", async () => {
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        const caveats = [
+            screen.getByText(/not an official xBloom feature/i),
+            screen.getByText(/password is never stored/i),
+        ];
+        for (const node of caveats) {
+            expect(String(node.props.children)).not.toMatch(/[\u2013\u2014]/);
+        }
     });
 });

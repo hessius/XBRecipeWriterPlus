@@ -9,9 +9,19 @@ import {CloudError, post} from "./transport";
  * question answerable by reading one short module rather than auditing five.
  *
  * The password is an argument to `signIn` and nothing else. It is never
- * written, never returned, and never held beyond the call. What is stored is
- * the token, which xBloom can revoke and which grants nothing on any other
- * service.
+ * written, never returned, and never held beyond the call.
+ *
+ * What is stored is three things: the token, which xBloom can revoke and which
+ * grants nothing on any other service; `memberId`, which the encrypted calls
+ * need; and the account's email address, because Settings shows which account
+ * is connected and an account the user cannot identify is one they cannot
+ * decide to sign out of.
+ *
+ * The email is the reason this list is written out rather than summarised. The
+ * screen's own disclosure once said only a token was kept, which was not true,
+ * and nothing connected the two sentences. Anything added here has to be added
+ * to `app/importCloud.tsx`'s caveat in the same commit, or the app is lying to
+ * the user about a credential store.
  */
 
 const KEY = "xbloom.session";
