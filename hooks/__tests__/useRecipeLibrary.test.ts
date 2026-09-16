@@ -8,7 +8,7 @@ jest.mock("@/library/RecipeDatabase");
 
 function stubDb(recipes: Recipe[]) {
     return {
-        retrieveAllRecipes: jest.fn(() => recipes),
+        queryRecipes:       jest.fn(() => recipes),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
         // Writes through to the backing array so a reload after the write
@@ -44,17 +44,21 @@ function payloadOf(recipes: Recipe[]): BackupPayload {
 }
 
 describe("useRecipeLibrary", () => {
-    it("sorts by display name so the list order does not depend on insertion order", async () => {
+    it("hands back the store's order without re-sorting it", async () => {
+        // Sorting moved out of the hook and into the SQL query the store runs;
+        // the hook must present exactly what `queryRecipes` returned, in that
+        // order. Seeding an order the hook would once have alphabetised
+        // (Ethiopia, Kenya, Zambia) proves it no longer sorts in JavaScript.
         const db = stubDb([named("Zambia"), named("Ethiopia"), named("Kenya")]);
         const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes.map((r) => r.displayName()))
-            .toEqual(["Ethiopia", "Kenya", "Zambia"]);
+            .toEqual(["Zambia", "Ethiopia", "Kenya"]);
     });
 
-    it("reports an empty library as an empty list, not as null", async () => {
-        // retrieveAllRecipes returns null when the table is empty. Every caller
-        // leaking that null is how the old screen ended up with `recipesJSON ? ... : ""`.
-        const db = {...stubDb([]), retrieveAllRecipes: jest.fn(() => null)};
+    it("reports an empty library as an empty list", async () => {
+        // `queryRecipes` returns [] for an empty table, never null, so the hook
+        // no longer has a null to absorb -- but the screen still needs [].
+        const db = {...stubDb([]), queryRecipes: jest.fn(() => [])};
         const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes).toEqual([]);
     });
@@ -66,7 +70,7 @@ describe("useRecipeLibrary", () => {
         await act(async () => result.current.deleteRecipe(result.current.recipes[0]));
 
         expect(db.deleteRecipe).toHaveBeenCalledTimes(1);
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("duplicates through the database and re-reads", async () => {
@@ -76,7 +80,7 @@ describe("useRecipeLibrary", () => {
         await act(async () => result.current.duplicateRecipe(result.current.recipes[0]));
 
         expect(db.cloneRecipe).toHaveBeenCalledTimes(1);
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("toggles a favourite and persists it", async () => {
@@ -112,7 +116,7 @@ describe("useRecipeLibrary", () => {
         const original = plainRecipe();
         const stored = JSON.stringify(original);
         const db = {
-            retrieveAllRecipes: jest.fn(() => [new Recipe(undefined, stored)]),
+            queryRecipes:       jest.fn(() => [new Recipe(undefined, stored)]),
             deleteRecipe:       jest.fn(),
             cloneRecipe:        jest.fn(),
             updateRecipe:       jest.fn(() => {
@@ -136,7 +140,7 @@ describe("useRecipeLibrary", () => {
 
         await act(async () => result.current.refresh());
 
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("deletes the whole library and reports how many went", async () => {

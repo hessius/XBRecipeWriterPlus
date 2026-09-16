@@ -215,10 +215,13 @@ function writable(name: string): Recipe {
 
 function store(recipes: Recipe[]) {
     return {
-        retrieveAllRecipes: jest.fn(() => (recipes.length > 0 ? recipes : null)),
-        deleteRecipe:       jest.fn(),
-        cloneRecipe:        jest.fn(),
-        updateRecipe:       jest.fn()
+        // Emulates the name-ascending default the SQL query returns, which is
+        // the order this screen used to get from the hook's own JavaScript sort.
+        queryRecipes: jest.fn(() =>
+            [...recipes].sort((a, b) => a.displayName().localeCompare(b.displayName()))),
+        deleteRecipe: jest.fn(),
+        cloneRecipe:  jest.fn(),
+        updateRecipe: jest.fn()
     };
 }
 
@@ -937,7 +940,7 @@ describe("import", () => {
         await renderWithProviders(
             <HomeScreen db={db} settings={new Settings(memoryStorage())}/>
         );
-        const before = db.retrieveAllRecipes.mock.calls.length;
+        const before = db.queryRecipes.mock.calls.length;
 
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
         await act(async () => { jest.advanceTimersByTime(500); });
@@ -945,7 +948,7 @@ describe("import", () => {
         await fireEvent.press(screen.getByLabelText("Close"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        expect(db.retrieveAllRecipes.mock.calls.length).toBeGreaterThan(before);
+        expect(db.queryRecipes.mock.calls.length).toBeGreaterThan(before);
         jest.useRealTimers();
     });
 

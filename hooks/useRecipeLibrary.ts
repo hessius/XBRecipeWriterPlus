@@ -1,6 +1,8 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
+import {resolveStockFilter} from "@/library/libraryFilters";
+import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 
@@ -11,19 +13,44 @@ import RecipeDatabase from "@/library/RecipeDatabase";
  * of functions instead of a database, and a reader can see at a glance that the
  * home screen neither writes recipes nor reads settings.
  *
+ * The list is a `queryRecipes`, not a `retrieveAllRecipes`: the library stopped
+ * being "every recipe, sorted in JavaScript" and became the answer to the
+ * rail's query, sorted and filtered in SQL. `retrieveAllRecipes` still lives on
+ * `RecipeDatabase` for the callers that genuinely want the whole table
+ * regardless of the rail (backup export, accent tallies), but this hook reads
+ * one way only -- two paths to the same list would disagree the first time
+ * someone edited one.
+ *
  * The restore/delete-all members are optional because not every caller reaches
  * for them — the home screen only reads, deletes one and clones one — and a
  * test store for that screen should not have to stub a transaction it never
  * calls. The production store (`RecipeDatabase`) provides all of them.
  */
 export type RecipeStore = {
-    retrieveAllRecipes: () => Recipe[] | null;
+    queryRecipes: (query: LibraryQuery, resolveFilter?: FilterResolver) => Recipe[];
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
     deleteAllRecipes?: () => void;
     insertRecipes?: (recipes: Recipe[]) => void;
     replaceAllRecipes?: (recipes: Recipe[]) => void;
+};
+
+/**
+ * The query a library with no rail runs: the whole table in the default order.
+ *
+ * Kept at module scope so its identity is stable across renders. The wiring task
+ * hands `useRecipeLibrary` the rail's live query instead; until then, and in the
+ * tests that exercise the mutation paths, this is the standing question -- name
+ * A to Z, nothing searched, nothing filtered -- which is the order the hook used
+ * to produce in JavaScript, now produced in SQL.
+ */
+const WHOLE_LIBRARY: LibraryQuery = {
+    search: "",
+    filters: [],
+    sort: "name",
+    direction: "asc",
+    favouritesFirst: false
 };
 
 /** Whether a choice replaces the library or only adds to it. */
@@ -74,15 +101,33 @@ export type RecipeLibrary = {
  * `useRecipeEditor`. The store lives here once, so a screen never opens SQLite
  * a second time.
  *
+ * @param query The rail's question -- what to search, filter and sort by. The
+ *   wiring task hands the live query in; the default is the whole library in
+ *   name order, which is what the mutation-path tests run against.
  * @param db Injected by tests. Production call sites omit it.
  */
-export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
+export function useRecipeLibrary(
+    db?: RecipeStore,
+    query: LibraryQuery = WHOLE_LIBRARY
+): RecipeLibrary {
     // One store for the hook's lifetime. As a default parameter this ran on
     // every render, and every `new RecipeDatabase()` opens SQLite and replays
     // the table setup — on a screen that re-renders for scrolling, for the
     // settings sheet and for NFC progress.
     const [store] = useState<RecipeStore>(() => db ?? new RecipeDatabase());
-    const [recipes, setRecipes] = useState<Recipe[]>(() => read(store));
+
+    // A counter the mutations bump to force a fresh read. The list is a pure
+    // read of the query and this counter: the query says what to ask, the
+    // counter forces a re-ask after a write the query cannot see -- a delete or
+    // a restore changes the answer without changing the question. Deriving the
+    // list at render rather than seeding it into state and resetting from an
+    // effect is the house pattern (`useTraceAnimation`): the compiler forbids
+    // seeding state from an effect, and a synchronous SQLite read needs no
+    // effect. It also closes the stale-result race by construction: a
+    // synchronous read taken at render is always the answer to the query being
+    // rendered, so a slower older query can never land after a newer one.
+    const [revision, setRevision] = useState(0);
+    const recipes = readLibrary(store, query, revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -95,7 +140,7 @@ export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
     }, [recipes]);
 
     function reload() {
-        setRecipes(read(store));
+        setRevision((r) => r + 1);
     }
 
     function deleteRecipe(recipe: Recipe) {
@@ -179,13 +224,22 @@ export function useRecipeLibrary(db?: RecipeStore): RecipeLibrary {
 }
 
 /**
- * `retrieveAllRecipes` answers `null` for an empty table. Absorbed here rather
- * than leaked to callers: the old screen checked for it at every use, and one
- * of those checks conflated "no recipes" with "not loaded yet".
+ * The library list for a query.
+ *
+ * `resolveStockFilter` is what turns the query's filter ids into WHERE
+ * fragments; the ids reaching here have already been narrowed to the ones this
+ * build knows (`asStockFilters`, in `useLibraryQuery`), so the resolver's null
+ * -- which makes `buildLibraryQuery` throw -- stays reserved for a genuine
+ * in-code disagreement rather than firing on stale persisted state.
+ *
+ * `revision` does not shape the query. It is a cache key the mutations bump so
+ * a delete or a restore forces a fresh read the unchanged query object would
+ * otherwise let the compiler skip; naming it in this computation is what ties
+ * the recompute to it.
  */
-function read(db: RecipeStore): Recipe[] {
-    const stored = db.retrieveAllRecipes() ?? [];
-    return [...stored].sort((a, b) => a.displayName().localeCompare(b.displayName()));
+function readLibrary(db: RecipeStore, query: LibraryQuery, revision: number): Recipe[] {
+    void revision;
+    return db.queryRecipes(query, resolveStockFilter);
 }
 
 export default useRecipeLibrary;
