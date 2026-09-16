@@ -146,9 +146,17 @@ export const SORT_AXIS_ORDER: readonly SortAxis[] = [
     "name", "added", "lastBrewed", "timesBrewed", "ratio"
 ];
 
-/** Whether a value is one of the known sort axes. */
+/**
+ * Whether a value is one of the known sort axes.
+ *
+ * `Object.hasOwn` rather than `in`, because `in` walks the prototype chain and
+ * would answer true for `"toString"`, `"constructor"` and `"__proto__"`. Those
+ * are exactly the strings a hostile backup would carry, and they would pass
+ * this guard, be written to storage, and then index `SORT_AXES` to a function
+ * with no `orderBy` -- the crash the narrowing readers exist to prevent.
+ */
 export function isSortAxis(value: unknown): value is SortAxis {
-    return typeof value === "string" && value in SORT_AXES;
+    return typeof value === "string" && Object.hasOwn(SORT_AXES, value);
 }
 
 /** Whether a value is one of the two directions. */

@@ -175,6 +175,21 @@ describe("an unknown axis survives the read boundary", () => {
         }
     });
 
+    // An `in` check would answer true for every one of these, because `in`
+    // walks the prototype chain. They would then be stored by the restore path
+    // and index SORT_AXES to a function with no `orderBy`, which is the crash
+    // the readers exist to prevent -- and a backup file is untrusted input, so
+    // these are precisely the strings an attacker would reach for.
+    it("does not mistake an inherited property for an axis", () => {
+        for (const inherited of [
+            "toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"
+        ]) {
+            expect(isSortAxis(inherited)).toBe(false);
+            expect(asSortAxis(inherited)).toBe("name");
+            expect(() => orderByFragment(inherited, "asc")).not.toThrow();
+        }
+    });
+
     it("falls orderByFragment back to name rather than throwing on an unknown axis", () => {
         const unknownAxis = "banana" as unknown as SortAxis;
         expect(() => orderByFragment(unknownAxis, "asc")).not.toThrow();
