@@ -228,7 +228,10 @@ export function useRecipeLibrary(
     }
 
     function deleteAll(): DeleteAllOutcome {
-        const removed = recipes.length;
+        // The whole-table size, not `recipes.length`: this deletes the table, so
+        // reporting the length of a filtered view would tell the user a smaller
+        // number than the one they just lost.
+        const removed = librarySize;
         // The same shape as `applyRestore` below, and for the same reason: a
         // `runSync` that throws used to escape into the settings screen's press
         // handler, where there was no outcome to branch on and nothing to catch

@@ -236,6 +236,31 @@ describe("useRecipeLibrary", () => {
         expect(db.deleteAllRecipes).toHaveBeenCalledTimes(1);
     });
 
+    it("reports the whole table deleted, not the narrowed list on screen", async () => {
+        // Delete-all deletes the table whatever the rail was showing, so a count
+        // taken from the view would tell the user a smaller number than the one
+        // they actually lost.
+        const shown = named("Kenya");
+        const db = stubDb([shown]);
+        db.countRecipes.mockReturnValue(3);
+        const {result} = await renderHook(() =>
+            useRecipeLibrary(db, {
+                search:          "kenya",
+                filters:         [],
+                sort:            "name",
+                direction:       "asc",
+                favouritesFirst: false
+            })
+        );
+
+        let outcome;
+        await act(async () => {
+            outcome = result.current.deleteAll();
+        });
+
+        expect(outcome).toEqual({status: "deleted", deleted: 3});
+    });
+
     it("reports a failed delete instead of throwing into the screen", async () => {
         // The one irreversible action in the app, and the only destructive path
         // that had no outcome to report. A `runSync` that threw escaped into the

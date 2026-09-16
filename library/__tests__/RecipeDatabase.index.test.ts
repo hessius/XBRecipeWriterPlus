@@ -637,4 +637,29 @@ describe("filter counts", () => {
         expect(counts.tea).toBe(1);
         expect(counts.pods).toBe(0);
     });
+
+    it("binds each filter's parameters to its own column of the one read", () => {
+        // Every clause pushes its parameters into one shared list, bound
+        // positionally across the whole SELECT. Two parameterised clauses with
+        // deliberately unequal counts are what makes a swapped binding visible:
+        // with one pod and two overflow-off recipes, scrambling the order
+        // reports the counts the other way round rather than failing outright.
+        const db = new RecipeDatabase();
+        for (const [name, cupType] of [
+            ["Pod", CUP_TYPE.XPOD],
+            ["Open one", CUP_TYPE.OMNI],
+            ["Open two", CUP_TYPE.OMNI]
+        ] as const) {
+            const recipe = new Recipe();
+            recipe.name = name;
+            recipe.cupType = cupType;
+            db.insertRecipe(recipe);
+        }
+
+        const counts = db.countRecipesByFilter(
+            ["pods", "overflowOff"], resolveStockFilter
+        );
+
+        expect(counts).toEqual({pods: 1, overflowOff: 2});
+    });
 });

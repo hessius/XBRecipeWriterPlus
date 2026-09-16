@@ -648,7 +648,7 @@ export default function HomeScreen({db, settings}: Props) {
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 <HomeHeader
-                    count={library.recipes.length}
+                    count={library.librarySize}
                     collapsed={collapsed}
                     editing={editing}
                     showEdit={!wholeLibraryEmpty}

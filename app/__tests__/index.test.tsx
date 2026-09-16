@@ -12,6 +12,7 @@ import {resolveStockFilter} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
+import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 
 const mockPush = jest.fn();
 
@@ -361,6 +362,25 @@ describe("HomeScreen", () => {
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
         expect(screen.queryByTestId("library-rail")).toBeNull();
         expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
+    });
+
+    it("keeps the header count on the whole library when a search matches nothing", async () => {
+        // The count beside the wordmark says how many recipes you have, not how
+        // many survived the last search. Reading it off the queried list makes
+        // it read 0 over a library of three, which is the one number on this
+        // screen a user would take as a report that something was lost.
+        jest.useFakeTimers();
+        await renderHome({recipes: [named("Ethiopia"), named("Kenya"), named("Yirgacheffe")]});
+
+        await fireEvent.press(screen.getByTestId("rail-search"));
+        await act(async () => {
+            fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzz");
+            jest.advanceTimersByTime(TYPING_DEBOUNCE_MS);
+        });
+
+        expect(screen.queryByTestId("recipe-card")).toBeNull();
+        expect(screen.getByTestId("home-title-count")).toHaveTextContent("3");
+        jest.useRealTimers();
     });
 
     it("draws favourites and all recipes headings only when both sections have recipes", async () => {
