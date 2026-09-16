@@ -236,6 +236,31 @@ describe("SwipeableRecipeRow", () => {
         expect(await screen.findByText("KEPT")).toBeTruthy();
     });
 
+    it("names the recipe to a screen reader, like every other tile", async () => {
+        // A tray is reached by swiping one row among many, so a label that
+        // omits the recipe leaves the one control that will not say what it
+        // is about to act on. The tiles beside this one all name it.
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(screen.getByLabelText("Add Ethiopia Guji to favourites"))
+            .toBeTruthy();
+    });
+
+    it("says removing, not adding, once the recipe is one", async () => {
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={favouriteRecipe()} onPress={() => {}}
+                                onDelete={() => {}} onDuplicate={() => {}}
+                                onToggleFavourite={() => {}}/>
+        );
+
+        expect(screen.getByLabelText("Remove Ethiopia Guji from favourites"))
+            .toBeTruthy();
+    });
+
     it("omits the tile when no handler is given", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={plainRecipe()} onPress={() => {}}

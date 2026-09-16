@@ -186,9 +186,14 @@ export default function SwipeableRecipeRow({
                           // would be the only label in either tray that is.
                           caption={recipe.favourite ? "KEPT" : "KEEP"}
                           tone={resolveAccent(recipe)}
+                          // Named, like every other tile in both trays. A tray
+                          // is reached by swiping one row among many, so a
+                          // label that omits the recipe leaves a screen reader
+                          // user holding the one control that will not say
+                          // what it is about to act on.
                           label={recipe.favourite
-                              ? "Remove from favourites"
-                              : "Add to favourites"}
+                              ? `Remove ${recipe.displayName()} from favourites`
+                              : `Add ${recipe.displayName()} to favourites`}
                           testID="recipe-row-favourite"
                           onPress={() => {
                               swipeableRef.current?.close();
