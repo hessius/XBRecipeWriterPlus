@@ -196,7 +196,7 @@ Every task below runs in this worktree.
 
 ---
 
-### Task 2: `favourite` and `description` on `Recipe`
+### Task 2: `favourite` and `description` on `Recipe` — DONE
 
 **Files:**
 - Modify: `library/Recipe.ts`
@@ -372,7 +372,7 @@ git commit -m "feat: a description and a favourite on the recipe"
 
 ---
 
-### Task 3: Carry both fields through backup
+### Task 3: Carry both fields through backup — DONE
 
 `library/backup.ts` is a trust boundary. The `Recipe` constructor is deliberately
 forgiving so it can migrate its own old shapes, which makes it useless as a
@@ -494,7 +494,7 @@ git commit -m "feat: carry the description and favourite through backups"
 
 ---
 
-### Task 4: Index columns
+### Task 4: Index columns — DONE
 
 Four descriptors, one revision bump. `xid` and `sharedBy` serve shelves that
 arrive later; they are added now because adding a descriptor forces a rebuild of
@@ -666,7 +666,7 @@ git commit -m "feat: index the xid, author, favourite and note-presence columns"
 
 ---
 
-### Task 5: A star glyph
+### Task 5: A star glyph — DONE
 
 `constants/dotIcons.ts` has no star. Its header says adding an icon means drawing
 one and to keep the set small; this is the one M5 needs.
@@ -754,7 +754,7 @@ git commit -m "feat: a star glyph for favourites"
 
 ---
 
-### Task 6: The star on the card
+### Task 6: The star on the card — DONE
 
 A filled star at the **leading** end of the stats row. Evidence takes the
 trailing end later; the favourite takes the front. Both are free, and the two
@@ -851,7 +851,7 @@ git commit -m "feat: a star on a favourite recipe's card"
 
 ---
 
-### Task 7: The swipe tile
+### Task 7: The swipe tile — DONE
 
 A third tile beside COPY and DELETE. `components/SwipeableRecipeRow.tsx:38`
 already works out that three tiles fit at 320 pt and four would not, so this
@@ -970,7 +970,7 @@ git commit -m "feat: a keep tile in the row's management tray"
 
 ---
 
-### Task 8: Wire it to the library
+### Task 8: Wire it to the library — DONE
 
 **Files:**
 - Modify: `hooks/useRecipeLibrary.ts:19-26`, `:104-108`, `:153`
