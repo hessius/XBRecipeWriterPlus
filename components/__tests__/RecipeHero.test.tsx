@@ -21,7 +21,8 @@ const BASE = {
     collapsed: false,
     onBack:    () => {},
     onMore:    () => {},
-    onHelp:    () => {}
+    onHelp:    () => {},
+    onRename:  () => {}
 };
 
 type Node = ReturnType<typeof screen.getByTestId>;
@@ -36,6 +37,47 @@ function touchables(node: Node): number {
 }
 
 describe("RecipeHero", () => {
+    it("makes the name a rename button, with a pencil beside it", async () => {
+        // Nothing hidden: a title that merely happens to be tappable is a
+        // feature nobody finds. The name announces itself as a button and says
+        // what tapping it does.
+        const onRename = jest.fn();
+        await renderWithProviders(<RecipeHero {...BASE} onRename={onRename}/>);
+
+        const title = screen.getByTestId("hero-rename");
+        expect(title.props.accessibilityRole).toBe("button");
+        expect(title.props.accessibilityLabel).toBe("Ethiopia Guji");
+
+        await fireEvent.press(title);
+        expect(onRename).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the rename button once the slab has folded away", async () => {
+        // Renaming has to be reachable from every scroll position, not only
+        // from the top of the screen.
+        const onRename = jest.fn();
+        await renderWithProviders(
+            <RecipeHero {...BASE} collapsed onRename={onRename}/>
+        );
+
+        await fireEvent.press(screen.getByTestId("hero-rename-collapsed"));
+
+        expect(onRename).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers a placeholder name as a button too", async () => {
+        // New recipe is the title every recipe starts with, so it is the one a
+        // person most wants to tap.
+        const onRename = jest.fn();
+        await renderWithProviders(
+            <RecipeHero {...BASE} name="New recipe" named={false} onRename={onRename}/>
+        );
+
+        await fireEvent.press(screen.getByTestId("hero-rename"));
+
+        expect(onRename).toHaveBeenCalledTimes(1);
+    });
+
     it("shows the name, the beverage and the id", async () => {
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
@@ -64,16 +106,16 @@ describe("RecipeHero", () => {
         expect(screen.queryByTestId("hero-xid")).toBeNull();
     });
 
-    it("is the screen's navigation, and nothing else is tappable", async () => {
+    it("is the screen's navigation and its name, and nothing else is tappable", async () => {
         await renderWithProviders(<RecipeHero {...BASE}/>);
 
         // Counted by the handler rather than by role. A bare Pressable declares
         // no accessibility role, so a query for buttons stays empty however
         // tappable the hero has quietly become; every touchable does set a
-        // responder on its host view. Three: back, help and more. The slab
-        // itself is still a picture — every value on it is edited in the deck
-        // below.
-        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(3);
+        // responder on its host view. Four: back, help, more and the name.
+        // Everything else on the slab is still a picture — every value on it is
+        // edited in the deck below.
+        expect(touchables(screen.getByTestId("recipe-hero"))).toBe(4);
         expect(screen.getByTestId("recipe-hero").props.accessibilityRole)
             .not.toBe("button");
     });

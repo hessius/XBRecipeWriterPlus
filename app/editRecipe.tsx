@@ -14,6 +14,7 @@ import HelpSheet from "@/components/HelpSheet";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
+import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
 import SegmentedRow from "@/components/SegmentedRow";
 import StageProfile from "@/components/StageProfile";
@@ -737,6 +738,7 @@ export default function EditRecipe() {
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    const [renameOpen, setRenameOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
@@ -916,7 +918,8 @@ export default function EditRecipe() {
     // -- must also hide the screen from TalkBack, which an absolutely
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
-    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen || bypassWriteOpen;
+    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
+        || bypassWriteOpen || renameOpen;
 
     return (
         <>
@@ -941,7 +944,8 @@ export default function EditRecipe() {
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
                         onBack={async () => { await flushDrafts(); navigation.goBack(); }}
                         onMore={() => setOverflowOpen(true)}
-                        onHelp={() => setHelpOpen(true)}/>
+                        onHelp={() => setHelpOpen(true)}
+                        onRename={() => setRenameOpen(true)}/>
 
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
                 counts slots — so every slot below is always occupied, by an
@@ -1079,6 +1083,16 @@ export default function EditRecipe() {
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
+
+            {/* The recipe's own name, not its displayName(): a recipe following
+                its pod has an empty name and a borrowed title, and seeding the
+                field with the borrowed one would turn the next save into a
+                rename nobody asked for. Committed through the same dispatch the
+                Name row uses, so a rename from the header and a rename from
+                ABOUT are one code path. */}
+            <RenameSheet open={renameOpen} onOpenChange={setRenameOpen}
+                         name={recipe.name}
+                         onRename={(next) => dispatch(RECIPE_LABELS.TITLE, next)}/>
 
             <BypassWriteSheet open={bypassWriteOpen}
                               recipe={recipe}

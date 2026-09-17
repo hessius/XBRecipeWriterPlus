@@ -46,6 +46,14 @@ type Props = {
     onMore: () => void;
     /** Opens the help sheet. In the chrome row, because help is not a rare action. */
     onHelp: () => void;
+    /**
+     * Opens the rename sheet.
+     *
+     * The name is a button in both places it is drawn, with a pencil beside it,
+     * because the roadmap rules out hidden functionality and a title that merely
+     * happens to be tappable is hidden.
+     */
+    onRename: () => void;
 };
 
 /**
@@ -68,7 +76,8 @@ type Props = {
  * the same recipe is called.
  */
 export default function RecipeHero({
-    name, named, xid, accent, beverage, pours, collapsed, onBack, onMore, onHelp
+    name, named, xid, accent, beverage, pours, collapsed,
+    onBack, onMore, onHelp, onRename
 }: Props) {
     "use no memo";
 
@@ -110,12 +119,25 @@ export default function RecipeHero({
                 <HeaderButton label="Back" icon="back" accent={accent} onPress={onBack}/>
 
                 {/* The name moves up here once the slab is folded away, so the
-                    screen never loses its title. */}
-                <Text flex={1} numberOfLines={1} fontSize={15} fontWeight="700"
-                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                      color={named ? onAccent.text : onAccent.label}>
-                    {collapsed ? name : ""}
-                </Text>
+                    screen never loses its title. Still the rename button when
+                    it does: renaming is reachable from every scroll position and
+                    every deck, which it never was while Name was a row near the
+                    bottom of BREW. Not a button while the slab is open, where
+                    the pressable would be an empty strip between BACK and HELP. */}
+                {collapsed ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel={name}
+                               accessibilityHint="Opens a sheet to rename this recipe"
+                               testID="hero-rename-collapsed"
+                               style={{flex: 1, flexDirection: "row", alignItems: "center"}}
+                               onPress={onRename} hitSlop={8}>
+                        <Text flex={1} numberOfLines={1} fontSize={15} fontWeight="700"
+                              maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                              color={named ? onAccent.text : onAccent.label}>
+                            {name}
+                        </Text>
+                        <DotIcon name="edit" size={13} color={onAccent.label}/>
+                    </Pressable>
+                ) : <View style={{flex: 1}}/>}
 
                 {/* In the chrome row rather than behind the caret. Help is
                     not a rare action -- it is what the deck's one-line hints
@@ -155,12 +177,25 @@ export default function RecipeHero({
                 {/* Bounded to the same scale Doto is, exactly as the home card
                     is, so a long name at a large text size does not swallow the
                     slab. */}
-                <Text fontSize={26} fontWeight="700" lineHeight={31} marginTop="$2"
-                      maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                      color={named ? onAccent.text : onAccent.label}
-                      numberOfLines={2} maxWidth="72%">
-                    {name}
-                </Text>
+                {/* A recipe with no name of its own draws its borrowed title
+                    muted, and the placeholder is a button exactly as a real name
+                    is: New recipe is the one title every recipe starts with, so
+                    it is the one a person most wants to tap. */}
+                <Pressable accessibilityRole="button" accessibilityLabel={name}
+                           accessibilityHint="Opens a sheet to rename this recipe"
+                           testID="hero-rename"
+                           style={{flexDirection: "row", alignItems: "flex-start", gap: 8}}
+                           onPress={onRename} hitSlop={8}>
+                    <Text fontSize={26} fontWeight="700" lineHeight={31} marginTop="$2"
+                          maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                          color={named ? onAccent.text : onAccent.label}
+                          numberOfLines={2} maxWidth="72%">
+                        {name}
+                    </Text>
+                    <YStack marginTop="$3">
+                        <DotIcon name="edit" size={15} color={onAccent.label}/>
+                    </YStack>
+                </Pressable>
             </Collapsible>
         </YStack>
     );

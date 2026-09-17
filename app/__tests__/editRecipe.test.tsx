@@ -714,6 +714,73 @@ describe("the editor", () => {
     });
 });
 
+describe("renaming from the header", () => {
+    // Renaming used to mean scrolling to the bottom of the brew deck. It is a
+    // sheet rather than a field in the header because the header collapses on
+    // scroll and the keyboard arrives under it, which is the shape of bug that
+    // behaves on one platform and not the other.
+    async function openRename(): Promise<void> {
+        await fireEvent.press(screen.getByTestId("hero-rename"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+    }
+
+    it.each([
+        ["the brew deck", "Brew settings"],
+        ["the stages deck", "Stages, 3"],
+        ["the about deck", "About this recipe"]
+    ])("renames from %s, which it never did", async (unused, deck) => {
+        jest.useFakeTimers();
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText(deck));
+
+        await openRename();
+
+        expect(screen.getByTestId("rename-field")).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("writes the new name onto the recipe, and the header shows it", async () => {
+        jest.useFakeTimers();
+        await renderEditor();
+        await openRename();
+
+        await fireEvent.changeText(screen.getByTestId("rename-field"), "Yirgacheffe");
+        await fireEvent.press(screen.getByTestId("rename-confirm"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByText("Yirgacheffe")).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("leaves the name alone when the sheet is dismissed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({name: "Ethiopia"});
+        await openRename();
+
+        await fireEvent.changeText(screen.getByTestId("rename-field"), "Something else");
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+        expect(screen.queryByText("Something else")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("seeds the field with the recipe's own name, not a borrowed one", async () => {
+        // A recipe following its pod has an empty `name` and a title it borrowed
+        // from `xbloomName`. Seeding with the borrowed one would turn the next
+        // save into a rename nobody asked for, freezing a string the pod can
+        // still change.
+        jest.useFakeTimers();
+        await renderEditor({name: "", xbloomName: "Kenya Nyeri"});
+
+        await openRename();
+
+        expect(screen.getByTestId("rename-field").props.value).toBe("");
+        jest.useRealTimers();
+    });
+});
+
 describe("the stages deck", () => {
     it("switches decks without leaving the screen", async () => {
         await renderEditor();
