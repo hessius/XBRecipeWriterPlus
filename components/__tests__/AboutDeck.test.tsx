@@ -24,11 +24,19 @@ function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
 }
 
 describe("AboutDeck", () => {
-    it("holds the two fields that are identity rather than brew parameters", async () => {
+    it("holds the ID, which is a lookup key rather than a brew parameter", async () => {
         await renderWithProviders(<AboutDeck {...props()}/>);
 
         expect(screen.getByLabelText("Recipe ID")).toBeTruthy();
-        expect(screen.getByLabelText("Name")).toBeTruthy();
+    });
+
+    it("offers no second place to type the name", async () => {
+        // The name is the header, renamed through a sheet from any deck. A row
+        // here as well would be two controls for one field, each able to be
+        // showing something the other is not.
+        await renderWithProviders(<AboutDeck {...props()}/>);
+
+        expect(screen.queryByLabelText("Name")).toBeNull();
     });
 
     it("holds the note, which is what a recipe is for rather than what it does", async () => {
@@ -73,17 +81,14 @@ describe("AboutDeck", () => {
         expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
     });
 
-    it("commits the ID and the name to their own labels", async () => {
+    it("commits the ID under its own label", async () => {
         const dispatch = jest.fn();
         await renderWithProviders(<AboutDeck {...props({dispatch})}/>);
 
         await fireEvent(screen.getByLabelText("Recipe ID"), "endEditing",
                         {nativeEvent: {text: "CGL12"}});
-        await fireEvent(screen.getByLabelText("Name"), "endEditing",
-                        {nativeEvent: {text: "Yirgacheffe"}});
 
         expect(dispatch).toHaveBeenCalledWith("XID", "CGL12");
-        expect(dispatch).toHaveBeenCalledWith("Title", "Yirgacheffe");
     });
 
     it("closes the save gate on an ID no pod could carry", async () => {

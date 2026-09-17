@@ -2,9 +2,9 @@ import React from "react";
 import {YStack} from "tamagui";
 
 import NoteSection from "@/components/NoteSection";
-import TextFieldRow from "@/components/TextFieldRow";
+import PodSection from "@/components/PodSection";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
-import Recipe, {isValidXID} from "@/library/Recipe";
+import Recipe from "@/library/Recipe";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
@@ -25,7 +25,7 @@ type Props = {
     xidLookupFailed: boolean;
     /**
      * Counter bumped only when the recipe instance is swapped (a revert). The
-     * two text rows key on it, so a genuine external replacement remounts them
+     * text rows key on it, so a genuine external replacement remounts them
      * and resets their visible text and validity, while an ordinary edit or an
      * XID lookup leaves the field a user is typing in mounted.
      */
@@ -39,14 +39,18 @@ type Props = {
  *
  * The third deck. It exists because `Recipe ID` and `Name` were sitting at the
  * bottom of the brew deck, among dose, ratio and grind, and they are identity
- * and a lookup key rather than brew parameters. Moving them takes the last two
- * text fields off a deck of steppers and segmented rows, and gives the three
- * sections still to land here -- the note, the pod and where a recipe arrived
- * from -- somewhere to be that is not a fourth thing bolted to BREW.
+ * and a lookup key rather than brew parameters. Taking them off gives the deck
+ * of steppers and segmented rows its subject back, and gives the sections that
+ * answer what a recipe is -- the note, the pod, where it arrived from and how
+ * it has gone -- somewhere to be that is not a fourth thing bolted to BREW.
  *
- * The rows are moved, not rewritten. Their keying on the external-replacement
+ * The name has no row here. It is the screen header, renamed through a sheet
+ * from any of the three decks, and a second place to type it would be two
+ * controls for one field.
+ *
+ * The ID row is moved, not rewritten. Its keying on the external-replacement
  * epoch and the focus report that defers the XID lookup are load-bearing, and
- * the comments that say why came with them.
+ * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
     recipe, showHint, dispatch, onDraft, onInputErrorChange,
@@ -54,46 +58,22 @@ export default function AboutDeck({
 }: Props) {
     return (
         <YStack gap="$2" marginTop="$3">
-            {/* Keyed on the external-replacement epoch, not on the value it
-                mirrors. The counter bumps only when the whole recipe is swapped
-                out — a revert — so that one case still remounts the row and
-                resets its visible text, local `invalid` mark and the screen's
-                save gate to the restored ID. An ordinary keystroke or a
-                late-arriving XID lookup does not touch the epoch, so the field a
-                user is typing in is never remounted mid-entry: keying on
-                `recipe.xid` used to do exactly that, and a mid-typing render
-                (the XID lookup resolving) reset the uncontrolled input and ate
-                keystrokes.
-
-                The `xid-`/`name-` prefixes keep the two rows in separate key
-                namespaces, so a share-link import — which arrives with `xid`
-                and `name` both empty and now shares the same epoch — cannot land
-                two siblings on one key and draw React's duplicate-key warning. */}
-            <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID"
-                          initialValue={recipe.xid}
-                          maxLength={8} autoCapitalize="characters"
-                          showHint={showHint}
-                          note={xidLookupFailed ? "not found" : undefined}
-                          validate={isValidXID} onInvalidChange={onInputErrorChange}
-                          invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
-                          onFocusChange={onXidFocusChange}
-                          onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
-                          onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
-
-            <TextFieldRow key={`name-${externalEpoch}`} topic="name" label="Name"
-                          initialValue={recipe.name}
-                          maxLength={100}
-                          showHint={showHint}
-                          onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
-                          onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
-
-            {/* Keyed on the same epoch and for the same reason as the rows
-                above: a revert has to reset the text the field is showing, and
-                nothing else may remount it mid-sentence. */}
+            {/* Keyed on the same epoch and for the same reason as the ID row
+                inside the pod section: a revert has to reset the text the field
+                is showing, and nothing else may remount it mid-sentence. */}
             <NoteSection key={`note-${externalEpoch}`}
                          initialValue={recipe.description}
                          onDraft={(value) => onDraft(RECIPE_LABELS.NOTE, value)}
                          onCommit={(value) => dispatch(RECIPE_LABELS.NOTE, value)}/>
+
+            <PodSection recipe={recipe} showHint={showHint}
+                        xidLookupFailed={xidLookupFailed}
+                        externalEpoch={externalEpoch}
+                        onXidFocusChange={onXidFocusChange}
+                        onInputErrorChange={onInputErrorChange}
+                        onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
+                        onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}
+                        onFollowPod={() => dispatch(RECIPE_LABELS.TITLE, "")}/>
         </YStack>
     );
 }
