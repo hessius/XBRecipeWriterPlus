@@ -314,7 +314,17 @@ function readLibrary(db: RecipeStore, query: LibraryQuery, revision: number): Re
 function readLibrarySize(db: RecipeStore, revision: number): number {
     void revision;
     if (db.countRecipes) return db.countRecipes();
-    return db.retrieveAllRecipes?.()?.length ?? 0;
+    // The test is whether the store can answer, not what it answered. This
+    // figure is what the screen asks "is the library empty?", so a store that
+    // can count neither way must not be allowed to say "no recipes" -- that
+    // hides the rail and the list over a store that may hold every recipe the
+    // user has. A thrown error is recoverable and a silent empty library is
+    // not, which is why `readFilterCounts` below throws for the same reason.
+    if (!db.retrieveAllRecipes) throw new Error("This store cannot count its recipes");
+    // `?? 0` is right here and nowhere else: `retrieveAllRecipes` returns null
+    // for an empty table, so from a store that has the method, null is the
+    // answer "none" rather than the absence of one.
+    return db.retrieveAllRecipes()?.length ?? 0;
 }
 
 function readFilterCounts(db: RecipeStore, revision: number): Record<string, number> {

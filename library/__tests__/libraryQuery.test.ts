@@ -70,12 +70,20 @@ describe("the built statement", () => {
         expect(sql).not.toContain(hostile);
         expect(sql).not.toContain("DROP TABLE recipes");
         expect(params).toContain(`%${hostile}%`);
-        // One bound copy per `?`. Order is not asserted because every column
-        // binds the same pattern, so a swap is a semantic no-op; a miscount is
-        // not, and SQLite would reject it anyway.
+        // One bound value per `?`. Not every column binds the same pattern --
+        // `sortName` takes the accent-folded term and the tag subquery the
+        // case-folded one -- so this counts the values carrying the hostile text
+        // in any of its foldings rather than matching one exact string. A
+        // miscount is what matters, and SQLite would reject it anyway.
         const placeholders = (sql.match(/LIKE \? ESCAPE/g) ?? []).length;
-        expect(params.filter((p) => p === `%${hostile}%`))
-            .toHaveLength(placeholders);
+        const bound = params.filter(
+            (p): p is string =>
+                typeof p === "string" && p.toLowerCase() === `%${hostile}%`.toLowerCase()
+        );
+        expect(bound).toHaveLength(placeholders);
+        // And every one of them arrived whole, so no folding quietly dropped a
+        // metacharacter on its way to being bound.
+        for (const value of bound) expect(value.toLowerCase()).toContain("drop table recipes");
     });
 
     it("escapes LIKE wildcards so a literal percent is a literal percent", () => {
@@ -292,6 +300,25 @@ describe("querying a real database", () => {
         expect(found.sort())
             .toEqual(["byAuthor", "byDescription", "byName", "byTag", "byXid"]);
         expect(found).not.toContain("miss");
+    });
+
+    it("finds an accented tag whatever case either side is written in", () => {
+        // The tag table holds two forms: `tag` as the user typed it, and
+        // `tagKey` folded for matching. LIKE folds ASCII case and nothing else,
+        // so against the display `tag` this search found CAFÉ only when the
+        // accented letter happened to match in case -- which is to say, for a
+        // non-English user, almost never.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            shouty: {name: "Morning", createdAt: 1, ratio: 15, tags: ["CAFÉ"]},
+            quiet: {name: "Evening", createdAt: 2, ratio: 15, tags: ["café"]},
+            miss: {name: "Kenya", createdAt: 3, ratio: 15, tags: ["cafe"]}
+        });
+        // Either spelling of the query reaches both spellings of the tag, and
+        // neither reaches the unaccented one, which is a different tag.
+        for (const search of ["café", "CAFÉ"]) {
+            expect(order(db, query({search}), uuids).sort()).toEqual(["quiet", "shouty"]);
+        }
     });
 
     it("treats a percent in the term as a literal, not a wildcard", () => {

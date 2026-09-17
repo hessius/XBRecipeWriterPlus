@@ -1,5 +1,6 @@
 import {orderByFragment, type SortAxis, type SortDirection} from "./librarySort";
 import {foldSortKey, type IndexValue} from "./recipeIndex";
+import {tagKey} from "./tagKey";
 
 /**
  * The rail's question, turned into one SQL statement.
@@ -87,12 +88,18 @@ function escapeLike(term: string): string {
  * own, which is what "case insensitively" asks for; the NOCASE columns get the
  * same treatment for free.
  */
-function searchClause(pattern: string, foldedPattern: string): FilterClause {
+function searchClause(
+    pattern: string, foldedPattern: string, tagPattern: string
+): FilterClause {
     // `sortName` holds a folded key, so it must be matched with a folded term or
-    // typing a name exactly as it is spelled would fail to find it. The other
-    // columns hold what the user typed, accents and all, and are matched
-    // literally: a description that says "café" should match a search for
-    // "café". So the pattern travels per column rather than once for the clause.
+    // typing a name exactly as it is spelled would fail to find it. Tags hold
+    // two forms and `tagKey` is the one built for matching: `CAFÉ` is stored
+    // with `tagKey` "café", and since LIKE folds ASCII case and nothing else,
+    // matching the display `tag` would find that tag only for a searcher who
+    // happened to type the accented letter in the same case. The other columns
+    // hold what the user typed, accents and all, and are matched literally: a
+    // description that says "café" should match a search for "café". So the
+    // pattern travels per column rather than once for the clause.
     const columns: [string, string][] = [
         ["sortName", foldedPattern],
         ["sharedBy", pattern],
@@ -103,14 +110,14 @@ function searchClause(pattern: string, foldedPattern: string): FilterClause {
         where: `(
             ${columns.map(([c]) => `${c} LIKE ? ESCAPE '\\'`).join("\n            OR ")}
             OR recipes.uuid IN (
-                SELECT uuid FROM recipe_tags WHERE tag LIKE ? ESCAPE '\\'
+                SELECT uuid FROM recipe_tags WHERE tagKey LIKE ? ESCAPE '\\'
             )
         )`,
         // The clause carries its own bindings, like every resolver clause does,
         // so the count cannot drift from the SQL when a column is added to the
         // list above. Counting placeholders by hand at the call site is how a
         // fifth column arrives bound to four values.
-        params: columns.map(([, value]) => value).concat(pattern)
+        params: columns.map(([, value]) => value).concat(tagPattern)
     };
 }
 
@@ -138,7 +145,8 @@ export function buildLibraryQuery(
     if (term.length > 0) {
         const clause = searchClause(
             `%${escapeLike(term)}%`,
-            `%${escapeLike(foldSortKey(term))}%`
+            `%${escapeLike(foldSortKey(term))}%`,
+            `%${escapeLike(tagKey(term))}%`
         );
         conditions.push(clause.where);
         params.push(...(clause.params ?? []));

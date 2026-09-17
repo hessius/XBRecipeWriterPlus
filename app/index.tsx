@@ -646,18 +646,19 @@ export default function HomeScreen({db, settings}: Props) {
         }
     }
 
-    // The import sheet and the new-recipe chooser each cover the screen while
-    // open, and the NFC ceremony while a scan is running. All three hide the
-    // subtree below from the reader.
-    const screenCovered = scanning || importOpen || newOpen || showNfcOverlay;
+    // The import sheet, the new-recipe chooser and the sort sheet each cover the
+    // screen while open, and the NFC ceremony while a scan is running. All four
+    // hide the subtree below from the reader.
+    const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay;
 
     return (
         <>
             {/* The NFC ceremony is a modal moment, and an absolutely positioned
                 overlay only covers the screen visually. While it -- or the
-                import sheet or the new-recipe chooser, both non-modal Tamagui
-                sheets that render as a sibling of this screen rather than
-                through a native Modal and so isolate nothing on Android -- is
+                import sheet, the new-recipe chooser or the sort sheet, all
+                non-modal Tamagui sheets that render as a sibling of this screen
+                rather than through a native Modal and so isolate nothing on
+                Android -- is
                 up, this subtree hides its own descendants from the screen
                 reader, so TalkBack cannot reach and fire the controls behind it
                 — the Android half of what `accessibilityViewIsModal` does on

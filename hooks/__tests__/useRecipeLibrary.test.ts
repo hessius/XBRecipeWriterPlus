@@ -11,7 +11,10 @@ jest.mock("@/library/RecipeDatabase");
 function stubDb(recipes: Recipe[]) {
     return {
         queryRecipes:       jest.fn(() => recipes),
-        retrieveAllRecipes: jest.fn(() => recipes),
+        // Typed nullable because the real `retrieveAllRecipes` returns null for
+        // an empty table rather than an empty array, and a stub that cannot
+        // express that hides the case from every test using it.
+        retrieveAllRecipes: jest.fn((): Recipe[] | null => recipes),
         countRecipes:       jest.fn(() => recipes.length),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
@@ -96,6 +99,31 @@ describe("useRecipeLibrary", () => {
         await expect(renderHook(() => useRecipeLibrary(withoutCounts))).rejects.toThrow(
             "This store cannot count stock filters"
         );
+    });
+
+    it("throws when a store can count its recipes neither way", async () => {
+        // Rather than reporting zero. `librarySize` is what the screen asks "is
+        // the library empty?", so a success-shaped zero from a store that cannot
+        // count hides the rail and the list over a table that may hold
+        // everything the user has. Failing loudly is recoverable; an empty
+        // library that is not empty is not.
+        const {countRecipes: _c, retrieveAllRecipes: _r, ...neither} = stubDb([named("Ethiopia")]);
+
+        await expect(renderHook(() => useRecipeLibrary(neither as never))).rejects.toThrow(
+            "This store cannot count its recipes"
+        );
+    });
+
+    it("reads a null from a store that does have the method as an empty table", async () => {
+        // `retrieveAllRecipes` returns null for an empty table as well as never
+        // being there at all, so the guard above has to test the method rather
+        // than its answer. Testing the answer would throw on a genuinely empty
+        // library, which is the first library every new user has.
+        const {countRecipes: _omitted, ...byList} = stubDb([]);
+        byList.retrieveAllRecipes.mockReturnValue(null);
+        const {result} = await renderHook(() => useRecipeLibrary(byList as never));
+
+        expect(result.current.librarySize).toBe(0);
     });
 
     it("refuses to build a backup from a store that cannot read the table", async () => {

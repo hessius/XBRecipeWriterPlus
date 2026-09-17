@@ -614,6 +614,22 @@ describe("HomeScreen", () => {
         expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
     });
 
+    it("takes the screen out of the reader's reach while the sort sheet is open", async () => {
+        // The fourth sheet on this screen, and the one that was missed: like the
+        // import sheet and the chooser it is a non-modal Tamagui sheet, so its
+        // own `accessibilityViewIsModal` isolates nothing on Android and the
+        // screen behind it has to hide its own subtree. Unlike those two it is
+        // opened from the rail, which is inside the subtree being guarded.
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia"), named("Kenya")])}
+                        settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(await screen.findByLabelText(/^Sort/));
+
+        await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
+        expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
+    });
+
     describe("the accent a recipe is edited under", () => {
         it("is settled before the editor sees it", async () => {
             // The editor is pushed with the recipe serialised, and a recipe is only
