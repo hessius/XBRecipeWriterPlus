@@ -1,5 +1,9 @@
 # M5 Phase 5: The Recipe Screen — Implementation Plan
 
+> **Shipped.** All eight tasks are done. The one thing this plan asked for that
+> automated checks cannot give is the device pass: three segments at 390 pt is a
+> width claim RNTL performs no layout to test.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A third deck that holds what a recipe *is*, so the brew deck can go back to holding only what it *does* — and with it, the one place a description can finally be typed.

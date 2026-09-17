@@ -305,6 +305,31 @@ describe("the editor", () => {
         expect(screen.queryByText("Dose")).toBeNull();
     });
 
+    it("announces three decks as tabs, with the one in force marked selected", async () => {
+        await renderEditor();
+
+        await openAbout();
+
+        const tabs = screen.getAllByRole("tab");
+        expect(tabs).toHaveLength(3);
+        const selected = tabs.filter((tab) => tab.props.accessibilityState.selected);
+        expect(selected).toHaveLength(1);
+        expect(selected[0].props.accessibilityLabel).toMatch(/about/i);
+    });
+
+    it("reads the about deck in the order it is drawn", async () => {
+        // Note, then the pod, then where it came from, then how it has gone.
+        // The order is the argument the deck makes, so it is worth pinning.
+        await renderEditor();
+
+        await openAbout();
+
+        expect(screen.getByTestId("about-note")).toBeTruthy();
+        expect(screen.getByTestId("about-pod")).toBeTruthy();
+        expect(screen.getByTestId("about-from")).toBeTruthy();
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
     it("puts a renamed recipe back on its pod name by clearing its own", async () => {
         // The title follows the pod again rather than freezing a copy of it,
         // so a pod name that later changes carries the recipe with it. The

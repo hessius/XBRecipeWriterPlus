@@ -863,8 +863,9 @@ worth stating so the plan does not have to rediscover it.
    reversals of decisions this design made, recorded in §"The rail belongs to
    the view" and §"A shelf opens into itself". Needs 4. Planned in
    [`2026-09-17-m5-shelf-rooms.md`](../plans/2026-09-17-m5-shelf-rooms.md).
-5. **The recipe screen.** The third deck, the header rename sheet, the pod
-   section. Independent of 3 and 4; needs only 1. Planned in
+5. **The recipe screen. Shipped.** The third deck, the header rename sheet, the
+   pod section, the note and the card's line budget, the avatar setting and a
+   stubbed evidence line. Independent of 3 and 4; needs only 1. Planned in
    [`2026-09-16-m5-recipe-screen.md`](../plans/2026-09-16-m5-recipe-screen.md),
    which also picks up the description and the card's line budget left behind
    by phase 1.
