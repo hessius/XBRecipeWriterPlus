@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import type {SortAxis, SortDirection} from './librarySort';
+import type {LibraryView} from './libraryView';
 
 /**
  * Every setting, with its default.
@@ -161,6 +162,22 @@ export const DEFAULTS = {
      * over nothing.
      */
     libraryFavouritesFirst: false,
+    /**
+     * Which of the two library views was last used.
+     *
+     * Global rather than per shelf or per session, per the design: a ten recipe
+     * library and a hundred and eighty recipe library want different front
+     * doors, and the app should not have an opinion about which one a person is.
+     * Remembered so the choice survives a relaunch, because a view that reset
+     * itself would teach the user their choice did not take.
+     *
+     * Defaults to the list, which is the view that works at any library size.
+     * As with `librarySort`, the `LibraryView` union documents the intent but
+     * cannot enforce it at the read boundary; `asLibraryView` is the guard every
+     * reader narrows through, so an unknown value draws the list rather than
+     * lighting neither half of the segmented pair.
+     */
+    libraryView: "list" as LibraryView,
     /**
      * Whether the xBloom account import exists at all.
      *
