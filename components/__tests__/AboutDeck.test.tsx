@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutDeck from "@/components/AboutDeck";
+import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -12,6 +13,8 @@ function recipeWith(over: Partial<Recipe> = {}): Recipe {
 function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
     return {
         recipe:             recipeWith(),
+        accent:             palette.info,
+        showAvatar:         false,
         showHint:           false,
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),

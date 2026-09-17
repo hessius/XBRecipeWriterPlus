@@ -690,6 +690,7 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
+    const [showRecipeAvatars] = useSetting("showRecipeAvatars");
     const [rememberedMachine] = useSetting("machineDeviceId");
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
     const [lastCardRead] = useSetting("lastCardRead");
@@ -1014,7 +1015,9 @@ export default function EditRecipe() {
                               showHint={showHint} dispatch={dispatch}
                               coarsenGrindToMinimum={coarsenGrindToMinimum}/>
                 ) : deck === "about" ? (
-                    <AboutDeck recipe={recipe} showHint={showHint} dispatch={dispatch}
+                    <AboutDeck recipe={recipe} accent={accent}
+                               showAvatar={showRecipeAvatars}
+                               showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}
                                onXidFocusChange={setXidFocused}

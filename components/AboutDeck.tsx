@@ -1,6 +1,7 @@
 import React from "react";
 import {YStack} from "tamagui";
 
+import FromSection from "@/components/FromSection";
 import NoteSection from "@/components/NoteSection";
 import PodSection from "@/components/PodSection";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
@@ -11,6 +12,10 @@ type Dispatch = (label: string, value: string) => void;
 
 type Props = {
     recipe: Recipe;
+    /** The recipe's own colour, which the FROM mark falls back to. */
+    accent: string;
+    /** `showRecipeAvatars`, off by default. */
+    showAvatar: boolean;
     showHint: boolean;
     dispatch: Dispatch;
     /** Records an unblurred field's current text, for the screen to flush. */
@@ -53,7 +58,7 @@ type Props = {
  * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
-    recipe, showHint, dispatch, onDraft, onInputErrorChange,
+    recipe, accent, showAvatar, showHint, dispatch, onDraft, onInputErrorChange,
     xidLookupFailed, externalEpoch, onXidFocusChange
 }: Props) {
     return (
@@ -74,6 +79,8 @@ export default function AboutDeck({
                         onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
                         onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}
                         onFollowPod={() => dispatch(RECIPE_LABELS.TITLE, "")}/>
+
+            <FromSection recipe={recipe} accent={accent} showAvatar={showAvatar}/>
         </YStack>
     );
 }

@@ -79,6 +79,8 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("showCoffeeMarker", settings);
     const [dotMatrixProfile, setDotMatrixProfile] =
         useSetting("dotMatrixProfile", settings);
+    const [showRecipeAvatars, setShowRecipeAvatars] =
+        useSetting("showRecipeAvatars", settings);
     // Not shown as a row on this screen -- the hints switch lives on the editor's
     // own caret, which is where a user is when they want it. Read here anyway,
     // because a backup carries every preference and this is one.
@@ -131,7 +133,8 @@ export default function SettingsScreen({settings}: Props) {
     // a key someone forgot.
     function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
         return {
-            showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
+            showCoffeeMarker, dotMatrixProfile, showRecipeAvatars, showHints,
+            temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
@@ -171,6 +174,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.dotMatrixProfile === "boolean") {
             setDotMatrixProfile(incoming.dotMatrixProfile);
+        }
+        if (typeof incoming.showRecipeAvatars === "boolean") {
+            setShowRecipeAvatars(incoming.showRecipeAvatars);
         }
         if (typeof incoming.showHints === "boolean") {
             setShowHints(incoming.showHints);
@@ -323,6 +329,11 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
+                    <SettingsToggleRow
+                        label="Show recipe pictures"
+                        description="Draw the pod photo or the sharer's picture where a recipe arrived with one."
+                        value={showRecipeAvatars}
+                        onChange={setShowRecipeAvatars}/>
                 </SettingsSection>
 
                 <SettingsSection title="Units">

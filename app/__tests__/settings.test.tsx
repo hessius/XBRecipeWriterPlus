@@ -210,6 +210,24 @@ describe("SettingsScreen", () => {
         expect(new Settings(storage).get("dotMatrixProfile")).toBe(true);
     });
 
+    it("offers recipe pictures, off until someone asks for them", async () => {
+        // Off by default on purpose: the setting exists to find out whether a
+        // pod photo or a sharer's picture helps at all.
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.getByLabelText("Show recipe pictures")
+            .props.accessibilityState.checked).toBe(false);
+    });
+
+    it("persists recipe pictures", async () => {
+        const storage = memoryStorage();
+
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+        await fireEvent(screen.getByLabelText("Show recipe pictures"), "checkedChange", true);
+
+        expect(new Settings(storage).get("showRecipeAvatars")).toBe(true);
+    });
+
     it("does not offer the one-line hints", async () => {
         // The hints toggle lives in the editor's more menu, beside the deck it
         // annotates, rather than a screen away from it.
