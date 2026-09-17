@@ -36,6 +36,7 @@ export type RecipeStore = {
         ids: readonly string[],
         resolveFilter?: FilterResolver
     ) => Record<string, number>;
+    countRecipesByTag?: () => {tag: string; count: number}[];
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -110,6 +111,8 @@ export type RecipeLibrary = {
     librarySize: number;
     /** Whole-table counts for stock filters, keyed by filter id. */
     filterCounts: Record<string, number>;
+    /** Whole-table counts for every tag, largest shelf first. */
+    tagCounts: {tag: string; count: number}[];
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
@@ -158,6 +161,7 @@ export function useRecipeLibrary(
     const recipes = readLibrary(store, query, revision);
     const librarySize = readLibrarySize(store, revision);
     const filterCounts = readFilterCounts(store, revision);
+    const tagCounts = readTagCounts(store, revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -282,6 +286,7 @@ export function useRecipeLibrary(
         recipes,
         librarySize,
         filterCounts,
+        tagCounts,
         allRecipes,
         refresh: reload,
         deleteRecipe,
@@ -333,6 +338,23 @@ function readFilterCounts(db: RecipeStore, revision: number): Record<string, num
         throw new Error("This store cannot count stock filters");
     }
     return db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+}
+
+/**
+ * Every tag and how many recipes carry it: the manual half of the shelf grid.
+ *
+ * Throws rather than returning nothing, for the reason `readFilterCounts` does.
+ * A store that cannot answer would otherwise report a library with no tags,
+ * and every shelf the user built by hand would be missing from the grid with
+ * nothing on screen to say so. A shelf a person made is the one thing here the
+ * app cannot reconstruct if it quietly drops it.
+ */
+function readTagCounts(db: RecipeStore, revision: number): {tag: string; count: number}[] {
+    void revision;
+    if (!db.countRecipesByTag) {
+        throw new Error("This store cannot count tags");
+    }
+    return db.countRecipesByTag();
 }
 
 export default useRecipeLibrary;

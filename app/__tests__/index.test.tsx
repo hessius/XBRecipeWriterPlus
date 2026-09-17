@@ -262,6 +262,15 @@ function store(recipes: Recipe[]) {
                 id === "tea" ? recipes.filter((recipe) => recipe.isTea()).length : 0
             ]))
         ),
+        countRecipesByTag: jest.fn(() => {
+            const counts = new Map<string, number>();
+            for (const recipe of recipes) {
+                for (const tag of recipe.tags ?? []) {
+                    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+                }
+            }
+            return [...counts].map(([tag, count]) => ({tag, count}));
+        }),
         deleteRecipe: jest.fn(),
         cloneRecipe:  jest.fn(),
         updateRecipe: jest.fn()
