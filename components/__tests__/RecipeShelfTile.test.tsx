@@ -92,6 +92,24 @@ describe("RecipeShelfTile", () => {
         expect(names).not.toContain("write");
     });
 
+    it("carries the sheet's brew history row, which no tray mirrors", async () => {
+        // The tile's other actions all mirror a verb a list row can be swiped
+        // to. The history is only ever reached by the long press, which is a
+        // gesture a screen reader cannot make.
+        const onHistory = jest.fn();
+        const recipe = named("Ethiopia");
+        await renderWithProviders(
+            <RecipeShelfTile recipe={recipe} {...HANDLERS} onHistory={onHistory}/>
+        );
+        const tile = screen.getByTestId(`recipe-tile-${recipe.uuid}`);
+        expect((tile.props.accessibilityActions as {name: string}[])
+            .map((a) => a.name)).toContain("history");
+
+        await fireEvent(tile, "accessibilityAction",
+                        {nativeEvent: {actionName: "history"}});
+        expect(onHistory).toHaveBeenCalledTimes(1);
+    });
+
     it("routes an accessibility action to its handler", async () => {
         const onDelete = jest.fn();
         const recipe = named("Ethiopia");

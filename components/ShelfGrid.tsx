@@ -83,9 +83,12 @@ function Rows({shelves, onOpen, onEdit}: {
  * included: a heading over an empty section is a promise the app cannot keep,
  * and `AUTO SHELVES` over nothing would be the first thing a new user saw.
  *
- * Tapping a tile applies that shelf and leaves for the list. The grid holds no
- * selected state of its own for that reason -- there is nothing to select here,
- * only somewhere to go.
+ * Tapping a tile opens that shelf into its own room, which is this same view
+ * with the shelf's recipes on the squares instead of the shelves. It used to
+ * apply the shelf and leave for the list; that was reversed in phase 4b after
+ * device testing, because dissolving the grid into a filter read as the app
+ * undoing the tap. The grid holds no selected state of its own either way --
+ * there is nothing to select here, only somewhere to go.
  */
 export default function ShelfGrid({
     shelves, onOpen, onNewShelf, onEditShelf, paddingBottom = 0

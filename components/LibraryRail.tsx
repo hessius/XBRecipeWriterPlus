@@ -344,8 +344,18 @@ export default function LibraryRail({
                 space and has to stay a positioned box even when nothing is
                 drawn over it. */}
             <XStack position="relative">
+                {/* Hidden from a reader while the field covers it. The controls
+                    underneath are drawn over, not unmounted, so without this
+                    they stayed focusable: a reader could reach and press a
+                    toggle that was invisible to everyone else. Both props,
+                    because they are the iOS and Android halves of the one
+                    instruction and neither platform reads the other's. */}
                 <XStack flex={1} alignItems="center"
-                        paddingHorizontal="$3" gap={CHIP_GAP}>
+                        paddingHorizontal="$3" gap={CHIP_GAP}
+                        accessibilityElementsHidden={searchOpen}
+                        importantForAccessibility={
+                            searchOpen ? "no-hide-descendants" : "auto"
+                        }>
                     {cluster}
                 </XStack>
 

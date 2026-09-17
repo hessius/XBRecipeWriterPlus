@@ -50,6 +50,18 @@ export default function ShelfTile({shelf, onPress, onEdit}: {
         <Pressable accessibilityRole="button"
                    accessibilityLabel={`${shelf.label}, ${kind}, ${recipes}`}
                    testID={`shelf-${shelf.id}`}
+                   // The edit button below is nested inside this element, which
+                   // is one accessibility element, so VoiceOver cannot reach it
+                   // -- the same trap `components/RecipeCard.tsx` documents for
+                   // its tray tiles. Editing is the only way a recipe comes off
+                   // a manual shelf, so without this action a reader has a shelf
+                   // it can never change.
+                   accessibilityActions={onEdit !== undefined
+                       ? [{name: "edit", label: `Edit the ${shelf.label} shelf`}]
+                       : undefined}
+                   onAccessibilityAction={(event) => {
+                       if (event.nativeEvent.actionName === "edit") onEdit?.();
+                   }}
                    onPress={onPress} style={{flex: 1}}>
             <YStack height={TILE_HEIGHT} justifyContent="space-between"
                     padding="$3" borderRadius="$4"

@@ -33,6 +33,8 @@ export type RoomRecipeActions = {
     onDuplicate: () => void;
     onDelete: () => void;
     onToggleFavourite?: () => void;
+    /** Open this recipe's brew history, the sheet row no tray carries. */
+    onHistory: () => void;
 };
 
 /**
@@ -157,7 +159,8 @@ export default function ShelfRoom({
                                     onWrite={acts.onWrite}
                                     onDuplicate={acts.onDuplicate}
                                     onDelete={acts.onDelete}
-                                    onToggleFavourite={acts.onToggleFavourite}/>
+                                    onToggleFavourite={acts.onToggleFavourite}
+                                    onHistory={acts.onHistory}/>
                             );
                         })}
                         {/* Pad an odd last row to a full pair, so the final tile

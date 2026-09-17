@@ -49,6 +49,12 @@ type Props = {
     onToggleFavourite?: () => void;
     /** Open the recipe's actions sheet by a long press. Forwarded to the card. */
     onLongPress?: () => void;
+    /**
+     * Open this recipe's brew history. Forwarded to the card, where it is the
+     * one sheet row that no tray tile mirrors and so the one act a reader would
+     * otherwise reach only through the long press.
+     */
+    onHistory?: () => void;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -148,7 +154,8 @@ export default function SwipeableRecipeRow({
                                                onShare,
                                                onWrite,
                                                onToggleFavourite,
-                                               onLongPress
+                                               onLongPress,
+                                               onHistory
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -339,7 +346,8 @@ export default function SwipeableRecipeRow({
                             onShare={onShare} onWrite={onWrite}
                             onDelete={onDelete} onDuplicate={onDuplicate}
                             onToggleFavourite={onToggleFavourite}
-                            onLongPress={onLongPress}/>
+                            onLongPress={onLongPress}
+                            onHistory={onHistory}/>
             </Swipeable>
         </View>
     );

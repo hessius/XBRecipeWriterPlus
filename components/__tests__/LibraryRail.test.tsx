@@ -183,7 +183,11 @@ describe("LibraryRail", () => {
         await press(screen.getByTestId("rail-search"));
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
 
-        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+        // Hidden from a screen reader while the field is over it, so the query
+        // has to ask for it explicitly. Still drawn, which is the point here.
+        expect(
+            screen.getByText(chipLabel("added"), {includeHiddenElements: true})
+        ).toBeTruthy();
     });
 
     it("leaves the view toggle exactly where it was when search opens", async () => {
@@ -196,7 +200,23 @@ describe("LibraryRail", () => {
         await press(screen.getByTestId("rail-search"));
 
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
-        expect(screen.getByTestId("rail-view-toggle")).toBe(before);
+        expect(
+            screen.getByTestId("rail-view-toggle", {includeHiddenElements: true})
+        ).toBe(before);
+    });
+
+    it("takes the covered rail away from a screen reader while the field is up", async () => {
+        // The field is drawn over the cluster rather than in it, so the controls
+        // underneath stay in the tree and stay focusable unless they are hidden.
+        // A reader swiping past the field would otherwise land on a sort chip it
+        // cannot see. The two props are one instruction in two dialects, so the
+        // probe for this only fails with both of them gone.
+        await renderWithProviders(<LibraryRail {...railProps({})}/>);
+        expect(screen.queryByTestId("rail-view-toggle")).toBeTruthy();
+
+        await press(screen.getByTestId("rail-search"));
+
+        expect(screen.queryByTestId("rail-view-toggle")).toBeNull();
     });
 
     it("gives the field back to the rail when an empty one is walked away from", async () => {

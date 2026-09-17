@@ -54,6 +54,14 @@ type Props = {
     onDuplicate: () => void;
     onDelete: () => void;
     onToggleFavourite?: () => void;
+    /**
+     * Open this recipe's brew history, the sheet's one row that no tray carries.
+     *
+     * Every other action here mirrors something a list row can also be swiped
+     * to; this one mirrors the long press itself, so without it the history
+     * would be reachable only by a gesture a reader cannot make.
+     */
+    onHistory?: () => void;
 };
 
 /**
@@ -72,7 +80,7 @@ type Props = {
  */
 export default function RecipeShelfTile({
     recipe, onPress, onLongPress, showCoffeeMarker = true, dottedProfile = false,
-    onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite
+    onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite, onHistory
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -107,6 +115,9 @@ export default function RecipeShelfTile({
                 label: recipe.favourite ? "Remove star from recipe" : "Star recipe"
             }]
             : []),
+        ...(onHistory !== undefined
+            ? [{name: "history", label: "Brew history"}]
+            : []),
         {name: "delete", label: "Delete recipe"}
     ];
 
@@ -131,6 +142,8 @@ export default function RecipeShelfTile({
                     onDuplicate();
                 } else if (event.nativeEvent.actionName === "favourite") {
                     onToggleFavourite?.();
+                } else if (event.nativeEvent.actionName === "history") {
+                    onHistory?.();
                 } else if (event.nativeEvent.actionName === "delete") {
                     onDelete();
                 }

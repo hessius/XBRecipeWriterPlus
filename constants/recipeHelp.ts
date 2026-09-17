@@ -183,8 +183,8 @@ const ENTRIES = {
                   "folder. Auto shelves gather themselves from what a recipe " +
                   "already is, so a tea recipe is on the tea shelf without " +
                   "anyone putting it there. A shelf you make yourself holds the " +
-                  "recipes you picked, and a recipe can sit on as many shelves " +
-                  "as you like. Nothing is moved and nothing is copied, so " +
+                  "recipes you picked, and a recipe can sit on up to twenty " +
+                  "shelves at once. Nothing is moved and nothing is copied, so " +
                   "taking a recipe off a shelf never deletes it. A shelf with " +
                   "nobody left on it goes away."
     },

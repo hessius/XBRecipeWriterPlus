@@ -818,6 +818,25 @@ describe("RecipeCard", () => {
         expect(names).not.toContain("write");
     });
 
+    it("mirrors the sheet's brew history row as an accessibility action", async () => {
+        // Every other action on this card mirrors a tray tile. This one mirrors
+        // the long press, which is the only door to the history and is a gesture
+        // a screen reader cannot make at all.
+        const onHistory = jest.fn();
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}
+                        onHistory={onHistory}/>
+        );
+        const card = screen.getByTestId("recipe-card");
+        expect(card.props.accessibilityActions).toEqual(
+            expect.arrayContaining([{name: "history", label: "Brew history"}])
+        );
+
+        await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "history"}});
+        expect(onHistory).toHaveBeenCalledTimes(1);
+    });
+
     it("offers no brew action when there is nothing to brew on", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}

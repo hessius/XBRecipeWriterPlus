@@ -1,5 +1,5 @@
 import React from "react";
-import {screen} from "@testing-library/react-native";
+import {fireEvent, screen} from "@testing-library/react-native";
 
 import ShelfGrid from "@/components/ShelfGrid";
 import type {Shelf} from "@/library/shelves";
@@ -54,6 +54,26 @@ describe("ShelfGrid", () => {
 
         expect(screen.getByRole("button", {name: "morning, your shelf, 2 recipes"}))
             .toBeTruthy();
+    });
+
+    it("offers EDIT as an accessibility action on the tile itself", async () => {
+        // The edit button is nested inside the tile, and the tile is one
+        // accessibility element, so VoiceOver never reaches the button. Editing
+        // is the only way a recipe comes off a manual shelf, so without this a
+        // reader has a shelf it can never change.
+        const onEditShelf = jest.fn();
+        await renderWithProviders(
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={onEditShelf}
+                       shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})]}/>
+        );
+        const tile = screen.getByTestId("shelf-tag:morning");
+        expect(tile.props.accessibilityActions).toEqual(
+            [{name: "edit", label: "Edit the morning shelf"}]
+        );
+
+        await fireEvent(tile, "accessibilityAction",
+                        {nativeEvent: {actionName: "edit"}});
+        expect(onEditShelf).toHaveBeenCalledTimes(1);
     });
 
     it("says one recipe rather than 1 recipes", async () => {

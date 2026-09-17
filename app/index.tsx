@@ -60,6 +60,7 @@ import {
     type FilterId
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
+import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
@@ -399,6 +400,11 @@ export default function HomeScreen({db, settings}: Props) {
      * stick with no explanation on screen.
      */
     function reportShelfWrite({full, failed}: ShelfWriteOutcome) {
+        // Both, when both happened. Reporting the cap and returning left a user
+        // whose save had also been refused by the database believing every
+        // recipe under the cap had made it, which is the more dangerous of the
+        // two silences: the cap is a rule they can act on, a refused write is
+        // one they cannot even see.
         if (full > 0) {
             notify({
                 tone:    "error",
@@ -406,7 +412,6 @@ export default function HomeScreen({db, settings}: Props) {
                     ? "One recipe is already on as many shelves as it can hold."
                     : `${full} recipes are already on as many shelves as they can hold.`
             });
-            return;
         }
         if (failed > 0) {
             notify({tone: "error", message: "Some recipes could not be saved."});
@@ -432,6 +437,25 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function nameShelf(name: string) {
+        // A name that folds to a shelf that already exists is refused rather
+        // than saved. `setShelfMembers` writes an exact membership: it takes the
+        // tag off every recipe that was not just ticked, so naming a new shelf
+        // "mornings" while a "Mornings" existed would not make a second shelf,
+        // it would silently rewrite the first one to whatever happened to be
+        // ticked here. Folded through `tagKey` for the same reason the query
+        // is: the two names are one shelf as far as everything downstream is
+        // concerned, so a case variant is a collision, not a new shelf.
+        //
+        // Refused rather than merged, because the two readings of the gesture
+        // are opposite and the app cannot tell which was meant: add these to
+        // that shelf, or replace that shelf with these. The shelf is reachable
+        // for editing from its own tile, where the membership on screen is the
+        // membership being changed.
+        const taken = library.tagCounts.some(({tag}) => tagKey(tag) === tagKey(name));
+        if (taken) {
+            notify({tone: "error", message: `There is already a shelf called ${name}.`});
+            return;
+        }
         reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
         setNamingShelf(false);
         stopPicking();
@@ -814,6 +838,14 @@ export default function HomeScreen({db, settings}: Props) {
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
         || namingShelf || removingShelf !== null || overflowRecipe !== null;
 
+    // The sheet's own row, reachable without the long press that opens it. A
+    // reader cannot make that gesture, so every verb the sheet offers is also an
+    // accessibility action on the tile and the row, and this is the one of them
+    // no swipe tray already carries.
+    function openHistory(recipe: Recipe) {
+        router.push(`/brewHistory?recipeUuid=${recipe.uuid}`);
+    }
+
     // Every act the shelf room can perform on one of its recipes, built once here
     // and handed to the room per tile. It is the same set the swipe tray offers a
     // list row -- brew (only with a machine, the tray's own rule), share, write,
@@ -828,7 +860,8 @@ export default function HomeScreen({db, settings}: Props) {
         onWrite:           () => writeCard(recipe),
         onDuplicate:       () => library.duplicateRecipe(recipe),
         onDelete:          () => library.deleteRecipe(recipe),
-        onToggleFavourite: () => library.toggleFavourite(recipe)
+        onToggleFavourite: () => library.toggleFavourite(recipe),
+        onHistory:         () => openHistory(recipe)
     });
 
     // The shelf standing open, found by the id the query holds. Its label and
@@ -1028,6 +1061,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 // their tiles; this is an addition, not a
                                 // replacement.
                                 onLongPress={() => setOverflowRecipe(item.recipe)}
+                                onHistory={() => openHistory(item.recipe)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
                                     library.deleteRecipe(item.recipe);
@@ -1044,7 +1078,13 @@ export default function HomeScreen({db, settings}: Props) {
                 )}
             </YStack>
 
-            {picker.active && (
+            {/* Hidden while a sheet covers the screen. `screenCovered` guards the
+                main stack, which ends above this, so without this the bar stayed
+                in the accessibility tree underneath the naming and removal
+                sheets: on Android, where a sheet does not hide its siblings,
+                TalkBack could focus and press DONE on a screen the user was not
+                looking at. */}
+            {picker.active && !screenCovered && (
                 <ShelfPickerBar count={picker.count}
                                 editing={picker.mode.kind === "editing"}
                                 paddingBottom={insets.bottom}
@@ -1103,7 +1143,11 @@ export default function HomeScreen({db, settings}: Props) {
                 onBrew={overflowRecipe !== null && remembered !== ""
                     ? () => openBrew(overflowRecipe)
                     : undefined}
-                onWrite={overflowRecipe !== null
+                // The same gate the swipe tray and both sets of accessibility
+                // actions apply. Without it the long press was the one door that
+                // offered a write on a recipe no card can hold, and the offer
+                // could only be discovered to be empty by taking it.
+                onWrite={overflowRecipe !== null && canWriteToCard(overflowRecipe)
                     ? () => writeCard(overflowRecipe)
                     : undefined}
                 onShare={() => {

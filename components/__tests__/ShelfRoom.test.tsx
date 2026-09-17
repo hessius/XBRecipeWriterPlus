@@ -19,6 +19,7 @@ function actionsFor(overrides: Partial<RoomRecipeActions> = {}) {
         onWrite:      jest.fn(),
         onDuplicate:  jest.fn(),
         onDelete:     jest.fn(),
+        onHistory:    jest.fn(),
         ...overrides
     });
 }

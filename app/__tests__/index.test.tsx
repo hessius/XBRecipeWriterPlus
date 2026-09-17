@@ -1921,6 +1921,34 @@ describe("the shelf room", () => {
 
         jest.useRealTimers();
     });
+
+    // The long press was the one door that offered a write on a recipe no card
+    // can hold. The swipe tray and both sets of accessibility actions have
+    // always gated it; an offer you can only discover is empty by taking it is
+    // worse than no offer.
+    it("withholds the write row on a recipe no card can hold", async () => {
+        jest.useFakeTimers();
+        await renderHome({recipes: [named("Ethiopia")]});
+
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // The sheet is open, so this is not passing on an empty screen.
+        expect(screen.queryByLabelText("Delete")).not.toBeNull();
+        expect(screen.queryByLabelText("Write recipe to card")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("offers the write row on a recipe a card can hold", async () => {
+        jest.useFakeTimers();
+        await renderHome({recipes: [writable("Ethiopia")]});
+
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.queryByLabelText("Write recipe to card")).not.toBeNull();
+        jest.useRealTimers();
+    });
 });
 
 /**
@@ -1971,6 +1999,77 @@ describe("picking a shelf's members", () => {
             tone:    "error",
             message: "One recipe is already on as many shelves as it can hold."
         }));
+    });
+
+    // A name that folds to a shelf that already exists cannot be allowed
+    // through: `setShelfMembers` writes an exact membership, so naming a new
+    // shelf "mornings" beside an existing "Mornings" would not raise a second
+    // shelf, it would rewrite the first one to whatever happened to be ticked.
+    it("refuses a name that folds to a shelf already there", async () => {
+        const existing = named("Kenya");
+        existing.setTags(["Mornings"]);
+        await startPicking([existing, named("Colombia")]);
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone:    "error",
+            message: "There is already a shelf called mornings."
+        }));
+        // Refused outright: the existing shelf keeps the members it had.
+        expect(existing.tags).toEqual(["Mornings"]);
+    });
+
+    // Reporting the cap and returning left a user whose save had also been
+    // refused by the database believing everything under the cap had landed.
+    it("reports a refused save as well as the cap when both happened", async () => {
+        const crowded = named("Kenya");
+        crowded.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        const refused = named("Colombia");
+        const db = store([crowded, refused]);
+        db.updateRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+        await renderWithProviders(
+            <HomeScreen db={db} settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("new-shelf"));
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            message: "One recipe is already on as many shelves as it can hold."
+        }));
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            message: "Some recipes could not be saved."
+        }));
+    });
+
+    // `screenCovered` guards the main stack, which ends above the bar, so the
+    // bar stayed in the accessibility tree underneath the naming sheet. On
+    // Android a sheet does not hide its siblings, so TalkBack could focus and
+    // press DONE on a screen the user was not looking at.
+    it("takes the picker bar away while a sheet covers the screen", async () => {
+        await startPicking();
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeNull();
     });
 
     it("swaps the grid for tickable rows", async () => {
