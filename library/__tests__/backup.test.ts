@@ -731,10 +731,45 @@ describe("brew history through a backup", () => {
         expect(result.payload.skippedBrews).toBe(0);
     });
 
+    it("carries the stalls a brew recorded", () => {
+        // The shape is `{atMl, seconds}` per stage, not a list of numbers. A
+        // validator stricter than the truth refused every brew that had ever
+        // stalled, which is to say every interesting one.
+        const stalls = [[{atMl: 20, seconds: 11}], []];
+        const result = parseBackup(buildBackup(
+            [recipeNamed("A", "u1")], {}, "2.6.0", [brewNamed("b1", {stalls})]
+        ));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.skippedBrews).toBe(0);
+        expect(result.payload.brews[0].stalls).toEqual(stalls);
+    });
+
+    it("truncates a very long note rather than losing the brew it belongs to", () => {
+        // The one brew field a person wrote by hand, so a long one is an
+        // honest thing to find in an honest file. Losing the brew, its figures
+        // and its rating over the length of a sentence about it would be the
+        // harm rather than the guard.
+        const result = parseBackup(backupFileWithBrewFields({
+            note: "x".repeat(MAX_BACKUP_NOTE + 50), rating: 4
+        }));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.skippedBrews).toBe(0);
+        expect(result.payload.brews[0].note).toHaveLength(MAX_BACKUP_NOTE);
+        expect(result.payload.brews[0].rating).toBe(4);
+    });
+
     it("does not carry the stream, or a claim to have one", () => {
-        const envelope = JSON.parse(
-            buildBackup([recipeNamed("A", "u1")], {}, "2.6.0", [brewNamed("b1")])
-        );
+        // Built from a row shaped as `BrewDatabase.all()` hands one back,
+        // `hasStream` and all: the production caller passes exactly that, and
+        // a fixture without the flag cannot prove the flag is dropped.
+        const envelope = JSON.parse(buildBackup(
+            [recipeNamed("A", "u1")], {}, "2.6.0",
+            [{...brewNamed("b1"), hasStream: true}]
+        ));
         expect(envelope.brews[0].hasStream).toBeUndefined();
         expect(envelope.brews[0].samples).toBeUndefined();
     });
@@ -744,7 +779,7 @@ describe("brew history through a backup", () => {
         ["a rating as a string", {rating: "5"}],
         ["a fractional rating", {rating: 3.5}],
         ["a note that is not a string", {note: 5}],
-        ["a note longer than the cap", {note: "x".repeat(MAX_BACKUP_NOTE + 1)}],
+        ["stalls that are not stalls", {stalls: [[1, 2]]}],
         ["an outcome this app never writes", {outcome: "exploded"}],
         ["a missing id", {id: undefined}],
         ["a water total that is not a number", {waterTotal: "lots"}],

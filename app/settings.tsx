@@ -299,6 +299,18 @@ export default function SettingsScreen({settings}: Props) {
         }
 
         notify({tone: "success", message: restoredMessage(outcome.added, brews)});
+
+        // Said out loud, and after the good news rather than instead of it. A
+        // history that came back short is not a failed restore, but a user who
+        // is told only what landed has no way to know something did not.
+        if (payload.skippedBrews > 0) {
+            notify({
+                tone: "error",
+                message: payload.skippedBrews === 1
+                    ? "One brew in that backup could not be read."
+                    : `${payload.skippedBrews} brews in that backup could not be read.`
+            });
+        }
     }
 
     async function onBackUpFirst() {

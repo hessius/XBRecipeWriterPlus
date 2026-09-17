@@ -120,7 +120,8 @@ function recipeNamed(name: string, uuid: string): Recipe {
 }
 
 function backupOf(
-    recipes: Recipe[], settings: Record<string, unknown> = {}, brews: unknown[] = []
+    recipes: Recipe[], settings: Record<string, unknown> = {}, brews: unknown[] = [],
+    skippedBrews = 0
 ) {
     return {
         cancelled: false,
@@ -131,7 +132,7 @@ function backupOf(
                 brews,
                 settings,
                 skipped: 0,
-                skippedBrews: 0,
+                skippedBrews,
                 appVersion: "2.6.0",
                 exportedAt: "2026-08-26T21:00:00.000Z"
             }
@@ -527,6 +528,30 @@ describe("SettingsScreen", () => {
         expect(mockBrewStore.restore).toHaveBeenCalledWith([{id: "b1"}, {id: "b2"}]);
         expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
             tone: "success", message: "1 recipe and 2 brews restored"
+        }));
+    });
+
+    it("says so when part of a history could not be read", async () => {
+        // A short history is not a failed restore, but a user told only what
+        // landed has no way to know something did not.
+        mockLibraryRecipes = [];
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")], {}, [{id: "b1"}], 2)
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        mockBrewStore.restore.mockReturnValue(1);
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "success", message: "1 recipe and 1 brew restored"
+        }));
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "error", message: "2 brews in that backup could not be read."
         }));
     });
 

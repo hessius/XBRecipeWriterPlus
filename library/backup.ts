@@ -61,7 +61,7 @@ export function buildBackup(
     recipes: readonly Recipe[],
     settings: BackupSettings,
     appVersion = "unknown",
-    brews: readonly BrewRecord[] = []
+    brews: readonly (BrewRecord & {hasStream?: boolean})[] = []
 ): string {
     return JSON.stringify({
         format: BACKUP_FORMAT,
@@ -75,8 +75,11 @@ export function buildBackup(
         recipes: recipes.map((recipe) => JSON.parse(JSON.stringify(recipe))),
         // `hasStream` is deliberately not written: it describes this device's
         // copy of a trace, and no trace is carried. A restored record says it
-        // has none, which is the truth on the machine it lands on.
-        brews: brews.map(({...record}) => record),
+        // has none, which is the truth on the machine it lands on. The caller
+        // hands us `BrewDatabase.all()`, whose rows are `StoredBrew` and do
+        // carry the flag, so it is named here and dropped rather than left to
+        // a spread that would copy it straight through.
+        brews: brews.map(({hasStream: _ignored, ...record}) => record),
         settings
     }, null, 2);
 }
@@ -485,9 +488,15 @@ const BREW_OUTCOMES = new Set([
  * A note long enough for anything a person types about a cup of coffee, and
  * short enough that a backup cannot smuggle a document in through it.
  *
- * The field itself has no ceiling in the app — a user typing into their own
- * database is not a threat to themselves — but an untrusted file is a
+ * The field itself has no ceiling in the app -- a user typing into their own
+ * database is not a threat to themselves -- but an untrusted file is a
  * different author, and this is the boundary where that difference is decided.
+ *
+ * Over-length is truncated rather than refused, which is the opposite of every
+ * other rule in this file and deliberately so. The note is the one brew field
+ * a person wrote by hand, so a long one is an honest thing to find in an
+ * honest file; dropping the record would lose a brew, its figures and its
+ * rating over the length of a sentence about it.
  */
 export const MAX_BACKUP_NOTE = 4000;
 
@@ -531,7 +540,14 @@ const BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
 const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     pouringAt:  isNumber,
     failure:    (v) => v === null || typeof v === "string",
-    stalls:     (v) => Array.isArray(v) && v.every(isNumberArray),
+    // A stall is `{atMl, seconds}`, not a number: one list of them per stage.
+    // Checked to that shape rather than to a list of numbers, because a
+    // validator that is merely stricter than the truth is not safe here -- it
+    // rejected every brew that had ever stalled, which is to say every
+    // interesting one, and took its rating with it.
+    stalls:     (v) => Array.isArray(v) && v.every((stage) =>
+        Array.isArray(stage) && stage.every((stall) =>
+            isPlainObject(stall) && isNumber(stall.atMl) && isNumber(stall.seconds))),
     plan:       (v) => Array.isArray(v),
     stageWater: isNumberArray,
     bypass:     isPlainObject,
@@ -539,7 +555,7 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // the database refuses a write with, so the door and the table cannot come
     // to disagree about what a star means. A 9 and a "5" are both refused.
     rating:     (v) => isRating(v),
-    note:       (v) => typeof v === "string" && v.length <= MAX_BACKUP_NOTE,
+    note:       (v) => typeof v === "string",
     pinned:     (v) => typeof v === "boolean"
 };
 
@@ -578,7 +594,7 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         stageWater: record.stageWater,
         bypass: record.bypass,
         rating: record.rating ?? 0,
-        note: record.note ?? "",
+        note: (record.note ?? "").slice(0, MAX_BACKUP_NOTE),
         pinned: record.pinned ?? false
     };
 }
