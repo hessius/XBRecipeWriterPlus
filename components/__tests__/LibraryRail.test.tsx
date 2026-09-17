@@ -169,6 +169,22 @@ describe("LibraryRail", () => {
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
     });
 
+    it("drops the sort chip's word while the search field is open, keeping its label", async () => {
+        // Work item 3: the field flexes into whatever the pinned controls leave,
+        // and the sort chip gives up its visible word to make that room. The
+        // spoken label is unchanged -- only the word on screen goes.
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+
+        await press(screen.getByTestId("rail-search"));
+
+        expect(screen.queryByText(chipLabel("added"))).toBeNull();
+        expect(screen.getByTestId("rail-sort").props.accessibilityLabel)
+            .toBe("Sort by date added, newest first");
+    });
+
     it("reports a sort tap", async () => {
         const onSortPress = jest.fn();
         await renderWithProviders(<LibraryRail {...railProps({onSortPress})}/>);
@@ -194,13 +210,15 @@ describe("LibraryRail", () => {
                 .toBe(palette.text);
         });
 
-        it("is a bare glyph with no count and no fill when nothing is applied", async () => {
+        it("shows a zero count and no fill when nothing is applied", async () => {
+            // The count is always drawn, "0" included: a hidden filter is worse
+            // than a visible one, so the button never falls back to a bare glyph.
+            // The fill still means something is filtered, so at zero it is off.
             await renderWithProviders(
                 <LibraryRail {...railProps({activeFilterCount: 0, filtersOpen: false})}/>
             );
             const toggle = screen.getByTestId("rail-filter-toggle");
-            // No numeric label at all: an icon-only chip.
-            expect(screen.queryByText("0")).toBeNull();
+            expect(screen.getByText("0")).toBeTruthy();
             expect((toggle.props.style as Record<string, unknown>).backgroundColor)
                 .toBe("transparent");
         });

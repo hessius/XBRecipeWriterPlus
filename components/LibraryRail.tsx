@@ -1,4 +1,4 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useState} from "react";
 import {ScrollView} from "react-native";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {XStack} from "tamagui";
@@ -162,13 +162,15 @@ function FilterRail({
  * The rail: the chrome above the library that searches it, sorts it and narrows
  * it.
  *
- * Two rows now, not one. The top rail is pinned all the way across: search,
- * sort, and a filter button at the trailing edge. The filter chips live on a
- * second rail beneath, drawn only when open, at the full width of the screen --
- * a small phone could not give the pinned cluster and a filter row the same row
- * without strangling the filters, so the filters moved out. The top rail still
- * shrinks as the list scrolls by shedding its own vertical padding; the chips
- * inside it never move off 44.
+ * Two rows now, not one. The top rail is pinned all the way across: a single
+ * cluster of search, sort and a filter button, left to right, with the filter
+ * button among the others rather than shoved to the trailing edge, because
+ * nothing scrolls past it any more. The filter chips live on a second rail
+ * beneath, drawn only when open, at the full width of the screen -- a small
+ * phone could not give the pinned cluster and a filter row the same row without
+ * strangling the filters, so the filters moved out. The top rail still shrinks
+ * as the list scrolls by shedding its own vertical padding; the chips inside it
+ * never move off 44.
  *
  * The old hairline divider is gone with the filters. It marked where the row
  * stopped being pinned, and the top rail is pinned end to end now, so a line
@@ -200,6 +202,11 @@ export default function LibraryRail({
 }: Props) {
     const reduced = useReducedMotion();
 
+    // Set from RailSearch's own event handlers, not an effect: while the search
+    // field is open the sort chip gives up its word to reclaim that width, and
+    // the rail learns the field opened only so it can ask for it back.
+    const [searchOpen, setSearchOpen] = useState(false);
+
     const shrink = useSharedValue(collapsed ? 1 : 0);
 
     useEffect(() => {
@@ -220,46 +227,55 @@ export default function LibraryRail({
     // fills and names its axis; the default sort stays a bare glyph.
     const sortActive = !isDefaultSort(sort, direction);
 
-    // The pinned cluster is a list rather than a fixed pair so phase 4 can splice
-    // the view segmented pair into it without restructuring the rail. Do not add
-    // the view pair here; that is phase 4's job.
-    const cluster = [
-        <RailSearch key="search" onTermChange={onSearchChange}/>,
-        <RailChip key="sort" testID="rail-sort" icon="sort"
-                  active={sortActive}
-                  label={sortActive ? chipLabel(sort) : undefined}
-                  accessibilityLabel={sortAccessibilityLabel(sort, direction)}
-                  onPress={onSortPress}/>
-    ];
+    // The word goes, not the accent, while search is open: an active sort still
+    // fills, it just falls back to its icon-only form so the expanding field has
+    // the width. The spoken label is unchanged -- only the visible word is
+    // dropped -- so a screen reader still names the axis.
+    const sortLabel = sortActive && !searchOpen ? chipLabel(sort) : undefined;
 
     // No filters to show means no button: one that opens an empty rail is worse
     // than none at all.
     const hasFilters = filters.length > 0;
 
+    // The pinned cluster is a list rather than a fixed set so phase 4 can splice
+    // the view segmented pair into it without restructuring the rail. Do not add
+    // the view pair here; that is phase 4's job. The filter button is part of the
+    // cluster now -- search, sort, filter, left to right -- rather than pinned to
+    // the trailing edge, since nothing scrolls past it any more.
+    const cluster = [
+        <RailSearch key="search" onTermChange={onSearchChange}
+                    onExpandedChange={setSearchOpen}/>,
+        <RailChip key="sort" testID="rail-sort" icon="sort"
+                  active={sortActive}
+                  label={sortLabel}
+                  accessibilityLabel={sortAccessibilityLabel(sort, direction)}
+                  onPress={onSortPress}/>
+    ];
+
+    if (hasFilters) {
+        cluster.push(
+            // The count shows at all times, including "0": a hidden filter is
+            // worse than a visible one, so the button never falls back to a bare
+            // glyph. The fill reports whether anything is filtered -- the one
+            // binary a chip's fill may carry -- and the caret reports whether the
+            // rail is open, because the fill is spent on the state the user
+            // cannot otherwise see.
+            <RailChip key="filter" testID="rail-filter-toggle" icon="filter"
+                      active={activeFilterCount > 0}
+                      label={String(activeFilterCount)}
+                      expanded={filtersOpen}
+                      caretOpen={filtersOpen}
+                      accessibilityLabel={
+                          filterToggleAccessibilityLabel(activeFilterCount, filtersOpen)
+                      }
+                      onPress={onFilterToggle}/>
+        );
+    }
+
     return (
         <Animated.View style={padding} testID="library-rail">
             <XStack alignItems="center" paddingHorizontal="$3" gap={CHIP_GAP}>
-                <XStack alignItems="center" gap={CHIP_GAP}>
-                    {cluster}
-                </XStack>
-
-                {hasFilters && (
-                    // `marginLeft="auto"` pins it to the trailing edge without a
-                    // hard width, so the cluster keeps its natural size however
-                    // the sort chip grows.
-                    <XStack marginLeft="auto">
-                        <RailChip testID="rail-filter-toggle" icon="filter"
-                                  active={activeFilterCount > 0}
-                                  label={activeFilterCount > 0
-                                      ? String(activeFilterCount)
-                                      : undefined}
-                                  expanded={filtersOpen}
-                                  accessibilityLabel={
-                                      filterToggleAccessibilityLabel(activeFilterCount, filtersOpen)
-                                  }
-                                  onPress={onFilterToggle}/>
-                    </XStack>
-                )}
+                {cluster}
             </XStack>
 
             {hasFilters && filtersOpen && (

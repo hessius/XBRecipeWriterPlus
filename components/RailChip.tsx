@@ -1,10 +1,12 @@
-import React from "react";
+import React, {useEffect} from "react";
+import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
+import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
 
 /**
  * The touch minimum, and the whole height of every chip whatever the rail does
@@ -18,6 +20,13 @@ export const CHIP_HEIGHT = 44;
 
 /** The glyph size inside a chip. Large enough to read, small enough to breathe. */
 const ICON_SIZE = 18;
+
+/**
+ * The trailing caret's size. A touch smaller than the leading glyph: it is a
+ * disclosure mark, not a peer of the icon that names the control, so it reads as
+ * subordinate the way the stage tile's caret does beside its title.
+ */
+const CARET_SIZE = 14;
 
 /** Side padding a labelled chip earns; an icon-only chip is square and takes none. */
 const CHIP_PADDING_X = 12;
@@ -50,6 +59,15 @@ type Props = {
      */
     expanded?: boolean;
     /**
+     * When set, a trailing caret is drawn that points down when `false` and
+     * flips to point up when `true`, so the chip can show whether the surface it
+     * discloses is open without spending its fill on it -- the fill carries
+     * exactly one binary and it belongs to the state, not the disclosure. Its
+     * colour follows the same `ink` as the leading glyph and the label, so it
+     * agrees with the fill rather than reading as a separate mark.
+     */
+    caretOpen?: boolean;
+    /**
      * The active fill. Defaults to `palette.text`, the house "selected with no
      * recipe accent" fill that `SegmentedControl` also uses, so the rail reads as
      * on without borrowing the brand colour, which never means a state.
@@ -57,6 +75,43 @@ type Props = {
     accent?: string;
     testID?: string;
 };
+
+/**
+ * The chip's trailing disclosure caret.
+ *
+ * Its own module-scope component so the rotation's shared value survives the
+ * chip's renders rather than being reallocated, and so the animation hooks only
+ * mount when a chip actually asks for a caret. The `chevron-down` bitmap is
+ * turned a half-turn to point up when open, the same trick the stage tile uses
+ * to avoid drawing a second glyph. It animates the base duration, and under
+ * Reduced Motion it arrives outright -- the same degradation as the rail's
+ * shrink, because the rotation is state, not decoration.
+ *
+ * `DotIcon` owns its own style prop, so the rotation rides a wrapper. The wrapper
+ * takes no label: the caret is part of the chip's one accessible node, whose
+ * expanded state already carries what the caret shows.
+ */
+function RailCaret({open, color}: {open: boolean; color: string}) {
+    const reduced = useReducedMotion();
+    const turn = useSharedValue(open ? 1 : 0);
+
+    useEffect(() => {
+        const target = open ? 1 : 0;
+        turn.value = reduced
+            ? target
+            : withTiming(target, {duration: DURATION.base, easing: EASING.out});
+    }, [open, reduced, turn]);
+
+    const spin = useAnimatedStyle(() => ({
+        transform: [{rotate: `${turn.value * 180}deg`}]
+    }));
+
+    return (
+        <Animated.View testID="rail-chip-caret" style={spin}>
+            <DotIcon name="chevron-down" size={CARET_SIZE} color={color}/>
+        </Animated.View>
+    );
+}
 
 /**
  * One control in the rail: search, sort, or a filter. Everything in the rail is
@@ -70,7 +125,8 @@ type Props = {
  * renders rather than a fresh one that remounts and drops its state each time.
  */
 export default function RailChip({
-    active, onPress, accessibilityLabel, icon, label, expanded, accent = palette.text, testID
+    active, onPress, accessibilityLabel, icon, label, expanded, caretOpen,
+    accent = palette.text, testID
 }: Props) {
     const iconOnly = label === undefined;
     // Ink only agrees with the fill; it does not carry the state itself.
@@ -103,6 +159,9 @@ export default function RailChip({
                 <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5} color={ink}>
                     {label}
                 </DotMatrixText>
+            )}
+            {caretOpen !== undefined && (
+                <RailCaret open={caretOpen} color={ink}/>
             )}
         </XStack>
     );

@@ -151,14 +151,14 @@ Widening the row is not available, so the filters leave it.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  ⌕   ☰ ▦   ⇅ RECENT                            ⌗ 2      │  always
+│  ⌕   ☰ ▦   ⇅ RECENT   ⌗ 2 ⌄                             │  always
 ├─────────────────────────────────────────────────────────┤
 │  TEA   SINGLE POUR   GRIND   FROM ANNA   xBLOOM PODS …  │  on demand
 └─────────────────────────────────────────────────────────┘
 ```
 
 The top rail keeps the controls that act on the whole library however it is
-narrowed: search, view, sort. A **filter button sits at the trailing edge** and
+narrowed: search, view, sort. A **filter button sits in the pinned cluster** and
 reveals a second rail beneath, which is nothing but filter chips at the full
 width of the screen. Twelve chips two at a time becomes twelve chips five at a
 time with a scroll that is a scroll rather than a cliff.
@@ -170,10 +170,36 @@ that it must never be removed as ornament cuts both ways.
 
 **The filter button carries the count, because a hidden filter is worse than a
 cramped one.** A chip a user can see is a chip they can see is on; a chip behind
-a button is a library quietly missing recipes with no visible reason. So the
-button fills and shows the number of active filters, exactly as the sort chip
-fills and names its axis once it leaves the default. Zero filters is a bare
-glyph.
+a button is a library quietly missing recipes with no visible reason. The button
+shows the number of applied filters at all times, including zero.
+
+**The fill means something is filtered. The caret means the rail is open.** The
+button has two binaries to report and `RailChip` allows the fill exactly one of
+them: its own doctrine is that the fill *is* the state, because the editor's
+action bar established that one step of ink is not a state. So the two must be
+carried by structurally different things.
+
+The fill goes to the filtering, not the disclosure. Whether the rail is open is
+already visible — the rail is directly beneath the button — so spending the fill
+on it would buy nothing and leave *closed with filters applied* drawn identically
+to *closed with none*, which is the one state where the app is hiding recipes.
+It also keeps the grammar the rest of the rail already speaks: a filled chip
+means this control is doing something to your library, exactly as the sort chip
+fills once it leaves the default. The caret takes the disclosure, which is what
+carets are for.
+
+    closed, none    ⌗ 0 ⌄   outline
+    closed, two     ⌗ 2 ⌄   filled
+    open,   none    ⌗ 0 ⌃   outline
+    open,   two     ⌗ 2 ⌃   filled
+
+**Search flexes rather than taking a fixed width.** A hardcoded field width
+overflows the cluster on a small phone and pushes the trailing control off an
+edge that cannot scroll, and no single number is right across every device. The
+field takes whatever the pinned controls leave, and the sort chip drops its word
+while the field is open. Search does not get a rail of its own: vertical space is
+the scarcest thing on this screen and saving it is the entire reason the rail
+exists.
 
 **The second rail opens by itself when a filter is already applied.** Not as a
 convenience: it is the same argument. If the user arrives at a narrowed library

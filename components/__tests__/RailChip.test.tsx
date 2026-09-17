@@ -116,6 +116,39 @@ describe("RailChip", () => {
         expect(chip("Tea").props.accessibilityState).toEqual({selected: true});
     });
 
+    it("draws no trailing caret unless asked for one", async () => {
+        await renderWithProviders(
+            <RailChip active={false} icon="filter" label="0" accessibilityLabel="Filters"
+                      onPress={jest.fn()}/>
+        );
+        expect(screen.queryByTestId("rail-chip-caret")).toBeNull();
+    });
+
+    it("points the caret down when its surface is closed", async () => {
+        await renderWithProviders(
+            <RailChip active={false} icon="filter" label="0" accessibilityLabel="Filters"
+                      caretOpen={false} onPress={jest.fn()}/>
+        );
+        const style = screen.getByTestId("rail-chip-caret").props.style as {
+            transform?: {rotate?: string}[];
+        }[];
+        expect(style[0]?.transform?.[0].rotate).toBe("0deg");
+    });
+
+    it("points the caret up when its surface is open", async () => {
+        // Read from a fresh mount that starts open, not a rerender: the rotation
+        // is real motion in the app, and the animation mock does not advance the
+        // timing transition.
+        await renderWithProviders(
+            <RailChip active={false} icon="filter" label="0" accessibilityLabel="Filters"
+                      caretOpen onPress={jest.fn()}/>
+        );
+        const style = screen.getByTestId("rail-chip-caret").props.style as {
+            transform?: {rotate?: string}[];
+        }[];
+        expect(style[0]?.transform?.[0].rotate).toBe("180deg");
+    });
+
     it("calls onPress when tapped", async () => {
         const onPress = jest.fn();
         await renderWithProviders(
