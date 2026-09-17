@@ -4,6 +4,7 @@ import {
     INDEX_COLUMNS,
     INDEX_REVISION,
     columnDefinitions,
+    foldSortKey,
     indexStatements,
     projectRecipe,
     schemaHash
@@ -52,7 +53,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("3da5523f");
+        expect(schemaHash()).toBe("89cb75e8");
     });
 
     it("folds the revision into the hash", () => {
@@ -128,6 +129,21 @@ describe("projectRecipe", () => {
         const recipe = new Recipe();
         recipe.name = "Morning";
         expect(projectRecipe(recipe).sortName).toBe("Morning");
+    });
+
+    it("stores the diacritic-folded key, not the display name, for an accented name", () => {
+        // The sort key is folded so "Étna" sorts near "E" under NOCASE rather
+        // than after "Z". The display name in the blob is untouched; only this
+        // derived column changes. Preserved exactly: NULL for a nameless recipe.
+        const recipe = new Recipe();
+        recipe.name = "Étna";
+        expect(projectRecipe(recipe).sortName).toBe("Etna");
+    });
+
+    it("does not fold a Nordic letter when projecting the sort key", () => {
+        const recipe = new Recipe();
+        recipe.name = "Öland";
+        expect(projectRecipe(recipe).sortName).toBe("Öland");
     });
 
     it("counts pours", () => {
@@ -242,5 +258,49 @@ describe("M5 descriptors", () => {
         ));
         // Presence only, never grouped by, so it earns no index of its own.
         expect(indexed).not.toContain("hasDescription");
+    });
+});
+
+describe("foldSortKey", () => {
+    it("folds a combining diacritic to its base letter", () => {
+        // The French/Spanish/German case: an accented letter is the same
+        // letter with a mark and must sort as its base. This is what stops
+        // "Étna" landing after "Zambia".
+        expect(foldSortKey("Étna")).toBe("Etna");
+        expect(foldSortKey("Éléphant")).toBe("Elephant");
+        expect(foldSortKey("Jalapeño")).toBe("Jalapeno");
+        expect(foldSortKey("Müller")).toBe("Muller");
+        expect(foldSortKey("Français")).toBe("Francais");
+    });
+
+    it("preserves each Nordic letter unchanged in upper and lower case", () => {
+        // These are separate letters of the Swedish/Danish/Norwegian alphabets
+        // that sort after Z, not accented forms. Their code points keep them
+        // there only if folding leaves them alone. Å/Ä/Ö decompose under NFD
+        // and are protected explicitly; Æ/Ø are single code points and survive
+        // for free -- both must come through intact.
+        for (const letter of ["Å", "å", "Ä", "ä", "Ö", "ö", "Æ", "æ", "Ø", "ø"]) {
+            expect(foldSortKey(letter)).toBe(letter);
+        }
+    });
+
+    it("preserves a Nordic letter while folding an accent in the same name", () => {
+        // The hybrid working on one string: the Nordic letter stays, the French
+        // accent goes.
+        expect(foldSortKey("ÖlÉ")).toBe("ÖlE");
+    });
+
+    it("folds a decomposed input the same as a precomposed one", () => {
+        // NFC-normalising first means "A" + combining ring folds to "A" only if
+        // it is not one of the preserved letters; a precomposed "Å" is
+        // recognised and kept. Both spellings of "Å" reach the same key.
+        const precomposed = "Å";
+        const decomposed = "A\u030A";
+        expect(foldSortKey(precomposed)).toBe(foldSortKey(decomposed));
+        expect(foldSortKey(precomposed)).toBe("Å");
+    });
+
+    it("leaves an ASCII name untouched", () => {
+        expect(foldSortKey("Morning")).toBe("Morning");
     });
 });

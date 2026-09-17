@@ -57,14 +57,16 @@ export type RecipeStore = {
  * JavaScript, and the difference is a one-time visible reorder for existing
  * users that is cosmetic and destroys nothing. The old order sorted on
  * `displayName().localeCompare(...)`; this sorts on `sortName COLLATE NOCASE
- * ASC`, and `COLLATE NOCASE` folds only ASCII case, so an accented name such as
- * "Etna" spelled with an accented E now sorts after "Zambia" rather than near
- * "E". True locale ordering is not simply available: SQLite ships no ICU
- * collation by default, and sorting in SQL is the whole point of this change --
- * the alternative is reading every recipe back to sort it in JavaScript, which
- * is what the library stopped doing. Unnamed recipes, once interspersed by their
- * formatted-date placeholder, now sink to the bottom; that is deliberate and
- * documented with the sort itself.
+ * ASC`, where `sortName` is a diacritic-folded key (see `foldSortKey`), so an
+ * accented name such as "Étna" now sorts as "Etna" near "E" rather than after
+ * "Zambia" as a raw NOCASE comparison of its code points would place it. The
+ * Nordic letters `Å Ä Ö Æ Ø` are deliberately not folded and still sort after
+ * "Z", which is correct in their alphabets. True locale ordering is not simply
+ * available: SQLite ships no ICU collation by default, and sorting in SQL is
+ * the whole point of this change -- the alternative is reading every recipe
+ * back to sort it in JavaScript, which is what the library stopped doing.
+ * Unnamed recipes, once interspersed by their formatted-date placeholder, now
+ * sink to the bottom; that is deliberate and documented with the sort itself.
  */
 const WHOLE_LIBRARY: LibraryQuery = {
     search: "",

@@ -1,5 +1,5 @@
 import {orderByFragment, type SortAxis, type SortDirection} from "./librarySort";
-import type {IndexValue} from "./recipeIndex";
+import {foldSortKey, type IndexValue} from "./recipeIndex";
 
 /**
  * The rail's question, turned into one SQL statement.
@@ -87,11 +87,21 @@ function escapeLike(term: string): string {
  * own, which is what "case insensitively" asks for; the NOCASE columns get the
  * same treatment for free.
  */
-function searchClause(pattern: string): FilterClause {
-    const columns = ["sortName", "sharedBy", "xid", "description"];
+function searchClause(pattern: string, foldedPattern: string): FilterClause {
+    // `sortName` holds a folded key, so it must be matched with a folded term or
+    // typing a name exactly as it is spelled would fail to find it. The other
+    // columns hold what the user typed, accents and all, and are matched
+    // literally: a description that says "café" should match a search for
+    // "café". So the pattern travels per column rather than once for the clause.
+    const columns: [string, string][] = [
+        ["sortName", foldedPattern],
+        ["sharedBy", pattern],
+        ["xid", pattern],
+        ["description", pattern]
+    ];
     return {
         where: `(
-            ${columns.map((c) => `${c} LIKE ? ESCAPE '\\'`).join("\n            OR ")}
+            ${columns.map(([c]) => `${c} LIKE ? ESCAPE '\\'`).join("\n            OR ")}
             OR recipes.uuid IN (
                 SELECT uuid FROM recipe_tags WHERE tag LIKE ? ESCAPE '\\'
             )
@@ -100,7 +110,7 @@ function searchClause(pattern: string): FilterClause {
         // so the count cannot drift from the SQL when a column is added to the
         // list above. Counting placeholders by hand at the call site is how a
         // fifth column arrives bound to four values.
-        params: columns.map(() => pattern).concat(pattern)
+        params: columns.map(([, value]) => value).concat(pattern)
     };
 }
 
@@ -126,7 +136,10 @@ export function buildLibraryQuery(
 
     const term = query.search.trim();
     if (term.length > 0) {
-        const clause = searchClause(`%${escapeLike(term)}%`);
+        const clause = searchClause(
+            `%${escapeLike(term)}%`,
+            `%${escapeLike(foldSortKey(term))}%`
+        );
         conditions.push(clause.where);
         params.push(...(clause.params ?? []));
     }

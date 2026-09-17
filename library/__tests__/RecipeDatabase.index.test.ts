@@ -287,6 +287,37 @@ describe("rebuild", () => {
         expect(storedHash()).toBe(schemaHash());
     });
 
+    it("re-folds an accented sort key an older version stored unfolded", () => {
+        // The reason INDEX_REVISION was bumped: a device that indexed before
+        // the fold holds the raw display name in sortName. The revision bump
+        // changes schemaHash, which stales the stored hash and forces this
+        // rebuild, which re-projects every recipe through the folding `from`.
+        // A nameless recipe must still come out NULL, not "".
+        const db = new RecipeDatabase();
+        const named = new Recipe();
+        named.name = "Étna";
+        const nameless = new Recipe();
+        db.insertRecipe(named);
+        db.insertRecipe(nameless);
+
+        // The pre-fold state: the raw accented name in the column, hash stale.
+        mockBacking.runSync(
+            "UPDATE recipes SET sortName = 'Étna' WHERE uuid = ?;", [named.uuid]
+        );
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        const row = mockBacking.getFirstSync(
+            "SELECT sortName FROM recipes WHERE uuid = ?;", [named.uuid]
+        ) as {sortName: string};
+        expect(row.sortName).toBe("Etna");
+        const blank = mockBacking.getFirstSync(
+            "SELECT sortName FROM recipes WHERE uuid = ?;", [nameless.uuid]
+        ) as {sortName: string | null};
+        expect(blank.sortName).toBeNull();
+    });
+
     it("does not rebuild when the hash matches", () => {
         const db = new RecipeDatabase();
         const recipe = new Recipe();

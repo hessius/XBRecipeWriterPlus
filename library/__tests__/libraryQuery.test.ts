@@ -193,6 +193,36 @@ describe("querying a real database", () => {
             .toEqual(["charlie", "bravo", "alpha", "nameless"]);
     });
 
+    it("folds accents for the name sort but keeps Nordic letters after Z", () => {
+        // The bug this whole change exists to fix: sortName is a diacritic-
+        // folded key, so "Étna" sorts as "Etna" -- between "Ethiopia" and
+        // "Zambia" -- rather than after "Zambia" where a raw NOCASE comparison
+        // of its code points put it. "Öland" is a genuine Nordic letter that is
+        // deliberately not folded, so it still sorts after "Zambia".
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            ethiopia: {name: "Ethiopia", createdAt: 1, ratio: 15},
+            etna: {name: "Étna", createdAt: 2, ratio: 15},
+            zambia: {name: "Zambia", createdAt: 3, ratio: 15},
+            oland: {name: "Öland", createdAt: 4, ratio: 15}
+        });
+        expect(order(db, query({sort: "name", direction: "asc"}), uuids))
+            .toEqual(["ethiopia", "etna", "zambia", "oland"]);
+    });
+
+    it("finds an accented name whether or not the accent is typed", () => {
+        // Both directions, because the folded key can only be matched by a
+        // folded term: search for "Etna" has to reach "Étna", and so does a
+        // search for "Étna" typed exactly as the recipe spells it.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            etna: {name: "Étna", createdAt: 1, ratio: 15},
+            zambia: {name: "Zambia", createdAt: 2, ratio: 15}
+        });
+        expect(order(db, query({search: "Etna"}), uuids)).toEqual(["etna"]);
+        expect(order(db, query({search: "Étna"}), uuids)).toEqual(["etna"]);
+    });
+
     it("sorts by date added", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
