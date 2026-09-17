@@ -39,23 +39,22 @@ type Props = {
      */
     onTermChange: (term: string) => void;
     /**
-     * The rail is told when a term is held, so a sibling control can give up
-     * width to it -- the sort chip drops its word while there is something to
-     * search for.
+     * The rail is told when the field opens and closes so a sibling control can
+     * give up width to it -- the sort chip drops its word while search is live.
      *
-     * A term, not an open field. Reporting the open field meant that merely
-     * tapping search took the sort word away, and that a field with nothing in
-     * it stayed narrowed until it was cleared: a width that moved on a gesture
-     * that changes nothing about the library. The word now goes when there is
-     * something to search for and returns when there is not, so every width
-     * change on this rail answers to the term.
+     * The open field, not a term held: a cursor in the field is a search about
+     * to be typed, and the room for it has to be there before the typing, not
+     * after the first letter. This is only bearable because an empty field no
+     * longer stays open -- walking away from one closes it, and the word comes
+     * straight back -- so the word is never held away from a search that was
+     * not made.
      *
-     * Reported from the same event handlers that change the text, never an
-     * effect, so the parent's state is set on the keystroke rather than synced
-     * after it. Optional, because the hook that exercises this component in
-     * isolation does not care.
+     * Reported from the same event handlers that open and close the field,
+     * never an effect, so the parent's state is set on the gesture rather than
+     * synced after it. Optional, because the hook that exercises this component
+     * in isolation does not care.
      */
-    onActiveChange?: (active: boolean) => void;
+    onExpandedChange?: (expanded: boolean) => void;
 };
 
 /**
@@ -68,30 +67,36 @@ type Props = {
  * two buttons leaves a long dead gap that reads as a missing control. Tapping it
  * therefore moves nothing across the rail at all; it puts a cursor in a field
  * already where it will be. The sort chip's word is the little extra room this
- * gains, and it is given up on the first keystroke rather than on the tap,
- * because a gesture that changes nothing about the library should not move the
- * rail.
+ * gains, and it goes on the tap rather than on the first keystroke, so the room
+ * is there before the typing instead of arriving underneath it. That is only
+ * bearable because an empty field does not stay open: walk away from one and it
+ * closes, and the word comes straight back.
  *
  * Module scope, and it owns its state through `useRailSearch`: a component
  * declared inside another's body is a fresh type every render, so React remounts
  * it and the field loses what was typed. That bug has been fixed twice here.
  */
-export default function RailSearch({onTermChange, onActiveChange}: Props) {
-    const {expanded, text, active, onExpand, onChangeText, onClear} = useRailSearch(onTermChange);
+export default function RailSearch({onTermChange, onExpandedChange}: Props) {
+    const {expanded, text, active, onExpand, onChangeText, onBlur, onClear} =
+        useRailSearch(onTermChange);
     const searchState = active ? `term ${text} active` : "no search term";
     // The header is dot matrix throughout, and a field that dropped to the
     // system face in the middle of it read as a borrowed control. Asked for
     // rather than spelled out, so Doto's size floor and scale cap still hold.
     const doto = dotMatrixTextProps({fontSize: 12, letterSpacing: 1.5});
 
-    function type(next: string) {
-        onChangeText(next);
-        onActiveChange?.(next.trim().length > 0);
+    function expand() {
+        onExpand();
+        onExpandedChange?.(true);
+    }
+
+    function blur() {
+        if (onBlur()) onExpandedChange?.(false);
     }
 
     function clear() {
         onClear();
-        onActiveChange?.(false);
+        onExpandedChange?.(false);
     }
 
     const inputRef = useRef<TextInput | null>(null);
@@ -122,7 +127,7 @@ export default function RailSearch({onTermChange, onActiveChange}: Props) {
             <XStack testID="rail-search" onLayout={measure}
                     accessible accessibilityRole="button"
                     accessibilityLabel={`Search recipes, collapsed, ${searchState}`}
-                    onPress={onExpand}
+                    onPress={expand}
                     // Flexed, exactly as the live field is, so tapping does not
                     // move the control. `minWidth` is the floor a touch target
                     // may not go below whatever the buttons beside it claim.
@@ -177,7 +182,12 @@ export default function RailSearch({onTermChange, onActiveChange}: Props) {
                 placeholder="SEARCH"
                 placeholderTextColor={palette.dim}
                 value={text}
-                onChangeText={type}
+                onChangeText={onChangeText}
+                onBlur={blur}
+                // The caps are put on by the hook, which holds the text upper
+                // case and hands the query a lower-case term. Not the keyboard:
+                // `autoCapitalize` would leave a pasted term in whatever case it
+                // arrived in, and the field would show two registers at once.
                 autoCapitalize="none"
                 autoCorrect={false}/>
             {/* No `hitSlop`. The square is already 44, and slop here would

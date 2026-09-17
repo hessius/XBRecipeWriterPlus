@@ -24,6 +24,11 @@ export type RailSearch = {
     active: boolean;
     onExpand: () => void;
     onChangeText: (next: string) => void;
+    /**
+     * Returns whether the field closed, so the caller can tell the rail in the
+     * same breath rather than watching `expanded` from an effect.
+     */
+    onBlur: () => boolean;
     onClear: () => void;
 };
 
@@ -39,15 +44,21 @@ export type RailSearch = {
  *
  * Two events look alike and are not. Clearing the field collapses it and drops
  * the term at once, because a cleared field is an unfiltered library now, not in
- * 600 ms. Dismissing the keyboard does neither: a user who typed a term and then
- * looked at the results still has one, and collapsing there would flick the
- * library back to unfiltered every time the keyboard left. So there is no blur
- * handler here at all -- the field only leaves on an explicit clear.
+ * 600 ms. Dismissing the keyboard with a term held does neither: a user who
+ * typed a term and then looked at the results still has one, and collapsing
+ * there would flick the library back to unfiltered every time the keyboard
+ * left.
  *
- * A consequence worth stating: because clear is the only collapse and it also
- * drops the term, "idle while a term is held" is not a reachable state. The
- * accent therefore lives entirely on the live field; the idle control is always
- * the unfiltered one.
+ * Dismissing it with nothing typed is a third thing again, and it does collapse.
+ * There is no term to lose, so the field is a cursor the user has walked away
+ * from, and leaving it open held the sort chip's word away for a search that was
+ * never made. Nothing is dropped here, which is why this is not the blur handler
+ * the paragraph above rules out.
+ *
+ * A consequence worth stating: neither collapse can leave a term behind -- clear
+ * drops it, and blur declines to close while one is held -- so "idle while a term
+ * is held" is not a reachable state. The accent therefore lives entirely on the
+ * live field; the idle control is always the unfiltered one.
  */
 export function useRailSearch(onTermChange: (term: string) => void): RailSearch {
     const [expanded, setExpanded] = useState(false);
@@ -78,8 +89,36 @@ export function useRailSearch(onTermChange: (term: string) => void): RailSearch 
     }
 
     function onChangeText(next: string) {
-        setText(next);
-        arm(next.trim());
+        // Held upper case, because that is how the field draws it and the rail
+        // around it. `textTransform` cannot do this: React Native implements it
+        // for Text and never plumbs it through to a TextInput on either
+        // platform, so the caps have to be in the string.
+        setText(next.toUpperCase());
+        arm(searchTerm(next));
+    }
+
+    /**
+     * The term as the query should see it, which is not what the field shows.
+     *
+     * Lower case, because the field's own casing is a display choice and the
+     * query must not inherit it. SQL LIKE folds ASCII case and nothing else, so
+     * the case that reaches it decides which accented text still matches: a
+     * recipe name is unaffected either way, since names match through the
+     * accent-folded key rather than literally, but a description or a sharer's
+     * name is matched as written, and free text is written in lower case far
+     * more often than in upper.
+     */
+    function searchTerm(text: string): string {
+        return text.trim().toLowerCase();
+    }
+
+    function onBlur(): boolean {
+        // A term survives the keyboard leaving. Only an empty field closes, and
+        // an empty field has nothing to tell the owner, so no term is emitted
+        // either way.
+        if (text.trim().length > 0) return false;
+        setExpanded(false);
+        return true;
     }
 
     function onClear() {
@@ -99,6 +138,7 @@ export function useRailSearch(onTermChange: (term: string) => void): RailSearch 
         active: text.trim().length > 0,
         onExpand,
         onChangeText,
+        onBlur,
         onClear
     };
 }

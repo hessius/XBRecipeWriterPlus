@@ -186,11 +186,10 @@ describe("LibraryRail", () => {
             .toBe("Sort by date added, newest first");
     });
 
-    it("keeps the sort word when search is merely open with nothing typed", async () => {
-        // Opening the field takes no width from anything: search is flexed idle
-        // and live alike, so a tap that changes nothing about the library must
-        // not move the rail. It also kept the word away until the field was
-        // cleared, which read as clearing the search having rearranged the sort.
+    it("drops the sort word as soon as there is a cursor in the field", async () => {
+        // The room has to be there before the typing. Waiting for the first
+        // letter meant the rail rearranged itself under a term already being
+        // entered.
         await renderWithProviders(
             <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
         );
@@ -198,7 +197,36 @@ describe("LibraryRail", () => {
         await press(screen.getByTestId("rail-search"));
 
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
+        expect(screen.queryByText(chipLabel("added"))).toBeNull();
+    });
+
+    it("gives the sort word back when an empty field is walked away from", async () => {
+        // Nothing was searched for, so nothing should still be paying for it.
+        // Leaving the field open held the word away until it was cleared, for a
+        // gesture that never reached the library at all.
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+        await press(screen.getByTestId("rail-search"));
+
+        await fireEvent(screen.getByTestId("rail-search-input"), "blur");
+
+        expect(screen.queryByTestId("rail-search-field")).toBeNull();
         expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+    });
+
+    it("keeps the field and the width it took when the keyboard leaves a term", async () => {
+        // A user who typed a term and then looked at the results still has one.
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+        await press(screen.getByTestId("rail-search"));
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
+
+        await fireEvent(screen.getByTestId("rail-search-input"), "blur");
+
+        expect(screen.getByTestId("rail-search-field")).toBeTruthy();
+        expect(screen.queryByText(chipLabel("added"))).toBeNull();
     });
 
     it("gives the sort word back when the term is cleared outright", async () => {
@@ -218,18 +246,7 @@ describe("LibraryRail", () => {
         expect(screen.getByText(chipLabel("added"))).toBeTruthy();
     });
 
-    it("gives the sort word back when the term is typed away", async () => {
-        await renderWithProviders(
-            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
-        );
-        await press(screen.getByTestId("rail-search"));
-        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
-        expect(screen.queryByText(chipLabel("added"))).toBeNull();
 
-        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "");
-
-        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
-    });
 
     it("reports a sort tap", async () => {
         const onSortPress = jest.fn();

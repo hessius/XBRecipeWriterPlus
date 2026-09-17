@@ -89,6 +89,36 @@ describe("SwipeableRecipeRow's mount nudge", () => {
         expect(onBounced).toHaveBeenCalledTimes(1);
     });
 
+    it("still closes when the owner retires the nudge on the report", async () => {
+        // The shape the app actually uses, and the one the fixed-prop tests
+        // above cannot see. Retiring the nudge flips `bounceOnMount`, which
+        // re-runs the effect and runs its cleanup -- and the cleanup clears the
+        // timers. Report from the opening timer and the cleanup cancels the
+        // very timer that brings the card back, leaving the row stuck open on
+        // every cold start. Report from the closing one and there is nothing
+        // left to cancel.
+        function Owner() {
+            const [bounce, setBounce] = React.useState(true);
+            return (
+                <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
+                                    onDuplicate={jest.fn()} onBrew={jest.fn()}
+                                    bounceOnMount={bounce}
+                                    onBounced={() => setBounce(false)}/>
+            );
+        }
+
+        await renderWithProviders(<Owner/>);
+        // Advanced in two steps, and that is the test. Jumping past both timers
+        // in one go runs them back to back before React ever re-renders, which
+        // is not how a real 700 ms gap behaves: the retire lands between them.
+        await act(async () => { jest.advanceTimersByTime(400); });
+        expect(mockOpenLeft).toHaveBeenCalled();
+
+        await act(async () => { jest.advanceTimersByTime(1600); });
+
+        expect(mockClose).toHaveBeenCalled();
+    });
+
     it("stays still when the caller does not ask for a hint", async () => {
         const onBounced = jest.fn();
         await renderWithProviders(

@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, type StyleProp, type TextStyle} from "react-native";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import RailSearch from "@/components/RailSearch";
 import {palette} from "@/constants/colors";
@@ -47,7 +47,7 @@ describe("RailSearch", () => {
         await expand();
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
 
-        expect(screen.getByLabelText("Search recipes, expanded, term eth active")).toBeTruthy();
+        expect(screen.getByLabelText("Search recipes, expanded, term ETH active")).toBeTruthy();
     });
 
     it("shows a bare glyph until it is tapped", async () => {
@@ -92,6 +92,52 @@ describe("RailSearch", () => {
             screen.getByTestId("rail-search-input").props.style as StyleProp<TextStyle>
         );
         expect(style.fontFamily).toBe("Doto-Bold");
+    });
+
+    it("draws the term in caps, matching the words on the rail around it", async () => {
+        // In the string rather than in a style: React Native implements
+        // `textTransform` for Text and never plumbs it through to a TextInput on
+        // either platform, so a style here would have been inert on device and
+        // green in Jest, which is the worst of both.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await expand();
+        const field = screen.getByTestId("rail-search-input");
+
+        await fireEvent.changeText(field, "\u00e9tna");
+
+        expect(screen.getByTestId("rail-search-input").props.value).toBe("\u00c9TNA");
+    });
+
+    it("hands the query a lower-case term whatever the field is showing", async () => {
+        // The field's casing is a display choice and the query must not inherit
+        // it. LIKE folds ASCII case and nothing else, so the case that reaches
+        // it decides which accented text still matches, and free text is written
+        // lower case far more often than upper.
+        jest.useFakeTimers();
+        try {
+            const onTermChange = jest.fn();
+            await renderWithProviders(<RailSearch onTermChange={onTermChange}/>);
+            await expand();
+
+            // Pasted in caps, which is the case the field's own upper-casing
+            // cannot stand in for: a typed term is already lower case.
+            await fireEvent.changeText(screen.getByTestId("rail-search-input"), "\u00c9TNA");
+            await act(async () => { jest.advanceTimersByTime(2000); });
+
+            expect(onTermChange).toHaveBeenCalledWith("\u00e9tna");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("leaves the keyboard out of the casing, so a pasted term matches a typed one", async () => {
+        // `autoCapitalize` would upper-case what is typed and leave a pasted
+        // term in whatever case it arrived in, and the field would show two
+        // registers at once.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await expand();
+
+        expect(screen.getByTestId("rail-search-input").props.autoCapitalize).toBe("none");
     });
 
     it("spells its name once it has been measured wide enough for the word", async () => {
@@ -161,7 +207,7 @@ describe("RailSearch", () => {
         await fireEvent(screen.getByTestId("rail-search-input"), "blur");
 
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
-        expect(screen.getByTestId("rail-search-input").props.value).toBe("eth");
+        expect(screen.getByTestId("rail-search-input").props.value).toBe("ETH");
         expect(onTermChange).not.toHaveBeenCalledWith("");
     });
 });

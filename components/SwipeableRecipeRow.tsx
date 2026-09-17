@@ -168,14 +168,19 @@ export default function SwipeableRecipeRow({
         // genuinely new and unconventional direction is swiping *right* to reach
         // BREW/SHARE/WRITE, and `openLeft` opens exactly that tray. Teach the
         // thing that is not already known.
-        const open = setTimeout(() => {
-            swipeableRef.current?.openLeft();
-            // Reported from the timer rather than the effect body: this fires
+        const open = setTimeout(() => swipeableRef.current?.openLeft(), BOUNCE_OPEN_DELAY);
+        const close = setTimeout(() => {
+            swipeableRef.current?.close();
+            // Reported from the *closing* timer, and this is load-bearing.
+            // Reporting from the opening one retired the lesson while it was
+            // still running: the owner set state, `bounceOnMount` went false,
+            // this effect's cleanup ran, and it cleared the very timer that
+            // brings the card back. The tray stayed open. Reported from a timer
+            // either way rather than from the effect body, because this fires
             // when the lesson has actually been given, and it is an event, not
             // a render, so the owner may set state on it.
             onBounced?.();
-        }, BOUNCE_OPEN_DELAY);
-        const close = setTimeout(() => swipeableRef.current?.close(), BOUNCE_CLOSE_DELAY);
+        }, BOUNCE_CLOSE_DELAY);
         return () => {
             clearTimeout(open);
             clearTimeout(close);

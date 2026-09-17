@@ -219,6 +219,16 @@ export default function HomeScreen({db, settings}: Props) {
     // fresh row and replay the lesson -- a card wobbling open on every chip tap.
     const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
+    // Named rather than written inline at the call site, because the call site
+    // is `renderItem`, which the list invokes outside this component's memoised
+    // render scope: an arrow built there is a fresh identity on every cell
+    // render, the row's nudge effect re-runs, and its timers restart. The peek
+    // cannot be left open by that -- the closing timer restarts too -- but it
+    // can replay while a cold start settles.
+    function retireBounce() {
+        setBounceFirstRow(false);
+    }
+
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
     // Held for the screen's lifetime, not rebuilt per render. Starting a scan
     // shows the overlay, which re-renders — so a per-render transport meant the
@@ -753,7 +763,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
-                                onBounced={() => setBounceFirstRow(false)}
+                                onBounced={retireBounce}
                                 // Gated on a machine: a dead BREW in every row's
                                 // tray is worse than none. Share and write need
                                 // no machine, so they are always offered.

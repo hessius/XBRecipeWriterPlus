@@ -22,7 +22,49 @@ describe("useRailSearch", () => {
         expect(result.current.expanded).toBe(true);
 
         await act(async () => result.current.onChangeText("eth"));
-        expect(result.current.text).toBe("eth");
+        // Held upper case: the field draws what this returns, and the rail
+        // around it is an all-caps readout.
+        expect(result.current.text).toBe("ETH");
+    });
+
+    it("closes an empty field that has been walked away from, and says so", async () => {
+        const {result} = await renderHook(() => useRailSearch(jest.fn()));
+        await act(async () => result.current.onExpand());
+
+        let closed = false;
+        await act(async () => { closed = result.current.onBlur(); });
+
+        expect(closed).toBe(true);
+        expect(result.current.expanded).toBe(false);
+    });
+
+    it("keeps a field that holds a term when the keyboard leaves", async () => {
+        // A user who typed a term and then looked at the results still has one.
+        // Closing here would flick the library back to unfiltered every time the
+        // keyboard went away.
+        const onTerm = jest.fn();
+        const {result} = await renderHook(() => useRailSearch(onTerm));
+        await act(async () => result.current.onExpand());
+        await act(async () => result.current.onChangeText("eth"));
+
+        let closed = true;
+        await act(async () => { closed = result.current.onBlur(); });
+
+        expect(closed).toBe(false);
+        expect(result.current.expanded).toBe(true);
+        expect(result.current.text).toBe("ETH");
+    });
+
+    it("treats a field holding only spaces as empty", async () => {
+        const {result} = await renderHook(() => useRailSearch(jest.fn()));
+        await act(async () => result.current.onExpand());
+        await act(async () => result.current.onChangeText("   "));
+
+        let closed = false;
+        await act(async () => { closed = result.current.onBlur(); });
+
+        expect(closed).toBe(true);
+        expect(result.current.expanded).toBe(false);
     });
 
     it("debounces the term before it reaches the owner", async () => {
