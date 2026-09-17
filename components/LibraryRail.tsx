@@ -202,10 +202,10 @@ export default function LibraryRail({
 }: Props) {
     const reduced = useReducedMotion();
 
-    // Set from RailSearch's own event handlers, not an effect: while the search
-    // field is open the sort chip gives up its word to reclaim that width, and
-    // the rail learns the field opened only so it can ask for it back.
-    const [searchOpen, setSearchOpen] = useState(false);
+    // Set from RailSearch's own event handlers, not an effect: while a term is
+    // held the sort chip gives up its word to reclaim that width, and the rail
+    // learns a term arrived only so it can ask for it back.
+    const [searchActive, setSearchActive] = useState(false);
 
     const shrink = useSharedValue(collapsed ? 1 : 0);
 
@@ -227,11 +227,16 @@ export default function LibraryRail({
     // fills and names its axis; the default sort stays a bare glyph.
     const sortActive = !isDefaultSort(sort, direction);
 
-    // The word goes, not the accent, while search is open: an active sort still
-    // fills, it just falls back to its icon-only form so the expanding field has
-    // the width. The spoken label is unchanged -- only the visible word is
-    // dropped -- so a screen reader still names the axis.
-    const sortLabel = sortActive && !searchOpen ? chipLabel(sort) : undefined;
+    // The word goes, not the accent, while a term is held: an active sort still
+    // fills, it just falls back to its icon-only form so the field has the width
+    // to show what is being typed. The spoken label is unchanged -- only the
+    // visible word is dropped -- so a screen reader still names the axis.
+    //
+    // Keyed to the term and not to the open field, so the only thing that moves
+    // this rail's widths is the thing the user typed. Opening an empty field
+    // took the word away for nothing, and because the field looks much the same
+    // idle as it does live, clearing it appeared to change only the sort chip.
+    const sortLabel = sortActive && !searchActive ? chipLabel(sort) : undefined;
 
     // No filters to show means no button: one that opens an empty rail is worse
     // than none at all.
@@ -248,7 +253,7 @@ export default function LibraryRail({
     // has taken its width, which stays true however many of them phase 4 adds.
     const cluster = [
         <RailSearch key="search" onTermChange={onSearchChange}
-                    onExpandedChange={setSearchOpen}/>,
+                    onActiveChange={setSearchActive}/>,
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortLabel}

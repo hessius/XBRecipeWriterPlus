@@ -1,9 +1,9 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, TextInput, type LayoutChangeEvent} from "react-native";
-import {Input, XStack, type ColorTokens, type TamaguiElement} from "tamagui";
+import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
-import DotMatrixText from "@/components/DotMatrixText";
+import DotMatrixText, {dotMatrixTextProps} from "@/components/DotMatrixText";
 import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
 import {useRailSearch} from "@/hooks/useRailSearch";
@@ -39,14 +39,23 @@ type Props = {
      */
     onTermChange: (term: string) => void;
     /**
-     * The rail is told when the field opens and closes so a sibling control can
-     * give up width to it -- the sort chip drops its word while search is open.
-     * Reported from the same event handlers that open and close the field, never
-     * an effect, so the parent's state is set on the tap rather than synced after
-     * it. Optional, because the hook that exercises this component in isolation
-     * does not care.
+     * The rail is told when a term is held, so a sibling control can give up
+     * width to it -- the sort chip drops its word while there is something to
+     * search for.
+     *
+     * A term, not an open field. Reporting the open field meant that merely
+     * tapping search took the sort word away, and that a field with nothing in
+     * it stayed narrowed until it was cleared: a width that moved on a gesture
+     * that changes nothing about the library. The word now goes when there is
+     * something to search for and returns when there is not, so every width
+     * change on this rail answers to the term.
+     *
+     * Reported from the same event handlers that change the text, never an
+     * effect, so the parent's state is set on the keystroke rather than synced
+     * after it. Optional, because the hook that exercises this component in
+     * isolation does not care.
      */
-    onExpandedChange?: (expanded: boolean) => void;
+    onActiveChange?: (active: boolean) => void;
 };
 
 /**
@@ -57,26 +66,32 @@ type Props = {
  * same row, and stopped being right the moment they moved to a rail of their
  * own: there is nothing left to give the width back to, so a square glyph beside
  * two buttons leaves a long dead gap that reads as a missing control. Tapping it
- * therefore moves nothing across the rail; it puts a cursor in a field already
- * where it will be, and takes the sort chip's word as the little extra room it
- * gains.
+ * therefore moves nothing across the rail at all; it puts a cursor in a field
+ * already where it will be. The sort chip's word is the little extra room this
+ * gains, and it is given up on the first keystroke rather than on the tap,
+ * because a gesture that changes nothing about the library should not move the
+ * rail.
  *
  * Module scope, and it owns its state through `useRailSearch`: a component
  * declared inside another's body is a fresh type every render, so React remounts
  * it and the field loses what was typed. That bug has been fixed twice here.
  */
-export default function RailSearch({onTermChange, onExpandedChange}: Props) {
+export default function RailSearch({onTermChange, onActiveChange}: Props) {
     const {expanded, text, active, onExpand, onChangeText, onClear} = useRailSearch(onTermChange);
     const searchState = active ? `term ${text} active` : "no search term";
+    // The header is dot matrix throughout, and a field that dropped to the
+    // system face in the middle of it read as a borrowed control. Asked for
+    // rather than spelled out, so Doto's size floor and scale cap still hold.
+    const doto = dotMatrixTextProps({fontSize: 12, letterSpacing: 1.5});
 
-    function expand() {
-        onExpand();
-        onExpandedChange?.(true);
+    function type(next: string) {
+        onChangeText(next);
+        onActiveChange?.(next.trim().length > 0);
     }
 
     function clear() {
         onClear();
-        onExpandedChange?.(false);
+        onActiveChange?.(false);
     }
 
     const inputRef = useRef<TextInput | null>(null);
@@ -107,7 +122,7 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
             <XStack testID="rail-search" onLayout={measure}
                     accessible accessibilityRole="button"
                     accessibilityLabel={`Search recipes, collapsed, ${searchState}`}
-                    onPress={expand}
+                    onPress={onExpand}
                     // Flexed, exactly as the live field is, so tapping does not
                     // move the control. `minWidth` is the floor a touch target
                     // may not go below whatever the buttons beside it claim.
@@ -115,7 +130,11 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
                     height={CHIP_HEIGHT} alignItems="center"
                     paddingHorizontal="$3" gap="$2"
                     borderRadius="$4" borderWidth={1}
-                    backgroundColor={palette.raised} borderColor={palette.line}
+                    // The same unfilled shape the sort and filter chips wear
+                    // when they are off: idle search is one more control in the
+                    // row, and a fill here would read as a state it is not in.
+                    // The fill arrives with the cursor.
+                    backgroundColor="transparent" borderColor={palette.line}
                     // The word is clipped rather than allowed to push the
                     // buttons, on the frame before the measurement lands.
                     overflow="hidden"
@@ -142,23 +161,25 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
                 borderColor={active ? palette.text : palette.line}>
             <DotIcon name="search" size={ICON_SIZE}
                      color={active ? palette.text : palette.dim}/>
-            <Input
-                // Tamagui types every element ref as `TamaguiElement`, which
-                // is a View, while `Input` forwards a real `TextInput` at
-                // runtime. The ref is typed for what actually arrives so the
-                // `focus()` above is checked; the cast is only for the prop.
-                ref={inputRef as React.Ref<TamaguiElement>}
+            {/* React Native's own field, not Tamagui's `Input`. Tamagui resolves
+                `fontFamily` against the theme's font tokens and drops anything
+                that is not one, and an `unstyled` Input discards a plain `style`
+                prop too, so Doto could not be asked for through it either way.
+                There is nothing else being traded: the field is a flex and a
+                colour, and the ref stops needing a cast through `TamaguiElement`
+                to reach the `focus()` above. */}
+            <TextInput
+                ref={inputRef}
                 testID="rail-search-input"
                 accessibilityLabel={`Search recipes, expanded, ${searchState}`}
-                flex={1}
-                unstyled
-                placeholder="Search"
-                placeholderTextColor={palette.dim as ColorTokens}
+                maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
+                style={[doto.style, {flex: 1, color: palette.text}]}
+                placeholder="SEARCH"
+                placeholderTextColor={palette.dim}
                 value={text}
-                onChangeText={onChangeText}
+                onChangeText={type}
                 autoCapitalize="none"
-                autoCorrect={false}
-                color={palette.text}/>
+                autoCorrect={false}/>
             {/* No `hitSlop`. The square is already 44, and slop here would
                 reach back into the field's trailing edge, where a tap meant
                 to place the cursor would wipe the term instead. */}

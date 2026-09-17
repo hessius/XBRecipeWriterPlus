@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet, type StyleProp, type TextStyle} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import RailSearch from "@/components/RailSearch";
@@ -67,6 +68,30 @@ describe("RailSearch", () => {
 
         const live = screen.getByTestId("rail-search-field").props.style as Record<string, unknown>;
         expect(live.flex).toBe(1);
+    });
+
+    it("wears the unfilled chip shape until there is a cursor in it", async () => {
+        // Idle search is one more control in the row, so it carries the same
+        // nothing-behind-it the sort and filter chips carry when they are off.
+        // The fill arrives with the cursor and means the field is live.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        const idle = screen.getByTestId("rail-search").props.style as Record<string, unknown>;
+        expect(idle.backgroundColor).toBe("transparent");
+
+        await expand();
+
+        const live = screen.getByTestId("rail-search-field").props.style as Record<string, unknown>;
+        expect(live.backgroundColor).toBe(palette.raised);
+    });
+
+    it("types in the same dot matrix face the header is set in", async () => {
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await expand();
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("rail-search-input").props.style as StyleProp<TextStyle>
+        );
+        expect(style.fontFamily).toBe("Doto-Bold");
     });
 
     it("spells its name once it has been measured wide enough for the word", async () => {

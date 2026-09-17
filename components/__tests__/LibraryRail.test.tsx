@@ -169,7 +169,7 @@ describe("LibraryRail", () => {
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
     });
 
-    it("drops the sort chip's word while the search field is open, keeping its label", async () => {
+    it("drops the sort chip's word while a term is held, keeping its label", async () => {
         // Work item 3: the field flexes into whatever the pinned controls leave,
         // and the sort chip gives up its visible word to make that room. The
         // spoken label is unchanged -- only the word on screen goes.
@@ -179,10 +179,56 @@ describe("LibraryRail", () => {
         expect(screen.getByText(chipLabel("added"))).toBeTruthy();
 
         await press(screen.getByTestId("rail-search"));
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
 
         expect(screen.queryByText(chipLabel("added"))).toBeNull();
         expect(screen.getByTestId("rail-sort").props.accessibilityLabel)
             .toBe("Sort by date added, newest first");
+    });
+
+    it("keeps the sort word when search is merely open with nothing typed", async () => {
+        // Opening the field takes no width from anything: search is flexed idle
+        // and live alike, so a tap that changes nothing about the library must
+        // not move the rail. It also kept the word away until the field was
+        // cleared, which read as clearing the search having rearranged the sort.
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+
+        await press(screen.getByTestId("rail-search"));
+
+        expect(screen.getByTestId("rail-search-field")).toBeTruthy();
+        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+    });
+
+    it("gives the sort word back when the term is cleared outright", async () => {
+        // Clearing does not go through the text handler, so it is the one path
+        // that must report for itself. Left unreported, the word stays gone
+        // after the field has collapsed and the library has gone unfiltered:
+        // the exact symptom keying this to the term was meant to end.
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+        await press(screen.getByTestId("rail-search"));
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
+        expect(screen.queryByText(chipLabel("added"))).toBeNull();
+
+        await fireEvent.press(screen.getByTestId("rail-search-clear"));
+
+        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+    });
+
+    it("gives the sort word back when the term is typed away", async () => {
+        await renderWithProviders(
+            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
+        );
+        await press(screen.getByTestId("rail-search"));
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
+        expect(screen.queryByText(chipLabel("added"))).toBeNull();
+
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "");
+
+        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
     });
 
     it("reports a sort tap", async () => {

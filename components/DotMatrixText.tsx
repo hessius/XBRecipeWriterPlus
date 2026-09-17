@@ -62,6 +62,33 @@ function requestedSize(fontSize: number): number {
 }
 
 /**
+ * Doto's style as plain text props, for the one thing that cannot be a
+ * `DotMatrixText`: a `TextInput`.
+ *
+ * A field renders its own glyphs, so the rail's search box could not be wrapped
+ * in this component and would otherwise have reached for the family and the size
+ * by hand, which is the moment the floor and the scale cap stop being enforced
+ * anywhere. Ask here instead, and there is still one place that knows how Doto
+ * must be sized.
+ */
+export function dotMatrixTextProps(
+    {fontSize = 14, weight = "bold", letterSpacing = 0.5}: {
+        fontSize?: number;
+        weight?: DotoWeight;
+        letterSpacing?: number;
+    } = {}
+) {
+    return {
+        style: {
+            fontFamily: DOTO_FAMILIES[weight],
+            fontSize:   requestedSize(fontSize),
+            letterSpacing
+        },
+        maxFontSizeMultiplier: DOTO_MAX_FONT_SCALE
+    };
+}
+
+/**
  * The size Doto is actually drawn at, after the bounded OS scale.
  *
  * Exported because a caller that clips dot-matrix text to a fixed box —
@@ -109,12 +136,18 @@ type Props = {
  * and system status. Anything a human typed — a recipe name, an error message —
  * stays in Inter and must not be rendered through here.
  *
- * One deliberate exception, granted by the product owner after seeing it on a
- * device: the recipe title on the brew screen and in the brew summary. Every
- * other glyph on those two screens is Doto, and one line of Inter among them
- * read as unstyled rather than as a different register. The name keeps its own
- * casing there — this component does not upper-case, callers do — so it is
- * still recognisably the name a person typed.
+ * Two deliberate exceptions, both granted by the product owner after seeing
+ * them on a device. The first is the recipe title on the brew screen and in the
+ * brew summary. Every other glyph on those two screens is Doto, and one line of
+ * Inter among them read as unstyled rather than as a different register. The
+ * name keeps its own casing there — this component does not upper-case, callers
+ * do — so it is still recognisably the name a person typed.
+ *
+ * The second is the library rail's search field, which takes Doto through
+ * `dotMatrixTextProps` below. The rail sits inside a header that is Doto end to
+ * end, and a field in the body face among them read as a borrowed control
+ * rather than as this app's own. It is the same argument as the brew title: the
+ * register is set by what surrounds the text, not only by who typed it.
  *
  * A register rule that follows from the above, stated because it looks like a
  * bug and has been "fixed" by mistake before: units are lower case in Inter
