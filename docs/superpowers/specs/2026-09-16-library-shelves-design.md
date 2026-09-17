@@ -810,9 +810,11 @@ worth stating so the plan does not have to rediscover it.
    things from this bullet deliberately: the view segmented pair goes with phase
    4, because the half it switches to is the shelf grid, and the Rating sort
    axis goes with #99, because until a rating exists the axis sorts nothing.
-4. **Shelves.** The query model, the grid, the stock auto shelves, shelf
-   creation and the selection mode picker. Needs 3, because the picker is the
-   library screen with its rail.
+4. **Shelves. In progress.** The query model, the grid, the stock auto shelves,
+   shelf creation and the selection mode picker, plus the view segmented pair
+   phase 3 deferred. Needs 3, because the picker is the library screen with its
+   rail. Planned in
+   [`2026-09-17-m5-shelves.md`](../plans/2026-09-17-m5-shelves.md).
 5. **The recipe screen.** The third deck, the header rename sheet, the pod
    section. Independent of 3 and 4; needs only 1. Planned in
    [`2026-09-16-m5-recipe-screen.md`](../plans/2026-09-16-m5-recipe-screen.md),
