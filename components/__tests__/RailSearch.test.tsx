@@ -130,14 +130,16 @@ describe("RailSearch", () => {
         }
     });
 
-    it("leaves the keyboard out of the casing, so a pasted term matches a typed one", async () => {
-        // `autoCapitalize` would upper-case what is typed and leave a pasted
-        // term in whatever case it arrived in, and the field would show two
-        // registers at once.
+    it("shift-locks the keyboard so a typed letter is never drawn lower case", async () => {
+        // Belt as well as braces. The hook's upper-casing is the guarantee and
+        // catches a pasted term, but it lands a frame after the native field has
+        // drawn the key that was pressed, so typing flickered. This is what
+        // stops the flicker; it is not what makes the invariant true.
         await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
         await expand();
 
-        expect(screen.getByTestId("rail-search-input").props.autoCapitalize).toBe("none");
+        expect(screen.getByTestId("rail-search-input").props.autoCapitalize)
+            .toBe("characters");
     });
 
     it("spells its name once it has been measured wide enough for the word", async () => {

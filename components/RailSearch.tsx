@@ -184,11 +184,15 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
                 value={text}
                 onChangeText={onChangeText}
                 onBlur={blur}
-                // The caps are put on by the hook, which holds the text upper
-                // case and hands the query a lower-case term. Not the keyboard:
-                // `autoCapitalize` would leave a pasted term in whatever case it
-                // arrived in, and the field would show two registers at once.
-                autoCapitalize="none"
+                // Both, and each covers what the other cannot. The hook holds
+                // the text upper case, which is the guarantee -- it catches a
+                // pasted term, which never passes through the keyboard at all.
+                // But a correction made in JavaScript arrives a frame after the
+                // native field has already drawn the key that was pressed, so
+                // typing flickered lower case and then snapped up. Shift-locking
+                // the keyboard means the letter is upper case before it is ever
+                // drawn, and the hook then has nothing left to change.
+                autoCapitalize="characters"
                 autoCorrect={false}/>
             {/* No `hitSlop`. The square is already 44, and slop here would
                 reach back into the field's trailing edge, where a tap meant
