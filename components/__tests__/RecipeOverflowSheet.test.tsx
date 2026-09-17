@@ -184,4 +184,82 @@ describe("RecipeOverflowSheet", () => {
         await fireEvent.press(screen.getByLabelText("Brew history"));
         expect(mockPush).toHaveBeenCalledWith("/brewHistory?recipeUuid=uuid-99");
     });
+
+    // The library door. The same sheet the editor opens, dressed for a recipe in
+    // the library rather than one on the bench: brew it, write it to a card and
+    // star it are the acts that make sense there, and revert, refresh-name and
+    // the hints switch are the ones that do not.
+    describe("as the library's recipe-actions sheet", () => {
+        const LIBRARY = {
+            onShare:            jest.fn(),
+            onDuplicate:        jest.fn(),
+            onDelete:           jest.fn(),
+            onOpenChange:       jest.fn(),
+            onBrew:             jest.fn(),
+            onWrite:            jest.fn(),
+            onToggleFavourite:  jest.fn()
+        };
+
+        it("offers brew, write and star when handed their actions", async () => {
+            await renderWithProviders(
+                <RecipeOverflowSheet open canRefreshName={false} {...LIBRARY}/>
+            );
+
+            expect(screen.getByLabelText("Brew recipe")).toBeTruthy();
+            expect(screen.getByLabelText("Write recipe to card")).toBeTruthy();
+            expect(screen.getByLabelText("Star recipe")).toBeTruthy();
+            expect(screen.getByLabelText("Share")).toBeTruthy();
+            expect(screen.getByLabelText("Duplicate")).toBeTruthy();
+            expect(screen.getByLabelText("Delete")).toBeTruthy();
+        });
+
+        // The rows the editor owns are gated on their handlers, so a call site
+        // that does not hand them over does not get them. Without this gate the
+        // library sheet would draw a Revert with nothing behind it and a hints
+        // switch that belongs to the editor's deck.
+        it("leaves out the editor-only rows when their handlers are absent", async () => {
+            await renderWithProviders(
+                <RecipeOverflowSheet open canRefreshName={false} {...LIBRARY}/>
+            );
+
+            expect(screen.queryByLabelText("Revert")).toBeNull();
+            expect(screen.queryByLabelText("Refresh name from xBloom")).toBeNull();
+            expect(screen.queryByLabelText("Show hints")).toBeNull();
+        });
+
+        it("names the star row by the recipe's current state", async () => {
+            await renderWithProviders(
+                <RecipeOverflowSheet open canRefreshName={false} {...LIBRARY} favourite/>
+            );
+
+            expect(screen.getByLabelText("Remove star from recipe")).toBeTruthy();
+            expect(screen.queryByLabelText("Star recipe")).toBeNull();
+        });
+
+        it("does not draw a brew row when the screen cannot brew", async () => {
+            // Brew is gated the same way the row's tray gates it: no machine,
+            // no brew handler, no row. A dead BREW in the sheet is worse than
+            // its absence.
+            const {onBrew, ...noBrew} = LIBRARY;
+            await renderWithProviders(
+                <RecipeOverflowSheet open canRefreshName={false} {...noBrew}/>
+            );
+
+            expect(screen.queryByLabelText("Brew recipe")).toBeNull();
+        });
+
+        it("calls the brew action and closes", async () => {
+            const onBrew = jest.fn();
+            const onOpenChange = jest.fn();
+            await renderWithProviders(
+                <RecipeOverflowSheet open canRefreshName={false} {...LIBRARY}
+                                     onBrew={onBrew} onOpenChange={onOpenChange}/>
+            );
+
+            await fireEvent.press(screen.getByLabelText("Brew recipe"));
+
+            expect(onBrew).toHaveBeenCalledTimes(1);
+            expect(onOpenChange).toHaveBeenCalledWith(false);
+        });
+    });
 });

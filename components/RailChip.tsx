@@ -28,6 +28,15 @@ const ICON_SIZE = 18;
  */
 const CARET_SIZE = 14;
 
+/**
+ * How far a chip fades when it is on screen but not offered.
+ *
+ * Far enough that it cannot be read as active. Device review of the brew and
+ * write buttons settled this: one step of ink is not a state, and a control at
+ * 0.6 still reads as tappable to someone who is not comparing it with anything.
+ */
+const DIMMED_OPACITY = 0.35;
+
 /** Side padding a labelled chip earns; an icon-only chip is square and takes none. */
 const CHIP_PADDING_X = 12;
 
@@ -40,6 +49,16 @@ type Props = {
      */
     active: boolean;
     onPress: () => void;
+    /**
+     * The chip is on screen but not offered.
+     *
+     * Drawn at the disabled opacity and given `accessibilityState.disabled`, so
+     * the two readings agree: a reader hears "dimmed" and a tap does nothing.
+     * The rail uses it while the shelf grid is showing, where the shelves are
+     * the filters and a chip would offer the same narrowing twice against a
+     * list that is not on screen to show the result.
+     */
+    dimmed?: boolean;
     /**
      * Spelled out, because an icon-only chip has no visible text to fall back on
      * and a filter chip's Doto label is an abbreviation. Names the state, not the
@@ -126,7 +145,7 @@ function RailCaret({open, color}: {open: boolean; color: string}) {
  */
 export default function RailChip({
     active, onPress, accessibilityLabel, icon, label, expanded, caretOpen,
-    accent = palette.text, testID
+    accent = palette.text, testID, dimmed = false
 }: Props) {
     const iconOnly = label === undefined;
     // Ink only agrees with the fill; it does not carry the state itself.
@@ -138,8 +157,16 @@ export default function RailChip({
             accessible
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
-            accessibilityState={expanded === undefined ? {selected: active} : {expanded}}
-            onPress={onPress}
+            // `disabled` is added only when it is true. A chip that is offered
+            // has nothing to say about being disabled, and announcing
+            // "disabled: false" on every chip in the rail is a word a reader
+            // has to hear past on each one.
+            accessibilityState={{
+                ...(expanded === undefined ? {selected: active} : {expanded}),
+                ...(dimmed ? {disabled: true} : {})
+            }}
+            opacity={dimmed ? DIMMED_OPACITY : 1}
+            onPress={dimmed ? undefined : onPress}
             height={CHIP_HEIGHT}
             // An icon-only chip is a fixed square; a labelled one hugs its word.
             width={iconOnly ? CHIP_HEIGHT : undefined}
@@ -151,7 +178,7 @@ export default function RailChip({
             borderWidth={1}
             backgroundColor={active ? accent : palette.none}
             borderColor={active ? accent : palette.line}
-            pressStyle={{opacity: 0.7}}>
+            pressStyle={dimmed ? undefined : {opacity: 0.7}}>
             {icon !== undefined && (
                 <DotIcon name={icon} size={ICON_SIZE} color={ink}/>
             )}

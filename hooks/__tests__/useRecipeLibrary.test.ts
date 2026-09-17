@@ -2,7 +2,9 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
-import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
+import {
+    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
@@ -29,7 +31,8 @@ function stubDb(recipes: Recipe[]) {
         replaceAllRecipes:  jest.fn(),
         countRecipesByFilter: jest.fn((ids: readonly string[]) =>
             Object.fromEntries(ids.map((id) => [id, 0]))
-        )
+        ),
+        countRecipesByTag: jest.fn((): {tag: string; count: number}[] => [])
     };
 }
 
@@ -80,7 +83,7 @@ describe("useRecipeLibrary", () => {
         };
         const db = stubDb([named("Ethiopia")]);
         await renderHook(() => useRecipeLibrary(db, query));
-        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
+        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveLibraryFilter);
     });
 
     it("reads stock filter counts through the store's count method", async () => {
@@ -90,6 +93,28 @@ describe("useRecipeLibrary", () => {
         expect(db.countRecipesByFilter).toHaveBeenCalledWith(
             STOCK_FILTER_ORDER,
             resolveStockFilter
+        );
+    });
+
+    it("reads tag counts through the store's count method", async () => {
+        const db = stubDb([named("Ethiopia")]);
+        db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 2}]);
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        expect(db.countRecipesByTag).toHaveBeenCalled();
+        expect(result.current.tagCounts).toEqual([{tag: "morning", count: 2}]);
+    });
+
+    // The same reasoning as the stock counts above. A store that cannot answer
+    // must not be allowed to say "no tags": every manual shelf the user built
+    // would vanish from the grid, which is a success-shaped lie about their own
+    // work rather than a failure they can see.
+    it("throws when a store cannot count tags", async () => {
+        const {countRecipesByTag: _omitted, ...withoutTags} = stubDb([named("Ethiopia")]);
+
+        await expect(renderHook(() => useRecipeLibrary(withoutTags))).rejects.toThrow(
+            "This store cannot count tags"
         );
     });
 
@@ -225,6 +250,7 @@ describe("useRecipeLibrary", () => {
             countRecipesByFilter: jest.fn((ids: readonly string[]) =>
                 Object.fromEntries(ids.map((id) => [id, 0]))
             ),
+            countRecipesByTag:  jest.fn((): {tag: string; count: number}[] => []),
             deleteRecipe:       jest.fn(),
             cloneRecipe:        jest.fn(),
             updateRecipe:       jest.fn(() => {

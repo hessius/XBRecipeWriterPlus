@@ -542,6 +542,33 @@ class RecipeDatabase {
         return counts;
     }
 
+    /**
+     * How many recipes sit on each tag, ordered by size then name.
+     *
+     * The manual half of the shelf grid. `GROUP BY tagKey` and not by `tag`,
+     * because the key is the matching form: two spellings of one word are one
+     * shelf, and grouping by the display text would draw two tiles that open the
+     * same list. The label is `MIN(tag)`, a spelling the user actually typed,
+     * because handing back the key would show them a lower-cased version of
+     * their own word.
+     *
+     * Ordered largest first so the grid's own order needs no second opinion, and
+     * by folded name within a size so the order is stable rather than whatever
+     * SQLite last happened to return. `tagKey` is already lower-cased, so
+     * ordering by it is case-insensitive without asking SQLite for a collation
+     * it only applies to ASCII.
+     *
+     * No suppression here. A manual shelf is always offered however small,
+     * because a person made it on purpose; `availableFilters` is for shelves the
+     * app invented.
+     */
+    public countRecipesByTag(): {tag: string; count: number}[] {
+        return this.db.getAllSync(
+            `SELECT MIN(tag) AS tag, COUNT(*) AS count FROM recipe_tags
+             GROUP BY tagKey ORDER BY count DESC, tagKey ASC;`
+        ) as {tag: string; count: number}[];
+    }
+
     public retrieveAllRecipes(): Recipe[] | null {
         let recipesJSON: any[] = this.db.getAllSync(
             `SELECT *

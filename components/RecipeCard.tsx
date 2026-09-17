@@ -144,6 +144,29 @@ type Props = {
     onWrite?: () => void;
     /** Same again for the management tray's STAR tile. */
     onToggleFavourite?: () => void;
+    /**
+     * Open this recipe's actions by a long press.
+     *
+     * The row already carries every act in its two swipe trays, so this is the
+     * second of the two doors the shelf design asks for: a tile has no room for
+     * a tray and reaches the actions by a long press, and giving the row the
+     * same gesture means both idioms open the one `RecipeOverflowSheet` rather
+     * than two lists that can drift. A long press is not reachable by a screen
+     * reader, which is what the `accessibilityActions` above are for: between
+     * the tray's verbs and `onHistory`, every row the sheet offers has an action
+     * here, so the gesture itself can go unlabelled without taking anything
+     * away.
+     */
+    onLongPress?: () => void;
+    /**
+     * Open this recipe's brew history.
+     *
+     * The one row in the sheet that no swipe tray carries, so it is the one act
+     * that would otherwise exist only behind the long press. Without it the
+     * claim above would be false: a reader would have every verb the trays hold
+     * and none of the sheet's own.
+     */
+    onHistory?: () => void;
 };
 
 /**
@@ -164,7 +187,9 @@ export default function RecipeCard({
     onBrew,
     onShare,
     onWrite,
-    onToggleFavourite
+    onToggleFavourite,
+    onLongPress,
+    onHistory
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -223,6 +248,12 @@ export default function RecipeCard({
                     ? "Remove star from recipe"
                     : "Star recipe"
             }]
+            : []),
+        // The sheet's own row, mirrored. Every other action here mirrors a tray
+        // tile; this one mirrors the long press, which is the only door to the
+        // history and is a gesture a reader cannot make.
+        ...(onHistory !== undefined
+            ? [{name: "history", label: "Brew history"}]
             : [])
     ];
 
@@ -247,6 +278,7 @@ export default function RecipeCard({
             accessibilityLabel={summary}
             accessibilityActions={actions}
             onPress={onPress}
+            onLongPress={onLongPress}
             onAccessibilityAction={(event) => {
                 if (event.nativeEvent.actionName === "duplicate") {
                     onDuplicate?.();
@@ -260,6 +292,8 @@ export default function RecipeCard({
                     onWrite?.();
                 } else if (event.nativeEvent.actionName === "favourite") {
                     onToggleFavourite?.();
+                } else if (event.nativeEvent.actionName === "history") {
+                    onHistory?.();
                 }
             }}
             // The press feedback Tamagui's `pressStyle` used to draw. Kept

@@ -1,10 +1,13 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
-import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
+import {
+    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+} from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {tagKey} from "@/library/tagKey";
 
 /**
  * The part of `RecipeDatabase` this hook uses.
@@ -36,6 +39,7 @@ export type RecipeStore = {
         ids: readonly string[],
         resolveFilter?: FilterResolver
     ) => Record<string, number>;
+    countRecipesByTag?: () => {tag: string; count: number}[];
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -104,17 +108,31 @@ export type RestoreOutcome =
     | {status: "failed"}
     | {status: "busy"};
 
+/**
+ * What a shelf write could not do.
+ *
+ * Both zero is the ordinary answer. `full` is the tag cap: a recipe already
+ * carrying `MAX_TAGS_PER_RECIPE` tags cannot join another shelf, and the user
+ * has to be told rather than left with a tick that did not stick. `failed` is
+ * the database refusing the write.
+ */
+export type ShelfWriteOutcome = {full: number; failed: number};
+
 export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
     librarySize: number;
     /** Whole-table counts for stock filters, keyed by filter id. */
     filterCounts: Record<string, number>;
+    /** Whole-table counts for every tag, largest shelf first. */
+    tagCounts: {tag: string; count: number}[];
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
     duplicateRecipe: (recipe: Recipe) => void;
     toggleFavourite: (recipe: Recipe) => void;
+    /** Make exactly these recipes the members of a shelf. */
+    setShelfMembers: (tag: string, uuids: readonly string[]) => ShelfWriteOutcome;
     deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
@@ -158,6 +176,7 @@ export function useRecipeLibrary(
     const recipes = readLibrary(store, query, revision);
     const librarySize = readLibrarySize(store, revision);
     const filterCounts = readFilterCounts(store, revision);
+    const tagCounts = readTagCounts(store, revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -229,6 +248,68 @@ export function useRecipeLibrary(
         reload();
     }
 
+    /**
+     * Put a shelf's tag on exactly these recipes, and take it off the rest.
+     *
+     * The whole membership in one call rather than an add and a remove, because
+     * a shelf is defined by who is on it: the picker hands over a final answer,
+     * and working out which recipes changed is this function's job, not the
+     * screen's. Members are looked up from the whole table (`allRecipes`) and
+     * not from the list, so a recipe ticked under one filter and then filtered
+     * away still gets the tag.
+     *
+     * Written through `setTags`, which is the model's stated invariant and not a
+     * formality here: it folds duplicate spellings and enforces
+     * `MAX_TAGS_PER_RECIPE`. Assigning `tags` directly would let a 21st shelf be
+     * saved and then quietly dropped the next time the blob was hydrated, so the
+     * membership would exist until the app was restarted and then not.
+     *
+     * Existing tags are preserved and the case the user typed is kept. Matching
+     * is on the folded key, so renaming is not possible by accident: tagging
+     * with "Morning" a recipe that already carries "morning" leaves the one tag
+     * it had rather than giving it two spellings of one shelf.
+     *
+     * The count of recipes it could not put on the shelf comes back rather than
+     * being swallowed. A shelf is exact by definition, so a partial answer the
+     * caller cannot see is a shelf that disagrees with the ticks the user just
+     * made, with nothing on screen saying which ones did not take.
+     */
+    function setShelfMembers(tag: string, uuids: readonly string[]): ShelfWriteOutcome {
+        const key = tagKey(tag);
+        const wanted = new Set(uuids);
+        let full = 0;
+        let failed = 0;
+        for (const recipe of allRecipes()) {
+            const tags = recipe.tags ?? [];
+            const has = tags.some((existing) => tagKey(existing) === key);
+            const should = wanted.has(recipe.uuid);
+            if (has === should) continue;
+            recipe.setTags(should
+                ? [...tags, tag]
+                : tags.filter((existing) => tagKey(existing) !== key));
+            // Asked of the model afterwards rather than assumed: `setTags` is
+            // where the cap lives, so this is the only honest way to know
+            // whether the recipe is actually on the shelf now.
+            const landed = recipe.tags.some((existing) => tagKey(existing) === key);
+            if (landed !== should) {
+                full += 1;
+                continue;
+            }
+            try {
+                store.updateRecipe(recipe.uuid, recipe);
+            } catch {
+                // Counted rather than ignored, unlike toggleFavourite: a
+                // favourite the database refused is one flag the reload puts
+                // back, while a shelf is a set the user built by hand and a
+                // silently missing member is indistinguishable from a tick that
+                // never registered.
+                failed += 1;
+            }
+        }
+        reload();
+        return {full, failed};
+    }
+
     function deleteAll(): DeleteAllOutcome {
         // The whole-table size, not `recipes.length`: this deletes the table, so
         // reporting the length of a filtered view would tell the user a smaller
@@ -282,12 +363,14 @@ export function useRecipeLibrary(
         recipes,
         librarySize,
         filterCounts,
+        tagCounts,
         allRecipes,
         refresh: reload,
         deleteRecipe,
         duplicateRecipe,
         toggleFavourite,
         deleteAll,
+        setShelfMembers,
         applyRestore
     };
 }
@@ -295,11 +378,16 @@ export function useRecipeLibrary(
 /**
  * The library list for a query.
  *
- * `resolveStockFilter` is what turns the query's filter ids into WHERE
+ * `resolveLibraryFilter` is what turns the query's filter ids into WHERE
  * fragments; the ids reaching here have already been narrowed to the ones this
- * build knows (`asStockFilters`, in `useLibraryQuery`), so the resolver's null
+ * build knows (`asLibraryFilters`, in `useLibraryQuery`), so the resolver's null
  * -- which makes `buildLibraryQuery` throw -- stays reserved for a genuine
  * in-code disagreement rather than firing on stale persisted state.
+ *
+ * It resolves tag shelves as well as stock ones, because the list must be able
+ * to answer a manual shelf. The count below stays on `resolveStockFilter`: it
+ * asks only about the stock vocabulary, and tags are counted by their own
+ * query.
  *
  * `revision` does not shape the query. It is a cache key the mutations bump so
  * a delete or a restore forces a fresh read the unchanged query object would
@@ -308,7 +396,7 @@ export function useRecipeLibrary(
  */
 function readLibrary(db: RecipeStore, query: LibraryQuery, revision: number): Recipe[] {
     void revision;
-    return db.queryRecipes(query, resolveStockFilter);
+    return db.queryRecipes(query, resolveLibraryFilter);
 }
 
 function readLibrarySize(db: RecipeStore, revision: number): number {
@@ -333,6 +421,23 @@ function readFilterCounts(db: RecipeStore, revision: number): Record<string, num
         throw new Error("This store cannot count stock filters");
     }
     return db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+}
+
+/**
+ * Every tag and how many recipes carry it: the manual half of the shelf grid.
+ *
+ * Throws rather than returning nothing, for the reason `readFilterCounts` does.
+ * A store that cannot answer would otherwise report a library with no tags,
+ * and every shelf the user built by hand would be missing from the grid with
+ * nothing on screen to say so. A shelf a person made is the one thing here the
+ * app cannot reconstruct if it quietly drops it.
+ */
+function readTagCounts(db: RecipeStore, revision: number): {tag: string; count: number}[] {
+    void revision;
+    if (!db.countRecipesByTag) {
+        throw new Error("This store cannot count tags");
+    }
+    return db.countRecipesByTag();
 }
 
 export default useRecipeLibrary;

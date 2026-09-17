@@ -332,13 +332,56 @@ the second stops it presenting the whole library as a category.
 Neither rule applies to anything a person authored. One favourited recipe is a
 decision, not noise, and a manual shelf of two is a shelf.
 
-### The grid is a picker for the lens, not a second home
+### A shelf opens into itself
 
-Tapping a shelf returns you to list view with that shelf applied. The grid is
-somewhere you pass through.
+**Reversed after device testing.** This section used to say the opposite: that
+tapping a shelf returned you to list view with that shelf applied, the filter
+chips dimmed, and the grid was somewhere you passed through. On a phone that
+reads as the app undoing the thing you just asked for. You tap a square, the
+squares vanish, you are back in the list you left, and the only sign anything
+happened is a chip. The reasoning was sound and the result was not.
 
-While a shelf is applied, the filter chips dim, because in that view the shelves
-are the filters and offering both would be offering the same narrowing twice.
+Tapping a shelf now opens that shelf, and stays in the shelf idiom: the shelf's
+name as the heading, its recipes as tiles of the same square, and a way back to
+the grid. A shelf is a place, not a lens you borrow.
+
+What this costs is the swipe tile. A square tile has no room to swipe open, so
+write, brew and delete are reached by a long press, which opens the overflow
+sheet the row already uses. This is the one door the grid and the list share, so
+the actions cannot drift apart between the two views.
+
+The list view keeps filter chips and they keep working. They are a different
+instrument: a chip narrows what you are looking at, a shelf is a thing you
+opened. The two only competed when tapping a shelf turned into applying a chip.
+
+### The rail belongs to the view, not to the screen
+
+**Added after device testing.** Phase 3 built the rail for a screen that had one
+view, then phase 4 pushed a second control into the same row, and at 320 pt the
+result was four controls fighting over a rail that comfortably holds two.
+
+The rail is drawn per view, and each view is asked what it actually needs:
+
+- **List view** carries the view toggle, search, sort, and the filter button.
+- **Shelf view** carries the view toggle and nothing else. It has no sort,
+  because shelf ordering is deferred and out of scope, so the control would
+  offer an axis that does not exist. It has no filter button, because a filter
+  and a shelf narrow the same library by the same means and a filtered shelf
+  grid is two instruments pointed at one target. It has no search, because the
+  thing worth finding in a grid of eight named squares is already on screen.
+
+Search returns to a square chip when idle, and when it opens it is drawn **over**
+the rest of the rail rather than pushing it. Phase 3 had search flex to fill the
+rail, which was right for a rail holding search and two buttons and wrong the
+moment a segmented pair joined it: a flexing field and a fixed pair share a row
+by taking width from each other, and the field lost. Overlaying means opening
+search cannot move the toggle, and the field gets the whole rail regardless of
+what is underneath it.
+
+The view toggle is built from the rail's own metrics rather than the shared
+`SegmentedControl`, which is a settings component and is also used by
+`SortSheet`. Bending it to match the rail would change two screens that did not
+ask to be changed; matching it in a rail-owned control cannot.
 
 ### Shelf art is a slot, not a decision
 
@@ -810,9 +853,16 @@ worth stating so the plan does not have to rediscover it.
    things from this bullet deliberately: the view segmented pair goes with phase
    4, because the half it switches to is the shelf grid, and the Rating sort
    axis goes with #99, because until a rating exists the axis sorts nothing.
-4. **Shelves.** The query model, the grid, the stock auto shelves, shelf
-   creation and the selection mode picker. Needs 3, because the picker is the
-   library screen with its rail.
+4. **Shelves. Shipped.** The query model, the grid, the stock auto shelves,
+   shelf creation and the selection mode picker, plus the view segmented pair
+   phase 3 deferred. Needs 3, because the picker is the library screen with its
+   rail. Planned in
+   [`2026-09-17-m5-shelves.md`](../plans/2026-09-17-m5-shelves.md).
+4b. **What device testing sent back. Shipped.** The rail per view, and a shelf
+   that opens into itself rather than dissolving into a filter. Both are
+   reversals of decisions this design made, recorded in §"The rail belongs to
+   the view" and §"A shelf opens into itself". Needs 4. Planned in
+   [`2026-09-17-m5-shelf-rooms.md`](../plans/2026-09-17-m5-shelf-rooms.md).
 5. **The recipe screen.** The third deck, the header rename sheet, the pod
    section. Independent of 3 and 4; needs only 1. Planned in
    [`2026-09-16-m5-recipe-screen.md`](../plans/2026-09-16-m5-recipe-screen.md),

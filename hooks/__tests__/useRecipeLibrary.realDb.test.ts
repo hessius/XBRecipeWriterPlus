@@ -96,3 +96,169 @@ describe("useRecipeLibrary against a real database", () => {
         expect(db.retrieveAllRecipes()?.[0].favourite).toBe(true);
     });
 });
+
+describe("a tag shelf against a real database", () => {
+    function tagged(name: string, tags: string[]): Recipe {
+        const recipe = named(name);
+        recipe.tags = tags;
+        return recipe;
+    }
+
+    // The EXISTS fragment is SQL text that no stub can check. Every other test
+    // of a tag shelf runs against a JavaScript stand-in, which would keep
+    // passing if the subquery named a column SQLite does not have.
+    it("narrows the library to the tagged recipes", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+        db.insertRecipe(tagged("Colombia", ["evening"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db, {
+            search: "", filters: ["tag:morning"], sort: "name",
+            direction: "asc", favouritesFirst: false
+        }));
+
+        expect(result.current.recipes.map((r) => r.displayName()))
+            .toEqual(["Ethiopia", "Kenya"]);
+    });
+
+    // The shelf is grouped by the folded key, so it must open on the folded key
+    // too. Matching the display text would open a shelf holding half of what
+    // its own count promised.
+    it("holds every spelling the shelf was counted from", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db, {
+            search: "", filters: ["tag:Morning"], sort: "name",
+            direction: "asc", favouritesFirst: false
+        }));
+
+        expect(result.current.recipes).toHaveLength(2);
+    });
+
+    it("counts the shelf at the size the list turns out to be", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        expect(result.current.tagCounts[0].count).toBe(2);
+    });
+});
+
+describe("setShelfMembers against a real database", () => {
+    it("writes a shelf's whole membership in one pass", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        db.insertRecipe(named("Evening"));
+        const all = db.retrieveAllRecipes() ?? [];
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.setShelfMembers("Mornings", [all[0].uuid]);
+        });
+
+        // The count is the shelf query's own answer, not the hook's state, so
+        // this fails if the tag reached the object but never the tag table.
+        expect(result.current.tagCounts).toEqual([
+            {tag: "Mornings", count: 1}
+        ]);
+    });
+
+    it("takes a member off a shelf without touching its other tags", async () => {
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(["Mornings", "Kenya"]);
+        db.insertRecipe(recipe);
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        // Emptied by the folded key rather than the spelling: the tile the user
+        // pressed carries MIN(tag), which need not be the spelling this recipe
+        // happens to hold, and a removal that missed would leave a member on a
+        // shelf the user had just emptied.
+        await act(async () => {
+            result.current.setShelfMembers("mornings", []);
+        });
+
+        expect(result.current.tagCounts).toEqual([
+            {tag: "Kenya", count: 1}
+        ]);
+    });
+
+    it("does not give a recipe two spellings of one shelf", async () => {
+        // The folded key is what matching is on, so adding "Morning" to a
+        // recipe that already carries "morning" leaves the one tag it had.
+        // Recipe.normaliseTags folds the duplicate out on the way back through
+        // SQLite as well, so this is defended twice on purpose: the spelling a
+        // shelf is counted under decides which tile is drawn.
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(["morning"]);
+        db.insertRecipe(recipe);
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.setShelfMembers("Morning", [uuid]);
+        });
+
+        expect(result.current.tagCounts).toEqual([
+            {tag: "morning", count: 1}
+        ]);
+    });
+
+    it("refuses a recipe that is already on as many shelves as it can hold", async () => {
+        // The cap lives in setTags. Assigning `tags` directly would save the
+        // twenty-first shelf and then lose it on the next hydration, so the
+        // membership would exist until the app was restarted and then not.
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        db.insertRecipe(recipe);
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 1, failed: 0});
+        expect(result.current.tagCounts.map((entry) => entry.tag))
+            .not.toContain("Mornings");
+    });
+
+    it("counts a recipe the database refused", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+        db.updateRecipe = () => {
+            throw new Error("disk full");
+        };
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 0, failed: 1});
+    });
+
+    it("reports nothing when it wrote everything it was asked to", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 0, failed: 0});
+    });
+});

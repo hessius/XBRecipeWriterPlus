@@ -1,6 +1,7 @@
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 import {
     availableFilters,
+    asLibraryFilters,
     asStockFilters,
     isStockFilter,
     resolveStockFilter,
@@ -244,5 +245,13 @@ describe("each stock fragment against a real database", () => {
             stale: {createdAt: now - 60 * 24 * 60 * 60 * 1000}
         });
         expect(labelsMatching(db, "recentlyAdded", uuids)).toEqual(["fresh"]);
+    });
+});
+
+describe("asLibraryFilters against untrusted input", () => {
+    it("drops a non-string rather than throwing on it", () => {
+        // A restored setting is whatever was in the file. A number reaching
+        // `startsWith` is a crash on launch, not a dropped filter.
+        expect(asLibraryFilters([1, null, {}, "tea"])).toEqual(["tea"]);
     });
 });

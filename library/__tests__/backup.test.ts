@@ -655,4 +655,19 @@ describe("every setting is carried or deliberately excluded", () => {
         expect(parsed.settings.librarySortDirection).toBe("desc");
         expect(parsed.settings.libraryFavouritesFirst).toBe(true);
     });
+
+    // Which front door the library opens on is a preference like any other, and
+    // a restore onto a fresh phone that put a shelf user back in the list would
+    // be the `showHints` failure repeated: a key in DEFAULTS is not a key in a
+    // backup until the snapshot names it.
+    it("carries the remembered view", () => {
+        expect(settingKeys).toContain("libraryView");
+        expect(NOT_IN_BACKUP).not.toContain("libraryView");
+
+        const parsed = JSON.parse(buildBackup([recipeNamed("A", "u1")], {
+            libraryView: "shelves"
+        }));
+
+        expect(parsed.settings.libraryView).toBe("shelves");
+    });
 });

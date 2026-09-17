@@ -21,6 +21,7 @@ import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
 import {isSortAxis, isSortDirection} from "@/library/librarySort";
+import {isLibraryView} from "@/library/libraryView";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -103,6 +104,7 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("librarySortDirection", settings);
     const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
+    const [libraryView, setLibraryView] = useSetting("libraryView", settings);
 
     // Deliberately given no query: this screen's questions are all about the
     // whole library, never about a view of it. That is what lets the restore
@@ -133,7 +135,8 @@ export default function SettingsScreen({settings}: Props) {
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
-            librarySort, librarySortDirection, libraryFavouritesFirst
+            librarySort, librarySortDirection, libraryFavouritesFirst,
+            libraryView
         };
     }
 
@@ -209,6 +212,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.libraryFavouritesFirst === "boolean") {
             setLibraryFavouritesFirst(incoming.libraryFavouritesFirst);
+        }
+        if (isLibraryView(incoming.libraryView)) {
+            setLibraryView(incoming.libraryView);
         }
     }
 

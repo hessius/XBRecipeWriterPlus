@@ -1,5 +1,5 @@
 import React from "react";
-import {AccessibilityInfo} from "react-native";
+import {AccessibilityInfo, BackHandler} from "react-native";
 import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
@@ -8,7 +8,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
-import {resolveStockFilter} from "@/library/libraryFilters";
+import {resolveLibraryFilter, tagFromFilterId} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
@@ -236,6 +236,12 @@ function store(recipes: Recipe[]) {
         if (query.filters.includes("tea")) {
             result = result.filter((recipe) => recipe.isTea());
         }
+        // The tag shelves, standing in for the EXISTS over recipe_tags.
+        for (const id of query.filters) {
+            const tag = tagFromFilterId(id);
+            if (tag === null) continue;
+            result = result.filter((recipe) => (recipe.tags ?? []).includes(tag));
+        }
         result = [...result].sort((a, b) =>
             a.displayName().localeCompare(b.displayName())
         );
@@ -262,6 +268,15 @@ function store(recipes: Recipe[]) {
                 id === "tea" ? recipes.filter((recipe) => recipe.isTea()).length : 0
             ]))
         ),
+        countRecipesByTag: jest.fn(() => {
+            const counts = new Map<string, number>();
+            for (const recipe of recipes) {
+                for (const tag of recipe.tags ?? []) {
+                    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+                }
+            }
+            return [...counts].map(([tag, count]) => ({tag, count}));
+        }),
         deleteRecipe: jest.fn(),
         cloneRecipe:  jest.fn(),
         updateRecipe: jest.fn()
@@ -348,7 +363,7 @@ describe("HomeScreen", () => {
         await renderWithProviders(<HomeScreen db={db} settings={new Settings(memoryStorage())}/>);
         expect(db.queryRecipes).toHaveBeenCalledWith(
             {search: "", filters: [], sort: "name", direction: "asc", favouritesFirst: false},
-            resolveStockFilter
+            resolveLibraryFilter
         );
     });
 
@@ -1693,5 +1708,475 @@ describe("writing a recipe from scratch", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         expect(screen.queryByLabelText("New coffee recipe")).toBeNull();
         jest.useRealTimers();
+    });
+});
+
+describe("the shelf grid", () => {
+    function shelfLibrary(): Recipe[] {
+        // Four teas, so the TEA auto shelf clears the floor of three, and a
+        // tagged recipe so the manual half has something in it.
+        const teas = ["Sencha", "Hojicha", "Genmaicha", "Matcha"].map((name) => {
+            const recipe = named(name);
+            recipe.cupType = CUP_TYPE.TEA;
+            return recipe;
+        });
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        return [...teas, tagged, named("Kenya"), named("Colombia")];
+    }
+
+    async function openGrid(recipes: Recipe[] = shelfLibrary()) {
+        await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+    }
+
+    it("replaces the list with the grid", async () => {
+        await openGrid();
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+    });
+
+    it("offers a shelf for a tag the user made", async () => {
+        await openGrid();
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+    });
+
+    // Reversed in phase 4b. These two tests encoded the old behaviour, where a
+    // tap on a shelf switched back to the list and applied a filter chip: on a
+    // device that read as the app undoing the tap -- the squares vanished, the
+    // list returned, and a chip was the only sign anything had happened, so the
+    // tester rejected it. A shelf now opens into a room: the same shelf view,
+    // the same rail, but the squares carry this shelf's recipes as tiles under
+    // its name. The list does not return, and no recipe card is drawn.
+    it("opens the tapped shelf into a room, staying in the shelf view", async () => {
+        await openGrid();
+
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+
+        // The grid is gone, but the room is not the list: it draws tiles, not
+        // cards, and it names the shelf it opened.
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        expect(screen.getByTestId("shelf-room")).toBeTruthy();
+        expect(screen.getByTestId("shelf-room-title").props.children).toBe("morning");
+        expect(screen.getAllByTestId("recipe-tile")).toHaveLength(1);
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("opens an auto shelf into a room the same way", async () => {
+        await openGrid();
+
+        await fireEvent.press(screen.getByTestId("shelf-tea"));
+
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        expect(screen.getByTestId("shelf-room")).toBeTruthy();
+        expect(screen.getAllByTestId("recipe-tile")).toHaveLength(4);
+    });
+
+    // A library with nothing to shelve gets the explanation, not an empty grid.
+    it("explains itself rather than drawing nothing", async () => {
+        await openGrid([named("Ethiopia"), named("Kenya")]);
+
+        expect(screen.getByTestId("shelves-empty")).toBeTruthy();
+    });
+});
+
+// The shelf room, added in phase 4b: a tap on a shelf opens it into itself
+// rather than throwing the user back to the list. These pin the ways in and the
+// ways out -- the back key, the view toggle, Android's hardware back -- and that
+// the long press on a tile reaches the same actions a row reaches.
+describe("the shelf room", () => {
+    function morningLibrary(): Recipe[] {
+        // One tagged recipe is enough to raise a manual shelf, and a manual
+        // shelf is always drawn whatever its count, so the auto shelves being
+        // suppressed here does not matter.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        return [tagged, named("Kenya"), named("Colombia")];
+    }
+
+    async function openRoom(recipes: Recipe[] = morningLibrary()) {
+        await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+    }
+
+    it("returns to the grid when back is pressed, without leaving the shelf view",
+        async () => {
+            await openRoom();
+
+            await fireEvent.press(screen.getByTestId("shelf-room-back"));
+
+            // Back to the grid of shelves, not out to the list: the tag tile is
+            // there again and no recipe card has appeared.
+            expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-room")).toBeNull();
+            expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        });
+
+    it("leaves the room when the view is switched to the list", async () => {
+        await openRoom();
+
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
+
+        // The list is showing, and the room did not survive as a filter behind
+        // it: every recipe in the library is listed, not just the shelf's one.
+        expect(screen.queryByTestId("shelf-room")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
+    });
+
+    it("closes the room on Android hardware back before the screen", async () => {
+        // The room registers a hardware-back handler while it is open; capture
+        // it, then fire it by hand the way the OS would.
+        const addSpy = jest.spyOn(BackHandler, "addEventListener");
+        await openRoom();
+
+        const registered = addSpy.mock.calls
+            .filter(([event]) => event === "hardwareBackPress")
+            .at(-1);
+        expect(registered).toBeDefined();
+        const handler = registered![1] as () => boolean;
+
+        let consumed = false;
+        await act(async () => {
+            consumed = handler();
+        });
+
+        // The press was consumed -- the app handled it -- and it closed the
+        // room rather than the screen.
+        expect(consumed).toBe(true);
+        expect(screen.queryByTestId("shelf-room")).toBeNull();
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+    });
+
+    it("opens a recipe's actions from a long press on its tile", async () => {
+        const [tagged] = morningLibrary();
+        await openRoom([tagged, named("Kenya"), named("Colombia")]);
+
+        await fireEvent(screen.getByTestId(`recipe-tile-${tagged.uuid}`), "longPress");
+
+        // The shared sheet, with the library's own verbs on it.
+        expect(await screen.findByLabelText("Delete")).toBeTruthy();
+        expect(screen.getByLabelText("Share")).toBeTruthy();
+        expect(screen.getByLabelText("Duplicate")).toBeTruthy();
+    });
+
+    // Two doors to one sheet is the design; two sheets that drift is the failure
+    // this guards against. The set a tile's long press reaches must be the set a
+    // row's long press reaches, for the same recipe.
+    it("offers the same actions from a tile as from a row", async () => {
+        // Fake timers so the sheet's open and its exit-grace close both land on
+        // a tick we advance by hand, rather than racing a real animation timer:
+        // reaching the rail for the second door depends on the first sheet
+        // having actually gone, and that made a real-timer version of this
+        // flake. The chooser tests drive XbrwSheet the same way.
+        jest.useFakeTimers();
+
+        // The candidates the library door can draw, plus the editor-only rows
+        // that must never appear on it. Filtering the whole list to what is
+        // actually present turns "same actions" into a comparison of two arrays.
+        const candidates = [
+            "Brew recipe", "Write recipe to card", "Share", "Duplicate",
+            "Star recipe", "Remove star from recipe", "Brew history", "Delete",
+            "Revert", "Refresh name from xBloom", "Show hints"
+        ];
+        function present(): string[] {
+            return candidates.filter((label) => screen.queryByLabelText(label) !== null);
+        }
+
+        // A machine is remembered, so BREW is offered: the door has to carry it
+        // on both sides or neither, and withholding it would make the comparison
+        // trivially pass on a shorter list.
+        mockRemembered = "AA:BB:CC:DD:EE:FF";
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+
+        await renderHome({recipes: [tagged]});
+
+        // Door one: the list row.
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+        const fromRow = present();
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // Door two: the shelf-room tile, for the same recipe.
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+        await fireEvent(screen.getByTestId(`recipe-tile-${tagged.uuid}`), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+        const fromTile = present();
+
+        expect(fromTile).toEqual(fromRow);
+        // And it is a real set, not an empty one that would make equality
+        // meaningless. Brew is on it because a machine is remembered.
+        expect(fromTile).toContain("Brew recipe");
+        expect(fromTile).toContain("Delete");
+        // None of the editor's own rows leaked onto the library door.
+        expect(fromTile).not.toContain("Revert");
+        expect(fromTile).not.toContain("Show hints");
+
+        jest.useRealTimers();
+    });
+
+    // The long press was the one door that offered a write on a recipe no card
+    // can hold. The swipe tray and both sets of accessibility actions have
+    // always gated it; an offer you can only discover is empty by taking it is
+    // worse than no offer.
+    it("withholds the write row on a recipe no card can hold", async () => {
+        jest.useFakeTimers();
+        await renderHome({recipes: [named("Ethiopia")]});
+
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // The sheet is open, so this is not passing on an empty screen.
+        expect(screen.queryByLabelText("Delete")).not.toBeNull();
+        expect(screen.queryByLabelText("Write recipe to card")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("offers the write row on a recipe a card can hold", async () => {
+        jest.useFakeTimers();
+        await renderHome({recipes: [writable("Ethiopia")]});
+
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.queryByLabelText("Write recipe to card")).not.toBeNull();
+        jest.useRealTimers();
+    });
+});
+
+/**
+ * Let a just-opened sheet finish arriving before it is touched.
+ *
+ * `XbrwSheet` slides in on the frame after it mounts, and a press dispatched
+ * into that gap is dropped silently: the element is in the tree and findable,
+ * so the test reads as if the button did nothing. The same helper is in
+ * `app/__tests__/settings.test.tsx` for the same reason.
+ */
+async function settleSheet(): Promise<void> {
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+}
+
+describe("picking a shelf's members", () => {
+    function pickerLibrary(): Recipe[] {
+        const teas = ["Sencha", "Hojicha", "Genmaicha", "Matcha"].map((name) => {
+            const recipe = named(name);
+            recipe.cupType = CUP_TYPE.TEA;
+            return recipe;
+        });
+        return [...teas, named("Kenya"), named("Colombia")];
+    }
+
+    async function startPicking(recipes: Recipe[] = pickerLibrary()) {
+        const rendered = await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("new-shelf"));
+        return rendered;
+    }
+
+    // A tick that does not stick is the one failure the user cannot see: the
+    // row ticks, the sheet closes, and the recipe simply is not on the shelf.
+    it("says so when a recipe is already on as many shelves as it can hold", async () => {
+        const crowded = named("Kenya");
+        crowded.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        await startPicking([crowded]);
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone:    "error",
+            message: "One recipe is already on as many shelves as it can hold."
+        }));
+    });
+
+    // A name that folds to a shelf that already exists cannot be allowed
+    // through: `setShelfMembers` writes an exact membership, so naming a new
+    // shelf "mornings" beside an existing "Mornings" would not raise a second
+    // shelf, it would rewrite the first one to whatever happened to be ticked.
+    it("refuses a name that folds to a shelf already there", async () => {
+        const existing = named("Kenya");
+        existing.setTags(["Mornings"]);
+        await startPicking([existing, named("Colombia")]);
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone:    "error",
+            message: "There is already a shelf called mornings."
+        }));
+        // Refused outright: the existing shelf keeps the members it had.
+        expect(existing.tags).toEqual(["Mornings"]);
+    });
+
+    // Reporting the cap and returning left a user whose save had also been
+    // refused by the database believing everything under the cap had landed.
+    it("reports a refused save as well as the cap when both happened", async () => {
+        const crowded = named("Kenya");
+        crowded.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        const refused = named("Colombia");
+        const db = store([crowded, refused]);
+        db.updateRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+        await renderWithProviders(
+            <HomeScreen db={db} settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("new-shelf"));
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            message: "One recipe is already on as many shelves as it can hold."
+        }));
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            message: "Some recipes could not be saved."
+        }));
+    });
+
+    // `screenCovered` guards the main stack, which ends above the bar, so the
+    // bar stayed in the accessibility tree underneath the naming sheet. On
+    // Android a sheet does not hide its siblings, so TalkBack could focus and
+    // press DONE on a screen the user was not looking at.
+    it("takes the picker bar away while a sheet covers the screen", async () => {
+        await startPicking();
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeNull();
+    });
+
+    it("swaps the grid for tickable rows", async () => {
+        await startPicking();
+
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.getByTestId("shelf-picker-bar")).toBeTruthy();
+        expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    });
+
+    it("counts what has been ticked", async () => {
+        await startPicking();
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("2 ON THIS SHELF");
+    });
+
+    // The test that matters most on this screen. The selection lives apart from
+    // the query precisely so a change of lens cannot quietly drop a member.
+    it("keeps a tick through a change of lens", async () => {
+        await startPicking();
+
+        // The filter rail is already open: picking forces it, because SELECTED
+        // lives in it and a count the user cannot reach is no count at all.
+        await fireEvent.press(screen.getByTestId("rail-filter-tea"));
+        const teas = screen.getAllByRole("checkbox");
+        expect(teas).toHaveLength(4);
+
+        await fireEvent.press(teas[0]);
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+
+        await fireEvent.press(screen.getByTestId("rail-filter-tea"));
+
+        expect(screen.getAllByRole("checkbox")).toHaveLength(6);
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+    });
+
+    it("narrows to what has been chosen, from inside a filter", async () => {
+        await startPicking();
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    });
+
+    it("cancels back to the grid without writing anything", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-cancel"));
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+    });
+
+    it("names the shelf after the members are chosen, and builds it", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        // The id carries the tag as it was typed. Folding happens where the
+        // query is built, so the tile can still show the user their own word.
+        expect(screen.getByTestId("shelf-tag:Mornings")).toBeTruthy();
+    });
+
+    it("empties a shelf by unticking everyone on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+
+        await fireEvent.press(screen.getByLabelText("Ethiopia"));
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+
+        // Asked before it happens, not reported after: a shelf is a query, so
+        // there is nothing to undo once its last tag is gone.
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("remove-shelf-confirm"));
+
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+
+        // The recipes are not a casualty of the shelf going away. Asked of the
+        // list rather than the grid, which draws tiles and no recipes at all.
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeNull();
+        // The library has no shelves left at all, so the grid draws its
+        // explanation rather than an empty frame.
+        expect(screen.getByTestId("shelves-empty")).toBeTruthy();
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
     });
 });
