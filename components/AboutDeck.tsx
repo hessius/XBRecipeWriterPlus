@@ -2,9 +2,11 @@ import React from "react";
 import {YStack} from "tamagui";
 
 import FromSection from "@/components/FromSection";
+import HistorySection from "@/components/HistorySection";
 import NoteSection from "@/components/NoteSection";
 import PodSection from "@/components/PodSection";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
+import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 
 /** What a field's edit callback commits, given a label and the new value. */
@@ -16,6 +18,8 @@ type Props = {
     accent: string;
     /** `showRecipeAvatars`, off by default. */
     showAvatar: boolean;
+    /** How many times this recipe has been brewed, and when last. */
+    brews: BrewSummary;
     showHint: boolean;
     dispatch: Dispatch;
     /** Records an unblurred field's current text, for the screen to flush. */
@@ -58,7 +62,7 @@ type Props = {
  * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
-    recipe, accent, showAvatar, showHint, dispatch, onDraft, onInputErrorChange,
+    recipe, accent, showAvatar, brews, showHint, dispatch, onDraft, onInputErrorChange,
     xidLookupFailed, externalEpoch, onXidFocusChange
 }: Props) {
     return (
@@ -81,6 +85,8 @@ export default function AboutDeck({
                         onFollowPod={() => dispatch(RECIPE_LABELS.TITLE, "")}/>
 
             <FromSection recipe={recipe} accent={accent} showAvatar={showAvatar}/>
+
+            <HistorySection summary={brews}/>
         </YStack>
     );
 }

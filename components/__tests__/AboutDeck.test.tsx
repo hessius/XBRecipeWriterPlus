@@ -15,6 +15,7 @@ function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
         recipe:             recipeWith(),
         accent:             palette.info,
         showAvatar:         false,
+        brews:              {times: 0, lastAt: 0},
         showHint:           false,
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),
@@ -58,6 +59,24 @@ describe("AboutDeck", () => {
                         {nativeEvent: {text: "Mornings"}});
 
         expect(dispatch).toHaveBeenCalledWith("Note", "Mornings");
+    });
+
+    it("carries all four sections, in the order the deck reads in", async () => {
+        await renderWithProviders(<AboutDeck {...props()}/>);
+
+        expect(screen.getByTestId("about-note")).toBeTruthy();
+        expect(screen.getByTestId("about-pod")).toBeTruthy();
+        expect(screen.getByTestId("about-from")).toBeTruthy();
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("passes the brew count through to the history line", async () => {
+        await renderWithProviders(
+            <AboutDeck {...props({brews: {times: 2, lastAt: 0}})}/>
+        );
+
+        expect(screen.getByTestId("history-summary"))
+            .toHaveTextContent("Brewed 2 times.");
     });
 
     it("reports the ID field's focus, so the lookup can be deferred", async () => {

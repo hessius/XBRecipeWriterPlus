@@ -7,6 +7,9 @@ import type {Stall} from "./brew/stalls";
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
+/** How a recipe has gone: how many brews, and when the last of them was. */
+export type BrewSummary = {times: number; lastAt: number};
+
 type BrewRow = {
     id: string;
     recipeUuid: string;
@@ -178,6 +181,26 @@ class BrewDatabase {
         return this.db
             .getAllSync<BrewRow>("SELECT * FROM brews ORDER BY startedAt DESC;")
             .map(hydrate);
+    }
+
+    /**
+     * How a recipe has gone, in the two figures the ABOUT deck asks for.
+     *
+     * Counted in SQL rather than by reading the rows, because the editor asks
+     * this on open and the answer is two numbers: pulling every brew of a
+     * much-used recipe across to count them would be work done to throw away.
+     *
+     * `lastAt` is 0 for a recipe never brewed, matching the sentinel the rest
+     * of the app uses for a timestamp that does not exist.
+     */
+    public summaryFor(recipeUuid: string): BrewSummary {
+        const rows = this.db.getAllSync<{times: number; lastAt: number | null}>(
+            "SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt FROM brews WHERE recipeUuid = ?;",
+            [recipeUuid]
+        );
+        const row = rows[0];
+        if (row === undefined) return {times: 0, lastAt: 0};
+        return {times: row.times, lastAt: row.lastAt ?? 0};
     }
 
     public get(id: string): StoredBrew | null {

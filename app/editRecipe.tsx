@@ -29,6 +29,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
+import {useRecipeBrewSummary, type BrewSummaryStore} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
@@ -675,7 +676,14 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
  * is derived at render by the hook, not repainted by hand, which is what fixed
  * the stale total (#40).
  */
-export default function EditRecipe() {
+export default function EditRecipe(
+    /**
+     * The brew count store, injected by tests the way `brew.tsx` takes its
+     * export store. The router passes nothing, so the default is the shared
+     * database.
+     */
+    {historyStore}: {historyStore?: BrewSummaryStore} = {}
+) {
     "use no memo";
 
     // The screen owns a `Recipe` that every edit mutates in place, and it
@@ -773,6 +781,12 @@ export default function EditRecipe() {
     // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
     // neutral tint on the render where the recipe has not resolved yet.
     const accent = recipe ? resolveAccent(recipe) : palette.dim;
+
+    // Read once, when the screen opens: a brew cannot be recorded from inside
+    // the editor, so there is nothing for a subscription here to hear. The
+    // empty uuid on the render before the recipe resolves counts nothing,
+    // which is the right answer for a recipe that is not there yet.
+    const brewSummary = useRecipeBrewSummary(recipe?.uuid ?? "", historyStore);
 
     if (!recipe) return null;
 
@@ -1016,7 +1030,7 @@ export default function EditRecipe() {
                               coarsenGrindToMinimum={coarsenGrindToMinimum}/>
                 ) : deck === "about" ? (
                     <AboutDeck recipe={recipe} accent={accent}
-                               showAvatar={showRecipeAvatars}
+                               showAvatar={showRecipeAvatars} brews={brewSummary}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}

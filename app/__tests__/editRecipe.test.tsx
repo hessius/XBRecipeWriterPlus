@@ -21,6 +21,18 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@/library/RecipeDatabase");
 
+// How a recipe has gone comes from the brew database, which is SQLite and has
+// no business being opened by a test of the editor. The hook is stubbed rather
+// than the store behind it, because the store is reached through the module's
+// own binding and a mocked export would not be seen from inside it. What the
+// hook reads is covered by its own test.
+let mockBrewSummary = {times: 0, lastAt: 0};
+jest.mock("@/hooks/useBrewHistory", () => ({
+    ...jest.requireActual("@/hooks/useBrewHistory"),
+    useRecipeBrewSummary: () => mockBrewSummary
+}));
+
+
 const mockNotify = jest.fn();
 jest.mock("@/components/XbrwToast", () => ({
     ...jest.requireActual("@/components/XbrwToast"),
