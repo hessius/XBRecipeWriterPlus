@@ -1,7 +1,9 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
-import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
+import {
+    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+} from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -300,11 +302,16 @@ export function useRecipeLibrary(
 /**
  * The library list for a query.
  *
- * `resolveStockFilter` is what turns the query's filter ids into WHERE
+ * `resolveLibraryFilter` is what turns the query's filter ids into WHERE
  * fragments; the ids reaching here have already been narrowed to the ones this
- * build knows (`asStockFilters`, in `useLibraryQuery`), so the resolver's null
+ * build knows (`asLibraryFilters`, in `useLibraryQuery`), so the resolver's null
  * -- which makes `buildLibraryQuery` throw -- stays reserved for a genuine
  * in-code disagreement rather than firing on stale persisted state.
+ *
+ * It resolves tag shelves as well as stock ones, because the list must be able
+ * to answer a manual shelf. The count below stays on `resolveStockFilter`: it
+ * asks only about the stock vocabulary, and tags are counted by their own
+ * query.
  *
  * `revision` does not shape the query. It is a cache key the mutations bump so
  * a delete or a restore forces a fresh read the unchanged query object would
@@ -313,7 +320,7 @@ export function useRecipeLibrary(
  */
 function readLibrary(db: RecipeStore, query: LibraryQuery, revision: number): Recipe[] {
     void revision;
-    return db.queryRecipes(query, resolveStockFilter);
+    return db.queryRecipes(query, resolveLibraryFilter);
 }
 
 function readLibrarySize(db: RecipeStore, revision: number): number {

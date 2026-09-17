@@ -7,8 +7,9 @@ describe("DOT_ICONS", () => {
         expect(names.sort()).toEqual(
             ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
              "duplicate", "edit", "error", "favourite", "filter", "help", "import", "info",
-             "link-off", "link-on", "link-wait", "minus", "more", "overflow", "plus", "refresh",
-             "revert", "scan", "search", "settings", "share", "sort", "success", "write"]
+             "link-off", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
+             "refresh", "revert", "scan", "search", "settings", "share", "shelves", "sort",
+             "success", "write"]
         );
     });
 

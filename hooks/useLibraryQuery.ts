@@ -1,7 +1,8 @@
 import {useState} from "react";
 
 import {useSetting} from "@/hooks/useSetting";
-import {asStockFilters} from "@/library/libraryFilters";
+import {asLibraryFilters} from "@/library/libraryFilters";
+import {asLibraryView, type LibraryView} from "@/library/libraryView";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {asSortAxis, asSortDirection, type SortAxis, type SortDirection}
     from "@/library/librarySort";
@@ -44,6 +45,26 @@ export type LibraryController = {
     clear: () => void;
     /** Changes only when clear() is taken, so an uncontrolled search field can reset by key. */
     clearToken: number;
+    /**
+     * Which of the two library views is showing.
+     *
+     * A preference rather than transient state, unlike the search term and the
+     * filters beside it: a ten recipe library and a hundred and eighty recipe
+     * library want different front doors, and which one a person is should
+     * survive a relaunch rather than being asked again every launch.
+     */
+    view: LibraryView;
+    onViewChange: (view: LibraryView) => void;
+    /**
+     * Apply a shelf and return to the list.
+     *
+     * One handle rather than the screen calling `toggleFilter` and then
+     * `onViewChange` itself, because the two only mean anything together: the
+     * grid is somewhere you pass through, so a tap that narrowed the library
+     * without opening the list would leave the user looking at tiles for a
+     * narrowing they cannot see the results of.
+     */
+    openShelf: (id: string) => void;
 };
 
 /**
@@ -88,14 +109,18 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
     const [directionRaw, setDirection] = useSetting("librarySortDirection", settings);
     const [favouritesFirst, setFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
+    const [viewRaw, setView] = useSetting("libraryView", settings);
 
     const sort = asSortAxis(sortRaw);
     const direction = asSortDirection(directionRaw);
+    const view = asLibraryView(viewRaw);
 
     // Narrowed once, here, because both the query and the count must agree on
-    // what "applied" means: a stale id that `asStockFilters` drops is not an
-    // applied filter and must not swell the button's number.
-    const activeFilters = asStockFilters(filters);
+    // what "applied" means: a stale id that `asLibraryFilters` drops is not an
+    // applied filter and must not swell the button's number. It is
+    // `asLibraryFilters` and not `asStockFilters` because a tag shelf is an
+    // applied filter too, and the stock narrowing would drop every one of them.
+    const activeFilters = asLibraryFilters(filters);
     const activeFilterCount = activeFilters.length;
 
     // Derived, not synced. "Applied means open" is a reading of the current
@@ -145,6 +170,23 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         setFilterRailIntent(!filterRailOpen);
     }
 
+    /**
+     * Apply a shelf and go back to the list.
+     *
+     * Replaces the applied filters rather than adding to them. A shelf is a
+     * whole lens, not a chip: tapping one in the grid while another was applied
+     * would otherwise intersect the two and open a list holding neither shelf's
+     * contents, which is the one result the user did not ask for.
+     */
+    function openShelf(id: string) {
+        setFilters([id]);
+        // Deliberately not the user's stored intent for the filter rail. The
+        // rail derives itself open from there being an applied filter, so the
+        // narrowing is on screen without this having to say so, and a shelf tap
+        // must not overwrite a decision the user made about the rail.
+        setView("list");
+    }
+
     function onSortChange(axis: SortAxis, nextDirection: SortDirection) {
         // Both in one gesture: an axis and a direction that belonged to the
         // previous axis are never a valid pair to persist, so writing them apart
@@ -178,7 +220,10 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         onSortChange,
         onFavouritesFirstChange,
         clear,
-        clearToken
+        clearToken,
+        view,
+        onViewChange: setView,
+        openShelf
     };
 }
 

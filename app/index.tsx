@@ -41,13 +41,16 @@ import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {blankRecipe} from "@/library/newRecipe";
 import {assignAccent} from "@/library/accent";
+import ShelfGrid from "@/components/ShelfGrid";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
     availableFilters,
+    filterLabel,
     STOCK_FILTERS
 } from "@/library/libraryFilters";
+import {buildShelves} from "@/library/shelves";
 import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
 
@@ -272,8 +275,16 @@ export default function HomeScreen({db, settings}: Props) {
         label:  STOCK_FILTERS[id].label,
         active: libraryQuery.isFilterActive(id)
     }));
-    const activeFilterLabels =
-        asStockFilters(libraryQuery.query.filters).map((id) => STOCK_FILTERS[id].label);
+    const activeFilterLabels = libraryQuery.query.filters.map(filterLabel);
+    // Both halves of the grid, assembled from counts the library already read.
+    // The applied filters go in so a shelf the user is standing in is drawn
+    // whatever its size, which matters most for the shelf they just opened.
+    const shelves = buildShelves({
+        filterCounts: library.filterCounts,
+        tagCounts:    library.tagCounts,
+        librarySize:  library.librarySize,
+        applied:      libraryQuery.query.filters
+    });
     const favouriteRecipes = library.recipes.filter((recipe) => recipe.favourite);
     const otherRecipes = library.recipes.filter((recipe) => !recipe.favourite);
     const drawSections =
@@ -733,11 +744,21 @@ export default function HomeScreen({db, settings}: Props) {
                         onFilterPress={libraryQuery.toggleFilter}
                         activeFilterCount={libraryQuery.activeFilterCount}
                         filtersOpen={libraryQuery.filterRailOpen}
-                        onFilterToggle={libraryQuery.toggleFilterRail}/>
+                        onFilterToggle={libraryQuery.toggleFilterRail}
+                        view={libraryQuery.view}
+                        onViewChange={libraryQuery.onViewChange}/>
                 )}
 
                 {wholeLibraryEmpty ? (
                     <EmptyLibrary/>
+                ) : libraryQuery.view === "shelves" ? (
+                    // Ahead of the empty-query branch on purpose. The grid is a
+                    // way out of a narrowing that matched nothing, so a view
+                    // that showed NO MATCHES instead of the shelves would hide
+                    // the control the user came to it for.
+                    <ShelfGrid shelves={shelves}
+                               onOpen={libraryQuery.openShelf}
+                               paddingBottom={insets.bottom + 8}/>
                 ) : visibleEmpty ? (
                     <EmptyQuery
                         search={libraryQuery.query.search}

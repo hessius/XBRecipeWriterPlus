@@ -1,5 +1,6 @@
 import type {FilterClause} from "./libraryQuery";
 import {CUP_TYPE} from "./Recipe";
+import {tagKey} from "./tagKey";
 
 /**
  * The stock filter vocabulary: the auto shelves the rail's chips are drawn
@@ -184,4 +185,81 @@ export function availableFilters(
 ): string[] {
     return Object.keys(counts)
         .filter((id) => isOffered(counts[id], librarySize) || applied.includes(id));
+}
+
+/**
+ * The namespace a manual shelf's filter id carries.
+ *
+ * A manual shelf is a tag, and a tag is whatever the user typed, so its id has
+ * to be told apart from a stock id by shape rather than by looking it up: a tag
+ * called "tea" is not the TEA shelf, and without a prefix the two would resolve
+ * to each other's query. The colon is already the app's separator for this --
+ * `sharedBy:` uses it for the per-author shelves -- so a reader meets one
+ * convention rather than two.
+ */
+export const TAG_FILTER_PREFIX = "tag:";
+
+/** The filter id for a tag shelf. */
+export function tagFilterId(tag: string): string {
+    return `${TAG_FILTER_PREFIX}${tag}`;
+}
+
+/** The tag a filter id names, or null when it does not name one. */
+export function tagFromFilterId(id: string): string | null {
+    if (!id.startsWith(TAG_FILTER_PREFIX)) return null;
+    const tag = id.slice(TAG_FILTER_PREFIX.length);
+    return tag.length > 0 ? tag : null;
+}
+
+/**
+ * The resolver for every filter the library can apply: a stock id, or a tag.
+ *
+ * A tag becomes an EXISTS over `recipe_tags` matched on `tagKey`, the folded
+ * form, so the shelf holds the same recipes the tag search finds and two
+ * spellings of one word cannot become two shelves holding different halves of
+ * the same set. The tag reaches SQLite as a bound `?` and is never spliced into
+ * the text: it is the one value here a person authored.
+ */
+export function resolveLibraryFilter(id: string): FilterClause | null {
+    const tag = tagFromFilterId(id);
+    if (tag !== null) {
+        return {
+            where: "EXISTS (SELECT 1 FROM recipe_tags t WHERE t.uuid = recipes.uuid"
+                + " AND t.tagKey = ?)",
+            params: [tagKey(tag)]
+        };
+    }
+    return resolveStockFilter(id);
+}
+
+/**
+ * Narrows a stored list of filter ids to the ones this build can still resolve.
+ *
+ * The counterpart to `asStockFilters` for a library that also applies tag
+ * shelves. `asStockFilters` drops anything it does not own, which is right for
+ * a stock-only caller and wrong here: it would silently discard every manual
+ * shelf the moment one was applied, leaving the user's own narrowing gone with
+ * no chip to say it ever happened.
+ *
+ * A tag id survives on shape alone rather than on being a tag that still exists.
+ * A tag whose last recipe was deleted resolves to a clause matching nothing,
+ * which is an empty shelf the user can see and close, not a crash.
+ */
+export function asLibraryFilters(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((id) => isStockFilter(id) || tagFromFilterId(id) !== null);
+}
+
+/**
+ * What to call a filter on screen: the stock label, or the tag as typed.
+ *
+ * One function so the chips, the empty-query line and the shelf grid cannot
+ * come to disagree about a shelf's name. A tag keeps the user's own spelling and
+ * capitals; it is not raised to Doto caps like the stock labels, because those
+ * are the app's words and this one is theirs.
+ */
+export function filterLabel(id: string): string {
+    const tag = tagFromFilterId(id);
+    if (tag !== null) return tag;
+    return isStockFilter(id) ? STOCK_FILTERS[id].label : id;
 }

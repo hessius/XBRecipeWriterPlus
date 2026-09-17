@@ -1,5 +1,5 @@
 import {
-    availableFilters, STOCK_FILTERS, STOCK_FILTER_ORDER, type FilterId
+    availableFilters, STOCK_FILTERS, STOCK_FILTER_ORDER, tagFilterId, type FilterId
 } from "./libraryFilters";
 
 /**
@@ -22,7 +22,15 @@ import {
  * counts the caller has already read.
  */
 export type Shelf = {
-    /** A `FilterId` for an auto shelf, the tag's display text for a manual one. */
+    /**
+     * The filter id that opens the shelf: a `FilterId` for an auto shelf, a
+     * `tag:`-prefixed one for a manual shelf.
+     *
+     * The id a tile carries is the id that is applied, with nothing in between
+     * to translate it. A raw tag here would be dropped by `asLibraryFilters` the
+     * moment it was applied, and the tap would open an unnarrowed library with
+     * no sign anything had happened.
+     */
     id: string;
     /** Doto caps for an auto shelf; the user's own spelling for a manual one. */
     label: string;
@@ -57,7 +65,7 @@ export function buildShelves(input: {
     const {filterCounts, tagCounts, librarySize, applied = []} = input;
 
     const manual: Shelf[] = tagCounts.map(({tag, count}) => ({
-        id: tag, label: tag, kind: "manual", count
+        id: tagFilterId(tag), label: tag, kind: "manual", count
     }));
 
     // Ordered by STOCK_FILTER_ORDER rather than by the count map's own key

@@ -5,7 +5,9 @@ import {XStack} from "tamagui";
 
 import RailChip from "@/components/RailChip";
 import RailSearch from "@/components/RailSearch";
+import SegmentedControl, {type SegmentOption} from "@/components/SegmentedControl";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {asLibraryView, type LibraryView} from "@/library/libraryView";
 import {
     chipLabel,
     isDefaultSort,
@@ -59,6 +61,9 @@ type Props = {
     onFilterPress: (id: string) => void;
     /** How many filters are applied, for the button's count and fill. */
     activeFilterCount: number;
+    /** Which of the two library views is showing. */
+    view: LibraryView;
+    onViewChange: (view: LibraryView) => void;
     /** Whether the filter rail is showing. Derived by the owner, not stored here. */
     filtersOpen: boolean;
     /** Reveal or hide the filter rail. */
@@ -74,6 +79,21 @@ function sentenceCase(label: string): string {
     const sentence = `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
     return sentence.replace(/xbloom/i, "xBloom");
 }
+
+/**
+ * The two halves of the view pair, drawn as glyphs.
+ *
+ * Both are always on screen and the active one is lit, which is the design's
+ * whole argument for a pair over a toggling icon: a single grid glyph might mean
+ * "you are in grid" or "tap for grid", and users of the same app disagree about
+ * which. Glyphs rather than words because the pair shares a row with search,
+ * sort and filter, and two words here is a third of the row; the labels are kept
+ * and are what a screen reader announces, so nothing is lost but ink.
+ */
+const VIEW_OPTIONS: readonly SegmentOption[] = [
+    {value: "list", label: "List", icon: "list"},
+    {value: "shelves", label: "Shelves", icon: "shelves"}
+];
 
 function sortAccessibilityLabel(sort: SortAxis, direction: SortDirection): string {
     const {axis, directions} = SORT_AXES[sort].spoken;
@@ -202,7 +222,9 @@ export default function LibraryRail({
     onFilterPress,
     activeFilterCount,
     filtersOpen,
-    onFilterToggle
+    onFilterToggle,
+    view,
+    onViewChange
 }: Props) {
     const reduced = useReducedMotion();
 
@@ -246,10 +268,15 @@ export default function LibraryRail({
     // than none at all.
     const hasFilters = filters.length > 0;
 
-    // The pinned cluster is a list rather than a fixed set so phase 4 can splice
-    // the view segmented pair into it without restructuring the rail. Do not add
-    // the view pair here; that is phase 4's job -- and when it comes, it belongs
-    // between search and the sort chip, at the leading edge of the button group.
+    // In the grid the shelves are the filters, so a chip would offer the same
+    // narrowing twice -- and against a list that is not on screen to show what
+    // it did. Dimmed rather than removed, so the row does not reflow under the
+    // user every time they change view.
+    const filtersDimmed = view === "shelves";
+
+    // The pinned cluster is a list rather than a fixed set, which is what let
+    // the view pair be spliced in between search and the sort chip without
+    // restructuring the rail.
     //
     // Search leads and is flexed, so it claims the row and pushes the buttons to
     // the trailing edge itself. Nothing here carries a `marginLeft="auto"`: the
@@ -258,6 +285,9 @@ export default function LibraryRail({
     const cluster = [
         <RailSearch key="search" onTermChange={onSearchChange}
                     onExpandedChange={setSearchOpen}/>,
+        <SegmentedControl key="view" value={view} options={VIEW_OPTIONS}
+                          accessibilityLabel="Library view"
+                          onChange={(next) => onViewChange(asLibraryView(next))}/>,
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortLabel}
@@ -278,6 +308,7 @@ export default function LibraryRail({
                       label={String(activeFilterCount)}
                       expanded={filtersOpen}
                       caretOpen={filtersOpen}
+                      dimmed={filtersDimmed}
                       accessibilityLabel={
                           filterToggleAccessibilityLabel(activeFilterCount, filtersOpen)
                       }
@@ -291,7 +322,7 @@ export default function LibraryRail({
                 {cluster}
             </XStack>
 
-            {hasFilters && filtersOpen && (
+            {hasFilters && filtersOpen && !filtersDimmed && (
                 <FilterRail filters={filters} onFilterPress={onFilterPress}/>
             )}
         </Animated.View>

@@ -8,7 +8,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
-import {resolveStockFilter} from "@/library/libraryFilters";
+import {resolveLibraryFilter, tagFromFilterId} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
@@ -236,6 +236,12 @@ function store(recipes: Recipe[]) {
         if (query.filters.includes("tea")) {
             result = result.filter((recipe) => recipe.isTea());
         }
+        // The tag shelves, standing in for the EXISTS over recipe_tags.
+        for (const id of query.filters) {
+            const tag = tagFromFilterId(id);
+            if (tag === null) continue;
+            result = result.filter((recipe) => (recipe.tags ?? []).includes(tag));
+        }
         result = [...result].sort((a, b) =>
             a.displayName().localeCompare(b.displayName())
         );
@@ -357,7 +363,7 @@ describe("HomeScreen", () => {
         await renderWithProviders(<HomeScreen db={db} settings={new Settings(memoryStorage())}/>);
         expect(db.queryRecipes).toHaveBeenCalledWith(
             {search: "", filters: [], sort: "name", direction: "asc", favouritesFirst: false},
-            resolveStockFilter
+            resolveLibraryFilter
         );
     });
 
@@ -1702,5 +1708,66 @@ describe("writing a recipe from scratch", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         expect(screen.queryByLabelText("New coffee recipe")).toBeNull();
         jest.useRealTimers();
+    });
+});
+
+describe("the shelf grid", () => {
+    function shelfLibrary(): Recipe[] {
+        // Four teas, so the TEA auto shelf clears the floor of three, and a
+        // tagged recipe so the manual half has something in it.
+        const teas = ["Sencha", "Hojicha", "Genmaicha", "Matcha"].map((name) => {
+            const recipe = named(name);
+            recipe.cupType = CUP_TYPE.TEA;
+            return recipe;
+        });
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        return [...teas, tagged, named("Kenya"), named("Colombia")];
+    }
+
+    async function openGrid(recipes: Recipe[] = shelfLibrary()) {
+        await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+    }
+
+    it("replaces the list with the grid", async () => {
+        await openGrid();
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+    });
+
+    it("offers a shelf for a tag the user made", async () => {
+        await openGrid();
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+    });
+
+    // The grid is somewhere you pass through. A tap that narrowed the library
+    // without opening the list would leave the user looking at tiles for a
+    // result they cannot see.
+    it("returns to the list narrowed to the shelf that was tapped", async () => {
+        await openGrid();
+
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(1);
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("opens an auto shelf the same way", async () => {
+        await openGrid();
+
+        await fireEvent.press(screen.getByTestId("shelf-tea"));
+
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(4);
+    });
+
+    // A library with nothing to shelve gets the explanation, not an empty grid.
+    it("explains itself rather than drawing nothing", async () => {
+        await openGrid([named("Ethiopia"), named("Kenya")]);
+
+        expect(screen.getByTestId("shelves-empty")).toBeTruthy();
     });
 });

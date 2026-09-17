@@ -41,6 +41,8 @@ function railProps(overrides: Partial<React.ComponentProps<typeof LibraryRail>> 
         activeFilterCount: 1,
         filtersOpen:       true,
         onFilterToggle:    jest.fn(),
+        view:              "list" as const,
+        onViewChange:      jest.fn(),
         ...overrides
     };
 }
@@ -356,5 +358,62 @@ describe("LibraryRail", () => {
             );
             expect(screen.queryByTestId("rail-filter-row")).toBeNull();
         });
+    });
+});
+
+describe("the view pair", () => {
+    // Both halves on screen with the active one lit, which is the design's whole
+    // argument against a toggling icon: a single grid glyph might mean "you are
+    // in grid" or "tap for grid", and users of the same app disagree.
+    it("draws both halves and marks the one you are in", async () => {
+        await renderWithProviders(<LibraryRail {...railProps({view: "list"})}/>);
+
+        expect(screen.getByRole("radio", {name: "List"}).props.accessibilityState)
+            .toEqual({checked: true});
+        expect(screen.getByRole("radio", {name: "Shelves"}).props.accessibilityState)
+            .toEqual({checked: false});
+    });
+
+    it("reports the half that was tapped", async () => {
+        const onViewChange = jest.fn();
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "list", onViewChange})}/>
+        );
+
+        // fireEvent.press rather than the responder pair the chips need: a
+        // segment is a plain Pressable with an onPress, not a gesture-handler
+        // surface, so the responder chain never reaches it.
+        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+
+        expect(onViewChange).toHaveBeenCalledWith("shelves");
+    });
+});
+
+describe("the filters while the grid is showing", () => {
+    it("dims the filter button and takes its tap away", async () => {
+        const onFilterToggle = jest.fn();
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "shelves", onFilterToggle})}/>
+        );
+
+        const button = screen.getByTestId("rail-filter-toggle");
+        expect(button.props.accessibilityState.disabled).toBe(true);
+
+        await press(button);
+        expect(onFilterToggle).not.toHaveBeenCalled();
+    });
+
+    it("puts the chips away rather than leaving them under a dimmed button", async () => {
+        await renderWithProviders(<LibraryRail {...railProps({view: "shelves"})}/>);
+
+        expect(screen.queryByRole("button", {name: "Tea filter"})).toBeNull();
+    });
+
+    it("offers them again back in the list", async () => {
+        await renderWithProviders(<LibraryRail {...railProps({view: "list"})}/>);
+
+        expect(screen.getByTestId("rail-filter-toggle").props.accessibilityState.disabled)
+            .toBeUndefined();
+        expect(screen.getByRole("button", {name: "Tea filter"})).toBeTruthy();
     });
 });

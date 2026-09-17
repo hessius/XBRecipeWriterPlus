@@ -2,12 +2,26 @@ import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack} from "tamagui";
 
+import DotIcon from "@/components/DotIcon";
 import {palette} from "@/constants/colors";
+import type {DotIconName} from "@/constants/dotIcons";
 
 export type SegmentOption = {
     value: string;
     label: string;
+    /**
+     * Draw this glyph instead of the label.
+     *
+     * For a pair that has to survive in a row of other controls: the library
+     * rail's view pair would spend a third of the row on two words. The label is
+     * still required and is still what a screen reader announces, so the control
+     * loses nothing but ink.
+     */
+    icon?: DotIconName;
 };
+
+/** The glyph size in an icon segment, matching a rail chip's. */
+const ICON_SIZE = 18;
 
 type Props = {
     value: string;
@@ -50,13 +64,26 @@ export default function SegmentedControl({
                                accessibilityLabel={option.label}
                                accessibilityState={{checked: selected}}
                                onPress={() => onChange(option.value)}>
-                        <Text fontSize={11} fontWeight="600"
-                              paddingHorizontal="$2.5" paddingVertical="$1.5"
-                              borderRadius="$2"
-                              backgroundColor={selected ? (accent ?? palette.text) : undefined}
-                              color={selected ? palette.base : palette.dim}>
-                            {option.label}
-                        </Text>
+                        {option.icon ? (
+                            <XStack paddingHorizontal="$2.5" paddingVertical="$2"
+                                    borderRadius="$2"
+                                    backgroundColor={
+                                        selected ? (accent ?? palette.text) : palette.none
+                                    }>
+                                <DotIcon name={option.icon} size={ICON_SIZE}
+                                         color={selected ? palette.base : palette.dim}/>
+                            </XStack>
+                        ) : (
+                            <Text fontSize={11} fontWeight="600"
+                                  paddingHorizontal="$2.5" paddingVertical="$1.5"
+                                  borderRadius="$2"
+                                  backgroundColor={
+                                      selected ? (accent ?? palette.text) : palette.none
+                                  }
+                                  color={selected ? palette.base : palette.dim}>
+                                {option.label}
+                            </Text>
+                        )}
                     </Pressable>
                 );
             })}

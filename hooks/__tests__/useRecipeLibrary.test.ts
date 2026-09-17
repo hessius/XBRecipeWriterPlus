@@ -2,7 +2,9 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
-import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
+import {
+    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
@@ -81,7 +83,7 @@ describe("useRecipeLibrary", () => {
         };
         const db = stubDb([named("Ethiopia")]);
         await renderHook(() => useRecipeLibrary(db, query));
-        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
+        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveLibraryFilter);
     });
 
     it("reads stock filter counts through the store's count method", async () => {

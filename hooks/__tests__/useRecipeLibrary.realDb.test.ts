@@ -96,3 +96,55 @@ describe("useRecipeLibrary against a real database", () => {
         expect(db.retrieveAllRecipes()?.[0].favourite).toBe(true);
     });
 });
+
+describe("a tag shelf against a real database", () => {
+    function tagged(name: string, tags: string[]): Recipe {
+        const recipe = named(name);
+        recipe.tags = tags;
+        return recipe;
+    }
+
+    // The EXISTS fragment is SQL text that no stub can check. Every other test
+    // of a tag shelf runs against a JavaScript stand-in, which would keep
+    // passing if the subquery named a column SQLite does not have.
+    it("narrows the library to the tagged recipes", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+        db.insertRecipe(tagged("Colombia", ["evening"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db, {
+            search: "", filters: ["tag:morning"], sort: "name",
+            direction: "asc", favouritesFirst: false
+        }));
+
+        expect(result.current.recipes.map((r) => r.displayName()))
+            .toEqual(["Ethiopia", "Kenya"]);
+    });
+
+    // The shelf is grouped by the folded key, so it must open on the folded key
+    // too. Matching the display text would open a shelf holding half of what
+    // its own count promised.
+    it("holds every spelling the shelf was counted from", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db, {
+            search: "", filters: ["tag:Morning"], sort: "name",
+            direction: "asc", favouritesFirst: false
+        }));
+
+        expect(result.current.recipes).toHaveLength(2);
+    });
+
+    it("counts the shelf at the size the list turns out to be", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Morning"]));
+        db.insertRecipe(tagged("Kenya", ["morning"]));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+
+        expect(result.current.tagCounts[0].count).toBe(2);
+    });
+});

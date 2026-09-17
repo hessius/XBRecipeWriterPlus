@@ -12,8 +12,11 @@ describe("building the shelves", () => {
         });
 
         expect(shelves.map((s) => s.kind)).toEqual(["manual", "auto"]);
+        // The id is the filter that opens it, prefixed; the label is the word
+        // the user typed. A raw tag as the id would be dropped by
+        // asLibraryFilters the moment the tile was tapped.
         expect(shelves[0]).toEqual({
-            id: "morning", label: "morning", kind: "manual", count: 2
+            id: "tag:morning", label: "morning", kind: "manual", count: 2
         });
     });
 
@@ -49,7 +52,7 @@ describe("building the shelves", () => {
             librarySize: 200
         });
 
-        expect(shelves.map((s) => s.id)).toEqual(["new"]);
+        expect(shelves.map((s) => s.id)).toEqual(["tag:new"]);
     });
 
     it("keeps a shelf the user is standing in, whatever its count", () => {

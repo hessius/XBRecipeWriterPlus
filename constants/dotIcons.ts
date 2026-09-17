@@ -501,6 +501,44 @@ export const DOT_ICONS = {
      * for its neighbour, and drawn here because the button is icon-only when no
      * filter is applied and this glyph is the whole of what it says.
      */
+    /**
+     * Three ruled lines with a marker: the library as a list of rows.
+     *
+     * Pure horizontal strokes on rows 1, 4 and 7, the one stroke class this grid
+     * renders without aliasing, and the separated leading dot is what keeps it
+     * from reading as a hamburger menu. It is half of a segmented pair, so it
+     * only has to be told apart from `shelves` beside it.
+     */
+    list: [
+        ".........",
+        "#..#####.",
+        ".........",
+        ".........",
+        "#..#####.",
+        ".........",
+        ".........",
+        "#..#####.",
+        "........."
+    ],
+    /**
+     * Four filled tiles: the library as a grid of shelves.
+     *
+     * Solid blocks rather than outlines, because at 9x9 an outlined tile is a
+     * one-dot frame around a two-dot hole and greys into a smudge at rail size.
+     * The gutter is one dot, the smallest gap that still reads as four things
+     * rather than one.
+     */
+    shelves: [
+        "####.####",
+        "####.####",
+        "####.####",
+        "####.####",
+        ".........",
+        "####.####",
+        "####.####",
+        "####.####",
+        "####.####"
+    ],
     filter: [
         "#########",
         ".#######.",

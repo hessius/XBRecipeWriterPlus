@@ -1,7 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {useLibraryQuery} from "@/hooks/useLibraryQuery";
-import {resolveStockFilter} from "@/library/libraryFilters";
+import {resolveLibraryFilter, resolveStockFilter} from "@/library/libraryFilters";
 import {buildLibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 
@@ -211,5 +211,84 @@ describe("useLibraryQuery", () => {
         expect(result.current.query.filters).toEqual([]);
         expect(result.current.activeFilterCount).toBe(0);
         expect(result.current.filterRailOpen).toBe(false);
+    });
+});
+
+describe("the view and the shelves", () => {
+    it("starts in the list", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+        expect(result.current.view).toBe("list");
+    });
+
+    it("remembers a chosen view in settings", async () => {
+        const settings = settingsWith();
+        const {result} = await renderHook(() => useLibraryQuery(settings));
+
+        await act(async () => result.current.onViewChange("shelves"));
+
+        expect(result.current.view).toBe("shelves");
+        expect(settings.get("libraryView")).toBe("shelves");
+    });
+
+    // The persistence boundary. A stale or hand-edited row must light one half
+    // of the pair rather than neither.
+    it("folds an unknown stored view back to the list", async () => {
+        const {result} = await renderHook(() =>
+            useLibraryQuery(settingsWith({libraryView: JSON.stringify("mosaic")}))
+        );
+        expect(result.current.view).toBe("list");
+    });
+
+    it("opens a shelf into the list", async () => {
+        const settings = settingsWith();
+        const {result} = await renderHook(() => useLibraryQuery(settings));
+        await act(async () => result.current.onViewChange("shelves"));
+
+        await act(async () => result.current.openShelf("tea"));
+
+        expect(result.current.view).toBe("list");
+        expect(result.current.query.filters).toEqual(["tea"]);
+    });
+
+    // A shelf is a whole lens, not another chip. Intersecting two would open a
+    // list holding neither shelf's contents, which is the one answer the user
+    // did not ask for.
+    it("replaces the applied filters rather than adding to them", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+        await act(async () => result.current.toggleFilter("hot"));
+
+        await act(async () => result.current.openShelf("tea"));
+
+        expect(result.current.query.filters).toEqual(["tea"]);
+    });
+
+    it("keeps a tag shelf in the query, where the stock narrowing would drop it", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        await act(async () => result.current.openShelf("tag:morning"));
+
+        expect(result.current.query.filters).toEqual(["tag:morning"]);
+        expect(result.current.activeFilterCount).toBe(1);
+    });
+
+    // An applied filter opens the filter rail by derivation, so a shelf tap puts
+    // its own narrowing on screen without touching the user's stored intent.
+    it("shows the narrowing a shelf applied", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        await act(async () => result.current.openShelf("tea"));
+
+        expect(result.current.filterRailOpen).toBe(true);
+    });
+
+    it("builds a real query for a tag shelf", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+        await act(async () => result.current.openShelf("tag:Morning"));
+
+        const {sql, params} = buildLibraryQuery(result.current.query, resolveLibraryFilter);
+
+        expect(sql).toContain("recipe_tags");
+        // Folded, so the shelf holds what the tag search finds.
+        expect(params).toContain("morning");
     });
 });
