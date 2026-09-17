@@ -127,9 +127,10 @@ function searchClause(
  * The brews join is always present, never conditional on the sort axis. A query
  * whose shape changes with its inputs is a query only ever exercised in one
  * shape; keeping the join constant means the brew-aggregate columns
- * (`lastBrewedAt`, `brewCount`) exist for every query and the same statement is
- * tested whichever axis is chosen. Those two names are a contract with
- * `librarySort`: its never-brewed-last guards key on exactly them.
+ * (`lastBrewedAt`, `brewCount`, `avgRating`) exist for every query and the same
+ * statement is tested whichever axis is chosen. Those three names are a
+ * contract with `librarySort`: its never-brewed-last and never-rated-last
+ * guards key on exactly them.
  *
  * No LIMIT. A library of a couple of hundred is not a paging problem, and a
  * limit would be a silent partial answer to a question the user can see all of.
@@ -188,7 +189,13 @@ export function buildLibraryQuery(
     const sql = `SELECT recipes.uuid AS uuid, recipes.recipeJSON AS recipeJSON
 FROM recipes
 LEFT JOIN (
-    SELECT recipeUuid, MAX(startedAt) AS lastBrewedAt, COUNT(*) AS brewCount
+    SELECT recipeUuid, MAX(startedAt) AS lastBrewedAt, COUNT(*) AS brewCount,
+           -- NULLIF, because 0 is the app's word for "not rated", not a
+           -- verdict of nothing. Averaged as a zero it would drag a recipe
+           -- below one the user actually disliked, so an unrated brew has to
+           -- leave the average alone entirely. A recipe with no rated brews
+           -- ends up NULL here, which is the never-rated-last guard's hook.
+           AVG(NULLIF(rating, 0)) AS avgRating
     FROM brews
     GROUP BY recipeUuid
 ) AS brewStats ON brewStats.recipeUuid = recipes.uuid${where}

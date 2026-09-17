@@ -474,6 +474,30 @@ describe("SettingsScreen", () => {
         );
     });
 
+    it("restores a library sorted by rating", async () => {
+        // The newest axis, through the read boundary that narrows an unknown
+        // one away: a backup naming it must come back sorting by rating rather
+        // than quietly falling back to name.
+        const storage = memoryStorage();
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")],
+                     {librarySort: "rating", librarySortDirection: "asc"})
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        const restored = new Settings(storage);
+        expect(restored.get("librarySort")).toBe("rating");
+        expect(restored.get("librarySortDirection")).toBe("asc");
+    });
+
     it("carries the brew history into a backup", async () => {
         const history = [{id: "b1", rating: 4}];
         mockBrewStore.all.mockReturnValue(history);
