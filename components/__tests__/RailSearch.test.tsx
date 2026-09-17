@@ -22,6 +22,12 @@ async function press(element: Parameters<typeof fireEvent>[0]) {
     await fireEvent(element, "responderRelease", TOUCH);
 }
 
+async function layout(width: number) {
+    await fireEvent(screen.getByTestId("rail-search"), "layout", {
+        nativeEvent: {layout: {width, height: 44, x: 0, y: 0}}
+    });
+}
+
 async function expand() {
     await press(screen.getByTestId("rail-search"));
 }
@@ -47,6 +53,46 @@ describe("RailSearch", () => {
         await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
         expect(screen.getByTestId("rail-search")).toBeTruthy();
         expect(screen.queryByTestId("rail-search-field")).toBeNull();
+    });
+
+    it("takes the rail's width while idle, not only once tapped", async () => {
+        // The idle control is flexed exactly as the live field is, so the two
+        // occupy the same space and a tap moves nothing across the rail. A
+        // square here would leave a dead gap beside the trailing buttons.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        const idle = screen.getByTestId("rail-search").props.style as Record<string, unknown>;
+        expect(idle.flex).toBe(1);
+
+        await expand();
+
+        const live = screen.getByTestId("rail-search-field").props.style as Record<string, unknown>;
+        expect(live.flex).toBe(1);
+    });
+
+    it("spells its name once it has been measured wide enough for the word", async () => {
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await layout(240);
+
+        expect(screen.getByText("SEARCH")).toBeTruthy();
+    });
+
+    it("keeps the word off until it knows there is room for it", async () => {
+        // Before the first measurement there is no width to judge, so the word
+        // stays off: a clipped half-word reads as a broken control, while a bare
+        // glyph reads as a search button.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        expect(screen.queryByText("SEARCH")).toBeNull();
+    });
+
+    it("drops the word when a long sort axis leaves too little room", async () => {
+        // The remainder depends on the sort chip's word, which changes as the
+        // user sorts, so no breakpoint on device width could answer this.
+        await renderWithProviders(<RailSearch onTermChange={jest.fn()}/>);
+        await layout(240);
+        expect(screen.getByText("SEARCH")).toBeTruthy();
+
+        await layout(90);
+        expect(screen.queryByText("SEARCH")).toBeNull();
     });
 
     it("expands into a field on tap", async () => {

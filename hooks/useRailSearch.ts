@@ -12,12 +12,12 @@ import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 const DEBOUNCE_MS = TYPING_DEBOUNCE_MS;
 
 export type RailSearch = {
-    /** Whether the field is drawn in place of the icon chip. */
+    /** Whether the field is live, with a cursor in it, rather than idle. */
     expanded: boolean;
     /** The raw field text, undebounced. */
     text: string;
     /**
-     * Whether a term is currently held, so the chip reads as on. Raw, not the
+     * Whether a term is currently held, so the field reads as on. Raw, not the
      * debounced copy: the library must not look unfiltered for the 600 ms
      * between a keystroke and the query catching up.
      */
@@ -28,7 +28,7 @@ export type RailSearch = {
 };
 
 /**
- * The search chip's state: whether it is a field yet, what is in it, and when
+ * The search control's state: whether it is live yet, what is in it, and when
  * that reaches the query.
  *
  * Kept beside the rail rather than in the owner so the rail is testable without
@@ -45,9 +45,9 @@ export type RailSearch = {
  * handler here at all -- the field only leaves on an explicit clear.
  *
  * A consequence worth stating: because clear is the only collapse and it also
- * drops the term, "collapsed while a term is held" is not a reachable state. The
- * chip's accent therefore lives entirely on the expanded field; a collapsed chip
- * is always the bare, unfiltered glyph.
+ * drops the term, "idle while a term is held" is not a reachable state. The
+ * accent therefore lives entirely on the live field; the idle control is always
+ * the unfiltered one.
  */
 export function useRailSearch(onTermChange: (term: string) => void): RailSearch {
     const [expanded, setExpanded] = useState(false);

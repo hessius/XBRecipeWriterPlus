@@ -239,9 +239,13 @@ export default function LibraryRail({
 
     // The pinned cluster is a list rather than a fixed set so phase 4 can splice
     // the view segmented pair into it without restructuring the rail. Do not add
-    // the view pair here; that is phase 4's job. The filter button is part of the
-    // cluster now -- search, sort, filter, left to right -- rather than pinned to
-    // the trailing edge, since nothing scrolls past it any more.
+    // the view pair here; that is phase 4's job -- and when it comes, it belongs
+    // between search and the sort chip, at the leading edge of the button group.
+    //
+    // Search leads and is flexed, so it claims the row and pushes the buttons to
+    // the trailing edge itself. Nothing here carries a `marginLeft="auto"`: the
+    // buttons are not pinned right, they are simply what is left after search
+    // has taken its width, which stays true however many of them phase 4 adds.
     const cluster = [
         <RailSearch key="search" onTermChange={onSearchChange}
                     onExpandedChange={setSearchOpen}/>,

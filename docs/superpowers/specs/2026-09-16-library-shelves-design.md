@@ -151,15 +151,16 @@ Widening the row is not available, so the filters leave it.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  ⌕   ☰ ▦   ⇅ RECENT   ⌗ 2 ⌄                             │  always
+│  ⌕ SEARCH ────────────────────────┤ ☰ ▦  ⇅ RECENT  ⌗ 2 ⌄│  always
 ├─────────────────────────────────────────────────────────┤
 │  TEA   SINGLE POUR   GRIND   FROM ANNA   xBLOOM PODS …  │  on demand
 └─────────────────────────────────────────────────────────┘
 ```
 
 The top rail keeps the controls that act on the whole library however it is
-narrowed: search, view, sort. A **filter button sits in the pinned cluster** and
-reveals a second rail beneath, which is nothing but filter chips at the full
+narrowed: search, view, sort. **Search leads and takes the width; the buttons sit
+to the trailing edge.** A **filter button joins them** and reveals a second rail
+beneath, which is nothing but filter chips at the full
 width of the screen. Twelve chips two at a time becomes twelve chips five at a
 time with a scroll that is a scroll rather than a cliff.
 
@@ -193,11 +194,23 @@ carets are for.
     open,   none    ⌗ 0 ⌃   outline
     open,   two     ⌗ 2 ⌃   filled
 
-**Search flexes rather than taking a fixed width.** A hardcoded field width
-overflows the cluster on a small phone and pushes the trailing control off an
-edge that cannot scroll, and no single number is right across every device. The
-field takes whatever the pinned controls leave, and the sort chip drops its word
-while the field is open. Search does not get a rail of its own: vertical space is
+**Search flexes rather than taking a fixed width, and it flexes whether or not
+it is in use.** A hardcoded field width overflows the cluster on a small phone
+and pushes the trailing control off an edge that cannot scroll, and no single
+number is right across every device. Search takes whatever the buttons leave.
+
+It keeps that width when idle. The earlier reading -- an icon-only square that
+pays for its space only while in use -- was right when twelve filter chips were
+competing for the same row, and stopped being right the moment they moved out.
+There is nothing left to give the width back *to*: a 44-point square beside two
+buttons leaves a long dead gap in the middle of the rail, which reads as a
+missing control rather than as restraint. So the idle state is a full-width
+field showing its own word, and the rail is always full.
+
+What changes on activation is therefore small on purpose -- the field takes the
+sort chip's word as extra room and grows into it. The control does not leap
+across the rail; it is already where it will be, and the tap only puts a cursor
+in it. Search does not get a rail of its own: vertical space is
 the scarcest thing on this screen and saving it is the entire reason the rail
 exists.
 
