@@ -149,7 +149,7 @@ export default function RailChip({
             gap="$1.5"
             borderRadius="$4"
             borderWidth={1}
-            backgroundColor={active ? accent : "transparent"}
+            backgroundColor={active ? accent : palette.none}
             borderColor={active ? accent : palette.line}
             pressStyle={{opacity: 0.7}}>
             {icon !== undefined && (

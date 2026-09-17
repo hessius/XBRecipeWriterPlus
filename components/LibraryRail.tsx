@@ -65,9 +65,13 @@ type Props = {
     onFilterToggle: () => void;
 };
 
+// Locale-independent on purpose. These labels are a fixed English vocabulary,
+// and `toLocaleLowerCase` would case them by the device's language: on a Turkish
+// locale "SINGLE POUR" comes back "sıngle pour", so the reader speaks a
+// misspelling of a word the user cannot have chosen a spelling for.
 function sentenceCase(label: string): string {
-    const lower = label.toLocaleLowerCase();
-    const sentence = `${lower.charAt(0).toLocaleUpperCase()}${lower.slice(1)}`;
+    const lower = label.toLowerCase();
+    const sentence = `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
     return sentence.replace(/xbloom/i, "xBloom");
 }
 

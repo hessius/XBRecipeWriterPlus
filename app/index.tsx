@@ -746,8 +746,19 @@ export default function HomeScreen({db, settings}: Props) {
                 ) : (
                     <FlatList
                         data={listItems}
+                        // Namespaced rather than raw, because the two kinds draw
+                        // their keys from different vocabularies that are not
+                        // guaranteed to be disjoint: a heading's id is a word
+                        // like "favourites", and a recipe's uuid is any string a
+                        // backup was willing to carry. A restored recipe whose
+                        // uuid happened to be "favourites" would collide with
+                        // the heading and have its row recycled into the wrong
+                        // place. The prefix costs nothing and removes the
+                        // question.
                         keyExtractor={(item: RecipeListItem) =>
-                            item.kind === "heading" ? item.id : item.recipe.key}
+                            item.kind === "heading"
+                                ? `heading:${item.id}`
+                                : `recipe:${item.recipe.key}`}
                         onScroll={onScroll}
                         scrollEventThrottle={16}
                         showsVerticalScrollIndicator={false}

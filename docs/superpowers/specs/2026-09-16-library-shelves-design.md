@@ -500,6 +500,15 @@ Correct, and indistinguishable from a bug.
 
 Backfilling in insertion order gives a stable and plausible ordering on day one.
 
+**In the index, not in the blob.** Nothing outside the index column reads
+`createdAt`, so the backfill happens during `migrateIndex` from `ORDER BY rowid`,
+which is the insertion order and does not change between rebuilds. Writing a
+manufactured timestamp into every legacy recipe's stored JSON would put an
+invention in the user's own file to settle a sort order, and
+`RecipeDatabase.index.test.ts` already holds a rule that a rebuild never rewrites
+a blob. The ordinals are small integers, so they sort below every genuine
+millisecond timestamp and the undated library sits before the dated one.
+
 ## Favourites
 
 A favourite is authored intent, which #95 permits on the recipe as long as it

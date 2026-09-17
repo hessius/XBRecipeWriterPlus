@@ -64,8 +64,8 @@ describe("migrating a pre-index database", () => {
         ) as {uuid: string; sortName: string; isTea: number; pourCount: number; totalVolume: number}[];
 
         expect(rows).toEqual([
-            {uuid: "uuid-a", sortName: "Legacy Coffee", isTea: 0, pourCount: 1, totalVolume: 120},
-            {uuid: "uuid-b", sortName: "Legacy Tea", isTea: 1, pourCount: 1, totalVolume: 120}
+            {uuid: "uuid-a", sortName: "legacy coffee", isTea: 0, pourCount: 1, totalVolume: 120},
+            {uuid: "uuid-b", sortName: "legacy tea", isTea: 1, pourCount: 1, totalVolume: 120}
         ]);
     });
 

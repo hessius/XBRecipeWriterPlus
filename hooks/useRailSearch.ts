@@ -113,22 +113,34 @@ export function useRailSearch(onTermChange: (term: string) => void): RailSearch 
     }
 
     function onBlur(): boolean {
-        // A term survives the keyboard leaving. Only an empty field closes, and
-        // an empty field has nothing to tell the owner, so no term is emitted
-        // either way.
+        // A term survives the keyboard leaving. Only an empty field closes.
         if (text.trim().length > 0) return false;
-        setExpanded(false);
+        // Empty may still mean "emptied a moment ago", with a debounced empty
+        // term armed and not yet fired. Closing on top of that would take the
+        // field away while the old term went on filtering the library for the
+        // rest of the debounce, leaving a narrowed list with nothing on screen
+        // to explain it and nothing left to clear it with. So this closes the
+        // same way the clear button does: cancel, and say so now.
+        close();
         return true;
     }
 
     function onClear() {
+        setText("");
+        close();
+    }
+
+    /**
+     * Collapse the field and unfilter the library as one action.
+     *
+     * The emit is immediate rather than debounced, because the collapse is
+     * already immediate and the two have to agree: a debounced one leaves the
+     * term in force for 600 ms after the field it came from is gone.
+     */
+    function close() {
         if (timer.current !== null) clearTimeout(timer.current);
         timer.current = null;
-        setText("");
         setExpanded(false);
-        // Immediate, not debounced: the collapse and the unfiltered library are
-        // one action, so waiting out the debounce would leave the term in force
-        // for 600 ms after the field is gone.
         emit.current("");
     }
 

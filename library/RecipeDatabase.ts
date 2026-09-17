@@ -248,10 +248,14 @@ class RecipeDatabase {
         if (stored && stored.value === current) return;
 
         this.atomically(() => {
+            // `ORDER BY rowid` is the backfill's whole basis: it is the order
+            // the rows were inserted in, it does not change, and it is
+            // therefore the same on every rebuild.
             const rows = this.db.getAllSync(
-                "SELECT uuid, recipeJSON FROM recipes;"
+                "SELECT uuid, recipeJSON FROM recipes ORDER BY rowid;"
             ) as {uuid: string; recipeJSON: string}[];
 
+            let legacyOrdinal = 0;
             for (const row of rows) {
                 let projected: Record<string, IndexValue>;
                 let tags: string[];
@@ -274,6 +278,19 @@ class RecipeDatabase {
                     this.clearIndex(row.uuid);
                     continue;
                 }
+                // A recipe that predates the column hydrates with createdAt 0,
+                // so left alone every legacy recipe ties and "Date added"
+                // becomes an exact copy of "Name" -- correct, and
+                // indistinguishable from a bug. A small ascending ordinal in
+                // rowid order gives the axis a stable and plausible day one:
+                // distinct, in the order the recipes were added, and below
+                // every genuine millisecond timestamp, so the undated library
+                // sits before the dated one, which is where it belongs.
+                //
+                // The index only. Nothing outside it reads createdAt, so
+                // rewriting the blobs would put a manufactured date in the
+                // user's own file to settle a sort order.
+                if (projected.createdAt === 0) projected.createdAt = ++legacyOrdinal;
                 // Outside the try, and that is the other half of the rule. A
                 // failure here is SQL failing, not a bad row, and it must stay
                 // fatal: it rolls the transaction back and leaves the hash

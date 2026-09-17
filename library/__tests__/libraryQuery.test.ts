@@ -321,6 +321,25 @@ describe("querying a real database", () => {
         }
     });
 
+    it("finds a Nordic name typed in either case", () => {
+        // The same trap the tag search fell into, one column over. `sortName`
+        // preserves the Nordic letters rather than folding them, so it holds
+        // "Öland"; the rail hands the query a lowercased term, so it asks for
+        // "öland"; and LIKE folds ASCII case and nothing else. The result was
+        // that a Swedish or Danish user could not find a recipe by typing its
+        // name, which is the one thing search exists for.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            oland: {name: "Öland", createdAt: 1, ratio: 15},
+            aland: {name: "Åland", createdAt: 2, ratio: 15},
+            miss: {name: "Oland", createdAt: 3, ratio: 15}
+        });
+        for (const search of ["öland", "Öland", "ÖLAND"]) {
+            expect(order(db, query({search}), uuids)).toEqual(["oland"]);
+        }
+        expect(order(db, query({search: "åland"}), uuids)).toEqual(["aland"]);
+    });
+
     it("treats a percent in the term as a literal, not a wildcard", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {

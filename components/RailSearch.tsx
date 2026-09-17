@@ -139,7 +139,7 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
                     // when they are off: idle search is one more control in the
                     // row, and a fill here would read as a state it is not in.
                     // The fill arrives with the cursor.
-                    backgroundColor="transparent" borderColor={palette.line}
+                    backgroundColor={palette.none} borderColor={palette.line}
                     // The word is clipped rather than allowed to push the
                     // buttons, on the frame before the measurement lands.
                     overflow="hidden"

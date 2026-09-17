@@ -55,6 +55,34 @@ describe("useRailSearch", () => {
         expect(result.current.text).toBe("ETH");
     });
 
+    it("drops a backspaced term the moment the field closes", async () => {
+        // The gap between the two: backspacing to empty arms a debounced empty
+        // term, and blurring closes the field at once. Left alone, the field is
+        // gone while the old term is still filtering the library for the rest of
+        // the debounce -- a narrowed list with nothing on screen that explains
+        // it, and nothing left to clear. Closing and unfiltering are one action,
+        // exactly as they are for the clear button.
+        const onTerm = jest.fn();
+        const {result} = await renderHook(() => useRailSearch(onTerm));
+        await act(async () => result.current.onExpand());
+        await act(async () => result.current.onChangeText("eth"));
+        await act(async () => { jest.advanceTimersByTime(600); });
+        expect(onTerm).toHaveBeenLastCalledWith("eth");
+
+        await act(async () => result.current.onChangeText(""));
+        let closed = false;
+        await act(async () => { closed = result.current.onBlur(); });
+
+        expect(closed).toBe(true);
+        // Emitted on the way out, not 600 ms later.
+        expect(onTerm).toHaveBeenLastCalledWith("");
+        const callsAtClose = onTerm.mock.calls.length;
+
+        // And the cancelled timer does not arrive afterwards to repeat itself.
+        await act(async () => { jest.advanceTimersByTime(600); });
+        expect(onTerm).toHaveBeenCalledTimes(callsAtClose);
+    });
+
     it("treats a field holding only spaces as empty", async () => {
         const {result} = await renderHook(() => useRailSearch(jest.fn()));
         await act(async () => result.current.onExpand());

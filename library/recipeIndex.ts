@@ -42,7 +42,7 @@ export type IndexColumn = {
  * `from` body leaves it identical. Changing a projection therefore fails on
  * the golden values, which is the prompt to bump this number.
  */
-export const INDEX_REVISION = 2;
+export const INDEX_REVISION = 3;
 
 /**
  * The Nordic letters that survive folding unchanged, because they are genuinely
@@ -83,9 +83,19 @@ const PRESERVED_LETTERS = new Set([
  * NFC-normalise first so a precomposed "Å" and a decomposed "A"+ring fold
  * identically; then iterate by code point so a preserved letter is matched as a
  * whole before the per-character NFD strip can reach its combining mark.
+ *
+ * Lower-cased, and that is load-bearing twice over rather than cosmetic. NOCASE
+ * folds ASCII only, so a preserved letter left in its written case both sorts
+ * and matches apart from its own other case: "Åland" and "åland" landed in two
+ * different places in the list, and a search for "öland" could not find a
+ * recipe named "Öland" -- which is to say, a Nordic user could not find a
+ * recipe by typing its name. Case-folding here in JavaScript is what NOCASE
+ * cannot do, so both halves of the problem close at the same point. It also
+ * means every caller matching against this key must fold its term through this
+ * same function rather than lower-casing by hand.
  */
 export function foldSortKey(name: string): string {
-    return Array.from(name.normalize("NFC"), (character) =>
+    return Array.from(name.normalize("NFC").toLowerCase(), (character) =>
         PRESERVED_LETTERS.has(character)
             ? character
             : character.normalize("NFD").replace(/\p{Diacritic}/gu, "")
