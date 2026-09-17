@@ -53,7 +53,10 @@ function favouriteRecipe(): Recipe {
 }
 
 function payloadOf(recipes: Recipe[]): BackupPayload {
-    return {recipes, settings: {}, skipped: 0, appVersion: "2.6.0", exportedAt: ""};
+    return {
+        recipes, brews: [], settings: {}, skipped: 0, skippedBrews: 0,
+        appVersion: "2.6.0", exportedAt: ""
+    };
 }
 
 describe("useRecipeLibrary", () => {

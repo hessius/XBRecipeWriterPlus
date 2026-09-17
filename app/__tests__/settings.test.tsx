@@ -70,6 +70,19 @@ let mockLibraryRecipes: Recipe[] = [];
 const mockRefresh = jest.fn();
 const mockDeleteAll = jest.fn();
 const mockApplyRestore = jest.fn();
+// The brew history lives in SQLite, which this environment has no native
+// module for. Mocked as a store rather than stubbed away, so the two questions
+// the screen asks it -- what to back up, and what a restore added -- can both
+// be asserted.
+const mockBrewStore = {
+    all: jest.fn(() => [] as unknown[]),
+    restore: jest.fn(() => 0)
+};
+
+jest.mock("@/hooks/useBrewHistory", () => ({
+    sharedBrewDatabase: () => mockBrewStore
+}));
+
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({
         recipes:         mockLibraryRecipes,
@@ -106,15 +119,20 @@ function recipeNamed(name: string, uuid: string): Recipe {
     return recipe;
 }
 
-function backupOf(recipes: Recipe[], settings: Record<string, unknown> = {}) {
+function backupOf(
+    recipes: Recipe[], settings: Record<string, unknown> = {}, brews: unknown[] = [],
+    skippedBrews = 0
+) {
     return {
         cancelled: false,
         result: {
             ok: true,
             payload: {
                 recipes,
+                brews,
                 settings,
                 skipped: 0,
+                skippedBrews,
                 appVersion: "2.6.0",
                 exportedAt: "2026-08-26T21:00:00.000Z"
             }
@@ -168,6 +186,8 @@ describe("SettingsScreen", () => {
         // that made one of these reject would otherwise poison its successors.
         mockLoadSession.mockResolvedValue(null);
         mockSignOut.mockResolvedValue(undefined);
+        mockBrewStore.all.mockReturnValue([]);
+        mockBrewStore.restore.mockReturnValue(0);
     });
 
     it("shows the coffee marker toggle in its stored state", async () => {
@@ -322,7 +342,7 @@ describe("SettingsScreen", () => {
             {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
 
         expect(mockExportBackup).toHaveBeenCalledWith(
-            mockLibraryRecipes, expect.any(Object), expect.any(String)
+            mockLibraryRecipes, expect.any(Object), expect.any(String), expect.any(Array)
         );
 
         // Asserted against DEFAULTS rather than a list written out here, because
@@ -453,6 +473,100 @@ describe("SettingsScreen", () => {
         expect(mockNotify).toHaveBeenCalledWith(
             expect.objectContaining({tone: "success", message: "2 recipes restored"})
         );
+    });
+
+    it("restores a library sorted by rating", async () => {
+        // The newest axis, through the read boundary that narrows an unknown
+        // one away: a backup naming it must come back sorting by rating rather
+        // than quietly falling back to name.
+        const storage = memoryStorage();
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")],
+                     {librarySort: "rating", librarySortDirection: "asc"})
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        const restored = new Settings(storage);
+        expect(restored.get("librarySort")).toBe("rating");
+        expect(restored.get("librarySortDirection")).toBe("asc");
+    });
+
+    it("carries the brew history into a backup", async () => {
+        const history = [{id: "b1", rating: 4}];
+        mockBrewStore.all.mockReturnValue(history);
+        mockExportBackup.mockResolvedValue({ok: true});
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
+
+        expect(mockExportBackup.mock.calls[0][3]).toBe(history);
+    });
+
+    it("restores the brews a backup carries, and says how many landed", async () => {
+        mockLibraryRecipes = [];
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")], {}, [{id: "b1"}, {id: "b2"}])
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        mockBrewStore.restore.mockReturnValue(2);
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(mockBrewStore.restore).toHaveBeenCalledWith([{id: "b1"}, {id: "b2"}]);
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "success", message: "1 recipe and 2 brews restored"
+        }));
+    });
+
+    it("says so when part of a history could not be read", async () => {
+        // A short history is not a failed restore, but a user told only what
+        // landed has no way to know something did not.
+        mockLibraryRecipes = [];
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")], {}, [{id: "b1"}], 2)
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        mockBrewStore.restore.mockReturnValue(1);
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "success", message: "1 recipe and 1 brew restored"
+        }));
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "error", message: "2 brews in that backup could not be read."
+        }));
+    });
+
+    it("does not restore a history over a library that would not restore", async () => {
+        mockLibraryRecipes = [];
+        mockPickBackup.mockResolvedValue(backupOf([recipeNamed("A", "u1")], {}, [{id: "b1"}]));
+        mockApplyRestore.mockReturnValue({status: "failed"});
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(mockBrewStore.restore).not.toHaveBeenCalled();
     });
 
     it("reports a replace that rolled back, and leaves the settings alone", async () => {

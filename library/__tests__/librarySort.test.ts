@@ -14,7 +14,8 @@ import {
     type SortDirection
 } from "@/library/librarySort";
 
-const AXES: SortAxis[] = ["name", "added", "lastBrewed", "timesBrewed", "ratio"];
+const AXES: SortAxis[] =
+    ["name", "added", "lastBrewed", "timesBrewed", "rating", "ratio"];
 const DIRECTIONS: SortDirection[] = ["asc", "desc"];
 
 // The shared tie break every non-name axis ends with. Kept here as its own
@@ -23,14 +24,15 @@ const DIRECTIONS: SortDirection[] = ["asc", "desc"];
 const NAME_UUID_TIE = "sortName COLLATE NOCASE ASC, uuid ASC";
 
 describe("the vocabulary", () => {
-    it("offers exactly the five axes, and no Rating yet", () => {
-        // Rating waits for #99; until then it would sort nothing. Pinned so
-        // adding it is a deliberate change to this expectation, not a surprise.
+    it("offers exactly the six axes", () => {
+        // Pinned so adding one is a deliberate change to this expectation
+        // rather than a surprise. Rating joined the list with #99; the rail
+        // and the sort sheet both read the order from here.
         expect(Object.keys(SORT_AXES).sort()).toEqual(
-            ["added", "lastBrewed", "name", "ratio", "timesBrewed"]
+            ["added", "lastBrewed", "name", "rating", "ratio", "timesBrewed"]
         );
         expect(SORT_AXIS_ORDER).toEqual(
-            ["name", "added", "lastBrewed", "timesBrewed", "ratio"]
+            ["name", "added", "lastBrewed", "timesBrewed", "rating", "ratio"]
         );
     });
 
@@ -39,6 +41,7 @@ describe("the vocabulary", () => {
         expect(chipLabel("added")).toBe("ADDED");
         expect(chipLabel("lastBrewed")).toBe("LAST BREWED");
         expect(chipLabel("timesBrewed")).toBe("TIMES BREWED");
+        expect(chipLabel("rating")).toBe("RATING");
         expect(chipLabel("ratio")).toBe("RATIO");
     });
 
@@ -137,6 +140,19 @@ describe("a sort never hides a recipe", () => {
         }
         expect(orderByFragment("timesBrewed", "desc")).toContain("brewCount DESC");
         expect(orderByFragment("timesBrewed", "asc")).toContain("brewCount ASC");
+    });
+
+    it("puts a never-rated recipe last under rating, both directions", () => {
+        // WORST is a question about coffee somebody drank and judged, so a
+        // recipe with no verdict at all trails under both words rather than
+        // leading the list of the bad ones.
+        for (const direction of DIRECTIONS) {
+            expect(orderByFragment("rating", direction)).toMatch(
+                /^CASE WHEN avgRating IS NULL THEN 1 ELSE 0 END,/
+            );
+        }
+        expect(orderByFragment("rating", "desc")).toContain("avgRating DESC");
+        expect(orderByFragment("rating", "asc")).toContain("avgRating ASC");
     });
 });
 

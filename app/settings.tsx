@@ -15,10 +15,12 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
+import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
 import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
+import type {BrewRecord} from "@/library/brew/BrewRecord";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
 import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {isLibraryView} from "@/library/libraryView";
@@ -35,6 +37,40 @@ const TEMPERATURE_OPTIONS = [
 ] as const;
 
 const VERSION = Application.nativeApplicationVersion ?? "unknown";
+
+/**
+ * The brew history, for a backup that is about to be written.
+ *
+ * Resolved here rather than during render, and never held in state: opening
+ * the brew database is a native call, and a screen that made it on every
+ * render would pay for history on a screen that is mostly toggles.
+ *
+ * A history that will not read is not worth failing the export over -- the
+ * recipes are the thing a backup exists to protect -- so the file is written
+ * without it rather than not written at all.
+ */
+function brewHistory(): BrewRecord[] {
+    try {
+        return sharedBrewDatabase().all();
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * What a restore did, in one sentence.
+ *
+ * Both halves are named when both happened, because they land in different
+ * places: a user who sees only "12 recipes restored" has no way to tell whether
+ * their history came back with them.
+ */
+function restoredMessage(recipes: number, brews: number): string {
+    const parts: string[] = [];
+    if (recipes > 0) parts.push(recipes === 1 ? "1 recipe" : `${recipes} recipes`);
+    if (brews > 0) parts.push(brews === 1 ? "1 brew" : `${brews} brews`);
+    if (parts.length === 0) return "0 recipes restored";
+    return `${parts.join(" and ")} restored`;
+}
 
 /**
  * The settings screen.
@@ -148,7 +184,9 @@ export default function SettingsScreen({settings}: Props) {
         // rail's query, and a backup must hold every recipe regardless of what
         // the user last searched or filtered by. `allRecipes()` asks a different
         // question from the list on purpose.
-        const outcome = await exportBackup(library.allRecipes(), settingsSnapshot(), VERSION);
+        const outcome = await exportBackup(
+            library.allRecipes(), settingsSnapshot(), VERSION, brewHistory()
+        );
         if (!outcome.ok) notify({tone: "error", message: outcome.reason});
     }
 
@@ -242,19 +280,37 @@ export default function SettingsScreen({settings}: Props) {
         // both outcomes.
         if (choice.includeSettings) applySettings(payload.settings);
 
+        // After the recipes, and never overwriting: a brew already here may
+        // carry a rating the user gave it since the backup was made. A history
+        // that will not restore is not worth failing a restore of recipes
+        // over, so the count is taken and the screen goes on.
+        let brews = 0;
+        try {
+            brews = sharedBrewDatabase().restore(payload.brews);
+        } catch {
+            brews = 0;
+        }
+
         // A restore that took only the settings did happen, and reporting it as
         // "0 recipes restored" reads as a failure the app is being coy about.
-        if (outcome.added === 0 && choice.includeSettings) {
+        if (outcome.added === 0 && brews === 0 && choice.includeSettings) {
             notify({tone: "success", message: "Settings restored"});
             return;
         }
 
-        notify({
-            tone: "success",
-            message: outcome.added === 1
-                ? "1 recipe restored"
-                : `${outcome.added} recipes restored`
-        });
+        notify({tone: "success", message: restoredMessage(outcome.added, brews)});
+
+        // Said out loud, and after the good news rather than instead of it. A
+        // history that came back short is not a failed restore, but a user who
+        // is told only what landed has no way to know something did not.
+        if (payload.skippedBrews > 0) {
+            notify({
+                tone: "error",
+                message: payload.skippedBrews === 1
+                    ? "One brew in that backup could not be read."
+                    : `${payload.skippedBrews} brews in that backup could not be read.`
+            });
+        }
     }
 
     async function onBackUpFirst() {

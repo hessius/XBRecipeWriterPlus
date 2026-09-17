@@ -38,7 +38,7 @@ Where the app stopped being a card writer.
 | M2 · Share your recipe | Outbound share links | `2026-08-31-share-link-design.md` | done |
 | M3 · Brew from the app | BLE connection, brewing, the machine console | `2026-08-31-ble-brew-design.md` | done |
 | M4 · Watch it brew | Live telemetry, brew history, the machine as app-wide state | `2026-09-03-machine-ux-design.md` | **done** — hardware verification outstanding; see below |
-| M5 · A library worth keeping | Shelves, the rail (search, sort, filter), the recipe screen; post-brew notes and rating | `2026-09-16-library-shelves-design.md` | **in progress** — phases 1 to 4 are done; phase 5 is next. See below |
+| M5 · A library worth keeping | Shelves, the rail (search, sort, filter), the recipe screen; post-brew notes and rating | `2026-09-16-library-shelves-design.md` | **in progress** — all five phases and the brew judgement (#99) are done; device verification outstanding. See below |
 | M6 · Your xBloom library | Cloud library import and push, authentication, a "what leaves this device" screen | `2026-09-15-xbloom-account-import-design.md` | account import done and gated; push and the disclosure screen outstanding |
 
 M4 grew during design. It was scoped as one issue about telemetry (#63) and
@@ -80,9 +80,9 @@ own "Shipping order" and not repeated here. Phase 1 (the recipe index, the new
 the favourite from phase 2 shipped together in #116 and #118, planned in
 [`2026-09-16-m5-foundation-and-favourites.md`](../plans/2026-09-16-m5-foundation-and-favourites.md).
 
-What remains of phase 2 is blocked, and deliberately so: the description has
-nowhere to be typed until the ABOUT deck (phase 5), and the evidence suffix
-reads an average rating that does not exist until #99.
+Phase 2's two blockers are both cleared now: the description is typed on the
+ABOUT deck, which shipped with phase 5 in #128, and the average rating the
+evidence suffix reads exists as of the brew judgement below.
 
 **Phase 3, the rail**, shipped in #121: search, sort with direction and
 favourites first, filter chips on a second rail, and the section headers
@@ -91,9 +91,20 @@ segmented pair went to phase 4, because the half it switches to is the shelf
 grid; and the Rating sort axis went to #99, because until a rating exists the
 axis sorts nothing.
 
-**Phase 4, shelves**, is under way, planned in
+**Phase 4, shelves**, shipped, planned in
 [`2026-09-17-m5-shelves.md`](../plans/2026-09-17-m5-shelves.md). It needs
 phase 3, because the member picker is the library screen wearing its rail.
+
+**Phase 5, the recipe screen**, shipped in #128: the three decks, the ABOUT deck
+with the note, the pod, where a recipe came from and one line of brew history,
+and the rename sheet.
+
+**The brew judgement (#99)**, planned in
+[`2026-09-18-brew-judgement.md`](../plans/2026-09-18-brew-judgement.md), closes
+the milestone's last row and two issues with it. Five whole stars and a note,
+asked for on the finished brew and on the record; judging pins the brew against
+the retention sweep (#97); brew records ride through a backup, records only
+(#96); and the Rating sort axis the rail left a hole for is open at last.
 
 **M6 arrived out of order.** The account import was built and gated behind a
 setting while M5's foundation was in flight, rather than held back for it. #59

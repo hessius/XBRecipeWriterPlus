@@ -2,6 +2,7 @@ import React from "react";
 import {Pressable, View} from "react-native";
 import {XStack, YStack} from "tamagui";
 
+import BrewStars, {spokenRating} from "@/components/BrewStars";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -44,7 +45,12 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
         formatBrewDuration(brew.startedAt, brew.endedAt),
         endedEarly ? "ended early" : undefined,
         stopped ? "stopped" : undefined,
-        brew.hasStream ? undefined : "no trace kept"
+        brew.hasStream ? undefined : "no trace kept",
+        // Only when there is one. "Not rated" on every unjudged row would be
+        // the loudest thing in a history nobody has rated yet, and it is the
+        // one part of the row that carries no information.
+        (brew.rating ?? 0) > 0 ? spokenRating(brew.rating ?? 0) : undefined,
+        brew.pinned ? "kept through the sweep" : undefined
     ].filter((part) => part !== undefined).join(", ");
 
     return (
@@ -63,10 +69,22 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
                             backgroundColor: brew.accent}}
                 />
                 <YStack flex={1} gap="$1">
-                    <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.2}
-                                   color={palette.text}>
-                        {brew.recipeName}
-                    </DotMatrixText>
+                    <XStack alignItems="center" gap="$2">
+                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.2}
+                                       color={palette.text} numberOfLines={1}
+                                       style={{flexShrink: 1}}>
+                            {brew.recipeName}
+                        </DotMatrixText>
+                        {/* The rating it has, and nothing where it has none:
+                            five hollow stars on an unjudged row would read as a
+                            bad brew rather than an unjudged one. */}
+                        {/* Silent, because the row's own label already says
+                            the rating: a Pressable replaces its subtree for a
+                            screen reader, and a node inside it only makes the
+                            same words reachable twice. */}
+                        <BrewStars rating={brew.rating ?? 0} size={11}
+                                   announce={false} testID="history-row-stars"/>
+                    </XStack>
                     <XStack gap="$3" alignItems="center">
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
                             {formatBrewDate(brew.startedAt)}
@@ -87,6 +105,19 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
                                            color={palette.danger}>
                                 STOPPED
+                            </DotMatrixText>
+                        )}
+                        {brew.pinned && (
+                            // A word rather than a second glyph: the only pin
+                            // icon this app owns is the star, which is already
+                            // three points to the left meaning the rating. It
+                            // joins the chip family that NO TRACE KEPT belongs
+                            // to, and answers the question that chip raises --
+                            // why this old brew still has one.
+                            <DotMatrixText testID="history-row-pin" fontSize={11}
+                                           weight="bold" letterSpacing={1.4}
+                                           color={palette.muted}>
+                                KEPT
                             </DotMatrixText>
                         )}
                         {!brew.hasStream && (

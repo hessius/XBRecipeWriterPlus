@@ -1,3 +1,4 @@
+import {isRating, type BrewRecord} from "./brew/BrewRecord";
 import Recipe, {MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
@@ -25,9 +26,28 @@ export type BackupSettings = Record<string, unknown>;
 
 export type BackupPayload = {
     recipes: Recipe[];
+    /**
+     * Brew history, records only.
+     *
+     * The sample streams stay behind on purpose: they are some 2 400 rows a
+     * brew, they are already subject to a retention sweep the user chose, and
+     * a backup whose size is dominated by traces that expire is a backup that
+     * becomes too big to mail for the sake of data the app itself throws away.
+     * What survives is what the history list draws and what a verdict is
+     * attached to.
+     */
+    brews: BrewRecord[];
     settings: BackupSettings;
     /** Entries that were present but unreadable. Reported, not hidden. */
     skipped: number;
+    /**
+     * Brews that were present but unreadable, counted apart from `skipped`.
+     *
+     * A malformed brew must not read as a lost recipe: the two are restored by
+     * different code into different tables, and a single tally would make a
+     * file whose history is damaged look like a file whose library is.
+     */
+    skippedBrews: number;
     appVersion: string;
     exportedAt: string;
 };
@@ -40,7 +60,8 @@ export type ParseResult =
 export function buildBackup(
     recipes: readonly Recipe[],
     settings: BackupSettings,
-    appVersion = "unknown"
+    appVersion = "unknown",
+    brews: readonly (BrewRecord & {hasStream?: boolean})[] = []
 ): string {
     return JSON.stringify({
         format: BACKUP_FORMAT,
@@ -52,6 +73,13 @@ export function buildBackup(
         // reshapes a recipe, which is what keeps the format honest across a
         // change to the model.
         recipes: recipes.map((recipe) => JSON.parse(JSON.stringify(recipe))),
+        // `hasStream` is deliberately not written: it describes this device's
+        // copy of a trace, and no trace is carried. A restored record says it
+        // has none, which is the truth on the machine it lands on. The caller
+        // hands us `BrewDatabase.all()`, whose rows are `StoredBrew` and do
+        // carry the flag, so it is named here and dropped rather than left to
+        // a spread that would copy it straight through.
+        brews: brews.map(({hasStream: _ignored, ...record}) => record),
         settings
     }, null, 2);
 }
@@ -95,6 +123,19 @@ export function parseBackup(text: string): ParseResult {
         return {ok: false, reason: "That file is not an XBRW++ backup."};
     }
 
+    const brews: BrewRecord[] = [];
+    let skippedBrews = 0;
+    // Absent is not an error: every backup written before this existed has no
+    // `brews` key at all, and a file with none is a file from an older app
+    // rather than a broken one.
+    if (Array.isArray(envelope.brews)) {
+        for (const entry of envelope.brews) {
+            const brew = reviveBrew(entry);
+            if (brew === null) skippedBrews += 1;
+            else brews.push(brew);
+        }
+    }
+
     const recipes: Recipe[] = [];
     let skipped = 0;
     for (const entry of envelope.recipes) {
@@ -123,6 +164,8 @@ export function parseBackup(text: string): ParseResult {
         ok: true,
         payload: {
             recipes,
+            brews,
+            skippedBrews,
             settings: isPlainObject(envelope.settings) ? envelope.settings : {},
             skipped,
             appVersion: typeof envelope.appVersion === "string" ? envelope.appVersion : "unknown",
@@ -433,4 +476,152 @@ function reviveRecipe(entry: unknown): Recipe | null {
     } catch {
         return null;
     }
+}
+
+/** The outcomes a record may claim. A brew that ended some other way did not
+ * come from this app. */
+const BREW_OUTCOMES = new Set([
+    "done", "endedOnMachine", "cancelled", "lostContact", "failed"
+]);
+
+/**
+ * A note long enough for anything a person types about a cup of coffee, and
+ * short enough that a backup cannot smuggle a document in through it.
+ *
+ * The field itself has no ceiling in the app -- a user typing into their own
+ * database is not a threat to themselves -- but an untrusted file is a
+ * different author, and this is the boundary where that difference is decided.
+ *
+ * Over-length is truncated rather than refused, which is the opposite of every
+ * other rule in this file and deliberately so. The note is the one brew field
+ * a person wrote by hand, so a long one is an honest thing to find in an
+ * honest file; dropping the record would lose a brew, its figures and its
+ * rating over the length of a sentence about it.
+ */
+export const MAX_BACKUP_NOTE = 4000;
+
+/**
+ * The fields a brew record must have, and the type each one must hold.
+ *
+ * Required rather than optional, unlike a recipe's: `BrewDatabase.insert`
+ * writes every one of these for every brew, so a record missing one did not
+ * come from here. A recipe is forgiving because the constructor can repair a
+ * legacy shape and a lost recipe is a real loss; a brew has no migrations to
+ * be forgiving of.
+ */
+const BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
+    id:          (v) => typeof v === "string" && v !== "",
+    recipeUuid:  (v) => typeof v === "string",
+    recipeName:  (v) => typeof v === "string",
+    accent:      (v) => typeof v === "string",
+    startedAt:   isNumber,
+    endedAt:     isNumber,
+    outcome:     (v) => typeof v === "string" && BREW_OUTCOMES.has(v),
+    pours:       isNumber,
+    waterTotal:  isNumber,
+    cupTotal:    isNumber,
+    heldSeconds: isNumber
+};
+
+/**
+ * The fields a record may omit, checked only when present.
+ *
+ * Every one of them was added to `BrewRecord` after the table existed, so a
+ * row written by an older build genuinely has none of them and draws exactly
+ * as it always did. The judgement fields are here for the same reason and not
+ * for a softer one: an unrated brew has no rating, and that is not damage.
+ *
+ * A present-but-wrong value costs the record rather than being dropped, which
+ * is the opposite of `DROPPABLE_RECIPE_FIELDS`. Nothing in a brew is
+ * decoration arriving from a third party's server: every field here was
+ * written by this app or typed by the user, so a bad one is evidence about the
+ * file rather than a plausible thing to find in an honest one.
+ */
+const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
+    pouringAt:  isNumber,
+    failure:    (v) => v === null || typeof v === "string",
+    // A stall is `{atMl, seconds}`, not a number: one list of them per stage.
+    // Checked to that shape rather than to a list of numbers, because a
+    // validator that is merely stricter than the truth is not safe here -- it
+    // rejected every brew that had ever stalled, which is to say every
+    // interesting one, and took its rating with it.
+    stalls:     (v) => Array.isArray(v) && v.every((stage) =>
+        Array.isArray(stage) && stage.every((stall) =>
+            isPlainObject(stall) && isNumber(stall.atMl) && isNumber(stall.seconds))),
+    plan:       (v) => Array.isArray(v),
+    stageWater: isNumberArray,
+    bypass:     isPlainObject,
+    // Whole, on the scale, and nothing else: `isRating` is the same predicate
+    // the database refuses a write with, so the door and the table cannot come
+    // to disagree about what a star means. A 9 and a "5" are both refused.
+    rating:     (v) => isRating(v),
+    note:       (v) => typeof v === "string",
+    pinned:     (v) => typeof v === "boolean"
+};
+
+/** A record from a backup file, or null. Never throws. */
+export function reviveBrew(entry: unknown): BrewRecord | null {
+    if (!isPlainObject(entry)) return null;
+
+    for (const [field, ok] of Object.entries(BREW_FIELDS)) {
+        if (!ok(entry[field])) return null;
+    }
+    for (const [field, ok] of Object.entries(OPTIONAL_BREW_FIELDS)) {
+        if (entry[field] !== undefined && !ok(entry[field])) return null;
+    }
+
+    // Rebuilt field by field rather than passed through, so a file carrying
+    // extra keys cannot put them in the table: the insert names its columns,
+    // but the record is also handed to the screens, and a backup should not be
+    // able to decide what a brew record contains.
+    const record = entry as unknown as BrewRecord;
+    return {
+        id: record.id,
+        recipeUuid: record.recipeUuid,
+        recipeName: record.recipeName,
+        accent: record.accent,
+        startedAt: record.startedAt,
+        pouringAt: record.pouringAt,
+        endedAt: record.endedAt,
+        outcome: record.outcome,
+        failure: record.failure ?? null,
+        pours: record.pours,
+        waterTotal: record.waterTotal,
+        cupTotal: record.cupTotal,
+        heldSeconds: record.heldSeconds,
+        stalls: record.stalls,
+        plan: record.plan,
+        stageWater: record.stageWater,
+        bypass: record.bypass,
+        rating: record.rating ?? 0,
+        note: (record.note ?? "").slice(0, MAX_BACKUP_NOTE),
+        pinned: record.pinned ?? false
+    };
+}
+
+/**
+ * What a restore would add to the history, and what is already there.
+ *
+ * Matched on `id` and never overwriting, for a sharper reason than
+ * `mergeRecipes` has: the row already on this device may carry a rating and a
+ * note the user gave it after the backup was made, and a restore that replaced
+ * it would delete a verdict to put back the absence of one.
+ */
+export function mergeBrews(
+    existing: readonly {id: string}[],
+    incoming: readonly BrewRecord[]
+): {toAdd: BrewRecord[]; alreadyPresent: number} {
+    const known = new Set(existing.map((brew) => brew.id));
+    const toAdd: BrewRecord[] = [];
+    let alreadyPresent = 0;
+
+    for (const brew of incoming) {
+        if (known.has(brew.id)) alreadyPresent += 1;
+        else {
+            toAdd.push(brew);
+            known.add(brew.id);
+        }
+    }
+
+    return {toAdd, alreadyPresent};
 }

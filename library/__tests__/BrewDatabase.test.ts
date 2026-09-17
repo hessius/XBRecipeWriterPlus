@@ -54,9 +54,21 @@ jest.mock("expo-sqlite", () => ({
                     }
                 } else if (/^\s*DELETE FROM brew_frames\s*$/i.test(source)) {
                     frames.length = 0;
-                } else if (/^\s*UPDATE brews SET hasStream/i.test(source)) {
-                    const row = brews.find((b) => b.id === params[0]);
-                    if (row) row.hasStream = 0;
+                } else if (/^\s*UPDATE brews SET/i.test(source)) {
+                    // Generic because `judge` builds its SET list from the
+                    // fields it was given, so there is no one literal to match:
+                    // each assignment is either a bound `?` or a literal, and
+                    // the trailing `WHERE id = ?` takes the last parameter.
+                    const assignments = source
+                        .match(/SET\s+(.+?)\s+WHERE/is)![1]
+                        .split(",").map((a) => a.trim());
+                    const row = brews.find((b) => b.id === params[params.length - 1]);
+                    let next = 0;
+                    assignments.forEach((assignment) => {
+                        const [column, value] = assignment.split("=").map((p) => p.trim());
+                        const bound = value === "?" ? params[next++] : Number(value);
+                        if (row) row[column] = bound as string | number;
+                    });
                 } else if (/^\s*DELETE FROM brew_samples WHERE brewId/i.test(source)) {
                     for (let i = samples.length - 1; i >= 0; i -= 1) {
                         if (samples[i].brewId === params[0]) samples.splice(i, 1);
@@ -145,7 +157,11 @@ describe("BrewDatabase", () => {
     it("round-trips a record", () => {
         const db = new BrewDatabase();
         db.insert(record(), []);
-        expect(db.get("brew-1")).toEqual({...record(), hasStream: false});
+        // Every stored brew reports a verdict, even the empty one: unrated is
+        // a value the readers have to be able to see, not an absence.
+        expect(db.get("brew-1")).toEqual({
+            ...record(), rating: 0, note: "", pinned: false, hasStream: false
+        });
     });
 
     it("restores a brew that never poured with no zero rather than a wrong one", () => {
@@ -252,6 +268,95 @@ describe("BrewDatabase", () => {
         expect(db.samples("a")).toEqual(stream);
     });
 
+    it("keeps a judged brew's trace through a sweep that takes the rest", () => {
+        // The whole point of the pin: a 5 star brew with no trace left is a
+        // judgement the user cannot act on.
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", startedAt: 1}), stream);
+        db.insert(record({id: "b", startedAt: 2}), stream);
+        db.insert(record({id: "c", startedAt: 3}), stream);
+
+        db.judge("a", {rating: 5});
+        db.sweep(1);
+
+        expect(db.samples("a")).toEqual(stream);
+        expect(db.get("a")?.hasStream).toBe(true);
+        expect(db.samples("b")).toEqual([]);
+    });
+
+    it("does not spend the keep count on a pinned brew", () => {
+        // Pinning the oldest brew must not push the newest ordinary one over
+        // the edge; the pinned row is outside the sweep, not ahead of it.
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", startedAt: 1}), stream);
+        db.insert(record({id: "b", startedAt: 2}), stream);
+
+        db.judge("a", {rating: 4});
+        db.sweep(1);
+
+        expect(db.samples("a")).toEqual(stream);
+        expect(db.samples("b")).toEqual(stream);
+    });
+
+    it("reads a row written before the judgement columns as unrated", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "a"}), stream);
+        const brew = db.get("a");
+        expect(brew?.rating).toBe(0);
+        expect(brew?.note).toBe("");
+        expect(brew?.pinned).toBe(false);
+    });
+
+    it("writes a rating and a note, and pins on either", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "a"}), stream);
+        db.insert(record({id: "b"}), stream);
+
+        db.judge("a", {rating: 4});
+        db.judge("b", {note: "Too sour, grind finer."});
+
+        expect(db.get("a")?.rating).toBe(4);
+        expect(db.get("a")?.pinned).toBe(true);
+        expect(db.get("b")?.note).toBe("Too sour, grind finer.");
+        expect(db.get("b")?.pinned).toBe(true);
+    });
+
+    it("refuses a rating off the scale rather than clamping it", () => {
+        // A 9 reaching here is a caller that is wrong. Clamping would write a
+        // verdict nobody gave, and pin the brew on the strength of it.
+        const db = new BrewDatabase();
+        db.insert(record({id: "a"}), stream);
+
+        db.judge("a", {rating: 9});
+        db.judge("a", {rating: 2.5});
+
+        expect(db.get("a")?.rating).toBe(0);
+        expect(db.get("a")?.pinned).toBe(false);
+    });
+
+    it("releases a pin without touching the judgement", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "a"}), stream);
+        db.judge("a", {rating: 3, note: "Fine."});
+
+        db.setPinned("a", false);
+
+        expect(db.get("a")?.pinned).toBe(false);
+        expect(db.get("a")?.rating).toBe(3);
+        expect(db.get("a")?.note).toBe("Fine.");
+    });
+
+    it("carries a judgement in with a restored record", () => {
+        // A restore inserts a record that already has a verdict on it, which a
+        // live brew never does: nothing has been drunk when that row is written.
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", rating: 5, note: "The best one.", pinned: true}), []);
+        const brew = db.get("a");
+        expect(brew?.rating).toBe(5);
+        expect(brew?.note).toBe("The best one.");
+        expect(brew?.pinned).toBe(true);
+    });
+
     it("clears every brew", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "a", startedAt: 1}), stream);
@@ -340,5 +445,59 @@ describe("the frame log of a brew", () => {
         db.sweep(1);
         expect(db.frames("old")).toBe("");
         expect(db.frames("new")).toBe(log);
+    });
+});
+
+describe("a history restored from a backup", () => {
+    it("adds the records it was given, without a stream", () => {
+        const db = new BrewDatabase();
+        const added = db.restore([record({id: "b1"}), record({id: "b2"})]);
+
+        expect(added).toBe(2);
+        expect(db.all().map((brew) => brew.id).sort()).toEqual(["b1", "b2"]);
+        expect(db.get("b1")?.hasStream).toBe(false);
+        expect(db.samples("b1")).toEqual([]);
+    });
+
+    it("carries the judgement in with the record", () => {
+        const db = new BrewDatabase();
+        db.restore([record({id: "b1", rating: 4, note: "Too sour", pinned: true})]);
+
+        const restored = db.get("b1");
+        expect(restored?.rating).toBe(4);
+        expect(restored?.note).toBe("Too sour");
+        expect(restored?.pinned).toBe(true);
+    });
+
+    /**
+     * The sharpest rule in the restore: the row here may carry a verdict the
+     * user gave after the backup was made, and replacing it would delete a
+     * rating to put back the absence of one.
+     */
+    it("never overwrites a brew already here", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "b1"}), []);
+        db.judge("b1", {rating: 5, note: "Best yet"});
+
+        const added = db.restore([record({id: "b1", rating: 0, note: ""})]);
+
+        expect(added).toBe(0);
+        expect(db.get("b1")?.rating).toBe(5);
+        expect(db.get("b1")?.note).toBe("Best yet");
+    });
+
+    it("inserts a brew a file carries twice only once", () => {
+        const db = new BrewDatabase();
+        const added = db.restore([record({id: "b1"}), record({id: "b1"})]);
+
+        expect(added).toBe(1);
+        expect(db.all()).toHaveLength(1);
+    });
+
+    it("refuses an off-scale rating rather than writing it", () => {
+        const db = new BrewDatabase();
+        db.restore([record({id: "b1", rating: 9 as unknown as number})]);
+
+        expect(db.get("b1")?.rating).toBe(0);
     });
 });

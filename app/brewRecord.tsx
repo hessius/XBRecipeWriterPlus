@@ -1,9 +1,10 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useRef, useState} from "react";
-import {ScrollView, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
+import BrewJudgement from "@/components/BrewJudgement";
 import BrewSummary from "@/components/BrewSummary";
 import StageDetail from "@/components/StageDetail";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -15,7 +16,8 @@ import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
-import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
+    from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
@@ -117,6 +119,26 @@ export default function BrewRecord({recipeLookup}: Props) {
             // how a capture comes out clipped.
             scroller.current?.scrollTo({y: 0, animated: false});
         }
+    );
+
+    // Seeded from the record that is already in memory, so the screen shows
+    // the verdict the user gave at the end of the brew rather than an empty
+    // row. Optional writes for the same reason the brew screen has them: an
+    // injected store need not grow a judgement fake to draw a trace.
+    const judgementStore: JudgementStore = {
+        judge: (id, verdict) =>
+            (sharedBrewDatabase() as Partial<JudgementStore>).judge?.(id, verdict),
+        setPinned: (id, pinned) =>
+            (sharedBrewDatabase() as Partial<JudgementStore>).setPinned?.(id, pinned)
+    };
+    const judgement = useBrewJudgement(
+        () => opened?.record.id ?? null,
+        {
+            rating: opened?.record.rating ?? 0,
+            note:   opened?.record.note ?? "",
+            pinned: opened?.record.pinned ?? false
+        },
+        judgementStore
     );
 
     // No "All brews" control. The list is the only way in here, so it sat
@@ -249,6 +271,37 @@ export default function BrewRecord({recipeLookup}: Props) {
                     onClose={() => setSelectedIndex(null)}
                 />
             )}
+
+            {/* Outside the ViewShot, like its twin on the live screen: the
+                capture is a picture of what the machine did, and a control
+                inside it would be in every PNG anybody shares. */}
+            <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
+                <BrewJudgement rating={judgement.rating} note={judgement.note}
+                               onRate={judgement.rate}
+                               onNote={judgement.annotate}/>
+                {judgement.pinned && (
+                    // The pin as a state rather than a question. It is set by
+                    // judging, so the user is told what happened and offered
+                    // the way out, instead of being asked twice whether a brew
+                    // they just rated is worth keeping.
+                    <XStack alignItems="center" justifyContent="space-between">
+                        <DotMatrixText testID="record-pinned" fontSize={11}
+                                       letterSpacing={1.4} color={palette.dim}>
+                            KEPT THROUGH THE SWEEP
+                        </DotMatrixText>
+                        <Pressable testID="record-release"
+                                   accessibilityRole="button"
+                                   accessibilityLabel="Let this brew expire with the rest"
+                                   hitSlop={8}
+                                   onPress={() => judgement.setPinned(false)}>
+                            <DotMatrixText fontSize={11} letterSpacing={1.4}
+                                           color={palette.muted}>
+                                RELEASE
+                            </DotMatrixText>
+                        </Pressable>
+                    </XStack>
+                )}
+            </YStack>
 
             <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
                 <ExportButton label="Save as image" busy={busy}

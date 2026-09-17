@@ -141,6 +141,8 @@ type Spec = {
     tags?: string[];
     /** Brew start timestamps; length is the times-brewed count. */
     brews?: number[];
+    /** The rating of each brew, index-aligned with `brews`. 0 is unrated. */
+    ratings?: number[];
 };
 
 function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, string> {
@@ -164,12 +166,12 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt,
                                     pouringAt, endedAt, outcome, failure, pours,
                                     waterTotal, cupTotal, heldSeconds, stalls, plan,
-                                    stageWater, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    stageWater, rating, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     `${recipe.uuid}-${index}`, recipe.uuid, "n", "a", startedAt,
                     0, startedAt, "completed", null, 1,
-                    0, 0, 0, "[]", "[]", "[]", 0
+                    0, 0, 0, "[]", "[]", "[]", spec.ratings?.[index] ?? 0, 0
                 ]
             );
         });
@@ -284,6 +286,50 @@ describe("querying a real database", () => {
         // LEAST: zero would lead a naive sort; the guard forces it last.
         expect(order(db, query({sort: "timesBrewed", direction: "asc"}), uuids))
             .toEqual(["once", "most", "never"]);
+    });
+
+    it("sorts by rating, best and worst first", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            best:  {name: "A", createdAt: 1, ratio: 15, brews: [1, 2], ratings: [5, 5]},
+            middle: {name: "B", createdAt: 2, ratio: 15, brews: [1], ratings: [3]},
+            worst: {name: "C", createdAt: 3, ratio: 15, brews: [1], ratings: [1]}
+        });
+
+        expect(order(db, query({sort: "rating", direction: "desc"}), uuids))
+            .toEqual(["best", "middle", "worst"]);
+        expect(order(db, query({sort: "rating", direction: "asc"}), uuids))
+            .toEqual(["worst", "middle", "best"]);
+    });
+
+    it("keeps the never-rated last under rating in both directions", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            rated:   {name: "A", createdAt: 1, ratio: 15, brews: [1], ratings: [2]},
+            unrated: {name: "B", createdAt: 2, ratio: 15, brews: [1, 2]},
+            never:   {name: "C", createdAt: 3, ratio: 15}
+        });
+
+        // WORST must not open with recipes nobody judged: a brew nobody rated
+        // and a recipe nobody brewed are the same absence of a verdict.
+        expect(order(db, query({sort: "rating", direction: "asc"}), uuids))
+            .toEqual(["rated", "unrated", "never"]);
+        expect(order(db, query({sort: "rating", direction: "desc"}), uuids))
+            .toEqual(["rated", "unrated", "never"]);
+    });
+
+    it("does not let an unrated brew drag an average down", () => {
+        // 0 is the app's word for "not rated", not a verdict of nothing. A
+        // recipe brewed twice and praised once must not fall below one brewed
+        // once and merely liked.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            praised: {name: "A", createdAt: 1, ratio: 15, brews: [1, 2], ratings: [5, 0]},
+            liked:   {name: "B", createdAt: 2, ratio: 15, brews: [1], ratings: [3]}
+        });
+
+        expect(order(db, query({sort: "rating", direction: "desc"}), uuids))
+            .toEqual(["praised", "liked"]);
     });
 
     it("searches name, tag, xid, author and description, and nothing else", () => {

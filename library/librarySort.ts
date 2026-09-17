@@ -15,7 +15,8 @@
  * assembles and `RecipeDatabase` executes.
  */
 
-export type SortAxis = "name" | "added" | "lastBrewed" | "timesBrewed" | "ratio";
+export type SortAxis =
+    "name" | "added" | "lastBrewed" | "timesBrewed" | "rating" | "ratio";
 export type SortDirection = "asc" | "desc";
 
 /**
@@ -71,6 +72,23 @@ function countOrder(direction: SortDirection): string {
 }
 
 /**
+ * Never rated sorts last in both directions, for the same reason LONGEST AGO
+ * must not open with the recipes nobody has ever brewed: WORST is a question
+ * about coffee somebody drank and judged, and a list of recipes with no verdict
+ * at all is not an answer to it.
+ *
+ * `avgRating` is NULL for a recipe with no brews and NULL again for a recipe
+ * whose brews are all unrated, because the join averages `NULLIF(rating, 0)`.
+ * One guard therefore covers both, and a recipe that has been brewed nine times
+ * without comment sits with the never-brewed rather than at the bottom of the
+ * scale it was never put on.
+ */
+function ratingOrder(direction: SortDirection): string {
+    const term = direction === "asc" ? "avgRating ASC" : "avgRating DESC";
+    return withTieBreaks(`CASE WHEN avgRating IS NULL THEN 1 ELSE 0 END, ${term}`);
+}
+
+/**
  * Unnamed recipes sort last under name in both directions, not first as SQLite
  * would put their NULL `sortName`. `recipeIndex.ts` stores NULL rather than the
  * formatted placeholder precisely so this axis can push them to the end
@@ -108,13 +126,7 @@ type AxisSpec = {
     orderBy: (direction: SortDirection) => string;
 };
 
-/**
- * The whole vocabulary. Rating (`BEST` / `WORST`, default `desc`, over
- * `avg(brews.rating)` with the same never-rated-last guard the brew axes use)
- * is deliberately absent: until #99 lets a recipe be rated every recipe would
- * score identically and the axis would sort nothing. When it lands it is one
- * more entry here.
- */
+/** The whole vocabulary. */
 export const SORT_AXES: Record<SortAxis, AxisSpec> = {
     name: {
         label: "NAME",
@@ -145,6 +157,13 @@ export const SORT_AXES: Record<SortAxis, AxisSpec> = {
         defaultDirection: "desc",
         orderBy: countOrder
     },
+    rating: {
+        label: "RATING",
+        spoken: {axis: "rating", directions: {asc: "worst first", desc: "best first"}},
+        directionLabels: {asc: "WORST", desc: "BEST"},
+        defaultDirection: "desc",
+        orderBy: ratingOrder
+    },
     ratio: {
         label: "RATIO",
         spoken: {axis: "ratio", directions: {asc: "low to high", desc: "high to low"}},
@@ -157,7 +176,7 @@ export const SORT_AXES: Record<SortAxis, AxisSpec> = {
 
 /** The axes in the order the sort sheet lists them. */
 export const SORT_AXIS_ORDER: readonly SortAxis[] = [
-    "name", "added", "lastBrewed", "timesBrewed", "ratio"
+    "name", "added", "lastBrewed", "timesBrewed", "rating", "ratio"
 ];
 
 /**
