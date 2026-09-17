@@ -250,8 +250,13 @@ export default function HomeScreen({db, settings}: Props) {
 
     const wholeLibraryEmpty = library.librarySize === 0;
     const visibleEmpty = library.recipes.length === 0;
-    const offeredFilterIds =
-        asStockFilters(availableFilters(library.filterCounts, library.librarySize));
+    const offeredFilterIds = asStockFilters(availableFilters(
+        library.filterCounts,
+        library.librarySize,
+        // What is already applied, so suppression cannot withdraw a filter the
+        // user switched on and strand the library narrowed with no control.
+        libraryQuery.query.filters
+    ));
     const railFilters: RailFilter[] = offeredFilterIds.map((id) => ({
         id,
         label:  STOCK_FILTERS[id].label,

@@ -166,10 +166,22 @@ function isOffered(count: number, librarySize: number): boolean {
  * two a user built is a decision, not noise; suppression is for shelves the app
  * invented. Keys are preserved in `counts`' own order, so the caller controls
  * chip order by how it builds the map.
+ *
+ * An applied filter is always offered, whatever its count. Suppression decides
+ * what to *propose*, never what to hide after the fact: a filter that crosses a
+ * threshold while it is switched on -- deleting recipes can push one over the
+ * 80% ceiling, or under the floor -- would otherwise take its own chip away, and
+ * with the chips now behind a button that is gated on there being any, it would
+ * take the button and the whole filter rail with it. The user would be left with
+ * a library quietly missing recipes and no control anywhere on screen to undo
+ * it. So the rule is one way: suppression can decline to offer a filter, but it
+ * can never withdraw one the user has already chosen.
  */
 export function availableFilters(
     counts: Readonly<Record<string, number>>,
-    librarySize: number
+    librarySize: number,
+    applied: readonly string[] = []
 ): string[] {
-    return Object.keys(counts).filter((id) => isOffered(counts[id], librarySize));
+    return Object.keys(counts)
+        .filter((id) => isOffered(counts[id], librarySize) || applied.includes(id));
 }

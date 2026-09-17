@@ -41,6 +41,19 @@ describe("suppression at its boundaries", () => {
         expect(availableFilters({a: 5}, 5)).toEqual([]);
     });
 
+    it("never withdraws a filter that is already applied", () => {
+        // Suppression decides what to propose, not what to take away. A filter
+        // that crosses a threshold while it is switched on -- here by rising
+        // past the 80% ceiling, and by falling under the count floor -- would
+        // otherwise remove its own chip, and with the chips behind a button
+        // gated on there being any, the button and the whole rail with it. The
+        // library would be left narrowed with nothing on screen to undo it.
+        expect(availableFilters({a: 81}, 100)).toEqual([]);
+        expect(availableFilters({a: 81}, 100, ["a"])).toEqual(["a"]);
+        expect(availableFilters({a: 1}, 100, ["a"])).toEqual(["a"]);
+        expect(availableFilters({a: 0}, 0, ["a"])).toEqual(["a"]);
+    });
+
     it("offers nothing for an empty library", () => {
         expect(availableFilters({a: 0}, 0)).toEqual([]);
     });
