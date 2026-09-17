@@ -1,5 +1,7 @@
-import {buildBackup, mergeRecipes, parseBackup, BACKUP_FORMAT, BACKUP_VERSION}
+import {buildBackup, mergeBrews, mergeRecipes, parseBackup, reviveBrew,
+        BACKUP_FORMAT, BACKUP_VERSION, MAX_BACKUP_NOTE}
     from "@/library/backup";
+import type {BrewRecord} from "@/library/brew/BrewRecord";
 import Recipe, {MAX_DESCRIPTION} from "@/library/Recipe";
 import {DEFAULTS, NOT_IN_BACKUP, type SettingKey} from "@/library/Settings";
 
@@ -669,5 +671,140 @@ describe("every setting is carried or deliberately excluded", () => {
         }));
 
         expect(parsed.settings.libraryView).toBe("shelves");
+    });
+});
+
+/** A record shaped exactly as `BrewDatabase.all()` hands one back. */
+function brewNamed(id: string, extra: Partial<BrewRecord> = {}): BrewRecord {
+    return {
+        id,
+        recipeUuid: "u1",
+        recipeName: "Ethiopia",
+        accent: "#ff0000",
+        startedAt: 1_700_000_000_000,
+        pouringAt: 1_700_000_010_000,
+        endedAt: 1_700_000_200_000,
+        outcome: "done",
+        failure: null,
+        pours: 2,
+        waterTotal: 250,
+        cupTotal: 240,
+        heldSeconds: 0,
+        ...extra
+    };
+}
+
+/** A backup file whose single brew carries the given keys verbatim. */
+function backupFileWithBrewFields(extra: Record<string, unknown>): string {
+    const valid = JSON.parse(buildBackup(
+        [new Recipe(undefined,
+            JSON.stringify({pours: [], ratio: 16, dosage: 18, grindSize: 60}))],
+        {}, "2.6.0", [brewNamed("b1")]
+    ));
+    valid.brews[0] = {...valid.brews[0], ...extra};
+    return JSON.stringify(valid);
+}
+
+describe("brew history through a backup", () => {
+    it("carries a rating and a note back out again", () => {
+        const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                 [brewNamed("b1", {rating: 4, note: "Too sour"})]);
+        const result = parseBackup(text);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toHaveLength(1);
+        expect(result.payload.brews[0].rating).toBe(4);
+        expect(result.payload.brews[0].note).toBe("Too sour");
+        expect(result.payload.skippedBrews).toBe(0);
+    });
+
+    it("reads a backup written before brews were carried", () => {
+        const text = buildBackup([recipeNamed("A", "u1")], {});
+        const envelope = JSON.parse(text);
+        delete envelope.brews;
+        const result = parseBackup(JSON.stringify(envelope));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(0);
+    });
+
+    it("does not carry the stream, or a claim to have one", () => {
+        const envelope = JSON.parse(
+            buildBackup([recipeNamed("A", "u1")], {}, "2.6.0", [brewNamed("b1")])
+        );
+        expect(envelope.brews[0].hasStream).toBeUndefined();
+        expect(envelope.brews[0].samples).toBeUndefined();
+    });
+
+    it.each([
+        ["a rating off the scale", {rating: 9}],
+        ["a rating as a string", {rating: "5"}],
+        ["a fractional rating", {rating: 3.5}],
+        ["a note that is not a string", {note: 5}],
+        ["a note longer than the cap", {note: "x".repeat(MAX_BACKUP_NOTE + 1)}],
+        ["an outcome this app never writes", {outcome: "exploded"}],
+        ["a missing id", {id: undefined}],
+        ["a water total that is not a number", {waterTotal: "lots"}],
+        ["a pin that is not a boolean", {pinned: 1}]
+    ])("skips a brew with %s, and counts it", (_label, extra) => {
+        const result = parseBackup(backupFileWithBrewFields(extra));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
+    it("does not let a malformed brew cost the recipes in the same file", () => {
+        const result = parseBackup(backupFileWithBrewFields({rating: 9}));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes).toHaveLength(1);
+        expect(result.payload.skipped).toBe(0);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
+    it("fills in the judgement a record never got", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1"))));
+
+        expect(brew).not.toBeNull();
+        expect(brew?.rating).toBe(0);
+        expect(brew?.note).toBe("");
+        expect(brew?.pinned).toBe(false);
+    });
+
+    it("does not let a file decide what a brew record contains", () => {
+        const brew = reviveBrew({
+            ...JSON.parse(JSON.stringify(brewNamed("b1"))),
+            hasStream: 1,
+            somethingElse: "smuggled"
+        }) as (BrewRecord & Record<string, unknown>) | null;
+
+        expect(brew).not.toBeNull();
+        expect(brew?.hasStream).toBeUndefined();
+        expect(brew?.somethingElse).toBeUndefined();
+    });
+});
+
+describe("mergeBrews", () => {
+    it("never overwrites a brew already here, judgement and all", () => {
+        const here = [brewNamed("b1", {rating: 5, note: "Best yet"})];
+        const {toAdd, alreadyPresent} =
+            mergeBrews(here, [brewNamed("b1"), brewNamed("b2")]);
+
+        expect(alreadyPresent).toBe(1);
+        expect(toAdd.map((b) => b.id)).toEqual(["b2"]);
+    });
+
+    it("counts a file that carries the same brew twice", () => {
+        const {toAdd, alreadyPresent} =
+            mergeBrews([], [brewNamed("b1"), brewNamed("b1")]);
+
+        expect(toAdd).toHaveLength(1);
+        expect(alreadyPresent).toBe(1);
     });
 });

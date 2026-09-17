@@ -280,6 +280,56 @@ class BrewDatabase {
         );
     }
 
+    /**
+     * Put records from a backup into the history, and say how many landed.
+     *
+     * Never overwrites: a row already here may carry a rating and a note the
+     * user gave it after the backup was made, and replacing it would delete a
+     * verdict to put back the absence of one. Streams are not carried in a
+     * backup, so every restored record is inserted with none and says so.
+     *
+     * One transaction, so a restore is all or nothing rather than a history
+     * that is half somebody else's.
+     */
+    public restore(records: readonly BrewRecord[]): number {
+        // Deduped here rather than through `library/backup`'s `mergeBrews`,
+        // which the restore screen uses for its preview: the database must not
+        // depend on the file format to protect its own rows, and a second
+        // copy of the same id inside one file has to be caught too.
+        const known = new Set(this.all().map((brew) => brew.id));
+        const toAdd: BrewRecord[] = [];
+        for (const record of records) {
+            if (known.has(record.id)) continue;
+            known.add(record.id);
+            toAdd.push(record);
+        }
+        if (toAdd.length === 0) return 0;
+        this.db.withTransactionSync(() => {
+            toAdd.forEach((record) => {
+                this.db.runSync(
+                    `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
+                                        endedAt, outcome, failure, pours, waterTotal, cupTotal,
+                                        heldSeconds, stalls, plan, stageWater, rating,
+                                        note, pinned, hasStream)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
+                    [
+                        record.id, record.recipeUuid, record.recipeName, record.accent,
+                        record.startedAt, record.pouringAt ?? 0,
+                        record.endedAt, record.outcome, record.failure,
+                        record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
+                        JSON.stringify(record.stalls ?? []),
+                        JSON.stringify(record.plan ?? []),
+                        JSON.stringify(record.stageWater ?? []),
+                        isRating(record.rating) ? record.rating : 0,
+                        record.note ?? "",
+                        record.pinned ? 1 : 0
+                    ]
+                );
+            });
+        });
+        return toAdd.length;
+    }
+
     public get(id: string): StoredBrew | null {
         const rows = this.db.getAllSync<BrewRow>(
             "SELECT * FROM brews WHERE id = ?;", [id]

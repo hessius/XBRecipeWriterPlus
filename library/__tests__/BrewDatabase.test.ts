@@ -447,3 +447,57 @@ describe("the frame log of a brew", () => {
         expect(db.frames("new")).toBe(log);
     });
 });
+
+describe("a history restored from a backup", () => {
+    it("adds the records it was given, without a stream", () => {
+        const db = new BrewDatabase();
+        const added = db.restore([record({id: "b1"}), record({id: "b2"})]);
+
+        expect(added).toBe(2);
+        expect(db.all().map((brew) => brew.id).sort()).toEqual(["b1", "b2"]);
+        expect(db.get("b1")?.hasStream).toBe(false);
+        expect(db.samples("b1")).toEqual([]);
+    });
+
+    it("carries the judgement in with the record", () => {
+        const db = new BrewDatabase();
+        db.restore([record({id: "b1", rating: 4, note: "Too sour", pinned: true})]);
+
+        const restored = db.get("b1");
+        expect(restored?.rating).toBe(4);
+        expect(restored?.note).toBe("Too sour");
+        expect(restored?.pinned).toBe(true);
+    });
+
+    /**
+     * The sharpest rule in the restore: the row here may carry a verdict the
+     * user gave after the backup was made, and replacing it would delete a
+     * rating to put back the absence of one.
+     */
+    it("never overwrites a brew already here", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "b1"}), []);
+        db.judge("b1", {rating: 5, note: "Best yet"});
+
+        const added = db.restore([record({id: "b1", rating: 0, note: ""})]);
+
+        expect(added).toBe(0);
+        expect(db.get("b1")?.rating).toBe(5);
+        expect(db.get("b1")?.note).toBe("Best yet");
+    });
+
+    it("inserts a brew a file carries twice only once", () => {
+        const db = new BrewDatabase();
+        const added = db.restore([record({id: "b1"}), record({id: "b1"})]);
+
+        expect(added).toBe(1);
+        expect(db.all()).toHaveLength(1);
+    });
+
+    it("refuses an off-scale rating rather than writing it", () => {
+        const db = new BrewDatabase();
+        db.restore([record({id: "b1", rating: 9 as unknown as number})]);
+
+        expect(db.get("b1")?.rating).toBe(0);
+    });
+});

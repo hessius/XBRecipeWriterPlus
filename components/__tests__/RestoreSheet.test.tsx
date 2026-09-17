@@ -14,8 +14,10 @@ function recipeNamed(name: string, uuid: string): Recipe {
 
 const PAYLOAD = {
     recipes: [recipeNamed("A", "u1"), recipeNamed("B", "u2")],
+    brews: [],
     settings: {temperatureUnit: "F"},
     skipped: 0,
+    skippedBrews: 0,
     appVersion: "2.6.0",
     exportedAt: "2026-08-26T21:00:00.000Z"
 };
