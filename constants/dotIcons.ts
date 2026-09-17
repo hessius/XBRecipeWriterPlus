@@ -493,15 +493,6 @@ export const DOT_ICONS = {
         "..#...#.."
     ],
     /**
-     * A funnel: narrow the library to a shelf.
-     *
-     * A triangle whose edges are pure 45-degree diagonals down to a one-dot
-     * stem, the two stroke classes this grid renders cleanly. Reads as a funnel
-     * rather than the `sort` arrows so the rail's filter button is never mistaken
-     * for its neighbour, and drawn here because the button is icon-only when no
-     * filter is applied and this glyph is the whole of what it says.
-     */
-    /**
      * Three ruled lines with a marker: the library as a list of rows.
      *
      * Pure horizontal strokes on rows 1, 4 and 7, the one stroke class this grid
@@ -539,6 +530,15 @@ export const DOT_ICONS = {
         "####.####",
         "####.####"
     ],
+    /**
+     * A funnel: narrow the library to a shelf.
+     *
+     * A triangle whose edges are pure 45-degree diagonals down to a one-dot
+     * stem, the two stroke classes this grid renders cleanly. Reads as a funnel
+     * rather than the `sort` arrows so the rail's filter button is never mistaken
+     * for its neighbour, and drawn here because the button is icon-only when no
+     * filter is applied and this glyph is the whole of what it says.
+     */
     filter: [
         "#########",
         ".#######.",

@@ -108,6 +108,16 @@ export type RestoreOutcome =
     | {status: "failed"}
     | {status: "busy"};
 
+/**
+ * What a shelf write could not do.
+ *
+ * Both zero is the ordinary answer. `full` is the tag cap: a recipe already
+ * carrying `MAX_TAGS_PER_RECIPE` tags cannot join another shelf, and the user
+ * has to be told rather than left with a tick that did not stick. `failed` is
+ * the database refusing the write.
+ */
+export type ShelfWriteOutcome = {full: number; failed: number};
+
 export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
@@ -122,7 +132,7 @@ export type RecipeLibrary = {
     duplicateRecipe: (recipe: Recipe) => void;
     toggleFavourite: (recipe: Recipe) => void;
     /** Make exactly these recipes the members of a shelf. */
-    setShelfMembers: (tag: string, uuids: readonly string[]) => void;
+    setShelfMembers: (tag: string, uuids: readonly string[]) => ShelfWriteOutcome;
     deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
@@ -248,31 +258,56 @@ export function useRecipeLibrary(
      * not from the list, so a recipe ticked under one filter and then filtered
      * away still gets the tag.
      *
+     * Written through `setTags`, which is the model's stated invariant and not a
+     * formality here: it folds duplicate spellings and enforces
+     * `MAX_TAGS_PER_RECIPE`. Assigning `tags` directly would let a 21st shelf be
+     * saved and then quietly dropped the next time the blob was hydrated, so the
+     * membership would exist until the app was restarted and then not.
+     *
      * Existing tags are preserved and the case the user typed is kept. Matching
      * is on the folded key, so renaming is not possible by accident: tagging
      * with "Morning" a recipe that already carries "morning" leaves the one tag
      * it had rather than giving it two spellings of one shelf.
+     *
+     * The count of recipes it could not put on the shelf comes back rather than
+     * being swallowed. A shelf is exact by definition, so a partial answer the
+     * caller cannot see is a shelf that disagrees with the ticks the user just
+     * made, with nothing on screen saying which ones did not take.
      */
-    function setShelfMembers(tag: string, uuids: readonly string[]) {
+    function setShelfMembers(tag: string, uuids: readonly string[]): ShelfWriteOutcome {
         const key = tagKey(tag);
         const wanted = new Set(uuids);
+        let full = 0;
+        let failed = 0;
         for (const recipe of allRecipes()) {
             const tags = recipe.tags ?? [];
             const has = tags.some((existing) => tagKey(existing) === key);
             const should = wanted.has(recipe.uuid);
             if (has === should) continue;
-            recipe.tags = should
+            recipe.setTags(should
                 ? [...tags, tag]
-                : tags.filter((existing) => tagKey(existing) !== key);
+                : tags.filter((existing) => tagKey(existing) !== key));
+            // Asked of the model afterwards rather than assumed: `setTags` is
+            // where the cap lives, so this is the only honest way to know
+            // whether the recipe is actually on the shelf now.
+            const landed = recipe.tags.some((existing) => tagKey(existing) === key);
+            if (landed !== should) {
+                full += 1;
+                continue;
+            }
             try {
                 store.updateRecipe(recipe.uuid, recipe);
             } catch {
-                // Deliberately empty, as toggleFavourite above: reload() puts
-                // the true value back on screen rather than leaving the list
-                // showing a membership the database refused.
+                // Counted rather than ignored, unlike toggleFavourite: a
+                // favourite the database refused is one flag the reload puts
+                // back, while a shelf is a set the user built by hand and a
+                // silently missing member is indistinguishable from a tick that
+                // never registered.
+                failed += 1;
             }
         }
         reload();
+        return {full, failed};
     }
 
     function deleteAll(): DeleteAllOutcome {

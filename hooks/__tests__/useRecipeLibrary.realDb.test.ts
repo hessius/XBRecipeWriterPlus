@@ -209,4 +209,56 @@ describe("setShelfMembers against a real database", () => {
             {tag: "morning", count: 1}
         ]);
     });
+
+    it("refuses a recipe that is already on as many shelves as it can hold", async () => {
+        // The cap lives in setTags. Assigning `tags` directly would save the
+        // twenty-first shelf and then lose it on the next hydration, so the
+        // membership would exist until the app was restarted and then not.
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        db.insertRecipe(recipe);
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 1, failed: 0});
+        expect(result.current.tagCounts.map((entry) => entry.tag))
+            .not.toContain("Mornings");
+    });
+
+    it("counts a recipe the database refused", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+        db.updateRecipe = () => {
+            throw new Error("disk full");
+        };
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 0, failed: 1});
+    });
+
+    it("reports nothing when it wrote everything it was asked to", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.setShelfMembers("Mornings", [uuid]);
+        });
+
+        expect(outcome).toEqual({full: 0, failed: 0});
+    });
 });

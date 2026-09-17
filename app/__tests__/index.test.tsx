@@ -1803,6 +1803,25 @@ describe("picking a shelf's members", () => {
         return rendered;
     }
 
+    // A tick that does not stick is the one failure the user cannot see: the
+    // row ticks, the sheet closes, and the recipe simply is not on the shelf.
+    it("says so when a recipe is already on as many shelves as it can hold", async () => {
+        const crowded = named("Kenya");
+        crowded.setTags(Array.from({length: 20}, (unused, index) => `shelf${index}`));
+        await startPicking([crowded]);
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone:    "error",
+            message: "One recipe is already on as many shelves as it can hold."
+        }));
+    });
+
     it("swaps the grid for tickable rows", async () => {
         await startPicking();
 

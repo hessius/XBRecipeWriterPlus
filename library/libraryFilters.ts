@@ -241,13 +241,18 @@ export function resolveLibraryFilter(id: string): FilterClause | null {
  * shelf the moment one was applied, leaving the user's own narrowing gone with
  * no chip to say it ever happened.
  *
+ * The type is checked before the shape, because the input is whatever was in a
+ * restored setting: a stored `[1]` would otherwise reach `startsWith` on a
+ * number and throw, which is a crash on launch rather than a dropped filter.
+ *
  * A tag id survives on shape alone rather than on being a tag that still exists.
  * A tag whose last recipe was deleted resolves to a clause matching nothing,
  * which is an empty shelf the user can see and close, not a crash.
  */
 export function asLibraryFilters(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
-    return value.filter((id) => isStockFilter(id) || tagFromFilterId(id) !== null);
+    return value.filter((id) => typeof id === "string"
+        && (isStockFilter(id) || tagFromFilterId(id) !== null));
 }
 
 /**

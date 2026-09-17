@@ -4,20 +4,25 @@ import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import ShelfMark from "@/components/ShelfMark";
 import {palette} from "@/constants/colors";
 import type {Shelf} from "@/library/shelves";
 
-/** The tile's height. Two lines of type with room to breathe, and a wide tap. */
-const TILE_HEIGHT = 96;
+/**
+ * The tile's height: the mark's 44 pt square, two lines of type, and padding.
+ *
+ * Sized from the mark rather than chosen, because the design fixes the square
+ * at 44 and a tile that could not hold it would make the art reflow the grid,
+ * which is the one thing the square is fixed to prevent.
+ */
+const TILE_HEIGHT = 120;
 
 /**
  * One shelf in the grid.
  *
- * The mark is a slot, not a decision: the design says the art is unsettled and
- * going to testers, so this draws the plainest thing that distinguishes the two
- * kinds -- a filled bar for a shelf a person made, a short faint one for one the
- * app derived -- and leaves the variants to a later pass. Nothing else in the
- * tile depends on which mark is drawn, so replacing it is replacing this block.
+ * The mark is a slot, not a decision, and the slot is `ShelfMark`: the design
+ * says the art is unsettled and going to testers, so the tile commits only to
+ * the 44 pt square it is drawn in and knows nothing about what fills it.
  *
  * The count is part of the label a reader hears rather than a separate element,
  * because "morning, 4 recipes" is one fact and two elements would make the user
@@ -51,9 +56,8 @@ export default function ShelfTile({shelf, onPress, onEdit}: {
                     backgroundColor={palette.raised}
                     borderWidth={manual ? 0 : 1}
                     borderColor={palette.line}>
-                <XStack alignItems="center" justifyContent="space-between">
-                    <YStack height={4} width={manual ? 28 : 16} borderRadius={2}
-                            backgroundColor={manual ? palette.text : palette.muted}/>
+                <XStack alignItems="flex-start" justifyContent="space-between">
+                    <ShelfMark kind={shelf.kind}/>
                     {onEdit && (
                         <Pressable accessibilityRole="button"
                                    accessibilityLabel={`Edit the ${shelf.label} shelf`}

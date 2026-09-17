@@ -6,6 +6,18 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {onAccent, palette} from "@/constants/colors";
 
 /**
+ * How tall the bar is above the safe-area inset.
+ *
+ * Exported because the list has to reserve it: the bar is absolutely positioned
+ * over the rows, so without this the last recipe sits underneath it and its tick
+ * cannot be reached, which is worst for the shelf a user has just scrolled to
+ * the bottom to finish.
+ */
+const BAR_PADDING = 12;
+const BUTTON_HEIGHT = 44;
+export const PICKER_BAR_HEIGHT = BAR_PADDING + BUTTON_HEIGHT + BAR_PADDING;
+
+/**
  * The bar across the bottom of the library while a shelf is being picked.
  *
  * The count is the shelf, never the view. `4 ON THIS SHELF` stays four while the
@@ -41,15 +53,16 @@ export default function ShelfPickerBar({
 
     return (
         <YStack position="absolute" left={0} right={0} bottom={0}
-                paddingHorizontal="$3" paddingTop="$3"
-                paddingBottom={paddingBottom + 12}
+                paddingHorizontal="$3" paddingTop={BAR_PADDING}
+                paddingBottom={paddingBottom + BAR_PADDING}
                 backgroundColor={palette.surface}
                 borderTopWidth={1} borderTopColor={palette.line}
                 testID="shelf-picker-bar">
             <XStack alignItems="center" gap="$3">
                 <Pressable accessibilityRole="button" accessibilityLabel="Cancel"
                            testID="shelf-picker-cancel" onPress={onCancel}>
-                    <XStack height={44} paddingHorizontal="$3" alignItems="center">
+                    <XStack height={BUTTON_HEIGHT} paddingHorizontal="$3"
+                            alignItems="center">
                         <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
                                        color={palette.dim}>
                             CANCEL
@@ -67,7 +80,7 @@ export default function ShelfPickerBar({
                         testID="shelf-picker-done"
                         onPress={blocked ? undefined : onDone}
                         opacity={blocked ? 0.35 : 1}
-                        height={44} paddingHorizontal="$4"
+                        height={BUTTON_HEIGHT} paddingHorizontal="$4"
                         alignItems="center" justifyContent="center"
                         borderRadius="$4"
                         // An emptying save is a deletion, and the palette has a

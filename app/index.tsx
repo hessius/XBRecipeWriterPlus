@@ -32,7 +32,8 @@ import {useCardWriter} from "@/hooks/useCardWriter";
 import {useMachine} from "@/hooks/useMachine";
 import {useLibraryQuery} from "@/hooks/useLibraryQuery";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
-import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
+import {useRecipeLibrary, type RecipeStore, type ShelfWriteOutcome}
+    from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -46,14 +47,15 @@ import NameShelfSheet from "@/components/NameShelfSheet";
 import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
-import ShelfPickerBar from "@/components/ShelfPickerBar";
+import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
     availableFilters,
     filterLabel,
-    STOCK_FILTERS
+    STOCK_FILTERS,
+    type FilterId
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
 import {tagKey} from "@/library/tagKey";
@@ -285,6 +287,16 @@ export default function HomeScreen({db, settings}: Props) {
         // user switched on and strand the library narrowed with no control.
         libraryQuery.query.filters
     ));
+    // Every applied filter the stock row cannot offer, which in practice means
+    // the shelf the user just opened from the grid. Without these the tag stays
+    // in the query and in the filter button's count with no chip naming it, so
+    // the narrowing is on and there is nothing on screen that turns it off. It
+    // is worse inside the picker: the shelf being edited would hide every
+    // recipe that is not already on it, which is most of the ones the user came
+    // to add.
+    const appliedNonStock = libraryQuery.query.filters.filter(
+        (id) => !offeredFilterIds.includes(id as FilterId)
+    );
     const railFilters: RailFilter[] = [
         // Drawn first and only while picking, because from inside a narrowed
         // library it is the only way back to what has been chosen. It is a chip
@@ -295,6 +307,11 @@ export default function HomeScreen({db, settings}: Props) {
             label:  `SELECTED (${picker.count})`,
             active: onlySelected
         }] : []),
+        ...appliedNonStock.map((id) => ({
+            id,
+            label:  filterLabel(id),
+            active: true
+        })),
         ...offeredFilterIds.map((id) => ({
             id,
             label:  STOCK_FILTERS[id].label,
@@ -313,10 +330,13 @@ export default function HomeScreen({db, settings}: Props) {
     });
     // The rows the picker draws are the rows the list draws, so a filter, a
     // search and a sort narrow the picker exactly as they narrow the library.
-    // SELECTED is the one lens the picker adds, and it is the answer to "what
-    // have I actually chosen" from inside a narrowed library.
+    //
+    // SELECTED is the one lens that does not, and it is read from the whole
+    // table rather than from `library.recipes` on purpose: its whole job is to
+    // bring back a choice the current lens has hidden, and an intersection with
+    // that lens would show the user the subset they could already see.
     const shownRecipes = picker.active && onlySelected
-        ? library.recipes.filter((recipe) => picker.selected.has(recipe.uuid))
+        ? library.allRecipes().filter((recipe) => picker.selected.has(recipe.uuid))
         : library.recipes;
     const favouriteRecipes = shownRecipes.filter((recipe) => recipe.favourite);
     const otherRecipes = shownRecipes.filter((recipe) => !recipe.favourite);
@@ -337,6 +357,28 @@ export default function HomeScreen({db, settings}: Props) {
         picker.cancel();
     }
 
+    /**
+     * Say what a shelf write could not do, and say nothing when it did it all.
+     *
+     * The cap is the case worth naming: a recipe already on twenty shelves
+     * cannot join a twenty-first, and without this the tick simply would not
+     * stick with no explanation on screen.
+     */
+    function reportShelfWrite({full, failed}: ShelfWriteOutcome) {
+        if (full > 0) {
+            notify({
+                tone:    "error",
+                message: full === 1
+                    ? "One recipe is already on as many shelves as it can hold."
+                    : `${full} recipes are already on as many shelves as they can hold.`
+            });
+            return;
+        }
+        if (failed > 0) {
+            notify({tone: "error", message: "Some recipes could not be saved."});
+        }
+    }
+
     function finishPicking() {
         if (picker.mode.kind === "editing") {
             // An emptied shelf is a removal, and it is asked about before it
@@ -346,7 +388,7 @@ export default function HomeScreen({db, settings}: Props) {
                 setRemovingShelf(picker.mode.tag);
                 return;
             }
-            library.setShelfMembers(picker.mode.tag, picker.chosen());
+            reportShelfWrite(library.setShelfMembers(picker.mode.tag, picker.chosen()));
             stopPicking();
             return;
         }
@@ -356,7 +398,7 @@ export default function HomeScreen({db, settings}: Props) {
     }
 
     function nameShelf(name: string) {
-        library.setShelfMembers(name, picker.chosen());
+        reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
         setNamingShelf(false);
         stopPicking();
     }
@@ -875,7 +917,10 @@ export default function HomeScreen({db, settings}: Props) {
                         // The list runs to the bottom of the display and the
                         // last card scrolls clear of the home indicator, rather
                         // than the whole screen stopping short of it.
-                        contentContainerStyle={{paddingBottom: insets.bottom + 8}}
+                        contentContainerStyle={{
+                            paddingBottom: insets.bottom + 8
+                                + (picker.active ? PICKER_BAR_HEIGHT : 0)
+                        }}
                         renderItem={({item}: {item: RecipeListItem}) => item.kind === "heading" ? (
                             <SectionHeading label={item.label}/>
                         ) : picker.active ? (
@@ -934,7 +979,9 @@ export default function HomeScreen({db, settings}: Props) {
                               }}
                               onRemove={() => {
                                   if (removingShelf !== null) {
-                                      library.setShelfMembers(removingShelf, []);
+                                      reportShelfWrite(
+                                          library.setShelfMembers(removingShelf, [])
+                                      );
                                   }
                                   setRemovingShelf(null);
                                   stopPicking();
