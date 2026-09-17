@@ -1727,7 +1727,7 @@ describe("the shelf grid", () => {
 
     async function openGrid(recipes: Recipe[] = shelfLibrary()) {
         await renderHome({recipes});
-        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
     }
 
     it("replaces the list with the grid", async () => {
@@ -1798,7 +1798,7 @@ describe("picking a shelf's members", () => {
 
     async function startPicking(recipes: Recipe[] = pickerLibrary()) {
         const rendered = await renderHome({recipes});
-        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
         await fireEvent.press(screen.getByTestId("new-shelf"));
         return rendered;
     }
@@ -1903,7 +1903,7 @@ describe("picking a shelf's members", () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
         await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
-        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
         expect(screen.getByTestId("shelf-picker-count"))
@@ -1925,7 +1925,7 @@ describe("picking a shelf's members", () => {
         // The library has no shelves left at all, so the grid draws its
         // explanation rather than an empty frame.
         expect(screen.getByTestId("shelves-empty")).toBeTruthy();
-        await fireEvent.press(screen.getByRole("radio", {name: "List"}));
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
         expect(screen.getByText("Ethiopia")).toBeTruthy();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
     });

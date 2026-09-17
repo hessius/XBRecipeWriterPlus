@@ -1,13 +1,14 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect} from "react";
 import {ScrollView} from "react-native";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
 import {XStack} from "tamagui";
 
 import RailChip from "@/components/RailChip";
-import RailSearch from "@/components/RailSearch";
-import SegmentedControl, {type SegmentOption} from "@/components/SegmentedControl";
+import {RailSearchChip, RailSearchField} from "@/components/RailSearch";
+import RailViewToggle, {type ViewToggleOption} from "@/components/RailViewToggle";
 import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
-import {asLibraryView, type LibraryView} from "@/library/libraryView";
+import {useRailSearch} from "@/hooks/useRailSearch";
+import {type LibraryView} from "@/library/libraryView";
 import {
     chipLabel,
     isDefaultSort,
@@ -97,7 +98,7 @@ function sentenceCase(label: string): string {
  * sort and filter, and two words here is a third of the row; the labels are kept
  * and are what a screen reader announces, so nothing is lost but ink.
  */
-const VIEW_OPTIONS: readonly SegmentOption[] = [
+const VIEW_OPTIONS: readonly ViewToggleOption<LibraryView>[] = [
     {value: "list", label: "List", icon: "list"},
     {value: "shelves", label: "Shelves", icon: "shelves"}
 ];
@@ -236,10 +237,13 @@ export default function LibraryRail({
 }: Props) {
     const reduced = useReducedMotion();
 
-    // Set from RailSearch's own event handlers, not an effect: while the search
-    // field is live the sort chip gives up its word to reclaim that width, and
-    // the rail learns the field opened only so it can ask for it back.
-    const [searchOpen, setSearchOpen] = useState(false);
+    // The rail owns the search state rather than the control, because the two
+    // halves of that control are drawn in different places: the square sits in
+    // the cluster and the field is drawn over the whole rail, so no one
+    // component contains both.
+    const {expanded: searchOpen, text: searchText, active: searchActive,
+        onExpand, onChangeText, onBlur, onClear} = useRailSearch(onSearchChange);
+    const searchState = searchActive ? `term ${searchText} active` : "no search term";
 
     const shrink = useSharedValue(collapsed ? 1 : 0);
 
@@ -261,58 +265,60 @@ export default function LibraryRail({
     // fills and names its axis; the default sort stays a bare glyph.
     const sortActive = !isDefaultSort(sort, direction);
 
-    // The word goes, not the accent, while the field is live: an active sort
-    // still fills, it just falls back to its icon-only form so the field has the
-    // width to show what is being typed. The spoken label is unchanged -- only
-    // the visible word is dropped -- so a screen reader still names the axis.
-    //
-    // The room has to be there before the typing rather than after the first
-    // letter, which is why this reads the open field. What made that bearable is
-    // at the other end: an empty field no longer stays open, so the word is
-    // never held away from a search nobody made.
-    const sortLabel = sortActive && !searchOpen ? chipLabel(sort) : undefined;
+    // An active sort names its axis, and now keeps the word whatever search is
+    // doing. Phase 3 dropped it while the field was live, to hand that width
+    // over to a field that was flexed into the same row; the field is drawn over
+    // the rail now, so there is no width to hand over and nothing to drop.
+    const sortLabel = sortActive ? chipLabel(sort) : undefined;
 
     // No filters to show means no button: one that opens an empty rail is worse
     // than none at all.
     const hasFilters = filters.length > 0;
 
-    // In the grid the shelves are the filters, so a chip would offer the same
-    // narrowing twice -- and against a list that is not on screen to show what
-    // it did. Dimmed rather than removed, so the row does not reflow under the
-    // user every time they change view.
-    //
-    // Picking is the exception, and the reason this is not simply the view: the
-    // grid steps aside for rows while members are chosen, so the filters are
-    // narrowing something the user can see again, and SELECTED is in that row.
-    const filtersDimmed = view === "shelves" && !picking;
+    /**
+     * Whether this view is asking a question of the list.
+     *
+     * Search, sort and filter all narrow or order a list of recipes, so they
+     * belong to the view that shows one. The grid shows shelves: there is
+     * nothing to sort it by while shelf ordering is out of scope, a filter and a
+     * shelf narrow the same library by the same means, and a grid of eight named
+     * squares has nothing in it worth searching for. Device testing found four
+     * controls fighting over a 320 pt rail; this is the half of the fix that
+     * removes the ones that had nothing to do there.
+     *
+     * Picking is the exception, and the reason this is not simply the view: the
+     * grid steps aside for rows while members are chosen, so the query controls
+     * are narrowing something the user can see again.
+     */
+    const asksOfTheList = view === "list" || picking;
 
-    // The pinned cluster is a list rather than a fixed set, which is what let
-    // the view pair be spliced in between search and the sort chip without
-    // restructuring the rail.
+    // The pinned cluster is a list rather than a fixed set, so a view can be
+    // handed the controls it needs without the rail being restructured around
+    // which ones those are.
     //
-    // Search leads and is flexed, so it claims the row and pushes the buttons to
-    // the trailing edge itself. Nothing here carries a `marginLeft="auto"`: the
-    // buttons are not pinned right, they are simply what is left after search
-    // has taken its width, which stays true however many of them phase 4 adds.
+    // The toggle leads in both views, and it is the only control present in
+    // both: a control that moved when the views changed would be a control that
+    // moved under the thumb that had just tapped it.
     const cluster = [
-        <RailSearch key="search" onTermChange={onSearchChange}
-                    onExpandedChange={setSearchOpen}/>,
         // Left out while picking. The grid has nothing on it to tick, so a pair
         // whose other half ended the selection would be a way to lose a
         // half-built shelf to a single tap.
         ...(picking ? [] : [
-            <SegmentedControl key="view" value={view} options={VIEW_OPTIONS}
-                              accessibilityLabel="Library view"
-                              onChange={(next) => onViewChange(asLibraryView(next))}/>
+            <RailViewToggle key="view" value={view} options={VIEW_OPTIONS}
+                            accessibilityLabel="Library view"
+                            onChange={onViewChange}/>
         ]),
-        <RailChip key="sort" testID="rail-sort" icon="sort"
-                  active={sortActive}
-                  label={sortLabel}
-                  accessibilityLabel={sortAccessibilityLabel(sort, direction)}
-                  onPress={onSortPress}/>
+        ...(asksOfTheList ? [
+            <RailSearchChip key="search" state={searchState} onPress={onExpand}/>,
+            <RailChip key="sort" testID="rail-sort" icon="sort"
+                      active={sortActive}
+                      label={sortLabel}
+                      accessibilityLabel={sortAccessibilityLabel(sort, direction)}
+                      onPress={onSortPress}/>
+        ] : [])
     ];
 
-    if (hasFilters) {
+    if (asksOfTheList && hasFilters) {
         cluster.push(
             // The count shows at all times, including "0": a hidden filter is
             // worse than a visible one, so the button never falls back to a bare
@@ -325,7 +331,6 @@ export default function LibraryRail({
                       label={String(activeFilterCount)}
                       expanded={filtersOpen}
                       caretOpen={filtersOpen}
-                      dimmed={filtersDimmed}
                       accessibilityLabel={
                           filterToggleAccessibilityLabel(activeFilterCount, filtersOpen)
                       }
@@ -335,11 +340,27 @@ export default function LibraryRail({
 
     return (
         <Animated.View style={padding} testID="library-rail">
-            <XStack alignItems="center" paddingHorizontal="$3" gap={CHIP_GAP}>
-                {cluster}
+            {/* The field is drawn over this row, so the row is its coordinate
+                space and has to stay a positioned box even when nothing is
+                drawn over it. */}
+            <XStack position="relative">
+                <XStack flex={1} alignItems="center"
+                        paddingHorizontal="$3" gap={CHIP_GAP}>
+                    {cluster}
+                </XStack>
+
+                {searchOpen && (
+                    <XStack position="absolute" top={0} left={0} right={0} bottom={0}
+                            alignItems="center" paddingHorizontal="$3">
+                        <RailSearchField state={searchState} text={searchText}
+                                         active={searchActive}
+                                         onChangeText={onChangeText}
+                                         onBlur={onBlur} onClear={onClear}/>
+                    </XStack>
+                )}
             </XStack>
 
-            {hasFilters && filtersOpen && !filtersDimmed && (
+            {asksOfTheList && hasFilters && filtersOpen && (
                 <FilterRail filters={filters} onFilterPress={onFilterPress}/>
             )}
         </Animated.View>

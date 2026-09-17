@@ -171,84 +171,64 @@ describe("LibraryRail", () => {
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
     });
 
-    it("drops the sort chip's word while a term is held, keeping its label", async () => {
-        // Work item 3: the field flexes into whatever the pinned controls leave,
-        // and the sort chip gives up its visible word to make that room. The
-        // spoken label is unchanged -- only the word on screen goes.
+    it("keeps the sort word while the field is live", async () => {
+        // Reversed in phase 4b. The word used to go while search was open, to
+        // hand its width to a field flexed into the same row. The field is drawn
+        // over the rail now, so nothing is competing for that width and there is
+        // nothing to hand over.
         await renderWithProviders(
             <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
         );
-        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
 
         await press(screen.getByTestId("rail-search"));
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
 
-        expect(screen.queryByText(chipLabel("added"))).toBeNull();
-        expect(screen.getByTestId("rail-sort").props.accessibilityLabel)
-            .toBe("Sort by date added, newest first");
+        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
     });
 
-    it("drops the sort word as soon as there is a cursor in the field", async () => {
-        // The room has to be there before the typing. Waiting for the first
-        // letter meant the rail rearranged itself under a term already being
-        // entered.
-        await renderWithProviders(
-            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
-        );
+    it("leaves the view toggle exactly where it was when search opens", async () => {
+        // The whole argument for overlaying rather than flexing. A field that
+        // joined the row took its width from the toggle beside it, which is what
+        // made the rail unusable at 320 pt.
+        await renderWithProviders(<LibraryRail {...railProps({})}/>);
+        const before = screen.getByTestId("rail-view-toggle");
 
         await press(screen.getByTestId("rail-search"));
 
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
-        expect(screen.queryByText(chipLabel("added"))).toBeNull();
+        expect(screen.getByTestId("rail-view-toggle")).toBe(before);
     });
 
-    it("gives the sort word back when an empty field is walked away from", async () => {
-        // Nothing was searched for, so nothing should still be paying for it.
-        // Leaving the field open held the word away until it was cleared, for a
-        // gesture that never reached the library at all.
-        await renderWithProviders(
-            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
-        );
+    it("gives the field back to the rail when an empty one is walked away from", async () => {
+        // Nothing was searched for, so nothing should still be covering the rail.
+        await renderWithProviders(<LibraryRail {...railProps({})}/>);
         await press(screen.getByTestId("rail-search"));
 
         await fireEvent(screen.getByTestId("rail-search-input"), "blur");
 
         expect(screen.queryByTestId("rail-search-field")).toBeNull();
-        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
     });
 
-    it("keeps the field and the width it took when the keyboard leaves a term", async () => {
+    it("keeps the field when the keyboard leaves a term behind", async () => {
         // A user who typed a term and then looked at the results still has one.
-        await renderWithProviders(
-            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
-        );
+        await renderWithProviders(<LibraryRail {...railProps({})}/>);
         await press(screen.getByTestId("rail-search"));
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
 
         await fireEvent(screen.getByTestId("rail-search-input"), "blur");
 
         expect(screen.getByTestId("rail-search-field")).toBeTruthy();
-        expect(screen.queryByText(chipLabel("added"))).toBeNull();
     });
 
-    it("gives the sort word back when the term is cleared outright", async () => {
-        // Clearing does not go through the text handler, so it is the one path
-        // that must report for itself. Left unreported, the word stays gone
-        // after the field has collapsed and the library has gone unfiltered:
-        // the exact symptom keying this to the term was meant to end.
-        await renderWithProviders(
-            <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
-        );
+    it("closes the field when the term is cleared outright", async () => {
+        await renderWithProviders(<LibraryRail {...railProps({})}/>);
         await press(screen.getByTestId("rail-search"));
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "eth");
-        expect(screen.queryByText(chipLabel("added"))).toBeNull();
 
         await fireEvent.press(screen.getByTestId("rail-search-clear"));
 
-        expect(screen.getByText(chipLabel("added"))).toBeTruthy();
+        expect(screen.queryByTestId("rail-search-field")).toBeNull();
     });
-
-
 
     it("reports a sort tap", async () => {
         const onSortPress = jest.fn();
@@ -368,10 +348,10 @@ describe("the view pair", () => {
     it("draws both halves and marks the one you are in", async () => {
         await renderWithProviders(<LibraryRail {...railProps({view: "list"})}/>);
 
-        expect(screen.getByRole("radio", {name: "List"}).props.accessibilityState)
-            .toEqual({checked: true});
-        expect(screen.getByRole("radio", {name: "Shelves"}).props.accessibilityState)
-            .toEqual({checked: false});
+        expect(screen.getByRole("tab", {name: "List"}).props.accessibilityState)
+            .toEqual({selected: true});
+        expect(screen.getByRole("tab", {name: "Shelves"}).props.accessibilityState)
+            .toEqual({selected: false});
     });
 
     it("reports the half that was tapped", async () => {
@@ -380,27 +360,46 @@ describe("the view pair", () => {
             <LibraryRail {...railProps({view: "list", onViewChange})}/>
         );
 
-        // fireEvent.press rather than the responder pair the chips need: a
-        // segment is a plain Pressable with an onPress, not a gesture-handler
-        // surface, so the responder chain never reaches it.
-        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+        await press(screen.getByRole("tab", {name: "Shelves"}));
 
         expect(onViewChange).toHaveBeenCalledWith("shelves");
     });
 });
 
 describe("the filters while the grid is showing", () => {
-    it("dims the filter button and takes its tap away", async () => {
-        const onFilterToggle = jest.fn();
+    it("takes the filter button away entirely", async () => {
+        // Dimmed in phase 4, absent in 4b. A filter and a shelf narrow the same
+        // library by the same means, so the grid offers one instrument, not two
+        // with one greyed out.
+        await renderWithProviders(<LibraryRail {...railProps({view: "shelves"})}/>);
+
+        expect(screen.queryByTestId("rail-filter-toggle")).toBeNull();
+    });
+
+    it("takes sort and search away with it", async () => {
+        // Nothing to sort a grid by while shelf ordering is out of scope, and
+        // nothing worth finding in eight named squares that is not on screen.
+        await renderWithProviders(<LibraryRail {...railProps({view: "shelves"})}/>);
+
+        expect(screen.queryByTestId("rail-sort")).toBeNull();
+        expect(screen.queryByTestId("rail-search")).toBeNull();
+    });
+
+    it("keeps the toggle, which is the one control both views carry", async () => {
+        await renderWithProviders(<LibraryRail {...railProps({view: "shelves"})}/>);
+
+        expect(screen.getByTestId("rail-view-toggle")).toBeTruthy();
+    });
+
+    it("offers the query controls again while members are being picked", async () => {
+        // The grid steps aside for rows while picking, so they are narrowing
+        // something the user can see again.
         await renderWithProviders(
-            <LibraryRail {...railProps({view: "shelves", onFilterToggle})}/>
+            <LibraryRail {...railProps({view: "shelves", picking: true})}/>
         );
 
-        const button = screen.getByTestId("rail-filter-toggle");
-        expect(button.props.accessibilityState.disabled).toBe(true);
-
-        await press(button);
-        expect(onFilterToggle).not.toHaveBeenCalled();
+        expect(screen.getByTestId("rail-sort")).toBeTruthy();
+        expect(screen.getByTestId("rail-search")).toBeTruthy();
     });
 
     it("puts the chips away rather than leaving them under a dimmed button", async () => {

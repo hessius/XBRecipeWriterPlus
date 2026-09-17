@@ -1,162 +1,88 @@
-import React, {useEffect, useRef, useState} from "react";
-import {Pressable, TextInput, type LayoutChangeEvent} from "react-native";
+import React, {useEffect, useRef} from "react";
+import {Pressable, TextInput} from "react-native";
 import {XStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
-import DotMatrixText, {dotMatrixTextProps} from "@/components/DotMatrixText";
+import {dotMatrixTextProps} from "@/components/DotMatrixText";
 import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
-import {useRailSearch} from "@/hooks/useRailSearch";
 
-/** The glyph size inside the field, matching the chips beside it. */
+/** The glyph size inside the control, matching the chips beside it. */
 const ICON_SIZE = 18;
 
 /**
- * The width the idle control must have before it spells its own name.
+ * Search, idle: a square in the rail.
  *
- * Search takes whatever the trailing buttons leave, and on a narrow phone
- * carrying a long sort word that remainder is not much more than the glyph. The
- * word is the first thing to go, because a clipped half-word reads as a broken
- * control while a bare glyph reads as a search button.
+ * It was a flexed field that filled the row, which was right for a rail holding
+ * search and two buttons, and wrong the moment phase 4 put a segmented pair in
+ * the same row. A flexing control and a fixed one share a rail by taking width
+ * from each other, and on a 320 pt phone the field lost: device testing found it
+ * too cramped to type in. A square takes the least the rail can offer, and the
+ * field it opens does not have to fit beside anything, because it is drawn over
+ * the rail rather than in it.
  *
- * Measured rather than guessed: the remainder depends on the sort axis's word,
- * which changes as the user sorts, so no fixed breakpoint on device width can
- * answer it. The measurement cannot loop -- the label sits in a box that is
- * sized by the control's siblings, so showing or hiding it does not change the
- * width being measured: `flex` resolves to a basis of 0, so the control's width
- * is decided by its siblings and its own content cannot feed back into it. That
- * is what makes the measurement safe, so do not rewrite the `flex` below as a
- * bare `flexGrow`, which leaves the basis at `auto` and would make the label's
- * own width part of what is being measured.
+ * Kept apart from the field on purpose: the field has to be positioned against
+ * the rail, not against this square, so the two cannot be one component without
+ * this square becoming the field's coordinate space.
  */
-const LABEL_MIN_WIDTH = 132;
-
-type Props = {
-    /**
-     * The debounced term, and only that. The rail's owner is handed the settled
-     * search string and never the keystrokes or the field's open/closed state,
-     * which is what lets the rail be tested without the query behind it.
-     */
-    onTermChange: (term: string) => void;
-    /**
-     * The rail is told when the field opens and closes so a sibling control can
-     * give up width to it -- the sort chip drops its word while search is live.
-     *
-     * The open field, not a term held: a cursor in the field is a search about
-     * to be typed, and the room for it has to be there before the typing, not
-     * after the first letter. This is only bearable because an empty field no
-     * longer stays open -- walking away from one closes it, and the word comes
-     * straight back -- so the word is never held away from a search that was
-     * not made.
-     *
-     * Reported from the same event handlers that open and close the field,
-     * never an effect, so the parent's state is set on the gesture rather than
-     * synced after it. Optional, because the hook that exercises this component
-     * in isolation does not care.
-     */
-    onExpandedChange?: (expanded: boolean) => void;
-};
+export function RailSearchChip({state, onPress}: {
+    /** What a reader hears about the search behind the square. */
+    state: string;
+    onPress: () => void;
+}) {
+    return (
+        <XStack testID="rail-search"
+                accessible accessibilityRole="button"
+                accessibilityLabel={`Search recipes, collapsed, ${state}`}
+                onPress={onPress}
+                width={CHIP_HEIGHT} height={CHIP_HEIGHT}
+                alignItems="center" justifyContent="center"
+                borderRadius="$4" borderWidth={1}
+                // The same unfilled shape the sort and filter chips wear when
+                // they are off. The fill arrives with the cursor.
+                backgroundColor={palette.none} borderColor={palette.line}
+                pressStyle={{opacity: 0.7}}>
+            <DotIcon name="search" size={ICON_SIZE} color={palette.dim}/>
+        </XStack>
+    );
+}
 
 /**
- * The rail's search: a field across the rail, live once tapped.
+ * Search, live: the field, drawn over the rail.
  *
- * It takes whatever the trailing buttons leave, idle or not. Paying for its
- * space only while in use was right while twelve filter chips competed for the
- * same row, and stopped being right the moment they moved to a rail of their
- * own: there is nothing left to give the width back to, so a square glyph beside
- * two buttons leaves a long dead gap that reads as a missing control. Tapping it
- * therefore moves nothing across the rail at all; it puts a cursor in a field
- * already where it will be. The sort chip's word is the little extra room this
- * gains, and it goes on the tap rather than on the first keystroke, so the room
- * is there before the typing instead of arriving underneath it. That is only
- * bearable because an empty field does not stay open: walk away from one and it
- * closes, and the word comes straight back.
+ * The caller positions it; this only fills what it is given. Because it covers
+ * the rail rather than joining it, opening search moves nothing underneath --
+ * the view toggle stays exactly where the thumb left it -- and the field gets
+ * the whole width whatever the rail is carrying that day.
  *
- * Module scope, and it owns its state through `useRailSearch`: a component
- * declared inside another's body is a fresh type every render, so React remounts
- * it and the field loses what was typed. That bug has been fixed twice here.
+ * That is also what retired the sort chip's word suppression. Phase 3 had the
+ * sort chip drop its word while the field was live, to hand the width over; with
+ * nothing competing for width there is nothing to hand over.
  */
-export default function RailSearch({onTermChange, onExpandedChange}: Props) {
-    const {expanded, text, active, onExpand, onChangeText, onBlur, onClear} =
-        useRailSearch(onTermChange);
-    const searchState = active ? `term ${text} active` : "no search term";
+export function RailSearchField({state, text, active, onChangeText, onBlur, onClear}: {
+    state: string;
+    text: string;
+    /** Whether a term is held. Lights the border and the glyph. */
+    active: boolean;
+    onChangeText: (next: string) => void;
+    onBlur: () => void;
+    onClear: () => void;
+}) {
+    const inputRef = useRef<TextInput | null>(null);
     // The header is dot matrix throughout, and a field that dropped to the
     // system face in the middle of it read as a borrowed control. Asked for
     // rather than spelled out, so Doto's size floor and scale cap still hold.
     const doto = dotMatrixTextProps({fontSize: 12, letterSpacing: 1.5});
 
-    function expand() {
-        onExpand();
-        onExpandedChange?.(true);
-    }
-
-    function blur() {
-        if (onBlur()) onExpandedChange?.(false);
-    }
-
-    function clear() {
-        onClear();
-        onExpandedChange?.(false);
-    }
-
-    const inputRef = useRef<TextInput | null>(null);
-    // Set from a layout event, not an effect, and never read to decide the width
-    // it came from.
-    const [width, setWidth] = useState(0);
-
-    function measure(event: LayoutChangeEvent) {
-        setWidth(event.nativeEvent.layout.width);
-    }
-
     // The imperative replacement for `autoFocus`, which under a programmatic
-    // mount can fire before the field is in the tree. Focus on the edge into the
-    // expanded state so the keyboard follows the tap.
+    // mount can fire before the field is in the tree. This component exists only
+    // while the field is live, so mounting is the edge to focus on.
     useEffect(() => {
-        if (expanded) inputRef.current?.focus();
-    }, [expanded]);
-
-    // Nothing animates the width any more. The control already occupies its
-    // width when idle, so there is no expansion to describe: the only room it
-    // gains on a tap is the sort chip's word, and easing a field a few points
-    // wider draws the eye to a change that is not the point of the gesture. The
-    // shared value, its effect and the motion constants went with it rather than
-    // being left inert.
-
-    if (!expanded) {
-        return (
-            <XStack testID="rail-search" onLayout={measure}
-                    accessible accessibilityRole="button"
-                    accessibilityLabel={`Search recipes, collapsed, ${searchState}`}
-                    onPress={expand}
-                    // Flexed, exactly as the live field is, so tapping does not
-                    // move the control. `minWidth` is the floor a touch target
-                    // may not go below whatever the buttons beside it claim.
-                    flex={1} minWidth={CHIP_HEIGHT}
-                    height={CHIP_HEIGHT} alignItems="center"
-                    paddingHorizontal="$3" gap="$2"
-                    borderRadius="$4" borderWidth={1}
-                    // The same unfilled shape the sort and filter chips wear
-                    // when they are off: idle search is one more control in the
-                    // row, and a fill here would read as a state it is not in.
-                    // The fill arrives with the cursor.
-                    backgroundColor={palette.none} borderColor={palette.line}
-                    // The word is clipped rather than allowed to push the
-                    // buttons, on the frame before the measurement lands.
-                    overflow="hidden"
-                    pressStyle={{opacity: 0.7}}>
-                <DotIcon name="search" size={ICON_SIZE} color={palette.dim}/>
-                {width >= LABEL_MIN_WIDTH && (
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
-                                   color={palette.dim}>
-                        SEARCH
-                    </DotMatrixText>
-                )}
-            </XStack>
-        );
-    }
+        inputRef.current?.focus();
+    }, []);
 
     return (
-        <XStack testID="rail-search-field" flex={1} minWidth={CHIP_HEIGHT}
+        <XStack testID="rail-search-field" flex={1}
                 height={CHIP_HEIGHT} alignItems="center"
                 paddingLeft="$3" gap="$2" borderRadius="$4" borderWidth={1}
                 backgroundColor={palette.raised}
@@ -169,21 +95,18 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
             {/* React Native's own field, not Tamagui's `Input`. Tamagui resolves
                 `fontFamily` against the theme's font tokens and drops anything
                 that is not one, and an `unstyled` Input discards a plain `style`
-                prop too, so Doto could not be asked for through it either way.
-                There is nothing else being traded: the field is a flex and a
-                colour, and the ref stops needing a cast through `TamaguiElement`
-                to reach the `focus()` above. */}
+                prop too, so Doto could not be asked for through it either way. */}
             <TextInput
                 ref={inputRef}
                 testID="rail-search-input"
-                accessibilityLabel={`Search recipes, expanded, ${searchState}`}
+                accessibilityLabel={`Search recipes, expanded, ${state}`}
                 maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
                 style={[doto.style, {flex: 1, color: palette.text}]}
                 placeholder="SEARCH"
                 placeholderTextColor={palette.dim}
                 value={text}
                 onChangeText={onChangeText}
-                onBlur={blur}
+                onBlur={onBlur}
                 // Both, and each covers what the other cannot. The hook holds
                 // the text upper case, which is the guarantee -- it catches a
                 // pasted term, which never passes through the keyboard at all.
@@ -198,7 +121,7 @@ export default function RailSearch({onTermChange, onExpandedChange}: Props) {
                 reach back into the field's trailing edge, where a tap meant
                 to place the cursor would wipe the term instead. */}
             <Pressable testID="rail-search-clear" accessibilityRole="button"
-                       accessibilityLabel="Clear search" onPress={clear}
+                       accessibilityLabel="Clear search" onPress={onClear}
                        style={{width: CHIP_HEIGHT, height: CHIP_HEIGHT,
                                alignItems: "center", justifyContent: "center"}}>
                 <DotIcon name="close" size={ICON_SIZE} color={palette.dim}/>
