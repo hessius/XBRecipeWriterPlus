@@ -1,9 +1,10 @@
 import {router, useLocalSearchParams, useNavigation} from "expo-router";
 import React, {useEffect, useRef, useState} from "react";
-import {Pressable, ScrollView, Share, TextInput, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, Share, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {Input, Text, XStack, YStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
+import AboutDeck from "@/components/AboutDeck";
 import BypassRung from "@/components/BypassRung";
 import BypassWriteSheet from "@/components/BypassWriteSheet";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
@@ -13,6 +14,7 @@ import HelpSheet from "@/components/HelpSheet";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
+import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
 import SegmentedRow from "@/components/SegmentedRow";
 import StageProfile from "@/components/StageProfile";
@@ -22,19 +24,19 @@ import TeaBanner from "@/components/TeaBanner";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {grindTooFine} from "@/constants/copy";
-import type {HelpTopic} from "@/constants/recipeHelp";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
+import {useRecipeBrewSummary, type BrewSummaryStore} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import {parseCapture} from "@/library/cardDiagnostics";
 import {maxStagesForBytes, SIGNATURE_BYTES} from "@/library/cardWriteErrors";
 import type Pour from "@/library/Pour";
-import Recipe, {CUP_TYPE, isValidXID} from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {shareBlockReason} from "@/library/shareLink";
 import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
@@ -85,117 +87,6 @@ const GRINDER_OPTIONS = [
  */
 const BANNER_ACTION = {minHeight: 44, justifyContent: "center"} as const;
 
-type TextFieldRowProps = {
-    topic: HelpTopic;
-    label: string;
-    initialValue: string;
-    maxLength?: number;
-    autoCapitalize?: "none" | "characters";
-    showHint: boolean;
-    onCommit: (value: string) => void;
-    /**
-     * Every keystroke, so the screen can flush an unblurred field.
-     *
-     * A `Pressable` does not blur a focused `TextInput`, so WRITE, SAVE, More
-     * and Back can all fire while this row still holds a value the recipe has
-     * never seen. The draft goes to a ref rather than to state: the recipe is
-     * mutated in place and published by a key bump, so routing per keystroke
-     * through state would re-render the row and fight the cursor for no gain.
-     */
-    onDraft?: (value: string) => void;
-    /** Validates on every keystroke; false marks the field and reports up. */
-    validate?: (value: string) => boolean;
-    /** The reason shown while `validate` returns false. Prose, not a caption. */
-    invalidReason?: string;
-    /** Reports the field's validity so the write and save gates can honour it. */
-    onInvalidChange?: (invalid: boolean) => void;
-    /** Told when the input gains or loses focus, so a caller can defer work. */
-    onFocusChange?: (focused: boolean) => void;
-    /**
-     * A live annotation on the field's own label, e.g. that an online lookup
-     * failed. Passed straight to `FieldRow`; unlike `error` it does not gate any
-     * button and is not styled as a validation failure.
-     */
-    note?: string;
-};
-
-/**
- * A `FieldRow` whose value is typed.
- *
- * Uncontrolled — the recipe is mutated in place and published by a key bump, so
- * feeding the input back a controlled `value` on every keystroke would fight the
- * cursor. It commits when editing ends, which is when the value is worth writing
- * back.
- *
- * The row keys on an external-replacement epoch at its call site, not on the
- * value it mirrors, so only a wholesale swap of the recipe (a revert) remounts
- * it and resets the visible text; an ordinary edit leaves it mounted. See the
- * key comment beside the call.
- *
- * A field may validate live: `validate` runs on every keystroke, not only on
- * commit, so a bad value closes the write and save gates before the field
- * blurs. Validity is reported up rather than kept here alone, because the gate
- * it feeds lives on the screen.
- *
- * Declared at module scope so it is not a fresh component type on every render
- * of the screen, which would remount it and drop the text mid-entry.
- */
-function TextFieldRow({
-    topic, label, initialValue, maxLength, autoCapitalize,
-    showHint, onCommit, onDraft,
-    validate, invalidReason, onInvalidChange, onFocusChange, note
-}: TextFieldRowProps) {
-    const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
-    // The whole row focuses this, so a short or empty value no longer leaves a
-    // wide strip of the row looking tappable while only the input responds.
-    const inputRef = useRef<React.ElementRef<typeof Input>>(null);
-
-    // Reports validity on mount. The row is keyed on the external-replacement
-    // epoch by its call site, so a revert remounts the whole row and both the
-    // local `invalid` mark and the screen's gate are recomputed here from the
-    // restored value. Keying only the inner input left this state behind: the
-    // danger colour and the reason stayed on a field that now held something
-    // valid.
-    useEffect(() => {
-        if (validate) onInvalidChange?.(!validate(initialValue));
-    }, [initialValue, validate, onInvalidChange]);
-
-    function onChangeText(value: string) {
-        onDraft?.(value);
-        if (!validate) return;
-        const bad = !validate(value);
-        setInvalid(bad);
-        onInvalidChange?.(bad);
-    }
-
-    return (
-        // The whole row is the touch target, not just the right-aligned input.
-        // `accessible={false}` keeps this wrapper out of the accessibility tree
-        // so the `Input` below stays the single announced element under its own
-        // `label` -- the same one-announced-target rule `ImportTile` follows,
-        // where the wrapper carries the label and the inner control is hidden.
-        // This press only lives in `TextFieldRow`, not in `FieldRow`: a Stepper
-        // or segmented row shares `FieldRow`, and a row-wide press there would
-        // swallow the taps meant for the stepper's - and + controls.
-        <Pressable accessible={false} testID={`field-row-${label}`}
-                   onPress={() => (inputRef.current as TextInput | null)?.focus()}>
-            <FieldRow topic={topic} showHint={showHint} note={note}
-                      error={invalid ? invalidReason : undefined}>
-                {/* Not keyed here: the key belongs on the row, which is what owns
-                    the `invalid` state this input feeds. */}
-                <Input ref={inputRef} unstyled accessibilityLabel={label}
-                       defaultValue={initialValue} maxLength={maxLength}
-                       autoCapitalize={autoCapitalize} onChangeText={onChangeText}
-                       onFocus={() => onFocusChange?.(true)}
-                       onBlur={() => onFocusChange?.(false)}
-                       onEndEditing={(event) => onCommit(event.nativeEvent.text)}
-                       textAlign="right" minWidth={110} fontSize={16}
-                       color={invalid ? palette.danger : palette.text}/>
-            </FieldRow>
-        </Pressable>
-    );
-}
-
 type BrewDeckProps = {
     recipe: Recipe;
 
@@ -203,27 +94,8 @@ type BrewDeckProps = {
     balanceTarget: number;
     showHint: boolean;
     dispatch: Dispatch;
-    /** Records an unblurred field's current text, for the screen to flush. */
-    onDraft: (label: string, value: string) => void;
-    /** Reports the recipe-ID field's validity into the screen's write/save gate. */
-    onInputErrorChange: (invalid: boolean) => void;
     /** Raises a too-fine imported grind to the card minimum. */
     coarsenGrindToMinimum: () => void;
-    /**
-     * The xBloom name lookup for this recipe's XID was tried and failed. Shown
-     * as a quiet note on the XID row, not an error: the recipe is valid without
-     * a looked-up name, so this never touches the save gate.
-     */
-    xidLookupFailed: boolean;
-    /**
-     * Counter bumped only when the recipe instance is swapped (a revert). The
-     * two text rows key on it, so a genuine external replacement remounts them
-     * and resets their visible text and validity, while an ordinary edit or an
-     * XID lookup leaves the field a user is typing in mounted.
-     */
-    externalEpoch: number;
-    /** The Recipe ID field reports focus so the hook can defer the XID lookup. */
-    onXidFocusChange: (focused: boolean) => void;
 };
 
 /**
@@ -249,9 +121,7 @@ type BrewDeckProps = {
  * body is a new type on every render and would remount its whole subtree.
  */
 function BrewDeck({
-    recipe, accent, balanceTarget, showHint,
-    dispatch, onDraft, onInputErrorChange, coarsenGrindToMinimum, xidLookupFailed,
-    externalEpoch, onXidFocusChange
+    recipe, accent, balanceTarget, showHint, dispatch, coarsenGrindToMinimum
 }: BrewDeckProps) {
     "use no memo";
 
@@ -398,36 +268,6 @@ function BrewDeck({
                               onChange={(value) => dispatch(RECIPE_LABELS.GRINDER, value)}/>
             )}
 
-            {/* Keyed on the external-replacement epoch, not on the value it
-                mirrors. The counter bumps only when the whole recipe is swapped
-                out — a revert — so that one case still remounts the row and
-                resets its visible text, local `invalid` mark and the screen's
-                save gate to the restored ID. An ordinary keystroke or a
-                late-arriving XID lookup does not touch the epoch, so the field a
-                user is typing in is never remounted mid-entry: keying on
-                `recipe.xid` used to do exactly that, and a mid-typing render
-                (the XID lookup resolving) reset the uncontrolled input and ate
-                keystrokes.
-
-                The `xid-`/`name-` prefixes keep the two rows in separate key
-                namespaces, so a share-link import — which arrives with `xid`
-                and `name` both empty and now shares the same epoch — cannot land
-                two siblings on one key and draw React's duplicate-key warning. */}
-            <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID" initialValue={recipe.xid}
-                          maxLength={8} autoCapitalize="characters"
-                      showHint={showHint}
-                          note={xidLookupFailed ? "not found" : undefined}
-                          validate={isValidXID} onInvalidChange={onInputErrorChange}
-                          invalidReason="Not a valid ID: three letters, an optional T, then two or three digits, like CGL12."
-                          onFocusChange={onXidFocusChange}
-                          onDraft={(value) => onDraft(RECIPE_LABELS.XID, value)}
-                          onCommit={(value) => dispatch(RECIPE_LABELS.XID, value)}/>
-
-            <TextFieldRow key={`name-${externalEpoch}`} topic="name" label="Name" initialValue={recipe.name}
-                          maxLength={100}
-                      showHint={showHint}
-                          onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
-                          onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
         </YStack>
     );
 }
@@ -836,7 +676,14 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
  * is derived at render by the hook, not repainted by hand, which is what fixed
  * the stale total (#40).
  */
-export default function EditRecipe() {
+export default function EditRecipe(
+    /**
+     * The brew count store, injected by tests the way `brew.tsx` takes its
+     * export store. The router passes nothing, so the default is the shared
+     * database.
+     */
+    {historyStore}: {historyStore?: BrewSummaryStore} = {}
+) {
     "use no memo";
 
     // The screen owns a `Recipe` that every edit mutates in place, and it
@@ -851,6 +698,7 @@ export default function EditRecipe() {
     const navigation = useNavigation();
 
     const [showHint, setShowHint] = useSetting("showHints");
+    const [showRecipeAvatars] = useSetting("showRecipeAvatars");
     const [rememberedMachine] = useSetting("machineDeviceId");
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
     const [lastCardRead] = useSetting("lastCardRead");
@@ -899,6 +747,7 @@ export default function EditRecipe() {
     const [overflowOpen, setOverflowOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    const [renameOpen, setRenameOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
@@ -932,6 +781,12 @@ export default function EditRecipe() {
     // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
     // neutral tint on the render where the recipe has not resolved yet.
     const accent = recipe ? resolveAccent(recipe) : palette.dim;
+
+    // Read once, when the screen opens: a brew cannot be recorded from inside
+    // the editor, so there is nothing for a subscription here to hear. The
+    // empty uuid on the render before the recipe resolves counts nothing,
+    // which is the right answer for a recipe that is not there yet.
+    const brewSummary = useRecipeBrewSummary(recipe?.uuid ?? "", historyStore);
 
     if (!recipe) return null;
 
@@ -1078,7 +933,8 @@ export default function EditRecipe() {
     // -- must also hide the screen from TalkBack, which an absolutely
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
-    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen || bypassWriteOpen;
+    const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
+        || bypassWriteOpen || renameOpen;
 
     return (
         <>
@@ -1103,7 +959,8 @@ export default function EditRecipe() {
                         beverage={recipe.isTea() ? "TEA" : "COFFEE"} pours={recipe.pours}
                         onBack={async () => { await flushDrafts(); navigation.goBack(); }}
                         onMore={() => setOverflowOpen(true)}
-                        onHelp={() => setHelpOpen(true)}/>
+                        onHelp={() => setHelpOpen(true)}
+                        onRename={() => setRenameOpen(true)}/>
 
             {/* `stickyHeaderIndices` only sticks *direct* children, and it
                 counts slots — so every slot below is always occupied, by an
@@ -1127,8 +984,9 @@ export default function EditRecipe() {
                         stickyHeaderIndices={deck === "stages" ? [2] : undefined}
                         // iOS grows the scroll view's own bottom inset by the
                         // keyboard's height so a focused field low on the screen
-                        // — the Recipe ID and Name rows sit near the bottom of
-                        // the brew deck — scrolls clear of the software keyboard
+                        // — the Recipe ID and Name rows, which moved to the
+                        // about deck but are still the screen's only text
+                        // fields — scrolls clear of the software keyboard
                         // instead of hiding behind it. It adds to the inset, so
                         // the measured `paddingBottom` above still holds; and it
                         // only ever touches the bottom inset, so the sticky
@@ -1169,12 +1027,16 @@ export default function EditRecipe() {
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
-                              coarsenGrindToMinimum={coarsenGrindToMinimum}
-                              xidLookupFailed={xidLookupFailed}
-                              externalEpoch={externalEpoch}
-                              onXidFocusChange={setXidFocused}
-                              onDraft={(label, value) => drafts.current.set(label, value)}
-                              onInputErrorChange={setInputError}/>
+                              coarsenGrindToMinimum={coarsenGrindToMinimum}/>
+                ) : deck === "about" ? (
+                    <AboutDeck recipe={recipe} accent={accent}
+                               showAvatar={showRecipeAvatars} brews={brewSummary}
+                               showHint={showHint} dispatch={dispatch}
+                               xidLookupFailed={xidLookupFailed}
+                               externalEpoch={externalEpoch}
+                               onXidFocusChange={setXidFocused}
+                               onDraft={(label, value) => drafts.current.set(label, value)}
+                               onInputErrorChange={setInputError}/>
                 ) : (
                     <View onLayout={(event) => {
                         deckOffset.current = event.nativeEvent.layout.y;
@@ -1238,6 +1100,16 @@ export default function EditRecipe() {
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
+
+            {/* The recipe's own name, not its displayName(): a recipe following
+                its pod has an empty name and a borrowed title, and seeding the
+                field with the borrowed one would turn the next save into a
+                rename nobody asked for. Committed through the same dispatch the
+                Name row uses, so a rename from the header and a rename from
+                ABOUT are one code path. */}
+            <RenameSheet open={renameOpen} onOpenChange={setRenameOpen}
+                         name={recipe.name}
+                         onRename={(next) => dispatch(RECIPE_LABELS.TITLE, next)}/>
 
             <BypassWriteSheet open={bypassWriteOpen}
                               recipe={recipe}

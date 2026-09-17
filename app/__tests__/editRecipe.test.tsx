@@ -21,6 +21,18 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@/library/RecipeDatabase");
 
+// How a recipe has gone comes from the brew database, which is SQLite and has
+// no business being opened by a test of the editor. The hook is stubbed rather
+// than the store behind it, because the store is reached through the module's
+// own binding and a mocked export would not be seen from inside it. What the
+// hook reads is covered by its own test.
+let mockBrewSummary = {times: 0, lastAt: 0};
+jest.mock("@/hooks/useBrewHistory", () => ({
+    ...jest.requireActual("@/hooks/useBrewHistory"),
+    useRecipeBrewSummary: () => mockBrewSummary
+}));
+
+
 const mockNotify = jest.fn();
 jest.mock("@/components/XbrwToast", () => ({
     ...jest.requireActual("@/components/XbrwToast"),
@@ -161,6 +173,17 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
 }
 
 /**
+ * Open the ABOUT deck, where a recipe's identity lives.
+ *
+ * `Recipe ID` and `Name` sat at the bottom of the brew deck until phase 5 of
+ * M5, so a test that wants either of them has to switch decks first. They are
+ * identity and a lookup key, not brew parameters.
+ */
+async function openAbout(): Promise<void> {
+    await fireEvent.press(screen.getByLabelText("About this recipe"));
+}
+
+/**
  * A pinned accent, and the recipe that carries it.
  *
  * A recipe with no accent of its own is assigned one on hydration, and which
@@ -262,9 +285,65 @@ describe("the editor", () => {
         // `textTransform`, which is a style — the text content is unchanged,
         // so a query for "RATIO" would find nothing.
         for (const label of ["Dose", "Ratio", "Grind size · French press", "Grind speed",
-                             "Cup", "Grinder", "Recipe ID", "Name"]) {
+                             "Cup", "Grinder"]) {
             expect(screen.getByText(label)).toBeTruthy();
         }
+        // And only brew fields. Identity moved to ABOUT in phase 5, which is
+        // half of what the third deck was for.
+        expect(screen.queryByText("Recipe ID")).toBeNull();
+        expect(screen.queryByText("Name")).toBeNull();
+    });
+
+    it("keeps identity on the about deck, where it is not a brew parameter", async () => {
+        await renderEditor();
+
+        await openAbout();
+
+        expect(screen.getByText("Recipe ID")).toBeTruthy();
+        expect(screen.getByTestId("note-field")).toBeTruthy();
+        // The brew deck is gone, rather than both being on screen at once.
+        expect(screen.queryByText("Dose")).toBeNull();
+    });
+
+    it("announces three decks as tabs, with the one in force marked selected", async () => {
+        await renderEditor();
+
+        await openAbout();
+
+        const tabs = screen.getAllByRole("tab");
+        expect(tabs).toHaveLength(3);
+        const selected = tabs.filter((tab) => tab.props.accessibilityState.selected);
+        expect(selected).toHaveLength(1);
+        expect(selected[0].props.accessibilityLabel).toMatch(/about/i);
+    });
+
+    it("reads the about deck in the order it is drawn", async () => {
+        // Note, then the pod, then where it came from, then how it has gone.
+        // The order is the argument the deck makes, so it is worth pinning.
+        await renderEditor();
+
+        await openAbout();
+
+        expect(screen.getByTestId("about-note")).toBeTruthy();
+        expect(screen.getByTestId("about-pod")).toBeTruthy();
+        expect(screen.getByTestId("about-from")).toBeTruthy();
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("puts a renamed recipe back on its pod name by clearing its own", async () => {
+        // The title follows the pod again rather than freezing a copy of it,
+        // so a pod name that later changes carries the recipe with it. The
+        // hero is what proves it: it reads the pod name through displayName().
+        await renderEditor({
+            xid: "CGL12", xbloomName: "Ethiopia Guji", name: "Sunday"
+        });
+        await openAbout();
+
+        await fireEvent.press(screen.getByTestId("pod-use-name"));
+
+        expect(screen.getAllByText("Ethiopia Guji").length).toBeGreaterThan(0);
+        expect(screen.queryByTestId("pod-use-name")).toBeNull();
+        expect(screen.getByTestId("pod-following")).toBeTruthy();
     });
 
     it("steps the ratio by whole numbers, which is all the card holds", async () => {
@@ -425,13 +504,14 @@ describe("the editor", () => {
             .mockResolvedValue({action: Share.sharedAction});
 
         await renderEditor();
-        await fireEvent.changeText(screen.getByLabelText("Name"), "Shared name");
+        await openAbout();
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Shared note");
         await fireEvent.press(screen.getByLabelText("More"));
         await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Share"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        expect(mockShareRecipe.mock.calls[0][0].name).toBe("Shared name");
+        expect(mockShareRecipe.mock.calls[0][0].description).toBe("Shared note");
         expect(shareSheet).toHaveBeenCalledWith({message: url});
         const store = RecipeDatabase.mock.instances.at(-1)!;
         expect(store.updateRecipe.mock.calls.at(-1)![1].shareUrl).toBe(url);
@@ -570,6 +650,8 @@ describe("the editor", () => {
     it("blocks write and save while the recipe ID is malformed, and says why", async () => {
         await renderEditor();
 
+        await openAbout();
+
         // Validated live, on change — not on blur — so the gate closes before
         // the field commits. `!!bad` is neither empty nor the vendor-code shape.
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
@@ -583,6 +665,7 @@ describe("the editor", () => {
 
     it("clears the block once the recipe ID is valid again", async () => {
         await renderEditor();
+        await openAbout();
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "CGL12");
@@ -594,6 +677,7 @@ describe("the editor", () => {
 
     it("treats an empty recipe ID as valid", async () => {
         await renderEditor();
+        await openAbout();
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "");
@@ -602,25 +686,11 @@ describe("the editor", () => {
         expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
     });
 
-    it("focuses the name input from anywhere on its row, not only the field", async () => {
-        // On a short or empty value the input was a thin target on the right of
-        // a wide row. The whole row now focuses it. Spying on the prototype is
-        // how a programmatic `focus()` is observed: it does not fire `onFocus`
-        // under the test renderer.
-        const focus = jest.spyOn(TextInput.prototype, "focus");
-        await renderEditor();
-
-        // The label area, the far side of the row from the input.
-        await fireEvent.press(screen.getByTestId("field-row-Name"));
-
-        expect(focus).toHaveBeenCalledTimes(1);
-        focus.mockRestore();
-    });
-
     it("focuses the recipe ID input from anywhere on its row too", async () => {
         // Same wrapper, so the other TextFieldRow call site gets it for free.
         const focus = jest.spyOn(TextInput.prototype, "focus");
         await renderEditor();
+        await openAbout();
 
         await fireEvent.press(screen.getByTestId("field-row-Recipe ID"));
 
@@ -661,6 +731,7 @@ describe("the editor", () => {
         const backing = fixture();
         backing.xid = "CGL12";
         await renderEditor({xid: "CGL12", offline_backup: backing.getData()});
+        await openAbout();
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(true);
@@ -676,6 +747,73 @@ describe("the editor", () => {
         // from the restored CGL12 and reopened the gate.
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(false);
         expect(screen.queryByText(/Not a valid ID/i)).toBeNull();
+        jest.useRealTimers();
+    });
+});
+
+describe("renaming from the header", () => {
+    // Renaming used to mean scrolling to the bottom of the brew deck. It is a
+    // sheet rather than a field in the header because the header collapses on
+    // scroll and the keyboard arrives under it, which is the shape of bug that
+    // behaves on one platform and not the other.
+    async function openRename(): Promise<void> {
+        await fireEvent.press(screen.getByTestId("hero-rename"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+    }
+
+    it.each([
+        ["the brew deck", "Brew settings"],
+        ["the stages deck", "Stages, 3"],
+        ["the about deck", "About this recipe"]
+    ])("renames from %s, which it never did", async (unused, deck) => {
+        jest.useFakeTimers();
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText(deck));
+
+        await openRename();
+
+        expect(screen.getByTestId("rename-field")).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("writes the new name onto the recipe, and the header shows it", async () => {
+        jest.useFakeTimers();
+        await renderEditor();
+        await openRename();
+
+        await fireEvent.changeText(screen.getByTestId("rename-field"), "Yirgacheffe");
+        await fireEvent.press(screen.getByTestId("rename-confirm"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByText("Yirgacheffe")).toBeTruthy();
+        jest.useRealTimers();
+    });
+
+    it("leaves the name alone when the sheet is dismissed", async () => {
+        jest.useFakeTimers();
+        await renderEditor({name: "Ethiopia"});
+        await openRename();
+
+        await fireEvent.changeText(screen.getByTestId("rename-field"), "Something else");
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+        expect(screen.queryByText("Something else")).toBeNull();
+        jest.useRealTimers();
+    });
+
+    it("seeds the field with the recipe's own name, not a borrowed one", async () => {
+        // A recipe following its pod has an empty `name` and a title it borrowed
+        // from `xbloomName`. Seeding with the borrowed one would turn the next
+        // save into a rename nobody asked for, freezing a string the pod can
+        // still change.
+        jest.useFakeTimers();
+        await renderEditor({name: "", xbloomName: "Kenya Nyeri"});
+
+        await openRename();
+
+        expect(screen.getByTestId("rename-field").props.value).toBe("");
         jest.useRealTimers();
     });
 });
@@ -933,28 +1071,43 @@ describe("flushing an unblurred field before an action", () => {
     // recipe.
     const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
 
-    it("saves the name being typed when SAVE is tapped without blurring first", async () => {
+    it("saves the ID being typed when SAVE is tapped without blurring first", async () => {
         RecipeDatabase.mockClear();
         await renderEditor();
+        await openAbout();
 
-        await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
+        await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "CGL12");
         await fireEvent.press(screen.getByLabelText("Save"));
 
         const store = RecipeDatabase.mock.instances.at(-1)!;
-        expect(store.updateRecipe.mock.calls[0][1].name).toBe("New name");
+        expect(store.updateRecipe.mock.calls[0][1].xid).toBe("CGL12");
     });
 
-    it("keeps the name being typed when Back is tapped, which unmounts the field", async () => {
+    it("saves the note being typed, which is a field like any other", async () => {
+        RecipeDatabase.mockClear();
+        await renderEditor();
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Good for mornings");
+        await fireEvent.press(screen.getByLabelText("Save"));
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls[0][1].description)
+            .toBe("Good for mornings");
+    });
+
+    it("keeps the note being typed when Back is tapped, which unmounts the field", async () => {
         // The most dangerous of the four: navigation tears the input down, so
         // `onEndEditing` can never rescue the value. `goBack` is mocked, so the
         // screen stays mounted and the flushed name surfaces on the hero.
         await renderEditor();
+        await openAbout();
 
-        await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
+        await fireEvent.changeText(screen.getByTestId("note-field"), "New note");
         await fireEvent.press(screen.getByLabelText("Back"));
 
         expect(mockGoBack).toHaveBeenCalled();
-        expect(screen.getByText("New name")).toBeTruthy();
+        expect(screen.getByTestId("note-field").props.defaultValue).toBe("New note");
     });
 
     it("drops a committed field's draft, so a later flush cannot re-apply it", async () => {
@@ -963,22 +1116,24 @@ describe("flushing an unblurred field before an action", () => {
         // the two are made to differ to prove the draft was dropped.
         RecipeDatabase.mockClear();
         await renderEditor();
+        await openAbout();
 
-        const name = screen.getByLabelText("Name");
-        await fireEvent.changeText(name, "Draft");
-        await fireEvent(name, "endEditing", {nativeEvent: {text: "Committed"}});
+        const note = screen.getByTestId("note-field");
+        await fireEvent.changeText(note, "Draft");
+        await fireEvent(note, "endEditing", {nativeEvent: {text: "Committed"}});
         await fireEvent.press(screen.getByLabelText("Save"));
 
         const store = RecipeDatabase.mock.instances.at(-1)!;
-        expect(store.updateRecipe.mock.calls[0][1].name).toBe("Committed");
+        expect(store.updateRecipe.mock.calls[0][1].description).toBe("Committed");
     });
 
     it("drops an unblurred draft when a revert replaces the recipe", async () => {
         // The revert swaps the whole `Recipe` out from under the rows. A draft
         // typed against the old one used to evaporate when its row remounted;
         // held in a ref, it outlived the recipe and the next save wrote it back
-        // over the restored values. The restore keeps the name, so the saved
-        // name must be the original one, never the keystroke the revert answered.
+        // over the restored values. The restore keeps the name and carries no
+        // note, so the saved recipe must be the restored one throughout, never
+        // the keystroke the revert answered.
         //
         // Fake timers because the sheet gates its open state on a
         // `requestAnimationFrame`, and this test opens two of them in turn: the
@@ -988,8 +1143,9 @@ describe("flushing an unblurred field before an action", () => {
         const backing = fixture();
         backing.xid = "CGL12";
         await renderEditor({name: "Original", offline_backup: backing.getData()});
+        await openAbout();
 
-        await fireEvent.changeText(screen.getByLabelText("Name"), "Stale");
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Stale");
         await fireEvent.press(screen.getByLabelText("More"));
         await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Revert"));
@@ -1001,6 +1157,7 @@ describe("flushing an unblurred field before an action", () => {
 
         const store = RecipeDatabase.mock.instances.at(-1)!;
         expect(store.updateRecipe.mock.calls.at(-1)![1].name).toBe("Original");
+        expect(store.updateRecipe.mock.calls.at(-1)![1].description).toBe("");
         jest.useRealTimers();
     });
 });

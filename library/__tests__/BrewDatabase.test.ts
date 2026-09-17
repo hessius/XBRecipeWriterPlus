@@ -79,6 +79,17 @@ jest.mock("expo-sqlite", () => ({
                 }
                 const ordered = [...brews]
                     .sort((a, b) => (b.startedAt as number) - (a.startedAt as number));
+                if (/COUNT\(\*\) AS times/i.test(source)) {
+                    const mine = ordered.filter((b) => b.recipeUuid === params[0]);
+                    return [{
+                        times:  mine.length,
+                        // SQL's MAX over no rows is NULL, not 0, and the caller
+                        // has to survive that: the mock must say so too.
+                        lastAt: mine.length === 0
+                            ? null
+                            : Math.max(...mine.map((b) => b.startedAt as number))
+                    }];
+                }
                 if (/WHERE id = \?/i.test(source)) {
                     return ordered.filter((b) => b.id === params[0]);
                 }
@@ -113,6 +124,24 @@ const stream: BrewSample[] = [
 ];
 
 describe("BrewDatabase", () => {
+    it("counts a recipe's brews and dates the last of them", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", startedAt: 1_000}), []);
+        db.insert(record({id: "b", recipeUuid: "uuid-1", startedAt: 9_000}), []);
+        db.insert(record({id: "c", recipeUuid: "uuid-2", startedAt: 5_000}), []);
+
+        expect(db.summaryFor("uuid-1")).toEqual({times: 2, lastAt: 9_000});
+    });
+
+    it("answers for a recipe never brewed without inventing a date", () => {
+        // MAX over no rows is NULL. Left as it comes back it would reach the
+        // deck as a date, and 1970 is not when this recipe was last brewed.
+        const db = new BrewDatabase();
+        db.insert(record({recipeUuid: "uuid-2"}), []);
+
+        expect(db.summaryFor("uuid-1")).toEqual({times: 0, lastAt: 0});
+    });
+
     it("round-trips a record", () => {
         const db = new BrewDatabase();
         db.insert(record(), []);

@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {sweepOnLaunch, useBrewHistory} from "@/hooks/useBrewHistory";
+import {sweepOnLaunch, useBrewHistory, useRecipeBrewSummary} from "@/hooks/useBrewHistory";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
@@ -66,5 +66,30 @@ describe("useBrewHistory", () => {
         const store = fakeStore([]);
         sweepOnLaunch(store, 0);
         expect(store.swept).toEqual([0]);
+    });
+});
+
+describe("useRecipeBrewSummary", () => {
+    it("asks the store about the recipe in hand", async () => {
+        const summaryFor = jest.fn(() => ({times: 4, lastAt: 9_000}));
+        const {result} = await renderHook(
+            () => useRecipeBrewSummary("uuid-1", {summaryFor})
+        );
+
+        expect(summaryFor).toHaveBeenCalledWith("uuid-1");
+        expect(result.current).toEqual({times: 4, lastAt: 9_000});
+    });
+
+    it("reads once, because a brew cannot be recorded from inside the editor", async () => {
+        // Held in a state initialiser rather than read on every render: the
+        // screen it feeds has no way to change the answer while it is open.
+        const summaryFor = jest.fn(() => ({times: 1, lastAt: 1}));
+        const {rerender} = await renderHook(
+            () => useRecipeBrewSummary("uuid-1", {summaryFor})
+        );
+
+        await act(async () => { rerender({}); });
+
+        expect(summaryFor).toHaveBeenCalledTimes(1);
     });
 });

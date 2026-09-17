@@ -1,7 +1,7 @@
 import {useState} from "react";
 
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
-import BrewDatabase, {type StoredBrew} from "@/library/BrewDatabase";
+import BrewDatabase, {type BrewSummary, type StoredBrew} from "@/library/BrewDatabase";
 
 /** The part of `BrewDatabase` history reads. Injected, so tests need no SQLite. */
 export type HistoryStore = {
@@ -21,6 +21,26 @@ let shared: BrewDatabase | undefined;
 export function sharedBrewDatabase(): BrewDatabase {
     if (shared === undefined) shared = new BrewDatabase();
     return shared;
+}
+
+/** The one method the recipe screen's summary needs. Injected by its tests. */
+export type BrewSummaryStore = {summaryFor: (recipeUuid: string) => BrewSummary};
+
+/**
+ * How one recipe has gone, read once when the editor opens.
+ *
+ * Read in a state initialiser rather than an effect, which this codebase does
+ * not allow to seed state, and not re-read while the screen is open: a brew
+ * cannot be recorded from inside the editor, so there is nothing for a
+ * subscription to hear.
+ */
+export function useRecipeBrewSummary(
+    recipeUuid: string, store?: BrewSummaryStore
+): BrewSummary {
+    const [summary] = useState(
+        () => (store ?? sharedBrewDatabase()).summaryFor(recipeUuid)
+    );
+    return summary;
 }
 
 /**

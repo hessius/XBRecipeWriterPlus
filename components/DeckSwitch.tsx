@@ -5,7 +5,7 @@ import {XStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 
-export type Deck = "brew" | "stages";
+export type Deck = "brew" | "stages" | "about";
 
 type Props = {
     deck: Deck;
@@ -16,7 +16,7 @@ type Props = {
 };
 
 /**
- * Which half of the editor is showing.
+ * Which deck of the editor is showing.
  *
  * Not a tab bar to look at: it navigates nothing, appears on no other screen,
  * and carries no icons. It exists so that neither half needs a scroll view of
@@ -30,7 +30,13 @@ type Props = {
  * values, so those are radios.
  */
 export default function DeckSwitch({deck, stageCount, accent, onChange}: Props) {
-    function half(value: Deck, label: string, spoken: string) {
+    // One segment of however many there are. Named for what it is rather than
+    // for how many there used to be: it was `half` when there were two, and the
+    // name was the only thing standing between the switch and a third deck.
+    // Every segment is flex: 1, so adding one costs nothing but the arithmetic
+    // of the row -- at 390 pt three segments are about 119 pt each, which holds
+    // STAGES · 4 without wrapping.
+    function segment(value: Deck, label: string, spoken: string) {
         const active = deck === value;
         return (
             <Pressable accessibilityRole="tab" accessibilityLabel={spoken}
@@ -57,8 +63,9 @@ export default function DeckSwitch({deck, stageCount, accent, onChange}: Props) 
         <XStack accessibilityRole="tablist" gap={2} padding={3}
                 marginHorizontal="$4" marginTop="$2"
                 backgroundColor={palette.raised} borderRadius="$4">
-            {half("brew", "BREW", "Brew settings")}
-            {half("stages", `STAGES · ${stageCount}`, `Stages, ${stageCount}`)}
+            {segment("brew", "BREW", "Brew settings")}
+            {segment("stages", `STAGES · ${stageCount}`, `Stages, ${stageCount}`)}
+            {segment("about", "ABOUT", "About this recipe")}
         </XStack>
     );
 }

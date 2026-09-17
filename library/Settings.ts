@@ -23,6 +23,15 @@ export const DEFAULTS = {
      */
     dotMatrixProfile: false,
     /**
+     * Draw the picture a recipe arrived with, where there is one.
+     *
+     * Off by default, because this is here to find out whether a face or a pod
+     * photo helps at all. A 40 pt mark is a far smaller promise than the recipe
+     * images the roadmap deferred, and anything that will not load falls back
+     * to the accent mark without saying a word about it.
+     */
+    showRecipeAvatars: false,
+    /**
      * Draw the one-line hint under every label on the BREW deck.
      *
      * Off by default. On a real phone the deck explained more than it needed

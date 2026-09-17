@@ -200,8 +200,11 @@ export default function RecipeCard({
     // inside is announced on its own. Everything the card shows has to be in
     // this label or it is, to a screen reader, conveyed by the accent colour
     // alone -- which is the state the TEA/COFFEE marker exists to prevent.
+    const hasNote = recipe.description.length > 0;
+
     const summary = [
         recipe.displayName(),
+        hasNote ? recipe.description : undefined,
         marker.toLowerCase(),
         recipe.favourite ? "starred" : undefined,
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
@@ -334,12 +337,37 @@ export default function RecipeCard({
                         justifyContent="space-between" alignItems="flex-start" gap="$2"
                         paddingRight={0}>
                     {/* Bounded to the same scale Doto is, so the two halves of the
-                        card grow together rather than the prose swamping the data. */}
-                    <Text flex={1} fontSize={17} fontWeight="700" numberOfLines={2}
-                          maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-                          color={recipe.hasName() ? onAccent.text : onAccent.label}>
-                        {recipe.displayName()}
-                    </Text>
+                        card grow together rather than the prose swamping the data.
+
+                        Two lines of prose per card, always: either the title
+                        takes both, or the title takes one and the note takes the
+                        other. That is what keeps a card with a note and a card
+                        without the same height, and it keeps being true at every
+                        Dynamic Type size, which a fixed pixel height would not.
+                        A long title alongside a note truncates, deliberately: a
+                        name that needs two lines and an explanation is a name
+                        doing the note's job. */}
+                    <YStack testID="recipe-card-prose" flex={1} gap="$1">
+                        <Text fontSize={17} fontWeight="700"
+                              numberOfLines={hasNote ? 1 : 2}
+                              maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                              color={recipe.hasName() ? onAccent.text : onAccent.label}>
+                            {recipe.displayName()}
+                        </Text>
+                        {hasNote && (
+                            // Out of the accessibility tree: it is already in
+                            // the card's own label above, which is the single
+                            // announced element here.
+                            <Text testID="recipe-card-note"
+                                  accessibilityElementsHidden
+                                  importantForAccessibility="no-hide-descendants"
+                                  fontSize={13} numberOfLines={1}
+                                  maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+                                  color={onAccent.label}>
+                                {recipe.description}
+                            </Text>
+                        )}
+                    </YStack>
                     <XStack alignItems="center" gap="$1.5">
                         {/* The card's badge corner: the star joins the marker
                             rather than the stats row, so the numbers keep their

@@ -18,6 +18,18 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@/library/RecipeDatabase");
 
+// How a recipe has gone comes from the brew database, which is SQLite and has
+// no business being opened by a test of the editor. The hook is stubbed rather
+// than the store behind it, because the store is reached through the module's
+// own binding and a mocked export would not be seen from inside it. What the
+// hook reads is covered by its own test.
+let mockBrewSummary = {times: 0, lastAt: 0};
+jest.mock("@/hooks/useBrewHistory", () => ({
+    ...jest.requireActual("@/hooks/useBrewHistory"),
+    useRecipeBrewSummary: () => mockBrewSummary
+}));
+
+
 // The XID row looks its bean's name up against xBloom on mount. Only the tests
 // that set `recipe.xid` reach it; the rest never construct this. Default it to
 // a resolved lookup with no name so the row stays plain, and let a test flip it
@@ -321,9 +333,12 @@ describe("stage ceiling advisory", () => {
 });
 
 describe("editor XID lookup", () => {
+    // The row moved to the about deck in phase 5 of M5: it is a lookup key, not
+    // a brew parameter, so the deck has to be opened before it can be seen.
     it("marks the XID row when the lookup fails", async () => {
         mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
         await renderEditor({xid: "XB0001"});
+        await fireEvent.press(screen.getByLabelText("About this recipe"));
 
         await waitFor(() =>
             expect(screen.getByText(/not found/i)).toBeTruthy());
@@ -332,6 +347,7 @@ describe("editor XID lookup", () => {
     it("does not gate the save button on a failed lookup", async () => {
         mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
         await renderEditor({xid: "XB0001"});
+        await fireEvent.press(screen.getByLabelText("About this recipe"));
 
         await waitFor(() =>
             expect(screen.getByText(/not found/i)).toBeTruthy());
