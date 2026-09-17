@@ -1772,6 +1772,20 @@ describe("the shelf grid", () => {
     });
 });
 
+/**
+ * Let a just-opened sheet finish arriving before it is touched.
+ *
+ * `XbrwSheet` slides in on the frame after it mounts, and a press dispatched
+ * into that gap is dropped silently: the element is in the tree and findable,
+ * so the test reads as if the button did nothing. The same helper is in
+ * `app/__tests__/settings.test.tsx` for the same reason.
+ */
+async function settleSheet(): Promise<void> {
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+}
+
 describe("picking a shelf's members", () => {
     function pickerLibrary(): Recipe[] {
         const teas = ["Sencha", "Hojicha", "Genmaicha", "Matcha"].map((name) => {
@@ -1856,6 +1870,7 @@ describe("picking a shelf's members", () => {
 
         await fireEvent.press(screen.getAllByRole("checkbox")[0]);
         await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
 
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
         await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
@@ -1880,10 +1895,19 @@ describe("picking a shelf's members", () => {
 
         // Asked before it happens, not reported after: a shelf is a query, so
         // there is nothing to undo once its last tag is gone.
+        await settleSheet();
         await fireEvent.press(screen.getByTestId("remove-shelf-confirm"));
 
         expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
-        // The recipes are not a casualty of the shelf going away.
+
+        // The recipes are not a casualty of the shelf going away. Asked of the
+        // list rather than the grid, which draws tiles and no recipes at all.
+        expect(screen.queryByTestId("shelf-picker-bar")).toBeNull();
+        // The library has no shelves left at all, so the grid draws its
+        // explanation rather than an empty frame.
+        expect(screen.getByTestId("shelves-empty")).toBeTruthy();
+        await fireEvent.press(screen.getByRole("radio", {name: "List"}));
         expect(screen.getByText("Ethiopia")).toBeTruthy();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
     });
 });

@@ -729,10 +729,14 @@ export default function HomeScreen({db, settings}: Props) {
         }
     }
 
-    // The import sheet, the new-recipe chooser and the sort sheet each cover the
-    // screen while open, and the NFC ceremony while a scan is running. All four
-    // hide the subtree below from the reader.
-    const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay;
+    // The import sheet, the new-recipe chooser, the sort sheet and phase 4's two
+    // shelf sheets each cover the screen while open, and the NFC ceremony while
+    // a scan is running. All of them hide the subtree below from the reader.
+    // Every open sheet has to be named here: on Android a Tamagui sheet renders
+    // as a sibling and isolates nothing on its own, so one left out leaves the
+    // library reachable underneath it.
+    const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
+        || namingShelf || removingShelf !== null;
 
     return (
         <>

@@ -1,4 +1,5 @@
 import React from "react";
+import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
@@ -34,29 +35,31 @@ export default function RemoveShelfSheet({open, tag, onOpenChange, onRemove}: {
                         + "looking at the library, not a place things are kept."}
                 </Text>
 
-                <XStack accessibilityRole="button"
-                        accessibilityLabel={`Remove the ${tag} shelf`}
-                        testID="remove-shelf-confirm"
-                        onPress={onRemove}
-                        height={48} alignItems="center" justifyContent="center"
-                        borderRadius="$4" backgroundColor={palette.danger}>
-                    <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
-                                   color={onAccent.text}>
-                        REMOVE SHELF
-                    </DotMatrixText>
-                </XStack>
+                <Pressable accessibilityRole="button"
+                           accessibilityLabel={`Remove the ${tag} shelf`}
+                           testID="remove-shelf-confirm"
+                           onPress={onRemove}>
+                    <XStack height={48} alignItems="center" justifyContent="center"
+                            borderRadius="$4" backgroundColor={palette.danger}>
+                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
+                                       color={onAccent.text}>
+                            REMOVE SHELF
+                        </DotMatrixText>
+                    </XStack>
+                </Pressable>
 
-                <XStack accessibilityRole="button"
-                        accessibilityLabel="Keep this shelf"
-                        testID="remove-shelf-cancel"
-                        onPress={() => onOpenChange(false)}
-                        height={48} alignItems="center" justifyContent="center"
-                        borderRadius="$4" borderWidth={1} borderColor={palette.line}>
-                    <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
-                                   color={palette.dim}>
-                        KEEP IT
-                    </DotMatrixText>
-                </XStack>
+                <Pressable accessibilityRole="button"
+                           accessibilityLabel="Keep this shelf"
+                           testID="remove-shelf-cancel"
+                           onPress={() => onOpenChange(false)}>
+                    <XStack height={48} alignItems="center" justifyContent="center"
+                            borderRadius="$4" borderWidth={1} borderColor={palette.line}>
+                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
+                                       color={palette.dim}>
+                            KEEP IT
+                        </DotMatrixText>
+                    </XStack>
+                </Pressable>
             </YStack>
         </XbrwSheet>
     );
