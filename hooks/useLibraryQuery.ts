@@ -24,6 +24,16 @@ export type LibraryController = {
     toggleFilter: (id: string) => void;
     /** Whether a given filter is currently applied, so a chip can read as on. */
     isFilterActive: (id: string) => boolean;
+    /** How many filters are applied, for the filter button's count and fill. */
+    activeFilterCount: number;
+    /**
+     * Whether the filter rail is showing. Derived, never synced: the rail is
+     * open when the user opened it or when any filter is applied, so an applied
+     * narrowing is always on screen.
+     */
+    filterRailOpen: boolean;
+    /** Flip the filter rail's user-open intent. */
+    toggleFilterRail: () => void;
     sort: SortAxis;
     direction: SortDirection;
     favouritesFirst: boolean;
@@ -69,6 +79,10 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState<string[]>([]);
     const [clearToken, setClearToken] = useState(0);
+    // The filter rail's *user* intent only. The rail's actual open state is
+    // derived below, never stored: syncing it from an effect is exactly the
+    // `set-state-in-effect` the compiler forbids here.
+    const [filterRailIntent, setFilterRailIntent] = useState<boolean | null>(null);
 
     const [sortRaw, setSort] = useSetting("librarySort", settings);
     const [directionRaw, setDirection] = useSetting("librarySortDirection", settings);
@@ -78,13 +92,33 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
     const sort = asSortAxis(sortRaw);
     const direction = asSortDirection(directionRaw);
 
+    // Narrowed once, here, because both the query and the count must agree on
+    // what "applied" means: a stale id that `asStockFilters` drops is not an
+    // applied filter and must not swell the button's number.
+    const activeFilters = asStockFilters(filters);
+    const activeFilterCount = activeFilters.length;
+
+    // Derived, not synced. "Applied means open" is a reading of the current
+    // state, not an event to react to. The intent is deliberately three-valued:
+    // `null` means the user has not said, and the rail follows the filters, so a
+    // narrowing applied from anywhere puts its chips on screen rather than
+    // hiding them behind a number. A tap settles it either way and wins from
+    // then on, because a button whose tap does nothing is worse than a rail in
+    // the wrong state -- and a user who just closed the rail on a filter they
+    // applied a second ago does not need it shown back to them.
+    //
+    // Nothing outside this hook can apply a filter today, so `null` currently
+    // resolves to closed at every launch. It is written this way for phase 4,
+    // where a shelf selects filters without the rail being open.
+    const filterRailOpen = filterRailIntent ?? activeFilterCount > 0;
+
     const query: LibraryQuery = {
         search,
         // Narrowed at the query boundary, never trusted raw: a stale id must not
         // reach `buildLibraryQuery`'s throw. The typed state cannot hold one
         // today, but `toggleFilter` takes a bare `string` (the rail hands it a
         // chip id), so this is the seam that keeps a bad id out of the SQL.
-        filters: asStockFilters(filters),
+        filters: activeFilters,
         sort,
         direction,
         favouritesFirst
@@ -104,6 +138,13 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         return filters.includes(id);
     }
 
+    function toggleFilterRail() {
+        // Flip what is on screen, not the stored intent, so the first tap always
+        // does the opposite of what the user can see -- including the first tap
+        // after an auto-open, which must close rather than re-open.
+        setFilterRailIntent(!filterRailOpen);
+    }
+
     function onSortChange(axis: SortAxis, nextDirection: SortDirection) {
         // Both in one gesture: an axis and a direction that belonged to the
         // previous axis are never a valid pair to persist, so writing them apart
@@ -119,6 +160,7 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
     function clear() {
         setSearch("");
         setFilters([]);
+        setFilterRailIntent(null);
         setClearToken((current) => current + 1);
     }
 
@@ -127,6 +169,9 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         onSearchChange,
         toggleFilter,
         isFilterActive,
+        activeFilterCount,
+        filterRailOpen,
+        toggleFilterRail,
         sort,
         direction,
         favouritesFirst,

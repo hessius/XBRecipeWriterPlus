@@ -42,6 +42,14 @@ type Props = {
     /** The chip's word, in Doto caps. Absent for an icon-only chip. */
     label?: string;
     /**
+     * When set, the chip is an expander rather than a selection, and announces
+     * its expanded/collapsed state instead of a selected one. A control that
+     * both selects and expands would say two state words at once, which is the
+     * contradictory double-announcement the filter chips were fixed for; a chip
+     * is one or the other, never both.
+     */
+    expanded?: boolean;
+    /**
      * The active fill. Defaults to `palette.text`, the house "selected with no
      * recipe accent" fill that `SegmentedControl` also uses, so the rail reads as
      * on without borrowing the brand colour, which never means a state.
@@ -62,7 +70,7 @@ type Props = {
  * renders rather than a fresh one that remounts and drops its state each time.
  */
 export default function RailChip({
-    active, onPress, accessibilityLabel, icon, label, accent = palette.text, testID
+    active, onPress, accessibilityLabel, icon, label, expanded, accent = palette.text, testID
 }: Props) {
     const iconOnly = label === undefined;
     // Ink only agrees with the fill; it does not carry the state itself.
@@ -74,7 +82,7 @@ export default function RailChip({
             accessible
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
-            accessibilityState={{selected: active}}
+            accessibilityState={expanded === undefined ? {selected: active} : {expanded}}
             onPress={onPress}
             height={CHIP_HEIGHT}
             // An icon-only chip is a fixed square; a labelled one hugs its word.

@@ -31,30 +31,30 @@ const FILTERS: RailFilter[] = [
 
 function railProps(overrides: Partial<React.ComponentProps<typeof LibraryRail>> = {}) {
     return {
-        collapsed:      false,
-        onSearchChange: jest.fn(),
-        sort:           "name" as const,
-        direction:      "asc" as const,
-        onSortPress:    jest.fn(),
-        filters:        FILTERS,
-        onFilterPress:  jest.fn(),
+        collapsed:         false,
+        onSearchChange:    jest.fn(),
+        sort:              "name" as const,
+        direction:         "asc" as const,
+        onSortPress:       jest.fn(),
+        filters:           FILTERS,
+        onFilterPress:     jest.fn(),
+        activeFilterCount: 1,
+        filtersOpen:       true,
+        onFilterToggle:    jest.fn(),
         ...overrides
     };
 }
 
 describe("LibraryRail", () => {
-    it("announces search, sort and filters in traversal order without duplicating selected state", async () => {
+    it("announces the filter chips as selected through state, not duplicated in the label", async () => {
         await renderWithProviders(
             <LibraryRail {...railProps({sort: "added", direction: "desc"})}/>
         );
 
-        expect(screen.getAllByRole("button").map((button) => button.props.accessibilityLabel))
-            .toEqual([
-                "Search recipes, collapsed, no search term",
-                "Sort by date added, newest first",
-                "Tea filter",
-                "Single pour filter"
-            ]);
+        expect(screen.getByRole("button", {name: "Tea filter"}).props.accessibilityState)
+            .toEqual({selected: false});
+        expect(screen.getByRole("button", {name: "Single pour filter"}).props.accessibilityState)
+            .toEqual({selected: true});
     });
 
     it("keeps the brand lowercase when its label opens the sentence", async () => {
@@ -67,11 +67,10 @@ describe("LibraryRail", () => {
             })}/>
         );
 
-        expect(screen.getAllByRole("button").map((button) => button.props.accessibilityLabel))
-            .toContain("xBloom pods filter");
+        expect(screen.getByRole("button", {name: "xBloom pods filter"})).toBeTruthy();
     });
 
-    it("keeps the horizontal filter row visible to screen readers as one reachable group", async () => {
+    it("keeps the filter row visible to screen readers as one reachable group", async () => {
         await renderWithProviders(<LibraryRail {...railProps()}/>);
 
         const row = screen.getByTestId("rail-filter-row");
@@ -108,12 +107,12 @@ describe("LibraryRail", () => {
             .toBeTruthy();
     });
 
-    it("draws the divider that tells a user part of the row scrolls", async () => {
+    it("no longer draws the divider that once split the row", async () => {
+        // The divider marked where the pinned cluster stopped and the scrolling
+        // filters began. The filters moved to a second rail, so the top rail is
+        // pinned end to end and the line would be ornament.
         await renderWithProviders(<LibraryRail {...railProps()}/>);
-        const divider = screen.getByTestId("rail-divider");
-        const style = divider.props.style as Record<string, unknown>;
-        expect(style.backgroundColor).toBe(palette.line);
-        expect(style.width).toBe(1);
+        expect(screen.queryByTestId("rail-divider")).toBeNull();
     });
 
     it("keeps its chips at 44 while expanded", async () => {
@@ -182,5 +181,99 @@ describe("LibraryRail", () => {
         await renderWithProviders(<LibraryRail {...railProps({onFilterPress})}/>);
         await press(screen.getByTestId("rail-filter-tea"));
         expect(onFilterPress).toHaveBeenCalledWith("tea");
+    });
+
+    describe("filter button", () => {
+        it("shows the applied count as its label and fills when a filter is on", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 2})}/>
+            );
+            const toggle = screen.getByTestId("rail-filter-toggle");
+            expect(screen.getByText("2")).toBeTruthy();
+            expect((toggle.props.style as Record<string, unknown>).backgroundColor)
+                .toBe(palette.text);
+        });
+
+        it("is a bare glyph with no count and no fill when nothing is applied", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 0, filtersOpen: false})}/>
+            );
+            const toggle = screen.getByTestId("rail-filter-toggle");
+            // No numeric label at all: an icon-only chip.
+            expect(screen.queryByText("0")).toBeNull();
+            expect((toggle.props.style as Record<string, unknown>).backgroundColor)
+                .toBe("transparent");
+        });
+
+        it("names one applied filter in the singular", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 1, filtersOpen: false})}/>
+            );
+            expect(screen.getByTestId("rail-filter-toggle").props.accessibilityLabel)
+                .toBe("1 filter applied. Tap to show the filter row.");
+        });
+
+        it("names several applied filters in the plural", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 3})}/>
+            );
+            expect(screen.getByTestId("rail-filter-toggle").props.accessibilityLabel)
+                .toBe("3 filters applied. Tap to hide the filter row.");
+        });
+
+        it("offers to open the row when it is closed and empty", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 0, filtersOpen: false})}/>
+            );
+            expect(screen.getByTestId("rail-filter-toggle").props.accessibilityLabel)
+                .toBe("No filters applied. Tap to show the filter row.");
+        });
+
+        it("announces its expanded state instead of a selected one", async () => {
+            const {rerender} = await renderWithProviders(
+                <LibraryRail {...railProps({activeFilterCount: 0, filtersOpen: false})}/>
+            );
+            expect(screen.getByTestId("rail-filter-toggle").props.accessibilityState)
+                .toEqual({expanded: false});
+
+            await rerender(<LibraryRail {...railProps({activeFilterCount: 0, filtersOpen: true})}/>);
+            expect(screen.getByTestId("rail-filter-toggle").props.accessibilityState)
+                .toEqual({expanded: true});
+        });
+
+        it("reports a tap so the owner can reveal the rail", async () => {
+            const onFilterToggle = jest.fn();
+            await renderWithProviders(
+                <LibraryRail {...railProps({filtersOpen: false, onFilterToggle})}/>
+            );
+            await press(screen.getByTestId("rail-filter-toggle"));
+            expect(onFilterToggle).toHaveBeenCalledTimes(1);
+        });
+
+        it("is absent when there are no filters to show", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({filters: [], activeFilterCount: 0, filtersOpen: false})}/>
+            );
+            expect(screen.queryByTestId("rail-filter-toggle")).toBeNull();
+        });
+    });
+
+    describe("the filter rail", () => {
+        it("is drawn only when open", async () => {
+            const {rerender} = await renderWithProviders(
+                <LibraryRail {...railProps({filtersOpen: false, activeFilterCount: 0})}/>
+            );
+            expect(screen.queryByTestId("rail-filter-row")).toBeNull();
+
+            await rerender(<LibraryRail {...railProps({filtersOpen: true, activeFilterCount: 0})}/>);
+            expect(screen.getByTestId("rail-filter-row")).toBeTruthy();
+        });
+
+        it("stays absent when open but there are no filters at all", async () => {
+            await renderWithProviders(
+                <LibraryRail {...railProps({filters: [], filtersOpen: true, activeFilterCount: 0})}/>
+            );
+            expect(screen.queryByTestId("rail-filter-row")).toBeNull();
+        });
     });
 });

@@ -87,15 +87,6 @@ type RecipeListItem =
     | {kind: "heading"; id: string; label: string}
     | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
 
-/**
- * Six is the first point where the rail earns teaching: on the smallest target
- * phone the initial library view is no longer scannable at a glance, and with a
- * 3-of-6 stock shelf the filter row has a real chip to explain rather than a
- * future affordance.
- */
-const RAIL_HINT_MIN_LIBRARY_SIZE = 6;
-const RAIL_HINT = "Search, sort and filter recipes from this row.";
-
 function SectionHeading({label}: {label: string}) {
     return (
         <YStack paddingHorizontal="$3" paddingTop="$4" paddingBottom="$1">
@@ -163,9 +154,6 @@ export default function HomeScreen({db, settings}: Props) {
     const {collapsed, onScroll} = useCollapsibleHeader();
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
-    const [showHints] = useSetting("showHints", settings);
-    const [railHintDismissed, setRailHintDismissed] =
-        useSetting("libraryRailHintDismissed", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -267,19 +255,6 @@ export default function HomeScreen({db, settings}: Props) {
     }));
     const activeFilterLabels =
         asStockFilters(libraryQuery.query.filters).map((id) => STOCK_FILTERS[id].label);
-    // Deliberately dismissed by *using* the rail, not by having been seen once.
-    // A spec reviewer read "one line, not four" as "once per install" and called
-    // the difference a gap; it is a choice. Every other hint in the app (the
-    // editor's whole field set, via `FieldRow`) shows for as long as `showHints`
-    // is on and is never dismissed at all, so a hint that leaves the moment the
-    // user touches the rail is already the strictest one here. "One, not four"
-    // is about how many lines the rail earns, not how many launches they last.
-    // The user who keeps seeing it is the user who has not yet found the thing
-    // it points at, and they have a global switch for hints either way.
-    const showRailHint = showHints
-        && !railHintDismissed
-        && library.librarySize >= RAIL_HINT_MIN_LIBRARY_SIZE
-        && railFilters.length > 0;
     const favouriteRecipes = library.recipes.filter((recipe) => recipe.favourite);
     const otherRecipes = library.recipes.filter((recipe) => !recipe.favourite);
     const drawSections =
@@ -736,16 +711,9 @@ export default function HomeScreen({db, settings}: Props) {
                         onSortPress={() => setSortOpen(true)}
                         filters={railFilters}
                         onFilterPress={libraryQuery.toggleFilter}
-                        // Only while there is still a hint to put away. The rail
-                        // reports every use, and `Settings.set` writes and
-                        // notifies unconditionally, so a permanently-wired
-                        // callback would run a SQLite write and a global settings
-                        // notification on every sort, filter and search tap for
-                        // the life of the install, to set true to true.
-                        onUse={railHintDismissed
-                            ? undefined
-                            : () => setRailHintDismissed(true)}
-                        hint={showRailHint ? RAIL_HINT : undefined}/>
+                        activeFilterCount={libraryQuery.activeFilterCount}
+                        filtersOpen={libraryQuery.filterRailOpen}
+                        onFilterToggle={libraryQuery.toggleFilterRail}/>
                 )}
 
                 {wholeLibraryEmpty ? (

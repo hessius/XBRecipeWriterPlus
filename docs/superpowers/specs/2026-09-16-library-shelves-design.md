@@ -109,6 +109,10 @@ So one rail, one row high, holding everything.
 
 ### Pinned leading cluster, scrolling filters
 
+> **Superseded** by "Revision: the filters move to a second rail" below, which
+> moves the chips out of this row and retires the divider. The reasoning here is
+> kept because the revision is an answer to it.
+
 Three controls pin to the leading edge behind a hairline divider: **search**,
 **view mode**, **sort**. Filter chips scroll past them.
 
@@ -134,6 +138,68 @@ are adjacent siblings. Slop cannot rescue a chip that has been drawn too small.
 So shrinking is a reduction in the rail's own vertical padding. **Chip height
 stays at 44 and never moves**, and an icon-only chip is 44 wide as well as tall.
 The rail gets shorter; the targets inside it do not.
+
+### Revision: the filters move to a second rail
+
+One row held everything right up until a device saw it. On a small phone the
+pinned cluster, the divider and a sort chip wide enough to name its axis leave
+the filter row squeezed to two chips, and the view segmented pair above has not
+even been built yet. Add it and the budget is one chip. A row that can show one
+of twelve filters is not a filter row; it is a rumour of one.
+
+Widening the row is not available, so the filters leave it.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ⌕   ☰ ▦   ⇅ RECENT                            ⌗ 2      │  always
+├─────────────────────────────────────────────────────────┤
+│  TEA   SINGLE POUR   GRIND   FROM ANNA   xBLOOM PODS …  │  on demand
+└─────────────────────────────────────────────────────────┘
+```
+
+The top rail keeps the controls that act on the whole library however it is
+narrowed: search, view, sort. A **filter button sits at the trailing edge** and
+reveals a second rail beneath, which is nothing but filter chips at the full
+width of the screen. Twelve chips two at a time becomes twelve chips five at a
+time with a scroll that is a scroll rather than a cliff.
+
+**The hairline divider between pinned and scrolling goes.** It earned its place
+by marking where the row stopped being pinned, and with the filters gone the top
+rail is pinned all the way across. Keeping it would be ornament, and the rule
+that it must never be removed as ornament cuts both ways.
+
+**The filter button carries the count, because a hidden filter is worse than a
+cramped one.** A chip a user can see is a chip they can see is on; a chip behind
+a button is a library quietly missing recipes with no visible reason. So the
+button fills and shows the number of active filters, exactly as the sort chip
+fills and names its axis once it leaves the default. Zero filters is a bare
+glyph.
+
+**The second rail opens by itself when a filter is already applied.** Not as a
+convenience: it is the same argument. If the user arrives at a narrowed library
+the narrowing has to be on screen, and the button's count alone tells them *that*
+something is filtered without telling them *what*. Applied means open, until the
+user says otherwise.
+
+**Until the user says otherwise** is the whole of it. The intent is three-valued:
+unsaid, open, closed. Unsaid follows the filters; a tap settles it and wins from
+then on. Holding the rail open against a tap because a filter is applied would
+make the button dead on exactly the screen where it is most likely to be pressed,
+and a dead control teaches a user that the app is broken faster than a rail in
+the wrong state teaches them anything at all. Beyond that the intent is
+transient, like the filters themselves, and is not a setting.
+
+This costs a row of height, but only while the user is filtering, which is
+exactly when they have asked for it. The permanent chrome gets *shorter*, not
+taller: one rail without a filter row is less than one rail with a strangled one.
+
+### Revision: the hint comes out
+
+Phase 3 shipped a one-line hint above the rail naming what the row does,
+dismissed on first use and gated behind `showHints`. Device review rejected it:
+search, sort and filter are self-evident from their glyphs, and the line looked
+wrong where it sat. It goes entirely, along with its setting key. A rail that
+needs a caption is a rail with the wrong glyphs.
 
 ### View mode is a segmented pair, not a toggling icon
 

@@ -124,4 +124,92 @@ describe("useLibraryQuery", () => {
         expect(result.current.query.sort).toBe("ratio");
         expect(settings.get("libraryFavouritesFirst")).toBe(true);
     });
+
+    it("counts the applied filters", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        expect(result.current.activeFilterCount).toBe(0);
+        await act(async () => result.current.toggleFilter("tea"));
+        await act(async () => result.current.toggleFilter("singlePour"));
+        expect(result.current.activeFilterCount).toBe(2);
+    });
+
+    it("starts with the filter rail closed and opens it on demand", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        expect(result.current.filterRailOpen).toBe(false);
+        await act(async () => result.current.toggleFilterRail());
+        expect(result.current.filterRailOpen).toBe(true);
+        await act(async () => result.current.toggleFilterRail());
+        expect(result.current.filterRailOpen).toBe(false);
+    });
+
+    it("opens the filter rail by itself once a filter is applied", async () => {
+        // Applied means on screen: the narrowing has to be visible without the
+        // user opening the rail, and this is derived, never synced from an
+        // effect.
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        expect(result.current.filterRailOpen).toBe(false);
+        await act(async () => result.current.toggleFilter("tea"));
+        expect(result.current.filterRailOpen).toBe(true);
+    });
+
+    it("closes the rail on a tap even while a filter is applied", async () => {
+        // The button must never be dead. A rail held open against a tap because
+        // something is filtered would be inert on exactly the screen where it is
+        // most likely to be pressed.
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        await act(async () => result.current.toggleFilter("tea"));
+        expect(result.current.filterRailOpen).toBe(true);
+
+        await act(async () => result.current.toggleFilterRail());
+
+        expect(result.current.activeFilterCount).toBe(1);
+        expect(result.current.filterRailOpen).toBe(false);
+    });
+
+    it("does not slam the rail shut when the last filter is removed after the user opened it", async () => {
+        // The behaviour this task pins: open, apply, remove must leave the rail
+        // open, because the user opened it. The settled intent outlives the
+        // filter it once held.
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        await act(async () => result.current.toggleFilterRail());
+        await act(async () => result.current.toggleFilter("tea"));
+        await act(async () => result.current.toggleFilter("tea"));
+
+        expect(result.current.activeFilterCount).toBe(0);
+        expect(result.current.filterRailOpen).toBe(true);
+    });
+
+    it("closes the auto-opened rail once its only filter is removed", async () => {
+        // The other side of the same choice: a rail the user never opened, only
+        // auto-opened by a filter, closes again when that filter goes.
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        await act(async () => result.current.toggleFilter("tea"));
+        expect(result.current.filterRailOpen).toBe(true);
+        await act(async () => result.current.toggleFilter("tea"));
+        expect(result.current.filterRailOpen).toBe(false);
+    });
+
+    it("clears the search, the filters and the open rail together", async () => {
+        const {result} = await renderHook(() => useLibraryQuery(settingsWith()));
+
+        // Open the rail *first*, so `filterRailOpenedByUser` is standing when
+        // clear runs -- otherwise the applied filter alone holds it open and the
+        // reset of the user-open intent is never exercised.
+        await act(async () => result.current.toggleFilterRail());
+        await act(async () => result.current.onSearchChange("ethiopia"));
+        await act(async () => result.current.toggleFilter("tea"));
+
+        await act(async () => result.current.clear());
+
+        expect(result.current.query.search).toBe("");
+        expect(result.current.query.filters).toEqual([]);
+        expect(result.current.activeFilterCount).toBe(0);
+        expect(result.current.filterRailOpen).toBe(false);
+    });
 });

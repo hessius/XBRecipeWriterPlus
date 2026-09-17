@@ -103,8 +103,6 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("librarySortDirection", settings);
     const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
-    const [libraryRailHintDismissed, setLibraryRailHintDismissed] =
-        useSetting("libraryRailHintDismissed", settings);
 
     // Deliberately given no query: this screen's questions are all about the
     // whole library, never about a view of it. That is what lets the restore
@@ -135,8 +133,7 @@ export default function SettingsScreen({settings}: Props) {
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
-            librarySort, librarySortDirection, libraryFavouritesFirst,
-            libraryRailHintDismissed
+            librarySort, librarySortDirection, libraryFavouritesFirst
         };
     }
 
@@ -212,9 +209,6 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.libraryFavouritesFirst === "boolean") {
             setLibraryFavouritesFirst(incoming.libraryFavouritesFirst);
-        }
-        if (typeof incoming.libraryRailHintDismissed === "boolean") {
-            setLibraryRailHintDismissed(incoming.libraryRailHintDismissed);
         }
     }
 

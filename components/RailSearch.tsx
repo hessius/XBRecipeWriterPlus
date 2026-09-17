@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from "react";
 import {Pressable, TextInput} from "react-native";
 import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
-import {Input, XStack, type ColorTokens} from "tamagui";
+import {Input, XStack, type ColorTokens, type TamaguiElement} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import RailChip, {CHIP_HEIGHT} from "@/components/RailChip";
@@ -27,8 +27,6 @@ type Props = {
      * which is what lets the rail be tested without the query behind it.
      */
     onTermChange: (term: string) => void;
-    /** Called when the search chip itself is used, before any term is typed. */
-    onUse?: () => void;
 };
 
 /**
@@ -42,13 +40,12 @@ type Props = {
  * declared inside another's body is a fresh type every render, so React remounts
  * it and the field loses what was typed. That bug has been fixed twice here.
  */
-export default function RailSearch({onTermChange, onUse}: Props) {
+export default function RailSearch({onTermChange}: Props) {
     const {expanded, text, active, onExpand, onChangeText, onClear} = useRailSearch(onTermChange);
     const reduced = useReducedMotion();
     const searchState = active ? `term ${text} active` : "no search term";
 
     function expand() {
-        onUse?.();
         onExpand();
     }
 
@@ -100,7 +97,11 @@ export default function RailSearch({onTermChange, onUse}: Props) {
                 <DotIcon name="search" size={ICON_SIZE}
                          color={active ? palette.text : palette.dim}/>
                 <Input
-                    ref={inputRef}
+                    // Tamagui types every element ref as `TamaguiElement`, which
+                    // is a View, while `Input` forwards a real `TextInput` at
+                    // runtime. The ref is typed for what actually arrives so the
+                    // `focus()` above is checked; the cast is only for the prop.
+                    ref={inputRef as React.Ref<TamaguiElement>}
                     testID="rail-search-input"
                     accessibilityLabel={`Search recipes, expanded, ${searchState}`}
                     flex={1}

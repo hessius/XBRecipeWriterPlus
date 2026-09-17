@@ -364,113 +364,6 @@ describe("HomeScreen", () => {
         expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
     });
 
-    it("shows one rail hint when hints are on and the library is large enough", async () => {
-        const recipes = [
-            tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")
-        ];
-        await renderHome({
-            recipes,
-            settings: new Settings(memoryStorage({showHints: true}))
-        });
-
-        expect(screen.getByText("Search, sort and filter recipes from this row.")).toBeTruthy();
-        expect(screen.getAllByText("Search, sort and filter recipes from this row.")).toHaveLength(1);
-    });
-
-    it("leaves the rail hint hidden when hints are off", async () => {
-        await renderHome({
-            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
-            settings: new Settings(memoryStorage({showHints: false}))
-        });
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-    });
-
-    it("leaves the rail hint hidden while the library is still small", async () => {
-        // Five recipes, three of them tea, so the filter row does have a chip to
-        // explain. That is what isolates the size threshold: a fixture of five
-        // plain recipes would also offer no chip, and would go on passing if the
-        // size clause were deleted.
-        await renderHome({
-            recipes:  [tea("A"), tea("B"), tea("C"), named("D"), named("E")],
-            settings: new Settings(memoryStorage({showHints: true}))
-        });
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-    });
-
-    it("leaves the rail hint hidden when there is no filter chip to explain", async () => {
-        // Six recipes, past the size threshold, but all alike, so every stock
-        // shelf either matches nothing or matches nearly all of them and is
-        // suppressed. A hint pointing at an empty filter row teaches nothing.
-        await renderHome({
-            recipes:  ["A", "B", "C", "D", "E", "F"].map(named),
-            settings: new Settings(memoryStorage({showHints: true}))
-        });
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-    });
-
-    it("writes the dismissal once, not on every later tap of the rail", async () => {
-        // The rail reports every use and `Settings.set` writes unconditionally,
-        // so a callback left wired after the hint is gone spends a SQLite write
-        // and a global notification per tap, forever, setting true to true.
-        const writes: string[] = [];
-        const backing = memoryStorage({showHints: true});
-        const settings = new Settings({
-            read:  backing.read,
-            write: (key, value) => {
-                writes.push(key);
-                backing.write(key, value);
-            }
-        });
-        await renderHome({
-            recipes: [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")],
-            settings
-        });
-
-        await fireEvent.press(screen.getByLabelText("Sort by name, A to Z"));
-        await fireEvent.press(screen.getByLabelText("Tea filter"));
-        await fireEvent.press(screen.getByLabelText("Tea filter"));
-
-        expect(writes.filter((key) => key === "libraryRailHintDismissed")).toHaveLength(1);
-    });
-
-    it("dismisses the rail hint across a home screen remount once the rail is used", async () => {
-        const recipes = [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")];
-        const db = store(recipes);
-        const settings = new Settings(memoryStorage({showHints: true}));
-        const {rerender} = await renderWithProviders(
-            <HomeScreen key="first" db={db} settings={settings}/>
-        );
-
-        expect(screen.getByText("Search, sort and filter recipes from this row.")).toBeTruthy();
-
-        await fireEvent.press(screen.getByLabelText("Sort by name, A to Z"));
-
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-
-        await act(async () => {
-            rerender(<HomeScreen key="second" db={db} settings={settings}/>);
-        });
-
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-    });
-
-    it("dismisses the rail hint when search is opened, before a term is typed", async () => {
-        const recipes = [tea("A"), tea("B"), tea("C"), named("D"), named("E"), named("F")];
-        const db = store(recipes);
-        const settings = new Settings(memoryStorage({showHints: true}));
-        const {rerender} = await renderWithProviders(
-            <HomeScreen key="first" db={db} settings={settings}/>
-        );
-
-        await fireEvent.press(screen.getByLabelText("Search recipes, collapsed, no search term"));
-
-        await act(async () => {
-            rerender(<HomeScreen key="second" db={db} settings={settings}/>);
-        });
-
-        expect(screen.queryByText("Search, sort and filter recipes from this row.")).toBeNull();
-    });
-
     it("keeps the header count on the whole library when a search matches nothing", async () => {
         // The count beside the wordmark says how many recipes you have, not how
         // many survived the last search. Reading it off the queried list makes
@@ -555,6 +448,7 @@ describe("HomeScreen", () => {
             ]
         });
 
+        await fireEvent.press(screen.getByLabelText("No filters applied. Tap to show the filter row."));
         await fireEvent.press(screen.getByTestId("rail-filter-tea"));
         await fireEvent.press(screen.getByTestId("rail-search"));
         await fireEvent.changeText(screen.getByTestId("rail-search-input"), "missing");
