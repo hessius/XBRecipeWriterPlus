@@ -1,7 +1,8 @@
 import React from "react";
-import {ScrollView} from "react-native";
+import {Pressable, ScrollView} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import ShelfTile from "@/components/ShelfTile";
 import {palette} from "@/constants/colors";
@@ -31,10 +32,27 @@ function Heading({label}: {label: string}) {
  * the width of every other tile instead of stretching across the row and
  * reading as a different kind of thing.
  */
-function Section({title, shelves, onOpen}: {
-    title: string;
+function NewShelfButton({onPress}: {onPress: () => void}) {
+    return (
+        <Pressable accessibilityRole="button" accessibilityLabel="New shelf"
+                   testID="new-shelf" onPress={onPress}>
+            <XStack height={48} alignItems="center" justifyContent="center" gap="$2"
+                    borderRadius="$4" borderWidth={1} borderColor={palette.line}
+                    backgroundColor={palette.none}>
+                <DotIcon name="plus" size={14} color={palette.dim}/>
+                <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
+                               color={palette.dim}>
+                    NEW SHELF
+                </DotMatrixText>
+            </XStack>
+        </Pressable>
+    );
+}
+
+function Rows({shelves, onOpen, onEdit}: {
     shelves: readonly Shelf[];
     onOpen: (id: string) => void;
+    onEdit?: (tag: string) => void;
 }) {
     const rows: Shelf[][] = [];
     for (let i = 0; i < shelves.length; i += COLUMNS) {
@@ -42,13 +60,13 @@ function Section({title, shelves, onOpen}: {
     }
 
     return (
-        <YStack gap="$2">
-            <Heading label={title}/>
+        <YStack gap="$3">
             {rows.map((row) => (
                 <XStack key={row[0].id} gap="$3">
                     {row.map((shelf) => (
                         <ShelfTile key={shelf.id} shelf={shelf}
-                                   onPress={() => onOpen(shelf.id)}/>
+                                   onPress={() => onOpen(shelf.id)}
+                                   onEdit={onEdit && (() => onEdit(shelf.label))}/>
                     ))}
                     {row.length < COLUMNS && <YStack flex={1}/>}
                 </XStack>
@@ -69,9 +87,15 @@ function Section({title, shelves, onOpen}: {
  * selected state of its own for that reason -- there is nothing to select here,
  * only somewhere to go.
  */
-export default function ShelfGrid({shelves, onOpen, paddingBottom = 0}: {
+export default function ShelfGrid({
+    shelves, onOpen, onNewShelf, onEditShelf, paddingBottom = 0
+}: {
     shelves: readonly Shelf[];
     onOpen: (id: string) => void;
+    /** Start choosing members for a new shelf. */
+    onNewShelf: () => void;
+    /** Change who is on an existing manual shelf, by its tag. */
+    onEditShelf: (tag: string) => void;
     paddingBottom?: number;
 }) {
     const manual = shelves.filter((shelf) => shelf.kind === "manual");
@@ -86,9 +110,10 @@ export default function ShelfGrid({shelves, onOpen, paddingBottom = 0}: {
                     NO SHELVES YET
                 </DotMatrixText>
                 <Text fontSize={13} color={palette.dim} textAlign="center">
-                    A shelf is a saved way of looking at your library. Tag a few
-                    recipes and they will gather here.
+                    A shelf is a saved way of looking at your library. Pick a few
+                    recipes and they gather here.
                 </Text>
+                <NewShelfButton onPress={onNewShelf}/>
             </YStack>
         );
     }
@@ -99,11 +124,25 @@ export default function ShelfGrid({shelves, onOpen, paddingBottom = 0}: {
                     contentContainerStyle={{
                         paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 24
                     }}>
-            {manual.length > 0 && (
-                <Section title="YOUR SHELVES" shelves={manual} onOpen={onOpen}/>
-            )}
+            <YStack gap="$2">
+                <Heading label="YOUR SHELVES"/>
+                {manual.length > 0 && (
+                    <Rows shelves={manual} onOpen={onOpen} onEdit={onEditShelf}/>
+                )}
+                {/*
+                  * The one heading always drawn over what might be nothing. It
+                  * is not a heading over an empty section: the button under it
+                  * is the section, and it is the only place in the app a shelf
+                  * can be made. Hiding it until a shelf existed would be a
+                  * feature that cannot be started.
+                  */}
+                <NewShelfButton onPress={onNewShelf}/>
+            </YStack>
             {auto.length > 0 && (
-                <Section title="AUTO SHELVES" shelves={auto} onOpen={onOpen}/>
+                <YStack gap="$2">
+                    <Heading label="AUTO SHELVES"/>
+                    <Rows shelves={auto} onOpen={onOpen}/>
+                </YStack>
             )}
         </ScrollView>
     );

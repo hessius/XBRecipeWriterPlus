@@ -27,6 +27,7 @@ import {OVER} from "@/constants/brewCopy";
 import {ALREADY_IN_LIBRARY, CARD_READ_FAILED, HOLD_CARD} from "@/constants/copy";
 import {onAccent, palette, type AccentGroup} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useShelfPicker} from "@/hooks/useShelfPicker";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useMachine} from "@/hooks/useMachine";
 import {useLibraryQuery} from "@/hooks/useLibraryQuery";
@@ -41,7 +42,10 @@ import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {blankRecipe} from "@/library/newRecipe";
 import {assignAccent} from "@/library/accent";
+import NameShelfSheet from "@/components/NameShelfSheet";
+import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
+import ShelfPickerBar from "@/components/ShelfPickerBar";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {
@@ -51,6 +55,7 @@ import {
     STOCK_FILTERS
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
+import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import type {Settings} from "@/library/Settings";
 
@@ -155,6 +160,12 @@ export default function HomeScreen({db, settings}: Props) {
     const libraryQuery = useLibraryQuery(settings);
     const library = useRecipeLibrary(db, libraryQuery.query);
     const {collapsed, onScroll} = useCollapsibleHeader();
+    // The picker's selection lives apart from the library's query, which is
+    // what lets a ticked recipe survive a change of lens: filter to tea, tick
+    // three, clear the filter, and the three are still ticked.
+    const picker = useShelfPicker();
+    const [namingShelf, setNamingShelf] = useState(false);
+    const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     // Written from the card-read sink below, never read here. The setter is the
@@ -263,6 +274,8 @@ export default function HomeScreen({db, settings}: Props) {
 
     const wholeLibraryEmpty = library.librarySize === 0;
     const visibleEmpty = library.recipes.length === 0;
+    /** The chip's own id, which is not a filter and never reaches a query. */
+    const SELECTED_CHIP = "picker:selected";
     const offeredFilterIds = asStockFilters(availableFilters(
         library.filterCounts,
         library.librarySize,
@@ -270,11 +283,22 @@ export default function HomeScreen({db, settings}: Props) {
         // user switched on and strand the library narrowed with no control.
         libraryQuery.query.filters
     ));
-    const railFilters: RailFilter[] = offeredFilterIds.map((id) => ({
-        id,
-        label:  STOCK_FILTERS[id].label,
-        active: libraryQuery.isFilterActive(id)
-    }));
+    const railFilters: RailFilter[] = [
+        // Drawn first and only while picking, because from inside a narrowed
+        // library it is the only way back to what has been chosen. It is a chip
+        // rather than a filter because it narrows the view without touching the
+        // query: the selection has to outlive every filter around it.
+        ...(picker.active ? [{
+            id:     SELECTED_CHIP,
+            label:  `SELECTED (${picker.count})`,
+            active: onlySelected
+        }] : []),
+        ...offeredFilterIds.map((id) => ({
+            id,
+            label:  STOCK_FILTERS[id].label,
+            active: libraryQuery.isFilterActive(id)
+        }))
+    ];
     const activeFilterLabels = libraryQuery.query.filters.map(filterLabel);
     // Both halves of the grid, assembled from counts the library already read.
     // The applied filters go in so a shelf the user is standing in is drawn
@@ -285,10 +309,49 @@ export default function HomeScreen({db, settings}: Props) {
         librarySize:  library.librarySize,
         applied:      libraryQuery.query.filters
     });
-    const favouriteRecipes = library.recipes.filter((recipe) => recipe.favourite);
-    const otherRecipes = library.recipes.filter((recipe) => !recipe.favourite);
+    // The rows the picker draws are the rows the list draws, so a filter, a
+    // search and a sort narrow the picker exactly as they narrow the library.
+    // SELECTED is the one lens the picker adds, and it is the answer to "what
+    // have I actually chosen" from inside a narrowed library.
+    const shownRecipes = picker.active && onlySelected
+        ? library.recipes.filter((recipe) => picker.selected.has(recipe.uuid))
+        : library.recipes;
+    const favouriteRecipes = shownRecipes.filter((recipe) => recipe.favourite);
+    const otherRecipes = shownRecipes.filter((recipe) => !recipe.favourite);
     const drawSections =
         libraryQuery.favouritesFirst && favouriteRecipes.length > 0 && otherRecipes.length > 0;
+    function beginEditingShelf(tag: string) {
+        // Members read from the whole table, not the list. A shelf edited while
+        // a filter was applied would otherwise start with only the members that
+        // happened to be on screen and take the tag off the rest on save.
+        const key = tagKey(tag);
+        picker.startEditing(tag, library.allRecipes().filter((recipe) =>
+            (recipe.tags ?? []).some((existing) => tagKey(existing) === key)
+        ));
+    }
+
+    function stopPicking() {
+        setOnlySelected(false);
+        picker.cancel();
+    }
+
+    function finishPicking() {
+        if (picker.mode.kind === "editing") {
+            library.setShelfMembers(picker.mode.tag, picker.chosen());
+            stopPicking();
+            return;
+        }
+        // A new shelf has no name yet, and cannot be named before it has
+        // members: a shelf of nothing is not a shelf.
+        setNamingShelf(true);
+    }
+
+    function nameShelf(name: string) {
+        library.setShelfMembers(name, picker.chosen());
+        setNamingShelf(false);
+        stopPicking();
+    }
+
     const listItems: RecipeListItem[] = drawSections
         ? [
             {kind: "heading", id: "favourites", label: "FAVOURITES"},
@@ -300,7 +363,7 @@ export default function HomeScreen({db, settings}: Props) {
                 {kind: "recipe" as const, recipe, recipeIndex: favouriteRecipes.length + index}
             ))
         ]
-        : library.recipes.map((recipe, recipeIndex) => (
+        : shownRecipes.map((recipe, recipeIndex) => (
             {kind: "recipe" as const, recipe, recipeIndex}
         ));
 
@@ -741,9 +804,16 @@ export default function HomeScreen({db, settings}: Props) {
                         direction={libraryQuery.direction}
                         onSortPress={() => setSortOpen(true)}
                         filters={railFilters}
-                        onFilterPress={libraryQuery.toggleFilter}
+                        onFilterPress={(id) => {
+                            if (id === SELECTED_CHIP) setOnlySelected((on) => !on);
+                            else libraryQuery.toggleFilter(id);
+                        }}
                         activeFilterCount={libraryQuery.activeFilterCount}
-                        filtersOpen={libraryQuery.filterRailOpen}
+                        // Forced open while picking, because SELECTED lives in
+                        // that rail and a count the user cannot reach is the
+                        // same as no count at all.
+                        filtersOpen={libraryQuery.filterRailOpen || picker.active}
+                        picking={picker.active}
                         onFilterToggle={libraryQuery.toggleFilterRail}
                         view={libraryQuery.view}
                         onViewChange={libraryQuery.onViewChange}/>
@@ -751,13 +821,19 @@ export default function HomeScreen({db, settings}: Props) {
 
                 {wholeLibraryEmpty ? (
                     <EmptyLibrary/>
-                ) : libraryQuery.view === "shelves" ? (
+                ) : libraryQuery.view === "shelves" && !picker.active ? (
+                    // The grid steps aside while picking without changing the
+                    // remembered view, so cancelling puts the user back where
+                    // they pressed NEW SHELF. Members are chosen from rows: a
+                    // grid of shelves has nothing on it to tick.
                     // Ahead of the empty-query branch on purpose. The grid is a
                     // way out of a narrowing that matched nothing, so a view
                     // that showed NO MATCHES instead of the shelves would hide
                     // the control the user came to it for.
                     <ShelfGrid shelves={shelves}
                                onOpen={libraryQuery.openShelf}
+                               onNewShelf={picker.startCreating}
+                               onEditShelf={beginEditingShelf}
                                paddingBottom={insets.bottom + 8}/>
                 ) : visibleEmpty ? (
                     <EmptyQuery
@@ -789,6 +865,13 @@ export default function HomeScreen({db, settings}: Props) {
                         contentContainerStyle={{paddingBottom: insets.bottom + 8}}
                         renderItem={({item}: {item: RecipeListItem}) => item.kind === "heading" ? (
                             <SectionHeading label={item.label}/>
+                        ) : picker.active ? (
+                            <SelectableRecipeRow
+                                recipe={item.recipe}
+                                selected={picker.selected.has(item.recipe.uuid)}
+                                onToggle={() => picker.toggle(item.recipe.uuid)}
+                                showCoffeeMarker={showCoffeeMarker}
+                                dottedProfile={dottedProfile}/>
                         ) : (
                             <SwipeableRecipeRow
                                 recipe={item.recipe}
@@ -819,6 +902,18 @@ export default function HomeScreen({db, settings}: Props) {
                         )}/>
                 )}
             </YStack>
+
+            {picker.active && (
+                <ShelfPickerBar count={picker.count}
+                                editing={picker.mode.kind === "editing"}
+                                paddingBottom={insets.bottom}
+                                onCancel={stopPicking}
+                                onDone={finishPicking}/>
+            )}
+
+            <NameShelfSheet open={namingShelf} count={picker.count}
+                            onOpenChange={setNamingShelf}
+                            onName={nameShelf}/>
 
             <SortSheet
                 open={sortOpen}

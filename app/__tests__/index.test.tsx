@@ -1771,3 +1771,113 @@ describe("the shelf grid", () => {
         expect(screen.getByTestId("shelves-empty")).toBeTruthy();
     });
 });
+
+describe("picking a shelf's members", () => {
+    function pickerLibrary(): Recipe[] {
+        const teas = ["Sencha", "Hojicha", "Genmaicha", "Matcha"].map((name) => {
+            const recipe = named(name);
+            recipe.cupType = CUP_TYPE.TEA;
+            return recipe;
+        });
+        return [...teas, named("Kenya"), named("Colombia")];
+    }
+
+    async function startPicking(recipes: Recipe[] = pickerLibrary()) {
+        const rendered = await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("new-shelf"));
+        return rendered;
+    }
+
+    it("swaps the grid for tickable rows", async () => {
+        await startPicking();
+
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.getByTestId("shelf-picker-bar")).toBeTruthy();
+        expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    });
+
+    it("counts what has been ticked", async () => {
+        await startPicking();
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("2 ON THIS SHELF");
+    });
+
+    // The test that matters most on this screen. The selection lives apart from
+    // the query precisely so a change of lens cannot quietly drop a member.
+    it("keeps a tick through a change of lens", async () => {
+        await startPicking();
+
+        // The filter rail is already open: picking forces it, because SELECTED
+        // lives in it and a count the user cannot reach is no count at all.
+        await fireEvent.press(screen.getByTestId("rail-filter-tea"));
+        const teas = screen.getAllByRole("checkbox");
+        expect(teas).toHaveLength(4);
+
+        await fireEvent.press(teas[0]);
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+
+        await fireEvent.press(screen.getByTestId("rail-filter-tea"));
+
+        expect(screen.getAllByRole("checkbox")).toHaveLength(6);
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+    });
+
+    it("narrows to what has been chosen, from inside a filter", async () => {
+        await startPicking();
+
+        const rows = screen.getAllByRole("checkbox");
+        await fireEvent.press(rows[0]);
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    });
+
+    it("cancels back to the grid without writing anything", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-cancel"));
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+    });
+
+    it("names the shelf after the members are chosen, and builds it", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        // The id carries the tag as it was typed. Folding happens where the
+        // query is built, so the tile can still show the user their own word.
+        expect(screen.getByTestId("shelf-tag:Mornings")).toBeTruthy();
+    });
+
+    it("empties a shelf by unticking everyone on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
+        await fireEvent.press(screen.getByRole("radio", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        expect(screen.getByTestId("shelf-picker-count"))
+            .toHaveTextContent("1 ON THIS SHELF");
+
+        await fireEvent.press(screen.getByLabelText("Ethiopia"));
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+    });
+});

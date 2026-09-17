@@ -148,3 +148,65 @@ describe("a tag shelf against a real database", () => {
         expect(result.current.tagCounts[0].count).toBe(2);
     });
 });
+
+describe("setShelfMembers against a real database", () => {
+    it("writes a shelf's whole membership in one pass", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(named("Morning"));
+        db.insertRecipe(named("Evening"));
+        const all = db.retrieveAllRecipes() ?? [];
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.setShelfMembers("Mornings", [all[0].uuid]);
+        });
+
+        // The count is the shelf query's own answer, not the hook's state, so
+        // this fails if the tag reached the object but never the tag table.
+        expect(result.current.tagCounts).toEqual([
+            {tag: "Mornings", count: 1}
+        ]);
+    });
+
+    it("takes a member off a shelf without touching its other tags", async () => {
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(["Mornings", "Kenya"]);
+        db.insertRecipe(recipe);
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        // Emptied by the folded key rather than the spelling: the tile the user
+        // pressed carries MIN(tag), which need not be the spelling this recipe
+        // happens to hold, and a removal that missed would leave a member on a
+        // shelf the user had just emptied.
+        await act(async () => {
+            result.current.setShelfMembers("mornings", []);
+        });
+
+        expect(result.current.tagCounts).toEqual([
+            {tag: "Kenya", count: 1}
+        ]);
+    });
+
+    it("does not give a recipe two spellings of one shelf", async () => {
+        // The folded key is what matching is on, so adding "Morning" to a
+        // recipe that already carries "morning" leaves the one tag it had.
+        // Recipe.normaliseTags folds the duplicate out on the way back through
+        // SQLite as well, so this is defended twice on purpose: the spelling a
+        // shelf is counted under decides which tile is drawn.
+        const db = new RecipeDatabase();
+        const recipe = named("Morning");
+        recipe.setTags(["morning"]);
+        db.insertRecipe(recipe);
+        const uuid = (db.retrieveAllRecipes() ?? [])[0].uuid;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.setShelfMembers("Morning", [uuid]);
+        });
+
+        expect(result.current.tagCounts).toEqual([
+            {tag: "morning", count: 1}
+        ]);
+    });
+});

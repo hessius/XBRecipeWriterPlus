@@ -1,7 +1,8 @@
 import React from "react";
 import {Pressable} from "react-native";
-import {Text, YStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
+import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {Shelf} from "@/library/shelves";
@@ -22,9 +23,19 @@ const TILE_HEIGHT = 96;
  * because "morning, 4 recipes" is one fact and two elements would make the user
  * swipe twice to learn it.
  */
-export default function ShelfTile({shelf, onPress}: {
+export default function ShelfTile({shelf, onPress, onEdit}: {
     shelf: Shelf;
     onPress: () => void;
+    /**
+     * Change who is on this shelf. Manual shelves only: an auto shelf has no
+     * membership to change, only a rule.
+     *
+     * A second, smaller target inside the tile rather than a long press, because
+     * a long press is not discoverable and this is the only way a member ever
+     * comes off a shelf. A shelf with no way out is a tag the user can never
+     * undo.
+     */
+    onEdit?: () => void;
 }) {
     const manual = shelf.kind === "manual";
     const recipes = shelf.count === 1 ? "1 recipe" : `${shelf.count} recipes`;
@@ -40,8 +51,19 @@ export default function ShelfTile({shelf, onPress}: {
                     backgroundColor={palette.raised}
                     borderWidth={manual ? 0 : 1}
                     borderColor={palette.line}>
-                <YStack height={4} width={manual ? 28 : 16} borderRadius={2}
-                        backgroundColor={manual ? palette.text : palette.muted}/>
+                <XStack alignItems="center" justifyContent="space-between">
+                    <YStack height={4} width={manual ? 28 : 16} borderRadius={2}
+                            backgroundColor={manual ? palette.text : palette.muted}/>
+                    {onEdit && (
+                        <Pressable accessibilityRole="button"
+                                   accessibilityLabel={`Edit the ${shelf.label} shelf`}
+                                   testID={`shelf-edit-${shelf.id}`}
+                                   hitSlop={12}
+                                   onPress={onEdit}>
+                            <DotIcon name="edit" size={14} color={palette.dim}/>
+                        </Pressable>
+                    )}
+                </XStack>
 
                 <YStack gap="$1">
                     {/*

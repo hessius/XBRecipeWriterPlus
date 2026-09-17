@@ -7,6 +7,7 @@ import {
 import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {tagKey} from "@/library/tagKey";
 
 /**
  * The part of `RecipeDatabase` this hook uses.
@@ -120,6 +121,8 @@ export type RecipeLibrary = {
     deleteRecipe: (recipe: Recipe) => void;
     duplicateRecipe: (recipe: Recipe) => void;
     toggleFavourite: (recipe: Recipe) => void;
+    /** Make exactly these recipes the members of a shelf. */
+    setShelfMembers: (tag: string, uuids: readonly string[]) => void;
     deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
@@ -235,6 +238,43 @@ export function useRecipeLibrary(
         reload();
     }
 
+    /**
+     * Put a shelf's tag on exactly these recipes, and take it off the rest.
+     *
+     * The whole membership in one call rather than an add and a remove, because
+     * a shelf is defined by who is on it: the picker hands over a final answer,
+     * and working out which recipes changed is this function's job, not the
+     * screen's. Members are looked up from the whole table (`allRecipes`) and
+     * not from the list, so a recipe ticked under one filter and then filtered
+     * away still gets the tag.
+     *
+     * Existing tags are preserved and the case the user typed is kept. Matching
+     * is on the folded key, so renaming is not possible by accident: tagging
+     * with "Morning" a recipe that already carries "morning" leaves the one tag
+     * it had rather than giving it two spellings of one shelf.
+     */
+    function setShelfMembers(tag: string, uuids: readonly string[]) {
+        const key = tagKey(tag);
+        const wanted = new Set(uuids);
+        for (const recipe of allRecipes()) {
+            const tags = recipe.tags ?? [];
+            const has = tags.some((existing) => tagKey(existing) === key);
+            const should = wanted.has(recipe.uuid);
+            if (has === should) continue;
+            recipe.tags = should
+                ? [...tags, tag]
+                : tags.filter((existing) => tagKey(existing) !== key);
+            try {
+                store.updateRecipe(recipe.uuid, recipe);
+            } catch {
+                // Deliberately empty, as toggleFavourite above: reload() puts
+                // the true value back on screen rather than leaving the list
+                // showing a membership the database refused.
+            }
+        }
+        reload();
+    }
+
     function deleteAll(): DeleteAllOutcome {
         // The whole-table size, not `recipes.length`: this deletes the table, so
         // reporting the length of a filtered view would tell the user a smaller
@@ -295,6 +335,7 @@ export function useRecipeLibrary(
         duplicateRecipe,
         toggleFavourite,
         deleteAll,
+        setShelfMembers,
         applyRestore
     };
 }

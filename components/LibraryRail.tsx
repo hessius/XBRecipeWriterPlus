@@ -66,6 +66,13 @@ type Props = {
     onViewChange: (view: LibraryView) => void;
     /** Whether the filter rail is showing. Derived by the owner, not stored here. */
     filtersOpen: boolean;
+    /**
+     * Members are being chosen for a shelf.
+     *
+     * The rail stays: a picker that could not be filtered or searched would make
+     * the user scroll their whole library to build a shelf out of four recipes.
+     */
+    picking?: boolean;
     /** Reveal or hide the filter rail. */
     onFilterToggle: () => void;
 };
@@ -222,6 +229,7 @@ export default function LibraryRail({
     onFilterPress,
     activeFilterCount,
     filtersOpen,
+    picking = false,
     onFilterToggle,
     view,
     onViewChange
@@ -272,7 +280,11 @@ export default function LibraryRail({
     // narrowing twice -- and against a list that is not on screen to show what
     // it did. Dimmed rather than removed, so the row does not reflow under the
     // user every time they change view.
-    const filtersDimmed = view === "shelves";
+    //
+    // Picking is the exception, and the reason this is not simply the view: the
+    // grid steps aside for rows while members are chosen, so the filters are
+    // narrowing something the user can see again, and SELECTED is in that row.
+    const filtersDimmed = view === "shelves" && !picking;
 
     // The pinned cluster is a list rather than a fixed set, which is what let
     // the view pair be spliced in between search and the sort chip without
@@ -285,9 +297,14 @@ export default function LibraryRail({
     const cluster = [
         <RailSearch key="search" onTermChange={onSearchChange}
                     onExpandedChange={setSearchOpen}/>,
-        <SegmentedControl key="view" value={view} options={VIEW_OPTIONS}
-                          accessibilityLabel="Library view"
-                          onChange={(next) => onViewChange(asLibraryView(next))}/>,
+        // Left out while picking. The grid has nothing on it to tick, so a pair
+        // whose other half ended the selection would be a way to lose a
+        // half-built shelf to a single tap.
+        ...(picking ? [] : [
+            <SegmentedControl key="view" value={view} options={VIEW_OPTIONS}
+                              accessibilityLabel="Library view"
+                              onChange={(next) => onViewChange(asLibraryView(next))}/>
+        ]),
         <RailChip key="sort" testID="rail-sort" icon="sort"
                   active={sortActive}
                   label={sortLabel}

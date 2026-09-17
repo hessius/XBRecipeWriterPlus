@@ -10,18 +10,22 @@ function shelf(over: Partial<Shelf> = {}): Shelf {
 }
 
 describe("ShelfGrid", () => {
-    it("draws a heading only over a section that has shelves", async () => {
+    it("draws the auto heading only when there are auto shelves", async () => {
         await renderWithProviders(
-            <ShelfGrid shelves={[shelf()]} onOpen={jest.fn()}/>
+            <ShelfGrid shelves={[shelf()]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
         );
 
         expect(screen.getByText("AUTO SHELVES")).toBeTruthy();
-        expect(screen.queryByText("YOUR SHELVES")).toBeNull();
+        // YOUR SHELVES is drawn over the NEW SHELF button even with no shelves
+        // on it, because that button is the section and is the only place in
+        // the app a shelf can be made.
+        expect(screen.getByText("YOUR SHELVES")).toBeTruthy();
+        expect(screen.getByTestId("new-shelf")).toBeTruthy();
     });
 
     it("puts the shelves a person made above the ones the app invented", async () => {
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} shelves={[
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()} shelves={[
                 shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2}),
                 shelf()
             ]}/>
@@ -32,7 +36,7 @@ describe("ShelfGrid", () => {
     });
 
     it("explains what a shelf is rather than drawing an empty grid", async () => {
-        await renderWithProviders(<ShelfGrid shelves={[]} onOpen={jest.fn()}/>);
+        await renderWithProviders(<ShelfGrid shelves={[]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>);
 
         expect(screen.getByTestId("shelves-empty")).toBeTruthy();
         expect(screen.queryByTestId("shelf-grid")).toBeNull();
@@ -43,7 +47,7 @@ describe("ShelfGrid", () => {
     // would make a reader swipe twice to learn it.
     it("names the shelf, its kind and its size in one label", async () => {
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} shelves={[
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()} shelves={[
                 shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})
             ]}/>
         );
@@ -54,7 +58,7 @@ describe("ShelfGrid", () => {
 
     it("says one recipe rather than 1 recipes", async () => {
         await renderWithProviders(
-            <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()}/>
+            <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
         );
 
         expect(screen.getByRole("button", {name: "TEA, auto shelf, 1 recipe"})).toBeTruthy();
