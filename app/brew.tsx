@@ -5,6 +5,7 @@ import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
+import BrewJudgement from "@/components/BrewJudgement";
 import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewSummary from "@/components/BrewSummary";
@@ -20,7 +21,8 @@ import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         PRO_MODE_PROMPT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
-import {sharedBrewDatabase, type HistoryStore} from "@/hooks/useBrewHistory";
+import {sharedBrewDatabase, useBrewJudgement, type HistoryStore, type JudgementStore}
+    from "@/hooks/useBrewHistory";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
@@ -37,7 +39,7 @@ const WORKING = new Set(["idle", "waking", "sending"]);
 export const BREW_BAND_GAP = 13;
 
 /** Where an export sources its record: the freshest brew in the store. */
-type ExportStore = Pick<HistoryStore, "all" | "samples">;
+type ExportStore = Pick<HistoryStore, "all" | "samples"> & Partial<JudgementStore>;
 
 /** The just-finished brew, read from the store on press (not on render). */
 function latestExport(store: ExportStore): BrewExportSource | null {
@@ -185,6 +187,30 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     );
     const {shotRef, shareImage, shareData, busy} = useBrewExport(
         () => latestExport(historyStore ?? sharedBrewDatabase())
+    );
+    // The verdict goes on the row the run has just written, which is why the id
+    // is resolved on press rather than on render: at the moment this screen
+    // draws the row may not exist yet, and the finished brew is always the
+    // freshest one in the store -- the same rule, and the same reason, as the
+    // export above.
+    //
+    // The store is reached for inside these calls, never in render: opening
+    // SQLite while drawing would open it in every test that renders this
+    // screen, which is the rule `latestExport` above already follows.
+    //
+    // The two writes are optional on an injected store so a test that only
+    // cares about the trace does not have to grow a judgement fake. The real
+    // database has both; a fake that does not simply records nothing.
+    const judgementStore: JudgementStore = {
+        judge:     (id, verdict) =>
+            (historyStore ?? sharedBrewDatabase()).judge?.(id, verdict),
+        setPinned: (id, pinned) =>
+            (historyStore ?? sharedBrewDatabase()).setPinned?.(id, pinned)
+    };
+    const judgement = useBrewJudgement(
+        () => (historyStore ?? sharedBrewDatabase()).all()[0]?.id ?? null,
+        {rating: 0, note: "", pinned: false},
+        judgementStore
     );
     const liveIndex = activeIndex !== null && activeIndex < recipe.pours.length
         ? activeIndex : null;
@@ -375,6 +401,21 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                     {offerPro && (
                         <Action label="Switch to Pro" color={palette.warn}
                                 onPress={() => startInPro(recipe)} />
+                    )}
+                    {phase.name === "done" && (
+                        // Outside the ViewShot, deliberately. The capture is the
+                        // same node the screen draws, so anything put inside it
+                        // is in every PNG anybody shares, and an empty row of
+                        // stars in a shared image is an invitation to rate
+                        // somebody else's brew.
+                        //
+                        // Here rather than only on the record screen because
+                        // this is the moment the user is holding the cup, and a
+                        // rating that can only be given from a history screen is
+                        // a rating nobody gives.
+                        <BrewJudgement rating={judgement.rating} note={judgement.note}
+                                       onRate={judgement.rate}
+                                       onNote={judgement.annotate}/>
                     )}
                     {phase.name === "done" && (
                         // In place, on the screen you are already on. This used

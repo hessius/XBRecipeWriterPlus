@@ -43,6 +43,62 @@ export function useRecipeBrewSummary(
     return summary;
 }
 
+/** The two writes a judgement makes. Injected by tests. */
+export type JudgementStore = {
+    judge: (id: string, judgement: {rating?: number; note?: string}) => void;
+    setPinned: (id: string, pinned: boolean) => void;
+};
+
+export type Judgement = {rating: number; note: string; pinned: boolean};
+
+/**
+ * A verdict on a brew, held locally and written through.
+ *
+ * The id is resolved when the user acts rather than when the screen renders,
+ * which is what lets the finished-brew screen use this hook at all: at the
+ * moment it draws, the run may not have written its row yet, and reading the
+ * store in render would be both a purity problem and a wrong answer. The same
+ * rule the export already follows, for the same reason.
+ *
+ * A note that has not changed is not written. A text field commits on blur
+ * whether or not it was edited, so without this a user who tapped into the
+ * field and out again would pin a brew they never judged.
+ */
+export function useBrewJudgement(
+    resolveId: () => string | null,
+    initial: Judgement,
+    store?: JudgementStore
+) {
+    const [judgement, setJudgement] = useState<Judgement>(initial);
+    // Resolved per write, not in render, so a screen that draws without ever
+    // being judged never opens the database.
+    const database = () => store ?? sharedBrewDatabase();
+
+    function rate(rating: number): void {
+        const id = resolveId();
+        if (id === null) return;
+        setJudgement((was) => ({...was, rating, pinned: true}));
+        database().judge(id, {rating});
+    }
+
+    function annotate(note: string): void {
+        if (note === judgement.note) return;
+        const id = resolveId();
+        if (id === null) return;
+        setJudgement((was) => ({...was, note, pinned: true}));
+        database().judge(id, {note});
+    }
+
+    function setPinned(pinned: boolean): void {
+        const id = resolveId();
+        if (id === null) return;
+        setJudgement((was) => ({...was, pinned}));
+        database().setPinned(id, pinned);
+    }
+
+    return {...judgement, rate, annotate, setPinned};
+}
+
 /**
  * The brew history: list, open, delete.
  *

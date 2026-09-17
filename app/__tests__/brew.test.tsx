@@ -477,6 +477,71 @@ describe("brew route", () => {
         expect(mockPush).not.toHaveBeenCalled();
     });
 
+    it("rates the brew the run has just written", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const judge = jest.fn();
+        const historyStore = {
+            all: () => [record],
+            samples: () => [],
+            judge
+        };
+        const {getByTestId} = await renderWithProviders(
+            <Brew historyStore={historyStore} />
+        );
+
+        await fireEvent.press(getByTestId("judgement-stars-4"));
+
+        expect(judge).toHaveBeenCalledWith(record.id, {rating: 4});
+    });
+
+    it("keeps the rating control out of the picture that gets shared", async () => {
+        // The capture is the same node the screen draws. An empty row of stars
+        // inside it would be in every shared PNG, inviting somebody to rate a
+        // brew that is not theirs.
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {getByTestId, queryByTestId} = await renderWithProviders(<Brew />);
+
+        expect(queryByTestId("judgement-stars-1")).not.toBeNull();
+        expect(within(getByTestId("viewshot")).queryByTestId("judgement-stars-1"))
+            .toBeNull();
+    });
+
+    it("writes a note once it is finished with, and not before", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const judge = jest.fn();
+        const historyStore = {all: () => [record], samples: () => [], judge};
+        const {getByTestId} = await renderWithProviders(
+            <Brew historyStore={historyStore} />
+        );
+
+        const field = getByTestId("judgement-note");
+        await fireEvent.changeText(field, "Too sour.");
+        expect(judge).not.toHaveBeenCalled();
+
+        await fireEvent(field, "endEditing", {nativeEvent: {text: "Too sour."}});
+        expect(judge).toHaveBeenCalledWith(record.id, {note: "Too sour."});
+    });
+
+    it("does not pin a brew whose note was only tapped into", async () => {
+        // A text field commits on blur whether or not it was edited. Without
+        // the guard, looking at the note would keep the brew forever.
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const judge = jest.fn();
+        const historyStore = {all: () => [record], samples: () => [], judge};
+        const {getByTestId} = await renderWithProviders(
+            <Brew historyStore={historyStore} />
+        );
+
+        await fireEvent(getByTestId("judgement-note"), "endEditing",
+            {nativeEvent: {text: ""}});
+
+        expect(judge).not.toHaveBeenCalled();
+    });
+
     it("offers START when the recipe is loaded but not committed", async () => {
         mockPhase = {name: "readyToStart"} as BrewPhase;
         const {getByLabelText} = await renderWithProviders(<Brew />);

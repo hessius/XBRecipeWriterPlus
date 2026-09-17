@@ -35,6 +35,9 @@ let mockParams: {id?: string; latest?: string} = {id: "brew-1"};
 // Settable per test — defaults to empty so that `brews[0]` is undefined.
 let mockBrews: StoredBrew[] = [];
 
+// The judgement writes the screen makes, recorded rather than performed.
+const mockJudgementStore = {judge: jest.fn(), setPinned: jest.fn()};
+
 jest.mock("expo-router", () => ({
     router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
     useLocalSearchParams: () => mockParams,
@@ -53,7 +56,11 @@ jest.mock("@/hooks/useBrewHistory", () => ({
         remove: jest.fn(),
         open: () => mockOpened
     }),
-    sharedBrewDatabase: () => ({})
+    // The real judgement hook over a fake store: the screen's seeding, the
+    // local state and the write-through are the things under test, and
+    // reimplementing them here would be testing the mock.
+    useBrewJudgement: jest.requireActual("@/hooks/useBrewHistory").useBrewJudgement,
+    sharedBrewDatabase: () => mockJudgementStore
 }));
 
 // Provide a minimal pour-less recipe for the ladder, avoiding the need to
@@ -438,6 +445,58 @@ describe("brew record", () => {
         releaseFirst(true);
         await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledTimes(1));
         expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("a verdict on a record", () => {
+    beforeEach(() => {
+        mockParams = {id: "brew-1"};
+        mockJudgementStore.judge.mockReset();
+        mockJudgementStore.setPinned.mockReset();
+        mockOpened = {record, samples: []};
+    });
+
+    it("shows the verdict the record already carries", async () => {
+        mockOpened = {
+            record: {...record, rating: 4, note: "Sweet, a little thin.", pinned: true},
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(screen.getByLabelText("Clear the rating, currently 4 stars")).toBeTruthy();
+        expect(screen.getByDisplayValue("Sweet, a little thin.")).toBeTruthy();
+    });
+
+    it("writes a rating given here", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        await fireEvent.press(screen.getByTestId("judgement-stars-5"));
+        expect(mockJudgementStore.judge).toHaveBeenCalledWith("brew-1", {rating: 5});
+    });
+
+    it("says nothing about the sweep until the brew is judged", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(screen.queryByTestId("record-pinned")).toBeNull();
+    });
+
+    it("reports the pin, and lets it go", async () => {
+        // The pin is set by judging rather than asked for, so the screen's job
+        // is to say what happened and offer the way out.
+        mockOpened = {record: {...record, rating: 5, pinned: true}, samples: []};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.getByTestId("record-pinned")).toBeTruthy();
+        await fireEvent.press(screen.getByTestId("record-release"));
+
+        expect(mockJudgementStore.setPinned).toHaveBeenCalledWith("brew-1", false);
+        expect(screen.queryByTestId("record-pinned")).toBeNull();
+        // Releasing is about the trace, not the verdict.
+        expect(screen.getByLabelText("Clear the rating, currently 5 stars")).toBeTruthy();
+    });
+
+    it("keeps the control out of the captured picture", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        expect(within(screen.getByTestId("viewshot")).queryByTestId("judgement-stars-1"))
+            .toBeNull();
+        expect(screen.queryByTestId("judgement-stars-1")).not.toBeNull();
     });
 });
 
