@@ -17,6 +17,12 @@ type Props = {
     rating: number;
     /** Present makes the row a control; absent leaves it a reading. */
     onRate?: (rating: number) => void;
+    /**
+     * Set false inside a control that already says the rating in its own
+     * label. A `Pressable` replaces its subtree for a screen reader, so an
+     * accessible node inside one only makes the same words reachable twice.
+     */
+    announce?: boolean;
     size?: number;
     testID?: string;
 };
@@ -35,7 +41,9 @@ type Props = {
  * way back to unrated, and it has to exist: a rating given by accident on a
  * screen the user is tapping through is otherwise permanent.
  */
-export default function BrewStars({rating, onRate, size = 18, testID}: Props) {
+export default function BrewStars(
+    {rating, onRate, announce = true, size = 18, testID}: Props
+) {
     const shown = onRate === undefined ? rating : MAX_RATING;
     if (shown <= 0) return null;
 
@@ -44,8 +52,8 @@ export default function BrewStars({rating, onRate, size = 18, testID}: Props) {
     if (onRate === undefined) {
         return (
             <XStack gap="$1" testID={testID}
-                    accessible={true}
-                    accessibilityLabel={spokenRating(rating)}>
+                    accessible={announce}
+                    accessibilityLabel={announce ? spokenRating(rating) : undefined}>
                 {stars.map((star) => (
                     <DotIcon key={star} name="favourite" size={size}
                              color={palette.text}/>

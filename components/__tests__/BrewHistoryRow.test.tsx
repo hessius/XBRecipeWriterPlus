@@ -132,6 +132,43 @@ describe("BrewHistoryRow", () => {
         expect(getByText("ENDED EARLY")).toBeTruthy();
     });
 
+    it("draws no stars on a brew nobody judged", async () => {
+        // Five hollow stars is how a bad brew would have to be drawn. An
+        // unjudged one must not wear it.
+        const {queryByTestId} = await renderWithProviders(
+            <BrewHistoryRow brew={brew()} onPress={jest.fn()} />
+        );
+        expect(queryByTestId("history-row-stars")).toBeNull();
+    });
+
+    it("draws the rating a brew has", async () => {
+        const {getByTestId} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({rating: 4})} onPress={jest.fn()} />
+        );
+        expect(getByTestId("history-row-stars")).toBeTruthy();
+    });
+
+    it("reads the rating out with the rest of the row", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({rating: 4})} onPress={jest.fn()} />
+        );
+        expect(getByLabelText(/4 stars/)).toBeTruthy();
+    });
+
+    it("says why an old brew still has a trace", async () => {
+        const {getByTestId} = await renderWithProviders(
+            <BrewHistoryRow brew={brew({pinned: true})} onPress={jest.fn()} />
+        );
+        expect(getByTestId("history-row-pin")).toBeTruthy();
+    });
+
+    it("says nothing about the sweep on a brew that is subject to it", async () => {
+        const {queryByTestId} = await renderWithProviders(
+            <BrewHistoryRow brew={brew()} onPress={jest.fn()} />
+        );
+        expect(queryByTestId("history-row-pin")).toBeNull();
+    });
+
     it("marks an early end in the neutral colour, not the danger one", async () => {
         const {getByText} = await renderWithProviders(
             <BrewHistoryRow brew={brew({outcome: "endedOnMachine", failure: null})}
