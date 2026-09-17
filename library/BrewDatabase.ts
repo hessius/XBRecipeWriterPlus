@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 import type {BrewFailure} from "./machine/Machine";
+import {isRating} from "./brew/BrewRecord";
 import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
 
@@ -31,6 +32,10 @@ type BrewRow = {
     plan: string | null;
     /** JSON, one delivered volume per stage. `[]` on rows written before it. */
     stageWater: string | null;
+    /** 0 on a brew nobody judged, and on rows written before the column. */
+    rating: number | null;
+    note: string | null;
+    pinned: number | null;
     hasStream: number;
 };
 
@@ -70,6 +75,9 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 stalls TEXT NOT NULL DEFAULT '[]',
                 plan TEXT NOT NULL DEFAULT '[]',
                 stageWater TEXT NOT NULL DEFAULT '[]',
+                rating INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                pinned INTEGER NOT NULL DEFAULT 0,
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -110,6 +118,23 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Every brew recorded before these is unrated, un-noted and unpinned, which
+    // is the truth about them: nobody was ever offered the chance to say.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN rating INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN note TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -146,8 +171,9 @@ class BrewDatabase {
             this.db.runSync(
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, stalls, plan, stageWater, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    heldSeconds, stalls, plan, stageWater, rating,
+                                    note, pinned, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
@@ -156,6 +182,12 @@ class BrewDatabase {
                     JSON.stringify(record.stalls ?? []),
                     JSON.stringify(record.plan ?? []),
                     JSON.stringify(record.stageWater ?? []),
+                    // A restore carries a judgement in with the record, so the
+                    // insert has to take one. A live brew never does: nothing
+                    // has been drunk yet at the moment the row is written.
+                    isRating(record.rating) ? record.rating : 0,
+                    record.note ?? "",
+                    record.pinned ? 1 : 0,
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -201,6 +233,51 @@ class BrewDatabase {
         const row = rows[0];
         if (row === undefined) return {times: 0, lastAt: 0};
         return {times: row.times, lastAt: row.lastAt ?? 0};
+    }
+
+    /**
+     * The user's verdict on a brew, and the pin that comes with it.
+     *
+     * One statement, so the pin cannot lag the judgement it is there to
+     * protect: a rating whose trace the next sweep took is a rating the user
+     * cannot act on. A rating outside the scale is refused rather than clamped,
+     * because a 9 arriving here means a caller is wrong, and clamping it to 5
+     * would write a verdict nobody gave.
+     */
+    public judge(id: string, judgement: {rating?: number; note?: string}): void {
+        const {rating, note} = judgement;
+        if (rating !== undefined && !isRating(rating)) return;
+        const sets: string[] = [];
+        const params: (string | number)[] = [];
+        if (rating !== undefined) {
+            sets.push("rating = ?");
+            params.push(rating);
+        }
+        if (note !== undefined) {
+            sets.push("note = ?");
+            params.push(note);
+        }
+        if (sets.length === 0) return;
+        // Clearing a rating back to 0 still pins: the user has been here and
+        // said something about this brew, and taking the trace away underneath
+        // them for changing their mind is the same loss by another route.
+        sets.push("pinned = 1");
+        this.db.runSync(
+            `UPDATE brews SET ${sets.join(", ")} WHERE id = ?;`, [...params, id]
+        );
+    }
+
+    /**
+     * Let a brew back into the sweep, or hold it out of one by hand.
+     *
+     * Releasing does not bring back a stream that has already gone, and nothing
+     * here pretends it might: `hasStream` already tells a record whether its
+     * trace survived.
+     */
+    public setPinned(id: string, pinned: boolean): void {
+        this.db.runSync(
+            "UPDATE brews SET pinned = ? WHERE id = ?;", [pinned ? 1 : 0, id]
+        );
     }
 
     public get(id: string): StoredBrew | null {
@@ -262,7 +339,14 @@ class BrewDatabase {
         // A nonsense keep count would slice from zero and quietly expire every
         // trace the user has. Refuse rather than delete on a bad number.
         if (!Number.isFinite(keep) || keep < 0) return;
-        const expiring = this.all().slice(keep).filter((b) => b.hasStream);
+        // A pinned brew is outside the sweep entirely, and is not counted
+        // against `keep` either: holding one back must not push an unpinned
+        // brew over the edge, or pinning a favourite would quietly cost the
+        // most recent ordinary brew its trace.
+        const expiring = this.all()
+            .filter((b) => !b.pinned)
+            .slice(keep)
+            .filter((b) => b.hasStream);
         if (expiring.length === 0) return;
         this.db.withTransactionSync(() => {
             expiring.forEach((brew) => {
@@ -297,6 +381,9 @@ function hydrate(row: BrewRow): StoredBrew {
         ...(stalls.length > 0 ? {stalls} : {}),
         ...(plan.length > 0 ? {plan} : {}),
         ...(stageWater.length > 0 ? {stageWater} : {}),
+        rating: row.rating ?? 0,
+        note: row.note ?? "",
+        pinned: row.pinned === 1,
         hasStream: row.hasStream === 1
     };
 }

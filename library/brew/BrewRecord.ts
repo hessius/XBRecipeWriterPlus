@@ -152,7 +152,37 @@ export type BrewRecord = {
      * every existing reader of it wrong by one.
      */
     bypass?: BypassRecord;
+    /**
+     * The user's own verdict, 1 to 5 whole stars.
+     *
+     * 0, and absent, both mean unrated, and unrated is not nought: every brew
+     * recorded before this existed is unrated, and an average that counted them
+     * as bad would rank a much-brewed recipe below a once-brewed one for no
+     * reason but silence. Every average filters `rating > 0`.
+     */
+    rating?: number;
+    /** What the user said about the cup. Empty is no note; there is no flag. */
+    note?: string;
+    /**
+     * Kept back from the retention sweep.
+     *
+     * Set by judging rather than by a control of its own: a user who has just
+     * said a brew was good has already said it is worth keeping, and a
+     * judgement whose trace has been swept is one that cannot be acted on.
+     */
+    pinned?: boolean;
 };
+
+/** The ceiling of the scale, decided once in the design and read from here. */
+export const MAX_RATING = 5;
+
+/** A rating the database will accept: a whole 0..5, where 0 means unrated. */
+export function isRating(value: unknown): value is number {
+    return typeof value === "number"
+        && Number.isInteger(value)
+        && value >= 0
+        && value <= MAX_RATING;
+}
 
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
 
