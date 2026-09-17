@@ -31,6 +31,24 @@ describe("AboutDeck", () => {
         expect(screen.getByLabelText("Name")).toBeTruthy();
     });
 
+    it("holds the note, which is what a recipe is for rather than what it does", async () => {
+        await renderWithProviders(
+            <AboutDeck {...props({recipe: recipeWith({description: "Mornings"})})}/>
+        );
+
+        expect(screen.getByTestId("note-field").props.defaultValue).toBe("Mornings");
+    });
+
+    it("commits the note to the recipe", async () => {
+        const dispatch = jest.fn();
+        await renderWithProviders(<AboutDeck {...props({dispatch})}/>);
+
+        await fireEvent(screen.getByTestId("note-field"), "endEditing",
+                        {nativeEvent: {text: "Mornings"}});
+
+        expect(dispatch).toHaveBeenCalledWith("Note", "Mornings");
+    });
+
     it("reports the ID field's focus, so the lookup can be deferred", async () => {
         // The machinery moved with the field rather than being rewritten. A
         // lookup resolving while the field is focused resets the uncontrolled

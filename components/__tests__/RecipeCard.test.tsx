@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen, within} from "@testing-library/react-native";
+import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
 import RecipeCard from "@/components/RecipeCard";
 import {PROFILE_BLEED} from "@/components/PourProfile";
@@ -414,10 +414,58 @@ describe("RecipeCard", () => {
         );
         const title = screen.getByText(/Name$/);
         expect(title.props.numberOfLines).toBe(2);
-        // Without flex the name takes its full measured width and pushes the
-        // marker off the card.
-        expect(title.props.style).toEqual(expect.objectContaining({flex: 1}));
+        // Without flex on the prose column the name takes its full measured
+        // width and pushes the marker off the card. The flex sits on the column
+        // rather than on the title, because the note shares it.
+        expect(screen.getByTestId("recipe-card-prose").props.style)
+            .toEqual(expect.objectContaining({flex: 1}));
         expect(screen.getByText("COFFEE")).toBeTruthy();
+    });
+
+    it("draws the note under the name", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({description: "Good for mornings"})}
+                        onPress={jest.fn()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card-note", {includeHiddenElements: true}))
+            .toHaveTextContent("Good for mornings");
+    });
+
+    it("spends the same two lines of prose whether or not there is a note", async () => {
+        // Equal height is a line budget, not a pixel height: the title takes
+        // both lines or it takes one and the note takes the other. A pixel
+        // height stops being equal at the first Dynamic Type setting anyone
+        // changes, which is why minHeight is what the card uses.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({description: "Good for mornings"})}
+                        onPress={jest.fn()}/>
+        );
+        const withNote = screen.getByText("Ethiopia Guji").props.numberOfLines
+            + screen.getByTestId("recipe-card-note", {includeHiddenElements: true})
+                .props.numberOfLines;
+
+        await act(async () => { screen.unmount(); });
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>
+        );
+
+        expect(screen.getByText("Ethiopia Guji").props.numberOfLines).toBe(2);
+        expect(withNote).toBe(2);
+        expect(screen.queryByTestId("recipe-card-note", {includeHiddenElements: true}))
+            .toBeNull();
+    });
+
+    it("puts the note in what a screen reader hears, once", async () => {
+        // The card is one announced element, so anything drawn on it has to be
+        // in that label or it is conveyed visually alone.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({description: "Good for mornings"})}
+                        onPress={jest.fn()}/>
+        );
+
+        expect(screen.getByLabelText(/Good for mornings/)).toBeTruthy();
+        expect(screen.queryByTestId("recipe-card-note")).toBeNull();
     });
 
     it("shows an unset ratio and grind as unset, not as zero", async () => {

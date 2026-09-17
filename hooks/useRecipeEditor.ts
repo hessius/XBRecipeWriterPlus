@@ -22,6 +22,7 @@ export type BypassField = "volume" | "temperature";
 export const RECIPE_LABELS = {
     TITLE:            "Title",
     XID:              "XID",
+    NOTE:             "Note",
     DOSE:             "Dose (g)",
     RATIO:            "Ratio",
     GRIND_SIZE:       "Grind size",
@@ -461,6 +462,12 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
             [RECIPE_LABELS.XID]:        {
                 requiresNumber: false,
                 update:         (r: Recipe, val: string) => r.xid = val
+            },
+            [RECIPE_LABELS.NOTE]:       {
+                requiresNumber: false,
+                update:         (r: Recipe, val: string) => {
+                    r.description = val;
+                }
             },
             [RECIPE_LABELS.TITLE]:      {
                 requiresNumber: false,

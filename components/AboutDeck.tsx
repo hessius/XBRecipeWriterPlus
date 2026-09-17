@@ -1,6 +1,7 @@
 import React from "react";
 import {YStack} from "tamagui";
 
+import NoteSection from "@/components/NoteSection";
 import TextFieldRow from "@/components/TextFieldRow";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
 import Recipe, {isValidXID} from "@/library/Recipe";
@@ -85,6 +86,14 @@ export default function AboutDeck({
                           showHint={showHint}
                           onDraft={(value) => onDraft(RECIPE_LABELS.TITLE, value)}
                           onCommit={(value) => dispatch(RECIPE_LABELS.TITLE, value)}/>
+
+            {/* Keyed on the same epoch and for the same reason as the rows
+                above: a revert has to reset the text the field is showing, and
+                nothing else may remount it mid-sentence. */}
+            <NoteSection key={`note-${externalEpoch}`}
+                         initialValue={recipe.description}
+                         onDraft={(value) => onDraft(RECIPE_LABELS.NOTE, value)}
+                         onCommit={(value) => dispatch(RECIPE_LABELS.NOTE, value)}/>
         </YStack>
     );
 }

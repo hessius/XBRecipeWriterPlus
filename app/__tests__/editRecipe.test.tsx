@@ -1046,6 +1046,19 @@ describe("flushing an unblurred field before an action", () => {
         expect(store.updateRecipe.mock.calls[0][1].name).toBe("New name");
     });
 
+    it("saves the note being typed, which is a field like any other", async () => {
+        RecipeDatabase.mockClear();
+        await renderEditor();
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Good for mornings");
+        await fireEvent.press(screen.getByLabelText("Save"));
+
+        const store = RecipeDatabase.mock.instances.at(-1)!;
+        expect(store.updateRecipe.mock.calls[0][1].description)
+            .toBe("Good for mornings");
+    });
+
     it("keeps the name being typed when Back is tapped, which unmounts the field", async () => {
         // The most dangerous of the four: navigation tears the input down, so
         // `onEndEditing` can never rescue the value. `goBack` is mocked, so the
