@@ -92,6 +92,22 @@ setting while M5's foundation was in flight, rather than held back for it. #59
 (push back to the cloud) and #76 (the "what leaves this device" screen) are
 still open.
 
+## From the field
+
+Requests from the beta group that are not milestone work, kept here so they do
+not fall between the phases.
+
+- **Half-step ratios (#122).** Small, and unblocked. The model already carries a
+  fractional ratio end to end, because a shared 1:15.5 link forced that fix; the
+  only defect is `step={1}` on the editor's ratio field, which destroys an
+  imported half the moment the stepper is touched. The card gate that refuses a
+  fractional ratio stays: `Recipe.getData()` writes the ratio into a single
+  byte. This is the general shape the app is growing into — a card limit is a
+  limit on *writing a card*, not on what a recipe may be, which bypass already
+  established.
+- **Beanconqueror export (#123).** Deferred, and deferred for a reason that is
+  not ours to fix; see below.
+
 ## Constraints that apply throughout
 
 - **Dark only.** Light mode is removed, not merely defaulted away.
@@ -126,6 +142,17 @@ still open.
 - **Easy Mode slots (#62).** Write-only, must be written three at a time or the
   machine hangs, and cannot be read back — so the app would model them blind.
 - **Android (#5).** Never run. It carries the only Android-specific BLE code.
+- **Beanconqueror export (#123).** Blocked upstream, not by us. Beanconqueror
+  has no channel that accepts a brew: no deep-link verb creates one, QR is the
+  same URL grammar, the file import overwrites the whole brew list rather than
+  merging, and there is no share or intent handler at all. Its brews reference a
+  bean by UUID with no name fallback, so even a hypothetical payload would
+  arrive with an unidentifiable coffee, which is exactly what the requester
+  described. The upstream request for an import API was closed as not planned
+  without discussion. The route is an upstream conversation and an offered PR;
+  the only piece buildable today is exporting the *bean*, which the existing
+  share URL already accepts. Beanconqueror is GPL-3.0, so nothing may be
+  vendored from it.
 
 ## Artefacts
 
