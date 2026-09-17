@@ -741,3 +741,73 @@ describe("filter counts", () => {
         expect(counts).toEqual({pods: 1, overflowOff: 2});
     });
 });
+
+describe("tag counts", () => {
+    function tagged(name: string, tags: string[]): Recipe {
+        const recipe = new Recipe();
+        recipe.name = name;
+        recipe.tags = tags;
+        return recipe;
+    }
+
+    it("counts the recipes on each tag", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("A", ["morning", "decaf"]));
+        db.insertRecipe(tagged("B", ["morning"]));
+        db.insertRecipe(tagged("C", []));
+
+        expect(db.countRecipesByTag()).toEqual([
+            {tag: "morning", count: 2},
+            {tag: "decaf", count: 1}
+        ]);
+    });
+
+    // tagKey is the matching form and is lower-cased, so grouping by it is what
+    // makes two spellings one shelf. It is not the label: showing the key back
+    // would show the user a lower-cased version of their own word.
+    it("groups spellings together and labels the shelf with one the user typed", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("A", ["Ethiopia"]));
+        db.insertRecipe(tagged("B", ["ethiopia"]));
+
+        const counts = db.countRecipesByTag();
+
+        expect(counts).toHaveLength(1);
+        expect(counts[0].count).toBe(2);
+        expect(["Ethiopia", "ethiopia"]).toContain(counts[0].tag);
+    });
+
+    it("labels a shelf with the capitals the user gave it", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("A", ["Ethiopia"]));
+
+        expect(db.countRecipesByTag()).toEqual([{tag: "Ethiopia", count: 1}]);
+    });
+
+    it("puts the biggest shelf first", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("A", ["small"]));
+        db.insertRecipe(tagged("B", ["big"]));
+        db.insertRecipe(tagged("C", ["big"]));
+
+        expect(db.countRecipesByTag().map((row) => row.tag)).toEqual(["big", "small"]);
+    });
+
+    it("counts nothing on an untagged library", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("A", []));
+        expect(db.countRecipesByTag()).toEqual([]);
+    });
+
+    // A tag row outliving its recipe would inflate a shelf that cannot be
+    // opened: the grid would offer four and the list would show three.
+    it("forgets a deleted recipe's tags", () => {
+        const db = new RecipeDatabase();
+        const doomed = tagged("A", ["morning"]);
+        db.insertRecipe(doomed);
+        db.insertRecipe(tagged("B", ["morning"]));
+        db.deleteRecipe(doomed.uuid);
+
+        expect(db.countRecipesByTag()).toEqual([{tag: "morning", count: 1}]);
+    });
+});
