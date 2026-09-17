@@ -43,6 +43,7 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 import {blankRecipe} from "@/library/newRecipe";
 import {assignAccent} from "@/library/accent";
 import NameShelfSheet from "@/components/NameShelfSheet";
+import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
 import ShelfPickerBar from "@/components/ShelfPickerBar";
@@ -165,6 +166,7 @@ export default function HomeScreen({db, settings}: Props) {
     // three, clear the filter, and the three are still ticked.
     const picker = useShelfPicker();
     const [namingShelf, setNamingShelf] = useState(false);
+    const [removingShelf, setRemovingShelf] = useState<string | null>(null);
     const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
@@ -337,6 +339,13 @@ export default function HomeScreen({db, settings}: Props) {
 
     function finishPicking() {
         if (picker.mode.kind === "editing") {
+            // An emptied shelf is a removal, and it is asked about before it
+            // happens rather than apologised for after: once the tag is off its
+            // last recipe there is no shelf left to put back.
+            if (picker.count === 0) {
+                setRemovingShelf(picker.mode.tag);
+                return;
+            }
             library.setShelfMembers(picker.mode.tag, picker.chosen());
             stopPicking();
             return;
@@ -910,6 +919,22 @@ export default function HomeScreen({db, settings}: Props) {
                                 onCancel={stopPicking}
                                 onDone={finishPicking}/>
             )}
+
+            <RemoveShelfSheet open={removingShelf !== null}
+                              tag={removingShelf ?? ""}
+                              onOpenChange={(next) => {
+                                  // Dismissing keeps the picker open on the
+                                  // shelf it was editing, so backing out of the
+                                  // question is not backing out of the edit.
+                                  if (!next) setRemovingShelf(null);
+                              }}
+                              onRemove={() => {
+                                  if (removingShelf !== null) {
+                                      library.setShelfMembers(removingShelf, []);
+                                  }
+                                  setRemovingShelf(null);
+                                  stopPicking();
+                              }}/>
 
             <NameShelfSheet open={namingShelf} count={picker.count}
                             onOpenChange={setNamingShelf}

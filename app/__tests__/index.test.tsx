@@ -1878,6 +1878,12 @@ describe("picking a shelf's members", () => {
         await fireEvent.press(screen.getByLabelText("Ethiopia"));
         await fireEvent.press(screen.getByTestId("shelf-picker-done"));
 
+        // Asked before it happens, not reported after: a shelf is a query, so
+        // there is nothing to undo once its last tag is gone.
+        await fireEvent.press(screen.getByTestId("remove-shelf-confirm"));
+
         expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+        // The recipes are not a casualty of the shelf going away.
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
     });
 });

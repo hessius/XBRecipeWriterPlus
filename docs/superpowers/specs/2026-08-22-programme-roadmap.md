@@ -38,7 +38,7 @@ Where the app stopped being a card writer.
 | M2 · Share your recipe | Outbound share links | `2026-08-31-share-link-design.md` | done |
 | M3 · Brew from the app | BLE connection, brewing, the machine console | `2026-08-31-ble-brew-design.md` | done |
 | M4 · Watch it brew | Live telemetry, brew history, the machine as app-wide state | `2026-09-03-machine-ux-design.md` | **done** — hardware verification outstanding; see below |
-| M5 · A library worth keeping | Shelves, the rail (search, sort, filter), the recipe screen; post-brew notes and rating | `2026-09-16-library-shelves-design.md` | **in progress** — phases 1 to 3 are done; phase 4 is under way. See below |
+| M5 · A library worth keeping | Shelves, the rail (search, sort, filter), the recipe screen; post-brew notes and rating | `2026-09-16-library-shelves-design.md` | **in progress** — phases 1 to 4 are done; phase 5 is next. See below |
 | M6 · Your xBloom library | Cloud library import and push, authentication, a "what leaves this device" screen | `2026-09-15-xbloom-account-import-design.md` | account import done and gated; push and the disclosure screen outstanding |
 
 M4 grew during design. It was scoped as one issue about telemetry (#63) and
