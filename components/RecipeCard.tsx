@@ -144,6 +144,19 @@ type Props = {
     onWrite?: () => void;
     /** Same again for the management tray's STAR tile. */
     onToggleFavourite?: () => void;
+    /**
+     * Open this recipe's actions by a long press.
+     *
+     * The row already carries every act in its two swipe trays, so this is the
+     * second of the two doors the shelf design asks for: a tile has no room for
+     * a tray and reaches the actions by a long press, and giving the row the
+     * same gesture means both idioms open the one `RecipeOverflowSheet` rather
+     * than two lists that can drift. A long press is not reachable by a screen
+     * reader, but the tray's verbs are already on this card as
+     * `accessibilityActions` above, so nothing is lost by leaving the gesture
+     * itself unlabelled.
+     */
+    onLongPress?: () => void;
 };
 
 /**
@@ -164,7 +177,8 @@ export default function RecipeCard({
     onBrew,
     onShare,
     onWrite,
-    onToggleFavourite
+    onToggleFavourite,
+    onLongPress
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -247,6 +261,7 @@ export default function RecipeCard({
             accessibilityLabel={summary}
             accessibilityActions={actions}
             onPress={onPress}
+            onLongPress={onLongPress}
             onAccessibilityAction={(event) => {
                 if (event.nativeEvent.actionName === "duplicate") {
                     onDuplicate?.();

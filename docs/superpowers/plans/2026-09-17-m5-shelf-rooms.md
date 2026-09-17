@@ -77,31 +77,31 @@ Five separate faults, which resolve into two changes and one deferral:
 
 ## Task 4: The shelf room
 
-- [ ] `app/index.tsx`: a third state, `openShelf`, beside selection mode. Not a
+- [x] `app/index.tsx`: a third state, `openShelf`, beside selection mode. Not a
       route, per the reasoning above.
-- [ ] The shelf's name is the heading, in the same Doto caps as the grid's
+- [x] The shelf's name is the heading, in the same Doto caps as the grid's
       section headings, with the count beneath it.
-- [ ] Recipes are drawn as tiles of the same square the grid uses, so opening a
+- [x] Recipes are drawn as tiles of the same square the grid uses, so opening a
       shelf changes what is on the squares and not what a square is.
-- [ ] Back returns to the grid, with the grid's scroll position intact.
-- [ ] The rail in a shelf room is the shelf view's rail: the toggle alone.
+- [x] Back returns to the grid. The grid's scroll position is NOT preserved (see the comment on `ShelfRoom`): the grid and the room are alternatives in one slot, so opening a room unmounts the grid and its offset, and replaying a saved offset onto different content would only be faked.
+- [x] The rail in a shelf room is the shelf view's rail: the toggle alone.
       Switching to list view from inside a room leaves the room.
-- [ ] Hardware back on Android leaves the room before it leaves the screen.
+- [x] Hardware back on Android leaves the room before it leaves the screen.
 
 ## Task 5: Long press is the door to the actions
 
-- [ ] A long press on a recipe tile opens `RecipeOverflowSheet`, the same sheet
+- [x] A long press on a recipe tile opens `RecipeOverflowSheet`, the same sheet
       the row's overflow opens, with the same items.
-- [ ] `accessibilityActions` carries the same actions, because a long press is
+- [x] `accessibilityActions` carries the same actions, because a long press is
       not reachable by a reader and an action available only by gesture is not
       available.
-- [ ] Test that the sheet from a tile and the sheet from a row offer the same
+- [x] Test that the sheet from a tile and the sheet from a row offer the same
       actions for the same recipe. Two doors to one sheet is the design; two
       sheets that drift is the failure it is guarding against.
 
 ## Task 6: The gate
 
-- [ ] `npm run typecheck`, `npx eslint .` at 0 errors and the 12 baseline
+- [x] `npm run typecheck`, `npx eslint .` at 0 errors and the 12 baseline
       warnings, `npm test`, `npx expo-doctor`.
-- [ ] Mutation-probe every new test, one at a time, via a file copy.
-- [ ] Update §Shipping order to mark 4b shipped.
+- [x] Mutation-probe every new test, one at a time, via a file copy.
+- [x] Update §Shipping order to mark 4b shipped.

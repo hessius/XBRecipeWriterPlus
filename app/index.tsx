@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Platform, Share} from "react-native";
+import {BackHandler, Platform, Share} from "react-native";
 // gesture-handler's FlatList, not React Native's: it keeps the list scroll
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
@@ -48,6 +48,8 @@ import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
 import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
+import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
+import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput} from "@/library/importInput";
 import {
@@ -194,6 +196,14 @@ export default function HomeScreen({db, settings}: Props) {
     const [popoverNow, setPopoverNow] = useState(0);
     const [sortOpen, setSortOpen] = useState(false);
 
+    // The recipe whose actions sheet is open, or null when it is closed. This is
+    // the library's own door onto `RecipeOverflowSheet`: a tile in a shelf room
+    // has no swipe tray, so its actions are reached by a long press, and a list
+    // row carries the same long press so both idioms open the one sheet rather
+    // than two lists that can drift. Held at the screen so a single sheet serves
+    // every tile and every row, rather than one sheet per recipe.
+    const [overflowRecipe, setOverflowRecipe] = useState<Recipe | null>(null);
+
     // Advance the displayed age while the popover is open.
     //
     // Minutes-granularity only, so every 25 s is more than enough. The timer
@@ -205,6 +215,30 @@ export default function HomeScreen({db, settings}: Props) {
         const id = setInterval(() => setPopoverNow(Date.now()), 25_000);
         return () => clearInterval(id);
     }, [popoverOpen]);
+
+    // A shelf room is a state of this screen and not a route, so the navigator
+    // has no frame to pop for it: without this, Android's hardware back would
+    // exit the library while a shelf was still open on the squares. The room is
+    // open when the shelf view is showing and a shelf id is set, and the two are
+    // kept together in the query so this stays a single truth.
+    const inShelfRoom =
+        libraryQuery.view === "shelves" && libraryQuery.openShelfId !== null;
+    // The subscription exists only while a room is open, so exactly one handler
+    // is registered at a time and back behaves normally everywhere else; it is
+    // torn down when the room closes or the screen unmounts. The handler returns
+    // true to say the app consumed the press, and it closes the room from inside
+    // a callback rather than the effect body -- a hardware-back event, not a
+    // render -- which is why setting state here does not trip
+    // react-hooks/set-state-in-effect.
+    useEffect(() => {
+        if (!inShelfRoom) return;
+        const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+            libraryQuery.closeShelf();
+            return true;
+        });
+        return () => sub.remove();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inShelfRoom]);
     const {run: liveRun} = useLiveBrew();
     /** When the brew screen was last pushed, so a second press in that window is refused. */
     const lastBrewPushRef = useRef(0);
@@ -778,7 +812,33 @@ export default function HomeScreen({db, settings}: Props) {
     // as a sibling and isolates nothing on its own, so one left out leaves the
     // library reachable underneath it.
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
-        || namingShelf || removingShelf !== null;
+        || namingShelf || removingShelf !== null || overflowRecipe !== null;
+
+    // Every act the shelf room can perform on one of its recipes, built once here
+    // and handed to the room per tile. It is the same set the swipe tray offers a
+    // list row -- brew (only with a machine, the tray's own rule), share, write,
+    // duplicate, star, delete -- plus the two doors onto them: a tap opens the
+    // editor, a long press opens the shared actions sheet. Sharing one builder
+    // keeps a tile and a row from drifting about what a recipe can do.
+    const roomActionsFor = (recipe: Recipe): RoomRecipeActions => ({
+        onOpen:            () => openRecipe(recipe),
+        onLongPress:       () => setOverflowRecipe(recipe),
+        onBrew:            remembered !== "" ? () => openBrew(recipe) : undefined,
+        onShare:           () => shareFromHome(recipe),
+        onWrite:           () => writeCard(recipe),
+        onDuplicate:       () => library.duplicateRecipe(recipe),
+        onDelete:          () => library.deleteRecipe(recipe),
+        onToggleFavourite: () => library.toggleFavourite(recipe)
+    });
+
+    // The shelf standing open, found by the id the query holds. Its label and
+    // kind come from the same `buildShelves` the grid drew, so the room names the
+    // shelf exactly as its tile did; `filterLabel` is the fallback for the gap
+    // between a shelf being cleared and the room closing. The count under the
+    // name is the room's own, counted from the recipes it drew rather than the
+    // shelf's library-wide tally: the two agree except in the instant a delete
+    // is settling, and what is on screen is the honest answer.
+    const openShelf = shelves.find((shelf) => shelf.id === libraryQuery.openShelfId);
 
     return (
         <>
@@ -876,6 +936,22 @@ export default function HomeScreen({db, settings}: Props) {
 
                 {wholeLibraryEmpty ? (
                     <EmptyLibrary/>
+                ) : inShelfRoom && !picker.active ? (
+                    // A shelf opened into itself, ahead of the grid branch it
+                    // replaces: same view, same rail, but the squares now carry
+                    // this shelf's recipes rather than the shelves. Not drawn
+                    // while picking, the same guard the grid carries, because a
+                    // room's tiles are not selectable and the picker's rows are
+                    // where members are chosen.
+                    <ShelfRoom
+                        label={openShelf?.label ?? filterLabel(libraryQuery.openShelfId ?? "")}
+                        manual={openShelf?.kind === "manual"}
+                        recipes={library.recipes}
+                        onBack={libraryQuery.closeShelf}
+                        actionsFor={roomActionsFor}
+                        showCoffeeMarker={showCoffeeMarker}
+                        dottedProfile={dottedProfile}
+                        paddingBottom={insets.bottom + 8}/>
                 ) : libraryQuery.view === "shelves" && !picker.active ? (
                     // The grid steps aside while picking without changing the
                     // remembered view, so cancelling puts the user back where
@@ -945,6 +1021,13 @@ export default function HomeScreen({db, settings}: Props) {
                                 onShare={() => shareFromHome(item.recipe)}
                                 onWrite={() => writeCard(item.recipe)}
                                 onPress={() => openRecipe(item.recipe)}
+                                // The row's second door onto the actions sheet:
+                                // the same long press a shelf-room tile carries,
+                                // so both idioms open the one sheet rather than
+                                // two lists that can drift. The swipe trays keep
+                                // their tiles; this is an addition, not a
+                                // replacement.
+                                onLongPress={() => setOverflowRecipe(item.recipe)}
                                 onDelete={() => {
                                     setBounceFirstRow(false);
                                     library.deleteRecipe(item.recipe);
@@ -999,6 +1082,42 @@ export default function HomeScreen({db, settings}: Props) {
                 favouritesFirst={libraryQuery.favouritesFirst}
                 onSortChange={libraryQuery.onSortChange}
                 onFavouritesFirstChange={libraryQuery.onFavouritesFirstChange}/>
+
+            {/* The library's one door onto the recipe-actions sheet, opened by a
+                long press on a shelf-room tile or a list row. One sheet for the
+                whole screen, keyed by which recipe is held: the shelf variant
+                (brew, write, share, duplicate, star, delete) with none of the
+                editor's own rows, because it is handed none of their handlers.
+                Brew follows the swipe tray's rule and is offered only with a
+                machine. The handlers close over the held recipe, and every one
+                is guarded because the value is null whenever the sheet is shut --
+                which is exactly when none of them can be pressed. */}
+            <RecipeOverflowSheet
+                open={overflowRecipe !== null}
+                onOpenChange={(next) => {
+                    if (!next) setOverflowRecipe(null);
+                }}
+                recipeUuid={overflowRecipe?.uuid}
+                canRefreshName={false}
+                favourite={overflowRecipe?.favourite ?? false}
+                onBrew={overflowRecipe !== null && remembered !== ""
+                    ? () => openBrew(overflowRecipe)
+                    : undefined}
+                onWrite={overflowRecipe !== null
+                    ? () => writeCard(overflowRecipe)
+                    : undefined}
+                onShare={() => {
+                    if (overflowRecipe !== null) shareFromHome(overflowRecipe);
+                }}
+                onDuplicate={() => {
+                    if (overflowRecipe !== null) library.duplicateRecipe(overflowRecipe);
+                }}
+                onToggleFavourite={overflowRecipe !== null
+                    ? () => library.toggleFavourite(overflowRecipe)
+                    : undefined}
+                onDelete={() => {
+                    if (overflowRecipe !== null) library.deleteRecipe(overflowRecipe);
+                }}/>
 
             <ImportSheet
                 open={importOpen}

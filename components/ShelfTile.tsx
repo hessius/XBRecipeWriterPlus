@@ -15,7 +15,7 @@ import type {Shelf} from "@/library/shelves";
  * at 44 and a tile that could not hold it would make the art reflow the grid,
  * which is the one thing the square is fixed to prevent.
  */
-const TILE_HEIGHT = 120;
+export const TILE_HEIGHT = 120;
 
 /**
  * One shelf in the grid.

@@ -47,6 +47,8 @@ type Props = {
      * follows: a control that cannot do anything should not be drawn.
      */
     onToggleFavourite?: () => void;
+    /** Open the recipe's actions sheet by a long press. Forwarded to the card. */
+    onLongPress?: () => void;
 };
 
 const BOUNCE_OPEN_DELAY = 300;
@@ -145,7 +147,8 @@ export default function SwipeableRecipeRow({
                                                onBrew,
                                                onShare,
                                                onWrite,
-                                               onToggleFavourite
+                                               onToggleFavourite,
+                                               onLongPress
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
 
@@ -335,7 +338,8 @@ export default function SwipeableRecipeRow({
                             onBrew={onBrew}
                             onShare={onShare} onWrite={onWrite}
                             onDelete={onDelete} onDuplicate={onDuplicate}
-                            onToggleFavourite={onToggleFavourite}/>
+                            onToggleFavourite={onToggleFavourite}
+                            onLongPress={onLongPress}/>
             </Swipeable>
         </View>
     );

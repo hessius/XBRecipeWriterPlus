@@ -1,5 +1,5 @@
 import React from "react";
-import {AccessibilityInfo} from "react-native";
+import {AccessibilityInfo, BackHandler} from "react-native";
 import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
@@ -1743,25 +1743,37 @@ describe("the shelf grid", () => {
         expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
     });
 
-    // The grid is somewhere you pass through. A tap that narrowed the library
-    // without opening the list would leave the user looking at tiles for a
-    // result they cannot see.
-    it("returns to the list narrowed to the shelf that was tapped", async () => {
+    // Reversed in phase 4b. These two tests encoded the old behaviour, where a
+    // tap on a shelf switched back to the list and applied a filter chip: on a
+    // device that read as the app undoing the tap -- the squares vanished, the
+    // list returned, and a chip was the only sign anything had happened, so the
+    // tester rejected it. A shelf now opens into a room: the same shelf view,
+    // the same rail, but the squares carry this shelf's recipes as tiles under
+    // its name. The list does not return, and no recipe card is drawn.
+    it("opens the tapped shelf into a room, staying in the shelf view", async () => {
         await openGrid();
 
         await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
 
+        // The grid is gone, but the room is not the list: it draws tiles, not
+        // cards, and it names the shelf it opened.
         expect(screen.queryByTestId("shelf-grid")).toBeNull();
-        expect(screen.getAllByTestId("recipe-card")).toHaveLength(1);
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        expect(screen.getByTestId("shelf-room")).toBeTruthy();
+        expect(screen.getByTestId("shelf-room-title").props.children).toBe("morning");
+        expect(screen.getAllByTestId("recipe-tile")).toHaveLength(1);
         expect(screen.getByText("Ethiopia")).toBeTruthy();
     });
 
-    it("opens an auto shelf the same way", async () => {
+    it("opens an auto shelf into a room the same way", async () => {
         await openGrid();
 
         await fireEvent.press(screen.getByTestId("shelf-tea"));
 
-        expect(screen.getAllByTestId("recipe-card")).toHaveLength(4);
+        expect(screen.queryByTestId("shelf-grid")).toBeNull();
+        expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        expect(screen.getByTestId("shelf-room")).toBeTruthy();
+        expect(screen.getAllByTestId("recipe-tile")).toHaveLength(4);
     });
 
     // A library with nothing to shelve gets the explanation, not an empty grid.
@@ -1769,6 +1781,145 @@ describe("the shelf grid", () => {
         await openGrid([named("Ethiopia"), named("Kenya")]);
 
         expect(screen.getByTestId("shelves-empty")).toBeTruthy();
+    });
+});
+
+// The shelf room, added in phase 4b: a tap on a shelf opens it into itself
+// rather than throwing the user back to the list. These pin the ways in and the
+// ways out -- the back key, the view toggle, Android's hardware back -- and that
+// the long press on a tile reaches the same actions a row reaches.
+describe("the shelf room", () => {
+    function morningLibrary(): Recipe[] {
+        // One tagged recipe is enough to raise a manual shelf, and a manual
+        // shelf is always drawn whatever its count, so the auto shelves being
+        // suppressed here does not matter.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        return [tagged, named("Kenya"), named("Colombia")];
+    }
+
+    async function openRoom(recipes: Recipe[] = morningLibrary()) {
+        await renderHome({recipes});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+    }
+
+    it("returns to the grid when back is pressed, without leaving the shelf view",
+        async () => {
+            await openRoom();
+
+            await fireEvent.press(screen.getByTestId("shelf-room-back"));
+
+            // Back to the grid of shelves, not out to the list: the tag tile is
+            // there again and no recipe card has appeared.
+            expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-room")).toBeNull();
+            expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
+        });
+
+    it("leaves the room when the view is switched to the list", async () => {
+        await openRoom();
+
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
+
+        // The list is showing, and the room did not survive as a filter behind
+        // it: every recipe in the library is listed, not just the shelf's one.
+        expect(screen.queryByTestId("shelf-room")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
+    });
+
+    it("closes the room on Android hardware back before the screen", async () => {
+        // The room registers a hardware-back handler while it is open; capture
+        // it, then fire it by hand the way the OS would.
+        const addSpy = jest.spyOn(BackHandler, "addEventListener");
+        await openRoom();
+
+        const registered = addSpy.mock.calls
+            .filter(([event]) => event === "hardwareBackPress")
+            .at(-1);
+        expect(registered).toBeDefined();
+        const handler = registered![1] as () => boolean;
+
+        let consumed = false;
+        await act(async () => {
+            consumed = handler();
+        });
+
+        // The press was consumed -- the app handled it -- and it closed the
+        // room rather than the screen.
+        expect(consumed).toBe(true);
+        expect(screen.queryByTestId("shelf-room")).toBeNull();
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+    });
+
+    it("opens a recipe's actions from a long press on its tile", async () => {
+        const [tagged] = morningLibrary();
+        await openRoom([tagged, named("Kenya"), named("Colombia")]);
+
+        await fireEvent(screen.getByTestId(`recipe-tile-${tagged.uuid}`), "longPress");
+
+        // The shared sheet, with the library's own verbs on it.
+        expect(await screen.findByLabelText("Delete")).toBeTruthy();
+        expect(screen.getByLabelText("Share")).toBeTruthy();
+        expect(screen.getByLabelText("Duplicate")).toBeTruthy();
+    });
+
+    // Two doors to one sheet is the design; two sheets that drift is the failure
+    // this guards against. The set a tile's long press reaches must be the set a
+    // row's long press reaches, for the same recipe.
+    it("offers the same actions from a tile as from a row", async () => {
+        // Fake timers so the sheet's open and its exit-grace close both land on
+        // a tick we advance by hand, rather than racing a real animation timer:
+        // reaching the rail for the second door depends on the first sheet
+        // having actually gone, and that made a real-timer version of this
+        // flake. The chooser tests drive XbrwSheet the same way.
+        jest.useFakeTimers();
+
+        // The candidates the library door can draw, plus the editor-only rows
+        // that must never appear on it. Filtering the whole list to what is
+        // actually present turns "same actions" into a comparison of two arrays.
+        const candidates = [
+            "Brew recipe", "Write recipe to card", "Share", "Duplicate",
+            "Star recipe", "Remove star from recipe", "Brew history", "Delete",
+            "Revert", "Refresh name from xBloom", "Show hints"
+        ];
+        function present(): string[] {
+            return candidates.filter((label) => screen.queryByLabelText(label) !== null);
+        }
+
+        // A machine is remembered, so BREW is offered: the door has to carry it
+        // on both sides or neither, and withholding it would make the comparison
+        // trivially pass on a shorter list.
+        mockRemembered = "AA:BB:CC:DD:EE:FF";
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+
+        await renderHome({recipes: [tagged]});
+
+        // Door one: the list row.
+        await fireEvent(screen.getByTestId("recipe-card"), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+        const fromRow = present();
+        await fireEvent.press(screen.getByLabelText("Close"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+
+        // Door two: the shelf-room tile, for the same recipe.
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+        await fireEvent(screen.getByTestId(`recipe-tile-${tagged.uuid}`), "longPress");
+        await act(async () => { jest.advanceTimersByTime(500); });
+        const fromTile = present();
+
+        expect(fromTile).toEqual(fromRow);
+        // And it is a real set, not an empty one that would make equality
+        // meaningless. Brew is on it because a machine is remembered.
+        expect(fromTile).toContain("Brew recipe");
+        expect(fromTile).toContain("Delete");
+        // None of the editor's own rows leaked onto the library door.
+        expect(fromTile).not.toContain("Revert");
+        expect(fromTile).not.toContain("Show hints");
+
+        jest.useRealTimers();
     });
 });
 

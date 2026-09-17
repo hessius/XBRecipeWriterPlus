@@ -858,10 +858,10 @@ worth stating so the plan does not have to rediscover it.
    phase 3 deferred. Needs 3, because the picker is the library screen with its
    rail. Planned in
    [`2026-09-17-m5-shelves.md`](../plans/2026-09-17-m5-shelves.md).
-4b. **What device testing sent back.** The rail per view, and a shelf that opens
-   into itself rather than dissolving into a filter. Both are reversals of
-   decisions this design made, recorded in §"The rail belongs to the view" and
-   §"A shelf opens into itself". Needs 4. Planned in
+4b. **What device testing sent back. Shipped.** The rail per view, and a shelf
+   that opens into itself rather than dissolving into a filter. Both are
+   reversals of decisions this design made, recorded in §"The rail belongs to
+   the view" and §"A shelf opens into itself". Needs 4. Planned in
    [`2026-09-17-m5-shelf-rooms.md`](../plans/2026-09-17-m5-shelf-rooms.md).
 5. **The recipe screen.** The third deck, the header rename sheet, the pod
    section. Independent of 3 and 4; needs only 1. Planned in

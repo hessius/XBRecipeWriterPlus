@@ -25,14 +25,41 @@ type Props = {
     /** The recipe's UUID, used to filter the brew history. */
     recipeUuid?: string;
     onOpenChange: (open: boolean) => void;
-    /** Whether the deck draws its one-line hints. */
-    showHints: boolean;
-    onShowHintsChange: (show: boolean) => void;
+    /**
+     * Whether the deck draws its one-line hints, and the handle to flip it.
+     *
+     * Editor-only. The switch reads and writes the editor deck's setting, so a
+     * call site that has no deck -- the library's own door onto this sheet --
+     * leaves both out, and the row is not drawn. Every editor-owned row is
+     * gated on its handler this way, so one component can be the editor's
+     * overflow and the library's recipe-actions sheet without either growing a
+     * row that belongs to the other.
+     */
+    showHints?: boolean;
+    onShowHintsChange?: (show: boolean) => void;
     onShare: () => void;
     onDuplicate: () => void;
-    onRefreshName: () => void;
-    onRevert: () => void;
+    /** Editor-only: re-read the name from xBloom. Gated by `canRefreshName` too. */
+    onRefreshName?: () => void;
+    /** Editor-only: step back to a saved state. Absent from the library door. */
+    onRevert?: () => void;
     onDelete: () => void;
+    /**
+     * The three the library door adds and the editor does not.
+     *
+     * Brew it, put it on a card, and star it: the acts that make sense on a
+     * recipe sitting in the library rather than open on the bench. Each is
+     * optional and its row is drawn only when handed over, the mirror of the
+     * editor-only rows above, so the two doors share one sheet and neither
+     * carries the other's verbs. `onBrew` follows the swipe tray's own rule and
+     * is withheld when there is no machine to brew on, so a dead row never
+     * shows.
+     */
+    onBrew?: () => void;
+    onWrite?: () => void;
+    onToggleFavourite?: () => void;
+    /** Which way the star row reads and speaks. */
+    favourite?: boolean;
 };
 
 /**
@@ -41,10 +68,18 @@ type Props = {
  * Two actions earn the bar at the bottom of the editor. The rest are either
  * rare, reversible, or destructive, and a row of six equal buttons made the two
  * that matter impossible to find.
+ *
+ * The same sheet is the library's recipe-actions door, opened by a long press on
+ * a shelf tile and on a list row -- two doors to one sheet, so the grid and the
+ * list cannot drift apart about what a recipe's actions are. The editor-only
+ * rows (hints, refresh name, revert) and the library-only rows (brew, write,
+ * star) are each gated on their handler, so a caller gets exactly the verbs it
+ * hands over and no others.
  */
 export default function RecipeOverflowSheet({
     open, canRefreshName, recipeUuid, onOpenChange, showHints, onShowHintsChange,
-    onShare, onDuplicate, onRefreshName, onRevert, onDelete
+    onShare, onDuplicate, onRefreshName, onRevert, onDelete,
+    onBrew, onWrite, onToggleFavourite, favourite = false
 }: Props) {
     function pick(action: () => void) {
         onOpenChange(false);
@@ -85,7 +120,9 @@ export default function RecipeOverflowSheet({
                     and dismissing on the tap would take the answer away with
                     it. It reads and writes the same stored setting as the
                     settings screen, which is why it needs no memory of its
-                    own. */}
+                    own. Editor-only: gated on its handler, so the library door
+                    -- which owns no deck to hint -- leaves it out. */}
+                {onShowHintsChange && (<>
                 <Pressable accessibilityRole="switch" accessibilityLabel="Show hints"
                            accessibilityState={{checked: showHints}}
                            accessibilityHint="Draws a short note under each field's label."
@@ -112,23 +149,39 @@ export default function RecipeOverflowSheet({
 
                 <YStack marginTop="$1" paddingTop="$2"
                         borderTopWidth={1} borderTopColor={palette.line}/>
+                </>)}
+
+                {/* The library door's own three, ahead of the shared rows: the
+                    acts on the recipe itself lead, the way the swipe tray leads
+                    with them. Each is drawn only when handed over, so the editor
+                    -- which hands over none -- shows none. Brew follows the
+                    tray's rule and is absent without a machine to brew on. */}
+                {onBrew && row("Brew recipe", "brew", onBrew, {caption: "Brew"})}
+                {onWrite && row("Write recipe to card", "write", onWrite, {
+                    caption: "Write to card"
+                })}
 
                 {row("Share", "share", onShare, {
                     testID: "overflow-share-label",
                     hint:   "Creates a link that opens this recipe in the xBloom app."
                 })}
                 {row("Duplicate", "duplicate", onDuplicate)}
+                {onToggleFavourite && row(
+                    favourite ? "Remove star from recipe" : "Star recipe",
+                    "favourite", onToggleFavourite,
+                    {caption: favourite ? "Starred" : "Star"}
+                )}
                 {row("Brew history", "info", () => router.push(recipeUuid ? `/brewHistory?recipeUuid=${recipeUuid}` : "/brewHistory"), {
                     hint: "Shows every recorded brew of this recipe."
                 })}
                 {/* Spoken in full, but captioned short: the other four rows are
                     one-word captions, and a sentence set in uppercase Doto
                     beside them reads as a different kind of thing. */}
-                {canRefreshName && row(
+                {canRefreshName && onRefreshName && row(
                     "Refresh name from xBloom", "import", onRefreshName,
                     {caption: "Refresh name"}
                 )}
-                {row("Revert", "revert", onRevert)}
+                {onRevert && row("Revert", "revert", onRevert)}
                 {/* Set apart, because it is the one row here that cannot be
                     undone and there is no second question after it. */}
                 <YStack marginTop="$2" paddingTop="$2"

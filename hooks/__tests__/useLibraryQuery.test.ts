@@ -239,15 +239,68 @@ describe("the view and the shelves", () => {
         expect(result.current.view).toBe("list");
     });
 
-    it("opens a shelf into the list", async () => {
+    // Reversed in phase 4b. This test used to assert opening a shelf switched
+    // the view back to the list; device testing rejected that as the app
+    // undoing the tap. A shelf now opens into itself: the view stays on the
+    // shelf idiom and the hook remembers which shelf is open, so the screen can
+    // draw the shelf room rather than a list with a chip.
+    it("opens a shelf into a room, staying in the shelf view", async () => {
         const settings = settingsWith();
         const {result} = await renderHook(() => useLibraryQuery(settings));
         await act(async () => result.current.onViewChange("shelves"));
 
         await act(async () => result.current.openShelf("tea"));
 
-        expect(result.current.view).toBe("list");
+        expect(result.current.view).toBe("shelves");
+        expect(result.current.openShelfId).toBe("tea");
         expect(result.current.query.filters).toEqual(["tea"]);
+    });
+
+    // Back out of the room, all the way back to the grid: the id and the filter
+    // it applied go together, because the room is only a room while both hold.
+    it("closes the room, clearing both the open id and its filter", async () => {
+        const settings = settingsWith();
+        const {result} = await renderHook(() => useLibraryQuery(settings));
+        await act(async () => result.current.onViewChange("shelves"));
+        await act(async () => result.current.openShelf("tea"));
+
+        await act(async () => result.current.closeShelf());
+
+        expect(result.current.view).toBe("shelves");
+        expect(result.current.openShelfId).toBeNull();
+        expect(result.current.query.filters).toEqual([]);
+    });
+
+    // Switching to list view from inside a room leaves the room. The shelf must
+    // not survive the switch as an applied chip: a shelf is a thing you opened,
+    // a chip is a lens you borrowed, and the two only ever competed when opening
+    // a shelf turned into applying a chip.
+    it("leaves the room when the view switches to the list", async () => {
+        const settings = settingsWith();
+        const {result} = await renderHook(() => useLibraryQuery(settings));
+        await act(async () => result.current.onViewChange("shelves"));
+        await act(async () => result.current.openShelf("tea"));
+
+        await act(async () => result.current.onViewChange("list"));
+
+        expect(result.current.view).toBe("list");
+        expect(result.current.openShelfId).toBeNull();
+        expect(result.current.query.filters).toEqual([]);
+    });
+
+    // The invariant the design calls out: a filter cleared by any other route
+    // must not leave a room hanging open against an empty filter, which would
+    // be a room with no shelf under it.
+    it("clears the open shelf when the whole query is cleared", async () => {
+        const settings = settingsWith();
+        const {result} = await renderHook(() => useLibraryQuery(settings));
+        await act(async () => result.current.onViewChange("shelves"));
+        await act(async () => result.current.openShelf("tea"));
+
+        await act(async () => result.current.clear());
+
+        expect(result.current.openShelfId).toBeNull();
+        expect(result.current.query.filters).toEqual([]);
     });
 
     // A shelf is a whole lens, not another chip. Intersecting two would open a
