@@ -3,6 +3,13 @@
 Implements [`2026-09-18-brew-judgement-design.md`](../specs/2026-09-18-brew-judgement-design.md),
 which closes #99 and the two issues it stands on, #97 and the brew half of #96.
 
+**Shipped.** All seven tasks are done and the gate is green. The one thing
+automated checks cannot give is the device pass: stars and a note on a real
+finished brew, a judged brew surviving a retention sweep that takes its
+neighbours, and a backup written on one phone restoring its history on another.
+None of that can be exercised in a simulator, because none of it starts without
+a machine.
+
 Each task is one commit, and each one leaves the gate green: `npx tsc --noEmit`,
 `npx eslint .` (0 errors, 12 baseline warnings), `npm test`, `npx expo-doctor`.
 Every new test is mutation-probed before its commit.

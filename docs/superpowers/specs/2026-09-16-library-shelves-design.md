@@ -853,6 +853,7 @@ worth stating so the plan does not have to rediscover it.
    things from this bullet deliberately: the view segmented pair goes with phase
    4, because the half it switches to is the shelf grid, and the Rating sort
    axis goes with #99, because until a rating exists the axis sorts nothing.
+   Both have landed since: the segmented pair with 4, the axis with 6 below.
 4. **Shelves. Shipped.** The query model, the grid, the stock auto shelves,
    shelf creation and the selection mode picker, plus the view segmented pair
    phase 3 deferred. Needs 3, because the picker is the library screen with its
@@ -869,6 +870,14 @@ worth stating so the plan does not have to rediscover it.
    [`2026-09-16-m5-recipe-screen.md`](../plans/2026-09-16-m5-recipe-screen.md),
    which also picks up the description and the card's line budget left behind
    by phase 1.
+6. **The brew judgement. Shipped.** #99: five whole stars and a note on the
+   finished brew and on the record, the pin that protects a judged brew from
+   the retention sweep (#97), brew records through a backup (#96), and the
+   Rating sort axis this list deferred out of 3. Needs nothing here but the
+   sort vocabulary from 3. Designed in
+   [`2026-09-18-brew-judgement-design.md`](2026-09-18-brew-judgement-design.md)
+   and planned in
+   [`2026-09-18-brew-judgement.md`](../plans/2026-09-18-brew-judgement.md).
 
 `ShelfMark` variants and the avatar setting ride along with 4 and 2
 respectively, and both are behind switches, so neither blocks a release.
@@ -876,8 +885,11 @@ respectively, and both are behind switches, so neither blocks a release.
 ## Out of scope
 
 - **Shelf ordering.** Deferred, with the options recorded in #111.
-- **Rating capture UI on the brew screen and brew record.** #99 owns it. This
-  design owns only the recipe side star and the sort axis that consumes it.
+- **Rating capture UI on the brew screen and brew record.** #99 owns it, and
+  has now shipped it; see
+  [`2026-09-18-brew-judgement-design.md`](2026-09-18-brew-judgement-design.md).
+  This design owns only the recipe side star and the sort axis that consumes
+  it, and that axis is open as of the same work.
 - **Recent brews, comparison, tag profiles** in the ABOUT deck. #95.
 - **Recipe hero images.** The avatar setting is a 40 pt mark and nothing more.
 - **A bottom tab bar or a hamburger menu.** Ruled out by the roadmap, and the
