@@ -72,14 +72,34 @@ describe("SwipeableRecipeRow's mount nudge", () => {
         expect(mockClose).toHaveBeenCalled();
     });
 
-    it("stays still when the caller does not ask for a hint", async () => {
+    it("reports the nudge once it has been given, so the owner can retire it", async () => {
+        // The owner turns the nudge off on this callback. Without it, "the first
+        // row" is whichever recipe the current query puts on top, so every sort,
+        // filter and search hands the gate a fresh row and replays the lesson.
+        const onBounced = jest.fn();
         await renderWithProviders(
             <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()} onBrew={jest.fn()}/>
+                                onDuplicate={jest.fn()} onBrew={jest.fn()} bounceOnMount
+                                onBounced={onBounced}/>
+        );
+        expect(onBounced).not.toHaveBeenCalled();
+
+        await act(async () => { jest.advanceTimersByTime(2000); });
+
+        expect(onBounced).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays still when the caller does not ask for a hint", async () => {
+        const onBounced = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
+                                onDuplicate={jest.fn()} onBrew={jest.fn()}
+                                onBounced={onBounced}/>
         );
         await act(async () => { jest.advanceTimersByTime(2000); });
 
         expect(mockOpenLeft).not.toHaveBeenCalled();
         expect(mockOpenRight).not.toHaveBeenCalled();
+        expect(onBounced).not.toHaveBeenCalled();
     });
 });

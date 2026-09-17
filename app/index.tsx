@@ -213,6 +213,10 @@ export default function HomeScreen({db, settings}: Props) {
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [readProgress, setReadProgress] = useState(0);
+    // Retired the moment the nudge has been given, not merely when the library
+    // is touched. "The first row" is whichever recipe the current query puts on
+    // top, so every sort, filter and search would otherwise hand the gate a
+    // fresh row and replay the lesson -- a card wobbling open on every chip tap.
     const [bounceFirstRow, setBounceFirstRow] = useState(true);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
@@ -744,6 +748,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
+                                onBounced={() => setBounceFirstRow(false)}
                                 // Gated on a machine: a dead BREW in every row's
                                 // tray is worse than none. Share and write need
                                 // no machine, so they are always offered.
