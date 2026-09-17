@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 
+import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput, type ImportSource} from "@/library/importInput";
 import type Recipe from "@/library/Recipe";
@@ -17,8 +18,11 @@ import {XBloomRecipe} from "@/library/XBloomRecipe";
  * That is survivable only because a typed result does not navigate. A premature
  * resolve costs one wasted request and shows a name the user can see is wrong.
  * If typing is ever made to navigate, this constant becomes dangerous.
+ *
+ * Shared with the library search field, so the app's two act-as-you-type
+ * fields cannot answer at two different speeds.
  */
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = TYPING_DEBOUNCE_MS;
 
 /**
  * How long a non-parsing value sits before the format is explained.
@@ -97,7 +101,7 @@ export type SelectionChangeEvent = {
 
 type Options = {
     /** The library, for de-duplication. Passed in rather than re-opened here. */
-    stored: Recipe[];
+    stored: Recipe[] | (() => Recipe[]);
     /** Navigation belongs to the screen; the timing rule belongs here. */
     onOpenRecipe: (recipe: Recipe, isExisting: boolean) => void;
 };
@@ -222,7 +226,7 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
      * The library, read at the moment a result lands rather than captured when
      * the lookup started -- a save can happen in between.
      */
-    const storedRef = useRef(stored);
+    const storedRef = useRef<Recipe[] | (() => Recipe[])>(stored);
     useEffect(() => {
         storedRef.current = stored;
     }, [stored]);
@@ -321,7 +325,10 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         // user the stored twin without the dilution and calls it the same
         // recipe. A card read keeps the loose match, for the mirror-image
         // reason -- see `Identity`.
-        const {recipe, isExisting} = resolveOnOpen(storedRef.current, candidate, "brew");
+        const storedNow = typeof storedRef.current === "function"
+            ? storedRef.current()
+            : storedRef.current;
+        const {recipe, isExisting} = resolveOnOpen(storedNow, candidate, "brew");
 
         // A paste into the field and a share intent both navigate on their own.
         // A shortcut navigates only for a recipe not already held: the tile's

@@ -20,6 +20,7 @@ jest.mock("expo-sqlite", () => ({
 /* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
 /* eslint-enable import/first */
 
 beforeEach(() => {
@@ -109,7 +110,7 @@ describe("write path", () => {
         db.insertRecipe(recipe);
 
         expect(indexRows()).toEqual([
-            {uuid: recipe.uuid, sortName: "Morning", pourCount: 0, isTea: 0}
+            {uuid: recipe.uuid, sortName: "morning", pourCount: 0, isTea: 0}
         ]);
     });
 
@@ -122,7 +123,7 @@ describe("write path", () => {
         recipe.name = "After";
         db.updateRecipe(recipe.uuid, recipe);
 
-        expect(indexRows()[0].sortName).toBe("After");
+        expect(indexRows()[0].sortName).toBe("after");
     });
 
     it("stores tags on insert", () => {
@@ -248,7 +249,7 @@ describe("write path", () => {
             ])
         ).toThrow();
 
-        expect(indexRows().map((r) => r.sortName)).toEqual(["Kept"]);
+        expect(indexRows().map((r) => r.sortName)).toEqual(["kept"]);
         expect(tagRows().map((r) => r.tag)).toEqual(["keep"]);
     });
 });
@@ -281,9 +282,40 @@ describe("rebuild", () => {
 
         new RecipeDatabase();
 
-        expect(indexRows()[0].sortName).toBe("Morning");
+        expect(indexRows()[0].sortName).toBe("morning");
         expect(tagRows().map((r) => r.tag)).toEqual(["filter"]);
         expect(storedHash()).toBe(schemaHash());
+    });
+
+    it("re-folds an accented sort key an older version stored unfolded", () => {
+        // The reason INDEX_REVISION was bumped: a device that indexed before
+        // the fold holds the raw display name in sortName. The revision bump
+        // changes schemaHash, which stales the stored hash and forces this
+        // rebuild, which re-projects every recipe through the folding `from`.
+        // A nameless recipe must still come out NULL, not "".
+        const db = new RecipeDatabase();
+        const named = new Recipe();
+        named.name = "Étna";
+        const nameless = new Recipe();
+        db.insertRecipe(named);
+        db.insertRecipe(nameless);
+
+        // The pre-fold state: the raw accented name in the column, hash stale.
+        mockBacking.runSync(
+            "UPDATE recipes SET sortName = 'Étna' WHERE uuid = ?;", [named.uuid]
+        );
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        const row = mockBacking.getFirstSync(
+            "SELECT sortName FROM recipes WHERE uuid = ?;", [named.uuid]
+        ) as {sortName: string};
+        expect(row.sortName).toBe("etna");
+        const blank = mockBacking.getFirstSync(
+            "SELECT sortName FROM recipes WHERE uuid = ?;", [nameless.uuid]
+        ) as {sortName: string | null};
+        expect(blank.sortName).toBeNull();
     });
 
     it("does not rebuild when the hash matches", () => {
@@ -316,6 +348,53 @@ describe("rebuild", () => {
             "SELECT recipeJSON FROM recipes;"
         ) as {recipeJSON: string}).recipeJSON;
         expect(after).toBe(before);
+    });
+
+    it("backfills a legacy recipe's date added in insertion order", () => {
+        // Every recipe already on a phone predates the createdAt column and
+        // hydrates with 0, so all of them tie, the name tie break takes over,
+        // and "Date added" is an exact copy of "Name" until the user adds
+        // something. The design calls that "correct, and indistinguishable from
+        // a bug", which is the right standard: a sort axis that silently does
+        // nothing is worse than one that is missing.
+        //
+        // Backfilled in the index, never in the blob. Nothing outside the index
+        // reads createdAt, so rewriting every legacy recipe to carry a
+        // manufactured timestamp would put an invention in the user's file to
+        // fix an ordering, and the test above exists to stop exactly that.
+        const db = new RecipeDatabase();
+        // Named against insertion order, so insertion order is distinguishable
+        // from the name fallback rather than agreeing with it by luck.
+        for (const name of ["Zulu", "Yankee", "Xray"]) {
+            const recipe = new Recipe();
+            recipe.name = name;
+            db.insertRecipe(recipe);
+        }
+        // Strip the field the way a pre-column install has it.
+        for (const row of mockBacking.getAllSync(
+            "SELECT uuid, recipeJSON FROM recipes;"
+        ) as {uuid: string; recipeJSON: string}[]) {
+            const {createdAt: _dropped, ...legacy} = JSON.parse(row.recipeJSON);
+            mockBacking.runSync("UPDATE recipes SET recipeJSON = ? WHERE uuid = ?;",
+                [JSON.stringify(legacy), row.uuid]);
+        }
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        const dates = (mockBacking.getAllSync(
+            "SELECT recipeJSON, createdAt FROM recipes ORDER BY rowid;"
+        ) as {recipeJSON: string; createdAt: number}[]);
+        // Distinct and ascending in the order they were inserted, so the axis
+        // has something to order by.
+        expect(dates.map((row) => row.createdAt))
+            .toEqual([...dates.map((row) => row.createdAt)].sort((a, b) => a - b));
+        expect(new Set(dates.map((row) => row.createdAt)).size).toBe(3);
+        expect(dates.every((row) => row.createdAt > 0)).toBe(true);
+        // And the blob is still the user's, without a manufactured date in it.
+        for (const row of dates) {
+            expect(JSON.parse(row.recipeJSON).createdAt).toBeUndefined();
+        }
     });
 
     it("never writes a legacy blob during a rebuild", () => {
@@ -385,7 +464,7 @@ describe("rebuild", () => {
         const named = mockBacking.getAllSync(
             "SELECT uuid, sortName FROM recipes ORDER BY uuid;"
         ) as {uuid: string; sortName: string | null}[];
-        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("Morning");
+        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("morning");
         expect(named.find((r) => r.uuid === bad.uuid)?.sortName).toBeNull();
 
         // And the blob is untouched, so it is still there to be recovered from.
@@ -416,7 +495,7 @@ describe("rebuild", () => {
         const names = (mockBacking.getAllSync(
             "SELECT sortName FROM recipes ORDER BY sortName;"
         ) as {sortName: string}[]).map((r) => r.sortName);
-        expect(names).toEqual(["Bystander", "Moving"]);
+        expect(names).toEqual(["bystander", "moving"]);
     });
 
     it("survives a blob that parses but cannot be projected", () => {
@@ -445,7 +524,7 @@ describe("rebuild", () => {
         const named = mockBacking.getAllSync(
             "SELECT uuid, sortName FROM recipes ORDER BY uuid;"
         ) as {uuid: string; sortName: string | null}[];
-        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("Morning");
+        expect(named.find((r) => r.uuid === good.uuid)?.sortName).toBe("morning");
         expect(named.find((r) => r.uuid === bad.uuid)?.sortName).toBeNull();
     });
 
@@ -617,5 +696,48 @@ describe("accent assignment", () => {
         const settled = db.getRecipe(overflowing.uuid)!.accentIndex!;
         expect(settled).toBeGreaterThanOrEqual(0);
         expect(settled).toBeLessThan(4);
+    });
+});
+
+describe("filter counts", () => {
+    it("counts every stock filter in one SQLite read", () => {
+        const db = new RecipeDatabase();
+        const tea = new Recipe();
+        tea.name = "Tea";
+        tea.cupType = CUP_TYPE.TEA;
+        db.insertRecipe(tea);
+
+        const getFirst = jest.spyOn(mockBacking, "getFirstSync");
+
+        const counts = db.countRecipesByFilter(STOCK_FILTER_ORDER, resolveStockFilter);
+
+        expect(getFirst).toHaveBeenCalledTimes(1);
+        expect(counts.tea).toBe(1);
+        expect(counts.pods).toBe(0);
+    });
+
+    it("binds each filter's parameters to its own column of the one read", () => {
+        // Every clause pushes its parameters into one shared list, bound
+        // positionally across the whole SELECT. Two parameterised clauses with
+        // deliberately unequal counts are what makes a swapped binding visible:
+        // with one pod and two overflow-off recipes, scrambling the order
+        // reports the counts the other way round rather than failing outright.
+        const db = new RecipeDatabase();
+        for (const [name, cupType] of [
+            ["Pod", CUP_TYPE.XPOD],
+            ["Open one", CUP_TYPE.OMNI],
+            ["Open two", CUP_TYPE.OMNI]
+        ] as const) {
+            const recipe = new Recipe();
+            recipe.name = name;
+            recipe.cupType = cupType;
+            db.insertRecipe(recipe);
+        }
+
+        const counts = db.countRecipesByFilter(
+            ["pods", "overflowOff"], resolveStockFilter
+        );
+
+        expect(counts).toEqual({pods: 1, overflowOff: 2});
     });
 });

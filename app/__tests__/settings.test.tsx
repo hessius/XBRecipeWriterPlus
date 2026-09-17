@@ -73,6 +73,7 @@ const mockApplyRestore = jest.fn();
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({
         recipes:         mockLibraryRecipes,
+        allRecipes:      () => mockLibraryRecipes,
         refresh:         mockRefresh,
         deleteRecipe:    jest.fn(),
         duplicateRecipe: jest.fn(),
@@ -315,6 +316,21 @@ describe("SettingsScreen", () => {
         expect(Object.keys(snapshot).sort()).toEqual(
             Object.keys(DEFAULTS).filter(key => !NOT_IN_BACKUP.includes(key as SettingKey)).sort()
         );
+    });
+
+    it("no longer carries the retired rail hint in a backup", async () => {
+        // The rail hint and its setting were removed outright. The exhaustiveness
+        // test above proves the snapshot equals DEFAULTS; this names the one key
+        // that must not reappear, so a reader who re-adds it to DEFAULTS by reflex
+        // is told here rather than shipping a dead preference in every backup.
+        mockExportBackup.mockResolvedValue({ok: true});
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
+
+        const snapshot = mockExportBackup.mock.calls[0][1] as Record<string, unknown>;
+        expect(snapshot).not.toHaveProperty("libraryRailHintDismissed");
     });
 
     it("leaves the paired machine out of a backup rather than carrying it to another phone", async () => {

@@ -148,7 +148,7 @@ export default function StageTile({
                                         borderWidth: 1,
                                         borderStyle: "dashed",
                                         borderColor: palette.line,
-                                        backgroundColor: "transparent"
+                                        backgroundColor: palette.none
                                     }}
                                 />
                             )}

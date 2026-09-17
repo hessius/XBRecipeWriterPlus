@@ -767,7 +767,7 @@ type BarButtonProps = {
 function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: BarButtonProps) {
     const fill = enabled
         ? (accent ?? palette.raised)
-        : "transparent";
+        : palette.none;
 
     return (
         <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel}

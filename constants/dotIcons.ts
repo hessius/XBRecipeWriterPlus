@@ -454,6 +454,63 @@ export const DOT_ICONS = {
         "...##....",
         "......##.",
         "....####."
+    ],
+    /**
+     * A magnifying glass: search the library.
+     *
+     * A five-dot ring with a handle struck off its lower-right corner on a pure
+     * 45-degree diagonal, the one non-axis-aligned stroke this grid renders
+     * cleanly. Drawn rather than borrowed from a font because the rail's search
+     * chip is icon-only, so this glyph is the whole of what the control says.
+     */
+    search: [
+        "..###....",
+        ".#...#...",
+        ".#...#...",
+        ".#...#...",
+        "..###....",
+        ".....#...",
+        "......#..",
+        ".......#.",
+        "........."
+    ],
+    /**
+     * Two arrows, one up and one down: reorder the library.
+     *
+     * The house glyph for sort, kept axis-aligned save for the two arrowheads so
+     * every dot lands on the grid. The pair reads as "this can go either way",
+     * which is exactly the sort chip's job before a direction is chosen.
+     */
+    sort: [
+        "..#...#..",
+        ".###..#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#...#..",
+        "..#..###.",
+        "..#...#.."
+    ],
+    /**
+     * A funnel: narrow the library to a shelf.
+     *
+     * A triangle whose edges are pure 45-degree diagonals down to a one-dot
+     * stem, the two stroke classes this grid renders cleanly. Reads as a funnel
+     * rather than the `sort` arrows so the rail's filter button is never mistaken
+     * for its neighbour, and drawn here because the button is icon-only when no
+     * filter is applied and this glyph is the whole of what it says.
+     */
+    filter: [
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#....",
+        "....#....",
+        "....#....",
+        "....#....",
+        "........."
     ]
 } as const satisfies Record<string, readonly string[]>;
 

@@ -20,6 +20,7 @@ import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
+import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -95,7 +96,19 @@ export default function SettingsScreen({settings}: Props) {
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
+    // Owned by the library rail, not shown as rows here. Read anyway, because a
+    // backup carries every preference and these are four.
+    const [librarySort, setLibrarySort] = useSetting("librarySort", settings);
+    const [librarySortDirection, setLibrarySortDirection] =
+        useSetting("librarySortDirection", settings);
+    const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
+        useSetting("libraryFavouritesFirst", settings);
 
+    // Deliberately given no query: this screen's questions are all about the
+    // whole library, never about a view of it. That is what lets the restore
+    // preview and the delete count read `library.recipes` directly instead of
+    // paying for a table read on every render. Hand this a rail query and both
+    // would quietly narrow with it.
     const library = useRecipeLibrary();
     const {exportBackup, pickBackup} = useBackup();
     // The sheet is mounted for the screen's whole life and only toggled open,
@@ -119,12 +132,17 @@ export default function SettingsScreen({settings}: Props) {
             showCoffeeMarker, dotMatrixProfile, showHints, temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, animateBrewChart, brewTraceRetention
+            machineAutoStart, animateBrewChart, brewTraceRetention,
+            librarySort, librarySortDirection, libraryFavouritesFirst
         };
     }
 
     async function onBackUp() {
-        const outcome = await exportBackup(library.recipes, settingsSnapshot(), VERSION);
+        // The whole table, not `library.recipes`: the list is the answer to the
+        // rail's query, and a backup must hold every recipe regardless of what
+        // the user last searched or filtered by. `allRecipes()` asks a different
+        // question from the list on purpose.
+        const outcome = await exportBackup(library.allRecipes(), settingsSnapshot(), VERSION);
         if (!outcome.ok) notify({tone: "error", message: outcome.reason});
     }
 
@@ -177,6 +195,20 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.brewTraceRetention === "number") {
             setBrewTraceRetention(incoming.brewTraceRetention);
+        }
+        // The same `isSortAxis` the ordinary read path narrows through, so the
+        // two places that decide what a valid axis is cannot come to disagree.
+        // Still a drop and not a fallback: a hostile backup naming an unknown
+        // axis leaves the current sort untouched rather than silently resetting
+        // it to name, which is what `asSortAxis` would do on the read path.
+        if (isSortAxis(incoming.librarySort)) {
+            setLibrarySort(incoming.librarySort);
+        }
+        if (isSortDirection(incoming.librarySortDirection)) {
+            setLibrarySortDirection(incoming.librarySortDirection);
+        }
+        if (typeof incoming.libraryFavouritesFirst === "boolean") {
+            setLibraryFavouritesFirst(incoming.libraryFavouritesFirst);
         }
     }
 

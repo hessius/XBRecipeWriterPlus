@@ -2,13 +2,20 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
+import {resolveStockFilter, STOCK_FILTER_ORDER} from "@/library/libraryFilters";
+import type {LibraryQuery} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
 
 function stubDb(recipes: Recipe[]) {
     return {
-        retrieveAllRecipes: jest.fn(() => recipes),
+        queryRecipes:       jest.fn(() => recipes),
+        // Typed nullable because the real `retrieveAllRecipes` returns null for
+        // an empty table rather than an empty array, and a stub that cannot
+        // express that hides the case from every test using it.
+        retrieveAllRecipes: jest.fn((): Recipe[] | null => recipes),
+        countRecipes:       jest.fn(() => recipes.length),
         deleteRecipe:       jest.fn(),
         cloneRecipe:        jest.fn(),
         // Writes through to the backing array so a reload after the write
@@ -19,7 +26,10 @@ function stubDb(recipes: Recipe[]) {
         }),
         deleteAllRecipes:   jest.fn(),
         insertRecipes:      jest.fn(),
-        replaceAllRecipes:  jest.fn()
+        replaceAllRecipes:  jest.fn(),
+        countRecipesByFilter: jest.fn((ids: readonly string[]) =>
+            Object.fromEntries(ids.map((id) => [id, 0]))
+        )
     };
 }
 
@@ -44,17 +54,115 @@ function payloadOf(recipes: Recipe[]): BackupPayload {
 }
 
 describe("useRecipeLibrary", () => {
-    it("sorts by display name so the list order does not depend on insertion order", async () => {
+    it("hands back the store's order without re-sorting it", async () => {
+        // Sorting moved out of the hook and into the SQL query the store runs;
+        // the hook must present exactly what `queryRecipes` returned, in that
+        // order. Seeding an order the hook would once have alphabetised
+        // (Ethiopia, Kenya, Zambia) proves it no longer sorts in JavaScript.
         const db = stubDb([named("Zambia"), named("Ethiopia"), named("Kenya")]);
         const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes.map((r) => r.displayName()))
+            .toEqual(["Zambia", "Ethiopia", "Kenya"]);
+    });
+
+    it("runs the exact query and filter resolver through queryRecipes", async () => {
+        // The hook's one job on the read path is to hand the query straight to
+        // the store. A stub that ignored its arguments let a reviewer replace the
+        // real query with a different one and watch every test stay green, so the
+        // wiring task that hands a live query down this path would have no test
+        // that could see it working. Pin both arguments to what was passed in.
+        const query: LibraryQuery = {
+            search: "ethiopia",
+            filters: [],
+            sort: "ratio",
+            direction: "desc",
+            favouritesFirst: true
+        };
+        const db = stubDb([named("Ethiopia")]);
+        await renderHook(() => useRecipeLibrary(db, query));
+        expect(db.queryRecipes).toHaveBeenCalledWith(query, resolveStockFilter);
+    });
+
+    it("reads stock filter counts through the store's count method", async () => {
+        const db = stubDb([named("Ethiopia")]);
+        await renderHook(() => useRecipeLibrary(db));
+
+        expect(db.countRecipesByFilter).toHaveBeenCalledWith(
+            STOCK_FILTER_ORDER,
+            resolveStockFilter
+        );
+    });
+
+    it("throws when a store cannot count stock filters", async () => {
+        const {countRecipesByFilter: _omitted, ...withoutCounts} = stubDb([named("Ethiopia")]);
+
+        await expect(renderHook(() => useRecipeLibrary(withoutCounts))).rejects.toThrow(
+            "This store cannot count stock filters"
+        );
+    });
+
+    it("throws when a store can count its recipes neither way", async () => {
+        // Rather than reporting zero. `librarySize` is what the screen asks "is
+        // the library empty?", so a success-shaped zero from a store that cannot
+        // count hides the rail and the list over a table that may hold
+        // everything the user has. Failing loudly is recoverable; an empty
+        // library that is not empty is not.
+        const {countRecipes: _c, retrieveAllRecipes: _r, ...neither} = stubDb([named("Ethiopia")]);
+
+        await expect(renderHook(() => useRecipeLibrary(neither as never))).rejects.toThrow(
+            "This store cannot count its recipes"
+        );
+    });
+
+    it("reads a null from a store that does have the method as an empty table", async () => {
+        // `retrieveAllRecipes` returns null for an empty table as well as never
+        // being there at all, so the guard above has to test the method rather
+        // than its answer. Testing the answer would throw on a genuinely empty
+        // library, which is the first library every new user has.
+        const {countRecipes: _omitted, ...byList} = stubDb([]);
+        byList.retrieveAllRecipes.mockReturnValue(null);
+        const {result} = await renderHook(() => useRecipeLibrary(byList as never));
+
+        expect(result.current.librarySize).toBe(0);
+    });
+
+    it("refuses to build a backup from a store that cannot read the table", async () => {
+        // An empty backup is the one outcome worse than a failed one: it looks
+        // like it worked, and the user finds out on the day it is all they have.
+        const {retrieveAllRecipes: _omitted, ...withoutIt} = stubDb([named("Ethiopia")]);
+        const {result} = await renderHook(() => useRecipeLibrary(withoutIt as never));
+
+        expect(() => result.current.allRecipes()).toThrow();
+    });
+
+    it("backs up the whole table even while the list holds a narrowing query", async () => {
+        // The moment a caller hands the rail's live query in, `recipes` is only
+        // what a search left on screen. A backup taken from that would silently
+        // drop everything the filter hid -- data loss dressed as an export. The
+        // whole library must reach the backup regardless of the query, so the two
+        // reads are pointed at different store methods: the list at a narrowing
+        // `queryRecipes`, the backup at `retrieveAllRecipes`.
+        const whole = [named("Ethiopia"), named("Kenya"), named("Zambia")];
+        const db = stubDb(whole);
+        db.queryRecipes.mockReturnValue([named("Ethiopia")]);
+        const narrowing: LibraryQuery = {
+            search: "eth",
+            filters: [],
+            sort: "name",
+            direction: "asc",
+            favouritesFirst: false
+        };
+        const {result} = await renderHook(() => useRecipeLibrary(db, narrowing));
+
+        expect(result.current.recipes.map((r) => r.displayName())).toEqual(["Ethiopia"]);
+        expect(result.current.allRecipes().map((r) => r.displayName()))
             .toEqual(["Ethiopia", "Kenya", "Zambia"]);
     });
 
-    it("reports an empty library as an empty list, not as null", async () => {
-        // retrieveAllRecipes returns null when the table is empty. Every caller
-        // leaking that null is how the old screen ended up with `recipesJSON ? ... : ""`.
-        const db = {...stubDb([]), retrieveAllRecipes: jest.fn(() => null)};
+    it("reports an empty library as an empty list", async () => {
+        // `queryRecipes` returns [] for an empty table, never null, so the hook
+        // no longer has a null to absorb -- but the screen still needs [].
+        const db = {...stubDb([]), queryRecipes: jest.fn(() => [])};
         const {result} = await renderHook(() => useRecipeLibrary(db));
         expect(result.current.recipes).toEqual([]);
     });
@@ -66,7 +174,7 @@ describe("useRecipeLibrary", () => {
         await act(async () => result.current.deleteRecipe(result.current.recipes[0]));
 
         expect(db.deleteRecipe).toHaveBeenCalledTimes(1);
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("duplicates through the database and re-reads", async () => {
@@ -76,7 +184,7 @@ describe("useRecipeLibrary", () => {
         await act(async () => result.current.duplicateRecipe(result.current.recipes[0]));
 
         expect(db.cloneRecipe).toHaveBeenCalledTimes(1);
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("toggles a favourite and persists it", async () => {
@@ -112,7 +220,11 @@ describe("useRecipeLibrary", () => {
         const original = plainRecipe();
         const stored = JSON.stringify(original);
         const db = {
-            retrieveAllRecipes: jest.fn(() => [new Recipe(undefined, stored)]),
+            queryRecipes:       jest.fn(() => [new Recipe(undefined, stored)]),
+            countRecipes:       jest.fn(() => 1),
+            countRecipesByFilter: jest.fn((ids: readonly string[]) =>
+                Object.fromEntries(ids.map((id) => [id, 0]))
+            ),
             deleteRecipe:       jest.fn(),
             cloneRecipe:        jest.fn(),
             updateRecipe:       jest.fn(() => {
@@ -136,7 +248,7 @@ describe("useRecipeLibrary", () => {
 
         await act(async () => result.current.refresh());
 
-        expect(db.retrieveAllRecipes).toHaveBeenCalledTimes(2);
+        expect(db.queryRecipes).toHaveBeenCalledTimes(2);
     });
 
     it("deletes the whole library and reports how many went", async () => {
@@ -150,6 +262,31 @@ describe("useRecipeLibrary", () => {
 
         expect(outcome).toEqual({status: "deleted", deleted: 2});
         expect(db.deleteAllRecipes).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports the whole table deleted, not the narrowed list on screen", async () => {
+        // Delete-all deletes the table whatever the rail was showing, so a count
+        // taken from the view would tell the user a smaller number than the one
+        // they actually lost.
+        const shown = named("Kenya");
+        const db = stubDb([shown]);
+        db.countRecipes.mockReturnValue(3);
+        const {result} = await renderHook(() =>
+            useRecipeLibrary(db, {
+                search:          "kenya",
+                filters:         [],
+                sort:            "name",
+                direction:       "asc",
+                favouritesFirst: false
+            })
+        );
+
+        let outcome;
+        await act(async () => {
+            outcome = result.current.deleteAll();
+        });
+
+        expect(outcome).toEqual({status: "deleted", deleted: 3});
     });
 
     it("reports a failed delete instead of throwing into the screen", async () => {
@@ -190,6 +327,31 @@ describe("useRecipeLibrary", () => {
         expect(db.insertRecipes).toHaveBeenCalledTimes(1);
         expect(db.insertRecipes.mock.calls[0][0].map((r: Recipe) => r.name)).toEqual(["Kenya"]);
         expect(db.replaceAllRecipes).not.toHaveBeenCalled();
+    });
+
+    it("dedupes a restore against the whole table, not the list on screen", async () => {
+        // A recipe the rail filtered out is still in the library. Deduping
+        // against the view would hand it back as an insert and collide.
+        const hidden = named("Ethiopia");
+        const shown = named("Kenya");
+        const db = stubDb([shown]);
+        db.retrieveAllRecipes.mockReturnValue([shown, hidden]);
+        const {result} = await renderHook(() =>
+            useRecipeLibrary(db, {
+                search:          "kenya",
+                filters:         [],
+                sort:            "name",
+                direction:       "asc",
+                favouritesFirst: false
+            })
+        );
+
+        await act(async () => {
+            result.current.applyRestore(payloadOf([hidden, shown]), {replace: false});
+        });
+
+        expect(db.insertRecipes).toHaveBeenCalledTimes(1);
+        expect(db.insertRecipes.mock.calls[0][0]).toEqual([]);
     });
 
     it("replaces a restore through the transactional replaceAllRecipes", async () => {

@@ -200,11 +200,13 @@ export default function Stepper({label, value, min, max, step, values, accent, u
                 <DotIcon name="minus" size={16} color={palette.dim}/>
             </Pressable>
 
-            {/* Two modes rather than a permanently editable field. Doto is a
-                display face and this app renders it only through
-                DotMatrixText, which enforces its size floor and its weight;
-                a TextInput cannot go through that component, so the readout
-                is Doto and the brief editing state is the body font. Only one
+            {/* Two modes rather than a permanently editable field, and the
+                editing state is deliberately the body font. A TextInput can be
+                given Doto -- `dotMatrixTextProps` does exactly that for the
+                library rail's search field -- so this is a choice, not a
+                limitation: a number being typed is a number a person is
+                entering, not a readout of what the machine will do, and the
+                face is what says which of the two you are looking at. Only one
                 of the two is ever mounted, so a screen reader is not offered
                 a text field that is not on screen. */}
             <XStack alignItems="center" justifyContent="center" minWidth={54}>

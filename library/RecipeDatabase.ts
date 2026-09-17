@@ -4,6 +4,8 @@ import Recipe from './Recipe';
 import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
+import {ensureBrewTables} from './BrewDatabase';
+import {buildLibraryQuery, type FilterResolver, type LibraryQuery} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
         projectRecipe, schemaHash} from './recipeIndex';
 
@@ -123,6 +125,13 @@ class RecipeDatabase {
     constructor() {
         this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
         this.createTable();
+        // The library query joins the recipe index to an aggregate over the
+        // brew tables, which `BrewDatabase` owns. On a fresh install the
+        // library screen opens this class before any brew screen has created
+        // those tables, so ensure them here too: the join would otherwise
+        // reference a table that does not exist and throw on first render. The
+        // DDL is shared, not copied, so the two openers cannot drift.
+        ensureBrewTables(this.db);
         this.migrateIndex();
     }
 
@@ -239,10 +248,14 @@ class RecipeDatabase {
         if (stored && stored.value === current) return;
 
         this.atomically(() => {
+            // `ORDER BY rowid` is the backfill's whole basis: it is the order
+            // the rows were inserted in, it does not change, and it is
+            // therefore the same on every rebuild.
             const rows = this.db.getAllSync(
-                "SELECT uuid, recipeJSON FROM recipes;"
+                "SELECT uuid, recipeJSON FROM recipes ORDER BY rowid;"
             ) as {uuid: string; recipeJSON: string}[];
 
+            let legacyOrdinal = 0;
             for (const row of rows) {
                 let projected: Record<string, IndexValue>;
                 let tags: string[];
@@ -265,6 +278,19 @@ class RecipeDatabase {
                     this.clearIndex(row.uuid);
                     continue;
                 }
+                // A recipe that predates the column hydrates with createdAt 0,
+                // so left alone every legacy recipe ties and "Date added"
+                // becomes an exact copy of "Name" -- correct, and
+                // indistinguishable from a bug. A small ascending ordinal in
+                // rowid order gives the axis a stable and plausible day one:
+                // distinct, in the order the recipes were added, and below
+                // every genuine millisecond timestamp, so the undated library
+                // sits before the dated one, which is where it belongs.
+                //
+                // The index only. Nothing outside it reads createdAt, so
+                // rewriting the blobs would put a manufactured date in the
+                // user's own file to settle a sort order.
+                if (projected.createdAt === 0) projected.createdAt = ++legacyOrdinal;
                 // Outside the try, and that is the other half of the rule. A
                 // failure here is SQL failing, not a bad row, and it must stay
                 // fatal: it rolls the transaction back and leaves the hash
@@ -459,6 +485,62 @@ class RecipeDatabase {
         }
     }
 
+
+    /**
+     * The library, as the answer to a rail query rather than "everything,
+     * sorted in JavaScript".
+     *
+     * The statement selects each matching recipe's blob and hydrates it, so the
+     * result is whole `Recipe` objects in the query's ORDER BY order, not the
+     * index rows the query sorts on. The index columns are a derived, lossy
+     * cache; the screen needs the real recipe, and the blob is the only source
+     * of truth. Selecting the blob alongside the uuid lets this build every
+     * result from one pass over the rows, in order, rather than re-reading each
+     * recipe by uuid.
+     *
+     * `resolveFilter` is injected so the pure builder need not know the filter
+     * vocabulary; until that vocabulary is wired in, callers pass no filters and
+     * the default resolver is never consulted.
+     */
+    public queryRecipes(query: LibraryQuery, resolveFilter?: FilterResolver): Recipe[] {
+        const {sql, params} = buildLibraryQuery(query, resolveFilter);
+        const rows = this.db.getAllSync(sql, params) as {recipeJSON: string}[];
+        return rows.map((row) => new Recipe(undefined, row.recipeJSON));
+    }
+
+    public countRecipes(): number {
+        const row = this.db.getFirstSync("SELECT COUNT(*) AS count FROM recipes;") as
+            {count: number} | null;
+        return row?.count ?? 0;
+    }
+
+    public countRecipesByFilter(
+        ids: readonly string[],
+        resolveFilter: FilterResolver = () => null
+    ): Record<string, number> {
+        if (ids.length === 0) return {};
+
+        const params: IndexValue[] = [];
+        const selections = ids.map((id, index) => {
+            const clause = resolveFilter(id);
+            if (clause === null) {
+                throw new Error(`RecipeDatabase: unknown filter id "${id}"`);
+            }
+            params.push(...(clause.params ?? []));
+            return `COALESCE(SUM(CASE WHEN (${clause.where}) THEN 1 ELSE 0 END), 0) AS c${index}`;
+        });
+
+        const row = this.db.getFirstSync(
+            `SELECT ${selections.join(", ")} FROM recipes;`,
+            params
+        ) as Record<string, number> | null;
+
+        const counts: Record<string, number> = {};
+        ids.forEach((id, index) => {
+            counts[id] = row?.[`c${index}`] ?? 0;
+        });
+        return counts;
+    }
 
     public retrieveAllRecipes(): Recipe[] | null {
         let recipesJSON: any[] = this.db.getAllSync(

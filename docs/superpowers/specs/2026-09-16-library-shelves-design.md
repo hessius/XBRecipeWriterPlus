@@ -109,6 +109,10 @@ So one rail, one row high, holding everything.
 
 ### Pinned leading cluster, scrolling filters
 
+> **Superseded** by "Revision: the filters move to a second rail" below, which
+> moves the chips out of this row and retires the divider. The reasoning here is
+> kept because the revision is an answer to it.
+
 Three controls pin to the leading edge behind a hairline divider: **search**,
 **view mode**, **sort**. Filter chips scroll past them.
 
@@ -134,6 +138,107 @@ are adjacent siblings. Slop cannot rescue a chip that has been drawn too small.
 So shrinking is a reduction in the rail's own vertical padding. **Chip height
 stays at 44 and never moves**, and an icon-only chip is 44 wide as well as tall.
 The rail gets shorter; the targets inside it do not.
+
+### Revision: the filters move to a second rail
+
+One row held everything right up until a device saw it. On a small phone the
+pinned cluster, the divider and a sort chip wide enough to name its axis leave
+the filter row squeezed to two chips, and the view segmented pair above has not
+even been built yet. Add it and the budget is one chip. A row that can show one
+of twelve filters is not a filter row; it is a rumour of one.
+
+Widening the row is not available, so the filters leave it.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ⌕ SEARCH ────────────────────────┤ ☰ ▦  ⇅ RECENT  ⌗ 2 ⌄│  always
+├─────────────────────────────────────────────────────────┤
+│  TEA   SINGLE POUR   GRIND   FROM ANNA   xBLOOM PODS …  │  on demand
+└─────────────────────────────────────────────────────────┘
+```
+
+The top rail keeps the controls that act on the whole library however it is
+narrowed: search, view, sort. **Search leads and takes the width; the buttons sit
+to the trailing edge.** A **filter button joins them** and reveals a second rail
+beneath, which is nothing but filter chips at the full
+width of the screen. Twelve chips two at a time becomes twelve chips five at a
+time with a scroll that is a scroll rather than a cliff.
+
+**The hairline divider between pinned and scrolling goes.** It earned its place
+by marking where the row stopped being pinned, and with the filters gone the top
+rail is pinned all the way across. Keeping it would be ornament, and the rule
+that it must never be removed as ornament cuts both ways.
+
+**The filter button carries the count, because a hidden filter is worse than a
+cramped one.** A chip a user can see is a chip they can see is on; a chip behind
+a button is a library quietly missing recipes with no visible reason. The button
+shows the number of applied filters at all times, including zero.
+
+**The fill means something is filtered. The caret means the rail is open.** The
+button has two binaries to report and `RailChip` allows the fill exactly one of
+them: its own doctrine is that the fill *is* the state, because the editor's
+action bar established that one step of ink is not a state. So the two must be
+carried by structurally different things.
+
+The fill goes to the filtering, not the disclosure. Whether the rail is open is
+already visible — the rail is directly beneath the button — so spending the fill
+on it would buy nothing and leave *closed with filters applied* drawn identically
+to *closed with none*, which is the one state where the app is hiding recipes.
+It also keeps the grammar the rest of the rail already speaks: a filled chip
+means this control is doing something to your library, exactly as the sort chip
+fills once it leaves the default. The caret takes the disclosure, which is what
+carets are for.
+
+    closed, none    ⌗ 0 ⌄   outline
+    closed, two     ⌗ 2 ⌄   filled
+    open,   none    ⌗ 0 ⌃   outline
+    open,   two     ⌗ 2 ⌃   filled
+
+**Search flexes rather than taking a fixed width, and it flexes whether or not
+it is in use.** A hardcoded field width overflows the cluster on a small phone
+and pushes the trailing control off an edge that cannot scroll, and no single
+number is right across every device. Search takes whatever the buttons leave.
+
+It keeps that width when idle. The earlier reading -- an icon-only square that
+pays for its space only while in use -- was right when twelve filter chips were
+competing for the same row, and stopped being right the moment they moved out.
+There is nothing left to give the width back *to*: a 44-point square beside two
+buttons leaves a long dead gap in the middle of the rail, which reads as a
+missing control rather than as restraint. So the idle state is a full-width
+field showing its own word, and the rail is always full.
+
+What changes on activation is therefore small on purpose -- the field takes the
+sort chip's word as extra room and grows into it. The control does not leap
+across the rail; it is already where it will be, and the tap only puts a cursor
+in it. Search does not get a rail of its own: vertical space is
+the scarcest thing on this screen and saving it is the entire reason the rail
+exists.
+
+**The second rail opens by itself when a filter is already applied.** Not as a
+convenience: it is the same argument. If the user arrives at a narrowed library
+the narrowing has to be on screen, and the button's count alone tells them *that*
+something is filtered without telling them *what*. Applied means open, until the
+user says otherwise.
+
+**Until the user says otherwise** is the whole of it. The intent is three-valued:
+unsaid, open, closed. Unsaid follows the filters; a tap settles it and wins from
+then on. Holding the rail open against a tap because a filter is applied would
+make the button dead on exactly the screen where it is most likely to be pressed,
+and a dead control teaches a user that the app is broken faster than a rail in
+the wrong state teaches them anything at all. Beyond that the intent is
+transient, like the filters themselves, and is not a setting.
+
+This costs a row of height, but only while the user is filtering, which is
+exactly when they have asked for it. The permanent chrome gets *shorter*, not
+taller: one rail without a filter row is less than one rail with a strangled one.
+
+### Revision: the hint comes out
+
+Phase 3 shipped a one-line hint above the rail naming what the row does,
+dismissed on first use and gated behind `showHints`. Device review rejected it:
+search, sort and filter are self-evident from their glyphs, and the line looked
+wrong where it sat. It goes entirely, along with its setting key. A rail that
+needs a caption is a rail with the wrong glyphs.
 
 ### View mode is a segmented pair, not a toggling icon
 
@@ -208,7 +313,7 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | Single pour | `pourCount = 1` |
 | Many stages | `pourCount >= 4` |
 | Grinder off | `grinder = 0` |
-| xBloom recipes | `xid <> ''` |
+| xBloom recipes | `xid IS NOT NULL` |
 | Strong | `ratio <= 14` |
 | Long | `ratio >= 17` |
 | Hot | `maxTemp >= 94` |
@@ -394,6 +499,15 @@ timestamp they would all tie, the name tie break would take over, and
 Correct, and indistinguishable from a bug.
 
 Backfilling in insertion order gives a stable and plausible ordering on day one.
+
+**In the index, not in the blob.** Nothing outside the index column reads
+`createdAt`, so the backfill happens during `migrateIndex` from `ORDER BY rowid`,
+which is the insertion order and does not change between rebuilds. Writing a
+manufactured timestamp into every legacy recipe's stored JSON would put an
+invention in the user's own file to settle a sort order, and
+`RecipeDatabase.index.test.ts` already holds a rule that a rebuild never rewrites
+a blob. The ordinals are small integers, so they sort below every genuine
+millisecond timestamp and the undated library sits before the dated one.
 
 ## Favourites
 
@@ -690,12 +804,12 @@ worth stating so the plan does not have to rediscover it.
 2. **The row.** Description, the equal height line budget, the favourite star
    and its swipe tile, and evidence as a stats row suffix. Useful on its own:
    it answers "remembering what a recipe is" without any of the rest.
-3. **The rail.** Search, sort with direction and favourites first, filter chips,
-   the view segmented pair. Useful on its own. Planned in
-   [`2026-09-16-m5-rail.md`](../plans/2026-09-16-m5-rail.md), which cuts two
-   things from this bullet and says why: the view pair goes with phase 4,
-   because the half it switches to is the shelf grid, and the Rating axis goes
-   with #99, because until a rating exists the axis sorts nothing.
+3. **The rail. Done in phase 3.** Search, sort with direction and favourites
+   first, and filter chips are shipped. Useful on its own. Planned in
+   [`2026-09-16-m5-rail.md`](../plans/2026-09-16-m5-rail.md), which cut two
+   things from this bullet deliberately: the view segmented pair goes with phase
+   4, because the half it switches to is the shelf grid, and the Rating sort
+   axis goes with #99, because until a rating exists the axis sorts nothing.
 4. **Shelves.** The query model, the grid, the stock auto shelves, shelf
    creation and the selection mode picker. Needs 3, because the picker is the
    library screen with its rail.

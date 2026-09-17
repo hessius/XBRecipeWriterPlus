@@ -1,6 +1,7 @@
 import {buildBackup, mergeRecipes, parseBackup, BACKUP_FORMAT, BACKUP_VERSION}
     from "@/library/backup";
 import Recipe, {MAX_DESCRIPTION} from "@/library/Recipe";
+import {DEFAULTS, NOT_IN_BACKUP, type SettingKey} from "@/library/Settings";
 
 function recipeNamed(name: string, uuid: string): Recipe {
     const recipe = new Recipe();
@@ -608,5 +609,50 @@ describe("authored fields through backup", () => {
         if (!parsed.ok) return;
         expect(parsed.payload.recipes).toHaveLength(1);
         expect(parsed.payload.recipes[0].favourite).toBe(false);
+    });
+});
+
+describe("every setting is carried or deliberately excluded", () => {
+    // The showHints bug was a key that lived in DEFAULTS but not in the snapshot
+    // the settings screen hands buildBackup, so the backup silently dropped it.
+    // The snapshot's type (Record<Exclude<SettingKey, BackupExcluded>, unknown>)
+    // now makes that a compile error; this pins the other half of the contract,
+    // that buildBackup emits every setting it is handed and NOT_IN_BACKUP names
+    // only real keys, so the two lists actually partition DEFAULTS.
+    const settingKeys = Object.keys(DEFAULTS) as SettingKey[];
+
+    it("emits every DEFAULTS key that is not on NOT_IN_BACKUP", () => {
+        const carried: Record<string, unknown> = {};
+        for (const key of settingKeys) {
+            if (!NOT_IN_BACKUP.includes(key)) carried[key] = DEFAULTS[key];
+        }
+
+        const parsed = JSON.parse(buildBackup([recipeNamed("A", "u1")], carried));
+
+        for (const key of settingKeys) {
+            expect(key in parsed.settings).toBe(!NOT_IN_BACKUP.includes(key));
+        }
+    });
+
+    it("excludes only keys that actually exist in DEFAULTS", () => {
+        for (const key of NOT_IN_BACKUP) {
+            expect(settingKeys).toContain(key);
+        }
+    });
+
+    it("carries the three library rail settings rather than excluding them", () => {
+        expect(NOT_IN_BACKUP).not.toContain("librarySort");
+        expect(NOT_IN_BACKUP).not.toContain("librarySortDirection");
+        expect(NOT_IN_BACKUP).not.toContain("libraryFavouritesFirst");
+
+        const parsed = JSON.parse(buildBackup([recipeNamed("A", "u1")], {
+            librarySort: "added",
+            librarySortDirection: "desc",
+            libraryFavouritesFirst: true
+        }));
+
+        expect(parsed.settings.librarySort).toBe("added");
+        expect(parsed.settings.librarySortDirection).toBe("desc");
+        expect(parsed.settings.libraryFavouritesFirst).toBe(true);
     });
 });

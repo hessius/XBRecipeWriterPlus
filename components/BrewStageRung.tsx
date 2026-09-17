@@ -284,7 +284,7 @@ export default function BrewStageRung({
             paddingHorizontal="$2"
             marginHorizontal="$-2"
             borderRadius="$3"
-            backgroundColor={selected ? palette.raised : "transparent"}
+            backgroundColor={selected ? palette.raised : palette.none}
             style={{opacity: state === "pending" ? PENDING_OPACITY : 1}}
         >
             <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}

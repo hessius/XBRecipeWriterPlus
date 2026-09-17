@@ -42,7 +42,65 @@ export type IndexColumn = {
  * `from` body leaves it identical. Changing a projection therefore fails on
  * the golden values, which is the prompt to bump this number.
  */
-export const INDEX_REVISION = 1;
+export const INDEX_REVISION = 3;
+
+/**
+ * The Nordic letters that survive folding unchanged, because they are genuinely
+ * separate letters of their alphabets rather than accented forms of a base
+ * letter.
+ *
+ * In Swedish, Danish and Norwegian, `Å Ä Ö Æ Ø` are distinct letters that sort
+ * *after* Z. In French, German and English, `É ñ ü` are the same letter with a
+ * mark and sort *as* the base letter. `foldSortKey` folds the second group and
+ * preserves the first, which is correct in every one of those languages at
+ * once: `É` is not a separate letter in Swedish either, so folding it is right
+ * there too. The one case this cannot satisfy is German `Ä`→`A`, which
+ * conflicts head-on with Swedish `Ä`-after-Z; Swedish wins deliberately.
+ *
+ * Do NOT "finish the job" by folding these as well. Full folding would break
+ * the Nordic alphabets (`Öland` would sort under O instead of after Z); no
+ * folding at all breaks French (`Étna` sorts after Z because its code point is
+ * above `z`). This hybrid is the only shape correct for all of them together.
+ *
+ * `Æ æ Ø ø` are single code points with no combining mark, so NFD leaves them
+ * alone for free and they would survive even without this list. `Å å Ä ä Ö ö`
+ * DO decompose under NFD (verified empirically, not assumed), so they must be
+ * protected explicitly or the diacritic strip would fold them to A/O.
+ */
+const PRESERVED_LETTERS = new Set([
+    "Å", "å", "Ä", "ä", "Ö", "ö", "Æ", "æ", "Ø", "ø"
+]);
+
+/**
+ * The sort key for a display name: the name with combining diacritics folded
+ * away, except the Nordic letters `PRESERVED_LETTERS` keeps intact.
+ *
+ * SQLite's `NOCASE` collation folds only ASCII, so an accented letter has a
+ * code point above `z` and sorts after every unaccented name -- "Étna" lands
+ * after "Zambia". Storing this folded key instead of the display name makes
+ * "Étna" sort as "Etna" while leaving the display name in the blob untouched.
+ *
+ * NFC-normalise first so a precomposed "Å" and a decomposed "A"+ring fold
+ * identically; then iterate by code point so a preserved letter is matched as a
+ * whole before the per-character NFD strip can reach its combining mark.
+ *
+ * Lower-cased, and that is load-bearing twice over rather than cosmetic. NOCASE
+ * folds ASCII only, so a preserved letter left in its written case both sorts
+ * and matches apart from its own other case: "Åland" and "åland" landed in two
+ * different places in the list, and a search for "öland" could not find a
+ * recipe named "Öland" -- which is to say, a Nordic user could not find a
+ * recipe by typing its name. Case-folding here in JavaScript is what NOCASE
+ * cannot do, so both halves of the problem close at the same point. It also
+ * means every caller matching against this key must fold its term through this
+ * same function rather than lower-casing by hand.
+ */
+export function foldSortKey(name: string): string {
+    return Array.from(name.normalize("NFC").toLowerCase(), (character) =>
+        PRESERVED_LETTERS.has(character)
+            ? character
+            : character.normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    ).join("");
+}
 
 /** Temperatures are stored as -1 until set; see Pour. */
 function temperatures(recipe: Recipe): number[] {
@@ -59,7 +117,12 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         // language into the sort key and leave it stale if that changed. NULL
         // also lets "sort by name" put unnamed recipes deliberately last
         // instead of scattering them under a localised string.
-        from: (r) => (r.hasName() ? r.displayName() : null)
+        //
+        // The stored value is the diacritic-folded key, not the display name,
+        // so "Étna" sorts as "Etna" under NOCASE (which folds ASCII only). NULL
+        // for an unnamed recipe is preserved exactly; foldSortKey never runs on
+        // it. See foldSortKey for why the Nordic letters are exempt.
+        from: (r) => (r.hasName() ? foldSortKey(r.displayName()) : null)
     },
     {name: "createdAt", type: "INTEGER", indexed: true, from: (r) => r.createdAt},
     {name: "source", type: "TEXT", indexed: true, from: (r) => r.source},
@@ -127,10 +190,16 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         from: (r) => r.sharedBy || null
     },
     {name: "favourite", type: "INTEGER", indexed: true, from: (r) => (r.favourite ? 1 : 0)},
-    // Presence, not content. Nothing searches a description; one filter asks
-    // whether there is one, and a boolean column answers it without carrying
-    // the text twice.
-    {name: "hasDescription", type: "INTEGER", from: (r) => (r.description ? 1 : 0)}
+    // Both the flag and the text, deliberately, because they answer different
+    // questions. `hasDescription` is what a filter asks -- "does this recipe
+    // carry a note" -- and a 0/1 integer answers that without carrying the words
+    // twice. `description` is what search reads: phase 5 is where a user first
+    // gets somewhere to type a note, and a search that could not find one would
+    // be a bug nobody would trace back to this table. Neither is indexed: a
+    // presence filter over a boolean scans cheaply, and LIKE '%term%' cannot use
+    // an index at all, so one would only cost writes.
+    {name: "hasDescription", type: "INTEGER", from: (r) => (r.description ? 1 : 0)},
+    {name: "description", type: "TEXT", collate: "NOCASE", from: (r) => r.description || null}
 ];
 
 /**

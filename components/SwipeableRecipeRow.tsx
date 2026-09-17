@@ -19,6 +19,16 @@ type Props = {
     onDuplicate: () => void;
     /** Nudges the row open briefly on mount so the swipe actions are discoverable. */
     bounceOnMount?: boolean;
+    /**
+     * Called once the nudge has actually run, so the owner can retire it.
+     *
+     * The nudge is a once-per-launch lesson, but "the first row" is not a fixed
+     * recipe: sorting, filtering or searching puts a different recipe at the top,
+     * which re-satisfies the gate and teaches the same lesson again. Reporting
+     * back is what lets the owner turn it off after the first time rather than
+     * on every change to the query.
+     */
+    onBounced?: () => void;
     /** When true, the card shows its destructive actions instead of hiding them behind a swipe. */
     editing?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
@@ -128,6 +138,7 @@ export default function SwipeableRecipeRow({
                                                onDelete,
                                                onDuplicate,
                                                bounceOnMount = false,
+                                               onBounced,
                                                editing = false,
                                                showCoffeeMarker = true,
                                                dottedProfile = false,
@@ -158,12 +169,23 @@ export default function SwipeableRecipeRow({
         // BREW/SHARE/WRITE, and `openLeft` opens exactly that tray. Teach the
         // thing that is not already known.
         const open = setTimeout(() => swipeableRef.current?.openLeft(), BOUNCE_OPEN_DELAY);
-        const close = setTimeout(() => swipeableRef.current?.close(), BOUNCE_CLOSE_DELAY);
+        const close = setTimeout(() => {
+            swipeableRef.current?.close();
+            // Reported from the *closing* timer, and this is load-bearing.
+            // Reporting from the opening one retired the lesson while it was
+            // still running: the owner set state, `bounceOnMount` went false,
+            // this effect's cleanup ran, and it cleared the very timer that
+            // brings the card back. The tray stayed open. Reported from a timer
+            // either way rather than from the effect body, because this fires
+            // when the lesson has actually been given, and it is an event, not
+            // a render, so the owner may set state on it.
+            onBounced?.();
+        }, BOUNCE_CLOSE_DELAY);
         return () => {
             clearTimeout(open);
             clearTimeout(close);
         };
-    }, [bounceOnMount]);
+    }, [bounceOnMount, onBounced]);
 
     /**
      * The management tray, revealed by swiping the card left.

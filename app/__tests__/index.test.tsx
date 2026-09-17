@@ -8,8 +8,11 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
+import {resolveStockFilter} from "@/library/libraryFilters";
+import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
+import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 
 const mockPush = jest.fn();
 
@@ -180,8 +183,10 @@ jest.mock("@/library/NFC", () => ({
     setNfcAlertIOS: jest.fn()
 }));
 
-function memoryStorage(): SettingsStorage {
-    const values = new Map<string, string>();
+function memoryStorage(raw: Record<string, unknown> = {}): SettingsStorage {
+    const values = new Map<string, string>(
+        Object.entries(raw).map(([key, value]) => [key, JSON.stringify(value)])
+    );
     return {
         read:  (key) => values.get(key) ?? null,
         write: (key, value) => {
@@ -193,6 +198,12 @@ function memoryStorage(): SettingsStorage {
 function named(name: string): Recipe {
     const r = new Recipe();
     r.name = name;
+    return r;
+}
+
+function tea(name: string): Recipe {
+    const r = named(name);
+    r.cupType = CUP_TYPE.TEA;
     return r;
 }
 
@@ -214,11 +225,46 @@ function writable(name: string): Recipe {
 }
 
 function store(recipes: Recipe[]) {
+    function queried(query: LibraryQuery): Recipe[] {
+        let result = recipes;
+        const term = query.search.trim().toLocaleLowerCase();
+        if (term.length > 0) {
+            result = result.filter((recipe) =>
+                recipe.displayName().toLocaleLowerCase().includes(term)
+            );
+        }
+        if (query.filters.includes("tea")) {
+            result = result.filter((recipe) => recipe.isTea());
+        }
+        result = [...result].sort((a, b) =>
+            a.displayName().localeCompare(b.displayName())
+        );
+        if (query.favouritesFirst) {
+            result.sort((a, b) => Number(b.favourite) - Number(a.favourite));
+        }
+        return result;
+    }
+
     return {
-        retrieveAllRecipes: jest.fn(() => (recipes.length > 0 ? recipes : null)),
-        deleteRecipe:       jest.fn(),
-        cloneRecipe:        jest.fn(),
-        updateRecipe:       jest.fn()
+        // Stands in for the SQL name-ascending default. Not identical to the old
+        // JavaScript sort this screen used to run: the query orders by `sortName
+        // COLLATE NOCASE`, which folds only ASCII case, so accented names land
+        // differently and unnamed recipes sink to the bottom. That divergence is
+        // exercised where the query is built; here the fixtures are plain ASCII
+        // names, so a localeCompare stands in for the visible order faithfully
+        // enough to lay the screen out.
+        queryRecipes: jest.fn((query: LibraryQuery) => queried(query)),
+        retrieveAllRecipes: jest.fn(() => recipes),
+        countRecipes: jest.fn(() => recipes.length),
+        countRecipesByFilter: jest.fn((ids: readonly string[]) =>
+            Object.fromEntries(ids.map((id) => [
+                id,
+                id === "tea" ? recipes.filter((recipe) => recipe.isTea()).length : 0
+            ]))
+        ),
+        deleteRecipe: jest.fn(),
+        cloneRecipe:  jest.fn(),
+        updateRecipe: jest.fn()
     };
 }
 
@@ -259,7 +305,11 @@ afterEach(() => {
  * render rather than passed as a prop.
  */
 async function renderHome(
-    options: {shareIntent?: Record<string, unknown>; recipes?: Recipe[]} = {}
+    options: {
+        shareIntent?: Record<string, unknown>;
+        recipes?: Recipe[];
+        settings?: Settings;
+    } = {}
 ) {
     if (options.shareIntent) {
         mockShareIntentState = {
@@ -269,7 +319,9 @@ async function renderHome(
         };
     }
     return renderWithProviders(
-        <HomeScreen db={store(options.recipes ?? [])} settings={new Settings(memoryStorage())}/>
+        <HomeScreen
+            db={store(options.recipes ?? [])}
+            settings={options.settings ?? new Settings(memoryStorage())}/>
     );
 }
 
@@ -284,10 +336,134 @@ describe("HomeScreen", () => {
         expect(screen.getByText("2")).toBeTruthy();
     });
 
+    it("runs the list through queryRecipes with the query and the filter resolver", async () => {
+        // The list is only the recipes queryRecipes returns, so the query the
+        // screen hands down is the whole feature. A mock that returned a fixed
+        // array regardless of its arguments let a reviewer swap the real query
+        // for a different one with every test still green -- the gap the wiring
+        // task would then fall straight into. This pins both arguments: the
+        // whole-library default the screen passes today, and the resolver that
+        // turns filter ids into WHERE fragments.
+        const db = store([named("Ethiopia")]);
+        await renderWithProviders(<HomeScreen db={db} settings={new Settings(memoryStorage())}/>);
+        expect(db.queryRecipes).toHaveBeenCalledWith(
+            {search: "", filters: [], sort: "name", direction: "asc", favouritesFirst: false},
+            resolveStockFilter
+        );
+    });
+
     it("shows the empty state instead of the list when there is nothing saved", async () => {
         await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
         expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
         expect(screen.queryByTestId("recipe-card")).toBeNull();
+    });
+
+    it("does not draw the rail when the whole library is empty", async () => {
+        await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
+        expect(screen.queryByTestId("library-rail")).toBeNull();
+        expect(screen.getByText("NO RECIPES YET")).toBeTruthy();
+    });
+
+    it("keeps the header count on the whole library when a search matches nothing", async () => {
+        // The count beside the wordmark says how many recipes you have, not how
+        // many survived the last search. Reading it off the queried list makes
+        // it read 0 over a library of three, which is the one number on this
+        // screen a user would take as a report that something was lost.
+        jest.useFakeTimers();
+        await renderHome({recipes: [named("Ethiopia"), named("Kenya"), named("Yirgacheffe")]});
+
+        await fireEvent.press(screen.getByTestId("rail-search"));
+        await act(async () => {
+            await fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzz");
+            jest.advanceTimersByTime(TYPING_DEBOUNCE_MS);
+        });
+
+        expect(screen.queryByTestId("recipe-card")).toBeNull();
+        expect(screen.getByTestId("home-title-count")).toHaveTextContent("3");
+        jest.useRealTimers();
+    });
+
+    it("draws favourites and all recipes headings only when both sections have recipes", async () => {
+        const favourite = named("Ethiopia");
+        favourite.favourite = true;
+        await renderHome({
+            recipes:  [favourite, named("Kenya")],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
+        });
+
+        expect(screen.getByText("FAVOURITES")).toBeTruthy();
+        expect(screen.getByText("ALL RECIPES")).toBeTruthy();
+    });
+
+    it("draws no section heading when favourites first leaves only one populated section", async () => {
+        await renderHome({
+            recipes:  [named("Ethiopia"), named("Kenya")],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
+        });
+
+        expect(screen.queryByText("FAVOURITES")).toBeNull();
+        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("draws no section heading when every visible recipe is a favourite", async () => {
+        const ethiopia = named("Ethiopia");
+        ethiopia.favourite = true;
+        const kenya = named("Kenya");
+        kenya.favourite = true;
+
+        await renderHome({
+            recipes:  [ethiopia, kenya],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
+        });
+
+        expect(screen.queryByText("FAVOURITES")).toBeNull();
+        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("draws no section heading when favourites first is off", async () => {
+        const favourite = named("Ethiopia");
+        favourite.favourite = true;
+
+        await renderHome({
+            recipes:  [favourite, named("Kenya")],
+            settings: new Settings(memoryStorage({libraryFavouritesFirst: false}))
+        });
+
+        expect(screen.queryByText("FAVOURITES")).toBeNull();
+        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("separates an empty query result from an empty library and can clear it", async () => {
+        jest.useFakeTimers();
+        await renderHome({
+            recipes: [
+                tea("Sencha"),
+                tea("Oolong"),
+                tea("Jasmine"),
+                tea("Hibiscus"),
+                named("Kenya")
+            ]
+        });
+
+        await fireEvent.press(screen.getByLabelText("No filters applied. Tap to show the filter row."));
+        await fireEvent.press(screen.getByTestId("rail-filter-tea"));
+        await fireEvent.press(screen.getByTestId("rail-search"));
+        await fireEvent.changeText(screen.getByTestId("rail-search-input"), "missing");
+        await act(async () => { jest.advanceTimersByTime(600); });
+
+        expect(screen.queryByText("NO RECIPES YET")).toBeNull();
+        expect(screen.getByText("NO MATCHES")).toBeTruthy();
+        expect(screen.getByText("missing")).toBeTruthy();
+        expect(screen.getAllByText("TEA").length).toBeGreaterThan(1);
+        expect(screen.queryByTestId("recipe-card")).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("Clear search and filters"));
+
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(5);
+        jest.useRealTimers();
     });
 
     it("keeps both actions visible when the library is empty", async () => {
@@ -435,6 +611,22 @@ describe("HomeScreen", () => {
         // reader...
         await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
         // ...but still in the tree: it is hidden, not unmounted.
+        expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    it("takes the screen out of the reader's reach while the sort sheet is open", async () => {
+        // The fourth sheet on this screen, and the one that was missed: like the
+        // import sheet and the chooser it is a non-modal Tamagui sheet, so its
+        // own `accessibilityViewIsModal` isolates nothing on Android and the
+        // screen behind it has to hide its own subtree. Unlike those two it is
+        // opened from the rail, which is inside the subtree being guarded.
+        await renderWithProviders(
+            <HomeScreen db={store([named("Ethiopia"), named("Kenya")])}
+                        settings={new Settings(memoryStorage())}/>
+        );
+        await fireEvent.press(await screen.findByLabelText(/^Sort/));
+
+        await waitFor(() => expect(screen.queryByLabelText("Settings")).toBeNull());
         expect(screen.queryByLabelText("Settings", {includeHiddenElements: true})).toBeTruthy();
     });
 
@@ -937,7 +1129,7 @@ describe("import", () => {
         await renderWithProviders(
             <HomeScreen db={db} settings={new Settings(memoryStorage())}/>
         );
-        const before = db.retrieveAllRecipes.mock.calls.length;
+        const before = db.queryRecipes.mock.calls.length;
 
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
         await act(async () => { jest.advanceTimersByTime(500); });
@@ -945,7 +1137,7 @@ describe("import", () => {
         await fireEvent.press(screen.getByLabelText("Close"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        expect(db.retrieveAllRecipes.mock.calls.length).toBeGreaterThan(before);
+        expect(db.queryRecipes.mock.calls.length).toBeGreaterThan(before);
         jest.useRealTimers();
     });
 

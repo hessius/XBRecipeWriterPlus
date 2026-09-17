@@ -16,6 +16,11 @@ export type AccentGroup = "coffee" | "tea";
 
 /** Surfaces, text and semantics. */
 export const palette = {
+    /** No fill at all, as distinct from any fill that happens to match what is
+     *  behind it. An unfilled control over `base` and one over `surface` look
+     *  identical and are not: the first follows whatever it is placed on. Named
+     *  here so the "no colour literals" rule has no exception to argue about. */
+    none:    "transparent",
     /** Screen background. `base` rather than `void`: `void` is a reserved word
      *  and cannot be shorthand-destructured. */
     base:    "#000000",

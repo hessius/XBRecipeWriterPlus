@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import type {SortAxis, SortDirection} from './librarySort';
 
 /**
  * Every setting, with its default.
@@ -120,6 +121,46 @@ export const DEFAULTS = {
      * expires. Zero is a real choice and means zero.
      */
     brewTraceRetention: 50,
+    /**
+     * How the library is ordered, and which way.
+     *
+     * Global rather than per shelf, on purpose: a per-shelf order would change
+     * under the user for a reason the chip cannot show, and the chip would then
+     * report a state belonging to something other than the thing they last
+     * touched. Name is the default the sort chip stays a bare glyph for; any
+     * other axis takes the accent fill and names itself.
+     *
+     * A `SortAxis` union documents the intended values, but it cannot enforce
+     * them at the read boundary: `SettingValue` widens the union back to
+     * `string` and `get()` checks only `typeof`, so a stale or hand-edited row
+     * can still return an axis this build has no fragment for. The real guard is
+     * `asSortAxis` in `librarySort.ts`, which every reader narrows through
+     * before an axis reaches an ORDER BY, so a bad value sorts by name rather
+     * than crashing the query. The list is `librarySort.ts`'s, imported rather
+     * than restated, so the two cannot drift into disagreeing about which axes
+     * exist.
+     */
+    librarySort: "name" as SortAxis,
+    /**
+     * Which way `librarySort` runs.
+     *
+     * Its meaning belongs to the axis, not to a fixed ascending or descending:
+     * NEWEST and LONGEST AGO are opposite directions of different axes. Kept
+     * beside the axis rather than folded into it so choosing an axis can apply
+     * that axis's sensible default without inheriting the direction the previous
+     * axis happened to be running in.
+     */
+    librarySortDirection: "asc" as SortDirection,
+    /**
+     * Whether favourites are held at the top, above the chosen order.
+     *
+     * A modifier and not a sixth axis: it composes with the sort rather than
+     * replacing it, so favourites keep the same order the rest are in. Off by
+     * default because a library nobody has starred yet would draw a FAVOURITES
+     * and an ALL RECIPES heading over one populated section, which is a heading
+     * over nothing.
+     */
+    libraryFavouritesFirst: false,
     /**
      * Whether the xBloom account import exists at all.
      *
