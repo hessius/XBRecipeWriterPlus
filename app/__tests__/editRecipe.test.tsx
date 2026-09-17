@@ -161,6 +161,17 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
 }
 
 /**
+ * Open the ABOUT deck, where a recipe's identity lives.
+ *
+ * `Recipe ID` and `Name` sat at the bottom of the brew deck until phase 5 of
+ * M5, so a test that wants either of them has to switch decks first. They are
+ * identity and a lookup key, not brew parameters.
+ */
+async function openAbout(): Promise<void> {
+    await fireEvent.press(screen.getByLabelText("About this recipe"));
+}
+
+/**
  * A pinned accent, and the recipe that carries it.
  *
  * A recipe with no accent of its own is assigned one on hydration, and which
@@ -262,9 +273,24 @@ describe("the editor", () => {
         // `textTransform`, which is a style — the text content is unchanged,
         // so a query for "RATIO" would find nothing.
         for (const label of ["Dose", "Ratio", "Grind size · French press", "Grind speed",
-                             "Cup", "Grinder", "Recipe ID", "Name"]) {
+                             "Cup", "Grinder"]) {
             expect(screen.getByText(label)).toBeTruthy();
         }
+        // And only brew fields. Identity moved to ABOUT in phase 5, which is
+        // half of what the third deck was for.
+        expect(screen.queryByText("Recipe ID")).toBeNull();
+        expect(screen.queryByText("Name")).toBeNull();
+    });
+
+    it("keeps identity on the about deck, where it is not a brew parameter", async () => {
+        await renderEditor();
+
+        await openAbout();
+
+        expect(screen.getByText("Recipe ID")).toBeTruthy();
+        expect(screen.getByText("Name")).toBeTruthy();
+        // The brew deck is gone, rather than both being on screen at once.
+        expect(screen.queryByText("Dose")).toBeNull();
     });
 
     it("steps the ratio by whole numbers, which is all the card holds", async () => {
@@ -425,6 +451,7 @@ describe("the editor", () => {
             .mockResolvedValue({action: Share.sharedAction});
 
         await renderEditor();
+        await openAbout();
         await fireEvent.changeText(screen.getByLabelText("Name"), "Shared name");
         await fireEvent.press(screen.getByLabelText("More"));
         await act(async () => { jest.advanceTimersByTime(500); });
@@ -570,6 +597,8 @@ describe("the editor", () => {
     it("blocks write and save while the recipe ID is malformed, and says why", async () => {
         await renderEditor();
 
+        await openAbout();
+
         // Validated live, on change — not on blur — so the gate closes before
         // the field commits. `!!bad` is neither empty nor the vendor-code shape.
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
@@ -583,6 +612,7 @@ describe("the editor", () => {
 
     it("clears the block once the recipe ID is valid again", async () => {
         await renderEditor();
+        await openAbout();
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "CGL12");
@@ -594,6 +624,7 @@ describe("the editor", () => {
 
     it("treats an empty recipe ID as valid", async () => {
         await renderEditor();
+        await openAbout();
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "");
@@ -609,6 +640,7 @@ describe("the editor", () => {
         // under the test renderer.
         const focus = jest.spyOn(TextInput.prototype, "focus");
         await renderEditor();
+        await openAbout();
 
         // The label area, the far side of the row from the input.
         await fireEvent.press(screen.getByTestId("field-row-Name"));
@@ -621,6 +653,7 @@ describe("the editor", () => {
         // Same wrapper, so the other TextFieldRow call site gets it for free.
         const focus = jest.spyOn(TextInput.prototype, "focus");
         await renderEditor();
+        await openAbout();
 
         await fireEvent.press(screen.getByTestId("field-row-Recipe ID"));
 
@@ -661,6 +694,7 @@ describe("the editor", () => {
         const backing = fixture();
         backing.xid = "CGL12";
         await renderEditor({xid: "CGL12", offline_backup: backing.getData()});
+        await openAbout();
 
         await fireEvent.changeText(screen.getByLabelText("Recipe ID"), "!!bad");
         expect(screen.getByLabelText("Save").props.accessibilityState.disabled).toBe(true);
@@ -936,6 +970,7 @@ describe("flushing an unblurred field before an action", () => {
     it("saves the name being typed when SAVE is tapped without blurring first", async () => {
         RecipeDatabase.mockClear();
         await renderEditor();
+        await openAbout();
 
         await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
         await fireEvent.press(screen.getByLabelText("Save"));
@@ -949,6 +984,7 @@ describe("flushing an unblurred field before an action", () => {
         // `onEndEditing` can never rescue the value. `goBack` is mocked, so the
         // screen stays mounted and the flushed name surfaces on the hero.
         await renderEditor();
+        await openAbout();
 
         await fireEvent.changeText(screen.getByLabelText("Name"), "New name");
         await fireEvent.press(screen.getByLabelText("Back"));
@@ -963,6 +999,7 @@ describe("flushing an unblurred field before an action", () => {
         // the two are made to differ to prove the draft was dropped.
         RecipeDatabase.mockClear();
         await renderEditor();
+        await openAbout();
 
         const name = screen.getByLabelText("Name");
         await fireEvent.changeText(name, "Draft");
@@ -988,6 +1025,7 @@ describe("flushing an unblurred field before an action", () => {
         const backing = fixture();
         backing.xid = "CGL12";
         await renderEditor({name: "Original", offline_backup: backing.getData()});
+        await openAbout();
 
         await fireEvent.changeText(screen.getByLabelText("Name"), "Stale");
         await fireEvent.press(screen.getByLabelText("More"));

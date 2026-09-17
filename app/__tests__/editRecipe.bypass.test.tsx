@@ -321,9 +321,12 @@ describe("stage ceiling advisory", () => {
 });
 
 describe("editor XID lookup", () => {
+    // The row moved to the about deck in phase 5 of M5: it is a lookup key, not
+    // a brew parameter, so the deck has to be opened before it can be seen.
     it("marks the XID row when the lookup fails", async () => {
         mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
         await renderEditor({xid: "XB0001"});
+        await fireEvent.press(screen.getByLabelText("About this recipe"));
 
         await waitFor(() =>
             expect(screen.getByText(/not found/i)).toBeTruthy());
@@ -332,6 +335,7 @@ describe("editor XID lookup", () => {
     it("does not gate the save button on a failed lookup", async () => {
         mockFetchRecipeDetail.mockRejectedValue(new Error("offline"));
         await renderEditor({xid: "XB0001"});
+        await fireEvent.press(screen.getByLabelText("About this recipe"));
 
         await waitFor(() =>
             expect(screen.getByText(/not found/i)).toBeTruthy());
