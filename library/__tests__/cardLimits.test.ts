@@ -7,7 +7,7 @@
  */
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {canWriteToCard, cardWriteProblems} from "@/library/cardLimits";
+import {brewProblems, canWriteToCard, cardWriteProblems} from "@/library/cardLimits";
 
 /** A recipe the machine would accept, as the baseline every case perturbs. */
 function validRecipe(): Recipe {
@@ -281,5 +281,53 @@ describe("canWriteToCard", () => {
         const recipe = validRecipe();
         recipe.ratio = 15.5;
         expect(canWriteToCard(recipe)).toBe(false);
+    });
+});
+
+/**
+ * A half ratio is a card problem and nothing else (#122).
+ *
+ * The card holds the ratio in one byte, so a fractional one would be silently
+ * truncated and that refusal is load-bearing. A Bluetooth brew is a different
+ * medium: `encodeCoffeeBlob` never sends `recipe.ratio` at all, it derives a
+ * byte from the pour volumes and the dose at one decimal place, and it
+ * ceilings rather than rounds. So the number that reaches the machine is the
+ * same whether the model holds 15 or 15.5, and refusing the brew was the
+ * medium dictating to the model -- the same mistake `MAX_POURS` records
+ * having made about stage counts.
+ */
+describe("a recipe with a half ratio", () => {
+    function halfRatio(): Recipe {
+        const recipe = validRecipe();
+        recipe.ratio = 15.5;
+        recipe.pours = [new Pour(1, 233, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)];
+        return recipe;
+    }
+
+    it("cannot be written to a card, and says which field", () => {
+        expect(cardWriteProblems(halfRatio())).toEqual([
+            "The ratio is 1:15.5. It has to be a whole number."
+        ]);
+    });
+
+    it("can still be brewed over Bluetooth", () => {
+        expect(brewProblems(halfRatio())).toEqual([]);
+    });
+
+    it("is still stopped from brewing by a problem the machine shares", () => {
+        const recipe = halfRatio();
+        recipe.grindSize = 5;
+
+        expect(brewProblems(recipe).length).toBeGreaterThan(0);
+    });
+
+    it("is stopped from brewing by a ratio outside the range altogether", () => {
+        // Out of range is not the same as fractional. A ratio of 1:400 means
+        // the volumes and the dose disagree by an order of magnitude, which is
+        // a broken recipe in any medium.
+        const recipe = halfRatio();
+        recipe.ratio = 400;
+
+        expect(brewProblems(recipe).length).toBeGreaterThan(0);
     });
 });

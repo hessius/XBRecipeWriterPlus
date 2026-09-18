@@ -3,7 +3,7 @@ import {
     HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS,
     SETTLE_CEILING_MS, STATE_FRESH_MS
 } from "@/constants/machine";
-import {cardWriteProblems} from "@/library/cardLimits";
+import {brewProblems} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
 
 import {RadioUnavailableError} from "./errors";
@@ -146,7 +146,21 @@ const FAILURE_EVENTS: Record<number, BrewFailure> = {
     // EVENT.ERROR_IDLING is deliberately absent: it means different things
     // depending on the phase it arrives in, and `onEvent` decides.
     //
-    // EVENT.WATER_LOW (40522) was here, and was the bug: see `onEvent`.
+    // EVENT.WATER_LOW (40522) was here, and was the bug. It is the tank
+    // crossing its low mark, not the machine stopping: the capture of
+    // 2026-09-09 has it arriving eleven seconds into the first pour of a brew
+    // that went on to finish normally. Treating it as fatal threw away two
+    // perfectly good brews and told the user the machine had run out of water
+    // while it was visibly still pouring.
+    //
+    // Its absence from this map is the whole of the fix, which is why nothing
+    // in `onEvent` mentions it: an event that is not a failure and has nothing
+    // to show falls through to the end like any other. Nothing is shown for it
+    // deliberately (#94). The consequence a user can act on is already handled
+    // -- the next info frame reports `waterEnough: false` and pre-flight
+    // `brewBlock` refuses the *next* brew with a message about filling the
+    // tank. A line during a brew that will finish anyway, about something
+    // nobody can do anything about until it ends, is noise.
 };
 
 /** States from which a brew may be started at all. */
@@ -187,20 +201,6 @@ const LINK_HISTORY_LIMIT = 200;
 export default class Machine {
     public info: MachineInfo | null = null;
     public state: number | null = null;
-    /**
-     * The machine has reported its tank low (event 40522) during this brew.
-     *
-     * A warning, never a failure: the brew carries on. Cleared when a new brew
-     * is asked for, so it always describes the run in front of the user.
-     *
-     * Nothing reads it yet, and that is deliberate — see #94. The consequence
-     * a user can act on is already covered by pre-flight refusing the *next*
-     * brew, and a mid-brew notice about something nobody can do anything about
-     * until it ends may be worse than silence. Kept because it is cheap, and
-     * because deciding to show it later should not mean re-deriving what 40522
-     * means from another ruined brew.
-     */
-    public waterLow = false;
     /** When `state` was last heard, as a wall clock. 0 means never. */
     private stateAt = 0;
 
@@ -822,7 +822,11 @@ export default class Machine {
                 return {kind: "busy", message: "The machine is busy. Wait for it to finish."};
             }
         }
-        const problems = cardWriteProblems(recipe);
+        // `brewProblems`, not `cardWriteProblems`: everything a card refuses
+        // the machine refuses too, bar a fractional ratio, which never reaches
+        // the wire because the blob derives its ratio byte from the volumes
+        // and the dose. See `brewProblems` for why that one is subtracted.
+        const problems = brewProblems(recipe);
         if (problems.length > 0) return {kind: "recipe", message: problems[0]};
         return null;
     }
@@ -834,8 +838,6 @@ export default class Machine {
      * over — the brew's progress arrives as phases.
      */
     async brew(recipe: Recipe): Promise<void> {
-        // The tank warning belongs to one run, not to the session.
-        this.waterLow = false;
         // A fresh attempt: the PRO-mode offer is per-brew, and this was not
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
@@ -1164,22 +1166,6 @@ export default class Machine {
             this.setPhase(this.phase.name === "grinding"
                 ? {name: "failed", reason: "noBeans"}
                 : {name: "failed", reason: "idling"});
-            return;
-        }
-
-        if (code === EVENT.WATER_LOW) {
-            // Not a stop. 40522 is the tank crossing its low mark, and the
-            // machine keeps brewing straight through it — see the capture
-            // quoted on `EVENT.WATER_LOW`. Treating it as fatal is what threw
-            // away two perfectly good brews and told the user the machine had
-            // run out of water while it was visibly still pouring.
-            //
-            // The consequence the user actually needs is already handled: the
-            // machine's next info frame reports `waterEnough: false`, and the
-            // pre-flight `brewBlock` refuses the *next* brew with a message
-            // about filling the tank. This only remembers that it happened.
-            this.waterLow = true;
-            this.announceLink();
             return;
         }
 
