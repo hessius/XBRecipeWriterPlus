@@ -510,6 +510,52 @@ Three rules make it survive filtering:
 - **The bottom bar counts the shelf, not the view.** `4 ON THIS SHELF`, never
   the number visible under the current filter.
 
+### Revision: the picker wears its own header
+
+It kept the library's own chrome -- wordmark, machine panel, scan, import, new
+recipe, and three large tiles beneath them -- and none of it can be reached from
+inside a half-built shelf. It spent the top third of the screen on doors that
+lead away from the task and pushed the rows the user is ticking below the fold.
+
+Picking now draws a compact header of its own: a cancel glyph, the shelf's name,
+how many are on it, and the shelf's menu. It is deliberately the same shape as
+`ScreenHeader`, the header of every pushed screen, because picking *is* a pushed
+screen in everything but routing -- somewhere the user goes, finishes, and comes
+back from. Cancel sits here as well as in the bottom bar, which is not a
+duplicate so much as two habits meeting: the bar is where the decision is made,
+the top-left glyph is where a user who has changed their mind reaches first.
+
+### What can be done to a shelf
+
+A manual shelf could be filled and emptied and nothing else, so a typo in its
+name was permanent unless the shelf was rebuilt from nothing. Four verbs now
+live in one sheet:
+
+| Verb | What it does |
+| --- | --- |
+| Edit members | The picker, seeded from the whole table |
+| Rename | The naming sheet again, seeded with the current name |
+| Duplicate | The picker seeded with this shelf's members, then named as new |
+| Delete | Takes the tag off every member, after a confirmation |
+
+Two doors, one sheet, the arrangement the recipe menu already uses: a glyph in
+the tile, and a long press on the tile. The long press is the shortcut, for the
+hand that already knows; it is never the only way in, because a gesture with no
+drawn control is not an interface. Auto shelves open neither: a rule the app
+wrote has no name of the user's to change and nothing of theirs to delete.
+
+**A rename clears the old tag before writing the new one.** `setTags` folds
+through `tagKey` and keeps the spelling it already has, so adding `Morning` to a
+recipe carrying `morning` is not a change at all and a re-spelling would
+silently do nothing. Clearing first also frees each member's tag slot, so the
+twenty-shelf cap cannot refuse a recipe its own shelf back. A name that folds to
+*another* existing shelf is still refused, for the reason naming a new one is.
+
+**A duplicate is named by the user**, not given `morning 2`. A shelf's name is
+the only thing about it the user wrote, and a machine-made one would be renamed
+immediately anyway. It borrows the picker's own naming flow, which also lets the
+user adjust who comes along before the copy exists.
+
 ## Sort
 
 ### Axes

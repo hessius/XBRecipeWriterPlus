@@ -51,12 +51,12 @@ function NewShelfButton({onPress}: {onPress: () => void}) {
     );
 }
 
-function Rows({shelves, marks, variant, onOpen, onEdit}: {
+function Rows({shelves, marks, variant, onOpen, onActions}: {
     shelves: readonly Shelf[];
     marks: Readonly<Record<string, ShelfMarkMembers>>;
     variant: ShelfMarkVariant;
     onOpen: (id: string) => void;
-    onEdit?: (tag: string) => void;
+    onActions?: (tag: string) => void;
 }) {
     const rows: Shelf[][] = [];
     for (let i = 0; i < shelves.length; i += COLUMNS) {
@@ -72,7 +72,7 @@ function Rows({shelves, marks, variant, onOpen, onEdit}: {
                                    members={marks[shelf.id]}
                                    variant={variant}
                                    onPress={() => onOpen(shelf.id)}
-                                   onEdit={onEdit && (() => onEdit(shelf.label))}/>
+                                   onActions={onActions && (() => onActions(shelf.label))}/>
                     ))}
                     {row.length < COLUMNS && <YStack flex={1}/>}
                 </XStack>
@@ -98,7 +98,7 @@ function Rows({shelves, marks, variant, onOpen, onEdit}: {
  */
 export default function ShelfGrid({
     shelves, marks = {}, variant = "hybrid",
-    onOpen, onNewShelf, onEditShelf, paddingBottom = 0
+    onOpen, onNewShelf, onShelfActions, paddingBottom = 0
 }: {
     shelves: readonly Shelf[];
     /** What each shelf's art is drawn from, keyed by shelf id. */
@@ -108,8 +108,8 @@ export default function ShelfGrid({
     onOpen: (id: string) => void;
     /** Start choosing members for a new shelf. */
     onNewShelf: () => void;
-    /** Change who is on an existing manual shelf, by its tag. */
-    onEditShelf: (tag: string) => void;
+    /** Open the menu of what can be done to a manual shelf, by its tag. */
+    onShelfActions: (tag: string) => void;
     paddingBottom?: number;
 }) {
     const manual = shelves.filter((shelf) => shelf.kind === "manual");
@@ -142,7 +142,7 @@ export default function ShelfGrid({
                 <Heading label="YOUR SHELVES"/>
                 {manual.length > 0 && (
                     <Rows shelves={manual} marks={marks} variant={variant}
-                          onOpen={onOpen} onEdit={onEditShelf}/>
+                          onOpen={onOpen} onActions={onShelfActions}/>
                 )}
                 {/*
                   * The one heading always drawn over what might be nothing. It

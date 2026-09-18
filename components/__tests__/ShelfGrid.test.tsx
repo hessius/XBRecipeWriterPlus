@@ -13,7 +13,7 @@ function shelf(over: Partial<Shelf> = {}): Shelf {
 describe("ShelfGrid", () => {
     it("draws the auto heading only when there are auto shelves", async () => {
         await renderWithProviders(
-            <ShelfGrid shelves={[shelf()]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            <ShelfGrid shelves={[shelf()]} onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
         );
 
         expect(screen.getByText("AUTO SHELVES")).toBeTruthy();
@@ -26,7 +26,7 @@ describe("ShelfGrid", () => {
 
     it("puts the shelves a person made above the ones the app invented", async () => {
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()} shelves={[
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()} shelves={[
                 shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2}),
                 shelf()
             ]}/>
@@ -37,7 +37,7 @@ describe("ShelfGrid", () => {
     });
 
     it("explains what a shelf is rather than drawing an empty grid", async () => {
-        await renderWithProviders(<ShelfGrid shelves={[]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>);
+        await renderWithProviders(<ShelfGrid shelves={[]} onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>);
 
         expect(screen.getByTestId("shelves-empty")).toBeTruthy();
         expect(screen.queryByTestId("shelf-grid")).toBeNull();
@@ -48,7 +48,7 @@ describe("ShelfGrid", () => {
     // would make a reader swipe twice to learn it.
     it("names the shelf, its kind and its size in one label", async () => {
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()} shelves={[
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()} shelves={[
                 shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})
             ]}/>
         );
@@ -57,29 +57,57 @@ describe("ShelfGrid", () => {
             .toBeTruthy();
     });
 
-    it("offers EDIT as an accessibility action on the tile itself", async () => {
-        // The edit button is nested inside the tile, and the tile is one
-        // accessibility element, so VoiceOver never reaches the button. Editing
+    it("offers the shelf's actions as an accessibility action on the tile", async () => {
+        // The glyph is nested inside the tile, and the tile is one
+        // accessibility element, so VoiceOver never reaches the glyph. Editing
         // is the only way a recipe comes off a manual shelf, so without this a
         // reader has a shelf it can never change.
-        const onEditShelf = jest.fn();
+        const onShelfActions = jest.fn();
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={onEditShelf}
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={onShelfActions}
                        shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})]}/>
         );
         const tile = screen.getByTestId("shelf-tag:morning");
         expect(tile.props.accessibilityActions).toEqual(
-            [{name: "edit", label: "Edit the morning shelf"}]
+            [{name: "edit", label: "Actions for the morning shelf"}]
         );
 
         await fireEvent(tile, "accessibilityAction",
                         {nativeEvent: {actionName: "edit"}});
-        expect(onEditShelf).toHaveBeenCalledTimes(1);
+        expect(onShelfActions).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens the same actions from a long press on the tile", async () => {
+        // The shortcut, for the hand that already knows where it is. It is
+        // never the only door: the glyph above draws the same menu.
+        const onShelfActions = jest.fn();
+        await renderWithProviders(
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={onShelfActions}
+                       shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})]}/>
+        );
+
+        await fireEvent(screen.getByTestId("shelf-tag:morning"), "longPress");
+        expect(onShelfActions).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives an auto shelf no actions and no long press", async () => {
+        // An auto shelf is a rule the app wrote: no name of the user's to
+        // change, nothing of theirs to delete.
+        const onShelfActions = jest.fn();
+        await renderWithProviders(
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={onShelfActions}
+                       shelves={[shelf({id: "tea", label: "TEA", kind: "auto", count: 2})]}/>
+        );
+        const tile = screen.getByTestId("shelf-tea");
+        expect(tile.props.accessibilityActions).toBeUndefined();
+
+        await fireEvent(tile, "longPress");
+        expect(onShelfActions).not.toHaveBeenCalled();
     });
 
     it("says one recipe rather than 1 recipes", async () => {
         await renderWithProviders(
-            <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
         );
 
         expect(screen.getByRole("button", {name: "TEA, auto shelf, 1 recipe"})).toBeTruthy();
@@ -89,7 +117,7 @@ describe("ShelfGrid", () => {
         it("gives an auto shelf the glyph drawn for it", async () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf()]} marks={{tea: {accents: ["#A"], profiles: [[]]}}}
-                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
             expect(screen.getByTestId("shelf-mark-glyph")).toBeTruthy();
@@ -101,7 +129,7 @@ describe("ShelfGrid", () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
                            marks={{"tag:morning": {accents: ["#A"], profiles: [[pour]]}}}
-                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
             expect(screen.getByTestId("shelf-mark-profiles")).toBeTruthy();
@@ -111,7 +139,7 @@ describe("ShelfGrid", () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf()]} variant="mosaic"
                            marks={{tea: {accents: ["#A"], profiles: [[]]}}}
-                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
             expect(screen.getByTestId("shelf-mark-mosaic")).toBeTruthy();
@@ -120,7 +148,7 @@ describe("ShelfGrid", () => {
         it("draws a shelf it has no art for as a plain field", async () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
-                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
             expect(screen.getByTestId("shelf-mark-field")).toBeTruthy();

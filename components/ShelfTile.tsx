@@ -32,7 +32,7 @@ export const TILE_HEIGHT = 120;
  * swipe twice to learn it.
  */
 export default function ShelfTile({
-    shelf, members, variant = "hybrid", onPress, onEdit
+    shelf, members, variant = "hybrid", onPress, onActions
 }: {
     shelf: Shelf;
     /** What this shelf's art is drawn from. Absent for an empty shelf. */
@@ -41,15 +41,18 @@ export default function ShelfTile({
     variant?: ShelfMarkVariant;
     onPress: () => void;
     /**
-     * Change who is on this shelf. Manual shelves only: an auto shelf has no
-     * membership to change, only a rule.
+     * Open what can be done to this shelf. Manual shelves only: an auto shelf
+     * is a rule the app wrote, with no name of the user's to change and nothing
+     * of theirs to delete.
      *
-     * A second, smaller target inside the tile rather than a long press, because
-     * a long press is not discoverable and this is the only way a member ever
-     * comes off a shelf. A shelf with no way out is a tag the user can never
-     * undo.
+     * Reached three ways, and deliberately so. A glyph inside the tile, because
+     * a long press is not discoverable and editing is the only way a recipe
+     * ever comes off a shelf -- a shelf with no drawn way out is a tag the user
+     * can never undo. A long press on the tile itself, for the hand that
+     * already knows. And an accessibility action, because the glyph is nested
+     * inside this one element and a screen reader cannot reach it.
      */
-    onEdit?: () => void;
+    onActions?: () => void;
 }) {
     const manual = shelf.kind === "manual";
     const recipes = shelf.count === 1 ? "1 recipe" : `${shelf.count} recipes`;
@@ -65,13 +68,13 @@ export default function ShelfTile({
                    // its tray tiles. Editing is the only way a recipe comes off
                    // a manual shelf, so without this action a reader has a shelf
                    // it can never change.
-                   accessibilityActions={onEdit !== undefined
-                       ? [{name: "edit", label: `Edit the ${shelf.label} shelf`}]
+                   accessibilityActions={onActions !== undefined
+                       ? [{name: "edit", label: `Actions for the ${shelf.label} shelf`}]
                        : undefined}
                    onAccessibilityAction={(event) => {
-                       if (event.nativeEvent.actionName === "edit") onEdit?.();
+                       if (event.nativeEvent.actionName === "edit") onActions?.();
                    }}
-                   onPress={onPress} style={{flex: 1}}>
+                   onPress={onPress} onLongPress={onActions} style={{flex: 1}}>
             <YStack height={TILE_HEIGHT} justifyContent="space-between"
                     padding="$3" borderRadius="$4"
                     backgroundColor={palette.raised}
@@ -82,13 +85,13 @@ export default function ShelfTile({
                                glyph={shelfGlyph(shelf.id)}
                                accents={members?.accents}
                                profiles={members?.profiles}/>
-                    {onEdit && (
+                    {onActions && (
                         <Pressable accessibilityRole="button"
-                                   accessibilityLabel={`Edit the ${shelf.label} shelf`}
+                                   accessibilityLabel={`Actions for the ${shelf.label} shelf`}
                                    testID={`shelf-edit-${shelf.id}`}
                                    hitSlop={12}
-                                   onPress={onEdit}>
-                            <DotIcon name="edit" size={14} color={palette.dim}/>
+                                   onPress={onActions}>
+                            <DotIcon name="more" size={14} color={palette.dim}/>
                         </Pressable>
                     )}
                 </XStack>

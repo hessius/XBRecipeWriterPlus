@@ -4,7 +4,6 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
-import DotMatrixText from "@/components/DotMatrixText";
 import ScreenTitle from "@/components/ScreenTitle";
 import {onAccent, palette} from "@/constants/colors";
 
@@ -31,7 +30,7 @@ const KEY_SIZE = 32;
  * top-left glyph is where a user who has changed their mind reaches first.
  */
 export default function ShelfPickerHeader({
-    title, count, onCancel, onRename
+    title, count, onCancel, onActions
 }: {
     /** The shelf's name while editing, or what is being made while creating. */
     title: string;
@@ -39,10 +38,13 @@ export default function ShelfPickerHeader({
     count: number;
     onCancel: () => void;
     /**
-     * Rename this shelf. Absent for a shelf that has no name yet: a new shelf
-     * is named at the end, by the bar, once it has members to be named for.
+     * Open what can be done to this shelf: rename, duplicate, delete.
+     *
+     * Absent for a shelf that has no name yet. A new shelf is named at the end,
+     * by the bar, once it has members to be named for, so until then there is
+     * nothing here to rename, copy or take away.
      */
-    onRename?: () => void;
+    onActions?: () => void;
 }) {
     const insets = useSafeAreaInsets();
 
@@ -63,16 +65,17 @@ export default function ShelfPickerHeader({
 
                 <ScreenTitle title={title} count={count} heading/>
 
-                {onRename !== undefined && (
+                {onActions !== undefined && (
                     <Pressable accessibilityRole="button"
-                               accessibilityLabel="Rename this shelf"
-                               testID="shelf-picker-rename"
-                               onPress={onRename} hitSlop={12}
+                               accessibilityLabel={`Actions for the ${title} shelf`}
+                               testID="shelf-picker-actions"
+                               onPress={onActions} hitSlop={12}
                                style={{marginLeft: "auto", paddingLeft: 8}}>
-                        <DotMatrixText fontSize={11} weight="bold"
-                                       letterSpacing={1.2} color={palette.dim}>
-                            RENAME
-                        </DotMatrixText>
+                        <YStack backgroundColor={onAccent.key}
+                                borderRadius="$3" width={KEY_SIZE} height={KEY_SIZE}
+                                alignItems="center" justifyContent="center">
+                            <DotIcon name="more" size={16} color={palette.text}/>
+                        </YStack>
                     </Pressable>
                 )}
             </XStack>

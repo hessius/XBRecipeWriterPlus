@@ -47,6 +47,7 @@ import NameShelfSheet from "@/components/NameShelfSheet";
 import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
+import ShelfOverflowSheet from "@/components/ShelfOverflowSheet";
 import ShelfPickerHeader from "@/components/ShelfPickerHeader";
 import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
@@ -174,6 +175,12 @@ export default function HomeScreen({db, settings}: Props) {
     const [namingShelf, setNamingShelf] = useState(false);
     const [removingShelf, setRemovingShelf] = useState<string | null>(null);
     const [renamingShelf, setRenamingShelf] = useState<string | null>(null);
+    const [shelfActions, setShelfActions] = useState<string | null>(null);
+    // Deleting a shelf outright and emptying one both end at the same
+    // confirmation, and it has to say which happened, so the reason travels
+    // with the tag rather than being guessed from the picker's state: by the
+    // time the sheet is up, the picker may not be running at all.
+    const [deletingShelf, setDeletingShelf] = useState<string | null>(null);
     const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
@@ -503,6 +510,42 @@ export default function HomeScreen({db, settings}: Props) {
         library.setShelfMembers(renamingShelf, []);
         reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
         setRenamingShelf(null);
+        stopPicking();
+    }
+
+    /**
+     * Count what is on a shelf, from the whole table rather than the list.
+     *
+     * The same reason `beginEditingShelf` reads the table: a shelf narrowed by
+     * a filter would otherwise report the members that happen to be on screen,
+     * and the sheet uses this to tell the user what a delete is about to take.
+     */
+    function shelfSize(tag: string): number {
+        const key = tagKey(tag);
+        return library.tagCounts.find(({tag: existing}) => tagKey(existing) === key)?.count ?? 0;
+    }
+
+    /**
+     * Copy a shelf, members and all.
+     *
+     * The copy is named by the user rather than given "morning 2": a shelf's
+     * name is the only thing about it the user wrote, and a machine-made one
+     * would have to be renamed immediately anyway. So this borrows the naming
+     * flow the picker already has -- put the members in the picker, then ask
+     * for a name -- which also means the user can adjust who comes along before
+     * the copy exists.
+     */
+    function duplicateShelf(tag: string) {
+        beginEditingShelf(tag);
+        // Creating, not editing: the original keeps its tag and its members,
+        // and the name sheet writes a second shelf beside it.
+        setNamingShelf(true);
+    }
+
+    /** Take a shelf away, keeping every recipe that was on it. */
+    function deleteShelf(tag: string) {
+        reportShelfWrite(library.setShelfMembers(tag, []));
+        setDeletingShelf(null);
         stopPicking();
     }
 
@@ -881,7 +924,8 @@ export default function HomeScreen({db, settings}: Props) {
     // as a sibling and isolates nothing on its own, so one left out leaves the
     // library reachable underneath it.
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
-        || namingShelf || renamingShelf !== null
+        || namingShelf || renamingShelf !== null || shelfActions !== null
+        || deletingShelf !== null
         || removingShelf !== null || overflowRecipe !== null;
 
     // The sheet's own row, reachable without the long press that opens it. A
@@ -940,9 +984,9 @@ export default function HomeScreen({db, settings}: Props) {
                         title={editingTag ?? "NEW SHELF"}
                         count={picker.count}
                         onCancel={stopPicking}
-                        onRename={editingTag === null
+                        onActions={editingTag === null
                             ? undefined
-                            : () => setRenamingShelf(editingTag)}/>
+                            : () => setShelfActions(editingTag)}/>
                 ) : (
                 <HomeHeader
                     count={library.librarySize}
@@ -1055,7 +1099,7 @@ export default function HomeScreen({db, settings}: Props) {
                                variant={asShelfMarkVariant(shelfMarkVariant)}
                                onOpen={libraryQuery.openShelf}
                                onNewShelf={picker.startCreating}
-                               onEditShelf={beginEditingShelf}
+                               onShelfActions={setShelfActions}
                                paddingBottom={insets.bottom + 8}/>
                 ) : visibleEmpty ? (
                     <EmptyQuery
@@ -1172,6 +1216,42 @@ export default function HomeScreen({db, settings}: Props) {
             <NameShelfSheet open={namingShelf} count={picker.count}
                             onOpenChange={setNamingShelf}
                             onName={nameShelf}/>
+
+            <ShelfOverflowSheet
+                open={shelfActions !== null}
+                shelf={shelfActions ?? ""}
+                count={shelfActions === null ? 0 : shelfSize(shelfActions)}
+                onOpenChange={(next) => {
+                    if (!next) setShelfActions(null);
+                }}
+                // Withheld from the picker's own door: the user is already
+                // inside the edit this row would start.
+                onEdit={picker.active || shelfActions === null
+                    ? undefined
+                    : () => beginEditingShelf(shelfActions)}
+                onRename={() => {
+                    // Renaming saves the ticks along with the name, so the
+                    // shelf has to be under edit for there to be ticks to save.
+                    // From the grid there is no edit running yet, and this
+                    // starts one the user never sees: the sheet opens over it
+                    // and closing either way ends it.
+                    if (!picker.active && shelfActions !== null) beginEditingShelf(shelfActions);
+                    setRenamingShelf(shelfActions);
+                }}
+                onDuplicate={() => {
+                    if (shelfActions !== null) duplicateShelf(shelfActions);
+                }}
+                onDelete={() => setDeletingShelf(shelfActions)}/>
+
+            <RemoveShelfSheet open={deletingShelf !== null}
+                              tag={deletingShelf ?? ""}
+                              emptied={false}
+                              onOpenChange={(next) => {
+                                  if (!next) setDeletingShelf(null);
+                              }}
+                              onRemove={() => {
+                                  if (deletingShelf !== null) deleteShelf(deletingShelf);
+                              }}/>
 
             <NameShelfSheet open={renamingShelf !== null} count={picker.count}
                             current={renamingShelf ?? undefined}

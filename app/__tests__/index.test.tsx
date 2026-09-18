@@ -1975,6 +1975,14 @@ describe("picking a shelf's members", () => {
         return [...teas, named("Kenya"), named("Colombia")];
     }
 
+    /** Open a manual shelf's menu from its tile, and pick one of its rows. */
+    async function shelfAction(tag: string, row: string) {
+        await fireEvent.press(screen.getByTestId(`shelf-edit-tag:${tag}`));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId(`shelf-overflow-${row}`));
+        await settleSheet();
+    }
+
     async function startPicking(recipes: Recipe[] = pickerLibrary()) {
         const rendered = await renderHome({recipes});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
@@ -2155,7 +2163,7 @@ describe("picking a shelf's members", () => {
         await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
-        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await shelfAction("morning", "edit");
         expect(screen.getByTestId("shelf-picker-count"))
             .toHaveTextContent("1 ON THIS SHELF");
 
@@ -2180,6 +2188,75 @@ describe("picking a shelf's members", () => {
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
     });
 
+    it("duplicates a shelf, leaving the original where it was", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "duplicate");
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+        expect(screen.getByTestId("shelf-tag:Evening")).toBeTruthy();
+
+        // The copy holds the same recipe. A shelf is a tag, and a recipe can
+        // carry both, so duplicating does not move anybody.
+        await fireEvent.press(screen.getByTestId("shelf-tag:Evening"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("deletes a shelf outright, keeping the recipes that were on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "delete");
+        // Asked before it happens, the same as an emptied shelf: there is no
+        // undo for a query that no longer exists.
+        await fireEvent.press(screen.getByTestId("remove-shelf-confirm"));
+
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("keeps the shelf when the delete is declined", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "delete");
+        await fireEvent.press(screen.getByTestId("remove-shelf-cancel"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+    });
+
+    it("withholds EDIT MEMBERS from the menu opened inside the edit", async () => {
+        // The grid's menu offers it because there is no edit running. The
+        // picker's own header does not, because the user is already standing
+        // in the edit that row would start.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        expect(screen.getByTestId("shelf-overflow-edit")).toBeTruthy();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-edit"));
+        await settleSheet();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-actions"));
+        await settleSheet();
+        expect(screen.queryByTestId("shelf-overflow-edit")).toBeNull();
+        expect(screen.getByTestId("shelf-overflow-rename")).toBeTruthy();
+    });
+
     it("sheds the library's own chrome while picking", async () => {
         // Every one of these is a door out of the half-built shelf, and none
         // of them do anything while picking. Drawing them spent the top third
@@ -2199,12 +2276,12 @@ describe("picking a shelf's members", () => {
         expect(screen.getByLabelText("Read a card")).toBeTruthy();
     });
 
-    it("offers no rename for a shelf that has no name yet", async () => {
+    it("offers no shelf actions for a shelf that has no name yet", async () => {
         // A new shelf is named at the end, by the bar, once it has members to
-        // be named for. There is nothing here to rename.
+        // be named for. Until then there is nothing to rename, copy or delete.
         await startPicking();
 
-        expect(screen.queryByTestId("shelf-picker-rename")).toBeNull();
+        expect(screen.queryByTestId("shelf-picker-actions")).toBeNull();
     });
 
     it("renames a shelf, keeping everyone on it", async () => {
@@ -2212,10 +2289,7 @@ describe("picking a shelf's members", () => {
         tagged.tags = ["morning"];
         await renderHome({recipes: [tagged, named("Kenya")]});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
-        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
-
-        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
-        await settleSheet();
+        await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
         await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
 
@@ -2235,10 +2309,7 @@ describe("picking a shelf's members", () => {
         evening.tags = ["evening"];
         await renderHome({recipes: [morning, evening]});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
-        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
-
-        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
-        await settleSheet();
+        await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "evening");
         await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
 
@@ -2257,10 +2328,7 @@ describe("picking a shelf's members", () => {
         tagged.tags = ["morning"];
         await renderHome({recipes: [tagged, named("Kenya")]});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
-        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
-
-        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
-        await settleSheet();
+        await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Morning");
         await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
 
