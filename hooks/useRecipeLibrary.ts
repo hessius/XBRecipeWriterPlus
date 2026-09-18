@@ -174,6 +174,9 @@ export type RecipeLibrary = {
     toggleFavourite: (recipe: Recipe) => void;
     /** Make exactly these recipes the members of a shelf. */
     setShelfMembers: (tag: string, uuids: readonly string[]) => ShelfWriteOutcome;
+    /** Rename a shelf and set its membership, in one pass over the library. */
+    renameShelf: (from: string, to: string,
+                  uuids: readonly string[]) => ShelfWriteOutcome;
     deleteAll: () => DeleteAllOutcome;
     applyRestore: (payload: BackupPayload, choice: RestoreChoice) => RestoreOutcome;
 };
@@ -362,6 +365,59 @@ export function useRecipeLibrary(
         return {full, failed};
     }
 
+    /**
+     * Rename a shelf, taking whatever ticks the user changed along with it.
+     *
+     * One pass rather than `setShelfMembers(old, [])` followed by
+     * `setShelfMembers(new, members)`. Two passes meant a window in which the
+     * shelf did not exist at all, and if the second pass was refused for any
+     * recipe -- a storage error, or a newly ticked recipe already carrying the
+     * twenty tags a recipe may hold -- the members it had already emptied were
+     * left with neither name. Here each recipe is written once, with the old
+     * name removed and the new one added in the same `setTags`, and a recipe
+     * the new name will not fit is put back exactly as it was rather than being
+     * stripped of the shelf it was on.
+     *
+     * A rename that only respells the shelf is a rename: `tagKey` folds case,
+     * so both spellings are taken off before the new one goes on and the recipe
+     * ends with one tag rather than two.
+     */
+    function renameShelf(from: string, to: string,
+                         uuids: readonly string[]): ShelfWriteOutcome {
+        const fromKey = tagKey(from);
+        const toKey = tagKey(to);
+        const wanted = new Set(uuids);
+        let full = 0;
+        let failed = 0;
+        for (const recipe of allRecipes()) {
+            const tags = recipe.tags ?? [];
+            const had = tags.some((existing) => tagKey(existing) === fromKey);
+            const has = tags.some((existing) => tagKey(existing) === toKey);
+            const should = wanted.has(recipe.uuid);
+            if (!had && !has && !should) continue;
+            const without = tags.filter((existing) =>
+                tagKey(existing) !== fromKey && tagKey(existing) !== toKey);
+            recipe.setTags(should ? [...without, to] : without);
+            // Asked of the model afterwards, as `setShelfMembers` does: the cap
+            // lives in `setTags` and this is the only honest way to know
+            // whether the new name landed.
+            const landed = recipe.tags.some((existing) => tagKey(existing) === toKey);
+            if (landed !== should) {
+                recipe.setTags(tags);
+                full += 1;
+                continue;
+            }
+            try {
+                store.updateRecipe(recipe.uuid, recipe);
+            } catch {
+                recipe.setTags(tags);
+                failed += 1;
+            }
+        }
+        reload();
+        return {full, failed};
+    }
+
     function deleteAll(): DeleteAllOutcome {
         // The whole-table size, not `recipes.length`: this deletes the table, so
         // reporting the length of a filtered view would tell the user a smaller
@@ -426,6 +482,7 @@ export function useRecipeLibrary(
         toggleFavourite,
         deleteAll,
         setShelfMembers,
+        renameShelf,
         applyRestore
     };
 }

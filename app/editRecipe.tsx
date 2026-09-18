@@ -757,7 +757,7 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, editInputComplete, setVolumeError,
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
         autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
         setXidFocused
@@ -1102,6 +1102,8 @@ export default function EditRecipe(
                                      await handleReloadTitlePress();
                                  }}
                                  onRevert={() => setRevertOpen(true)}
+                                 onToggleFavourite={toggleFavourite}
+                                 favourite={recipe.favourite}
                                  onDelete={deleteRecipe}/>
 
             <RevertSheet open={revertOpen} sources={revertSources}

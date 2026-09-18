@@ -10,15 +10,18 @@ import Recipe from "@/library/Recipe";
 const MARK_SIZE = 40;
 
 /**
- * Where a recipe arrived from.
+ * Where a recipe arrived from, when it arrived from somewhere.
  *
  * A claim, not an identity. The copy says a recipe arrived from a name, never
  * that it was made by one: `sharedBy` is whatever the person sharing it had
  * typed into xBloom, and the app has no way to know whether it is true.
  *
- * Only a share link carries a sharer at all. A recipe pulled from your own
- * xBloom library has no other author to name, so the section reads sensibly
- * with the field absent rather than treating it as missing data.
+ * Three cases, and only two of them draw. A share link names its sharer. A
+ * recipe with a pod ID and no sharer came from xBloom with nobody attached, so
+ * it says so. A recipe the user built here came from nowhere, and the section
+ * is absent rather than present and empty: it used to answer "nobody shared
+ * this one with you", which is a row spent telling someone something they
+ * already knew about a recipe they had just written.
  *
  * The picture is behind a setting, off by default, and anything that will not
  * load falls back to the accent mark without a word. A missing image is not an
@@ -34,8 +37,11 @@ export default function FromSection({recipe, accent, showAvatar}: {
     const [failed, setFailed] = useState(false);
 
     const sharedBy = recipe.sharedBy?.trim() ?? "";
+    const fromXbloom = recipe.xid.trim().length > 0;
     const avatar = recipe.sharedByAvatar ?? "";
     const drawAvatar = showAvatar && avatar.length > 0 && !failed;
+
+    if (sharedBy.length === 0 && !fromXbloom) return null;
 
     return (
         <DeckSection title="FROM" testID="about-from">
@@ -59,7 +65,7 @@ export default function FromSection({recipe, accent, showAvatar}: {
                       color={sharedBy.length > 0 ? palette.text : palette.dim}>
                     {sharedBy.length > 0
                         ? `Arrived from ${sharedBy}`
-                        : "Nobody shared this one with you. It is yours."}
+                        : "An xBloom recipe. Nobody is named as the sharer."}
                 </Text>
             </XStack>
         </DeckSection>

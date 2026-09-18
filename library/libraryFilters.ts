@@ -29,13 +29,17 @@ export type FilterId =
     | "overflowOff"
     | "otherBrewer"
     | "singlePour"
+    | "fewStages"
     | "manyStages"
     | "grinderOff"
     | "xbloom"
-    | "strong"
-    | "long"
+    | "shortRatio"
+    | "longRatio"
     | "hot"
-    | "recentlyAdded";
+    | "recentlyAdded"
+    | "mine"
+    | "quickBrew"
+    | "slowBrew";
 
 type StockFilter = {
     /** The chip label, in Doto caps, taken from the design's shelf names. */
@@ -51,6 +55,22 @@ type StockFilter = {
 
 /** Recently added means the last 30 days, measured when the query is built. */
 const RECENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Where a brew stops being quick and starts being slow, in seconds.
+ *
+ * The figures are the ones the shelves were asked for: two and a half minutes,
+ * and four. The gap between them is left unnamed on purpose -- most recipes
+ * live in it, and a shelf holding the middle of a distribution says nothing
+ * about the recipes on it.
+ *
+ * Measured by `plannedSeconds`, which is the recipe's own plan rather than any
+ * brew of it: pours at their stated flow plus the pauses between them. A
+ * recipe with no stages has no duration at all and `brewSeconds` is NULL for
+ * it, so neither comparison matches -- the treatment `maxTemp` already gets.
+ */
+const QUICK_BREW_SECONDS = 150;
+const SLOW_BREW_SECONDS = 240;
 
 export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     tea: {label: "TEA", clause: () => ({where: "isTea = 1"})},
@@ -68,6 +88,11 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
         clause: () => ({where: "cupType = ?", params: [CUP_TYPE.OTHER]})
     },
     singlePour: {label: "SINGLE POUR", clause: () => ({where: "pourCount = 1"})},
+    // FEW STAGES contains SINGLE POUR, which is the one place two stock
+    // shelves overlap. They are kept apart because they say different things:
+    // a single pour is a way of brewing, and few stages is a shape. Three is
+    // the unnamed middle, for the reason the duration pair leaves one.
+    fewStages: {label: "FEW STAGES", clause: () => ({where: "pourCount <= 2"})},
     manyStages: {label: "MANY STAGES", clause: () => ({where: "pourCount >= 4"})},
     grinderOff: {label: "GRINDER OFF", clause: () => ({where: "grinder = 0"})},
     // `xid IS NOT NULL`, not the design table's `xid <> ''`. recipeIndex stores
@@ -77,21 +102,47 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     // NULL <> '' is NULL, which WHERE drops -- so it reads as if empty strings
     // were the worry when the index guarantees none can occur.
     xbloom: {label: "XBLOOM RECIPES", clause: () => ({where: "xid IS NOT NULL"})},
-    strong: {label: "STRONG", clause: () => ({where: "ratio <= 14"})},
-    long: {label: "LONG", clause: () => ({where: "ratio >= 17"})},
+    // The ratio pair names the ratio outright. STRONG and MILD were the first
+    // attempt and were dropped: strength in coffee is decided by grind, dose,
+    // temperature and time as much as by ratio, so a STRONG shelf that sorted
+    // purely on `ratio` was promising something it could not know. SHORT and
+    // LONG are the ristretto/lungo words, they mean one thing, and they cannot
+    // be read as a duration now that the word LONG has been given a noun.
+    shortRatio: {label: "SHORT RATIO", clause: () => ({where: "ratio <= 14"})},
+    longRatio: {label: "LONG RATIO", clause: () => ({where: "ratio >= 17"})},
     // maxTemp is NULL when a recipe sets no temperatures; `>= 94` excludes those
     // rows, which is what "hot" has to mean.
     hot: {label: "HOT", clause: () => ({where: "maxTemp >= 94"})},
     recentlyAdded: {
         label: "RECENTLY ADDED",
         clause: () => ({where: "createdAt >= ?", params: [Date.now() - RECENT_WINDOW_MS]})
+    },
+    // The complement of every author shelf, and the reason it can be one
+    // clause rather than a list of sources. A recipe typed into the editor, a
+    // duplicate of one, a card read on the phone and a row pulled from the
+    // user's own xBloom account all arrive with no sharer: an account row is a
+    // bare `recipeVo`, and `shareMemberName` sits beside `recipeVo` rather than
+    // inside it, so only a recipe somebody sent carries one.
+    //
+    // `sharedByKey`, not `sharedBy`, so the column a shelf asks about is the
+    // one the author shelves match on -- asking the other would be two
+    // definitions of "came from somebody" that could disagree.
+    mine: {label: "MINE", clause: () => ({where: "sharedByKey IS NULL"})},
+    quickBrew: {
+        label: "QUICK BREW",
+        clause: () => ({where: "brewSeconds <= ?", params: [QUICK_BREW_SECONDS]})
+    },
+    slowBrew: {
+        label: "SLOW BREW",
+        clause: () => ({where: "brewSeconds >= ?", params: [SLOW_BREW_SECONDS]})
     }
 };
 
 /** The stock filters in the order the rail lists their chips. */
 export const STOCK_FILTER_ORDER: readonly FilterId[] = [
-    "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "manyStages",
-    "grinderOff", "xbloom", "strong", "long", "hot", "recentlyAdded"
+    "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "fewStages",
+    "manyStages", "grinderOff", "xbloom", "shortRatio", "longRatio",
+    "quickBrew", "slowBrew", "hot", "mine", "recentlyAdded"
 ];
 
 /**
@@ -191,8 +242,44 @@ export function availableFilters(
     librarySize: number,
     applied: readonly string[] = []
 ): string[] {
-    return Object.keys(counts)
+    const offered = Object.keys(counts)
         .filter((id) => isOffered(counts[id], librarySize) || applied.includes(id));
+    return collapseStageShelves(offered, counts, applied);
+}
+
+/**
+ * Of SINGLE POUR and FEW STAGES, offer whichever one says something.
+ *
+ * FEW STAGES contains SINGLE POUR, so on most libraries they are two doors
+ * onto nearly the same set and the grid drew both. Which one is worth having
+ * depends entirely on what is in the library, so the answer is counted rather
+ * than decided here:
+ *
+ * - A library with no two-stage recipes makes the two shelves *identical*.
+ *   SINGLE POUR is the truthful name for that set, so FEW STAGES goes.
+ * - A library with any two-stage recipe makes FEW STAGES the larger and more
+ *   useful of the two, and SINGLE POUR a subset of a shelf already on screen.
+ *   SINGLE POUR goes.
+ *
+ * Counts, not clauses: the two ids are the only place in this module that
+ * overlap by construction, and both branches reduce to "drop the one that is
+ * not telling the user anything new".
+ *
+ * An applied filter is never dropped, for the same reason `isOffered` cannot
+ * withdraw one. A user standing in SINGLE POUR keeps its chip even once a
+ * two-stage recipe arrives and makes FEW STAGES the better offer.
+ */
+function collapseStageShelves(
+    offered: readonly string[],
+    counts: Readonly<Record<string, number>>,
+    applied: readonly string[]
+): string[] {
+    if (!offered.includes("singlePour") || !offered.includes("fewStages")) {
+        return [...offered];
+    }
+    const twoStagesExist = (counts.fewStages ?? 0) > (counts.singlePour ?? 0);
+    const drop = twoStagesExist ? "singlePour" : "fewStages";
+    return offered.filter((id) => id !== drop || applied.includes(id));
 }
 
 /**

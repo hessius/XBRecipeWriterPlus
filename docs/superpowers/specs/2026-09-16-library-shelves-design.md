@@ -311,14 +311,56 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | Overflow protection off | `cupType = OMNI` |
 | Other brewer | `cupType = OTHER` |
 | Single pour | `pourCount = 1` |
+| Few stages | `pourCount <= 2` |
 | Many stages | `pourCount >= 4` |
 | Grinder off | `grinder = 0` |
 | xBloom recipes | `xid IS NOT NULL` |
-| Strong | `ratio <= 14` |
-| Long | `ratio >= 17` |
+| Short ratio | `ratio <= 14` |
+| Long ratio | `ratio >= 17` |
+| Quick brew | `brewSeconds <= 150` |
+| Slow brew | `brewSeconds >= 240` |
 | Hot | `maxTemp >= 94` |
-| From <author> | `sharedBy = ?`, one shelf per distinct author |
+| Mine | `sharedByKey IS NULL` |
+| From <author> | `sharedByKey = ?`, one shelf per distinct author |
 | Recently added | `createdAt` within 30 days |
+
+**The ratio pair names the ratio outright.** It was Strong and Long, then
+Strong and Mild, and both were wrong in the same way: strength in a cup is
+decided by grind, dose, temperature and time as much as by ratio, so a Strong
+shelf sorting purely on `ratio` promised something it could not know. Short and
+Long are the ristretto/lungo words, they mean one thing, and with the noun
+attached neither can be read as a duration. `asStockFilters` drops the stale
+ids, so a phone upgrading with `strong`, `long` or `mild` pinned loses a chip
+and nothing else.
+
+**Few stages contains Single pour**, the one place two stock shelves overlap.
+Reading "few" as two exactly would fix the overlap on paper and produce a shelf
+almost nobody could fill, so the overlap is resolved by counting instead: only
+one of the two is ever offered, and which one depends on the library. With no
+two-stage recipe in it the shelves are identical and Single pour is the
+truthful name for that set, so Few stages goes. With any two-stage recipe Few
+stages is the larger and Single pour a subset of a shelf already on screen, so
+Single pour goes. Neither is dropped while it is applied, for the same reason
+the 80% ceiling cannot withdraw a chosen chip. Three stages is the unnamed
+middle, for the same reason the duration pair leaves one.
+
+**Quick and slow are measured by `plannedSeconds`** -- the recipe's pours at
+their stated flow, plus the pauses between them -- so a shelf agrees with the
+staircase the brew screen draws rather than being a second opinion about the
+same recipe. The gap between 2:30 and 4:00 is deliberately unnamed: most
+recipes live in it, and a shelf holding the middle of a distribution says
+nothing about what is on it. A stageless recipe has `brewSeconds` NULL and is
+on neither shelf.
+
+**Mine is the complement of every author shelf**, which is why it is one clause
+and not a list of sources. A recipe typed into the editor, a duplicate of one,
+a card read on the phone and a row pulled from the user's own xBloom account
+all arrive with no sharer: an account row is a bare `recipeVo`, and
+`shareMemberName` sits beside `recipeVo` rather than inside it. Only a recipe
+somebody sent carries one. It is subject to the same ceiling as everything
+else, so it stays hidden until enough of the library came from other people for
+the distinction to mean something -- which is the point at which somebody would
+want it.
 
 `cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`,
 `OMNI 0x02` (which the UI calls "overflow protection off"), `TEA 0x03`.
@@ -353,6 +395,26 @@ the actions cannot drift apart between the two views.
 The list view keeps filter chips and they keep working. They are a different
 instrument: a chip narrows what you are looking at, a shelf is a thing you
 opened. The two only competed when tapping a shelf turned into applying a chip.
+
+### Revision: a room's tiles carry the card's figures
+
+A recipe tile drew a name on a colour and nothing else, so opening a shelf lost
+the dose, the ratio, the grind and how the recipe had gone. The two ways out
+were to bring the list card's information onto the tile, or to draw list rows in
+the room and keep one view. The square is the shape that belongs in a shelf, so
+the information came to it instead.
+
+`12G · 1:16 · 22` in one Doto line under the name, the card's three figures in
+the card's own order, with a missing one dropped rather than drawn as a
+sentinel; and the evidence line -- rating, count, recency -- taking the leading
+end of the top row, where the card also puts it. The name gives up its second
+line to make room, because the tile's height is the grid's and a tile that
+reflowed on its contents would break the row alignment the grid is built on.
+
+`evidenceLine`, `spokenEvidence` and `isSet` moved out of the card into
+`library/recipeEvidence.ts`. Two views drawing one recipe are entitled to one
+answer about it, and two copies of that arithmetic would agree until the first
+time one of them was edited.
 
 ### The rail belongs to the view, not to the screen
 
@@ -467,6 +529,52 @@ Three rules make it survive filtering:
   Without it, changing the lens makes your own choices vanish.
 - **The bottom bar counts the shelf, not the view.** `4 ON THIS SHELF`, never
   the number visible under the current filter.
+
+### Revision: the picker wears its own header
+
+It kept the library's own chrome -- wordmark, machine panel, scan, import, new
+recipe, and three large tiles beneath them -- and none of it can be reached from
+inside a half-built shelf. It spent the top third of the screen on doors that
+lead away from the task and pushed the rows the user is ticking below the fold.
+
+Picking now draws a compact header of its own: a cancel glyph, the shelf's name,
+how many are on it, and the shelf's menu. It is deliberately the same shape as
+`ScreenHeader`, the header of every pushed screen, because picking *is* a pushed
+screen in everything but routing -- somewhere the user goes, finishes, and comes
+back from. Cancel sits here as well as in the bottom bar, which is not a
+duplicate so much as two habits meeting: the bar is where the decision is made,
+the top-left glyph is where a user who has changed their mind reaches first.
+
+### What can be done to a shelf
+
+A manual shelf could be filled and emptied and nothing else, so a typo in its
+name was permanent unless the shelf was rebuilt from nothing. Four verbs now
+live in one sheet:
+
+| Verb | What it does |
+| --- | --- |
+| Edit members | The picker, seeded from the whole table |
+| Rename | The naming sheet again, seeded with the current name |
+| Duplicate | The picker seeded with this shelf's members, then named as new |
+| Delete | Takes the tag off every member, after a confirmation |
+
+Two doors, one sheet, the arrangement the recipe menu already uses: a glyph in
+the tile, and a long press on the tile. The long press is the shortcut, for the
+hand that already knows; it is never the only way in, because a gesture with no
+drawn control is not an interface. Auto shelves open neither: a rule the app
+wrote has no name of the user's to change and nothing of theirs to delete.
+
+**A rename clears the old tag before writing the new one.** `setTags` folds
+through `tagKey` and keeps the spelling it already has, so adding `Morning` to a
+recipe carrying `morning` is not a change at all and a re-spelling would
+silently do nothing. Clearing first also frees each member's tag slot, so the
+twenty-shelf cap cannot refuse a recipe its own shelf back. A name that folds to
+*another* existing shelf is still refused, for the reason naming a new one is.
+
+**A duplicate is named by the user**, not given `morning 2`. A shelf's name is
+the only thing about it the user wrote, and a machine-made one would be renamed
+immediately anyway. It borrows the picker's own naming flow, which also lets the
+user adjust who comes along before the copy exists.
 
 ## Sort
 
@@ -779,6 +887,8 @@ All in `Settings.DEFAULTS`, which is what carries them into a backup.
 | `libraryFavouritesFirst` | `false` |
 | `showRecipeAvatars` | `false` |
 | `shelfMarkVariant` | tester-controlled, through LABS |
+| `hiddenShelves` | `""` |
+| `invertAutoShelves` | `false` |
 
 The tester build no longer needs a bespoke mechanism for that last one. M6
 (#112) shipped `labsUnlocked`, a settings key that reveals a LABS section,
@@ -786,6 +896,46 @@ revealed by seven taps on the version line in About, and it was built as a
 general mechanism with this setting explicitly in mind. `shelfMarkVariant` is a
 row in that section. It does not read `__DEV__` or an EAS channel, so it works
 in a production TestFlight build, which is how the testers will get it.
+
+### Revision: an auto shelf you do not want
+
+A stock shelf is a rule the app wrote, and some of the rules will not describe
+the way a given person brews. TEA over a library with no tea in it never
+appears, because the floor of three keeps it out; TEA over a library with four
+teas in it appears whether or not the user thinks of those four as a shelf.
+
+So an auto shelf can be put away. A long press on the tile hides it, and a
+footer under the auto section says how many are hidden and names each one as a
+pressable chip that brings it back.
+
+The gesture is undiscoverable and that is allowed here, uniquely, because the
+footer is the discovery. A user who long-presses by accident is told what they
+just did, in words, in the place the shelf used to be, with the way back one tap
+away. The manual tile's menu cannot rely on that -- unshelving a recipe has no
+footer announcing it -- which is why that one is also drawn as a glyph.
+
+Both acts are the same act: `toggleHidden`. Hiding and showing are one function
+because they are one decision seen from two sides, and two functions would let
+them disagree about the order of the list.
+
+The stored list is a comma-separated string of shelf ids, and ids the build does
+not recognise are kept rather than dropped. An author shelf exists only while a
+recipe from that author is in the library, so forgetting an answer because the
+shelf was not on screen would silently unhide it on the next import. The footer
+draws only the hidden shelves that exist right now, though: offering back a
+shelf that would show the user nothing is not an offer.
+
+### Revision: an auto shelf drawn the other way round
+
+`invertAutoShelves` fills an auto tile with the shelf's accent and leaves its
+44 pt mark square quiet, with the glyph drawn in the accent it gave up. It is a
+preference rather than a decision because the two read differently at a glance
+and neither is wrong: upright, the grid is a page of grey cards with coloured
+stamps; inverted, it is a page of colour.
+
+Manual shelves are never inverted. Their mark is made of their members' own
+colours, so there is no single accent to lift out of it and nothing would be
+left in the square if one were.
 
 ### New `brews` columns
 

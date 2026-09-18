@@ -186,7 +186,15 @@ export default function XbrwSheet({
     // above the navigator, and every sheet in this app is opened from a screen
     // that draws its own header, so there is nothing above to sit over.
     return (
+        // `moveOnKeyboardChange` unconditionally rather than as an opt-in prop,
+        // so no caller can be the one that forgets. A sheet with no text field
+        // never sees a keyboard and is unaffected; a sheet with one is
+        // otherwise buried by it. These sheets snap to a third of the screen
+        // and several of them autofocus, so the keyboard arrived on top of the
+        // field it had just opened -- a rename sheet whose input could not be
+        // seen at all, and a shelf being named in the dark.
         <Sheet transition="sheet" zIndex={200000} dismissOnSnapToBottom
+               moveOnKeyboardChange
                open={shown} onOpenChange={onOpenChange}
                snapPointsMode="percent" snapPoints={[heightPercent]}>
             <Sheet.Overlay transition="quick"

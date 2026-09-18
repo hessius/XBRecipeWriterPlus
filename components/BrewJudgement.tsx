@@ -21,6 +21,14 @@ import {palette} from "@/constants/colors";
  * field in the editor uses: a value handed back on each keystroke fights the
  * cursor. There is no counter and no ceiling, because unlike a recipe's note
  * this one never has to fit on a library row.
+ *
+ * It wraps but does not take a newline. `multiline` without `submitBehavior`
+ * gives the return key its literal meaning, which left the only way out of the
+ * field a tap somewhere else -- on the one screen where the field sits at the
+ * bottom and the keyboard is over everything that could be tapped. Every other
+ * text field in the app dismisses on return, and a brew note is a sentence or
+ * two rather than a paragraph, so it does the same. The wrapping is what
+ * `multiline` is still here for.
  */
 export default function BrewJudgement({rating, note, onRate, onNote, testID}: {
     rating: number;
@@ -47,6 +55,8 @@ export default function BrewJudgement({rating, note, onRate, onNote, testID}: {
                 placeholder="Sweet, a little thin. Grind finer."
                 placeholderTextColor={palette.muted}
                 multiline={true}
+                returnKeyType="done"
+                submitBehavior="blurAndSubmit"
                 onEndEditing={(event) => onNote(event.nativeEvent.text)}
                 style={{
                     fontSize:          15,

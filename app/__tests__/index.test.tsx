@@ -1061,7 +1061,9 @@ describe("import", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         expect(screen.getByTestId("import-resolving")).toBeTruthy();
 
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
@@ -1149,7 +1151,9 @@ describe("import", () => {
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         expect(db.queryRecipes.mock.calls.length).toBeGreaterThan(before);
@@ -1737,6 +1741,20 @@ describe("the shelf grid", () => {
         expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
     });
 
+    // Long press, then the footer. The whole loop through the screen, because
+    // the grid only draws the answer and the screen is what remembers it.
+    it("puts an auto shelf away and brings it back", async () => {
+        await openGrid();
+
+        await fireEvent(screen.getByTestId("shelf-tea"), "longPress");
+        expect(screen.queryByTestId("shelf-tea")).toBeNull();
+        expect(screen.getByText("1 HIDDEN")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("shelf-show-tea"));
+        expect(screen.getByTestId("shelf-tea")).toBeTruthy();
+        expect(screen.queryByTestId("hidden-shelves")).toBeNull();
+    });
+
     it("offers a shelf for a tag the user made", async () => {
         await openGrid();
 
@@ -1900,7 +1918,9 @@ describe("the shelf room", () => {
         await fireEvent(screen.getByTestId("recipe-card"), "longPress");
         await act(async () => { jest.advanceTimersByTime(500); });
         const fromRow = present();
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         // Door two: the shelf-room tile, for the same recipe.
@@ -1973,6 +1993,14 @@ describe("picking a shelf's members", () => {
             return recipe;
         });
         return [...teas, named("Kenya"), named("Colombia")];
+    }
+
+    /** Open a manual shelf's menu from its tile, and pick one of its rows. */
+    async function shelfAction(tag: string, row: string) {
+        await fireEvent.press(screen.getByTestId(`shelf-edit-tag:${tag}`));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId(`shelf-overflow-${row}`));
+        await settleSheet();
     }
 
     async function startPicking(recipes: Recipe[] = pickerLibrary()) {
@@ -2155,7 +2183,7 @@ describe("picking a shelf's members", () => {
         await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
-        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await shelfAction("morning", "edit");
         expect(screen.getByTestId("shelf-picker-count"))
             .toHaveTextContent("1 ON THIS SHELF");
 
@@ -2178,5 +2206,204 @@ describe("picking a shelf's members", () => {
         await fireEvent.press(screen.getByRole("tab", {name: "List"}));
         expect(screen.getByText("Ethiopia")).toBeTruthy();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
+    });
+
+    it("duplicates a shelf, leaving the original where it was", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "duplicate");
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+        expect(screen.getByTestId("shelf-tag:Evening")).toBeTruthy();
+
+        // The copy holds the same recipe. A shelf is a tag, and a recipe can
+        // carry both, so duplicating does not move anybody.
+        await fireEvent.press(screen.getByTestId("shelf-tag:Evening"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("deletes a shelf outright, keeping the recipes that were on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "delete");
+        // Asked before it happens, the same as an emptied shelf: there is no
+        // undo for a query that no longer exists.
+        await fireEvent.press(screen.getByTestId("remove-shelf-confirm"));
+
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+        await fireEvent.press(screen.getByRole("tab", {name: "List"}));
+        expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
+    });
+
+    it("keeps the shelf when the delete is declined", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await shelfAction("morning", "delete");
+        await fireEvent.press(screen.getByTestId("remove-shelf-cancel"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+    });
+
+    it("withholds EDIT MEMBERS from the menu opened inside the edit", async () => {
+        // The grid's menu offers it because there is no edit running. The
+        // picker's own header does not, because the user is already standing
+        // in the edit that row would start.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        expect(screen.getByTestId("shelf-overflow-edit")).toBeTruthy();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-edit"));
+        await settleSheet();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-actions"));
+        await settleSheet();
+        expect(screen.queryByTestId("shelf-overflow-edit")).toBeNull();
+        expect(screen.getByTestId("shelf-overflow-rename")).toBeTruthy();
+    });
+
+    // A rename from the grid starts an edit the user never sees, so that the
+    // ticks it saves are the shelf's own. Backing out of the name must undo
+    // that: landing in the member editor is a place the user never asked for.
+    it("returns to the grid when a rename from the grid is dismissed", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-rename"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-picker-header")).toBeNull();
+    });
+
+    // The other origin. The user opened the edit themselves, so cancelling a
+    // name is cancelling the name and nothing else.
+    it("stays in the edit when a rename from the picker is dismissed", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-edit"));
+        await settleSheet();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-actions"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-rename"));
+        await settleSheet();
+
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-picker-header")).toBeTruthy();
+    });
+
+    it("sheds the library's own chrome while picking", async () => {
+        // Every one of these is a door out of the half-built shelf, and none
+        // of them do anything while picking. Drawing them spent the top third
+        // of the screen on controls that lead away from the task.
+        await startPicking();
+
+        expect(screen.getByTestId("shelf-picker-header")).toBeTruthy();
+        expect(screen.queryByLabelText("Read a card")).toBeNull();
+        expect(screen.queryByLabelText("Create a recipe")).toBeNull();
+    });
+
+    it("puts the chrome back when the picker is cancelled", async () => {
+        await startPicking();
+        await fireEvent.press(screen.getByTestId("shelf-picker-header-cancel"));
+
+        expect(screen.queryByTestId("shelf-picker-header")).toBeNull();
+        expect(screen.getByLabelText("Read a card")).toBeTruthy();
+    });
+
+    it("offers no shelf actions for a shelf that has no name yet", async () => {
+        // A new shelf is named at the end, by the bar, once it has members to
+        // be named for. Until then there is nothing to rename, copy or delete.
+        await startPicking();
+
+        expect(screen.queryByTestId("shelf-picker-actions")).toBeNull();
+    });
+
+    it("renames a shelf, keeping everyone on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await shelfAction("morning", "rename");
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:Evening")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+
+        // The member went with the name rather than being left behind on a
+        // shelf that no longer exists.
+        await fireEvent.press(screen.getByTestId("shelf-tag:Evening"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("refuses a rename onto a shelf that already exists", async () => {
+        const morning = named("Ethiopia");
+        morning.tags = ["morning"];
+        const evening = named("Kenya");
+        evening.tags = ["evening"];
+        await renderHome({recipes: [morning, evening]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await shelfAction("morning", "rename");
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "error", message: "There is already a shelf called evening."
+        }));
+        // A refused rename is not a half-done one: the sheet stays open on the
+        // name that was not accepted rather than closing as if it had been.
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+    });
+
+    it("allows a rename that only changes how the name is spelled", async () => {
+        // "morning" and "Morning" fold to one shelf everywhere downstream, so
+        // this is not a collision, it is the rename the user asked for.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await shelfAction("morning", "rename");
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Morning");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:Morning")).toBeTruthy();
+        await fireEvent.press(screen.getByTestId("shelf-tag:Morning"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
     });
 });

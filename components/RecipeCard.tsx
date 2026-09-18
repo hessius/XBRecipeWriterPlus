@@ -7,7 +7,7 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
-import {formatBrewAgo, spokenBrewAgo} from "@/library/brew/brewFormat";
+import {evidenceLine, isSet, spokenEvidence} from "@/library/recipeEvidence";
 import type {RecipeEvidence} from "@/library/libraryQuery";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {canWriteToCard} from "@/library/cardLimits";
@@ -36,49 +36,6 @@ const PROFILE_HEIGHT = 56;
 const TOUCH_TARGET = 44;
 const ACTION_ICON_SIZE = 18;
 const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
-
-/**
- * `Recipe` initialises `ratio` and `grindSize` to -1 to mean "not set yet".
- * `DigitRoll` clamps at zero, so passing a sentinel straight through would tell
- * the user the ratio is 0 — not a possible value, and indistinguishable from a
- * real reading.
- */
-function isSet(value: number): boolean {
-    return Number.isFinite(value) && value > 0;
-}
-
-/**
- * `4.3 · 12 · 3D`, or nothing.
- *
- * One average, one count, one recency, in the order a glance wants them: how
- * good, how often, how lately. The average is dropped rather than printed as
- * 0.0 for a recipe brewed and never judged, because unrated is not nought and
- * a 0.0 would be a verdict nobody gave.
- */
-function evidenceLine(evidence?: RecipeEvidence): string | null {
-    if (evidence === undefined || evidence.brews <= 0) return null;
-    return [
-        evidence.avgRating > 0 ? evidence.avgRating.toFixed(1) : undefined,
-        String(evidence.brews),
-        evidence.lastBrewedAt > 0 ? formatBrewAgo(evidence.lastBrewedAt) : undefined
-    ].filter((part) => part !== undefined).join(" · ");
-}
-
-/** The same three figures, for someone who cannot see them. */
-function spokenEvidence(evidence?: RecipeEvidence): string[] {
-    if (evidence === undefined || evidence.brews <= 0) return [];
-    return [
-        ...(evidence.avgRating > 0 ? [`rated ${evidence.avgRating.toFixed(1)}`] : []),
-        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`,
-        // The third fact. It is on the card as `3D`, and a label carrying only
-        // the first two would leave a reader with less than the row shows.
-        // Absent when no brew carried a date, which is what the drawn line does
-        // with it too.
-        ...(evidence.lastBrewedAt > 0
-            ? [`last brewed ${spokenBrewAgo(evidence.lastBrewedAt)}`]
-            : [])
-    ];
-}
 
 type StatProps = {
     label: string;

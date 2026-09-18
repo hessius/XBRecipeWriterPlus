@@ -32,7 +32,7 @@ const POD_SIZE = 44;
  * in, one tap out, and which of the two is in force is visible either way.
  */
 export default function PodSection({
-    recipe, showHint, xidLookupFailed, externalEpoch,
+    recipe, showHint, showAvatar, xidLookupFailed, externalEpoch,
     onXidFocusChange, onInputErrorChange, onDraft, onCommit, onFollowPod
 }: {
     recipe: Recipe;
@@ -43,6 +43,8 @@ export default function PodSection({
      * touches the save gate.
      */
     xidLookupFailed: boolean;
+    /** `showRecipeAvatars`. Off, the pod photo is not drawn. */
+    showAvatar: boolean;
     /** Bumped only when the recipe instance is swapped, which remounts the row. */
     externalEpoch: number;
     onXidFocusChange: (focused: boolean) => void;
@@ -56,7 +58,12 @@ export default function PodSection({
 
     const linked = recipe.xbloomName.trim().length > 0;
     const renamed = recipe.name.trim().length > 0;
-    const podImage = recipe.imageURL ?? "";
+    // Gated on the same setting as the sharer's mark. The setting exists to
+    // answer one question -- does a picture help at all -- and it could not
+    // answer it while half the pictures it names drew regardless of it. Its own
+    // description already promised the pod photo; this section had simply never
+    // been asked.
+    const podImage = showAvatar ? recipe.imageURL ?? "" : "";
 
     return (
         <DeckSection title="XBLOOM POD" testID="about-pod">

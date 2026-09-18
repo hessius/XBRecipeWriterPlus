@@ -11,6 +11,19 @@ import type Recipe from "@/library/Recipe";
 const TICK_SIZE = 26;
 
 /**
+ * The frame `SwipeableRecipeRow` draws its card in, repeated here.
+ *
+ * The two rows stand in for each other -- the picker is the library with the
+ * swipe taken out -- so a card that sat flush to the screen edge while picking
+ * and inset everywhere else would read as a different list. The numbers are
+ * copied rather than shared because the swipeable's frame is also the geometry
+ * its action tray is measured against, and one constant serving both would
+ * invite a change here to move the tiles there.
+ */
+const SIDE_PADDING = 12;
+const ROW_PADDING  = 6;
+
+/**
  * A recipe row while the library is picking members for a shelf.
  *
  * Not the swipeable row with a tick added. A row cannot both open a tray of
@@ -39,7 +52,10 @@ export default function SelectableRecipeRow({
                    accessibilityLabel={recipe.displayName()}
                    testID={`select-${recipe.uuid}`}
                    onPress={onToggle}>
-            <XStack alignItems="center">
+            <XStack alignItems="center" maxWidth={600}
+                    paddingHorizontal={SIDE_PADDING}
+                    paddingVertical={ROW_PADDING}
+                    gap="$2.5">
                 {/*
                   * The card is drawn inert: `pointerEvents` none, so its own
                   * pressables cannot take the tap away from the row. Without
@@ -53,7 +69,7 @@ export default function SelectableRecipeRow({
                                 dottedProfile={dottedProfile}/>
                 </YStack>
 
-                <YStack width={TICK_SIZE} height={TICK_SIZE} marginRight="$3"
+                <YStack width={TICK_SIZE} height={TICK_SIZE}
                         borderRadius={TICK_SIZE / 2}
                         alignItems="center" justifyContent="center"
                         borderWidth={1}

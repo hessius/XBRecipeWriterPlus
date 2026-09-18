@@ -7,21 +7,35 @@ import XbrwSheet from "@/components/XbrwSheet";
 import {onAccent, palette} from "@/constants/colors";
 
 /**
- * Asks before a shelf that has been emptied is removed.
+ * Asks before a shelf is removed.
  *
- * The bar already says REMOVE SHELF rather than DONE, so this is not the first
- * warning. It is the one that arrives before the thing happens rather than
- * after, which is what the shelf has instead of an undo: a shelf is a query, so
- * once its tag is off its last recipe there is nothing left to put back.
+ * Two ways in, and the sheet says which one it is. Emptied: the bar already
+ * said REMOVE SHELF rather than DONE, so this is the second warning, not the
+ * first. Deleted: the user chose it from the shelf's own menu, and there was no
+ * warning before this one.
+ *
+ * Either way it arrives before the thing happens rather than after, which is
+ * what a shelf has instead of an undo: a shelf is a query, so once its tag is
+ * off its last recipe there is nothing left to put back.
  *
  * It also says the one thing a person is actually worried about. Nothing about
  * a shelf is a container, so removing it keeps every recipe that was on it, and
  * saying so is the difference between a confirmation and a scare.
  */
-export default function RemoveShelfSheet({open, tag, onOpenChange, onRemove}: {
+export default function RemoveShelfSheet({
+    open, tag, emptied = true, onOpenChange, onRemove
+}: {
     open: boolean;
     /** The shelf's name, shown so the user can see which one they emptied. */
     tag: string;
+    /**
+     * Whether the shelf got here by having its last member unticked.
+     *
+     * False when the user asked for it outright, which changes the sentence:
+     * there is nobody left on an emptied shelf, and there may be a room full of
+     * recipes on a deleted one.
+     */
+    emptied?: boolean;
     onOpenChange: (open: boolean) => void;
     onRemove: () => void;
 }) {
@@ -30,7 +44,9 @@ export default function RemoveShelfSheet({open, tag, onOpenChange, onRemove}: {
                    title="Remove this shelf?" heightPercent={34}>
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                 <Text fontSize={13} color={palette.dim}>
-                    {`${tag} has nobody left on it, so it will be removed. `
+                    {(emptied
+                        ? `${tag} has nobody left on it, so it will be removed. `
+                        : `${tag} will be removed. `)
                         + "Your recipes are not affected: a shelf is a way of "
                         + "looking at the library, not a place things are kept."}
                 </Text>

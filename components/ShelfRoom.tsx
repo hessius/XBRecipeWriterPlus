@@ -1,10 +1,12 @@
 import React from "react";
 import {Pressable, ScrollView} from "react-native";
+import type {NativeScrollEvent, NativeSyntheticEvent} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import RecipeShelfTile from "@/components/RecipeShelfTile";
+import type {RecipeEvidence} from "@/library/libraryQuery";
 import {onAccent, palette} from "@/constants/colors";
 import type Recipe from "@/library/Recipe";
 
@@ -66,8 +68,8 @@ export type RoomRecipeActions = {
  * mounted behind the room, not to replay a saved offset here.
  */
 export default function ShelfRoom({
-    label, recipes, onBack, actionsFor, manual = false,
-    showCoffeeMarker = true, dottedProfile = false, paddingBottom = 0
+    label, recipes, onBack, actionsFor, evidence = {}, manual = false,
+    showCoffeeMarker = true, dottedProfile = false, onScroll, paddingBottom = 0
 }: {
     /** The shelf's name, drawn as the room's heading. */
     label: string;
@@ -85,6 +87,14 @@ export default function ShelfRoom({
     /** The acts the room can perform on one recipe, built by the screen. */
     actionsFor: (recipe: Recipe) => RoomRecipeActions;
     /**
+     * How each recipe has gone, by uuid, the same map the list reads.
+     *
+     * Passed whole rather than looked up per tile, because the screen already
+     * holds it and a room drawing its own would be a second answer about the
+     * same brews.
+     */
+    evidence?: Readonly<Record<string, RecipeEvidence>>;
+    /**
      * True for a tag shelf, whose name is the user's own word. It draws in a
      * plain face so the matrix does not recase it; a stock shelf is already the
      * app's Doto caps and draws in the matrix face, exactly as `ShelfTile` does.
@@ -92,6 +102,8 @@ export default function ShelfRoom({
     manual?: boolean;
     showCoffeeMarker?: boolean;
     dottedProfile?: boolean;
+    /** Drives the screen's collapsing header. */
+    onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     paddingBottom?: number;
 }) {
     const rows: Recipe[][] = [];
@@ -103,6 +115,12 @@ export default function ShelfRoom({
 
     return (
         <ScrollView testID="shelf-room"
+                    // The header collapses on this view's scroll the same way
+                    // it does on the list's. Without it the wordmark and the
+                    // tiles stayed up in the one view whose own content is
+                    // tiles, which is where the screen is most crowded.
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{
                         paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 12
@@ -154,6 +172,7 @@ export default function ShelfRoom({
                                     onLongPress={acts.onLongPress}
                                     showCoffeeMarker={showCoffeeMarker}
                                     dottedProfile={dottedProfile}
+                                    evidence={evidence[recipe.uuid]}
                                     onBrew={acts.onBrew}
                                     onShare={acts.onShare}
                                     onWrite={acts.onWrite}

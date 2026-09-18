@@ -59,6 +59,48 @@ describe("suppression at its boundaries", () => {
         expect(availableFilters({a: 0}, 0, ["a"])).toEqual(["a"]);
     });
 
+    it("offers only SINGLE POUR when no recipe has two stages", () => {
+        // The two shelves hold the same recipes, and SINGLE POUR is the
+        // truthful name for that set. FEW STAGES would be a second door onto
+        // it promising a breadth the library does not have.
+        expect(availableFilters({singlePour: 5, fewStages: 5}, 100))
+            .toEqual(["singlePour"]);
+    });
+
+    it("offers only FEW STAGES once a two-stage recipe exists", () => {
+        // FEW STAGES is now the larger shelf and SINGLE POUR a subset of one
+        // already on screen.
+        expect(availableFilters({singlePour: 5, fewStages: 6}, 100))
+            .toEqual(["fewStages"]);
+    });
+
+    it("keeps the collapsed shelf when the user is standing in it", () => {
+        // The one-way rule again: suppression declines to offer, it never
+        // withdraws. A user filtered to SINGLE POUR keeps its chip even once a
+        // two-stage recipe arrives and makes FEW STAGES the better offer.
+        expect(availableFilters({singlePour: 5, fewStages: 6}, 100, ["singlePour"]))
+            .toEqual(["singlePour", "fewStages"]);
+        expect(availableFilters({singlePour: 5, fewStages: 5}, 100, ["fewStages"]))
+            .toEqual(["singlePour", "fewStages"]);
+    });
+
+    it("leaves the pair alone when only one of them is offered anyway", () => {
+        // Nothing to collapse: the floor has already taken one out, and the
+        // collapse must not then take the other.
+        expect(availableFilters({singlePour: 5, fewStages: 2}, 100))
+            .toEqual(["singlePour"]);
+        expect(availableFilters({singlePour: 2, fewStages: 5}, 100))
+            .toEqual(["fewStages"]);
+    });
+
+    it("does not collapse away the only shelf of the pair still offered", () => {
+        // FEW STAGES is over the 80% ceiling and already gone, so it is not
+        // competing with anything. Collapsing on the counts alone would drop
+        // SINGLE POUR too and leave the user with neither.
+        expect(availableFilters({singlePour: 10, fewStages: 90}, 100))
+            .toEqual(["singlePour"]);
+    });
+
     it("offers nothing for an empty library", () => {
         expect(availableFilters({a: 0}, 0)).toEqual([]);
     });
@@ -87,8 +129,13 @@ describe("the narrowing seam", () => {
 
     it("drops stale ids from a persisted list rather than passing them on", () => {
         // A chip id from a previous build must not reach buildLibraryQuery's
-        // throw and take the screen down; asStockFilters is where it is dropped.
-        expect(asStockFilters(["tea", "ghost", "strong"])).toEqual(["tea", "strong"]);
+        // throw and take the screen down; asStockFilters is where it is
+        // dropped. `strong` and `long` are the real case: both were renamed
+        // when the ratio pair was, and a phone upgrading with either pinned
+        // must lose the chip rather than the library screen.
+        expect(asStockFilters(["tea", "ghost", "shortRatio"]))
+            .toEqual(["tea", "shortRatio"]);
+        expect(asStockFilters(["strong", "long", "mild"])).toEqual([]);
         expect(asStockFilters(["__proto__", "tea"])).toEqual(["tea"]);
     });
 
@@ -144,6 +191,10 @@ type Spec = {
     ratio?: number;
     xid?: string;
     maxTemp?: number;
+    volume?: number;
+    flowRate?: number;
+    pauseTime?: number;
+    sharedBy?: string;
 };
 
 function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, string> {
@@ -155,9 +206,11 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
         recipe.grinder = spec.grinder ?? true;
         recipe.ratio = spec.ratio ?? 15;
         if (spec.xid !== undefined) recipe.xid = spec.xid;
+        if (spec.sharedBy !== undefined) recipe.sharedBy = spec.sharedBy;
         const count = spec.pourCount ?? 1;
         recipe.pours = Array.from({length: count}, (_unused, index) =>
-            new Pour(index + 1, undefined, spec.maxTemp)
+            new Pour(index + 1, spec.volume, spec.maxTemp, spec.flowRate,
+                undefined, undefined, spec.pauseTime)
         );
         db.insertRecipe(recipe);
         uuids[label] = recipe.uuid;
@@ -189,15 +242,38 @@ describe("each stock fragment against a real database", () => {
         expect(labelsMatching(db, "otherBrewer", uuids)).toEqual(["other"]);
     });
 
-    it("selects single-pour and many-stages by pour count", () => {
+    it("selects single-pour, few-stages and many-stages by pour count", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
             one: {createdAt: 1, pourCount: 1},
-            three: {createdAt: 2, pourCount: 3},
-            four: {createdAt: 3, pourCount: 4}
+            two: {createdAt: 2, pourCount: 2},
+            three: {createdAt: 3, pourCount: 3},
+            four: {createdAt: 4, pourCount: 4}
         });
         expect(labelsMatching(db, "singlePour", uuids)).toEqual(["one"]);
+        expect(labelsMatching(db, "fewStages", uuids)).toEqual(["one", "two"]);
         expect(labelsMatching(db, "manyStages", uuids)).toEqual(["four"]);
+    });
+
+    it("leaves three stages unshelved, and one stage on two shelves", () => {
+        // The two facts the stage shelves are pinned on. Three is the unnamed
+        // middle, as it is for duration. One is on both SINGLE POUR and FEW
+        // STAGES on purpose: the first is a way of brewing and the second is a
+        // shape, and the only other reading -- few meaning "two exactly" --
+        // would be a shelf almost nobody could fill.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            one: {createdAt: 1, pourCount: 1},
+            three: {createdAt: 2, pourCount: 3}
+        });
+        const shelvesHolding = (label: string) => STOCK_FILTER_ORDER
+            .filter((id) => labelsMatching(db, id, uuids).includes(label));
+
+        expect(shelvesHolding("three")).not.toContain("fewStages");
+        expect(shelvesHolding("three")).not.toContain("manyStages");
+        expect(shelvesHolding("one")).toEqual(
+            expect.arrayContaining(["singlePour", "fewStages"])
+        );
     });
 
     it("selects grinder-off by the grinder flag", () => {
@@ -220,15 +296,101 @@ describe("each stock fragment against a real database", () => {
         expect(labelsMatching(db, "xbloom", uuids)).toEqual(["card"]);
     });
 
-    it("selects strong and long by ratio", () => {
+    it("selects short and long ratios by ratio", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
-            strong: {createdAt: 1, ratio: 14},
+            short: {createdAt: 1, ratio: 14},
             middle: {createdAt: 2, ratio: 15},
             long: {createdAt: 3, ratio: 17}
         });
-        expect(labelsMatching(db, "strong", uuids)).toEqual(["strong"]);
-        expect(labelsMatching(db, "long", uuids)).toEqual(["long"]);
+        expect(labelsMatching(db, "shortRatio", uuids)).toEqual(["short"]);
+        expect(labelsMatching(db, "longRatio", uuids)).toEqual(["long"]);
+    });
+
+    it("selects quick and slow brews by how long the plan takes", () => {
+        // 160 ml at 3.2 ml/s is 50 seconds of pouring. The pause is what
+        // separates the three: none, 150 seconds, and 250.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            quick:  {createdAt: 1, volume: 160, flowRate: 32, pauseTime: 0},
+            middle: {createdAt: 2, volume: 160, flowRate: 32, pauseTime: 150},
+            slow:   {createdAt: 3, volume: 160, flowRate: 32, pauseTime: 250}
+        });
+        expect(labelsMatching(db, "quickBrew", uuids)).toEqual(["quick"]);
+        expect(labelsMatching(db, "slowBrew", uuids)).toEqual(["slow"]);
+    });
+
+    it("puts the duration shelves at their exact boundaries", () => {
+        // Pinned at the second, as the suppression gate is pinned at its
+        // percentage: 2:30 is quick and 2:31 is not, 4:00 is slow and 3:59 is
+        // not. Every recipe here pours for 50 seconds and differs only in its
+        // pause.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            "quick-150": {createdAt: 1, volume: 160, flowRate: 32, pauseTime: 100},
+            "over-151":  {createdAt: 2, volume: 160, flowRate: 32, pauseTime: 101},
+            "under-239": {createdAt: 3, volume: 160, flowRate: 32, pauseTime: 189},
+            "slow-240":  {createdAt: 4, volume: 160, flowRate: 32, pauseTime: 190}
+        });
+        expect(labelsMatching(db, "quickBrew", uuids)).toEqual(["quick-150"]);
+        expect(labelsMatching(db, "slowBrew", uuids)).toEqual(["slow-240"]);
+    });
+
+    it("counts the pauses, not just the pouring", () => {
+        // The figure is how long the brew takes, and a recipe that pours for
+        // forty seconds and then steeps for four minutes is a slow brew by any
+        // reading. Summing only `pourSeconds` would have filed it as quick.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            steeped: {createdAt: 1, volume: 128, flowRate: 32, pauseTime: 240}
+        });
+        expect(labelsMatching(db, "slowBrew", uuids)).toEqual(["steeped"]);
+        expect(labelsMatching(db, "quickBrew", uuids)).toEqual([]);
+    });
+
+    it("keeps a stageless recipe off both duration shelves", () => {
+        // Its `brewSeconds` is NULL rather than 0. Zero is a duration, and it
+        // would have made a half-authored recipe the quickest brew in the
+        // library.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            empty: {createdAt: 1, pourCount: 0},
+            quick: {createdAt: 2, volume: 32, flowRate: 32}
+        });
+        expect(labelsMatching(db, "quickBrew", uuids)).toEqual(["quick"]);
+        expect(labelsMatching(db, "slowBrew", uuids)).toEqual([]);
+    });
+
+    it("selects mine as everything that arrived from nobody", () => {
+        // The complement of the author shelves. A card read, a recipe typed in
+        // and a row from the user's own account all have no sharer; only a
+        // recipe somebody sent does.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            own:     {createdAt: 1},
+            account: {createdAt: 2, xid: "ABC12345"},
+            sent:    {createdAt: 3, sharedBy: "BrewMind"}
+        });
+        expect(labelsMatching(db, "mine", uuids)).toEqual(["account", "own"]);
+    });
+
+    it("leaves no recipe between mine and an author shelf", () => {
+        // The two are halves of one partition: every recipe is on exactly one
+        // side of "arrived from somebody". The accented name is where that
+        // could break, and did before `sharedByKey` -- under `sharedBy COLLATE
+        // NOCASE` the author clause misses "café" while MINE still excludes
+        // it, and the recipe is reachable from neither shelf.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {sent: {createdAt: 1, sharedBy: "café"}});
+        const byUuid = Object.fromEntries(
+            Object.entries(uuids).map(([k, v]) => [v, k])
+        );
+        const fromCafe = db.queryRecipes(
+            {...BASE, filters: ["sharedBy:CAFÉ"]}, resolveLibraryFilter
+        ).map((recipe) => byUuid[recipe.uuid]);
+
+        expect(fromCafe).toEqual(["sent"]);
+        expect(labelsMatching(db, "mine", uuids)).toEqual([]);
     });
 
     it("selects hot by max temperature and excludes the templess", () => {

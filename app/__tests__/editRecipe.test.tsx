@@ -321,7 +321,10 @@ describe("the editor", () => {
     it("reads the about deck in the order it is drawn", async () => {
         // Note, then the pod, then where it came from, then how it has gone.
         // The order is the argument the deck makes, so it is worth pinning.
-        await renderEditor();
+        // The recipe needs a sharer: FROM draws nothing for a recipe the user
+        // wrote themselves, so a bare fixture would not have the section to
+        // put in order.
+        await renderEditor({sharedBy: "Anna"});
 
         await openAbout();
 

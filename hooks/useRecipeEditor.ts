@@ -425,6 +425,34 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         onSaved();
     }
 
+    /**
+     * Star the open recipe, and write it straight away.
+     *
+     * Persisted rather than left to SAVE, unlike every other edit on this
+     * screen. The star is not a property of the recipe being drafted, it is a
+     * mark on where the recipe sits in the library, and the library's own star
+     * has always written on the spot. A star that could be lost by backing out
+     * of the editor would not be the same star.
+     */
+    function toggleFavourite() {
+        if (!recipe) return;
+        const store = new RecipeDatabase();
+        const saved = store.getRecipe(recipe.uuid);
+        // The star goes onto the row as it stands in the library, not onto the
+        // draft. `persistRecipe` would write the whole bench: a user who
+        // changed the dose, starred the recipe and then backed out would find
+        // the dose changed too, having saved nothing.
+        if (saved) {
+            applyFavouriteToggle(saved);
+            store.updateRecipe(saved.uuid, saved);
+        }
+        // Mirrored onto the draft either way, so the star the user pressed
+        // stays lit. A recipe that has never been saved has no row to mark, and
+        // its star travels with SAVE like everything else on the bench.
+        applyFavouriteToggle(recipe);
+        setKey((prev) => prev + 1);
+    }
+
     const editInputComplete = useCallback(async (label: string, value: string, pourNumber?: number) => {
         if (!recipe) return;
         // Recipe settings
@@ -585,6 +613,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         editBypass,
         persistRecipe,
         saveRecipe,
+        toggleFavourite,
         editInputComplete,
         volumeError,
         setVolumeError,
@@ -637,6 +666,11 @@ function applyBypassEnabled(recipe: Recipe, on: boolean) {
             ?? BYPASS_DEFAULT_TEMPERATURE;
     }
     recipe.bypassEnabled = on;
+}
+
+/** Flip the star. Module scope, as above. */
+function applyFavouriteToggle(recipe: Recipe) {
+    recipe.favourite = !recipe.favourite;
 }
 
 /** Write one bypass value. Module scope, as above. */
