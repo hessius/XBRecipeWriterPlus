@@ -109,19 +109,19 @@ description containing `CAFÉ` is not found by a search for `café`. SQLite's
 has to happen in JavaScript and be stored, the way `sortName` and `tagKey`
 already are.
 
-- [ ] `descriptionKey` and `sharedByKey` columns in `library/recipeIndex.ts`,
+- [x] `descriptionKey` and `sharedByKey` columns in `library/recipeIndex.ts`,
       projected through the same folding helper the other keys use.
-- [ ] `INDEX_REVISION` bump, so every existing device rebuilds. `schemaHash`
+- [x] `INDEX_REVISION` bump, so every existing device rebuilds. `schemaHash`
       derives from it, so this is the one switch.
-- [ ] `searchClause` matches the folded columns with the folded pattern, and
+- [x] `searchClause` matches the folded columns with the folded pattern, and
       the comment above `columns` is rewritten: it currently explains why those
       two travel with the unfolded pattern, and that reasoning is about to stop
       being true.
-- [ ] **Size it before committing to it.** A description is free text and may
+- [x] **Size it before committing to it.** A description is free text and may
       be long, so this roughly doubles what the index stores for it. Measure
       against a realistic library; if it is material, fold only a bounded
       prefix and say so in a comment.
-- [ ] Tests: mixed-case accented text in each field is found from either
+- [x] Tests: mixed-case accented text in each field is found from either
       casing; an existing index at the old revision rebuilds rather than
       answering wrongly.
 

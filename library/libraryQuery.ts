@@ -79,32 +79,31 @@ function escapeLike(term: string): string {
 /**
  * The columns a search term matches, case insensitively, as a substring.
  *
- * `sortName`, `sharedBy`, `xid`, the recipe's tags, and its description. Not
- * the placeholder name: `recipeIndex` stores NULL in `sortName` for an unnamed
- * recipe rather than the formatted date it shows, precisely so searching "2026"
- * does not return every recipe nobody has named. `description` is the note's
- * own text -- distinct from `hasDescription`, the 0/1 presence flag a filter
- * asks, which carries none of the words to match. LIKE folds ASCII case on its
- * own, which is what "case insensitively" asks for; the NOCASE columns get the
- * same treatment for free.
+ * `sortName`, the folded `sharedByKey` and `descriptionKey`, `xid`, and the
+ * recipe's tags. Not the placeholder name: `recipeIndex` stores NULL in
+ * `sortName` for an unnamed recipe rather than the formatted date it shows,
+ * precisely so searching "2026" does not return every recipe nobody has named.
+ * Description is searched through `descriptionKey`, the folded form of the
+ * note's own text -- distinct from `hasDescription`, the 0/1 presence flag a
+ * filter asks, which carries none of the words to match.
  */
 function searchClause(
     pattern: string, foldedPattern: string, tagPattern: string
 ): FilterClause {
-    // `sortName` holds a folded key, so it must be matched with a folded term or
-    // typing a name exactly as it is spelled would fail to find it. Tags hold
-    // two forms and `tagKey` is the one built for matching: `CAFÉ` is stored
-    // with `tagKey` "café", and since LIKE folds ASCII case and nothing else,
-    // matching the display `tag` would find that tag only for a searcher who
-    // happened to type the accented letter in the same case. The other columns
-    // hold what the user typed, accents and all, and are matched literally: a
-    // description that says "café" should match a search for "café". So the
-    // pattern travels per column rather than once for the clause.
+    // Every column but `xid` is matched on a stored folded key, so each takes
+    // the term folded the same way its column was. `sortName` folds through
+    // `foldSortKey` (which keeps the Nordic letters), so it takes `foldedPattern`.
+    // `descriptionKey` and `sharedByKey` fold the two authored free-text fields
+    // through `tagKey`, so they take `tagPattern`, as the tag subquery does:
+    // without it a note saying "CAFÉ" would be found only by a searcher who
+    // typed the accented letter in the same case, which is to say almost never.
+    // `xid` is ASCII by construction and holds no folded twin, so it alone
+    // matches the raw `pattern`.
     const columns: [string, string][] = [
         ["sortName", foldedPattern],
-        ["sharedBy", pattern],
-        ["xid", pattern],
-        ["description", pattern]
+        ["descriptionKey", tagPattern],
+        ["sharedByKey", tagPattern],
+        ["xid", pattern]
     ];
     return {
         where: `(
