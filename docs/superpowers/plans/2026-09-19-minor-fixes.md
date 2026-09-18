@@ -94,8 +94,10 @@ plausible-looking wrong one, whose next stop is a genuine card.
       own old shapes, which is exactly what makes it useless as a validator.
 - [x] The card range is 1 to 31. Use `library/cardLimits.ts` rather than
       restating the numbers, so the two cannot drift.
-- [ ] The rejection message names the recipe and the field, as the other field
-      failures in that file do.
+- [x] The rejection message names the field. Not the recipe: a refused entry
+      may have no readable name to give, and `name` is one of the fields that
+      can be the fault. `recipeFault` returns the offending field rather than a
+      boolean, and `parseBackup` lists each distinct one once.
 - [x] Tests: a backup carrying `dosage: 0` is refused; one carrying a legal
       dose restores unchanged; the constructor is untouched, proved by a direct
       test that `new Recipe(undefined, ...)` with a 0 still behaves as it did.

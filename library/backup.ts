@@ -138,9 +138,10 @@ export function parseBackup(text: string): ParseResult {
     }
 
     const recipes: Recipe[] = [];
+    const faults: string[] = [];
     let skipped = 0;
     for (const entry of envelope.recipes) {
-        const recipe = reviveRecipe(entry);
+        const recipe = reviveRecipe(entry, faults);
         if (recipe === null) skipped += 1;
         else recipes.push(recipe);
     }
@@ -151,11 +152,18 @@ export function parseBackup(text: string): ParseResult {
         // file, because the restore did not happen. Reporting the second as the
         // first is the most dangerous sentence this module could say.
         if (skipped > 0) {
+            // Each distinct field once, in the order it was first met. Naming
+            // the same one per recipe would turn a file of fifty identically
+            // broken entries into a sentence nobody can read, and the second
+            // mention adds nothing the first did not.
+            const named = [...new Set(faults)].join(", ");
+            const because = named === "" ? "" : ` The trouble is in: ${named}.`;
             return {
                 ok: false,
                 reason: skipped === 1
-                    ? "The one recipe in that backup could not be read. Keep the file."
-                    : `None of the ${skipped} recipes in that backup could be read. Keep the file.`
+                    ? `The one recipe in that backup could not be read.${because} Keep the file.`
+                    : `None of the ${skipped} recipes in that backup could be read.${because} ` +
+                      "Keep the file."
             };
         }
         return {ok: false, reason: "There are no recipes in that backup."};
@@ -407,9 +415,9 @@ const REQUIRED_RECIPE_FIELDS = ["grindSize", "ratio"] as const;
  * at which point the old presence-of-a-uuid check declared the result valid. An
  * untrusted file was being reported as readable and its contents inserted.
  */
-function looksLikeRecipe(entry: Record<string, unknown>): boolean {
+function recipeFault(entry: Record<string, unknown>): string | null {
     for (const [field, ok] of Object.entries(RECIPE_FIELDS)) {
-        if (entry[field] !== undefined && !ok(entry[field])) return false;
+        if (entry[field] !== undefined && !ok(entry[field])) return field;
     }
 
     // Presence, not just type. The loop above lets an absent field through
@@ -418,10 +426,10 @@ function looksLikeRecipe(entry: Record<string, unknown>): boolean {
     // there at all. `RECIPE_FIELDS` already has their type, so once present
     // that check confirms it is a real number.
     for (const field of REQUIRED_RECIPE_FIELDS) {
-        if (entry[field] === undefined) return false;
+        if (entry[field] === undefined) return field;
     }
 
-    if (!Array.isArray(entry.pours)) return false;
+    if (!Array.isArray(entry.pours)) return "pours";
 
     for (const raw of entry.pours) {
         // Pours were stored as JSON strings by an older version, and the
@@ -432,22 +440,39 @@ function looksLikeRecipe(entry: Record<string, unknown>): boolean {
             try {
                 pour = JSON.parse(raw);
             } catch {
-                return false;
+                return "pours";
             }
         }
-        if (!isPlainObject(pour)) return false;
-        if (pour.pourNumber !== undefined && !isNumber(pour.pourNumber)) return false;
+        if (!isPlainObject(pour)) return "pours";
+        if (pour.pourNumber !== undefined && !isNumber(pour.pourNumber)) {
+            return "pours.pourNumber";
+        }
         for (const field of POUR_FIELDS) {
-            if (!isNumber(pour[field])) return false;
+            if (!isNumber(pour[field])) return `pours.${field}`;
         }
     }
 
-    return true;
+    return null;
 }
 
-function reviveRecipe(entry: unknown): Recipe | null {
-    if (!isPlainObject(entry)) return null;
-    if (!looksLikeRecipe(entry)) return null;
+/**
+ * Revive one recipe, and say which field cost it if it cannot be.
+ *
+ * The fault travels out rather than being reduced to a null, because "a recipe
+ * could not be read" is unactionable for a file this app wrote: the user has no
+ * way to tell a tampered dose from a bad share URL, and no way to repair
+ * either. The validator knows the field, so the message may as well say it.
+ */
+function reviveRecipe(entry: unknown, faults?: string[]): Recipe | null {
+    if (!isPlainObject(entry)) {
+        faults?.push("not an object");
+        return null;
+    }
+    const fault = recipeFault(entry);
+    if (fault !== null) {
+        faults?.push(fault);
+        return null;
+    }
 
     // Strip the droppable fields before the constructor sees them, not after:
     // the constructor is deliberately forgiving and, for most of these fields,

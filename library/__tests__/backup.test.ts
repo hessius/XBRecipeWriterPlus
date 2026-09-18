@@ -205,6 +205,35 @@ describe("parseBackup refuses, with a reason", () => {
         expect(result.reason).toMatch(/could not be read/i);
     });
 
+    it("names the field it refused over, rather than saying only that it failed", () => {
+        // "A recipe could not be read" is unactionable when the file came from
+        // this app: the user has no way to tell a tampered dose from a bad
+        // share URL, and no way to repair either. The field is the one piece
+        // of information that turns the refusal into something a person could
+        // act on, and the validator knows it.
+        const result = parseBackup(backupFileWithRecipeFields({dosage: 0}));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/dosage/i);
+    });
+
+    it("names each field once when several recipes fail in different ways", () => {
+        const file = JSON.parse(buildBackup(
+            [recipeNamed("A", "u1"), recipeNamed("B", "u2"), recipeNamed("C", "u3")], {}
+        ));
+        file.recipes[0].dosage = 0;
+        file.recipes[1].dosage = 99;
+        file.recipes[2].shareUrl = "not-a-share-url";
+
+        const result = parseBackup(JSON.stringify(file));
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/dosage/);
+        expect(result.reason).toMatch(/shareUrl/);
+        expect(result.reason.match(/dosage/g)).toHaveLength(1);
+    });
+
     it("refuses a dose above the card's range and keeps its bounds", () => {
         // Both ends, so a widened or narrowed bound is caught: 32 is over, 0 is
         // under, and 1 and 31 are the range itself and must survive.
