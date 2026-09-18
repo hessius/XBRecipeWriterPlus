@@ -425,6 +425,22 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         onSaved();
     }
 
+    /**
+     * Star the open recipe, and write it straight away.
+     *
+     * Persisted rather than left to SAVE, unlike every other edit on this
+     * screen. The star is not a property of the recipe being drafted, it is a
+     * mark on where the recipe sits in the library, and the library's own star
+     * has always written on the spot. A star that could be lost by backing out
+     * of the editor would not be the same star.
+     */
+    function toggleFavourite() {
+        if (!recipe) return;
+        recipe.favourite = !recipe.favourite;
+        persistRecipe();
+        setKey((prev) => prev + 1);
+    }
+
     const editInputComplete = useCallback(async (label: string, value: string, pourNumber?: number) => {
         if (!recipe) return;
         // Recipe settings
@@ -585,6 +601,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         editBypass,
         persistRecipe,
         saveRecipe,
+        toggleFavourite,
         editInputComplete,
         volumeError,
         setVolumeError,

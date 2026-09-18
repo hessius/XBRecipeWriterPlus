@@ -31,13 +31,26 @@ describe("FromSection", () => {
         expect(screen.queryByText(/by BrewMind/)).toBeNull();
     });
 
-    it("reads sensibly for a recipe nobody shared", async () => {
-        // Account imports and hand-built recipes carry no sharer at all, which
-        // is correct rather than missing: there is no other author to name.
-        await renderWithProviders(<FromSection {...props()}/>);
+    it("names xBloom for a pod recipe nobody shared", async () => {
+        // An account import carries no sharer at all, which is correct rather
+        // than missing: there is no other author to name. It still came from
+        // somewhere, and the pod ID is the proof.
+        await renderWithProviders(
+            <FromSection {...props({recipe: recipeWith({xid: "CGL12"})})}/>
+        );
 
         expect(screen.getByTestId("about-from")).toBeTruthy();
+        expect(screen.getByText(/An xBloom recipe/)).toBeTruthy();
         expect(screen.queryByText(/Arrived from/)).toBeNull();
+    });
+
+    it("is absent for a recipe the user wrote here", async () => {
+        // No sharer and no pod ID: it came from nowhere but this phone. The
+        // section used to say so out loud, which is a row spent telling
+        // someone something they already knew.
+        await renderWithProviders(<FromSection {...props()}/>);
+
+        expect(screen.queryByTestId("about-from")).toBeNull();
     });
 
     it("draws the accent mark while the setting is off, whatever the recipe carries", async () => {

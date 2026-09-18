@@ -13,6 +13,7 @@ function props(over: Partial<React.ComponentProps<typeof PodSection>> = {}) {
     return {
         recipe:             recipeWith(),
         showHint:           false,
+        showAvatar:         true,
         xidLookupFailed:    false,
         externalEpoch:      0,
         onXidFocusChange:   jest.fn(),
@@ -105,6 +106,19 @@ describe("PodSection", () => {
         await fireEvent(screen.getByTestId("pod-image"), "error");
 
         expect(screen.queryByTestId("pod-image")).toBeNull();
+        expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("draws no pod photo while the picture setting is off", async () => {
+        // The setting names the pod photo in its own description. It used to
+        // govern only the sharer's mark, so turning it on changed nothing for a
+        // library of pod recipes and nobody could tell it had worked.
+        await renderWithProviders(<PodSection {...props({
+            recipe: linked({imageURL: "https://x/pod.png"}), showAvatar: false
+        })}/>);
+
+        expect(screen.queryByTestId("pod-image")).toBeNull();
+        // The row itself stays: the pod name is the point, not the picture.
         expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
     });
 

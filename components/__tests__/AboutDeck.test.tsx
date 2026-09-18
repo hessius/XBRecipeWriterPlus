@@ -62,11 +62,23 @@ describe("AboutDeck", () => {
     });
 
     it("carries all four sections, in the order the deck reads in", async () => {
-        await renderWithProviders(<AboutDeck {...props()}/>);
+        await renderWithProviders(
+            <AboutDeck {...props({recipe: recipeWith({xid: "CGL12"})})}/>
+        );
 
         expect(screen.getByTestId("about-note")).toBeTruthy();
         expect(screen.getByTestId("about-pod")).toBeTruthy();
         expect(screen.getByTestId("about-from")).toBeTruthy();
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("drops the FROM section for a recipe that came from nowhere", async () => {
+        // The deck does not decide this; the section absents itself. Asserted
+        // here too because the deck is where a stray spacer or divider around
+        // a now-missing child would show up.
+        await renderWithProviders(<AboutDeck {...props()}/>);
+
+        expect(screen.queryByTestId("about-from")).toBeNull();
         expect(screen.getByTestId("about-history")).toBeTruthy();
     });
 

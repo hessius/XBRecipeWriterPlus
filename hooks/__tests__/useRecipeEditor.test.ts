@@ -409,3 +409,30 @@ describe("a recipe with no stages", () => {
         expect(result.current.recipe!.pours[1].temperature).toBe(71);
     });
 });
+
+describe("the star, on the recipe that is open", () => {
+    it("writes on the spot rather than waiting for SAVE", async () => {
+        // The star marks where a recipe sits in the library, not what the
+        // draft on the bench says. Backing out of the editor must not take it
+        // off again, so it is persisted the moment it is set.
+        const RecipeDatabase = require("@/library/RecipeDatabase").default;
+        const {result} = await renderEditor();
+
+        const before = RecipeDatabase.mock.instances.length;
+
+        await act(async () => { result.current.toggleFavourite(); });
+
+        expect(result.current.recipe?.favourite).toBe(true);
+        expect(RecipeDatabase.mock.instances.length).toBeGreaterThan(before);
+    });
+
+    it("takes the star off again on a second press", async () => {
+        const {result} = await renderEditor();
+
+        await act(async () => { result.current.toggleFavourite(); });
+        expect(result.current.recipe?.favourite).toBe(true);
+
+        await act(async () => { result.current.toggleFavourite(); });
+        expect(result.current.recipe?.favourite).toBe(false);
+    });
+});

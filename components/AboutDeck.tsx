@@ -84,6 +84,7 @@ export default function AboutDeck({
                          onCommit={(value) => dispatch(RECIPE_LABELS.NOTE, value)}/>
 
             <PodSection recipe={recipe} showHint={showHint}
+                        showAvatar={showAvatar}
                         xidLookupFailed={xidLookupFailed}
                         externalEpoch={externalEpoch}
                         onXidFocusChange={onXidFocusChange}
