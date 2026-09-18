@@ -27,6 +27,12 @@ export const EXPAND_AT = 24;
  * enough page to bother collapsing at all. Guessing high means refusing to
  * collapse a page that could just about have managed it; guessing low means the
  * strobe comes back. Those are not comparable mistakes.
+ *
+ * Revisited when the filter rail was added to the home screen (#120). The rail
+ * sits outside the collapsing box and only trades a few pixels of padding on
+ * collapse, so it folds almost nothing away; its persistent height instead
+ * enlarges `extent`, which makes a collapse easier to grant, not harder. The
+ * fold-away on both screens stays well under 140, so the overestimate stands.
  */
 export const COLLAPSE_SHRINK = 140;
 

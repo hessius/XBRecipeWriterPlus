@@ -1,7 +1,8 @@
 import React from "react";
 import {act, screen} from "@testing-library/react-native";
 
-import HomeTitle, {SESSION_START, WORDMARK_FADE_DELAY} from "@/components/HomeTitle";
+import HomeTitle, {MARK_LINE_HEIGHT, SESSION_START, WORDMARK_FADE_DELAY}
+    from "@/components/HomeTitle";
 import {palette} from "@/constants/colors";
 import {ATTRACT, DURATION} from "@/constants/motion";
 import {renderWithProviders} from "@/test-utils/render";
@@ -107,6 +108,29 @@ describe("HomeTitle", () => {
 
         const small = await renderWithProviders(<HomeTitle count={7} fontSize={18} collapsed={false}/>);
         const compact = small.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
+
+        expect(compact).toBeLessThan(large);
+    });
+
+    it("reserves the box from the same clock as the glyph", async () => {
+        // The glyph is animated on a shared value while the reserved box used to
+        // come from the static prop -- two clocks, so an interrupted collapse
+        // left a large glyph in a compact box (#120). The box must read the same
+        // value the glyph does.
+        await renderWithProviders(<HomeTitle count={7} fontSize={28} collapsed={false}/>);
+
+        const glyph = screen.getByText("XBRW").props.jestAnimatedStyle.value.fontSize;
+        const box = screen.getByTestId("home-title-box").props.jestAnimatedStyle.value.minHeight;
+
+        expect(box).toBe(Math.round(glyph * MARK_LINE_HEIGHT));
+    });
+
+    it("shrinks the reserved box with the glyph", async () => {
+        const big = await renderWithProviders(<HomeTitle count={7} fontSize={28} collapsed={false}/>);
+        const large = big.getByTestId("home-title-box").props.jestAnimatedStyle.value.minHeight;
+
+        const small = await renderWithProviders(<HomeTitle count={7} fontSize={18} collapsed={false}/>);
+        const compact = small.getByTestId("home-title-box").props.jestAnimatedStyle.value.minHeight;
 
         expect(compact).toBeLessThan(large);
     });
