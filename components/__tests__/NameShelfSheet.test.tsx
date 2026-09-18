@@ -49,6 +49,33 @@ describe("NameShelfSheet", () => {
             .toBe("characters");
     });
 
+    it("keeps the typed name when the submit is refused", async () => {
+        const onName = jest.fn().mockReturnValue(false);
+        await renderWithProviders(
+            <NameShelfSheet open count={1} onOpenChange={jest.fn()} onName={onName}/>
+        );
+
+        const field = screen.getByTestId("shelf-name-field");
+        await fireEvent.changeText(field, "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(onName).toHaveBeenCalledWith("Mornings");
+        expect(screen.getByTestId("shelf-name-field").props.value).toBe("Mornings");
+    });
+
+    it("clears the field when the submit is accepted", async () => {
+        const onName = jest.fn().mockReturnValue(true);
+        await renderWithProviders(
+            <NameShelfSheet open count={1} onOpenChange={jest.fn()} onName={onName}/>
+        );
+
+        const field = screen.getByTestId("shelf-name-field");
+        await fireEvent.changeText(field, "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-name-field").props.value).toBe("");
+    });
+
     it("accepts the name on submit from the keyboard", async () => {
         const onName = jest.fn();
         await renderWithProviders(

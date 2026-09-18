@@ -460,7 +460,7 @@ export default function HomeScreen({db, settings}: Props) {
         setNamingShelf(true);
     }
 
-    function nameShelf(name: string) {
+    function nameShelf(name: string): boolean {
         // A name that folds to a shelf that already exists is refused rather
         // than saved. `setShelfMembers` writes an exact membership: it takes the
         // tag off every recipe that was not just ticked, so naming a new shelf
@@ -478,11 +478,12 @@ export default function HomeScreen({db, settings}: Props) {
         const taken = library.tagCounts.some(({tag}) => tagKey(tag) === tagKey(name));
         if (taken) {
             notify({tone: "error", message: `There is already a shelf called ${name}.`});
-            return;
+            return false;
         }
         reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
         setNamingShelf(false);
         stopPicking();
+        return true;
     }
 
     /**
@@ -501,8 +502,8 @@ export default function HomeScreen({db, settings}: Props) {
      * from inside an edit, and finishing one gesture while silently abandoning
      * the other would be the worse surprise.
      */
-    function renameShelf(name: string) {
-        if (renamingShelf === null) return;
+    function renameShelf(name: string): boolean {
+        if (renamingShelf === null) return false;
         const from = tagKey(renamingShelf);
         // A name that only changes case is still this shelf, and refusing it
         // would make the app disagree with itself: `tagKey` folds case, so
@@ -513,7 +514,7 @@ export default function HomeScreen({db, settings}: Props) {
             tagKey(tag) === tagKey(name) && tagKey(tag) !== from);
         if (taken) {
             notify({tone: "error", message: `There is already a shelf called ${name}.`});
-            return;
+            return false;
         }
         // One pass over the library rather than an empty followed by a fill:
         // between two writes the shelf does not exist, and a refused second
@@ -522,6 +523,7 @@ export default function HomeScreen({db, settings}: Props) {
         setRenamingShelf(null);
         setRenameStartedEdit(false);
         stopPicking();
+        return true;
     }
 
     /**
