@@ -4,7 +4,8 @@ import {mergeRecipes, type BackupPayload} from "@/library/backup";
 import {MARK_MEMBERS} from "@/components/ShelfMark";
 import {resolveAccent} from "@/library/accent";
 import {
-    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER, tagFilterId
+    authorFilterId, resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER,
+    tagFilterId
 } from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery,
               RecipeEvidence} from "@/library/libraryQuery";
@@ -44,6 +45,8 @@ export type RecipeStore = {
         resolveFilter?: FilterResolver
     ) => Record<string, number>;
     countRecipesByTag?: () => {tag: string; count: number}[];
+    /** How many recipes arrived from each person, for the per-author shelves. */
+    countRecipesByAuthor?: () => {author: string; count: number}[];
     /**
      * What each recipe's brews add up to, for the card's evidence.
      *
@@ -157,6 +160,8 @@ export type RecipeLibrary = {
     filterCounts: Record<string, number>;
     /** Whole-table counts for every tag, largest shelf first. */
     tagCounts: {tag: string; count: number}[];
+    /** Whole-table counts for every person a recipe arrived from. */
+    authorCounts: {author: string; count: number}[];
     /** What each recipe's brews add up to, keyed by uuid. Absent means none. */
     evidence: Record<string, RecipeEvidence>;
     /** The art each shelf's tile draws, keyed by shelf id. */
@@ -212,6 +217,7 @@ export function useRecipeLibrary(
     const librarySize = readLibrarySize(store, revision);
     const filterCounts = readFilterCounts(store, revision);
     const tagCounts = readTagCounts(store, revision);
+    const authorCounts = readAuthorCounts(store, revision);
     const evidence = readEvidence(store, revision);
     // Keyed by every shelf that could be drawn rather than by the ones the grid
     // actually draws, because suppression depends on which filters are applied
@@ -219,7 +225,9 @@ export function useRecipeLibrary(
     // user is standing in it or passing it. Joining the ids into one string is
     // what lets the compiler cache this across renders -- an array rebuilt each
     // render is a new dependency every time, and this reads SQLite.
-    const shelfMarks = readShelfMarks(store, shelfIdsOf(tagCounts), revision);
+    const shelfMarks = readShelfMarks(
+        store, shelfIdsOf(tagCounts, authorCounts), revision
+    );
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -407,6 +415,7 @@ export function useRecipeLibrary(
         librarySize,
         filterCounts,
         tagCounts,
+        authorCounts,
         evidence,
         shelfMarks,
         allRecipes,
@@ -506,9 +515,29 @@ function readEvidence(
  * separator is a newline because a tag cannot contain one -- `Recipe.setTags`
  * collapses whitespace -- so two different tag sets cannot fold to one key.
  */
-function shelfIdsOf(tagCounts: readonly {tag: string}[]): string {
-    return [...STOCK_FILTER_ORDER, ...tagCounts.map(({tag}) => tagFilterId(tag))]
-        .join("\n");
+function shelfIdsOf(
+    tagCounts: readonly {tag: string}[],
+    authorCounts: readonly {author: string}[]
+): string {
+    return [
+        ...STOCK_FILTER_ORDER,
+        ...tagCounts.map(({tag}) => tagFilterId(tag)),
+        ...authorCounts.map(({author}) => authorFilterId(author))
+    ].join("\n");
+}
+
+/**
+ * How many recipes arrived from each person.
+ *
+ * Optional like the two reads above, and empty rather than a throw when the
+ * store cannot answer: the cost is a grid with no author shelves on it, which
+ * is also what a library nobody has shared into looks like.
+ */
+function readAuthorCounts(
+    db: RecipeStore, revision: number
+): {author: string; count: number}[] {
+    void revision;
+    return db.countRecipesByAuthor?.() ?? [];
 }
 
 /**

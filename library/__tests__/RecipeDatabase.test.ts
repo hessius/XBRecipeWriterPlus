@@ -247,3 +247,52 @@ describe("RecipeDatabase.shelfMembers", () => {
         expect(Object.keys(members).sort()).toEqual(["singlePour", "tea"]);
     });
 });
+
+describe("RecipeDatabase.countRecipesByAuthor", () => {
+    function from(name: string, author: string | undefined): Recipe {
+        const recipe = recipeNamed(name);
+        recipe.sharedBy = author;
+        return recipe;
+    }
+
+    it("counts nothing in a library nobody shared into", () => {
+        const db = freshDatabase();
+        db.insertRecipe(from("A", undefined));
+
+        expect(db.countRecipesByAuthor()).toEqual([]);
+    });
+
+    it("counts one shelf per person, largest first", () => {
+        const db = freshDatabase();
+        db.insertRecipe(from("A", "BrewMind"));
+        db.insertRecipe(from("B", "BrewMind"));
+        db.insertRecipe(from("C", "Kaffe"));
+
+        expect(db.countRecipesByAuthor()).toEqual([
+            {author: "BrewMind", count: 2},
+            {author: "Kaffe", count: 1}
+        ]);
+    });
+
+    it("reads two spellings of one name as one person", () => {
+        // The reason the folded column exists: COLLATE NOCASE would make these
+        // two shelves holding different halves of one person's recipes.
+        const db = freshDatabase();
+        db.insertRecipe(from("A", "CAFÉ"));
+        db.insertRecipe(from("B", "café"));
+
+        const counted = db.countRecipesByAuthor();
+
+        expect(counted).toHaveLength(1);
+        expect(counted[0].count).toBe(2);
+    });
+
+    it("leaves recipes that came from nobody out of every shelf", () => {
+        const db = freshDatabase();
+        db.insertRecipe(from("A", "BrewMind"));
+        db.insertRecipe(from("B", ""));
+        db.insertRecipe(from("C", undefined));
+
+        expect(db.countRecipesByAuthor()).toEqual([{author: "BrewMind", count: 1}]);
+    });
+});

@@ -35,7 +35,8 @@ function stubDb(recipes: Recipe[]) {
         ),
         countRecipesByTag: jest.fn((): {tag: string; count: number}[] => []),
         brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({})),
-        shelfMembers: jest.fn((): Record<string, Recipe[]> => ({}))
+        shelfMembers: jest.fn((): Record<string, Recipe[]> => ({})),
+        countRecipesByAuthor: jest.fn((): {author: string; count: number}[] => [])
     };
 }
 
@@ -541,6 +542,36 @@ describe("the store it reads through", () => {
             const {result} = await renderHook(() => useRecipeLibrary(without));
 
             expect(result.current.shelfMarks).toEqual({});
+        });
+    });
+
+    describe("who a recipe arrived from", () => {
+        it("hands back the counts the store read", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([{author: "BrewMind", count: 3}]);
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.authorCounts).toEqual([{author: "BrewMind", count: 3}]);
+        });
+
+        it("asks for each author's shelf art too", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([{author: "BrewMind", count: 3}]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("sharedBy:BrewMind");
+        });
+
+        it("is empty for a store that cannot answer", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            const {countRecipesByAuthor: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.authorCounts).toEqual([]);
         });
     });
 });

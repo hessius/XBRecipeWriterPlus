@@ -361,6 +361,7 @@ export default function HomeScreen({db, settings}: Props) {
     const shelves = buildShelves({
         filterCounts: library.filterCounts,
         tagCounts:    library.tagCounts,
+        authorCounts: library.authorCounts,
         librarySize:  library.librarySize,
         applied:      libraryQuery.query.filters
     });

@@ -212,6 +212,28 @@ export function tagFromFilterId(id: string): string | null {
 }
 
 /**
+ * The namespace a per-author shelf's filter id carries.
+ *
+ * The same shape convention as `tag:`, and for the same reason: an author is
+ * whatever somebody typed into a share, so their shelf has to be told apart
+ * from a stock id by shape rather than by lookup. `LibraryRail` has read this
+ * prefix since the rail shipped; this is the supply that was missing.
+ */
+export const AUTHOR_FILTER_PREFIX = "sharedBy:";
+
+/** The filter id for an author shelf. */
+export function authorFilterId(author: string): string {
+    return `${AUTHOR_FILTER_PREFIX}${author}`;
+}
+
+/** The author a filter id names, or null when it does not name one. */
+export function authorFromFilterId(id: string): string | null {
+    if (!id.startsWith(AUTHOR_FILTER_PREFIX)) return null;
+    const author = id.slice(AUTHOR_FILTER_PREFIX.length);
+    return author.length > 0 ? author : null;
+}
+
+/**
  * The resolver for every filter the library can apply: a stock id, or a tag.
  *
  * A tag becomes an EXISTS over `recipe_tags` matched on `tagKey`, the folded
@@ -221,6 +243,13 @@ export function tagFromFilterId(id: string): string | null {
  * the text: it is the one value here a person authored.
  */
 export function resolveLibraryFilter(id: string): FilterClause | null {
+    const author = authorFromFilterId(id);
+    if (author !== null) {
+        // Matched on the folded column rather than on `sharedBy COLLATE
+        // NOCASE`, for the reason `recipeIndex` spells out on it: NOCASE folds
+        // ASCII only, so "CAFÉ" and "café" would be two people.
+        return {where: "sharedByKey = ?", params: [tagKey(author)]};
+    }
     const tag = tagFromFilterId(id);
     if (tag !== null) {
         return {
@@ -252,7 +281,9 @@ export function resolveLibraryFilter(id: string): FilterClause | null {
 export function asLibraryFilters(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter((id) => typeof id === "string"
-        && (isStockFilter(id) || tagFromFilterId(id) !== null));
+        && (isStockFilter(id)
+            || tagFromFilterId(id) !== null
+            || authorFromFilterId(id) !== null));
 }
 
 /**
@@ -264,6 +295,10 @@ export function asLibraryFilters(value: unknown): string[] {
  * are the app's words and this one is theirs.
  */
 export function filterLabel(id: string): string {
+    const author = authorFromFilterId(id);
+    // "FROM" is the app's word and the name is the sharer's, so only the first
+    // half is raised to Doto caps. The design's shelf table spells it this way.
+    if (author !== null) return `FROM ${author}`;
     const tag = tagFromFilterId(id);
     if (tag !== null) return tag;
     return isStockFilter(id) ? STOCK_FILTERS[id].label : id;

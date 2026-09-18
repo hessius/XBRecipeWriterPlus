@@ -1,7 +1,11 @@
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 import {
+    authorFilterId,
+    authorFromFilterId,
     availableFilters,
     asLibraryFilters,
+    filterLabel,
+    resolveLibraryFilter,
     asStockFilters,
     isStockFilter,
     resolveStockFilter,
@@ -253,5 +257,48 @@ describe("asLibraryFilters against untrusted input", () => {
         // A restored setting is whatever was in the file. A number reaching
         // `startsWith` is a crash on launch, not a dropped filter.
         expect(asLibraryFilters([1, null, {}, "tea"])).toEqual(["tea"]);
+    });
+});
+
+describe("per-author shelves", () => {
+    it("names a shelf after the person who shared it", () => {
+        expect(authorFilterId("BrewMind")).toBe("sharedBy:BrewMind");
+        expect(authorFromFilterId("sharedBy:BrewMind")).toBe("BrewMind");
+    });
+
+    it("does not read a tag or a stock id as an author", () => {
+        expect(authorFromFilterId("tag:morning")).toBeNull();
+        expect(authorFromFilterId("tea")).toBeNull();
+    });
+
+    it("does not read a bare prefix as an author with no name", () => {
+        expect(authorFromFilterId("sharedBy:")).toBeNull();
+    });
+
+    it("resolves to the folded column, not the ASCII collation", () => {
+        // `sharedBy COLLATE NOCASE` would make CAFÉ and café two people.
+        const clause = resolveLibraryFilter("sharedBy:CAFÉ");
+
+        expect(clause?.where).toBe("sharedByKey = ?");
+        expect(clause?.params).toEqual(["café"]);
+    });
+
+    it("binds the name rather than splicing it into the SQL", () => {
+        // It is the one value here a person authored.
+        const clause = resolveLibraryFilter("sharedBy:Bobby'; DROP TABLE recipes;--");
+
+        expect(clause?.where).toBe("sharedByKey = ?");
+        expect(clause?.params).toHaveLength(1);
+    });
+
+    it("survives a relaunch, which is the whole of issue 126's first half", () => {
+        // `asLibraryFilters` used to drop every id it did not recognise, so an
+        // author filter would have been discarded the moment the app restarted.
+        expect(asLibraryFilters(["sharedBy:BrewMind", "tea", "nonsense"]))
+            .toEqual(["sharedBy:BrewMind", "tea"]);
+    });
+
+    it("labels the shelf with the app's word and the sharer's spelling", () => {
+        expect(filterLabel("sharedBy:BrewMind")).toBe("FROM BrewMind");
     });
 });

@@ -571,6 +571,26 @@ class RecipeDatabase {
     }
 
     /**
+     * How many recipes arrived from each person, largest first.
+     *
+     * The `SELECT DISTINCT sharedBy` the per-author shelves were waiting on.
+     * Grouped on `sharedByKey`, the folded column, so one person who spelled
+     * their name two ways is one shelf; the label is `MIN(sharedBy)`, the same
+     * arrangement `countRecipesByTag` uses, so the shelf is named the way a
+     * human wrote it rather than the way SQL compares it.
+     *
+     * Recipes that came from nobody are excluded by the column being null for
+     * them, which is why `recipeIndex` writes null rather than an empty string.
+     */
+    public countRecipesByAuthor(): {author: string; count: number}[] {
+        return this.db.getAllSync(
+            `SELECT MIN(sharedBy) AS author, COUNT(*) AS count FROM recipes
+             WHERE sharedByKey IS NOT NULL
+             GROUP BY sharedByKey ORDER BY count DESC, sharedByKey ASC;`
+        ) as {author: string; count: number}[];
+    }
+
+    /**
      * A few members of each shelf, for the art on its tile.
      *
      * At most `perShelf` recipes, taken in the shelf's own order, which is the
