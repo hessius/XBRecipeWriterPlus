@@ -15,7 +15,7 @@ function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
         recipe:             recipeWith(),
         accent:             palette.info,
         showAvatar:         false,
-        brews:              {times: 0, lastAt: 0},
+        brews:              {times: 0, lastAt: 0, avgRating: 0, rated: 0},
         showHint:           false,
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),
@@ -72,7 +72,7 @@ describe("AboutDeck", () => {
 
     it("passes the brew count through to the history line", async () => {
         await renderWithProviders(
-            <AboutDeck {...props({brews: {times: 2, lastAt: 0}})}/>
+            <AboutDeck {...props({brews: {times: 2, lastAt: 0, avgRating: 0, rated: 0}})}/>
         );
 
         expect(screen.getByTestId("history-summary"))

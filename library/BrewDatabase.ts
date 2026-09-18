@@ -9,7 +9,21 @@ import type {Stall} from "./brew/stalls";
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
 /** How a recipe has gone: how many brews, and when the last of them was. */
-export type BrewSummary = {times: number; lastAt: number};
+export type BrewSummary = {
+    times: number;
+    lastAt: number;
+    /**
+     * The average of the ratings actually given, or 0 where none were.
+     *
+     * 0 is "nobody has said", not a verdict of nothing, which is why the
+     * average is taken over `NULLIF(rating, 0)`: counting silence as a nought
+     * would rank a much-brewed recipe below a once-disliked one for no reason
+     * but that it was brewed more often without comment.
+     */
+    avgRating: number;
+    /** How many of those brews carry a rating. */
+    rated: number;
+};
 
 type BrewRow = {
     id: string;
@@ -238,13 +252,48 @@ class BrewDatabase {
      * of the app uses for a timestamp that does not exist.
      */
     public summaryFor(recipeUuid: string): BrewSummary {
-        const rows = this.db.getAllSync<{times: number; lastAt: number | null}>(
-            "SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt FROM brews WHERE recipeUuid = ?;",
+        const rows = this.db.getAllSync<{
+            times: number; lastAt: number | null;
+            avgRating: number | null; rated: number;
+        }>(
+            `SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt,
+                    AVG(NULLIF(rating, 0)) AS avgRating,
+                    COUNT(NULLIF(rating, 0)) AS rated
+             FROM brews WHERE recipeUuid = ?;`,
             [recipeUuid]
         );
         const row = rows[0];
-        if (row === undefined) return {times: 0, lastAt: 0};
-        return {times: row.times, lastAt: row.lastAt ?? 0};
+        if (row === undefined) return {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+        return {
+            times: row.times,
+            lastAt: row.lastAt ?? 0,
+            avgRating: row.avgRating ?? 0,
+            rated: row.rated
+        };
+    }
+
+    /**
+     * The latest brew of this recipe on the same day as `at`, if there is one.
+     *
+     * The recipe screen's star has one gesture and two outcomes: it rates
+     * today's brew where there is one, and writes a hand-logged brew where
+     * there is not. This is the question that chooses between them, and it is
+     * asked in local days rather than in hours because "today" is what the user
+     * means -- a cup at breakfast is still today's at supper, and a cup at
+     * 23:50 is not still today's at 00:10.
+     */
+    public brewOn(recipeUuid: string, at: number): string | null {
+        const start = new Date(at);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start.getTime());
+        end.setDate(end.getDate() + 1);
+        const rows = this.db.getAllSync<{id: string}>(
+            `SELECT id FROM brews
+             WHERE recipeUuid = ? AND startedAt >= ? AND startedAt < ?
+             ORDER BY startedAt DESC LIMIT 1;`,
+            [recipeUuid, start.getTime(), end.getTime()]
+        );
+        return rows[0]?.id ?? null;
     }
 
     /**

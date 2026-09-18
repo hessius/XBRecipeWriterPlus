@@ -94,14 +94,32 @@ jest.mock("expo-sqlite", () => ({
                     .sort((a, b) => (b.startedAt as number) - (a.startedAt as number));
                 if (/COUNT\(\*\) AS times/i.test(source)) {
                     const mine = ordered.filter((b) => b.recipeUuid === params[0]);
+                    const rated = mine.filter((b) => (b.rating as number) > 0);
                     return [{
                         times:  mine.length,
+                        rated:  rated.length,
+                        // AVG over no rows is NULL as well, and over
+                        // NULLIF(rating, 0) that is what an unrated recipe
+                        // gives: the caller has to survive it here too.
+                        avgRating: rated.length === 0
+                            ? null
+                            : rated.reduce((sum, b) => sum + (b.rating as number), 0)
+                                / rated.length,
                         // SQL's MAX over no rows is NULL, not 0, and the caller
                         // has to survive that: the mock must say so too.
                         lastAt: mine.length === 0
                             ? null
                             : Math.max(...mine.map((b) => b.startedAt as number))
                     }];
+                }
+                if (/SELECT id FROM brews/i.test(source)) {
+                    const [uuid, from, until] = params as [string, number, number];
+                    return ordered
+                        .filter((b) => b.recipeUuid === uuid
+                            && (b.startedAt as number) >= from
+                            && (b.startedAt as number) < until)
+                        .slice(0, 1)
+                        .map((b) => ({id: b.id}));
                 }
                 if (/WHERE id = \?/i.test(source)) {
                     return ordered.filter((b) => b.id === params[0]);
@@ -143,7 +161,8 @@ describe("BrewDatabase", () => {
         db.insert(record({id: "b", recipeUuid: "uuid-1", startedAt: 9_000}), []);
         db.insert(record({id: "c", recipeUuid: "uuid-2", startedAt: 5_000}), []);
 
-        expect(db.summaryFor("uuid-1")).toEqual({times: 2, lastAt: 9_000});
+        expect(db.summaryFor("uuid-1"))
+            .toEqual({times: 2, lastAt: 9_000, avgRating: 0, rated: 0});
     });
 
     it("answers for a recipe never brewed without inventing a date", () => {
@@ -152,7 +171,8 @@ describe("BrewDatabase", () => {
         const db = new BrewDatabase();
         db.insert(record({recipeUuid: "uuid-2"}), []);
 
-        expect(db.summaryFor("uuid-1")).toEqual({times: 0, lastAt: 0});
+        expect(db.summaryFor("uuid-1"))
+            .toEqual({times: 0, lastAt: 0, avgRating: 0, rated: 0});
     });
 
     it("round-trips a record", () => {
@@ -531,7 +551,8 @@ describe("a brew the app never watched", () => {
             rating: 4, at: 7_000, id: "hand-1"
         }), []);
 
-        expect(db.summaryFor("uuid-1")).toEqual({times: 1, lastAt: 7_000});
+        expect(db.summaryFor("uuid-1"))
+            .toMatchObject({times: 1, lastAt: 7_000});
     });
 
     it("keeps its verdict and its pin", () => {
@@ -561,5 +582,65 @@ describe("a brew the app never watched", () => {
         db.restore([record({id: "watched-1"})]);
 
         expect(db.get("watched-1")?.watched).toBeUndefined();
+    });
+});
+
+describe("what a recipe's history adds up to", () => {
+    it("averages only the brews somebody rated", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", rating: 5}), []);
+        db.insert(record({id: "b", recipeUuid: "uuid-1", rating: 3}), []);
+        // Unrated, and it must not drag the average down: 0 is silence, not a
+        // verdict of nothing.
+        db.insert(record({id: "c", recipeUuid: "uuid-1"}), []);
+
+        const summary = db.summaryFor("uuid-1");
+        expect(summary.avgRating).toBe(4);
+        expect(summary.rated).toBe(2);
+        expect(summary.times).toBe(3);
+    });
+
+    it("reports no average at all for a recipe nobody has judged", () => {
+        const db = new BrewDatabase();
+        db.insert(record({recipeUuid: "uuid-1"}), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({avgRating: 0, rated: 0});
+    });
+});
+
+describe("today's brew", () => {
+    const noon = new Date(2026, 8, 19, 12, 0, 0).getTime();
+
+    it("finds the latest brew from the same day", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "morning", recipeUuid: "uuid-1",
+            startedAt: new Date(2026, 8, 19, 7, 30).getTime()
+        }), []);
+        db.insert(record({
+            id: "elevenses", recipeUuid: "uuid-1",
+            startedAt: new Date(2026, 8, 19, 11, 0).getTime()
+        }), []);
+
+        expect(db.brewOn("uuid-1", noon)).toBe("elevenses");
+    });
+
+    it("does not reach back to yesterday", () => {
+        // A cup at 23:50 is not still today's at 00:10, which is the whole
+        // reason the window is a local day rather than a span of hours.
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "last-night", recipeUuid: "uuid-1",
+            startedAt: new Date(2026, 8, 18, 23, 50).getTime()
+        }), []);
+
+        expect(db.brewOn("uuid-1", new Date(2026, 8, 19, 0, 10).getTime())).toBeNull();
+    });
+
+    it("does not answer with another recipe's brew", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "theirs", recipeUuid: "uuid-2", startedAt: noon}), []);
+
+        expect(db.brewOn("uuid-1", noon)).toBeNull();
     });
 });

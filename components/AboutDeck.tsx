@@ -18,8 +18,16 @@ type Props = {
     accent: string;
     /** `showRecipeAvatars`, off by default. */
     showAvatar: boolean;
-    /** How many times this recipe has been brewed, and when last. */
+    /** How many times this recipe has been brewed, when last, and how it fared. */
     brews: BrewSummary;
+    /**
+     * The verdict the user just gave this recipe.
+     *
+     * Optional so a caller that cannot write -- a test reading the deck, or any
+     * future read-only use of it -- leaves the section a reading rather than
+     * drawing a control that does nothing.
+     */
+    onRate?: (rating: number) => void;
     showHint: boolean;
     dispatch: Dispatch;
     /** Records an unblurred field's current text, for the screen to flush. */
@@ -62,8 +70,8 @@ type Props = {
  * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
-    recipe, accent, showAvatar, brews, showHint, dispatch, onDraft, onInputErrorChange,
-    xidLookupFailed, externalEpoch, onXidFocusChange
+    recipe, accent, showAvatar, brews, onRate, showHint, dispatch, onDraft,
+    onInputErrorChange, xidLookupFailed, externalEpoch, onXidFocusChange
 }: Props) {
     return (
         <YStack gap="$2" marginTop="$3">
@@ -86,7 +94,7 @@ export default function AboutDeck({
 
             <FromSection recipe={recipe} accent={accent} showAvatar={showAvatar}/>
 
-            <HistorySection summary={brews}/>
+            <HistorySection summary={brews} onRate={onRate}/>
         </YStack>
     );
 }

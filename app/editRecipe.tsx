@@ -29,7 +29,7 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
-import {useRecipeBrewSummary, type BrewSummaryStore} from "@/hooks/useBrewHistory";
+import {useRecipeRating, type RecipeRatingStore} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
@@ -682,7 +682,7 @@ export default function EditRecipe(
      * export store. The router passes nothing, so the default is the shared
      * database.
      */
-    {historyStore}: {historyStore?: BrewSummaryStore} = {}
+    {historyStore}: {historyStore?: RecipeRatingStore} = {}
 ) {
     "use no memo";
 
@@ -786,7 +786,14 @@ export default function EditRecipe(
     // the editor, so there is nothing for a subscription here to hear. The
     // empty uuid on the render before the recipe resolves counts nothing,
     // which is the right answer for a recipe that is not there yet.
-    const brewSummary = useRecipeBrewSummary(recipe?.uuid ?? "", historyStore);
+    const {summary: brewSummary, rate} = useRecipeRating(
+        {
+            uuid: recipe?.uuid ?? "",
+            name: recipe?.displayName() ?? "",
+            accent
+        },
+        historyStore
+    );
 
     if (!recipe) return null;
 
@@ -1031,6 +1038,7 @@ export default function EditRecipe(
                 ) : deck === "about" ? (
                     <AboutDeck recipe={recipe} accent={accent}
                                showAvatar={showRecipeAvatars} brews={brewSummary}
+                               onRate={rate}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}
