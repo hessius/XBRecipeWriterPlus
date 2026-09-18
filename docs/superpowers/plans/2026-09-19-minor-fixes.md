@@ -134,18 +134,18 @@ fractional ratio end to end, because a shared link forced it to.
 it has two consequences: a half ratio cannot be authored, and worse, cannot be
 *preserved*, since one tap on the stepper turns 15.5 into 16.5.
 
-- [ ] `step={0.5}` on the ratio field. `Stepper` already switches to the
+- [x] `step={0.5}` on the ratio field. `Stepper` already switches to the
       decimal keypad for a fractional step and `stepped()` already rounds to
       the decimals the step implies, so there is nothing else to build.
-- [ ] **The card gate stays exactly as it is.** `library/cardLimits.ts` rejects
+- [x] **The card gate stays exactly as it is.** `library/cardLimits.ts` rejects
       a non-integer ratio and that is load-bearing: `Recipe.getData()` pushes
       the ratio straight into a byte, and a fractional value there reaches a
       genuine card. Do not relax it.
-- [ ] Confirm the gate's message reaches the user. Someone who deliberately set
+- [x] Confirm the gate's message reaches the user. Someone who deliberately set
       15.5 needs to see that the card is refusing, not the app.
-- [ ] Check every place a ratio is formatted, so 1:15.5 renders as itself and
+- [x] Check every place a ratio is formatted, so 1:15.5 renders as itself and
       is neither rounded for display nor shown as floating-point noise.
-- [ ] Tests: an imported half ratio survives a stepper tap; the card gate still
+- [x] Tests: an imported half ratio survives a stepper tap; the card gate still
       refuses it and says why; `autoFixPourVolumes` still terminates on a half
       ratio. The last is a regression guard for a hung JS thread, so it is
       worth having by name.
