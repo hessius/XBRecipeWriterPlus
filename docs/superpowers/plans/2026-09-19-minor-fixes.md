@@ -158,14 +158,14 @@ glyph from a Reanimated shared value but takes its layout box from the plain
 `fontSize` prop, which switches instantly. Two clocks, so an interrupted timing
 leaves a large glyph in a compact box.
 
-- [ ] Drive the box from the same shared value as the glyph. One clock is the
+- [x] Drive the box from the same shared value as the glyph. One clock is the
       fix; reconciling on focus is a patch over the same bug.
-- [ ] All timing from `constants/motion.ts`, as everything animated here is.
-- [ ] Revisit `COLLAPSE_SHRINK = 140` in `hooks/useCollapsibleHeader.ts` while
+- [x] All timing from `constants/motion.ts`, as everything animated here is.
+- [x] Revisit `COLLAPSE_SHRINK = 140` in `hooks/useCollapsibleHeader.ts` while
       in the file. It is documented as the height of everything the screen
       folds away, and the rail was added to that screen without the number
       being revisited.
-- [ ] Tests: the box and the glyph read the same value; a collapse interrupted
+- [x] Tests: the box and the glyph read the same value; a collapse interrupted
       part-way still settles compact. Given how little of this is assertable
       through the renderer, keep the test honest about what it proves.
 
