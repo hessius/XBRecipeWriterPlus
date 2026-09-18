@@ -4,7 +4,8 @@ import {mergeRecipes, type BackupPayload} from "@/library/backup";
 import {
     resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
 } from "@/library/libraryFilters";
-import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
+import type {FilterResolver, LibraryQuery,
+              RecipeEvidence} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {tagKey} from "@/library/tagKey";
@@ -40,6 +41,16 @@ export type RecipeStore = {
         resolveFilter?: FilterResolver
     ) => Record<string, number>;
     countRecipesByTag?: () => {tag: string; count: number}[];
+    /**
+     * What each recipe's brews add up to, for the card's evidence.
+     *
+     * Optional, and its absence is simply no evidence rather than a throw: a
+     * card with nothing to show draws no suffix, which is exactly what a
+     * library of never-brewed recipes looks like anyway. Nothing is lost or
+     * misreported by a store that cannot answer, so this is the one count here
+     * that does not shout.
+     */
+    brewEvidence?: () => Record<string, RecipeEvidence>;
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -126,6 +137,8 @@ export type RecipeLibrary = {
     filterCounts: Record<string, number>;
     /** Whole-table counts for every tag, largest shelf first. */
     tagCounts: {tag: string; count: number}[];
+    /** What each recipe's brews add up to, keyed by uuid. Absent means none. */
+    evidence: Record<string, RecipeEvidence>;
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
@@ -177,6 +190,7 @@ export function useRecipeLibrary(
     const librarySize = readLibrarySize(store, revision);
     const filterCounts = readFilterCounts(store, revision);
     const tagCounts = readTagCounts(store, revision);
+    const evidence = readEvidence(store, revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -364,6 +378,7 @@ export function useRecipeLibrary(
         librarySize,
         filterCounts,
         tagCounts,
+        evidence,
         allRecipes,
         refresh: reload,
         deleteRecipe,
@@ -438,6 +453,17 @@ function readTagCounts(db: RecipeStore, revision: number): {tag: string; count: 
         throw new Error("This store cannot count tags");
     }
     return db.countRecipesByTag();
+}
+
+/**
+ * What each recipe's brews add up to, re-read on the same revision counter as
+ * the list, so rating a recipe and coming back shows the new average.
+ */
+function readEvidence(
+    db: RecipeStore, revision: number
+): Record<string, RecipeEvidence> {
+    void revision;
+    return db.brewEvidence?.() ?? {};
 }
 
 export default useRecipeLibrary;

@@ -122,6 +122,22 @@ function searchClause(
 }
 
 /**
+ * What a recipe's brews add up to, as the card reports them.
+ *
+ * Three figures and no recipe: the card already has the recipe. A recipe with
+ * no brews has no entry at all rather than an entry of zeroes, because there is
+ * nothing here that a zero would be the true answer to -- an unrated brew
+ * leaves the average alone entirely, and a recipe never brewed has no last
+ * brew to date.
+ */
+export type RecipeEvidence = {
+    /** The average of the ratings given, or 0 where none were. */
+    avgRating: number;
+    brews: number;
+    lastBrewedAt: number;
+};
+
+/**
  * Build the statement and its bound parameters for a library query.
  *
  * The brews join is always present, never conditional on the sort axis. A query

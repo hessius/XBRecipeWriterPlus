@@ -1045,6 +1045,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 editing={editing}
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
+                                evidence={library.evidence[item.recipe.uuid]}
                                 bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
                                 onBounced={retireBounce}
                                 // Gated on a machine: a dead BREW in every row's

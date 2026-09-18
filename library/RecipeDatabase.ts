@@ -5,7 +5,8 @@ import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
 import {ensureBrewTables} from './BrewDatabase';
-import {buildLibraryQuery, type FilterResolver, type LibraryQuery} from './libraryQuery';
+import {buildLibraryQuery, type FilterResolver, type LibraryQuery,
+        type RecipeEvidence} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
         projectRecipe, schemaHash} from './recipeIndex';
 
@@ -567,6 +568,43 @@ class RecipeDatabase {
             `SELECT MIN(tag) AS tag, COUNT(*) AS count FROM recipe_tags
              GROUP BY tagKey ORDER BY count DESC, tagKey ASC;`
         ) as {tag: string; count: number}[];
+    }
+
+    /**
+     * What each recipe's brews add up to, for the card's evidence suffix.
+     *
+     * One grouped read over `brews` rather than a column on the library query,
+     * because evidence does not depend on what the rail asked: the same three
+     * figures are true whichever filter is on and whichever axis is sorted, and
+     * a card drawn in a shelf room must say what it says in the list. The join
+     * is possible at all because both classes open `xbrecipewriter.db`.
+     *
+     * Recipes with no brews are simply absent, which is what the card reads as
+     * "nothing to show yet". A row of zeroes would have to be told apart from a
+     * genuine zero somewhere, and there is no such thing here.
+     */
+    public brewEvidence(): Record<string, RecipeEvidence> {
+        const rows = this.db.getAllSync(
+            `SELECT recipeUuid, COUNT(*) AS brews, MAX(startedAt) AS lastBrewedAt,
+                    -- NULLIF for the same reason the library query has it:
+                    -- 0 is the app's word for unrated, and averaging silence
+                    -- as a nought would be a verdict nobody gave.
+                    AVG(NULLIF(rating, 0)) AS avgRating
+             FROM brews GROUP BY recipeUuid;`
+        ) as {
+            recipeUuid: string; brews: number;
+            lastBrewedAt: number | null; avgRating: number | null;
+        }[];
+
+        const evidence: Record<string, RecipeEvidence> = {};
+        rows.forEach((row) => {
+            evidence[row.recipeUuid] = {
+                brews: row.brews,
+                lastBrewedAt: row.lastBrewedAt ?? 0,
+                avgRating: row.avgRating ?? 0
+            };
+        });
+        return evidence;
     }
 
     public retrieveAllRecipes(): Recipe[] | null {

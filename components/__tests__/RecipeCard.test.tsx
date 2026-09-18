@@ -1006,3 +1006,78 @@ describe("RecipeCard", () => {
             .not.toContain("starred");
     });
 });
+
+describe("the evidence a card carries", () => {
+    const DAY = 86_400_000;
+
+    function evidence(overrides: Partial<{
+        avgRating: number; brews: number; lastBrewedAt: number;
+    }> = {}) {
+        return {
+            avgRating: 4.25, brews: 12, lastBrewedAt: Date.now() - 3 * DAY, ...overrides
+        };
+    }
+
+    it("shows the rating, the count and how long ago", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}}
+                        evidence={evidence()}/>
+        );
+
+        expect(screen.getByTestId("recipe-card-evidence"))
+            .toHaveTextContent("4.3 · 12 · 3D");
+    });
+
+    it("draws nothing at all for a recipe never brewed", async () => {
+        // Absent, not zeroed. A row of noughts would read as a verdict and a
+        // date, and there is neither.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}}/>
+        );
+
+        expect(screen.queryByTestId("recipe-card-evidence")).toBeNull();
+    });
+
+    it("leaves the star off a recipe brewed but never judged", async () => {
+        // Unrated is not nought, and a 0.0 here would be a verdict nobody gave.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}}
+                        evidence={evidence({avgRating: 0, brews: 2})}/>
+        );
+
+        const row = screen.getByTestId("recipe-card-evidence");
+        expect(row).toHaveTextContent("2 · 3D");
+        expect(row).not.toHaveTextContent("0.0");
+    });
+
+    it("gives the trailing end back to the actions while editing", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}} editing
+                        onDelete={() => {}} evidence={evidence()}/>
+        );
+
+        expect(screen.queryByTestId("recipe-card-evidence")).toBeNull();
+    });
+
+    it("says the evidence in words to a screen reader", async () => {
+        // A glance reads `4.3 · 12 · 3D`. Nobody can hear it.
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}}
+                        evidence={evidence()}/>
+        );
+
+        const label = screen.getByTestId("recipe-card").props.accessibilityLabel;
+        expect(label).toContain("rated 4.3");
+        expect(label).toContain("brewed 12 times");
+    });
+
+    it("counts one brew as once out loud as well", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe()} onPress={() => {}}
+                        evidence={evidence({brews: 1})}/>
+        );
+
+        expect(screen.getByTestId("recipe-card").props.accessibilityLabel)
+            .toContain("brewed once");
+    });
+});

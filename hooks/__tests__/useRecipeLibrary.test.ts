@@ -5,7 +5,7 @@ import type {BackupPayload} from "@/library/backup";
 import {
     resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
 } from "@/library/libraryFilters";
-import type {LibraryQuery} from "@/library/libraryQuery";
+import type {LibraryQuery, RecipeEvidence} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/library/RecipeDatabase");
@@ -32,7 +32,8 @@ function stubDb(recipes: Recipe[]) {
         countRecipesByFilter: jest.fn((ids: readonly string[]) =>
             Object.fromEntries(ids.map((id) => [id, 0]))
         ),
-        countRecipesByTag: jest.fn((): {tag: string; count: number}[] => [])
+        countRecipesByTag: jest.fn((): {tag: string; count: number}[] => []),
+        brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({}))
     };
 }
 
@@ -447,5 +448,44 @@ describe("the store it reads through", () => {
         await rerender(undefined);
 
         expect(RecipeDatabase).toHaveBeenCalledTimes(1);
+    });
+
+    describe("the evidence the cards carry", () => {
+        it("hands back what the store read", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.brewEvidence.mockReturnValue({
+                one: {brews: 3, lastBrewedAt: 1_000, avgRating: 4}
+            });
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.evidence["one"])
+                .toEqual({brews: 3, lastBrewedAt: 1_000, avgRating: 4});
+        });
+
+        it("re-reads it on a refresh, so a brew just judged shows up", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.brewEvidence.mockReturnValue({});
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+            expect(result.current.evidence).toEqual({});
+
+            db.brewEvidence.mockReturnValue({
+                one: {brews: 1, lastBrewedAt: 9, avgRating: 5}
+            });
+            await act(async () => { result.current.refresh(); });
+
+            expect(result.current.evidence["one"].brews).toBe(1);
+        });
+
+        it("is empty, not undefined, for a store that cannot report any", async () => {
+            // `brewEvidence` is optional on the store so the backup and test
+            // stubs elsewhere need not grow a method they have no use for.
+            const db = stubDb([named("Ethiopia")]);
+            const {brewEvidence: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.evidence).toEqual({});
+        });
     });
 });

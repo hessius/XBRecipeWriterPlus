@@ -7,6 +7,8 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
+import {formatBrewAgo} from "@/library/brew/brewFormat";
+import type {RecipeEvidence} from "@/library/libraryQuery";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {canWriteToCard} from "@/library/cardLimits";
 import {onAccent, palette} from "@/constants/colors";
@@ -43,6 +45,32 @@ const ACTION_PADDING = (TOUCH_TARGET - ACTION_ICON_SIZE) / 2;
  */
 function isSet(value: number): boolean {
     return Number.isFinite(value) && value > 0;
+}
+
+/**
+ * `4.3 · 12 · 3D`, or nothing.
+ *
+ * One average, one count, one recency, in the order a glance wants them: how
+ * good, how often, how lately. The average is dropped rather than printed as
+ * 0.0 for a recipe brewed and never judged, because unrated is not nought and
+ * a 0.0 would be a verdict nobody gave.
+ */
+function evidenceLine(evidence?: RecipeEvidence): string | null {
+    if (evidence === undefined || evidence.brews <= 0) return null;
+    return [
+        evidence.avgRating > 0 ? evidence.avgRating.toFixed(1) : undefined,
+        String(evidence.brews),
+        evidence.lastBrewedAt > 0 ? formatBrewAgo(evidence.lastBrewedAt) : undefined
+    ].filter((part) => part !== undefined).join(" · ");
+}
+
+/** The same three figures, for someone who cannot see them. */
+function spokenEvidence(evidence?: RecipeEvidence): string[] {
+    if (evidence === undefined || evidence.brews <= 0) return [];
+    return [
+        ...(evidence.avgRating > 0 ? [`rated ${evidence.avgRating.toFixed(1)}`] : []),
+        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`
+    ];
 }
 
 type StatProps = {
@@ -167,6 +195,17 @@ type Props = {
      * and none of the sheet's own.
      */
     onHistory?: () => void;
+    /**
+     * What this recipe's brews add up to, drawn at the trailing end of the
+     * stats row.
+     *
+     * Absent means never brewed, and never brewed draws nothing: a row of
+     * noughts would read as a verdict and a date when there is neither. The
+     * favourite star took the leading end of this row and evidence takes the
+     * trailing one, which is why the two lines of prose above are untouched by
+     * either.
+     */
+    evidence?: RecipeEvidence;
 };
 
 /**
@@ -180,6 +219,7 @@ export default function RecipeCard({
     recipe,
     onPress,
     editing = false,
+    evidence,
     onDuplicate,
     onDelete,
     showCoffeeMarker = true,
@@ -202,6 +242,8 @@ export default function RecipeCard({
     // alone -- which is the state the TEA/COFFEE marker exists to prevent.
     const hasNote = recipe.description.length > 0;
 
+    const shownEvidence = evidenceLine(evidence);
+
     const summary = [
         recipe.displayName(),
         hasNote ? recipe.description : undefined,
@@ -212,7 +254,12 @@ export default function RecipeCard({
         !isTea && !recipe.grinder ? "grinder off" : undefined,
         !isTea && recipe.grinder && isSet(recipe.grindSize)
             ? `grind ${recipe.grindSize}`
-            : undefined
+            : undefined,
+        // Said in words, because `4.3 · 12 · 3D` is unreadable aloud and a
+        // reader would otherwise have the figures conveyed by the glyphs
+        // alone. Kept out of the editing case for the same reason the drawn
+        // line is: it is not on screen then.
+        ...(editing ? [] : spokenEvidence(evidence))
     ].filter((part) => part !== undefined).join(", ");
 
     // The row actions are nested inside that same group, so VoiceOver cannot
@@ -403,6 +450,17 @@ export default function RecipeCard({
                         {!isTea && <Stat label="GRIND" value={recipe.grindSize}
                                          text={recipe.grinder ? undefined : "OFF"}/>}
                     </XStack>
+
+                    {/* Editing takes this end back for the actions. The two
+                        cannot share it, and a destructive control has the
+                        stronger claim on a row the user opened to manage. */}
+                    {!editing && shownEvidence !== null && (
+                        <DotMatrixText testID="recipe-card-evidence" fontSize={11}
+                                       weight="bold" letterSpacing={1.2}
+                                       color={onAccent.label}>
+                            {shownEvidence}
+                        </DotMatrixText>
+                    )}
 
                     {editing && (
                         <XStack gap="$1">
