@@ -1737,6 +1737,20 @@ describe("the shelf grid", () => {
         expect(screen.queryAllByTestId("recipe-card")).toHaveLength(0);
     });
 
+    // Long press, then the footer. The whole loop through the screen, because
+    // the grid only draws the answer and the screen is what remembers it.
+    it("puts an auto shelf away and brings it back", async () => {
+        await openGrid();
+
+        await fireEvent(screen.getByTestId("shelf-tea"), "longPress");
+        expect(screen.queryByTestId("shelf-tea")).toBeNull();
+        expect(screen.getByText("1 HIDDEN")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("shelf-show-tea"));
+        expect(screen.getByTestId("shelf-tea")).toBeTruthy();
+        expect(screen.queryByTestId("hidden-shelves")).toBeNull();
+    });
+
     it("offers a shelf for a tag the user made", async () => {
         await openGrid();
 

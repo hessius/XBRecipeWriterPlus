@@ -5,7 +5,7 @@ import {Text, XStack, YStack} from "tamagui";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import ShelfMark from "@/components/ShelfMark";
-import {palette} from "@/constants/colors";
+import {onAccent, palette} from "@/constants/colors";
 import {shelfGlyph} from "@/constants/shelfGlyphs";
 import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
 import type {ShelfMarkVariant} from "@/library/Settings";
@@ -32,13 +32,23 @@ export const TILE_HEIGHT = 120;
  * swipe twice to learn it.
  */
 export default function ShelfTile({
-    shelf, members, variant = "hybrid", onPress, onActions
+    shelf, members, variant = "hybrid", inverted = false, onPress, onActions,
+    onHide
 }: {
     shelf: Shelf;
     /** What this shelf's art is drawn from. Absent for an empty shelf. */
     members?: ShelfMarkMembers;
     /** Which art candidate to draw. From the LABS setting. */
     variant?: ShelfMarkVariant;
+    /**
+     * Draw this tile accent-first: the shelf's colour fills the card and the
+     * mark's square goes quiet. A preference.
+     *
+     * Only the grid sets this, and only on the auto section. A manual shelf's
+     * mark is made of its members' own colours, so there is no single accent to
+     * lift out of it and nothing left in the square if one were.
+     */
+    inverted?: boolean;
     onPress: () => void;
     /**
      * Open what can be done to this shelf. Manual shelves only: an auto shelf
@@ -53,10 +63,32 @@ export default function ShelfTile({
      * inside this one element and a screen reader cannot reach it.
      */
     onActions?: () => void;
+    /**
+     * Put this auto shelf away. Auto shelves only, and by long press only.
+     *
+     * The gesture with no drawn control that the manual tile's menu is careful
+     * not to be, and it can afford to be: the footer under the grid names every
+     * shelf that has been put away and brings it back with a tap, so the only
+     * way to discover this is also the only way to undo it. A shelf cannot be
+     * lost by a long press the user did not mean to make.
+     */
+    onHide?: () => void;
 }) {
     const manual = shelf.kind === "manual";
     const recipes = shelf.count === 1 ? "1 recipe" : `${shelf.count} recipes`;
     const kind = manual ? "your shelf" : "auto shelf";
+    // The accent the mark would have filled its square with. Inverting moves it
+    // out here, so the two have to read it from the same place or the tile and
+    // its square would disagree about which colour this shelf is.
+    const field = members?.accents?.[0] ?? palette.surface;
+    const actions = [
+        ...(onActions !== undefined
+            ? [{name: "edit", label: `Actions for the ${shelf.label} shelf`}]
+            : []),
+        ...(onHide !== undefined
+            ? [{name: "hide", label: `Hide the ${shelf.label} shelf`}]
+            : [])
+    ];
 
     return (
         <Pressable accessibilityRole="button"
@@ -68,23 +100,29 @@ export default function ShelfTile({
                    // its tray tiles. Editing is the only way a recipe comes off
                    // a manual shelf, so without this action a reader has a shelf
                    // it can never change.
-                   accessibilityActions={onActions !== undefined
-                       ? [{name: "edit", label: `Actions for the ${shelf.label} shelf`}]
-                       : undefined}
+                   // Both gestures here are unreachable by a screen reader: the
+                   // glyph is nested inside this one element, and a long press
+                   // cannot be made at all. Each act is offered as an action so
+                   // neither kind of shelf has something only a sighted hand
+                   // can do.
+                   accessibilityActions={actions.length > 0 ? actions : undefined}
                    onAccessibilityAction={(event) => {
                        if (event.nativeEvent.actionName === "edit") onActions?.();
+                       else if (event.nativeEvent.actionName === "hide") onHide?.();
                    }}
-                   onPress={onPress} onLongPress={onActions} style={{flex: 1}}>
+                   onPress={onPress} onLongPress={onActions ?? onHide}
+                   style={{flex: 1}}>
             <YStack height={TILE_HEIGHT} justifyContent="space-between"
                     padding="$3" borderRadius="$4"
-                    backgroundColor={palette.raised}
-                    borderWidth={manual ? 0 : 1}
+                    backgroundColor={inverted ? field : palette.raised}
+                    borderWidth={manual || inverted ? 0 : 1}
                     borderColor={palette.line}>
                 <XStack alignItems="flex-start" justifyContent="space-between">
                     <ShelfMark kind={shelf.kind} variant={variant}
                                glyph={shelfGlyph(shelf.id)}
                                accents={members?.accents}
-                               profiles={members?.profiles}/>
+                               profiles={members?.profiles}
+                               inverted={inverted}/>
                     {onActions && (
                         <Pressable accessibilityRole="button"
                                    accessibilityLabel={`Actions for the ${shelf.label} shelf`}
@@ -111,11 +149,14 @@ export default function ShelfTile({
                         </Text>
                     ) : (
                         <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}
-                                       color={palette.text}>
+                                       color={inverted ? onAccent.text : palette.text}>
                             {shelf.label}
                         </DotMatrixText>
                     )}
-                    <Text fontSize={11} color={palette.dim}>{recipes}</Text>
+                    <Text fontSize={11}
+                          color={inverted ? onAccent.label : palette.dim}>
+                        {recipes}
+                    </Text>
                 </YStack>
             </YStack>
         </Pressable>

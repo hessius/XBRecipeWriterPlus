@@ -1,5 +1,6 @@
 import React from "react";
 import {Pressable, ScrollView} from "react-native";
+import type {NativeScrollEvent, NativeSyntheticEvent} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
@@ -68,7 +69,7 @@ export type RoomRecipeActions = {
  */
 export default function ShelfRoom({
     label, recipes, onBack, actionsFor, evidence = {}, manual = false,
-    showCoffeeMarker = true, dottedProfile = false, paddingBottom = 0
+    showCoffeeMarker = true, dottedProfile = false, onScroll, paddingBottom = 0
 }: {
     /** The shelf's name, drawn as the room's heading. */
     label: string;
@@ -101,6 +102,8 @@ export default function ShelfRoom({
     manual?: boolean;
     showCoffeeMarker?: boolean;
     dottedProfile?: boolean;
+    /** Drives the screen's collapsing header. */
+    onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     paddingBottom?: number;
 }) {
     const rows: Recipe[][] = [];
@@ -112,6 +115,12 @@ export default function ShelfRoom({
 
     return (
         <ScrollView testID="shelf-room"
+                    // The header collapses on this view's scroll the same way
+                    // it does on the list's. Without it the wordmark and the
+                    // tiles stayed up in the one view whose own content is
+                    // tiles, which is where the screen is most crowded.
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{
                         paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 12

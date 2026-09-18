@@ -62,6 +62,7 @@ import {
     type FilterId
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
+import {parseHidden, toggleHidden} from "@/library/hiddenShelves";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
@@ -185,6 +186,8 @@ export default function HomeScreen({db, settings}: Props) {
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [shelfMarkVariant] = useSetting("shelfMarkVariant", settings);
+    const [invertAutoShelves] = useSetting("invertAutoShelves", settings);
+    const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -1081,6 +1084,7 @@ export default function HomeScreen({db, settings}: Props) {
                         manual={openShelf?.kind === "manual"}
                         recipes={library.recipes}
                         onBack={libraryQuery.closeShelf}
+                        onScroll={onScroll}
                         actionsFor={roomActionsFor}
                         evidence={library.evidence}
                         showCoffeeMarker={showCoffeeMarker}
@@ -1098,9 +1102,14 @@ export default function HomeScreen({db, settings}: Props) {
                     <ShelfGrid shelves={shelves}
                                marks={library.shelfMarks}
                                variant={asShelfMarkVariant(shelfMarkVariant)}
+                               invertAuto={invertAutoShelves}
+                               hidden={parseHidden(hiddenShelves)}
                                onOpen={libraryQuery.openShelf}
                                onNewShelf={picker.startCreating}
                                onShelfActions={setShelfActions}
+                               onHideShelf={(id) =>
+                                   setHiddenShelves(toggleHidden(hiddenShelves, id))}
+                               onScroll={onScroll}
                                paddingBottom={insets.bottom + 8}/>
                 ) : visibleEmpty ? (
                     <EmptyQuery

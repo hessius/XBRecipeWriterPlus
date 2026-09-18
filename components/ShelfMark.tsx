@@ -67,7 +67,7 @@ export function markFor(
  * silently changed art when its last member left would read as two shelves.
  */
 export default function ShelfMark({
-    kind, variant = "hybrid", glyph, accents = [], profiles = []
+    kind, variant = "hybrid", glyph, accents = [], profiles = [], inverted = false
 }: {
     kind: "auto" | "manual";
     /** Which candidate to draw. From the LABS setting. */
@@ -78,6 +78,15 @@ export default function ShelfMark({
     accents?: readonly string[];
     /** Members' pour profiles, for the profile variant. */
     profiles?: readonly Pour[][];
+    /**
+     * Swap the glyph square with its tile: the accent has gone to the card
+     * behind this, so the square takes the quiet field and the glyph draws in
+     * the accent it gave up.
+     *
+     * Glyph variant only. The other two marks *are* the members' colours, so
+     * there is nothing in them to hand to a tile and nothing left over here.
+     */
+    inverted?: boolean;
 }) {
     // A glyph that was asked for and does not exist becomes the derived mark
     // rather than an empty square. The glyphs are a closed set drawn at design
@@ -98,12 +107,21 @@ export default function ShelfMark({
     const field = members[0] ?? palette.surface;
 
     if (mark === "glyph" && glyph != null) {
+        // Inverted, the accent is behind the whole tile and this square is the
+        // quiet one, so the glyph draws in the accent rather than on it. With
+        // no members there is no accent to draw in, and the plain ink that the
+        // upright mark already falls back to is the right answer either way.
+        const ink = inverted
+            ? (members.length > 0 ? field : palette.text)
+            : (members.length > 0 ? onAccent.text : palette.text);
         return (
-            <Square testID="shelf-mark-glyph" background={field}>
-                {/* Dark ink only when the field is an accent. An empty shelf
-                    draws on `surface`, where `onAccent.text` would vanish. */}
-                <DotIcon name={glyph} size={GLYPH_SIZE}
-                         color={members.length > 0 ? onAccent.text : palette.text}/>
+            // The test id carries the inversion because Tamagui resolves colour
+            // to a class rather than to a style object, so a test cannot read
+            // the background back. It is the one thing about this square a test
+            // has to be able to see.
+            <Square testID={inverted ? "shelf-mark-glyph-inverted" : "shelf-mark-glyph"}
+                    background={inverted ? palette.surface : field}>
+                <DotIcon name={glyph} size={GLYPH_SIZE} color={ink}/>
             </Square>
         );
     }

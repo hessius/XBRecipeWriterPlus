@@ -25,6 +25,26 @@ function actionsFor(overrides: Partial<RoomRecipeActions> = {}) {
 }
 
 describe("ShelfRoom", () => {
+    it("drives the screen's collapsing header from its own scroll", async () => {
+        // A room is a scrolling view like the list, and the header treated it
+        // as if it never moved.
+        const onScroll = jest.fn();
+        await renderWithProviders(
+            <ShelfRoom label="MORNINGS" recipes={[named("Ethiopia")]}
+                       onBack={jest.fn()} actionsFor={actionsFor()}
+                       onScroll={onScroll}/>
+        );
+
+        await fireEvent.scroll(screen.getByTestId("shelf-room"), {
+            nativeEvent: {
+                contentOffset:     {y: 200},
+                contentSize:       {height: 2000},
+                layoutMeasurement: {height: 800}
+            }
+        });
+        expect(onScroll).toHaveBeenCalledTimes(1);
+    });
+
     it("names the shelf and counts its recipes", async () => {
         await renderWithProviders(
             <ShelfRoom label="MORNINGS"

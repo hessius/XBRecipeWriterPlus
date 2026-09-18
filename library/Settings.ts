@@ -266,6 +266,30 @@ export const DEFAULTS = {
      */
     shelfMarkVariant: "hybrid" as ShelfMarkVariant,
     /**
+     * Auto shelves the user has put away, as a comma-separated list of ids.
+     *
+     * A string rather than an array because this table stores strings, and the
+     * same reason the rest of the module does not pretend otherwise. Empty by
+     * default: the grid offers every shelf it can fill, and a library that
+     * makes a shelf meaningless is a better judge of that than a default.
+     *
+     * Only auto shelves. A manual shelf is the user's own and has a delete; an
+     * auto shelf is a rule the app wrote, and the only thing the user can say
+     * about a rule that does not describe how they brew is "not for me".
+     */
+    hiddenShelves: "",
+    /**
+     * Draw an auto shelf's tile the other way round: the accent fills the card
+     * and the glyph's square takes the quiet background.
+     *
+     * Off by default, and a matter of taste rather than a correction, which is
+     * why it is offered rather than chosen. The grid at present is a field of
+     * quiet cards with a small accented square on each; inverted, it is a field
+     * of colour, which reads as a bookshelf and is louder in exactly the way
+     * some people want a library to be.
+     */
+    invertAutoShelves: false,
+    /**
      * The raw bytes of the last card read, kept so a crash cannot lose them.
      *
      * Not a preference — a diagnostic. A genuine "bypass water" card read to

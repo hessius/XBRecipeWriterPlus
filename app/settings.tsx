@@ -161,6 +161,11 @@ export default function SettingsScreen({settings}: Props) {
     const [libraryView, setLibraryView] = useSetting("libraryView", settings);
     const [shelfMarkVariant, setShelfMarkVariant] =
         useSetting("shelfMarkVariant", settings);
+    const [invertAutoShelves, setInvertAutoShelves] =
+        useSetting("invertAutoShelves", settings);
+    // Read here only so the backup can carry it. The list itself belongs to the
+    // grid's footer, which is where a shelf is put away and brought back.
+    const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
 
     // Deliberately given no query: this screen's questions are all about the
     // whole library, never about a view of it. That is what lets the restore
@@ -193,7 +198,7 @@ export default function SettingsScreen({settings}: Props) {
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
-            libraryView, shelfMarkVariant
+            libraryView, shelfMarkVariant, invertAutoShelves, hiddenShelves
         };
     }
 
@@ -283,6 +288,17 @@ export default function SettingsScreen({settings}: Props) {
         // tester's chosen variant with the default.
         if (SHELF_MARK_VARIANTS.includes(incoming.shelfMarkVariant as ShelfMarkVariant)) {
             setShelfMarkVariant(incoming.shelfMarkVariant as ShelfMarkVariant);
+        }
+        if (typeof incoming.invertAutoShelves === "boolean") {
+            setInvertAutoShelves(incoming.invertAutoShelves);
+        }
+        // Taken as written rather than checked against today's shelf ids: the
+        // stock shelves change between releases, and a backup naming one this
+        // build has not got should keep it hidden rather than have it reappear
+        // on a downgrade. `parseHidden` drops anything unrecognised at the one
+        // place it matters, which is the grid.
+        if (typeof incoming.hiddenShelves === "string") {
+            setHiddenShelves(incoming.hiddenShelves);
         }
     }
 
@@ -409,6 +425,11 @@ export default function SettingsScreen({settings}: Props) {
                         description="Fill the graph behind each recipe with a screen of dots instead of a flat tint."
                         value={dotMatrixProfile}
                         onChange={setDotMatrixProfile}/>
+                    <SettingsToggleRow
+                        label="Invert auto shelves"
+                        description="Fill an auto shelf's tile with its colour instead of its icon square."
+                        value={invertAutoShelves}
+                        onChange={setInvertAutoShelves}/>
                     <SettingsToggleRow
                         label="Show recipe pictures"
                         description="Draw the pod photo or the sharer's picture where a recipe arrived with one."

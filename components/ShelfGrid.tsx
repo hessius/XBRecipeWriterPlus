@@ -1,5 +1,6 @@
 import React from "react";
 import {Pressable, ScrollView} from "react-native";
+import type {NativeScrollEvent, NativeSyntheticEvent} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
@@ -51,12 +52,14 @@ function NewShelfButton({onPress}: {onPress: () => void}) {
     );
 }
 
-function Rows({shelves, marks, variant, onOpen, onActions}: {
+function Rows({shelves, marks, variant, inverted, onOpen, onActions, onHide}: {
     shelves: readonly Shelf[];
     marks: Readonly<Record<string, ShelfMarkMembers>>;
     variant: ShelfMarkVariant;
+    inverted?: boolean;
     onOpen: (id: string) => void;
     onActions?: (tag: string) => void;
+    onHide?: (id: string) => void;
 }) {
     const rows: Shelf[][] = [];
     for (let i = 0; i < shelves.length; i += COLUMNS) {
@@ -71,12 +74,59 @@ function Rows({shelves, marks, variant, onOpen, onActions}: {
                         <ShelfTile key={shelf.id} shelf={shelf}
                                    members={marks[shelf.id]}
                                    variant={variant}
+                                   inverted={inverted}
                                    onPress={() => onOpen(shelf.id)}
-                                   onActions={onActions && (() => onActions(shelf.label))}/>
+                                   onActions={onActions && (() => onActions(shelf.label))}
+                                   onHide={onHide && (() => onHide(shelf.id))}/>
                     ))}
                     {row.length < COLUMNS && <YStack flex={1}/>}
                 </XStack>
             ))}
+        </YStack>
+    );
+}
+
+/**
+ * The shelves the user has put away, and the way back.
+ *
+ * A footer rather than a settings page, because the annoyance and the remedy
+ * should be in the same place: a shelf is hidden from the grid, so it comes
+ * back from the grid. It draws only when something is actually hidden, so a
+ * library that has never used this never sees a line of admin under its
+ * shelves.
+ *
+ * The names are pressable and nothing else is: there is one thing to do with a
+ * shelf that is not on the grid, and a row of tiles here would be a second grid
+ * competing with the first.
+ */
+function HiddenShelves({shelves, onShow}: {
+    shelves: readonly Shelf[];
+    onShow: (id: string) => void;
+}) {
+    return (
+        <YStack gap="$2" paddingTop="$1" testID="hidden-shelves">
+            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.4}
+                           color={palette.muted}>
+                {shelves.length === 1 ? "1 HIDDEN" : `${shelves.length} HIDDEN`}
+            </DotMatrixText>
+            <XStack gap="$2" flexWrap="wrap">
+                {shelves.map((shelf) => (
+                    <Pressable key={shelf.id}
+                               accessibilityRole="button"
+                               accessibilityLabel={`Show the ${shelf.label} shelf again`}
+                               testID={`shelf-show-${shelf.id}`}
+                               onPress={() => onShow(shelf.id)}>
+                        <XStack paddingHorizontal="$3" paddingVertical="$2"
+                                borderRadius="$3" borderWidth={1}
+                                borderColor={palette.line}>
+                            <DotMatrixText fontSize={11} weight="bold"
+                                           letterSpacing={1.2} color={palette.dim}>
+                                {shelf.label}
+                            </DotMatrixText>
+                        </XStack>
+                    </Pressable>
+                ))}
+            </XStack>
         </YStack>
     );
 }
@@ -97,23 +147,43 @@ function Rows({shelves, marks, variant, onOpen, onActions}: {
  * there is nothing to select here, only somewhere to go.
  */
 export default function ShelfGrid({
-    shelves, marks = {}, variant = "hybrid",
-    onOpen, onNewShelf, onShelfActions, paddingBottom = 0
+    shelves, marks = {}, variant = "hybrid", invertAuto = false,
+    hidden = [], onOpen, onNewShelf, onShelfActions, onHideShelf, onScroll,
+    paddingBottom = 0
 }: {
     shelves: readonly Shelf[];
     /** What each shelf's art is drawn from, keyed by shelf id. */
     marks?: Readonly<Record<string, ShelfMarkMembers>>;
     /** Which art candidate to draw. From the LABS setting. */
     variant?: ShelfMarkVariant;
+    /** Draw auto tiles accent-first, the glyph square quiet. A preference. */
+    invertAuto?: boolean;
+    /**
+     * The auto shelves the user has put away, in the order they put them away.
+     *
+     * Passed as the stored list rather than filtered out by the caller, because
+     * the footer has to draw the ones that are missing and a caller that
+     * removed them would leave nothing to draw.
+     */
+    hidden?: readonly string[];
     onOpen: (id: string) => void;
     /** Start choosing members for a new shelf. */
     onNewShelf: () => void;
     /** Open the menu of what can be done to a manual shelf, by its tag. */
     onShelfActions: (tag: string) => void;
+    /** Put an auto shelf away, or bring it back. The same act both ways. */
+    onHideShelf?: (id: string) => void;
+    /** Drives the screen's collapsing header. */
+    onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     paddingBottom?: number;
 }) {
     const manual = shelves.filter((shelf) => shelf.kind === "manual");
-    const auto = shelves.filter((shelf) => shelf.kind === "auto");
+    const allAuto = shelves.filter((shelf) => shelf.kind === "auto");
+    const auto = allAuto.filter((shelf) => !hidden.includes(shelf.id));
+    // Only the ones the app could draw. A shelf hidden while it had members and
+    // now empty is not offered back, because bringing it back would show the
+    // user nothing: the footer counts what is actually being withheld.
+    const putAway = allAuto.filter((shelf) => hidden.includes(shelf.id));
 
     if (shelves.length === 0) {
         return (
@@ -134,6 +204,12 @@ export default function ShelfGrid({
 
     return (
         <ScrollView testID="shelf-grid"
+                    // The header collapses on this view's scroll the same way
+                    // it does on the list's. Without it the wordmark and the
+                    // tiles stayed up in the one view whose own content is
+                    // tiles, which is where the screen is most crowded.
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{
                         paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 24
@@ -153,10 +229,17 @@ export default function ShelfGrid({
                   */}
                 <NewShelfButton onPress={onNewShelf}/>
             </YStack>
-            {auto.length > 0 && (
+            {(auto.length > 0 || putAway.length > 0) && (
                 <YStack gap="$2">
                     <Heading label="AUTO SHELVES"/>
-                    <Rows shelves={auto} marks={marks} variant={variant} onOpen={onOpen}/>
+                    {auto.length > 0 && (
+                        <Rows shelves={auto} marks={marks} variant={variant}
+                              inverted={invertAuto} onOpen={onOpen}
+                              onHide={onHideShelf}/>
+                    )}
+                    {putAway.length > 0 && onHideShelf !== undefined && (
+                        <HiddenShelves shelves={putAway} onShow={onHideShelf}/>
+                    )}
                 </YStack>
             )}
         </ScrollView>

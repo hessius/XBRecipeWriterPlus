@@ -887,6 +887,8 @@ All in `Settings.DEFAULTS`, which is what carries them into a backup.
 | `libraryFavouritesFirst` | `false` |
 | `showRecipeAvatars` | `false` |
 | `shelfMarkVariant` | tester-controlled, through LABS |
+| `hiddenShelves` | `""` |
+| `invertAutoShelves` | `false` |
 
 The tester build no longer needs a bespoke mechanism for that last one. M6
 (#112) shipped `labsUnlocked`, a settings key that reveals a LABS section,
@@ -894,6 +896,46 @@ revealed by seven taps on the version line in About, and it was built as a
 general mechanism with this setting explicitly in mind. `shelfMarkVariant` is a
 row in that section. It does not read `__DEV__` or an EAS channel, so it works
 in a production TestFlight build, which is how the testers will get it.
+
+### Revision: an auto shelf you do not want
+
+A stock shelf is a rule the app wrote, and some of the rules will not describe
+the way a given person brews. TEA over a library with no tea in it never
+appears, because the floor of three keeps it out; TEA over a library with four
+teas in it appears whether or not the user thinks of those four as a shelf.
+
+So an auto shelf can be put away. A long press on the tile hides it, and a
+footer under the auto section says how many are hidden and names each one as a
+pressable chip that brings it back.
+
+The gesture is undiscoverable and that is allowed here, uniquely, because the
+footer is the discovery. A user who long-presses by accident is told what they
+just did, in words, in the place the shelf used to be, with the way back one tap
+away. The manual tile's menu cannot rely on that -- unshelving a recipe has no
+footer announcing it -- which is why that one is also drawn as a glyph.
+
+Both acts are the same act: `toggleHidden`. Hiding and showing are one function
+because they are one decision seen from two sides, and two functions would let
+them disagree about the order of the list.
+
+The stored list is a comma-separated string of shelf ids, and ids the build does
+not recognise are kept rather than dropped. An author shelf exists only while a
+recipe from that author is in the library, so forgetting an answer because the
+shelf was not on screen would silently unhide it on the next import. The footer
+draws only the hidden shelves that exist right now, though: offering back a
+shelf that would show the user nothing is not an offer.
+
+### Revision: an auto shelf drawn the other way round
+
+`invertAutoShelves` fills an auto tile with the shelf's accent and leaves its
+44 pt mark square quiet, with the glyph drawn in the accent it gave up. It is a
+preference rather than a decision because the two read differently at a glance
+and neither is wrong: upright, the grid is a page of grey cards with coloured
+stamps; inverted, it is a page of colour.
+
+Manual shelves are never inverted. Their mark is made of their members' own
+colours, so there is no single accent to lift out of it and nothing would be
+left in the square if one were.
 
 ### New `brews` columns
 

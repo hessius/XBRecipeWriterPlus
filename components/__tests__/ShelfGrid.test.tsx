@@ -105,6 +105,26 @@ describe("ShelfGrid", () => {
         expect(onShelfActions).not.toHaveBeenCalled();
     });
 
+    it("drives the screen's collapsing header from its own scroll", async () => {
+        // The grid is the one view whose content is already tiles, so it is
+        // where the wordmark and the CTA tiles cost the most. They stayed up.
+        const onScroll = jest.fn();
+        await renderWithProviders(
+            <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()}
+                       onNewShelf={jest.fn()} onShelfActions={jest.fn()}
+                       onScroll={onScroll}/>
+        );
+
+        await fireEvent.scroll(screen.getByTestId("shelf-grid"), {
+            nativeEvent: {
+                contentOffset:     {y: 200},
+                contentSize:       {height: 2000},
+                layoutMeasurement: {height: 800}
+            }
+        });
+        expect(onScroll).toHaveBeenCalledTimes(1);
+    });
+
     it("says one recipe rather than 1 recipes", async () => {
         await renderWithProviders(
             <ShelfGrid shelves={[shelf({count: 1})]} onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
@@ -152,6 +172,154 @@ describe("ShelfGrid", () => {
             );
 
             expect(screen.getByTestId("shelf-mark-field")).toBeTruthy();
+        });
+    });
+
+    describe("shelves the user has put away", () => {
+        it("keeps a hidden auto shelf off the grid", async () => {
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={jest.fn()}
+                           hidden={["tea"]} shelves={[
+                    shelf(),
+                    shelf({id: "single", label: "SINGLE POUR"})
+                ]}/>
+            );
+
+            // By tile rather than by name: the footer under the grid names it
+            // too, which is the point of the footer.
+            expect(screen.queryByRole("button", {name: "TEA, auto shelf, 4 recipes"}))
+                .toBeNull();
+            expect(screen.getByRole("button", {name: "SINGLE POUR, auto shelf, 4 recipes"}))
+                .toBeTruthy();
+        });
+
+        it("says how many are hidden and offers each one back", async () => {
+            const onHideShelf = jest.fn();
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={onHideShelf}
+                           hidden={["tea"]} shelves={[shelf()]}/>
+            );
+
+            expect(screen.getByText("1 HIDDEN")).toBeTruthy();
+            fireEvent.press(screen.getByTestId("shelf-show-tea"));
+            expect(onHideShelf).toHaveBeenCalledWith("tea");
+        });
+
+        it("draws no footer when nothing is hidden", async () => {
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={jest.fn()}
+                           shelves={[shelf()]}/>
+            );
+
+            expect(screen.queryByTestId("hidden-shelves")).toBeNull();
+        });
+
+        // A shelf hidden while it had members and since emptied is not on the
+        // grid to begin with, so offering it back would show the user nothing.
+        it("counts only the hidden shelves that still exist", async () => {
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={jest.fn()}
+                           hidden={["tea", "gone"]} shelves={[
+                    shelf(),
+                    shelf({id: "single", label: "SINGLE POUR"})
+                ]}/>
+            );
+
+            expect(screen.getByText("1 HIDDEN")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-show-gone")).toBeNull();
+        });
+
+        // The heading is what tells a reader the footer under it is about auto
+        // shelves. With every one of them hidden it is the only thing left.
+        it("keeps the auto heading when every auto shelf is hidden", async () => {
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={jest.fn()}
+                           hidden={["tea"]} shelves={[shelf()]}/>
+            );
+
+            expect(screen.getByText("AUTO SHELVES")).toBeTruthy();
+            expect(screen.getByTestId("hidden-shelves")).toBeTruthy();
+        });
+
+        it("hides an auto shelf from its own accessibility action", async () => {
+            const onHideShelf = jest.fn();
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={onHideShelf}
+                           shelves={[shelf()]}/>
+            );
+
+            // Both halves, because `fireEvent` will run the handler whether or
+            // not the action was declared: a tile that answers an action it
+            // never offered is unreachable in the app.
+            const tile = screen.getByRole("button", {name: "TEA, auto shelf, 4 recipes"});
+            expect(tile.props.accessibilityActions)
+                .toEqual([{name: "hide", label: "Hide the TEA shelf"}]);
+            fireEvent(tile, "accessibilityAction", {nativeEvent: {actionName: "hide"}});
+            expect(onHideShelf).toHaveBeenCalledWith("tea");
+        });
+
+        // A manual shelf has a menu with a delete in it. Hiding is the answer
+        // to a shelf the user cannot delete, so it is not offered on one they
+        // can, and a long press there must keep opening the menu.
+        it("puts a long press on an auto tile onto hiding it", async () => {
+            const onHideShelf = jest.fn();
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={onHideShelf}
+                           shelves={[shelf()]}/>
+            );
+
+            fireEvent(screen.getByRole("button", {name: "TEA, auto shelf, 4 recipes"}),
+                      "longPress");
+            expect(onHideShelf).toHaveBeenCalledWith("tea");
+        });
+
+        it("does not offer to hide a shelf the user made", async () => {
+            await renderWithProviders(
+                <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()} onHideShelf={jest.fn()}
+                           shelves={[
+                    shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})
+                ]}/>
+            );
+
+            const tile = screen.getByRole("button", {name: "morning, your shelf, 2 recipes"});
+            expect(tile.props.accessibilityActions)
+                .toEqual([{name: "edit", label: "Actions for the morning shelf"}]);
+        });
+    });
+
+    // The point of inverting is that the shelf's colour moves off the small
+    // square and onto the whole tile. Asserted by test id, because Tamagui
+    // resolves colour to a class and a test cannot read a background back.
+    describe("inverted auto tiles", () => {
+        it("leaves the colour on the glyph square when upright", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf()]}
+                           marks={{tea: {accents: ["#A1B2C3"], profiles: [[]]}}}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-glyph")).toBeTruthy();
+        });
+
+        it("takes the colour off the glyph square when inverted", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf()]}
+                           marks={{tea: {accents: ["#A1B2C3"], profiles: [[]]}}}
+                           invertAuto onOpen={jest.fn()} onNewShelf={jest.fn()}
+                           onShelfActions={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-glyph-inverted")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-mark-glyph")).toBeNull();
         });
     });
 });
