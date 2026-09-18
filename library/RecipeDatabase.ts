@@ -571,6 +571,44 @@ class RecipeDatabase {
     }
 
     /**
+     * A few members of each shelf, for the art on its tile.
+     *
+     * At most `perShelf` recipes, taken in the shelf's own order, which is the
+     * grid's order: a shelf of forty drawn as forty staircases is a solid block,
+     * and the design caps the read at three. The cap is applied in SQL rather
+     * than by slicing afterwards, so a large shelf costs the same as a small
+     * one.
+     *
+     * One small query per shelf rather than one clever query for all of them.
+     * The alternative is a UNION of per-shelf limited subqueries, which is the
+     * same number of scans wearing a disguise, and unreadable. There are twelve
+     * stock shelves plus however many tags a person typed, each returning three
+     * rows of JSON.
+     *
+     * An unknown id is skipped rather than thrown on, unlike `countRecipesByFilter`:
+     * a count that silently answered zero would misreport the library, whereas a
+     * missing mark only costs a tile its picture.
+     */
+    public shelfMembers(
+        ids: readonly string[],
+        resolveFilter: FilterResolver = () => null,
+        perShelf = 3
+    ): Record<string, Recipe[]> {
+        const members: Record<string, Recipe[]> = {};
+        for (const id of ids) {
+            const clause = resolveFilter(id);
+            if (clause === null) continue;
+            const rows = this.db.getAllSync(
+                `SELECT recipeJSON FROM recipes WHERE (${clause.where})
+                 ORDER BY sortName ASC LIMIT ?;`,
+                [...(clause.params ?? []), perShelf]
+            ) as {recipeJSON: string}[];
+            members[id] = rows.map((row) => new Recipe(undefined, row.recipeJSON));
+        }
+        return members;
+    }
+
+    /**
      * What each recipe's brews add up to, for the card's evidence suffix.
      *
      * One grouped read over `brews` rather than a column on the library query,

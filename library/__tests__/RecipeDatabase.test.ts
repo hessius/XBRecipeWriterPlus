@@ -1,5 +1,6 @@
 import RecipeDatabase from "@/library/RecipeDatabase";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {resolveLibraryFilter} from "@/library/libraryFilters";
 // The `mock` prefix is what lets a jest.mock factory close over this binding:
 // the factory is hoisted above the imports, so Jest rejects any out-of-scope
 // reference that is not named as a mock. Same reason as mockBacking in
@@ -178,5 +179,71 @@ describe("duplicating a recipe", () => {
         const copy = (database.retrieveAllRecipes() ?? []).find((r) => r.source === "duplicate");
         expect(copy?.name).toBe("");
         expect(copy?.hasName()).toBe(false);
+    });
+});
+
+describe("RecipeDatabase.shelfMembers", () => {
+    function teaRecipe(name: string): Recipe {
+        const recipe = recipeNamed(name);
+        recipe.cupType = CUP_TYPE.TEA;
+        return recipe;
+    }
+
+    it("reads nothing for a shelf id it cannot resolve", () => {
+        // Unlike a count, which shouts: a missing mark only costs a tile its
+        // picture, whereas a count that answered zero would misreport the
+        // library.
+        const db = freshDatabase();
+        db.insertRecipe(recipeNamed("A"));
+
+        expect(db.shelfMembers(["nonsense"], () => null)).toEqual({});
+    });
+
+    it("reads only the recipes on that shelf", () => {
+        const db = freshDatabase();
+        db.insertRecipe(teaRecipe("Sencha"));
+        db.insertRecipe(recipeNamed("Ethiopia"));
+
+        const members = db.shelfMembers(["tea"], resolveLibraryFilter);
+
+        expect(members["tea"].map((r) => r.name)).toEqual(["Sencha"]);
+    });
+
+    it("stops at the member cap, however large the shelf", () => {
+        const db = freshDatabase();
+        ["A", "B", "C", "D", "E"].forEach((name) => db.insertRecipe(teaRecipe(name)));
+
+        const members = db.shelfMembers(["tea"], resolveLibraryFilter, 3);
+
+        expect(members["tea"]).toHaveLength(3);
+    });
+
+    it("takes them in the shelf's own order, not insertion order", () => {
+        const db = freshDatabase();
+        ["Zambia", "Ethiopia", "Kenya"].forEach((n) => db.insertRecipe(teaRecipe(n)));
+
+        const members = db.shelfMembers(["tea"], resolveLibraryFilter, 2);
+
+        expect(members["tea"].map((r) => r.name)).toEqual(["Ethiopia", "Kenya"]);
+    });
+
+    it("answers an empty shelf with an empty list, not an absence", () => {
+        // The mark's own fallback reads the list; a shelf that is drawn but
+        // empty is a real state, since a filter can be applied while it holds
+        // nothing.
+        const db = freshDatabase();
+        db.insertRecipe(recipeNamed("Ethiopia"));
+
+        expect(db.shelfMembers(["tea"], resolveLibraryFilter)["tea"]).toEqual([]);
+    });
+
+    it("answers several shelves in one call", () => {
+        const db = freshDatabase();
+        db.insertRecipe(teaRecipe("Sencha"));
+        db.insertRecipe(recipeNamed("Ethiopia"));
+
+        const members = db.shelfMembers(["tea", "singlePour"], resolveLibraryFilter);
+
+        expect(Object.keys(members).sort()).toEqual(["singlePour", "tea"]);
     });
 });

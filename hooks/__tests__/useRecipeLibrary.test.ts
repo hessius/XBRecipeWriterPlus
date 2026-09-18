@@ -7,6 +7,7 @@ import {
 } from "@/library/libraryFilters";
 import type {LibraryQuery, RecipeEvidence} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
+import {MARK_MEMBERS} from "@/components/ShelfMark";
 
 jest.mock("@/library/RecipeDatabase");
 
@@ -33,7 +34,8 @@ function stubDb(recipes: Recipe[]) {
             Object.fromEntries(ids.map((id) => [id, 0]))
         ),
         countRecipesByTag: jest.fn((): {tag: string; count: number}[] => []),
-        brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({}))
+        brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({})),
+        shelfMembers: jest.fn((): Record<string, Recipe[]> => ({}))
     };
 }
 
@@ -486,6 +488,59 @@ describe("the store it reads through", () => {
             const {result} = await renderHook(() => useRecipeLibrary(without));
 
             expect(result.current.evidence).toEqual({});
+        });
+    });
+
+    describe("the art each shelf tile draws", () => {
+        it("asks for every stock shelf and every tag", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 2}]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("tea");
+            expect(asked).toContain("tag:morning");
+        });
+
+        it("asks for no more members than the mark will draw", async () => {
+            const db = stubDb([named("Ethiopia")]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const call = db.shelfMembers.mock.calls[0] as unknown as [unknown, unknown, number];
+            expect(call[2]).toBe(MARK_MEMBERS);
+        });
+
+        it("turns the members into accents and profiles", async () => {
+            const member = named("Ethiopia");
+            const db = stubDb([member]);
+            db.shelfMembers.mockReturnValue({tea: [member]});
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.shelfMarks["tea"].accents).toHaveLength(1);
+            expect(result.current.shelfMarks["tea"].profiles).toEqual([member.pours]);
+        });
+
+        it("leaves out a shelf with no members at all", async () => {
+            // The tile falls back to its plain field, which is what an empty
+            // shelf should look like -- not a mark drawn from nothing.
+            const db = stubDb([named("Ethiopia")]);
+            db.shelfMembers.mockReturnValue({tea: []});
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.shelfMarks["tea"]).toBeUndefined();
+        });
+
+        it("is empty for a store that cannot answer", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            const {shelfMembers: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.shelfMarks).toEqual({});
         });
     });
 });

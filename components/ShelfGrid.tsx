@@ -6,6 +6,8 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import ShelfTile from "@/components/ShelfTile";
 import {palette} from "@/constants/colors";
+import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
+import type {ShelfMarkVariant} from "@/library/Settings";
 import type {Shelf} from "@/library/shelves";
 
 /** Two per row. Three is a tile too narrow for a tag of ordinary length. */
@@ -49,8 +51,10 @@ function NewShelfButton({onPress}: {onPress: () => void}) {
     );
 }
 
-function Rows({shelves, onOpen, onEdit}: {
+function Rows({shelves, marks, variant, onOpen, onEdit}: {
     shelves: readonly Shelf[];
+    marks: Readonly<Record<string, ShelfMarkMembers>>;
+    variant: ShelfMarkVariant;
     onOpen: (id: string) => void;
     onEdit?: (tag: string) => void;
 }) {
@@ -65,6 +69,8 @@ function Rows({shelves, onOpen, onEdit}: {
                 <XStack key={row[0].id} gap="$3">
                     {row.map((shelf) => (
                         <ShelfTile key={shelf.id} shelf={shelf}
+                                   members={marks[shelf.id]}
+                                   variant={variant}
                                    onPress={() => onOpen(shelf.id)}
                                    onEdit={onEdit && (() => onEdit(shelf.label))}/>
                     ))}
@@ -91,9 +97,14 @@ function Rows({shelves, onOpen, onEdit}: {
  * there is nothing to select here, only somewhere to go.
  */
 export default function ShelfGrid({
-    shelves, onOpen, onNewShelf, onEditShelf, paddingBottom = 0
+    shelves, marks = {}, variant = "hybrid",
+    onOpen, onNewShelf, onEditShelf, paddingBottom = 0
 }: {
     shelves: readonly Shelf[];
+    /** What each shelf's art is drawn from, keyed by shelf id. */
+    marks?: Readonly<Record<string, ShelfMarkMembers>>;
+    /** Which art candidate to draw. From the LABS setting. */
+    variant?: ShelfMarkVariant;
     onOpen: (id: string) => void;
     /** Start choosing members for a new shelf. */
     onNewShelf: () => void;
@@ -130,7 +141,8 @@ export default function ShelfGrid({
             <YStack gap="$2">
                 <Heading label="YOUR SHELVES"/>
                 {manual.length > 0 && (
-                    <Rows shelves={manual} onOpen={onOpen} onEdit={onEditShelf}/>
+                    <Rows shelves={manual} marks={marks} variant={variant}
+                          onOpen={onOpen} onEdit={onEditShelf}/>
                 )}
                 {/*
                   * The one heading always drawn over what might be nothing. It
@@ -144,7 +156,7 @@ export default function ShelfGrid({
             {auto.length > 0 && (
                 <YStack gap="$2">
                     <Heading label="AUTO SHELVES"/>
-                    <Rows shelves={auto} onOpen={onOpen}/>
+                    <Rows shelves={auto} marks={marks} variant={variant} onOpen={onOpen}/>
                 </YStack>
             )}
         </ScrollView>

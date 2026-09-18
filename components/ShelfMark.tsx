@@ -1,7 +1,13 @@
 import React from "react";
-import {YStack} from "tamagui";
+import Svg, {Path} from "react-native-svg";
+import {XStack, YStack} from "tamagui";
 
-import {palette} from "@/constants/colors";
+import DotIcon from "@/components/DotIcon";
+import {buildProfilePath, PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
+import {onAccent, palette} from "@/constants/colors";
+import type {DotIconName} from "@/constants/dotIcons";
+import type Pour from "@/library/Pour";
+import type {ShelfMarkVariant} from "@/library/Settings";
 
 /**
  * The size the design fixes, and the reason it is fixed.
@@ -13,40 +19,140 @@ import {palette} from "@/constants/colors";
  */
 export const MARK_SIZE = 44;
 
-/** How wide the placeholder bar is, as a fraction of the square. */
-const BAR_WIDTH = {manual: 28, auto: 16};
+/**
+ * How many members any variant reads.
+ *
+ * The design's cap, and it is a drawing rule rather than a query one: a shelf of
+ * forty drawn as forty staircases is a solid block, and a mosaic of forty tiles
+ * is a texture. Enforced here as well as in the query that supplies it, because
+ * the component is what the cap is about -- a caller handing over more must not
+ * be able to make the square illegible.
+ */
+export const MARK_MEMBERS = 3;
+
+/** The dot matrix glyph's size inside the square. */
+const GLYPH_SIZE = 26;
+
+/** The mosaic's gutter, in points. One dot of air, as the icons use. */
+const MOSAIC_GAP = 2;
+
+/** Radius shared by every variant, so a swap does not change the silhouette. */
+const RADIUS = 10;
+
+/**
+ * Which art this shelf takes, given the variant the tester picked.
+ *
+ * `hybrid` is the only branch with anything to decide, and what it decides is
+ * the design's central claim: an auto shelf is a closed set that ships with the
+ * app, so it carries a glyph drawn at design time, while a manual shelf is open
+ * ended and takes a mark derived from its members. The art then says which kind
+ * of shelf it is, without a caption saying so.
+ */
+export function markFor(
+    variant: ShelfMarkVariant, kind: "auto" | "manual"
+): "mosaic" | "profiles" | "glyph" {
+    if (variant !== "hybrid") return variant;
+    return kind === "auto" ? "glyph" : "profiles";
+}
 
 /**
  * The square a shelf's art is drawn in.
  *
- * This is the contract the design asked for, with the plainest possible art
- * inside it: a filled bar for a shelf a person made, a shorter faint one for one
- * the app derived. Both candidates the spec is testing -- an accent field with a
- * dot matrix glyph for auto shelves, superimposed pour profiles for manual ones
- * -- drop into this component without the grid noticing, because the square is
- * the same size whatever is drawn in it and everything it draws arrives as a
- * prop. Nothing is fetched here and nothing is stored, so a mark cannot go stale
- * against the shelf it sits on.
+ * Everything it draws arrives as a prop. Nothing is fetched here and nothing is
+ * stored, so a mark cannot go stale against the shelf it sits on, and switching
+ * variants cannot make one shelf disagree with another about what it holds.
  *
- * `accents` and `profiles` are the props those candidates will read. They are
- * declared and unused on purpose: the caller that will have to supply them is
- * the grid, and typing them now is what keeps the eventual swap to this file.
+ * A shelf whose members give the chosen variant nothing to draw falls back to
+ * the plain accent field rather than to a different variant. A tile that
+ * silently changed art when its last member left would read as two shelves.
  */
-export default function ShelfMark({kind}: {
+export default function ShelfMark({
+    kind, variant = "hybrid", glyph, accents = [], profiles = []
+}: {
     kind: "auto" | "manual";
-    /** Member accents, dominant first. For the mosaic and profile variants. */
+    /** Which candidate to draw. From the LABS setting. */
+    variant?: ShelfMarkVariant;
+    /** The glyph an auto shelf carries. Auto shelves only. */
+    glyph?: DotIconName | null;
+    /** Member accents, dominant first. For the mosaic and glyph variants. */
     accents?: readonly string[];
-    /** At most three members' pour profiles, for the profile variant. */
-    profiles?: readonly unknown[];
+    /** Members' pour profiles, for the profile variant. */
+    profiles?: readonly Pour[][];
 }) {
-    const manual = kind === "manual";
+    const mark = markFor(variant, kind);
+    const members = accents.slice(0, MARK_MEMBERS);
+    const shapes = profiles.slice(0, MARK_MEMBERS).filter((pours) => pours.length > 0);
+    const field = members[0] ?? palette.surface;
 
+    if (mark === "glyph" && glyph != null) {
+        return (
+            <Square testID="shelf-mark-glyph" background={field}>
+                {/* Dark ink only when the field is an accent. An empty shelf
+                    draws on `surface`, where `onAccent.text` would vanish. */}
+                <DotIcon name={glyph} size={GLYPH_SIZE}
+                         color={members.length > 0 ? onAccent.text : palette.text}/>
+            </Square>
+        );
+    }
+
+    if (mark === "profiles" && shapes.length > 0) {
+        return (
+            <Square testID="shelf-mark-profiles" background={palette.surface}>
+                <Svg width={MARK_SIZE} height={MARK_SIZE}
+                     viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`}>
+                    {shapes.map((pours, index) => (
+                        <Path key={index}
+                              // Inset so a staircase reaching the top of its
+                              // box is not clipped by the rounded corner.
+                              d={buildProfilePath(pours as Pour[],
+                                                  MARK_SIZE - 12, MARK_SIZE - 16)}
+                              translateX={6} translateY={10}
+                              fill="none"
+                              stroke={members[index] ?? palette.muted}
+                              strokeWidth={PROFILE_STROKE_WIDTH}/>
+                    ))}
+                </Svg>
+            </Square>
+        );
+    }
+
+    if (mark === "mosaic" && members.length > 0) {
+        // Four tiles from at most three accents: the dominant one takes the
+        // spare corner rather than a fourth member being read, so the mosaic
+        // obeys the same member cap as the other variants and a shelf of one
+        // still fills its square instead of drawing a lone quarter.
+        const tiles = [0, 1, 2, 3].map((i) => members[i % members.length]);
+        return (
+            <Square testID="shelf-mark-mosaic" background={palette.surface}>
+                <YStack width={MARK_SIZE} height={MARK_SIZE} gap={MOSAIC_GAP}>
+                    {[0, 2].map((row) => (
+                        <XStack key={row} flex={1} gap={MOSAIC_GAP}>
+                            <YStack flex={1} backgroundColor={tiles[row]}/>
+                            <YStack flex={1} backgroundColor={tiles[row + 1]}/>
+                        </XStack>
+                    ))}
+                </YStack>
+            </Square>
+        );
+    }
+
+    return <Square testID="shelf-mark-field" background={field}/>;
+}
+
+/** The 44 pt square itself, which every variant shares and none may resize. */
+function Square({background, testID, children}: {
+    background: string;
+    testID: string;
+    children?: React.ReactNode;
+}) {
     return (
-        <YStack width={MARK_SIZE} height={MARK_SIZE} justifyContent="center"
+        <YStack width={MARK_SIZE} height={MARK_SIZE} borderRadius={RADIUS}
+                overflow="hidden" alignItems="center" justifyContent="center"
+                backgroundColor={background}
                 testID="shelf-mark">
-            <YStack height={4} width={manual ? BAR_WIDTH.manual : BAR_WIDTH.auto}
-                    borderRadius={2}
-                    backgroundColor={manual ? palette.text : palette.muted}/>
+            <YStack testID={testID} alignItems="center" justifyContent="center">
+                {children}
+            </YStack>
         </YStack>
     );
 }

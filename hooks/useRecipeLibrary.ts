@@ -1,11 +1,14 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
+import {MARK_MEMBERS} from "@/components/ShelfMark";
+import {resolveAccent} from "@/library/accent";
 import {
-    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER, tagFilterId
 } from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery,
               RecipeEvidence} from "@/library/libraryQuery";
+import type Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {tagKey} from "@/library/tagKey";
@@ -51,6 +54,17 @@ export type RecipeStore = {
      * that does not shout.
      */
     brewEvidence?: () => Record<string, RecipeEvidence>;
+    /**
+     * A few members of each shelf, for the art on its tile.
+     *
+     * Optional for the same reason as `brewEvidence`: a store that cannot
+     * answer costs a tile its picture and nothing else.
+     */
+    shelfMembers?: (
+        ids: readonly string[],
+        resolveFilter?: FilterResolver,
+        perShelf?: number
+    ) => Record<string, Recipe[]>;
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -129,6 +143,12 @@ export type RestoreOutcome =
  */
 export type ShelfWriteOutcome = {full: number; failed: number};
 
+/** What a shelf's mark is drawn from: its first few members, in shelf order. */
+export type ShelfMarkMembers = {
+    accents: string[];
+    profiles: Pour[][];
+};
+
 export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
@@ -139,6 +159,8 @@ export type RecipeLibrary = {
     tagCounts: {tag: string; count: number}[];
     /** What each recipe's brews add up to, keyed by uuid. Absent means none. */
     evidence: Record<string, RecipeEvidence>;
+    /** The art each shelf's tile draws, keyed by shelf id. */
+    shelfMarks: Record<string, ShelfMarkMembers>;
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
@@ -191,6 +213,13 @@ export function useRecipeLibrary(
     const filterCounts = readFilterCounts(store, revision);
     const tagCounts = readTagCounts(store, revision);
     const evidence = readEvidence(store, revision);
+    // Keyed by every shelf that could be drawn rather than by the ones the grid
+    // actually draws, because suppression depends on which filters are applied
+    // and the art does not: the same shelf shows the same members whether the
+    // user is standing in it or passing it. Joining the ids into one string is
+    // what lets the compiler cache this across renders -- an array rebuilt each
+    // render is a new dependency every time, and this reads SQLite.
+    const shelfMarks = readShelfMarks(store, shelfIdsOf(tagCounts), revision);
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -379,6 +408,7 @@ export function useRecipeLibrary(
         filterCounts,
         tagCounts,
         evidence,
+        shelfMarks,
         allRecipes,
         refresh: reload,
         deleteRecipe,
@@ -452,7 +482,10 @@ function readTagCounts(db: RecipeStore, revision: number): {tag: string; count: 
     if (!db.countRecipesByTag) {
         throw new Error("This store cannot count tags");
     }
-    return db.countRecipesByTag();
+    // `?? []` for a store that has the method but answers nothing -- which is
+    // what an auto-mocked database does. A real one returns a row set, empty or
+    // not; the absent-method case above is the one that shouts.
+    return db.countRecipesByTag() ?? [];
 }
 
 /**
@@ -464,6 +497,43 @@ function readEvidence(
 ): Record<string, RecipeEvidence> {
     void revision;
     return db.brewEvidence?.() ?? {};
+}
+
+/**
+ * Every shelf id that could be drawn, as one string.
+ *
+ * A primitive rather than an array so the read below can be cached on it. The
+ * separator is a newline because a tag cannot contain one -- `Recipe.setTags`
+ * collapses whitespace -- so two different tag sets cannot fold to one key.
+ */
+function shelfIdsOf(tagCounts: readonly {tag: string}[]): string {
+    return [...STOCK_FILTER_ORDER, ...tagCounts.map(({tag}) => tagFilterId(tag))]
+        .join("\n");
+}
+
+/**
+ * The members whose accents and profiles a shelf's mark is drawn from.
+ *
+ * Read on the same revision counter as the list, so a recipe joining a shelf
+ * changes the shelf's picture without a reload.
+ */
+function readShelfMarks(
+    db: RecipeStore, ids: string, revision: number
+): Record<string, ShelfMarkMembers> {
+    void revision;
+    const members = db.shelfMembers?.(
+        ids === "" ? [] : ids.split("\n"), resolveLibraryFilter, MARK_MEMBERS
+    ) ?? {};
+
+    const marks: Record<string, ShelfMarkMembers> = {};
+    for (const [id, recipes] of Object.entries(members)) {
+        if (recipes.length === 0) continue;
+        marks[id] = {
+            accents:  recipes.map(resolveAccent),
+            profiles: recipes.map((recipe) => recipe.pours)
+        };
+    }
+    return marks;
 }
 
 export default useRecipeLibrary;

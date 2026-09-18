@@ -6,6 +6,9 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import ShelfMark from "@/components/ShelfMark";
 import {palette} from "@/constants/colors";
+import {shelfGlyph} from "@/constants/shelfGlyphs";
+import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
+import type {ShelfMarkVariant} from "@/library/Settings";
 import type {Shelf} from "@/library/shelves";
 
 /**
@@ -28,8 +31,14 @@ export const TILE_HEIGHT = 120;
  * because "morning, 4 recipes" is one fact and two elements would make the user
  * swipe twice to learn it.
  */
-export default function ShelfTile({shelf, onPress, onEdit}: {
+export default function ShelfTile({
+    shelf, members, variant = "hybrid", onPress, onEdit
+}: {
     shelf: Shelf;
+    /** What this shelf's art is drawn from. Absent for an empty shelf. */
+    members?: ShelfMarkMembers;
+    /** Which art candidate to draw. From the LABS setting. */
+    variant?: ShelfMarkVariant;
     onPress: () => void;
     /**
      * Change who is on this shelf. Manual shelves only: an auto shelf has no
@@ -69,7 +78,10 @@ export default function ShelfTile({shelf, onPress, onEdit}: {
                     borderWidth={manual ? 0 : 1}
                     borderColor={palette.line}>
                 <XStack alignItems="flex-start" justifyContent="space-between">
-                    <ShelfMark kind={shelf.kind}/>
+                    <ShelfMark kind={shelf.kind} variant={variant}
+                               glyph={shelfGlyph(shelf.id)}
+                               accents={members?.accents}
+                               profiles={members?.profiles}/>
                     {onEdit && (
                         <Pressable accessibilityRole="button"
                                    accessibilityLabel={`Edit the ${shelf.label} shelf`}
