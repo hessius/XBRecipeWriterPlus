@@ -24,16 +24,16 @@ done.
 about and returned from early, leaving the sheet open, complaining, and empty.
 Amending a near miss means typing the whole name again.
 
-- [ ] `onName` reports acceptance. The screen already knows whether it took the
+- [x] `onName` reports acceptance. The screen already knows whether it took the
       name, so let it say so rather than making the sheet infer it. A boolean
       return is enough; the sheet clears and closes on true and keeps the text
       on false.
-- [ ] The failure path already notifies, so the sheet adds no copy of its own.
+- [x] The failure path already notifies, so the sheet adds no copy of its own.
       Two messages for one refusal is worse than none.
-- [ ] Check the rename path as well as the create path. Both go through the
+- [x] Check the rename path as well as the create path. Both go through the
       same sheet and both can be refused, so a fix that only covers one is half
       a fix.
-- [ ] Tests: a refused name leaves the field holding what was typed and the
+- [x] Tests: a refused name leaves the field holding what was typed and the
       sheet open; an accepted name clears and closes. Probe by returning `true`
       unconditionally.
 
