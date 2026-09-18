@@ -9,6 +9,7 @@ import ShelfTile from "@/components/ShelfTile";
 import {palette} from "@/constants/colors";
 import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
 import type {ShelfMarkVariant} from "@/library/Settings";
+import {hides} from "@/library/hiddenShelves";
 import type {Shelf} from "@/library/shelves";
 
 /** Two per row. Three is a tile too narrow for a tag of ordinary length. */
@@ -179,11 +180,15 @@ export default function ShelfGrid({
 }) {
     const manual = shelves.filter((shelf) => shelf.kind === "manual");
     const allAuto = shelves.filter((shelf) => shelf.kind === "auto");
-    const auto = allAuto.filter((shelf) => !hidden.includes(shelf.id));
+    // Canonically, not by exact id: an author shelf's id carries whichever
+    // spelling the representative recipe used, and the grouping behind it is
+    // folded, so a library whose representative changes from "café" to "CAFÉ"
+    // would present a new id and unhide a shelf the user put away.
+    const auto = allAuto.filter((shelf) => !hides(hidden, shelf.id));
     // Only the ones the app could draw. A shelf hidden while it had members and
     // now empty is not offered back, because bringing it back would show the
     // user nothing: the footer counts what is actually being withheld.
-    const putAway = allAuto.filter((shelf) => hidden.includes(shelf.id));
+    const putAway = allAuto.filter((shelf) => hides(hidden, shelf.id));
 
     if (shelves.length === 0) {
         return (

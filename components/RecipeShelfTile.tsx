@@ -133,6 +133,9 @@ export default function RecipeShelfTile({
         // glance's shorthand and reads as noise when it is read aloud.
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
+        // The tile prints OFF in place of the size, so the label has to say it:
+        // a figure drawn and not spoken is one a screen reader user never gets.
+        !isTea && !recipe.grinder ? "grinder off" : undefined,
         !isTea && recipe.grinder && isSet(recipe.grindSize)
             ? `grind ${recipe.grindSize}`
             : undefined,

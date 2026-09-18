@@ -418,12 +418,44 @@ describe("the star, on the recipe that is open", () => {
         const RecipeDatabase = require("@/library/RecipeDatabase").default;
         const {result} = await renderEditor();
 
-        const before = RecipeDatabase.mock.instances.length;
+        const written: Recipe[] = [];
+        RecipeDatabase.mockImplementation(() => ({
+            getRecipe:    () => new Recipe(undefined, JSON.stringify(result.current.recipe)),
+            updateRecipe: (_uuid: string, r: Recipe) => { written.push(r); }
+        }));
 
         await act(async () => { result.current.toggleFavourite(); });
 
         expect(result.current.recipe?.favourite).toBe(true);
-        expect(RecipeDatabase.mock.instances.length).toBeGreaterThan(before);
+        expect(written).toHaveLength(1);
+        expect(written[0].favourite).toBe(true);
+    });
+
+    // The star is a mark on the library row, and the draft on the bench is not
+    // the library row: it holds every edit the user has not saved. Writing the
+    // draft to set one flag commits all of them, so backing out of the editor
+    // would keep changes the user never saved.
+    it("does not commit the unsaved draft along with the star", async () => {
+        const RecipeDatabase = require("@/library/RecipeDatabase").default;
+        const {result} = await renderEditor();
+
+        const saved = new Recipe(undefined, JSON.stringify(result.current.recipe));
+        saved.dosage = 15;
+        const written: Recipe[] = [];
+        RecipeDatabase.mockImplementation(() => ({
+            getRecipe:    () => saved,
+            updateRecipe: (_uuid: string, r: Recipe) => { written.push(r); }
+        }));
+
+        await act(async () => {
+            await result.current.editInputComplete(RECIPE_LABELS.DOSE, "22");
+        });
+        await act(async () => { result.current.toggleFavourite(); });
+
+        expect(result.current.recipe?.dosage).toBe(22);
+        expect(written).toHaveLength(1);
+        expect(written[0].favourite).toBe(true);
+        expect(written[0].dosage).toBe(15);
     });
 
     it("takes the star off again on a second press", async () => {

@@ -176,6 +176,11 @@ export default function HomeScreen({db, settings}: Props) {
     const [namingShelf, setNamingShelf] = useState(false);
     const [removingShelf, setRemovingShelf] = useState<string | null>(null);
     const [renamingShelf, setRenamingShelf] = useState<string | null>(null);
+    // Whether the rename is the reason an edit is running. A rename from the
+    // grid starts one the user never sees, so dismissing the sheet has to end
+    // it or they land in the member editor they never asked for; a rename from
+    // inside an edit must leave that edit exactly where it was.
+    const [renameStartedEdit, setRenameStartedEdit] = useState(false);
     const [shelfActions, setShelfActions] = useState<string | null>(null);
     // Deleting a shelf outright and emptying one both end at the same
     // confirmation, and it has to say which happened, so the reason travels
@@ -510,9 +515,12 @@ export default function HomeScreen({db, settings}: Props) {
             notify({tone: "error", message: `There is already a shelf called ${name}.`});
             return;
         }
-        library.setShelfMembers(renamingShelf, []);
-        reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
+        // One pass over the library rather than an empty followed by a fill:
+        // between two writes the shelf does not exist, and a refused second
+        // write left its members with neither name.
+        reportShelfWrite(library.renameShelf(renamingShelf, name, picker.chosen()));
         setRenamingShelf(null);
+        setRenameStartedEdit(false);
         stopPicking();
     }
 
@@ -1245,7 +1253,9 @@ export default function HomeScreen({db, settings}: Props) {
                     // From the grid there is no edit running yet, and this
                     // starts one the user never sees: the sheet opens over it
                     // and closing either way ends it.
-                    if (!picker.active && shelfActions !== null) beginEditingShelf(shelfActions);
+                    const starting = !picker.active && shelfActions !== null;
+                    if (starting) beginEditingShelf(shelfActions);
+                    setRenameStartedEdit(starting);
                     setRenamingShelf(shelfActions);
                 }}
                 onDuplicate={() => {
@@ -1266,7 +1276,16 @@ export default function HomeScreen({db, settings}: Props) {
             <NameShelfSheet open={renamingShelf !== null} count={picker.count}
                             current={renamingShelf ?? undefined}
                             onOpenChange={(next) => {
-                                if (!next) setRenamingShelf(null);
+                                if (next) return;
+                                setRenamingShelf(null);
+                                // Only the edit this rename started. One the
+                                // user opened for themselves is theirs to
+                                // finish, and cancelling a name is not
+                                // cancelling their ticks.
+                                if (renameStartedEdit) {
+                                    setRenameStartedEdit(false);
+                                    stopPicking();
+                                }
                             }}
                             onName={renameShelf}/>
 

@@ -77,6 +77,22 @@ describe("RecipeShelfTile", () => {
         expect(screen.getByTestId("recipe-tile-figures")).toHaveTextContent("OFF");
     });
 
+    // The tile is one accessibility element, so nothing inside it is spoken on
+    // its own: a figure drawn but missing from this label is a figure a screen
+    // reader user does not get at all.
+    it("speaks the grinder being off, which it prints", async () => {
+        const off = writable("Ethiopia");
+        off.grindSize = 60;
+        off.grinder = false;
+        await renderWithProviders(
+            <RecipeShelfTile recipe={off} {...HANDLERS}/>
+        );
+
+        const label = screen.getByLabelText(/grinder off/);
+        expect(label).toBeTruthy();
+        expect(label.props.accessibilityLabel).not.toContain("grind 60");
+    });
+
     it("says the grinder is off rather than printing its last size", async () => {
         const off = writable("Ethiopia");
         off.grinder = false;

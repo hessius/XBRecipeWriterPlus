@@ -1061,7 +1061,9 @@ describe("import", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         expect(screen.getByTestId("import-resolving")).toBeTruthy();
 
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
@@ -1149,7 +1151,9 @@ describe("import", () => {
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         expect(db.queryRecipes.mock.calls.length).toBeGreaterThan(before);
@@ -1914,7 +1918,9 @@ describe("the shelf room", () => {
         await fireEvent(screen.getByTestId("recipe-card"), "longPress");
         await act(async () => { jest.advanceTimersByTime(500); });
         const fromRow = present();
-        await fireEvent.press(screen.getByLabelText("Close"));
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
         await act(async () => { jest.advanceTimersByTime(500); });
 
         // Door two: the shelf-room tile, for the same recipe.
@@ -2269,6 +2275,56 @@ describe("picking a shelf's members", () => {
         await settleSheet();
         expect(screen.queryByTestId("shelf-overflow-edit")).toBeNull();
         expect(screen.getByTestId("shelf-overflow-rename")).toBeTruthy();
+    });
+
+    // A rename from the grid starts an edit the user never sees, so that the
+    // ticks it saves are the shelf's own. Backing out of the name must undo
+    // that: landing in the member editor is a place the user never asked for.
+    it("returns to the grid when a rename from the grid is dismissed", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-rename"));
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-grid")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-picker-header")).toBeNull();
+    });
+
+    // The other origin. The user opened the edit themselves, so cancelling a
+    // name is cancelling the name and nothing else.
+    it("stays in the edit when a rename from the picker is dismissed", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-edit"));
+        await settleSheet();
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-actions"));
+        await settleSheet();
+        await fireEvent.press(screen.getByTestId("shelf-overflow-rename"));
+        await settleSheet();
+
+        // The overflow sheet is still mounted through its exit grace, so there
+        // are two closes in the tree; the name sheet's is the later one.
+        await fireEvent.press(screen.getAllByLabelText("Close").at(-1)!);
+        await settleSheet();
+
+        expect(screen.getByTestId("shelf-picker-header")).toBeTruthy();
     });
 
     it("sheds the library's own chrome while picking", async () => {

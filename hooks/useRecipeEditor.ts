@@ -436,8 +436,20 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     function toggleFavourite() {
         if (!recipe) return;
+        const store = new RecipeDatabase();
+        const saved = store.getRecipe(recipe.uuid);
+        // The star goes onto the row as it stands in the library, not onto the
+        // draft. `persistRecipe` would write the whole bench: a user who
+        // changed the dose, starred the recipe and then backed out would find
+        // the dose changed too, having saved nothing.
+        if (saved) {
+            applyFavouriteToggle(saved);
+            store.updateRecipe(saved.uuid, saved);
+        }
+        // Mirrored onto the draft either way, so the star the user pressed
+        // stays lit. A recipe that has never been saved has no row to mark, and
+        // its star travels with SAVE like everything else on the bench.
         applyFavouriteToggle(recipe);
-        persistRecipe();
         setKey((prev) => prev + 1);
     }
 

@@ -323,3 +323,25 @@ describe("ShelfGrid", () => {
         });
     });
 });
+
+// Author shelves are grouped on a folded key but their id carries whichever
+// spelling the representative recipe used. Comparing ids exactly meant a
+// library whose representative changed case brought a put-away shelf back.
+describe("an author shelf whose spelling changes", () => {
+    it("stays put away", async () => {
+        await renderWithProviders(
+            <ShelfGrid
+                shelves={[{id: "sharedBy:CAFÉ", label: "CAFÉ", kind: "auto",
+                           count: 4}]}
+                hidden={["sharedBy:café"]}
+                onOpen={jest.fn()} onNewShelf={jest.fn()}
+                onShelfActions={jest.fn()} onHideShelf={jest.fn()}/>
+        );
+
+        // Off the grid and in the footer, which is where a put-away shelf
+        // says its name.
+        expect(screen.queryByTestId("shelf-sharedBy:CAFÉ")).toBeNull();
+        expect(screen.getByText("1 HIDDEN")).toBeTruthy();
+        expect(screen.getByTestId("shelf-show-sharedBy:CAFÉ")).toBeTruthy();
+    });
+});

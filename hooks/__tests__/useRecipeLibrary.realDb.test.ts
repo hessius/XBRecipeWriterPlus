@@ -262,3 +262,111 @@ describe("setShelfMembers against a real database", () => {
         expect(outcome).toEqual({full: 0, failed: 0});
     });
 });
+
+// A rename used to be two whole-library writes: empty the old shelf, then fill
+// the new one. Between them the shelf did not exist, and if the second write
+// was refused for any recipe -- a storage error, or a newly ticked recipe
+// already carrying the twenty tags a recipe may hold -- the user was left with
+// a shelf that had lost its name and not gained one.
+describe("renaming a shelf against a real database", () => {
+    function tagged(name: string, tags: string[]): Recipe {
+        const recipe = named(name);
+        recipe.setTags(tags);
+        return recipe;
+    }
+
+    function tagsOf(db: RecipeDatabase, name: string): string[] {
+        const all = db.retrieveAllRecipes() ?? [];
+        return all.find((r) => r.name === name)?.tags ?? [];
+    }
+
+    it("moves every member from the old name to the new one", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Mornings", "Kenya"]));
+        db.insertRecipe(tagged("Guji", ["Mornings"]));
+        const all = db.retrieveAllRecipes() ?? [];
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.renameShelf("Mornings", "Before work",
+                                       all.map((r) => r.uuid));
+        });
+
+        // The new name is appended, so the recipe's other tags keep their order.
+        expect(tagsOf(db, "Ethiopia")).toEqual(["Kenya", "Before work"]);
+        expect(tagsOf(db, "Guji")).toEqual(["Before work"]);
+    });
+
+    it("takes the ticks the user changed along with the name", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Mornings"]));
+        db.insertRecipe(named("Guji"));
+        const all = db.retrieveAllRecipes() ?? [];
+        const guji = all.find((r) => r.name === "Guji")!;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.renameShelf("Mornings", "Before work", [guji.uuid]);
+        });
+
+        expect(tagsOf(db, "Ethiopia")).toEqual([]);
+        expect(tagsOf(db, "Guji")).toEqual(["Before work"]);
+    });
+
+    // The case the old two-write rename could not survive. A recipe ticked into
+    // the shelf for the first time, already carrying the twenty tags a recipe
+    // may hold, cannot take the new name -- and the other members must not lose
+    // theirs because of it.
+    it("keeps the shelf when one new member cannot take the name", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Mornings"]));
+        const full = named("Guji");
+        full.setTags(Array.from({length: 20}, (_, i) => `tag${i}`));
+        db.insertRecipe(full);
+        const all = db.retrieveAllRecipes() ?? [];
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.renameShelf("Mornings", "Before work",
+                                                 all.map((r) => r.uuid));
+        });
+
+        expect(outcome).toEqual({full: 1, failed: 0});
+        expect(tagsOf(db, "Ethiopia")).toEqual(["Before work"]);
+        expect(tagsOf(db, "Guji")).toHaveLength(20);
+        expect(tagsOf(db, "Guji")).not.toContain("Before work");
+    });
+
+    it("leaves a recipe that was never on the shelf alone", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Mornings"]));
+        db.insertRecipe(tagged("Kenya", ["Evenings"]));
+        const all = db.retrieveAllRecipes() ?? [];
+        const ethiopia = all.find((r) => r.name === "Ethiopia")!;
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.renameShelf("Mornings", "Before work", [ethiopia.uuid]);
+        });
+
+        expect(tagsOf(db, "Kenya")).toEqual(["Evenings"]);
+    });
+
+    // A name that only changes case is still this shelf. The fold is what every
+    // shelf comparison is on, so the rename has to end with one tag, spelled
+    // the new way.
+    it("respells a shelf without doubling it", async () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["mornings"]));
+        const all = db.retrieveAllRecipes() ?? [];
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        await act(async () => {
+            result.current.renameShelf("mornings", "Mornings",
+                                       all.map((r) => r.uuid));
+        });
+
+        expect(tagsOf(db, "Ethiopia")).toEqual(["Mornings"]);
+    });
+});
