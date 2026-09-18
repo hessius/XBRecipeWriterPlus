@@ -553,7 +553,7 @@ export const DOT_ICONS = {
     /**
      * The shelf marks, one per auto shelf.
      *
-     * Fifteen glyphs is a lot to add to a set whose own rule is "keep it small",
+     * Sixteen glyphs is a lot to add to a set whose own rule is "keep it small",
      * and the rule still holds: these are one closed set, drawn once, for one
      * job. The auto shelves ship with the app and never change, so every glyph
      * is authored at design time and no user ever picks one -- which is exactly
@@ -561,10 +561,11 @@ export const DOT_ICONS = {
      * shelf, being open ended, takes the derived mark instead.
      *
      * Same two stroke classes as everything above: axis-aligned runs and pure
-     * diagonals. `shelfStrong` and `shelfMild` are deliberately the same frame
-     * filled and emptied, because that is what the two shelves are -- the same
-     * measure, more coffee or more water. `shelfQuickBrew` and `shelfSlowBrew`
-     * borrow the trick for the other pair.
+     * diagonals. `shelfShortRatio` and `shelfLongRatio` are deliberately the
+     * same frame filled and emptied, because that is what the two shelves are
+     * -- the same measure, more coffee or more water. `shelfQuickBrew` and
+     * `shelfSlowBrew` borrow the trick for the other pair, and
+     * `shelfFewStages` is `shelfManyStages` with two of its steps taken away.
      */
     shelfTea: [
         ".........",
@@ -625,6 +626,18 @@ export const DOT_ICONS = {
         "..#####..",
         "........."
     ],
+    /** The same staircase, two steps. */
+    shelfFewStages: [
+        ".........",
+        ".........",
+        "....#####",
+        "....#....",
+        "....#....",
+        "#####....",
+        "#........",
+        "#........",
+        "........."
+    ],
     /** A staircase of four: the shape a many-stage recipe draws. */
     shelfManyStages: [
         ".........",
@@ -661,8 +674,8 @@ export const DOT_ICONS = {
         ".#.....#.",
         "#.......#"
     ],
-    /** The measure, full. */
-    shelfStrong: [
+    /** The measure, full: less water for the coffee in it. */
+    shelfShortRatio: [
         ".........",
         ".#######.",
         ".#######.",
@@ -674,7 +687,7 @@ export const DOT_ICONS = {
         "........."
     ],
     /** The same measure, mostly water. */
-    shelfMild: [
+    shelfLongRatio: [
         ".........",
         ".#######.",
         ".#.....#.",

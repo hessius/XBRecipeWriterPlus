@@ -9,12 +9,13 @@ describe("DOT_ICONS", () => {
              "duplicate", "edit", "error", "favourite", "filter", "help", "import", "info",
              "link-off", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
              "refresh", "revert", "scan", "search", "settings", "share",
-             // The fifteen shelf marks, one per auto shelf. A closed set, drawn
+             // The sixteen shelf marks, one per auto shelf. A closed set, drawn
              // once: see the comment on them in `dotIcons.ts`.
-             "shelfGrinderOff", "shelfHot", "shelfManyStages", "shelfMild",
-             "shelfMine", "shelfOtherBrewer", "shelfOverflowOff", "shelfPods",
-             "shelfQuickBrew", "shelfRecent", "shelfSinglePour", "shelfSlowBrew",
-             "shelfStrong", "shelfTea", "shelfXbloom",
+             "shelfFewStages", "shelfGrinderOff", "shelfHot", "shelfLongRatio",
+             "shelfManyStages", "shelfMine", "shelfOtherBrewer",
+             "shelfOverflowOff", "shelfPods", "shelfQuickBrew", "shelfRecent",
+             "shelfShortRatio", "shelfSinglePour", "shelfSlowBrew", "shelfTea",
+             "shelfXbloom",
              "shelves", "sort", "success", "write"]
         );
     });

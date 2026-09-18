@@ -29,11 +29,12 @@ export type FilterId =
     | "overflowOff"
     | "otherBrewer"
     | "singlePour"
+    | "fewStages"
     | "manyStages"
     | "grinderOff"
     | "xbloom"
-    | "strong"
-    | "mild"
+    | "shortRatio"
+    | "longRatio"
     | "hot"
     | "recentlyAdded"
     | "mine"
@@ -87,6 +88,11 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
         clause: () => ({where: "cupType = ?", params: [CUP_TYPE.OTHER]})
     },
     singlePour: {label: "SINGLE POUR", clause: () => ({where: "pourCount = 1"})},
+    // FEW STAGES contains SINGLE POUR, which is the one place two stock
+    // shelves overlap. They are kept apart because they say different things:
+    // a single pour is a way of brewing, and few stages is a shape. Three is
+    // the unnamed middle, for the reason the duration pair leaves one.
+    fewStages: {label: "FEW STAGES", clause: () => ({where: "pourCount <= 2"})},
     manyStages: {label: "MANY STAGES", clause: () => ({where: "pourCount >= 4"})},
     grinderOff: {label: "GRINDER OFF", clause: () => ({where: "grinder = 0"})},
     // `xid IS NOT NULL`, not the design table's `xid <> ''`. recipeIndex stores
@@ -96,14 +102,14 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     // NULL <> '' is NULL, which WHERE drops -- so it reads as if empty strings
     // were the worry when the index guarantees none can occur.
     xbloom: {label: "XBLOOM RECIPES", clause: () => ({where: "xid IS NOT NULL"})},
-    // STRONG and MILD are one pair about strength, and QUICK BREW and SLOW
-    // BREW are another about duration. MILD was called LONG until the time
-    // shelves arrived, at which point one shelf would have been long because
-    // of its ratio and another because of its clock. The word went to the
-    // clock, where it is unambiguous, and the ratio pair took the two words
-    // that can only mean strength.
-    strong: {label: "STRONG", clause: () => ({where: "ratio <= 14"})},
-    mild: {label: "MILD", clause: () => ({where: "ratio >= 17"})},
+    // The ratio pair names the ratio outright. STRONG and MILD were the first
+    // attempt and were dropped: strength in coffee is decided by grind, dose,
+    // temperature and time as much as by ratio, so a STRONG shelf that sorted
+    // purely on `ratio` was promising something it could not know. SHORT and
+    // LONG are the ristretto/lungo words, they mean one thing, and they cannot
+    // be read as a duration now that the word LONG has been given a noun.
+    shortRatio: {label: "SHORT RATIO", clause: () => ({where: "ratio <= 14"})},
+    longRatio: {label: "LONG RATIO", clause: () => ({where: "ratio >= 17"})},
     // maxTemp is NULL when a recipe sets no temperatures; `>= 94` excludes those
     // rows, which is what "hot" has to mean.
     hot: {label: "HOT", clause: () => ({where: "maxTemp >= 94"})},
@@ -134,9 +140,9 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
 
 /** The stock filters in the order the rail lists their chips. */
 export const STOCK_FILTER_ORDER: readonly FilterId[] = [
-    "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "manyStages",
-    "grinderOff", "xbloom", "strong", "mild", "quickBrew", "slowBrew", "hot",
-    "mine", "recentlyAdded"
+    "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "fewStages",
+    "manyStages", "grinderOff", "xbloom", "shortRatio", "longRatio",
+    "quickBrew", "slowBrew", "hot", "mine", "recentlyAdded"
 ];
 
 /**

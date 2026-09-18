@@ -311,11 +311,12 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | Overflow protection off | `cupType = OMNI` |
 | Other brewer | `cupType = OTHER` |
 | Single pour | `pourCount = 1` |
+| Few stages | `pourCount <= 2` |
 | Many stages | `pourCount >= 4` |
 | Grinder off | `grinder = 0` |
 | xBloom recipes | `xid IS NOT NULL` |
-| Strong | `ratio <= 14` |
-| Mild | `ratio >= 17` |
+| Short ratio | `ratio <= 14` |
+| Long ratio | `ratio >= 17` |
 | Quick brew | `brewSeconds <= 150` |
 | Slow brew | `brewSeconds >= 240` |
 | Hot | `maxTemp >= 94` |
@@ -323,12 +324,20 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | From <author> | `sharedByKey = ?`, one shelf per distinct author |
 | Recently added | `createdAt` within 30 days |
 
-**Mild was called Long** until the duration pair arrived, at which point one
-shelf would have been long because of its ratio and another because of its
-clock. The word went to the clock, where it can only mean one thing, and the
-ratio pair took the two words that can only mean strength. The id changed with
-the label; `asStockFilters` drops the stale one, so an upgrade loses a pinned
-chip and nothing else.
+**The ratio pair names the ratio outright.** It was Strong and Long, then
+Strong and Mild, and both were wrong in the same way: strength in a cup is
+decided by grind, dose, temperature and time as much as by ratio, so a Strong
+shelf sorting purely on `ratio` promised something it could not know. Short and
+Long are the ristretto/lungo words, they mean one thing, and with the noun
+attached neither can be read as a duration. `asStockFilters` drops the stale
+ids, so a phone upgrading with `strong`, `long` or `mild` pinned loses a chip
+and nothing else.
+
+**Few stages contains Single pour**, the one place two stock shelves overlap.
+They are kept apart because they say different things: a single pour is a way
+of brewing, and few stages is a shape. Reading "few" as two exactly would fix
+the overlap and produce a shelf almost nobody could fill. Three stages is the
+unnamed middle, for the same reason the duration pair leaves one.
 
 **Quick and slow are measured by `plannedSeconds`** -- the recipe's pours at
 their stated flow, plus the pauses between them -- so a shelf agrees with the

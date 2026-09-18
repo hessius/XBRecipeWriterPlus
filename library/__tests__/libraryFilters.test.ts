@@ -87,8 +87,13 @@ describe("the narrowing seam", () => {
 
     it("drops stale ids from a persisted list rather than passing them on", () => {
         // A chip id from a previous build must not reach buildLibraryQuery's
-        // throw and take the screen down; asStockFilters is where it is dropped.
-        expect(asStockFilters(["tea", "ghost", "strong"])).toEqual(["tea", "strong"]);
+        // throw and take the screen down; asStockFilters is where it is
+        // dropped. `strong` and `long` are the real case: both were renamed
+        // when the ratio pair was, and a phone upgrading with either pinned
+        // must lose the chip rather than the library screen.
+        expect(asStockFilters(["tea", "ghost", "shortRatio"]))
+            .toEqual(["tea", "shortRatio"]);
+        expect(asStockFilters(["strong", "long", "mild"])).toEqual([]);
         expect(asStockFilters(["__proto__", "tea"])).toEqual(["tea"]);
     });
 
@@ -195,15 +200,38 @@ describe("each stock fragment against a real database", () => {
         expect(labelsMatching(db, "otherBrewer", uuids)).toEqual(["other"]);
     });
 
-    it("selects single-pour and many-stages by pour count", () => {
+    it("selects single-pour, few-stages and many-stages by pour count", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
             one: {createdAt: 1, pourCount: 1},
-            three: {createdAt: 2, pourCount: 3},
-            four: {createdAt: 3, pourCount: 4}
+            two: {createdAt: 2, pourCount: 2},
+            three: {createdAt: 3, pourCount: 3},
+            four: {createdAt: 4, pourCount: 4}
         });
         expect(labelsMatching(db, "singlePour", uuids)).toEqual(["one"]);
+        expect(labelsMatching(db, "fewStages", uuids)).toEqual(["one", "two"]);
         expect(labelsMatching(db, "manyStages", uuids)).toEqual(["four"]);
+    });
+
+    it("leaves three stages unshelved, and one stage on two shelves", () => {
+        // The two facts the stage shelves are pinned on. Three is the unnamed
+        // middle, as it is for duration. One is on both SINGLE POUR and FEW
+        // STAGES on purpose: the first is a way of brewing and the second is a
+        // shape, and the only other reading -- few meaning "two exactly" --
+        // would be a shelf almost nobody could fill.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            one: {createdAt: 1, pourCount: 1},
+            three: {createdAt: 2, pourCount: 3}
+        });
+        const shelvesHolding = (label: string) => STOCK_FILTER_ORDER
+            .filter((id) => labelsMatching(db, id, uuids).includes(label));
+
+        expect(shelvesHolding("three")).not.toContain("fewStages");
+        expect(shelvesHolding("three")).not.toContain("manyStages");
+        expect(shelvesHolding("one")).toEqual(
+            expect.arrayContaining(["singlePour", "fewStages"])
+        );
     });
 
     it("selects grinder-off by the grinder flag", () => {
@@ -226,15 +254,15 @@ describe("each stock fragment against a real database", () => {
         expect(labelsMatching(db, "xbloom", uuids)).toEqual(["card"]);
     });
 
-    it("selects strong and long by ratio", () => {
+    it("selects short and long ratios by ratio", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
-            strong: {createdAt: 1, ratio: 14},
+            short: {createdAt: 1, ratio: 14},
             middle: {createdAt: 2, ratio: 15},
-            mild: {createdAt: 3, ratio: 17}
+            long: {createdAt: 3, ratio: 17}
         });
-        expect(labelsMatching(db, "strong", uuids)).toEqual(["strong"]);
-        expect(labelsMatching(db, "mild", uuids)).toEqual(["mild"]);
+        expect(labelsMatching(db, "shortRatio", uuids)).toEqual(["short"]);
+        expect(labelsMatching(db, "longRatio", uuids)).toEqual(["long"]);
     });
 
     it("selects quick and slow brews by how long the plan takes", () => {
