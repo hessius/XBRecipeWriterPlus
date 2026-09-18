@@ -42,6 +42,22 @@ function insertRawBlob(uuid: string, recipeJSON: string): void {
     );
 }
 
+/**
+ * A blob that parses and is still unusable.
+ *
+ * Built from a real recipe so every field the constructor reads is there, and
+ * only `name` is the wrong type. A partial blob would throw in the constructor
+ * instead, which is the unparseable case, and a test that took that path would
+ * pass without proving anything about this one.
+ */
+function brokenBlobFor(name: string): string {
+    const blob = JSON.parse(JSON.stringify(recipeNamed(name))) as
+        Record<string, unknown>;
+    blob.uuid = "broken-uuid";
+    blob.name = 5;
+    return JSON.stringify(blob);
+}
+
 beforeEach(() => {
     mockBacking = createTestDatabase();
 });
@@ -83,5 +99,84 @@ describe("a library with one unreadable blob", () => {
         insertRawBlob("corrupt-uuid", "{not json");
 
         expect(() => db.retrieveAllRecipes()).toThrow();
+    });
+});
+
+/**
+ * A blob can parse and still be unusable.
+ *
+ * `Recipe` preserves some wrong field types rather than coercing them, so
+ * `{"name": 5}` constructs without complaint and throws the first time
+ * anything calls `name.trim()` -- which `hasName()` does on every row the
+ * library draws. Parsing is therefore the wrong test for "can this row be
+ * shown". Projecting it is, because it is the same work `writeRow` does for
+ * every row the app itself stores, so a row that cannot be projected is a row
+ * the app could not have written.
+ */
+describe("a blob that parses but cannot be used", () => {
+    function brokenBlob(): string {
+        return brokenBlobFor("Alpha");
+    }
+
+    it("is skipped by the list rather than crashing it", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("broken-uuid", brokenBlob());
+
+        const found = db.queryRecipes(WHOLE_LIBRARY).map((r) => r.name);
+
+        expect(found).toEqual(["Alpha"]);
+    });
+
+    it("is counted as unreadable, so the count matches what the list skips", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("broken-uuid", brokenBlob());
+
+        expect(db.countUnreadableRecipes()).toBe(1);
+    });
+
+    it("makes a backup refuse, exactly as an unparseable one does", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("broken-uuid", brokenBlob());
+
+        expect(() => db.retrieveAllRecipes()).toThrow();
+    });
+});
+
+/**
+ * The exit from the dead end the reviewer found: a backup refuses while an
+ * unreadable row is there, and the only other way out was to delete the whole
+ * library. Removing exactly the rows that cannot be read is the small door.
+ */
+describe("removing the rows that cannot be read", () => {
+    it("takes the unreadable rows and leaves the rest", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("corrupt-uuid", "{not json");
+        insertRawBlob("broken-uuid", brokenBlobFor("Alpha"));
+
+        expect(db.deleteUnreadableRecipes()).toBe(2);
+        expect(db.countUnreadableRecipes()).toBe(0);
+        expect(db.queryRecipes(WHOLE_LIBRARY).map((r) => r.name)).toEqual(["Alpha"]);
+    });
+
+    it("lets a backup be built again", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("corrupt-uuid", "{not json");
+
+        db.deleteUnreadableRecipes();
+
+        expect(db.retrieveAllRecipes()?.map((r) => r.name)).toEqual(["Alpha"]);
+    });
+
+    it("removes nothing from a healthy library", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+
+        expect(db.deleteUnreadableRecipes()).toBe(0);
+        expect(db.queryRecipes(WHOLE_LIBRARY)).toHaveLength(1);
     });
 });

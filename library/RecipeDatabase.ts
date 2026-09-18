@@ -29,7 +29,19 @@ import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
  */
 function hydrateRow(uuid: string, recipeJSON: string): Recipe | null {
     try {
-        return new Recipe(undefined, recipeJSON);
+        const recipe = new Recipe(undefined, recipeJSON);
+        // Parsing is not enough. `Recipe` preserves some wrong field types
+        // rather than coercing them, so a blob carrying `"name": 5` constructs
+        // without complaint and throws the first time anything calls
+        // `name.trim()` -- which `hasName()` does on every row the library
+        // draws. Projecting is the honest test for "can this row be shown",
+        // because it is the same work `writeRow` does for every row the app
+        // itself stores: a row that will not project is a row the app could
+        // not have written. `migrateIndex` already treats this exact failure
+        // as unreadable, so probing here is what finally makes the three read
+        // paths agree about which rows are safe to expose.
+        projectRecipe(recipe);
+        return recipe;
     } catch (error) {
         console.warn(`RecipeDatabase: could not read recipe ${uuid}`, error);
         return null;
@@ -552,16 +564,47 @@ class RecipeDatabase {
      * list is a figure the user can find rather than a mystery. Counts through
      * the same guarded hydrate the read paths use, so it counts exactly what
      * the list skips.
+     *
+     * Every row, parsed. That is why no caller may take it at render: it is
+     * a diagnostic, asked for once by the screen that shows it, never by the
+     * library on its way to drawing a list.
      */
     public countUnreadableRecipes(): number {
+        return this.unreadableUuids().length;
+    }
+
+    /**
+     * Take exactly the rows that cannot be read, and say how many went.
+     *
+     * The exit from a dead end. A backup refuses while an unreadable row is
+     * present, by design, and until this existed the only way to get a backup
+     * again was to delete the whole library -- which is to say, to lose every
+     * intact recipe in order to be rid of one broken one. This removes the
+     * broken ones and nothing else, so the user can back up and carry on.
+     *
+     * It cannot cost a readable recipe: the same guarded hydrate decides, so
+     * a row survives here on exactly the terms that get it drawn in the list.
+     */
+    public deleteUnreadableRecipes(): number {
+        const doomed = this.unreadableUuids();
+        if (doomed.length === 0) return 0;
+        this.atomically(() => {
+            for (const uuid of doomed) {
+                this.db.runSync("DELETE FROM recipes WHERE uuid = ?;", [uuid]);
+                this.db.runSync("DELETE FROM recipe_tags WHERE uuid = ?;", [uuid]);
+            }
+        });
+        return doomed.length;
+    }
+
+    /** The uuids of every row the guarded hydrate refuses. */
+    private unreadableUuids(): string[] {
         const rows = this.db.getAllSync(
             "SELECT uuid, recipeJSON FROM recipes;"
         ) as {uuid: string; recipeJSON: string}[];
-        let unreadable = 0;
-        for (const row of rows) {
-            if (hydrateRow(row.uuid, row.recipeJSON) === null) unreadable += 1;
-        }
-        return unreadable;
+        return rows
+            .filter((row) => hydrateRow(row.uuid, row.recipeJSON) === null)
+            .map((row) => row.uuid);
     }
 
     public countRecipes(): number {
