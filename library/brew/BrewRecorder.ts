@@ -7,8 +7,8 @@ import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_CEILING_MS, SETTLE_FLAT_MS}
 import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import type {BrewRecord, BrewSample} from "./BrewRecord";
-import {finalOutcome, planFromPours, stageWaterFromSamples, stallsFromSamples,
-        summarise} from "./BrewRecord";
+import {finalOutcome, newBrewId, planFromPours, stageWaterFromSamples,
+        stallsFromSamples, summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
 import {NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
 
@@ -37,10 +37,6 @@ export type RecorderOptions = {
 
 const TERMINAL: ReadonlySet<BrewPhase["name"]> =
     new Set(["done", "cancelled", "lostContact", "failed"]);
-
-function defaultId(): string {
-    return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
-}
 
 /**
  * Watches one brew and writes down what happened.
@@ -359,7 +355,7 @@ export default class BrewRecorder {
               }
             : undefined;
         const record: BrewRecord = {
-            id: (this.options.newId ?? defaultId)(),
+            id: (this.options.newId ?? newBrewId)(),
             recipeUuid: recipe.uuid,
             recipeName: recipe.displayName(),
             accent: resolveAccent(recipe),

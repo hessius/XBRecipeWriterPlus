@@ -1,5 +1,6 @@
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
+import {unobservedBrew} from "@/library/brew/BrewRecord";
 
 /**
  * An in-memory stand-in for expo-sqlite, in the same spirit as the one in
@@ -499,5 +500,66 @@ describe("a history restored from a backup", () => {
         db.restore([record({id: "b1", rating: 9 as unknown as number})]);
 
         expect(db.get("b1")?.rating).toBe(0);
+    });
+});
+
+describe("a brew the app never watched", () => {
+    it("comes back saying so", () => {
+        const db = new BrewDatabase();
+        db.insert(unobservedBrew({
+            recipeUuid: "uuid-1", recipeName: "Ethiopia", accent: "#f00",
+            rating: 4, at: 2_000, id: "hand-1"
+        }), []);
+
+        expect(db.get("hand-1")?.watched).toBe(false);
+    });
+
+    it("leaves a watched brew saying nothing, because it has nothing to say", () => {
+        // Absent rather than true: a record written before the column existed
+        // reads identically to one written after it, so nothing has to be
+        // migrated to go on being what it always was.
+        const db = new BrewDatabase();
+        db.insert(record({id: "watched-1"}), []);
+
+        expect(db.get("watched-1")?.watched).toBeUndefined();
+    });
+
+    it("counts as a brew, because it is one", () => {
+        const db = new BrewDatabase();
+        db.insert(unobservedBrew({
+            recipeUuid: "uuid-1", recipeName: "Ethiopia", accent: "#f00",
+            rating: 4, at: 7_000, id: "hand-1"
+        }), []);
+
+        expect(db.summaryFor("uuid-1")).toEqual({times: 1, lastAt: 7_000});
+    });
+
+    it("keeps its verdict and its pin", () => {
+        const db = new BrewDatabase();
+        db.insert(unobservedBrew({
+            recipeUuid: "uuid-1", recipeName: "Ethiopia", accent: "#f00",
+            rating: 5, at: 1_000, id: "hand-1"
+        }), []);
+
+        const brew = db.get("hand-1");
+        expect(brew?.rating).toBe(5);
+        expect(brew?.pinned).toBe(true);
+    });
+
+    it("survives a restore still unwatched", () => {
+        const db = new BrewDatabase();
+        db.restore([unobservedBrew({
+            recipeUuid: "uuid-1", recipeName: "Ethiopia", accent: "#f00",
+            rating: 3, at: 1_000, id: "hand-1"
+        })]);
+
+        expect(db.get("hand-1")?.watched).toBe(false);
+    });
+
+    it("restores a watched brew as watched", () => {
+        const db = new BrewDatabase();
+        db.restore([record({id: "watched-1"})]);
+
+        expect(db.get("watched-1")?.watched).toBeUndefined();
     });
 });

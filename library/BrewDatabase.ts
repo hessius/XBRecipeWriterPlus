@@ -36,6 +36,8 @@ type BrewRow = {
     rating: number | null;
     note: string | null;
     pinned: number | null;
+    /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
+    watched: number | null;
     hasStream: number;
 };
 
@@ -78,6 +80,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 rating INTEGER NOT NULL DEFAULT 0,
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
+                watched INTEGER NOT NULL DEFAULT 1,
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -135,6 +138,14 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Defaulting to 1, because every brew recorded before a person could log
+    // one by hand is a brew the app watched. The column exists so the ones it
+    // did not watch can say so; it is not a flag anything else has to set.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN watched INTEGER NOT NULL DEFAULT 1;");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -172,8 +183,8 @@ class BrewDatabase {
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                     heldSeconds, stalls, plan, stageWater, rating,
-                                    note, pinned, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    note, pinned, watched, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
@@ -188,6 +199,7 @@ class BrewDatabase {
                     isRating(record.rating) ? record.rating : 0,
                     record.note ?? "",
                     record.pinned ? 1 : 0,
+                    record.watched === false ? 0 : 1,
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -310,8 +322,8 @@ class BrewDatabase {
                     `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                         endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                         heldSeconds, stalls, plan, stageWater, rating,
-                                        note, pinned, hasStream)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
+                                        note, pinned, watched, hasStream)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
                     [
                         record.id, record.recipeUuid, record.recipeName, record.accent,
                         record.startedAt, record.pouringAt ?? 0,
@@ -322,7 +334,8 @@ class BrewDatabase {
                         JSON.stringify(record.stageWater ?? []),
                         isRating(record.rating) ? record.rating : 0,
                         record.note ?? "",
-                        record.pinned ? 1 : 0
+                        record.pinned ? 1 : 0,
+                        record.watched === false ? 0 : 1
                     ]
                 );
             });
@@ -434,6 +447,10 @@ function hydrate(row: BrewRow): StoredBrew {
         rating: row.rating ?? 0,
         note: row.note ?? "",
         pinned: row.pinned === 1,
+        // Emitted only when false, so a watched brew's record is byte for byte
+        // what it was before this column existed and the round trip stays
+        // honest about "absent means the app saw it".
+        ...(row.watched === 0 ? {watched: false} : {}),
         hasStream: row.hasStream === 1
     };
 }
