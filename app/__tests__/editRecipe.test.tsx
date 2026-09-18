@@ -350,12 +350,31 @@ describe("the editor", () => {
         expect(screen.getByTestId("pod-following")).toBeTruthy();
     });
 
-    it("steps the ratio by whole numbers, which is all the card holds", async () => {
+    it("steps the ratio by halves, so an imported 1:15.5 survives a tap", async () => {
         await renderEditor();
 
         await fireEvent.press(screen.getByLabelText("Increase Ratio"));
 
-        expect(screen.getByLabelText("Ratio, 17")).toBeTruthy();
+        // 16 + 0.5, not 16 + 1. The card still refuses a fractional ratio, but
+        // the editor can now express and preserve one, which is what xBloom's
+        // own app produces and what a tap on a step of 1 used to destroy.
+        expect(screen.getByLabelText("Ratio, 16.5")).toBeTruthy();
+    });
+
+    it("explains that the card, not the app, refuses a half ratio", async () => {
+        // The editor allows a half ratio because xBloom's own app produces one,
+        // but a card byte cannot hold it. A user who deliberately set 15.5 needs
+        // to see that it is the card refusing, not the app losing their recipe.
+        await renderEditor({ratio: 15.5});
+
+        expect(screen.getByTestId("ratio-not-whole")).toBeTruthy();
+        expect(screen.getByText(/whole ratios/i)).toBeTruthy();
+    });
+
+    it("shows no half-ratio banner for a whole ratio", async () => {
+        await renderEditor();
+
+        expect(screen.queryByTestId("ratio-not-whole")).toBeNull();
     });
 
     it("shows the target volume and follows the ratio", async () => {
@@ -365,7 +384,8 @@ describe("the editor", () => {
 
         await fireEvent.press(screen.getByLabelText("Increase Ratio"));
 
-        expect(screen.getByTestId("brew-target")).toHaveTextContent("306");
+        // 18 g times 16.5.
+        expect(screen.getByTestId("brew-target")).toHaveTextContent("297");
     });
 
     it("offers write and save, and nothing else, at the bottom", async () => {

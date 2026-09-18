@@ -142,6 +142,16 @@ describe("RecipeCard", () => {
         expect(screen.getByLabelText("16")).toBeTruthy();
     });
 
+    it("shows a fractional ratio as itself rather than rounding it", async () => {
+        await renderWithProviders(
+            <RecipeCard recipe={makeRecipe({ratio: 15.5})} onPress={jest.fn()}/>
+        );
+        // `DigitRoll` rounds, so a 1:15.5 recipe would otherwise read as 1:16
+        // on its own card. The RATIO stat draws plain text when the ratio
+        // carries a half.
+        expect(screen.getByText("15.5")).toBeTruthy();
+    });
+
     it("marks a coffee recipe as COFFEE", async () => {
         await renderWithProviders(
             <RecipeCard recipe={makeRecipe()} onPress={jest.fn()}/>

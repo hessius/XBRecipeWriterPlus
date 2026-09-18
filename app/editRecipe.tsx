@@ -142,6 +142,9 @@ function BrewDeck({
     // fix it that the stage mismatch has always had.
     const tooFine = showGrind && recipe.grindSize < CARD_GRIND_MIN;
     const fineBand = tooFine ? grindBand(recipe.grindSize) : undefined;
+    // A card byte cannot hold a fractional ratio, so a half ratio is refused at
+    // the write gate. The banner below names the card as the thing refusing.
+    const ratioNotWhole = Number.isFinite(recipe.ratio) && !Number.isInteger(recipe.ratio);
     // Tea has no bypass anywhere in the app; the machine ignores it.
     const showBypass = recipe.bypassEnabled && !isTea;
 
@@ -178,9 +181,35 @@ function BrewDeck({
             <FieldRow topic="ratio"
                       showHint={showHint}>
                 <Stepper label="Ratio" value={recipe.ratio}
-                         min={5} max={100} step={1} accent={accent}
+                         min={5} max={100} step={0.5} accent={accent}
                          onChange={(value) => dispatch(RECIPE_LABELS.RATIO, String(value))}/>
             </FieldRow>
+
+            {/* A half ratio is deliberate and preserved: xBloom's own app makes
+                one, and the editor no longer flattens it. The card byte holds
+                only whole numbers, so `cardWriteProblems` refuses the write and
+                `canWrite` disables the WRITE button. Without this line the
+                button would simply be dead, leaving a user who typed 15.5 to
+                guess whether the app had lost their ratio. `warn`, like the
+                stage-ceiling banner: nothing is wrong, the recipe still saves
+                and brews over Bluetooth. */}
+            {ratioNotWhole && (
+                <XStack testID="ratio-not-whole" alignItems="center" gap="$2.5"
+                        marginHorizontal="$4" marginTop="$3" padding="$3" borderRadius="$4"
+                        backgroundColor={palette.raised}
+                        borderLeftWidth={2} borderLeftColor={palette.warn}>
+                    <YStack flex={1} gap={2}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                       color={palette.warn}>
+                            {`RATIO 1:${recipe.ratio}`}
+                        </DotMatrixText>
+                        <Text fontSize={12} lineHeight={16} color={palette.dim}>
+                            A card holds only whole ratios. This recipe can still be saved
+                            and brewed over Bluetooth, but it cannot be written to a card.
+                        </Text>
+                    </YStack>
+                </XStack>
+            )}
 
             {tooFine && (
                 <XStack testID="grind-too-fine" alignItems="center" gap="$2.5"

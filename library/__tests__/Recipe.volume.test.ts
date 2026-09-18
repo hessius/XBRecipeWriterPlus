@@ -94,6 +94,19 @@ describe('autoFixPourVolumes', () => {
         }
     });
 
+    it('terminates on a half ratio and lands whole-number pours', () => {
+        // Regression guard for a hung JS thread. A fractional target once made
+        // the redistribution loop subtract 1 from a remainder of 0.5 for ever;
+        // getStageTargetVolume rounds dose x ratio to whole millilitres so the
+        // loop can converge. If this ever hangs again it fails by test timeout,
+        // which is the failure we want to catch rather than a wrong number.
+        const recipe = recipeWithPours([0, 0, 0], 15, 15.5);
+        recipe.autoFixPourVolumes();
+
+        expect(recipe.pours.every(p => Number.isInteger(p.volume))).toBe(true);
+        expect(recipe.isPourVolumeValid()).toBe(true);
+    });
+
     it('sets every tea pour to 90ml and recomputes the ratio', () => {
         const recipe = recipeWithPours([50, 50, 50], 5, 20);
         recipe.cupType = CUP_TYPE.TEA;

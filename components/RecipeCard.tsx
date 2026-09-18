@@ -410,7 +410,9 @@ export default function RecipeCard({
                 <XStack justifyContent="space-between" alignItems="flex-end" gap="$4">
                     <XStack gap="$5" alignItems="flex-end">
                         <Stat label="DOSE" value={recipe.dosage} suffix="g"/>
-                        <Stat label="RATIO" value={recipe.ratio}/>
+                        <Stat label="RATIO" value={recipe.ratio}
+                              text={isSet(recipe.ratio) && !Number.isInteger(recipe.ratio)
+                                  ? String(recipe.ratio) : undefined}/>
                         {!isTea && <Stat label="GRIND" value={recipe.grindSize}
                                          text={recipe.grinder ? undefined : "OFF"}/>}
                     </XStack>
