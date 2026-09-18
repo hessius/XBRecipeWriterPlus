@@ -73,6 +73,10 @@ export type RecipeStore = {
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
     retrieveAllRecipes?: () => Recipe[] | null;
+    /** How many stored blobs cannot be read, for the settings diagnostics line. */
+    countUnreadableRecipes?: () => number;
+    /** Remove exactly the rows that cannot be read, and say how many went. */
+    deleteUnreadableRecipes?: () => number;
     deleteAllRecipes?: () => void;
     insertRecipes?: (recipes: Recipe[]) => void;
     replaceAllRecipes?: (recipes: Recipe[]) => void;
@@ -157,6 +161,25 @@ export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
     librarySize: number;
+    /**
+     * How many stored blobs could not be read. `queryRecipes` skips such a row
+     * so the library still opens (#124); this is the count that stops a
+     * vanished recipe from being a mystery.
+     *
+     * A function rather than a figure, and the difference matters: answering it
+     * parses every blob in the table, so taken at render it would put a whole
+     * table parse on Home and on every other consumer of this hook, for a line
+     * only Settings draws. The one screen that shows it asks for it.
+     */
+    countUnreadable: () => number;
+    /**
+     * Remove exactly the rows that cannot be read, and say how many went.
+     *
+     * The exit from the dead end: a backup refuses while one is present, and
+     * without this the only way back to a working backup was to delete the
+     * whole library.
+     */
+    deleteUnreadable: () => number;
     /** Whole-table counts for stock filters, keyed by filter id. */
     filterCounts: Record<string, number>;
     /** Whole-table counts for every tag, largest shelf first. */
@@ -418,6 +441,26 @@ export function useRecipeLibrary(
         return {full, failed};
     }
 
+    /**
+     * How many stored blobs cannot be read.
+     *
+     * Zero for a store that cannot answer, unlike the counts this hook takes at
+     * render, which throw: this is a diagnostic, not a gate. A store without
+     * the method is a test stub or an older shape, and "none" is the honest
+     * thing to show for one that cannot look.
+     */
+    function countUnreadable(): number {
+        return store.countUnreadableRecipes ? store.countUnreadableRecipes() : 0;
+    }
+
+    /** Remove the rows that cannot be read, then re-read the library. */
+    function deleteUnreadable(): number {
+        const removed = store.deleteUnreadableRecipes
+            ? store.deleteUnreadableRecipes() : 0;
+        if (removed > 0) reload();
+        return removed;
+    }
+
     function deleteAll(): DeleteAllOutcome {
         // The whole-table size, not `recipes.length`: this deletes the table, so
         // reporting the length of a filtered view would tell the user a smaller
@@ -470,6 +513,8 @@ export function useRecipeLibrary(
     return {
         recipes,
         librarySize,
+        countUnreadable,
+        deleteUnreadable,
         filterCounts,
         tagCounts,
         authorCounts,

@@ -53,7 +53,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("c2b17255");
+        expect(schemaHash()).toBe("5e0a07fc");
     });
 
     it("folds the revision into the hash", () => {
@@ -109,7 +109,8 @@ describe("projectRecipe", () => {
             sharedByKey: null,
             favourite: 0,
             hasDescription: 0,
-            description: null
+            description: null,
+            descriptionKey: null
         });
     });
 

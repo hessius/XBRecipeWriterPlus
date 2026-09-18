@@ -318,6 +318,30 @@ describe("rebuild", () => {
         expect(blank.sortName).toBeNull();
     });
 
+    it("backfills descriptionKey when an older index rebuilds", () => {
+        // The reason this revision was bumped (#125): a device that indexed
+        // before `descriptionKey` existed holds NULL there, so a search for an
+        // accented note would miss. The revision bump stales the stored hash
+        // and forces a rebuild, which projects the folded key from the blob.
+        const db = new RecipeDatabase();
+        const recipe = new Recipe();
+        recipe.name = "Morning";
+        recipe.description = "A CAFÉ classic";
+        db.insertRecipe(recipe);
+
+        // The pre-fold state an older version left: no folded key, hash stale.
+        mockBacking.runSync("UPDATE recipes SET descriptionKey = NULL;");
+        mockBacking.runSync("UPDATE schema_meta SET value = 'stale' WHERE key = 'indexHash';");
+
+        new RecipeDatabase();
+
+        const row = mockBacking.getFirstSync(
+            "SELECT descriptionKey FROM recipes WHERE uuid = ?;", [recipe.uuid]
+        ) as {descriptionKey: string};
+        expect(row.descriptionKey).toBe("a café classic");
+        expect(storedHash()).toBe(schemaHash());
+    });
+
     it("does not rebuild when the hash matches", () => {
         const db = new RecipeDatabase();
         const recipe = new Recipe();

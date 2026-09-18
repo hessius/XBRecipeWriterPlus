@@ -1,7 +1,7 @@
 import * as Application from "expo-application";
 import {useRouter} from "expo-router";
 import React, {useState} from "react";
-import {ScrollView, YStack} from "tamagui";
+import {ScrollView, Text, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
 import CardReadDiagnostic from "@/components/CardReadDiagnostic";
@@ -182,6 +182,12 @@ export default function SettingsScreen({settings}: Props) {
     const [pending, setPending] = useState<BackupPayload | null>(null);
     const [restoreOpen, setRestoreOpen] = useState(false);
     const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
+    // Asked once, on arrival, because answering it parses every blob in the
+    // table (#124). Kept in state rather than taken at render so that cost is
+    // paid by the one screen that draws the line, and refreshed in the handlers
+    // that can change the answer rather than from an effect, which the compiler
+    // forbids and which would re-scan on every revision besides.
+    const [unreadableCount, setUnreadableCount] = useState(() => library.countUnreadable());
 
     // Every key in `DEFAULTS`, and a compile error when a new one is added
     // without being thought about here. A backup that says it carries your
@@ -207,10 +213,39 @@ export default function SettingsScreen({settings}: Props) {
         // rail's query, and a backup must hold every recipe regardless of what
         // the user last searched or filtered by. `allRecipes()` asks a different
         // question from the list on purpose.
+        //
+        // It also refuses, by throwing, over a row it cannot read, so that a
+        // backup is never a partial one wearing the costume of a whole one
+        // (#124). That throw is synchronous and happens before `exportBackup`
+        // is ever called, which means it lands outside every catch inside it:
+        // caught here or not at all, and not at all is a tap that does nothing.
+        let everything;
+        try {
+            everything = library.allRecipes();
+        } catch {
+            setUnreadableCount(library.countUnreadable());
+            notify({
+                tone: "error",
+                message: "A saved recipe could not be read, so this backup would be " +
+                         "missing it. Remove it under Library and try again."
+            });
+            return;
+        }
         const outcome = await exportBackup(
-            library.allRecipes(), settingsSnapshot(), VERSION, brewHistory()
+            everything, settingsSnapshot(), VERSION, brewHistory()
         );
         if (!outcome.ok) notify({tone: "error", message: outcome.reason});
+    }
+
+    function onRemoveUnreadable() {
+        const removed = library.deleteUnreadable();
+        setUnreadableCount(library.countUnreadable());
+        notify({
+            tone: "info",
+            message: removed === 1
+                ? "Removed 1 recipe that could not be read."
+                : `Removed ${removed} recipes that could not be read.`
+        });
     }
 
     async function onRestore() {
@@ -479,6 +514,33 @@ export default function SettingsScreen({settings}: Props) {
                 </SettingsSection>}
 
                 <SettingsSection title="Library">
+                    {unreadableCount > 0 && (
+                        // Bought off here: `queryRecipes` skips a blob it cannot
+                        // read so the library still opens (#124), and this is
+                        // the line that keeps that skip from being a silent
+                        // vanished recipe. Shown only when there is one, so a
+                        // healthy library carries no scar. A backup refuses over
+                        // the same row, so the note sits above the backup action
+                        // on purpose.
+                        <YStack testID="unreadable-recipes-note"
+                                paddingVertical="$3" paddingHorizontal="$4" gap="$1">
+                            <Text fontSize={16} color={palette.danger}>
+                                {unreadableCount === 1
+                                    ? "1 saved recipe could not be read."
+                                    : `${unreadableCount} saved recipes could not be read.`}
+                            </Text>
+                            <Text fontSize={13} color={palette.dim}>
+                                The rest of your library is fine. Backing up is paused
+                                until this is sorted, so that a backup is never quietly
+                                missing a recipe.
+                            </Text>
+                        </YStack>
+                    )}
+                    {unreadableCount > 0 && (
+                        <SettingsActionRow label="Remove unreadable recipes" tone="danger"
+                                           detail="Takes only the ones above. Everything else stays."
+                                           onPress={onRemoveUnreadable}/>
+                    )}
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
                                        onPress={onBackUp}/>

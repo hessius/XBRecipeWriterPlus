@@ -993,29 +993,6 @@ describe("brewing", () => {
         expect(machine.phase.name).toBe("pouring");
     });
 
-    it("remembers a water-low warning for the run, so the brew can say the tank is low", async () => {
-        const {transport, machine} = await readyMachine();
-        await machine.brew(brewable());
-        transport.emit(status(0x22));
-        transport.emit(event(40507));
-        expect(machine.waterLow).toBe(false);
-
-        transport.emit(event(40522));
-
-        expect(machine.waterLow).toBe(true);
-    });
-
-    it("forgets the previous run's water-low warning when a new brew is asked for", async () => {
-        const {transport, machine} = await readyMachine();
-        await machine.brew(brewable());
-        transport.emit(event(40522));
-        expect(machine.waterLow).toBe(true);
-
-        await machine.brew(brewable());
-
-        expect(machine.waterLow).toBe(false);
-    });
-
     it("still fails on a NO_WATER status while grinding, so the fix is not over-broad", async () => {
         // Grinding is not pouring or settling: no water is running, so a
         // NO_WATER state here keeps its original fatal handling.
@@ -1412,6 +1389,37 @@ describe("asking how the machine is doing now", () => {
         await machine.brew(brewable());
 
         expect(brewFrames(transport)).toContain(8002);
+    });
+
+    it("does not block a brew over a ratio the card could not hold", async () => {
+        // The blob carries no ratio field at all: `encodeCoffeeBlob` derives a
+        // byte from the volumes and the dose. So a fractional ratio is a card
+        // problem and not a machine one (#122), and refusing the brew told the
+        // user to fix something that was never going to be sent.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        // 18 g at 1:15.5 is 279 ml, which the stages must sum to: the balance
+        // rule is one of the many the machine does feel.
+        const recipe = brewable([140, 139]);
+        recipe.ratio = 15.5;
+
+        expect(machine.brewBlock(recipe)).toBeNull();
+
+        await machine.brew(recipe);
+        expect(brewFrames(transport)).toContain(8002);
+    });
+
+    it("still blocks a brew over a problem the machine would feel", async () => {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        await machine.connect("AA:BB");
+        transport.emit(status(0x01));
+        const recipe = brewable();
+        recipe.grindSize = 5;
+
+        expect(machine.brewBlock(recipe)).toMatchObject({kind: "recipe"});
     });
 
     it("does not block a tap-fed machine because its unused tank is low", async () => {

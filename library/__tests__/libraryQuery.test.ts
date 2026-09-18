@@ -367,6 +367,35 @@ describe("querying a real database", () => {
         }
     });
 
+    it("finds accented text in a description whatever case either side uses", () => {
+        // `description` and `sharedBy` used to be matched on the raw column,
+        // where LIKE folds ASCII case and nothing else, so a note saying "CAFÉ"
+        // was invisible to a search for "café" and vice versa. The folded
+        // `descriptionKey` closes it the way `sortName` and the tags already
+        // do (#125).
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            shouty: {name: "Morning", createdAt: 1, ratio: 15, description: "A CAFÉ classic"},
+            quiet: {name: "Evening", createdAt: 2, ratio: 15, description: "a café classic"},
+            miss: {name: "Kenya", createdAt: 3, ratio: 15, description: "plain water"}
+        });
+        for (const search of ["café", "CAFÉ"]) {
+            expect(order(db, query({search}), uuids).sort()).toEqual(["quiet", "shouty"]);
+        }
+    });
+
+    it("finds an accented sharer's name whatever case either side uses", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            shouty: {name: "Gift", createdAt: 1, ratio: 15, sharedBy: "CAFÉ René"},
+            quiet: {name: "Present", createdAt: 2, ratio: 15, sharedBy: "café rené"},
+            miss: {name: "Kenya", createdAt: 3, ratio: 15, sharedBy: "Blue Bottle"}
+        });
+        for (const search of ["rené", "RENÉ"]) {
+            expect(order(db, query({search}), uuids).sort()).toEqual(["quiet", "shouty"]);
+        }
+    });
+
     it("finds a Nordic name typed in either case", () => {
         // The same trap the tag search fell into, one column over. `sortName`
         // preserves the Nordic letters rather than folding them, so it holds

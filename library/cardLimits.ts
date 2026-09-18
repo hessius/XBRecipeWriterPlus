@@ -23,6 +23,13 @@ import {grindTooFine} from "@/constants/copy";
 export type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
+/**
+ * The card's dose range, in grams. Exported for `library/backup.ts`, whose job
+ * is to be the trust boundary: a stored dose outside this is a corrupt or
+ * tampered file, not a value this app ever writes (#117). Tea's own tighter
+ * cap (10 g) is a business rule layered on top, not the card's byte range.
+ */
+export const DOSE: Range = {min: 1, max: 31};
 /** Exported for the test that keeps `library/grindBands` in step with the card. */
 export const GRIND_SIZE: Range = {min: 40, max: 80};
 const GRIND_RPM: Range = {min: 60, max: 120};
@@ -73,6 +80,16 @@ function checkInteger(value: number, rangeMessage: string, problems: string[]): 
     }
 }
 
+/**
+ * The one problem that belongs to the card and not to the machine.
+ *
+ * Built by a function rather than written twice, so `brewProblems` can take it
+ * out of the list by identity rather than by matching on a sentence somebody
+ * will improve one day.
+ */
+const FRACTIONAL_RATIO = (ratio: number): string =>
+    `The ratio is 1:${ratio}. It has to be a whole number.`;
+
 export function cardWriteProblems(
     recipe: Recipe,
     temperatureUnit: TemperatureUnit = "C"
@@ -80,8 +97,8 @@ export function cardWriteProblems(
     const problems: string[] = [];
     const tea = recipe.isTea();
 
-    const maxDose = tea ? 10 : 31;
-    if (outside(recipe.dosage, {min: 1, max: maxDose})) {
+    const maxDose = tea ? 10 : DOSE.max;
+    if (outside(recipe.dosage, {min: DOSE.min, max: maxDose})) {
         problems.push(`The dose is ${recipe.dosage} g. The most is ${maxDose} g.`);
     }
 
@@ -89,7 +106,7 @@ export function cardWriteProblems(
         problems.push(`The ratio is 1:${recipe.ratio}. The range is 1:${RATIO.min}-1:${RATIO.max}.`);
     } else if (!Number.isInteger(recipe.ratio)) {
         // The card holds a whole number, and a half would be silently truncated.
-        problems.push(`The ratio is 1:${recipe.ratio}. It has to be a whole number.`);
+        problems.push(FRACTIONAL_RATIO(recipe.ratio));
     }
 
     // Only when the grinder is on, and never on tea: a tea card always writes
@@ -210,3 +227,32 @@ export function canWriteToCard(recipe: Recipe): boolean {
     return cardWriteProblems(recipe).length === 0;
 }
 
+
+/**
+ * What stops a Bluetooth brew, which is not quite what stops a card write.
+ *
+ * Nearly everything a card refuses, the machine refuses too, because the two
+ * carry the same recipe. The exception is a fractional ratio.
+ * `encodeCoffeeBlob` never sends `recipe.ratio`: it derives a byte from the
+ * pour volumes and the dose, at one decimal place and ceilinged rather than
+ * rounded, so the number the machine receives for a 1:15.5 recipe is exactly
+ * the number it would receive for the same volumes at 1:15. Nothing fractional
+ * reaches the wire, so nothing can be truncated on it.
+ *
+ * Refusing the brew anyway was the medium dictating to the model, the same
+ * mistake `MAX_POURS` records having made about stage counts (#122). The card
+ * refusal itself is untouched and load-bearing: `Recipe.getData()` does push
+ * `this.ratio` straight into a byte.
+ *
+ * A ratio outside `RATIO` altogether is not affected. That is not a
+ * representation problem, it is volumes and a dose that disagree by an order
+ * of magnitude, and it is wrong in any medium.
+ */
+export function brewProblems(
+    recipe: Recipe,
+    temperatureUnit: TemperatureUnit = "C"
+): string[] {
+    const cardOnly = FRACTIONAL_RATIO(recipe.ratio);
+    return cardWriteProblems(recipe, temperatureUnit)
+        .filter((problem) => problem !== cardOnly);
+}

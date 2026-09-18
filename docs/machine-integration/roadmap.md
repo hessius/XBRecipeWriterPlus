@@ -115,6 +115,21 @@ endpoint means anyone can call that endpoint directly, and if the service
 account gets rate-limited or suspended, sharing breaks for every user at once.
 That needs minimal abuse control and a path that degrades rather than dies.
 
+Both are built. `api/_lib/rateLimit.ts` caps per IP per hour and globally per day
+and holds an idempotency lock, and `hooks/useShareRecipe.ts` turns every refusal
+into a named state rather than a thrown error, so a failed mint is a sentence and
+not a crash.
+
+The third option considered was an XBRW++-to-XBRW++ link, which needs no account
+and no network, offered when a mint fails. **Decided against.** The value of a
+share link here is that it opens in the *official* app, which is what makes the
+recipe useful to someone who does not own XBRW++. A link only another XBRW++ user
+can open serves a much smaller audience, and it is a second share format to keep
+working forever: its own payload, its own parser, its own migrations, and a
+second answer to "why did this link not open". Recipes already travel between
+XBRW++ installs through backup files. When a mint fails, the honest answer is to
+say so and let the user try again.
+
 ### M3 · Brew from the app
 
 | Issue | |

@@ -2050,6 +2050,9 @@ describe("picking a shelf's members", () => {
         }));
         // Refused outright: the existing shelf keeps the members it had.
         expect(existing.tags).toEqual(["Mornings"]);
+        // And the sheet keeps what was typed, so amending a near miss does not
+        // mean typing the whole name again.
+        expect(screen.getByTestId("shelf-name-field").props.value).toBe("mornings");
     });
 
     // Reporting the cap and returning left a user whose save had also been
@@ -2150,6 +2153,40 @@ describe("picking a shelf's members", () => {
         await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
 
         expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    });
+
+    // The one case SELECTED exists for: narrow to nothing, then review what is
+    // on the shelf being built. The list is drawn from the ticks, not the
+    // query, so an empty query must not paint NO MATCHES over the members.
+    it("lists the ticked recipes under SELECTED when the query matches nothing", async () => {
+        jest.useFakeTimers();
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+
+        await fireEvent.press(screen.getByTestId("rail-search"));
+        await act(async () => {
+            await fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzzzz");
+            jest.advanceTimersByTime(TYPING_DEBOUNCE_MS);
+        });
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.queryByText("NO MATCHES")).toBeNull();
+        expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+        jest.useRealTimers();
+    });
+
+    // The mirror: SELECTED on with nothing ticked used to draw a FlatList over
+    // an empty array, a blank area with no line. It gets its own copy now, not
+    // the search-and-filter one, because nothing was searched for.
+    it("draws its own line under SELECTED when nothing is ticked", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.queryByText("NO MATCHES")).toBeNull();
+        expect(screen.getByText("Tick a recipe to add it to this shelf.")).toBeTruthy();
     });
 
     it("cancels back to the grid without writing anything", async () => {
@@ -2388,7 +2425,7 @@ describe("picking a shelf's members", () => {
         }));
         // A refused rename is not a half-done one: the sheet stays open on the
         // name that was not accepted rather than closing as if it had been.
-        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+        expect(screen.getByTestId("shelf-name-field").props.value).toBe("evening");
     });
 
     it("allows a rename that only changes how the name is spelled", async () => {

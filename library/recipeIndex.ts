@@ -44,7 +44,7 @@ export type IndexColumn = {
  * `from` body leaves it identical. Changing a projection therefore fails on
  * the golden values, which is the prompt to bump this number.
  */
-export const INDEX_REVISION = 4;
+export const INDEX_REVISION = 5;
 
 /**
  * The Nordic letters that survive folding unchanged, because they are genuinely
@@ -226,7 +226,24 @@ export const INDEX_COLUMNS: IndexColumn[] = [
     // presence filter over a boolean scans cheaply, and LIKE '%term%' cannot use
     // an index at all, so one would only cost writes.
     {name: "hasDescription", type: "INTEGER", from: (r) => (r.description ? 1 : 0)},
-    {name: "description", type: "TEXT", collate: "NOCASE", from: (r) => r.description || null}
+    {name: "description", type: "TEXT", collate: "NOCASE", from: (r) => r.description || null},
+    {
+        // The folded form of the description, and the one search matches on.
+        // NOCASE on the raw column above folds ASCII case only, so a note
+        // saying "CAFÉ" was invisible to a search for "café" and vice versa --
+        // the same latent bug the tags had before `tagKey`. Folded through the
+        // same `tagKey` as `sharedByKey`, so the two authored free-text fields
+        // fold alike and the search term folds once for both.
+        //
+        // Storage is not a concern worth a bounded prefix: `MAX_DESCRIPTION` is
+        // 60 characters, so this adds at most 60 bytes of key per recipe, and a
+        // realistic 300-recipe library measured at roughly one 4 KB SQLite page
+        // of growth. The raw `description` is kept because it is what an
+        // eventual "note contains" filter reads unfolded; only search moved to
+        // the folded key.
+        name: "descriptionKey", type: "TEXT",
+        from: (r) => (r.description ? tagKey(r.description) : null)
+    }
 ];
 
 /**

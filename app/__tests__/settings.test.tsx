@@ -67,6 +67,13 @@ jest.mock("@/components/XbrwToast", () => ({
 // the delete sheet and the merge preview read, and `mockApplyRestore` /
 // `mockDeleteAll` observe what the screen asks the library to do.
 let mockLibraryRecipes: Recipe[] = [];
+let mockUnreadableCount = 0;
+let mockAllRecipesThrows = false;
+// Callables, not a value: the count parses every blob, so the library exposes
+// it as something Settings asks for once rather than a figure every consumer
+// pays for at render (#124).
+const mockCountUnreadable = jest.fn(() => mockUnreadableCount);
+const mockDeleteUnreadable = jest.fn(() => 0);
 const mockRefresh = jest.fn();
 const mockDeleteAll = jest.fn();
 const mockApplyRestore = jest.fn();
@@ -86,7 +93,12 @@ jest.mock("@/hooks/useBrewHistory", () => ({
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({
         recipes:         mockLibraryRecipes,
-        allRecipes:      () => mockLibraryRecipes,
+        countUnreadable: mockCountUnreadable,
+        deleteUnreadable: mockDeleteUnreadable,
+        allRecipes:      () => {
+            if (mockAllRecipesThrows) throw new Error("one recipe could not be read");
+            return mockLibraryRecipes;
+        },
         refresh:         mockRefresh,
         deleteRecipe:    jest.fn(),
         duplicateRecipe: jest.fn(),
@@ -182,6 +194,10 @@ describe("SettingsScreen", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockLibraryRecipes = [];
+        mockUnreadableCount = 0;
+        mockAllRecipesThrows = false;
+        mockCountUnreadable.mockImplementation(() => mockUnreadableCount);
+        mockDeleteUnreadable.mockImplementation(() => 0);
         // `clearAllMocks` forgets calls but keeps implementations, so a test
         // that made one of these reject would otherwise poison its successors.
         mockLoadSession.mockResolvedValue(null);
@@ -497,6 +513,77 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("librarySort")).toBe("rating");
         expect(restored.get("librarySortDirection")).toBe("asc");
+    });
+
+    it("shows how many saved recipes could not be read, and only then", async () => {
+        // Buys off the silence of skipping an unreadable blob (#124): the line
+        // is present when the library reports one and absent when it does not.
+        mockUnreadableCount = 2;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByText("2 saved recipes could not be read.")).toBeTruthy();
+    });
+
+    it("asks the library for the count once rather than on every render", async () => {
+        // The count parses every blob in the table, so it is a diagnostic the
+        // screen that shows it asks for, never a figure the library carries
+        // around. Taken at render it would put a whole-table parse on Home.
+        mockUnreadableCount = 1;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(mockCountUnreadable).toHaveBeenCalledTimes(1);
+    });
+
+    it("says a backup is unavailable while a recipe cannot be read", async () => {
+        mockUnreadableCount = 1;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        expect(screen.getByText(/backing up is paused/i)).toBeTruthy();
+    });
+
+    it("reports the refusal rather than throwing out of the press", async () => {
+        // `allRecipes()` throws over an unreadable row on purpose, and that
+        // throw used to land outside `useBackup`'s catch and reject the press
+        // handler, so the user tapped and nothing at all happened.
+        mockUnreadableCount = 1;
+        mockAllRecipesThrows = true;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Back up my recipes, Writes a file and hands it to the share sheet."}));
+
+        expect(mockExportBackup).not.toHaveBeenCalled();
+        expect(mockNotify).toHaveBeenCalledWith(
+            expect.objectContaining({tone: "error"})
+        );
+    });
+
+    it("offers a way to remove the rows that cannot be read", async () => {
+        mockUnreadableCount = 1;
+        mockDeleteUnreadable.mockReturnValue(1);
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button", {name: /remove unreadable/i}));
+
+        expect(mockDeleteUnreadable).toHaveBeenCalled();
+    });
+
+    it("clears the note once the unreadable rows are gone", async () => {
+        mockUnreadableCount = 1;
+        mockDeleteUnreadable.mockImplementation(() => {
+            mockUnreadableCount = 0;
+            return 1;
+        });
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+
+        await fireEvent.press(screen.getByRole("button", {name: /remove unreadable/i}));
+
+        expect(screen.queryByTestId("unreadable-recipes-note")).toBeNull();
+    });
+
+    it("shows no unreadable-recipes note when the library is clean", async () => {
+        mockUnreadableCount = 0;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.queryByTestId("unreadable-recipes-note")).toBeNull();
     });
 
     it("carries the brew history into a backup", async () => {

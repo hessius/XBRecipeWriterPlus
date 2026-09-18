@@ -37,7 +37,7 @@ export default function NameShelfSheet({
     onOpenChange: (open: boolean) => void;
     /** How many recipes are going on it, so the sheet can say what it is naming. */
     count: number;
-    onName: (name: string) => void;
+    onName: (name: string) => boolean;
     /**
      * The name this shelf already has, which makes this a rename.
      *
@@ -71,8 +71,11 @@ export default function NameShelfSheet({
 
     function submit() {
         if (trimmed.length === 0) return;
-        onName(trimmed);
-        setName(current ?? "");
+        // Only clear the field once the screen says it took the name. A name
+        // that folds onto a shelf that already exists is refused there, and
+        // clearing on the way out would make the user retype the whole thing
+        // to amend a near miss. The screen owns the closing on acceptance.
+        if (onName(trimmed)) setName(current ?? "");
     }
 
     return (

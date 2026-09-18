@@ -193,6 +193,73 @@ describe("parseBackup refuses, with a reason", () => {
         expect(result.payload.skipped).toBe(corrupt.length);
     });
 
+    it("refuses a backup whose dose is zero, a value no card can hold", () => {
+        // A stored `dosage: 0` is present and impossible, not absent: the card
+        // dose range is 1 to 31, so a 0 is a corrupt or tampered file. The
+        // constructor's truthiness check would coerce it to the default and
+        // hand back a plausible-looking wrong recipe whose next stop is a
+        // genuine card, so the boundary refuses it here (#117).
+        const result = parseBackup(backupFileWithRecipeFields({dosage: 0}));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/could not be read/i);
+    });
+
+    it("names the field it refused over, rather than saying only that it failed", () => {
+        // "A recipe could not be read" is unactionable when the file came from
+        // this app: the user has no way to tell a tampered dose from a bad
+        // share URL, and no way to repair either. The field is the one piece
+        // of information that turns the refusal into something a person could
+        // act on, and the validator knows it.
+        const result = parseBackup(backupFileWithRecipeFields({dosage: 0}));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/dosage/i);
+    });
+
+    it("names each field once when several recipes fail in different ways", () => {
+        const file = JSON.parse(buildBackup(
+            [recipeNamed("A", "u1"), recipeNamed("B", "u2"), recipeNamed("C", "u3")], {}
+        ));
+        file.recipes[0].dosage = 0;
+        file.recipes[1].dosage = 99;
+        file.recipes[2].shareUrl = "not-a-share-url";
+
+        const result = parseBackup(JSON.stringify(file));
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/dosage/);
+        expect(result.reason).toMatch(/shareUrl/);
+        expect(result.reason.match(/dosage/g)).toHaveLength(1);
+    });
+
+    it("refuses a dose above the card's range and keeps its bounds", () => {
+        // Both ends, so a widened or narrowed bound is caught: 32 is over, 0 is
+        // under, and 1 and 31 are the range itself and must survive.
+        expect(parseBackup(backupFileWithRecipeFields({dosage: 32})).ok).toBe(false);
+        expect(parseBackup(backupFileWithRecipeFields({dosage: 1})).ok).toBe(true);
+        expect(parseBackup(backupFileWithRecipeFields({dosage: 31})).ok).toBe(true);
+    });
+
+    it("restores a recipe whose dose is a legal figure unchanged", () => {
+        const result = parseBackup(backupFileWithRecipeFields({dosage: 15}));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].dosage).toBe(15);
+    });
+
+    it("leaves the Recipe constructor forgiving of a 0 dose, as it was", () => {
+        // The fix belongs at the boundary, not in the model. The constructor is
+        // deliberately lenient so it can migrate the app's own old shapes, so a
+        // dosage 0 must still fall through to the default here rather than be
+        // rejected -- proof the fix did not reach past `backup.ts` (#117).
+        const recipe = new Recipe(undefined, JSON.stringify({
+            pours: [], ratio: 16, dosage: 0, grindSize: 60
+        }));
+        expect(recipe.dosage).toBe(15);
+    });
+
     it("still takes a recipe that merely leaves fields out", () => {
         // The other half of the same guard, and the more important half. The
         // model repairs a long tail of legacy omissions on purpose, and this

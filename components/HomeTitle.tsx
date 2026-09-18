@@ -31,6 +31,14 @@ export const WORDMARK_FADE_DELAY = ATTRACT.wordmarkFadeDelay;
 export const SESSION_START = Date.now();
 
 /**
+ * The vertical box a Doto mark of a given size occupies, as a multiple of that
+ * size. The reserved header space is derived from the animated size through
+ * this so the box and the glyph share one clock; the same ratio `DigitRoll`
+ * uses to fit dot-matrix text to a clipped column.
+ */
+export const MARK_LINE_HEIGHT = 1.35;
+
+/**
  * How far the superscript count sits below the top of the title's line.
  *
  * A worklet, and derived from the size rather than written as a literal, for the
@@ -40,6 +48,20 @@ export const SESSION_START = Date.now();
 function countLift(fontSize: number): number {
     "worklet";
     return Math.round(fontSize * 0.14);
+}
+
+/**
+ * The reserved vertical box for the mark at a given size.
+ *
+ * A worklet driven by the animated size, so the header reserves the space the
+ * glyph is currently drawn at rather than the space the static `fontSize` prop
+ * would ask for. Without it the box and the glyph run on two clocks: an
+ * interrupted collapse leaves a large glyph in a compact box, which the header
+ * then clips (#120).
+ */
+function markBox(fontSize: number): number {
+    "worklet";
+    return Math.round(fontSize * MARK_LINE_HEIGHT);
 }
 
 type Props = {
@@ -149,6 +171,7 @@ export default function HomeTitle({count, collapsed, fontSize}: Props) {
 
     const tintStyle = useAnimatedStyle(() => ({opacity: tint.value}));
     const countStyle = useAnimatedStyle(() => ({marginTop: countLift(size.value)}));
+    const boxStyle = useAnimatedStyle(() => ({minHeight: markBox(size.value)}));
 
     return (
         <XStack alignItems="flex-start" gap="$1">
@@ -157,16 +180,18 @@ export default function HomeTitle({count, collapsed, fontSize}: Props) {
                 lockups rather than animating one colour, because the `++` is
                 text and its colour comes from a prop, not from a style
                 Reanimated can drive. */}
-            <YStack>
-                <Wordmark fontSize={fontSize} animatedFontSize={size}
-                          plusColor={palette.muted}/>
-                <Animated.View testID="home-title-tint"
-                               style={[StyleSheet.absoluteFill, tintStyle]}
-                               pointerEvents="none">
+            <Animated.View testID="home-title-box" style={boxStyle}>
+                <YStack>
                     <Wordmark fontSize={fontSize} animatedFontSize={size}
-                              plusColor={palette.brand} decorative/>
-                </Animated.View>
-            </YStack>
+                              plusColor={palette.muted}/>
+                    <Animated.View testID="home-title-tint"
+                                   style={[StyleSheet.absoluteFill, tintStyle]}
+                                   pointerEvents="none">
+                        <Wordmark fontSize={fontSize} animatedFontSize={size}
+                                  plusColor={palette.brand} decorative/>
+                    </Animated.View>
+                </YStack>
+            </Animated.View>
             {count > 0 && (
                 // Doto has an 11 px legibility floor, so the count does not
                 // scale with the mark — the same rule `ScreenTitle` follows.
