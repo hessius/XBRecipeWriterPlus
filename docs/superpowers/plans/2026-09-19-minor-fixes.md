@@ -46,13 +46,13 @@ whole table instead. The two disagree in both directions, and the case the chip
 exists for is the one that breaks: narrow to nothing, tap SELECTED to review
 the shelf being built, and the recipes are there behind a NO MATCHES panel.
 
-- [ ] Gate the empty branch on what is actually rendered, `shownRecipes` (or
+- [x] Gate the empty branch on what is actually rendered, `shownRecipes` (or
       `listItems`, whichever is the true input to the `FlatList`), not on the
       query's count.
-- [ ] Give the nothing-ticked case its own line. The search-and-filter copy is
+- [x] Give the nothing-ticked case its own line. The search-and-filter copy is
       wrong there: nothing was searched for. Something plain, no dashes, in the
       voice of `docs/copy.md`.
-- [ ] Tests: SELECTED with a query matching nothing still lists the ticked
+- [x] Tests: SELECTED with a query matching nothing still lists the ticked
       recipes; SELECTED with nothing ticked draws its own line rather than a
       blank area or the search copy.
 
