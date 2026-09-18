@@ -9,6 +9,8 @@ import {TILE_HEIGHT} from "@/components/ShelfTile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {canWriteToCard} from "@/library/cardLimits";
+import type {RecipeEvidence} from "@/library/libraryQuery";
+import {evidenceLine, isSet, spokenEvidence} from "@/library/recipeEvidence";
 import {onAccent} from "@/constants/colors";
 
 /**
@@ -22,6 +24,28 @@ import {onAccent} from "@/constants/colors";
  */
 const PROFILE_OVERHANG = 2;
 const PROFILE_HEIGHT = 44;
+
+/**
+ * The card's three figures, as one line for a tile that has no room for three.
+ *
+ * `12g · 1:16 · 22`, in the card's own order, with a missing figure dropped
+ * rather than drawn as a sentinel. Grind is left out for tea for the reason the
+ * card leaves it out: a tea recipe always writes the default grind, so the
+ * number is the app's rather than the user's and printing it invites them to
+ * read meaning into it.
+ */
+function figuresLine(recipe: Recipe, isTea: boolean): string | null {
+    const parts = [
+        isSet(recipe.dosage) ? `${recipe.dosage}G` : undefined,
+        isSet(recipe.ratio) ? `1:${recipe.ratio}` : undefined,
+        isTea
+            ? undefined
+            : recipe.grinder
+                ? (isSet(recipe.grindSize) ? String(recipe.grindSize) : undefined)
+                : "OFF"
+    ].filter((part) => part !== undefined);
+    return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 type Props = {
     recipe: Recipe;
@@ -41,6 +65,14 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Fill the pour profile with a dot screen. Owned by the settings screen. */
     dottedProfile?: boolean;
+    /**
+     * How this recipe has gone: rating, brew count, how lately.
+     *
+     * The same figures the list card draws, from the same helper, because a
+     * user moving between the two views is reading one recipe and is entitled
+     * to one answer about it.
+     */
+    evidence?: RecipeEvidence;
     /**
      * The recipe's own actions, mirrored from the overflow sheet the long press
      * opens. Each is optional for the same reason its row in the sheet is: brew
@@ -80,7 +112,8 @@ type Props = {
  */
 export default function RecipeShelfTile({
     recipe, onPress, onLongPress, showCoffeeMarker = true, dottedProfile = false,
-    onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite, onHistory
+    evidence, onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite,
+    onHistory
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -90,10 +123,20 @@ export default function RecipeShelfTile({
     // The whole tile is one accessibility element, so nothing inside is spoken
     // on its own: everything it shows has to be in this label or it reaches a
     // screen reader as the accent colour alone.
+    const figures = figuresLine(recipe, isTea);
+    const shownEvidence = evidenceLine(evidence);
     const summary = [
         recipe.displayName(),
         marker.toLowerCase(),
-        recipe.favourite ? "starred" : undefined
+        recipe.favourite ? "starred" : undefined,
+        // Spoken in words rather than as the drawn line: "12G · 1:16 · 22" is a
+        // glance's shorthand and reads as noise when it is read aloud.
+        isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
+        isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
+        !isTea && recipe.grinder && isSet(recipe.grindSize)
+            ? `grind ${recipe.grindSize}`
+            : undefined,
+        ...spokenEvidence(evidence)
     ].filter((part) => part !== undefined).join(", ");
 
     // The long press is unreachable by a screen reader, so the acts it opens are
@@ -167,7 +210,18 @@ export default function RecipeShelfTile({
                                  width={140} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
                 </View>
 
-                <XStack alignItems="center" justifyContent="flex-end" gap="$1.5">
+                <XStack alignItems="center" gap="$1.5">
+                    {/* How it has gone leads the row, the way it takes the
+                        leading end of the card's own figures row. */}
+                    {shownEvidence !== null && (
+                        <DotMatrixText testID="recipe-tile-evidence" fontSize={10}
+                                       weight="bold" letterSpacing={1.1}
+                                       numberOfLines={1}
+                                       color={onAccent.label}>
+                            {shownEvidence}
+                        </DotMatrixText>
+                    )}
+                    <XStack flex={1}/>
                     {recipe.favourite && (
                         <DotIcon testID="recipe-tile-favourite" name="favourite"
                                  size={12} color={onAccent.marker}/>
@@ -180,10 +234,24 @@ export default function RecipeShelfTile({
                     )}
                 </XStack>
 
-                <Text fontSize={15} fontWeight="700" numberOfLines={2}
-                      color={recipe.hasName() ? onAccent.text : onAccent.label}>
-                    {recipe.displayName()}
-                </Text>
+                <YStack gap="$1">
+                    {/* One line rather than two once there are figures under
+                        it. The tile's height is the grid's and does not grow:
+                        a tile that reflowed on its contents would break the
+                        row alignment the whole grid is built on. */}
+                    <Text fontSize={15} fontWeight="700"
+                          numberOfLines={figures === null ? 2 : 1}
+                          color={recipe.hasName() ? onAccent.text : onAccent.label}>
+                        {recipe.displayName()}
+                    </Text>
+                    {figures !== null && (
+                        <DotMatrixText testID="recipe-tile-figures" fontSize={11}
+                                       weight="bold" letterSpacing={1.2}
+                                       numberOfLines={1} color={onAccent.label}>
+                            {figures}
+                        </DotMatrixText>
+                    )}
+                </YStack>
             </YStack>
         </Pressable>
     );

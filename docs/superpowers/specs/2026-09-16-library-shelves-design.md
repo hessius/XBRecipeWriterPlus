@@ -396,6 +396,26 @@ The list view keeps filter chips and they keep working. They are a different
 instrument: a chip narrows what you are looking at, a shelf is a thing you
 opened. The two only competed when tapping a shelf turned into applying a chip.
 
+### Revision: a room's tiles carry the card's figures
+
+A recipe tile drew a name on a colour and nothing else, so opening a shelf lost
+the dose, the ratio, the grind and how the recipe had gone. The two ways out
+were to bring the list card's information onto the tile, or to draw list rows in
+the room and keep one view. The square is the shape that belongs in a shelf, so
+the information came to it instead.
+
+`12G · 1:16 · 22` in one Doto line under the name, the card's three figures in
+the card's own order, with a missing one dropped rather than drawn as a
+sentinel; and the evidence line -- rating, count, recency -- taking the leading
+end of the top row, where the card also puts it. The name gives up its second
+line to make room, because the tile's height is the grid's and a tile that
+reflowed on its contents would break the row alignment the grid is built on.
+
+`evidenceLine`, `spokenEvidence` and `isSet` moved out of the card into
+`library/recipeEvidence.ts`. Two views drawing one recipe are entitled to one
+answer about it, and two copies of that arithmetic would agree until the first
+time one of them was edited.
+
 ### The rail belongs to the view, not to the screen
 
 **Added after device testing.** Phase 3 built the rail for a screen that had one

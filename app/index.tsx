@@ -1082,6 +1082,7 @@ export default function HomeScreen({db, settings}: Props) {
                         recipes={library.recipes}
                         onBack={libraryQuery.closeShelf}
                         actionsFor={roomActionsFor}
+                        evidence={library.evidence}
                         showCoffeeMarker={showCoffeeMarker}
                         dottedProfile={dottedProfile}
                         paddingBottom={insets.bottom + 8}/>

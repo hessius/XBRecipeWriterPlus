@@ -5,6 +5,7 @@ import {Text, XStack, YStack} from "tamagui";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import RecipeShelfTile from "@/components/RecipeShelfTile";
+import type {RecipeEvidence} from "@/library/libraryQuery";
 import {onAccent, palette} from "@/constants/colors";
 import type Recipe from "@/library/Recipe";
 
@@ -66,7 +67,7 @@ export type RoomRecipeActions = {
  * mounted behind the room, not to replay a saved offset here.
  */
 export default function ShelfRoom({
-    label, recipes, onBack, actionsFor, manual = false,
+    label, recipes, onBack, actionsFor, evidence = {}, manual = false,
     showCoffeeMarker = true, dottedProfile = false, paddingBottom = 0
 }: {
     /** The shelf's name, drawn as the room's heading. */
@@ -84,6 +85,14 @@ export default function ShelfRoom({
     onBack: () => void;
     /** The acts the room can perform on one recipe, built by the screen. */
     actionsFor: (recipe: Recipe) => RoomRecipeActions;
+    /**
+     * How each recipe has gone, by uuid, the same map the list reads.
+     *
+     * Passed whole rather than looked up per tile, because the screen already
+     * holds it and a room drawing its own would be a second answer about the
+     * same brews.
+     */
+    evidence?: Readonly<Record<string, RecipeEvidence>>;
     /**
      * True for a tag shelf, whose name is the user's own word. It draws in a
      * plain face so the matrix does not recase it; a stock shelf is already the
@@ -154,6 +163,7 @@ export default function ShelfRoom({
                                     onLongPress={acts.onLongPress}
                                     showCoffeeMarker={showCoffeeMarker}
                                     dottedProfile={dottedProfile}
+                                    evidence={evidence[recipe.uuid]}
                                     onBrew={acts.onBrew}
                                     onShare={acts.onShare}
                                     onWrite={acts.onWrite}
