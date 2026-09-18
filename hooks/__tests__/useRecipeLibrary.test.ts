@@ -495,13 +495,52 @@ describe("the store it reads through", () => {
     describe("the art each shelf tile draws", () => {
         it("asks for every stock shelf and every tag", async () => {
             const db = stubDb([named("Ethiopia")]);
-            db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 2}]);
+            db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 3}]);
 
             await renderHook(() => useRecipeLibrary(db));
 
             const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
             expect(asked).toContain("tea");
             expect(asked).toContain("tag:morning");
+        });
+
+        // Art is read one synchronous query per shelf, on the thread that is
+        // drawing. A library shared into by two hundred people would otherwise
+        // pay for two hundred reads to draw none of them: a shelf of fewer than
+        // three is never offered, whatever the rail is filtered by.
+        it("does not read art for a shelf too small to be offered", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByTag.mockReturnValue([
+                {tag: "morning", count: 3}, {tag: "once", count: 2}
+            ]);
+            db.countRecipesByAuthor.mockReturnValue([
+                {author: "Anna", count: 3}, {author: "Bo", count: 1}
+            ]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("tag:morning");
+            expect(asked).toContain("sharedBy:Anna");
+            expect(asked).not.toContain("tag:once");
+            expect(asked).not.toContain("sharedBy:Bo");
+        });
+
+        // The ids are folded to one string so the read can be cached on it.
+        // Author names are the one part of an id a stranger wrote, so the fold
+        // cannot use a character a name is allowed to contain.
+        it("keeps two author shelves apart when a name holds the separator", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([
+                {author: "Anna\nBo", count: 3}, {author: "Cal", count: 3}
+            ]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("sharedBy:Anna\nBo");
+            expect(asked).toContain("sharedBy:Cal");
+            expect(asked).not.toContain("sharedBy:Anna");
         });
 
         it("asks for no more members than the mark will draw", async () => {

@@ -7,7 +7,7 @@ import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
 import Recipe from "@/library/Recipe";
-import {formatBrewAgo} from "@/library/brew/brewFormat";
+import {formatBrewAgo, spokenBrewAgo} from "@/library/brew/brewFormat";
 import type {RecipeEvidence} from "@/library/libraryQuery";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
 import {canWriteToCard} from "@/library/cardLimits";
@@ -69,7 +69,14 @@ function spokenEvidence(evidence?: RecipeEvidence): string[] {
     if (evidence === undefined || evidence.brews <= 0) return [];
     return [
         ...(evidence.avgRating > 0 ? [`rated ${evidence.avgRating.toFixed(1)}`] : []),
-        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`
+        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`,
+        // The third fact. It is on the card as `3D`, and a label carrying only
+        // the first two would leave a reader with less than the row shows.
+        // Absent when no brew carried a date, which is what the drawn line does
+        // with it too.
+        ...(evidence.lastBrewedAt > 0
+            ? [`last brewed ${spokenBrewAgo(evidence.lastBrewedAt)}`]
+            : [])
     ];
 }
 
@@ -455,11 +462,22 @@ export default function RecipeCard({
                         cannot share it, and a destructive control has the
                         stronger claim on a row the user opened to manage. */}
                     {!editing && shownEvidence !== null && (
-                        <DotMatrixText testID="recipe-card-evidence" fontSize={11}
-                                       weight="bold" letterSpacing={1.2}
-                                       color={onAccent.label}>
-                            {shownEvidence}
-                        </DotMatrixText>
+                        // The star is drawn rather than typed: the line is set
+                        // in Doto, which has no glyph for one, and the app's
+                        // star is a dot icon everywhere else it appears.
+                        <XStack testID="recipe-card-evidence"
+                                alignItems="center" gap={3}>
+                            {(evidence?.avgRating ?? 0) > 0 && (
+                                <DotIcon name="favourite" size={9}
+                                         testID="recipe-card-evidence-star"
+                                         color={onAccent.label}/>
+                            )}
+                            <DotMatrixText fontSize={11} weight="bold"
+                                           letterSpacing={1.2}
+                                           color={onAccent.label}>
+                                {shownEvidence}
+                            </DotMatrixText>
+                        </XStack>
                     )}
 
                     {editing && (

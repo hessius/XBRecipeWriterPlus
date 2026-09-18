@@ -135,7 +135,15 @@ export function resolveStockFilter(id: string): FilterClause | null {
 }
 
 /** Below this a filter is noise the app should not invent a chip for. */
-const MIN_COUNT = 3;
+/**
+ * The floor a shelf has to clear to exist at all.
+ *
+ * Exported because it is not only a suppression rule: the shelf art read pays
+ * one synchronous query per shelf, and a shelf below this floor is never drawn
+ * whatever the rail is filtered by, so it must not be queried either. Both
+ * readings have to come from this one number or they would drift.
+ */
+export const MIN_COUNT = 3;
 
 /**
  * Whether a filter holding `count` of a library of `librarySize` is offered.
@@ -270,13 +278,22 @@ export function resolveLibraryFilter(id: string): FilterClause | null {
  * shelf the moment one was applied, leaving the user's own narrowing gone with
  * no chip to say it ever happened.
  *
- * The type is checked before the shape, because the input is whatever was in a
- * restored setting: a stored `[1]` would otherwise reach `startsWith` on a
- * number and throw, which is a crash on launch rather than a dropped filter.
+ * Applied filters are transient and never persisted (`useLibraryQuery` starts
+ * each launch with none), so nothing here has to survive a relaunch. What it
+ * guards is the gap between the ids the app can *set* and the ids the resolver
+ * can *resolve*: a shelf tile hands over an id built from live library data,
+ * and by the time it is applied the recipe behind it may be gone. Dropping
+ * such an id here is what keeps `buildLibraryQuery`'s throw reserved for a real
+ * disagreement between the vocabulary and the resolver.
  *
- * A tag id survives on shape alone rather than on being a tag that still exists.
- * A tag whose last recipe was deleted resolves to a clause matching nothing,
- * which is an empty shelf the user can see and close, not a crash.
+ * The type is checked before the shape all the same, because the cost is a line
+ * and the alternative is `startsWith` on a non-string taking the library down.
+ *
+ * A tag or author id survives on shape alone rather than on still naming
+ * something in the library. A tag whose last recipe was deleted, or an author
+ * whose only recipe was, resolves to a clause matching nothing: an empty shelf
+ * the user can see and close, not a crash and not a chip that vanishes without
+ * explaining itself.
  */
 export function asLibraryFilters(value: unknown): string[] {
     if (!Array.isArray(value)) return [];

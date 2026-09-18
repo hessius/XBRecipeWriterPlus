@@ -4,7 +4,8 @@ import {mergeRecipes, type BackupPayload} from "@/library/backup";
 import {MARK_MEMBERS} from "@/components/ShelfMark";
 import {resolveAccent} from "@/library/accent";
 import {
-    authorFilterId, resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER,
+    authorFilterId, MIN_COUNT, resolveLibraryFilter, resolveStockFilter,
+    STOCK_FILTER_ORDER,
     tagFilterId
 } from "@/library/libraryFilters";
 import type {FilterResolver, LibraryQuery,
@@ -511,19 +512,29 @@ function readEvidence(
 /**
  * Every shelf id that could be drawn, as one string.
  *
- * A primitive rather than an array so the read below can be cached on it. The
- * separator is a newline because a tag cannot contain one -- `Recipe.setTags`
- * collapses whitespace -- so two different tag sets cannot fold to one key.
+ * A primitive rather than an array so the read below can be cached on it, and
+ * JSON rather than a joined list because an author shelf's id ends in a name a
+ * stranger typed: `Smith, Anna` or a name carrying a newline would otherwise
+ * fold into two ids, and the shelf would ask for art under a name nobody has.
+ *
+ * Only the shelves that clear `MIN_COUNT` are listed. The upper suppression
+ * gate depends on what the rail is filtered by and the art does not, so it is
+ * deliberately not applied here -- but the floor is a property of the library
+ * itself, and a shelf under it is never drawn for anyone. The read below is one
+ * synchronous query per id on the thread that is drawing, so a library shared
+ * into by two hundred people must not pay two hundred reads to draw none.
  */
 function shelfIdsOf(
-    tagCounts: readonly {tag: string}[],
-    authorCounts: readonly {author: string}[]
+    tagCounts: readonly {tag: string; count: number}[],
+    authorCounts: readonly {author: string; count: number}[]
 ): string {
-    return [
+    return JSON.stringify([
         ...STOCK_FILTER_ORDER,
-        ...tagCounts.map(({tag}) => tagFilterId(tag)),
-        ...authorCounts.map(({author}) => authorFilterId(author))
-    ].join("\n");
+        ...tagCounts.filter(({count}) => count >= MIN_COUNT)
+            .map(({tag}) => tagFilterId(tag)),
+        ...authorCounts.filter(({count}) => count >= MIN_COUNT)
+            .map(({author}) => authorFilterId(author))
+    ]);
 }
 
 /**
@@ -551,7 +562,7 @@ function readShelfMarks(
 ): Record<string, ShelfMarkMembers> {
     void revision;
     const members = db.shelfMembers?.(
-        ids === "" ? [] : ids.split("\n"), resolveLibraryFilter, MARK_MEMBERS
+        JSON.parse(ids) as string[], resolveLibraryFilter, MARK_MEMBERS
     ) ?? {};
 
     const marks: Record<string, ShelfMarkMembers> = {};

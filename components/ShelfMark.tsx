@@ -79,9 +79,22 @@ export default function ShelfMark({
     /** Members' pour profiles, for the profile variant. */
     profiles?: readonly Pour[][];
 }) {
-    const mark = markFor(variant, kind);
+    // A glyph that was asked for and does not exist becomes the derived mark
+    // rather than an empty square. The glyphs are a closed set drawn at design
+    // time for the shelves that ship with the app; a per-author shelf is also
+    // `auto`, but it is named by a stranger, so there is no drawing for it and
+    // none can be invented. It is open ended in the way a tag is, so it takes
+    // what a tag takes.
+    const asked = markFor(variant, kind);
+    const mark = asked === "glyph" && glyph == null ? "profiles" : asked;
     const members = accents.slice(0, MARK_MEMBERS);
-    const shapes = profiles.slice(0, MARK_MEMBERS).filter((pours) => pours.length > 0);
+    // Paired before the empty ones are dropped, not after. The accent is what
+    // says which recipe a staircase belongs to, and a recipe with no pours
+    // leaves a hole in the profile list but not in the accent list: indexing
+    // one by the other's position draws a shape in a stranger's colour.
+    const shapes = profiles.slice(0, MARK_MEMBERS)
+        .map((pours, index) => ({pours, accent: accents[index] ?? palette.muted}))
+        .filter(({pours}) => pours.length > 0);
     const field = members[0] ?? palette.surface;
 
     if (mark === "glyph" && glyph != null) {
@@ -100,15 +113,15 @@ export default function ShelfMark({
             <Square testID="shelf-mark-profiles" background={palette.surface}>
                 <Svg width={MARK_SIZE} height={MARK_SIZE}
                      viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`}>
-                    {shapes.map((pours, index) => (
-                        <Path key={index}
+                    {shapes.map(({pours, accent}, index) => (
+                        <Path key={index} testID={`shelf-mark-profile-${index}`}
                               // Inset so a staircase reaching the top of its
                               // box is not clipped by the rounded corner.
                               d={buildProfilePath(pours as Pour[],
                                                   MARK_SIZE - 12, MARK_SIZE - 16)}
                               translateX={6} translateY={10}
                               fill="none"
-                              stroke={members[index] ?? palette.muted}
+                              stroke={accent}
                               strokeWidth={PROFILE_STROKE_WIDTH}/>
                     ))}
                 </Svg>

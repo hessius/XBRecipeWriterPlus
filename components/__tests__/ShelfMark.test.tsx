@@ -66,6 +66,37 @@ describe("ShelfMark", () => {
             expect(screen.getByTestId("shelf-mark-profiles")).toBeTruthy();
         });
 
+        // A recipe with no pours has nothing to draw, so it is left out of the
+        // stack. Its accent must leave with it: the colour is what says which
+        // recipe a staircase belongs to, and a shape wearing the colour of a
+        // recipe that is not on the square is worse than no colour at all.
+        it("keeps each profile in the colour of the recipe it came from", async () => {
+            await renderWithProviders(
+                <ShelfMark kind="manual" accents={["#AAAAAA", "#BBBBBB"]}
+                           profiles={[[], pours(2)]}/>
+            );
+
+            // react-native-svg has already resolved the colour to an ARGB int
+            // by the time it reaches the host element, so the assertion has to
+            // meet it there rather than on the string that was written.
+            expect(screen.getByTestId("shelf-mark-profile-0").props.stroke)
+                .toEqual({type: 0, payload: 0xFFBBBBBB});
+        });
+
+        // The glyphs are a closed set drawn at design time, and an author
+        // shelf is named by a stranger, so there is no glyph for it and none
+        // can be invented. It is open ended in exactly the way a tag is, so it
+        // takes the same derived mark a tag does rather than an empty square.
+        it("falls back to the members when an auto shelf has no glyph", async () => {
+            await renderWithProviders(
+                <ShelfMark kind="auto" glyph={null} accents={THREE}
+                           profiles={[pours(2)]}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-profiles")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-mark-field")).toBeNull();
+        });
+
         it("draws the mosaic when a tester picks it", async () => {
             await renderWithProviders(
                 <ShelfMark kind="auto" variant="mosaic" glyph="shelfTea"

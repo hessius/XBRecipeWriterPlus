@@ -114,8 +114,8 @@ export type LibraryController = {
  * build has no fragment for -- an axis renamed or removed since it was written
  * -- would otherwise index the sort table to nothing and take the query builder
  * down. `asSortAxis`/`asSortDirection` fold such a value back to name-ascending.
- * The filters get the same treatment through `asStockFilters` before they reach
- * the query: an id the vocabulary no longer defines is dropped here, so
+ * The filters get the same treatment through `asLibraryFilters` before they
+ * reach the query: an id the vocabulary no longer defines is dropped here, so
  * `buildLibraryQuery`'s throw for an unresolved id stays reserved for a real
  * in-code disagreement between the ids and the resolver rather than firing on
  * stale state and crashing the library on every render.

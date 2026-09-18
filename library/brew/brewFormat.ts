@@ -39,12 +39,49 @@ export function formatBrewDuration(startMs: number, endMs: number): string {
  *
  * Rounded down throughout, because a brew six days ago is not yet a week ago.
  * `TODAY` is its own word rather than `0d`, which reads as nothing at all.
+ *
+ * Counted in calendar days rather than in elapsed 24 hour periods, because the
+ * word means what the user means by it: a brew at 23:50 read at 00:10 is twenty
+ * minutes old and was still yesterday. Both instants are taken to local
+ * midnight first, and the division is rounded rather than floored so that a
+ * daylight saving day of 23 or 25 hours still counts as one day.
  */
+/** The local midnight that starts the day an instant falls in. */
+function midnight(ms: number): number {
+    const date = new Date(ms);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+}
+
 export function formatBrewAgo(ms: number, now = Date.now()): string {
-    const days = Math.floor((now - ms) / 86_400_000);
-    if (days <= 0) return "TODAY";
-    if (days < 7) return `${days}D`;
-    if (days < 56) return `${Math.floor(days / 7)}W`;
-    if (days < 365) return `${Math.floor(days / 30)}MO`;
-    return `${Math.floor(days / 365)}Y`;
+    const {unit, count} = brewAgo(ms, now);
+    if (unit === "today") return "TODAY";
+    return `${count}${{day: "D", week: "W", month: "MO", year: "Y"}[unit]}`;
+}
+
+/**
+ * The same answer in words: `today`, `3 days ago`, `2 weeks ago`.
+ *
+ * A screen reader gets the card's third fact from here. `3D` is four characters
+ * a glance reads instantly and a voice cannot say at all, and without this the
+ * recency would be conveyed by the drawn line alone -- which is the one place
+ * the design says the evidence must not live.
+ */
+export function spokenBrewAgo(ms: number, now = Date.now()): string {
+    const {unit, count} = brewAgo(ms, now);
+    if (unit === "today") return "today";
+    const word = count === 1 ? unit : `${unit}s`;
+    return `${count} ${word} ago`;
+}
+
+type Ago = {unit: "today" | "day" | "week" | "month" | "year"; count: number};
+
+/** How long ago, as a unit and a count, before either form words it. */
+function brewAgo(ms: number, now: number): Ago {
+    const days = Math.round((midnight(now) - midnight(ms)) / 86_400_000);
+    if (days <= 0) return {unit: "today", count: 0};
+    if (days < 7) return {unit: "day", count: days};
+    if (days < 56) return {unit: "week", count: Math.floor(days / 7)};
+    if (days < 365) return {unit: "month", count: Math.floor(days / 30)};
+    return {unit: "year", count: Math.floor(days / 365)};
 }
