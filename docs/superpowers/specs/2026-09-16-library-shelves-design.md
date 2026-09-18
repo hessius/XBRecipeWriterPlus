@@ -844,9 +844,11 @@ worth stating so the plan does not have to rediscover it.
    which also records why the description is not in that plan: it is typed on
    the ABOUT deck, so it ships with phase 5 rather than being rendered with
    nowhere to author it.
-2. **The row.** Description, the equal height line budget, the favourite star
-   and its swipe tile, and evidence as a stats row suffix. Useful on its own:
-   it answers "remembering what a recipe is" without any of the rest.
+2. **The row. Shipped.** Description, the equal height line budget, the
+   favourite star and its swipe tile, and evidence as a stats row suffix. Useful
+   on its own: it answers "remembering what a recipe is" without any of the
+   rest. The first three arrived with 1 and 5; the evidence suffix arrived with
+   7 below, because until #99 there was no rating for it to report.
 3. **The rail. Done in phase 3.** Search, sort with direction and favourites
    first, and filter chips are shipped. Useful on its own. Planned in
    [`2026-09-16-m5-rail.md`](../plans/2026-09-16-m5-rail.md), which cut two
@@ -879,8 +881,16 @@ worth stating so the plan does not have to rediscover it.
    and planned in
    [`2026-09-18-brew-judgement.md`](../plans/2026-09-18-brew-judgement.md).
 
-`ShelfMark` variants and the avatar setting ride along with 4 and 2
-respectively, and both are behind switches, so neither blocks a release.
+7. **The evidence. Shipped.** The brew nobody watched and the star on a recipe,
+   both from §"Rating, and the brew nobody watched"; the card's evidence suffix,
+   which closes 2; the three shelf art candidates behind their LABS switch; and
+   the per-author shelves (#126), which this design named and nothing supplied.
+   Needs 6, because every one of them is a way of showing or collecting a
+   rating. Planned in
+   [`2026-09-19-m5-evidence.md`](../plans/2026-09-19-m5-evidence.md).
+
+The avatar setting rides along with 2 and is behind a switch, so it does not
+block a release. The `ShelfMark` variants rode along with 7 the same way.
 
 ## Out of scope
 
