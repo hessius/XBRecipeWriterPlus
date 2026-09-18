@@ -26,8 +26,11 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     grinderOff:    "shelfGrinderOff",
     xbloom:        "shelfXbloom",
     strong:        "shelfStrong",
-    long:          "shelfLong",
+    mild:          "shelfMild",
+    quickBrew:     "shelfQuickBrew",
+    slowBrew:      "shelfSlowBrew",
     hot:           "shelfHot",
+    mine:          "shelfMine",
     recentlyAdded: "shelfRecent"
 };
 

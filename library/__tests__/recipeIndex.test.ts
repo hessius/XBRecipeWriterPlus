@@ -53,7 +53,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("dc2c76e3");
+        expect(schemaHash()).toBe("c2b17255");
     });
 
     it("folds the revision into the hash", () => {
@@ -99,6 +99,7 @@ describe("projectRecipe", () => {
             grindRPM: 120,
             pourCount: 2,
             totalVolume: 220,
+            brewSeconds: 69,
             minTemp: 88,
             maxTemp: 93,
             bypassEnabled: 0,
@@ -165,6 +166,32 @@ describe("projectRecipe", () => {
 
     it("gives a stageless recipe no volume", () => {
         expect(projectRecipe(new Recipe()).totalVolume).toBe(0);
+    });
+
+    it("gives a stageless recipe no duration at all", () => {
+        // NULL, not 0. Zero is a duration, and SQLite would have put a
+        // half-authored recipe on the QUICK BREW shelf as the fastest thing
+        // in the library.
+        expect(projectRecipe(new Recipe()).brewSeconds).toBeNull();
+    });
+
+    it("counts pouring and steeping into brewSeconds", () => {
+        // 128 ml at 3.2 ml/s is 40 seconds, plus a 90 second pause.
+        const recipe = new Recipe();
+        const steep = pour(128, 93);
+        steep.flowRate = 32;
+        steep.pauseTime = 90;
+        recipe.pours = [steep];
+        expect(projectRecipe(recipe).brewSeconds).toBe(130);
+    });
+
+    it("ignores the -1 sentinels when timing a half-filled stage", () => {
+        // `flowRate` and `pauseTime` both initialise to -1. A negative flow
+        // divides to a negative duration and a negative pause subtracts from
+        // it, so an unset stage would have come out faster than an empty one.
+        const recipe = new Recipe();
+        recipe.pours = [pour(32, 93)];
+        expect(projectRecipe(recipe).brewSeconds).toBe(10);
     });
 
     it("ignores the -1 sentinel when taking temperature bounds", () => {

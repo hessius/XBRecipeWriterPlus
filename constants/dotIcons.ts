@@ -553,7 +553,7 @@ export const DOT_ICONS = {
     /**
      * The shelf marks, one per auto shelf.
      *
-     * Twelve glyphs is a lot to add to a set whose own rule is "keep it small",
+     * Fifteen glyphs is a lot to add to a set whose own rule is "keep it small",
      * and the rule still holds: these are one closed set, drawn once, for one
      * job. The auto shelves ship with the app and never change, so every glyph
      * is authored at design time and no user ever picks one -- which is exactly
@@ -561,9 +561,10 @@ export const DOT_ICONS = {
      * shelf, being open ended, takes the derived mark instead.
      *
      * Same two stroke classes as everything above: axis-aligned runs and pure
-     * diagonals. `shelfStrong` and `shelfLong` are deliberately the same frame
+     * diagonals. `shelfStrong` and `shelfMild` are deliberately the same frame
      * filled and emptied, because that is what the two shelves are -- the same
-     * measure, more coffee or more water.
+     * measure, more coffee or more water. `shelfQuickBrew` and `shelfSlowBrew`
+     * borrow the trick for the other pair.
      */
     shelfTea: [
         ".........",
@@ -673,7 +674,7 @@ export const DOT_ICONS = {
         "........."
     ],
     /** The same measure, mostly water. */
-    shelfLong: [
+    shelfMild: [
         ".........",
         ".#######.",
         ".#.....#.",
@@ -695,6 +696,51 @@ export const DOT_ICONS = {
         "#########",
         "#########",
         "........."
+    ],
+    /**
+     * A house. The author shelves are every recipe that arrived from somebody;
+     * this is the shelf for the ones that did not, so it is drawn as home
+     * rather than as a person.
+     */
+    shelfMine: [
+        "....#....",
+        "...###...",
+        "..#####..",
+        ".#######.",
+        "#########",
+        ".#.....#.",
+        ".#.###.#.",
+        ".#.###.#.",
+        "........."
+    ],
+    /**
+     * An hourglass run through, and the same hourglass still full.
+     *
+     * The strong/mild pair's trick, applied to duration: one frame, the sand
+     * at one end or the other. They share a silhouette with `shelfXbloom`,
+     * which is the bare X with neither the bars nor the fill.
+     */
+    shelfQuickBrew: [
+        "#########",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#....",
+        "...###...",
+        "..#####..",
+        ".#######.",
+        "#########"
+    ],
+    shelfSlowBrew: [
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#....",
+        "...#.#...",
+        "..#...#..",
+        ".#.....#.",
+        "#########"
     ],
     /** A boxed plus: something newly put on the shelf. */
     shelfRecent: [

@@ -1,3 +1,4 @@
+import {plannedSeconds} from "./brew/brewShape";
 import Recipe from "./Recipe";
 import {tagKey} from "./tagKey";
 
@@ -152,6 +153,21 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         // recipe and diverge on a half-authored one, where a stageless recipe
         // would otherwise claim to make 240 ml while dispensing nothing.
         from: (r) => r.getPourTotalVolume()
+    },
+    {
+        name: "brewSeconds", type: "INTEGER", indexed: true,
+        // How long the recipe says it takes: its pours at their stated flow,
+        // plus the pauses between them. `plannedSeconds` is the arithmetic the
+        // brew trace and the recorder already share, so the shelf agrees with
+        // the staircase the user watched rather than being a second opinion
+        // about the same recipe.
+        //
+        // NULL for a stageless recipe, not 0. Zero is a duration, and a
+        // half-authored recipe would have claimed to be the quickest brew in
+        // the library; NULL fails both comparisons and keeps it off both
+        // shelves. Rounded, because a shelf boundary at a tenth of a second is
+        // a boundary nobody can see.
+        from: (r) => (r.pours.length === 0 ? null : Math.round(plannedSeconds(r.pours)))
     },
     {
         name: "minTemp", type: "INTEGER",

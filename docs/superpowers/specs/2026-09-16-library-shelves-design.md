@@ -315,10 +315,38 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 | Grinder off | `grinder = 0` |
 | xBloom recipes | `xid IS NOT NULL` |
 | Strong | `ratio <= 14` |
-| Long | `ratio >= 17` |
+| Mild | `ratio >= 17` |
+| Quick brew | `brewSeconds <= 150` |
+| Slow brew | `brewSeconds >= 240` |
 | Hot | `maxTemp >= 94` |
-| From <author> | `sharedBy = ?`, one shelf per distinct author |
+| Mine | `sharedByKey IS NULL` |
+| From <author> | `sharedByKey = ?`, one shelf per distinct author |
 | Recently added | `createdAt` within 30 days |
+
+**Mild was called Long** until the duration pair arrived, at which point one
+shelf would have been long because of its ratio and another because of its
+clock. The word went to the clock, where it can only mean one thing, and the
+ratio pair took the two words that can only mean strength. The id changed with
+the label; `asStockFilters` drops the stale one, so an upgrade loses a pinned
+chip and nothing else.
+
+**Quick and slow are measured by `plannedSeconds`** -- the recipe's pours at
+their stated flow, plus the pauses between them -- so a shelf agrees with the
+staircase the brew screen draws rather than being a second opinion about the
+same recipe. The gap between 2:30 and 4:00 is deliberately unnamed: most
+recipes live in it, and a shelf holding the middle of a distribution says
+nothing about what is on it. A stageless recipe has `brewSeconds` NULL and is
+on neither shelf.
+
+**Mine is the complement of every author shelf**, which is why it is one clause
+and not a list of sources. A recipe typed into the editor, a duplicate of one,
+a card read on the phone and a row pulled from the user's own xBloom account
+all arrive with no sharer: an account row is a bare `recipeVo`, and
+`shareMemberName` sits beside `recipeVo` rather than inside it. Only a recipe
+somebody sent carries one. It is subject to the same ceiling as everything
+else, so it stays hidden until enough of the library came from other people for
+the distinction to mean something -- which is the point at which somebody would
+want it.
 
 `cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`,
 `OMNI 0x02` (which the UI calls "overflow protection off"), `TEA 0x03`.

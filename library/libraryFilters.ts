@@ -33,9 +33,12 @@ export type FilterId =
     | "grinderOff"
     | "xbloom"
     | "strong"
-    | "long"
+    | "mild"
     | "hot"
-    | "recentlyAdded";
+    | "recentlyAdded"
+    | "mine"
+    | "quickBrew"
+    | "slowBrew";
 
 type StockFilter = {
     /** The chip label, in Doto caps, taken from the design's shelf names. */
@@ -51,6 +54,22 @@ type StockFilter = {
 
 /** Recently added means the last 30 days, measured when the query is built. */
 const RECENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Where a brew stops being quick and starts being slow, in seconds.
+ *
+ * The figures are the ones the shelves were asked for: two and a half minutes,
+ * and four. The gap between them is left unnamed on purpose -- most recipes
+ * live in it, and a shelf holding the middle of a distribution says nothing
+ * about the recipes on it.
+ *
+ * Measured by `plannedSeconds`, which is the recipe's own plan rather than any
+ * brew of it: pours at their stated flow plus the pauses between them. A
+ * recipe with no stages has no duration at all and `brewSeconds` is NULL for
+ * it, so neither comparison matches -- the treatment `maxTemp` already gets.
+ */
+const QUICK_BREW_SECONDS = 150;
+const SLOW_BREW_SECONDS = 240;
 
 export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     tea: {label: "TEA", clause: () => ({where: "isTea = 1"})},
@@ -77,21 +96,47 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     // NULL <> '' is NULL, which WHERE drops -- so it reads as if empty strings
     // were the worry when the index guarantees none can occur.
     xbloom: {label: "XBLOOM RECIPES", clause: () => ({where: "xid IS NOT NULL"})},
+    // STRONG and MILD are one pair about strength, and QUICK BREW and SLOW
+    // BREW are another about duration. MILD was called LONG until the time
+    // shelves arrived, at which point one shelf would have been long because
+    // of its ratio and another because of its clock. The word went to the
+    // clock, where it is unambiguous, and the ratio pair took the two words
+    // that can only mean strength.
     strong: {label: "STRONG", clause: () => ({where: "ratio <= 14"})},
-    long: {label: "LONG", clause: () => ({where: "ratio >= 17"})},
+    mild: {label: "MILD", clause: () => ({where: "ratio >= 17"})},
     // maxTemp is NULL when a recipe sets no temperatures; `>= 94` excludes those
     // rows, which is what "hot" has to mean.
     hot: {label: "HOT", clause: () => ({where: "maxTemp >= 94"})},
     recentlyAdded: {
         label: "RECENTLY ADDED",
         clause: () => ({where: "createdAt >= ?", params: [Date.now() - RECENT_WINDOW_MS]})
+    },
+    // The complement of every author shelf, and the reason it can be one
+    // clause rather than a list of sources. A recipe typed into the editor, a
+    // duplicate of one, a card read on the phone and a row pulled from the
+    // user's own xBloom account all arrive with no sharer: an account row is a
+    // bare `recipeVo`, and `shareMemberName` sits beside `recipeVo` rather than
+    // inside it, so only a recipe somebody sent carries one.
+    //
+    // `sharedByKey`, not `sharedBy`, so the column a shelf asks about is the
+    // one the author shelves match on -- asking the other would be two
+    // definitions of "came from somebody" that could disagree.
+    mine: {label: "MINE", clause: () => ({where: "sharedByKey IS NULL"})},
+    quickBrew: {
+        label: "QUICK BREW",
+        clause: () => ({where: "brewSeconds <= ?", params: [QUICK_BREW_SECONDS]})
+    },
+    slowBrew: {
+        label: "SLOW BREW",
+        clause: () => ({where: "brewSeconds >= ?", params: [SLOW_BREW_SECONDS]})
     }
 };
 
 /** The stock filters in the order the rail lists their chips. */
 export const STOCK_FILTER_ORDER: readonly FilterId[] = [
     "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "manyStages",
-    "grinderOff", "xbloom", "strong", "long", "hot", "recentlyAdded"
+    "grinderOff", "xbloom", "strong", "mild", "quickBrew", "slowBrew", "hot",
+    "mine", "recentlyAdded"
 ];
 
 /**
