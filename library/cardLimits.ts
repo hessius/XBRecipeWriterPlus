@@ -23,6 +23,13 @@ import {grindTooFine} from "@/constants/copy";
 export type Range = {min: number; max: number};
 
 const RATIO: Range = {min: 5, max: 100};
+/**
+ * The card's dose range, in grams. Exported for `library/backup.ts`, whose job
+ * is to be the trust boundary: a stored dose outside this is a corrupt or
+ * tampered file, not a value this app ever writes (#117). Tea's own tighter
+ * cap (10 g) is a business rule layered on top, not the card's byte range.
+ */
+export const DOSE: Range = {min: 1, max: 31};
 /** Exported for the test that keeps `library/grindBands` in step with the card. */
 export const GRIND_SIZE: Range = {min: 40, max: 80};
 const GRIND_RPM: Range = {min: 60, max: 120};
@@ -80,8 +87,8 @@ export function cardWriteProblems(
     const problems: string[] = [];
     const tea = recipe.isTea();
 
-    const maxDose = tea ? 10 : 31;
-    if (outside(recipe.dosage, {min: 1, max: maxDose})) {
+    const maxDose = tea ? 10 : DOSE.max;
+    if (outside(recipe.dosage, {min: DOSE.min, max: maxDose})) {
         problems.push(`The dose is ${recipe.dosage} g. The most is ${maxDose} g.`);
     }
 

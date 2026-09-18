@@ -1,4 +1,5 @@
 import {isRating, type BrewRecord} from "./brew/BrewRecord";
+import {DOSE} from "./cardLimits";
 import Recipe, {MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
@@ -336,7 +337,14 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     cloudId:          (v) => isNumber(v) && (v as number) >= 0,
     cloudFingerprint: (v) => typeof v === "string",
     grinder:     (v) => typeof v === "boolean",
-    dosage:      isNumber,
+    // Range-checked, not merely typed, unlike the other numbers here. The card
+    // dose range is `DOSE`, so a stored 0 -- or anything outside it -- is a
+    // corrupt or tampered file rather than a value this app ever wrote. The
+    // constructor reads the dose with a truthiness check and would coerce a 0
+    // to its default, handing back a plausible-looking wrong recipe whose next
+    // stop is a genuine card, so it is stopped at the door instead (#117). The
+    // range comes from `cardLimits` so the boundary and the card cannot drift.
+    dosage:      (v) => isNumber(v) && (v as number) >= DOSE.min && (v as number) <= DOSE.max,
     ratio:       isNumber,
     grindSize:   isNumber,
     grindRPM:    isNumber,
