@@ -1,4 +1,4 @@
-import {formatBrewAgo} from "@/library/brew/brewFormat";
+import {formatBrewAgo, spokenBrewAgo} from "@/library/brew/brewFormat";
 import type {RecipeEvidence} from "@/library/libraryQuery";
 
 /**
@@ -26,14 +26,19 @@ export function evidenceLine(evidence?: RecipeEvidence): string | null {
 /**
  * The same three figures, for someone who cannot see them.
  *
- * Recency is left out on purpose: `3D` is a glance's shorthand and reads as a
- * unit of nothing when it is spoken.
+ * Recency is spelled out rather than left as `3D`: the shorthand is a glance's
+ * and reads as a unit of nothing when it is spoken, but dropping it altogether
+ * left a reader with less than the card shows. Absent when no brew carried a
+ * date, which is what the drawn line does with it too.
  */
 export function spokenEvidence(evidence?: RecipeEvidence): string[] {
     if (evidence === undefined || evidence.brews <= 0) return [];
     return [
         ...(evidence.avgRating > 0 ? [`rated ${evidence.avgRating.toFixed(1)}`] : []),
-        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`
+        evidence.brews === 1 ? "brewed once" : `brewed ${evidence.brews} times`,
+        ...(evidence.lastBrewedAt > 0
+            ? [`last brewed ${spokenBrewAgo(evidence.lastBrewedAt)}`]
+            : [])
     ];
 }
 
