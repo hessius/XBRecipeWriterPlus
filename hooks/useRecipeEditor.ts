@@ -436,7 +436,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     function toggleFavourite() {
         if (!recipe) return;
-        recipe.favourite = !recipe.favourite;
+        applyFavouriteToggle(recipe);
         persistRecipe();
         setKey((prev) => prev + 1);
     }
@@ -654,6 +654,11 @@ function applyBypassEnabled(recipe: Recipe, on: boolean) {
             ?? BYPASS_DEFAULT_TEMPERATURE;
     }
     recipe.bypassEnabled = on;
+}
+
+/** Flip the star. Module scope, as above. */
+function applyFavouriteToggle(recipe: Recipe) {
+    recipe.favourite = !recipe.favourite;
 }
 
 /** Write one bypass value. Module scope, as above. */

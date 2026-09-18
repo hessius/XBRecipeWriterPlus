@@ -242,8 +242,44 @@ export function availableFilters(
     librarySize: number,
     applied: readonly string[] = []
 ): string[] {
-    return Object.keys(counts)
+    const offered = Object.keys(counts)
         .filter((id) => isOffered(counts[id], librarySize) || applied.includes(id));
+    return collapseStageShelves(offered, counts, applied);
+}
+
+/**
+ * Of SINGLE POUR and FEW STAGES, offer whichever one says something.
+ *
+ * FEW STAGES contains SINGLE POUR, so on most libraries they are two doors
+ * onto nearly the same set and the grid drew both. Which one is worth having
+ * depends entirely on what is in the library, so the answer is counted rather
+ * than decided here:
+ *
+ * - A library with no two-stage recipes makes the two shelves *identical*.
+ *   SINGLE POUR is the truthful name for that set, so FEW STAGES goes.
+ * - A library with any two-stage recipe makes FEW STAGES the larger and more
+ *   useful of the two, and SINGLE POUR a subset of a shelf already on screen.
+ *   SINGLE POUR goes.
+ *
+ * Counts, not clauses: the two ids are the only place in this module that
+ * overlap by construction, and both branches reduce to "drop the one that is
+ * not telling the user anything new".
+ *
+ * An applied filter is never dropped, for the same reason `isOffered` cannot
+ * withdraw one. A user standing in SINGLE POUR keeps its chip even once a
+ * two-stage recipe arrives and makes FEW STAGES the better offer.
+ */
+function collapseStageShelves(
+    offered: readonly string[],
+    counts: Readonly<Record<string, number>>,
+    applied: readonly string[]
+): string[] {
+    if (!offered.includes("singlePour") || !offered.includes("fewStages")) {
+        return [...offered];
+    }
+    const twoStagesExist = (counts.fewStages ?? 0) > (counts.singlePour ?? 0);
+    const drop = twoStagesExist ? "singlePour" : "fewStages";
+    return offered.filter((id) => id !== drop || applied.includes(id));
 }
 
 /**

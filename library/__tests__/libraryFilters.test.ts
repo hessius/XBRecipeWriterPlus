@@ -59,6 +59,48 @@ describe("suppression at its boundaries", () => {
         expect(availableFilters({a: 0}, 0, ["a"])).toEqual(["a"]);
     });
 
+    it("offers only SINGLE POUR when no recipe has two stages", () => {
+        // The two shelves hold the same recipes, and SINGLE POUR is the
+        // truthful name for that set. FEW STAGES would be a second door onto
+        // it promising a breadth the library does not have.
+        expect(availableFilters({singlePour: 5, fewStages: 5}, 100))
+            .toEqual(["singlePour"]);
+    });
+
+    it("offers only FEW STAGES once a two-stage recipe exists", () => {
+        // FEW STAGES is now the larger shelf and SINGLE POUR a subset of one
+        // already on screen.
+        expect(availableFilters({singlePour: 5, fewStages: 6}, 100))
+            .toEqual(["fewStages"]);
+    });
+
+    it("keeps the collapsed shelf when the user is standing in it", () => {
+        // The one-way rule again: suppression declines to offer, it never
+        // withdraws. A user filtered to SINGLE POUR keeps its chip even once a
+        // two-stage recipe arrives and makes FEW STAGES the better offer.
+        expect(availableFilters({singlePour: 5, fewStages: 6}, 100, ["singlePour"]))
+            .toEqual(["singlePour", "fewStages"]);
+        expect(availableFilters({singlePour: 5, fewStages: 5}, 100, ["fewStages"]))
+            .toEqual(["singlePour", "fewStages"]);
+    });
+
+    it("leaves the pair alone when only one of them is offered anyway", () => {
+        // Nothing to collapse: the floor has already taken one out, and the
+        // collapse must not then take the other.
+        expect(availableFilters({singlePour: 5, fewStages: 2}, 100))
+            .toEqual(["singlePour"]);
+        expect(availableFilters({singlePour: 2, fewStages: 5}, 100))
+            .toEqual(["fewStages"]);
+    });
+
+    it("does not collapse away the only shelf of the pair still offered", () => {
+        // FEW STAGES is over the 80% ceiling and already gone, so it is not
+        // competing with anything. Collapsing on the counts alone would drop
+        // SINGLE POUR too and leave the user with neither.
+        expect(availableFilters({singlePour: 10, fewStages: 90}, 100))
+            .toEqual(["singlePour"]);
+    });
+
     it("offers nothing for an empty library", () => {
         expect(availableFilters({a: 0}, 0)).toEqual([]);
     });

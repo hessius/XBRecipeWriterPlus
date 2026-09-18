@@ -334,10 +334,15 @@ ids, so a phone upgrading with `strong`, `long` or `mild` pinned loses a chip
 and nothing else.
 
 **Few stages contains Single pour**, the one place two stock shelves overlap.
-They are kept apart because they say different things: a single pour is a way
-of brewing, and few stages is a shape. Reading "few" as two exactly would fix
-the overlap and produce a shelf almost nobody could fill. Three stages is the
-unnamed middle, for the same reason the duration pair leaves one.
+Reading "few" as two exactly would fix the overlap on paper and produce a shelf
+almost nobody could fill, so the overlap is resolved by counting instead: only
+one of the two is ever offered, and which one depends on the library. With no
+two-stage recipe in it the shelves are identical and Single pour is the
+truthful name for that set, so Few stages goes. With any two-stage recipe Few
+stages is the larger and Single pour a subset of a shelf already on screen, so
+Single pour goes. Neither is dropped while it is applied, for the same reason
+the 80% ceiling cannot withdraw a chosen chip. Three stages is the unnamed
+middle, for the same reason the duration pair leaves one.
 
 **Quick and slow are measured by `plannedSeconds`** -- the recipe's pours at
 their stated flow, plus the pauses between them -- so a shelf agrees with the
