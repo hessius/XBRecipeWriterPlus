@@ -1,6 +1,7 @@
 import {router, useLocalSearchParams} from "expo-router";
 import React, {useEffect, useState} from "react";
-import {Pressable, ScrollView, StyleSheet, useWindowDimensions, View} from "react-native";
+import {KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View}
+    from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -220,6 +221,20 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         && pauseSeconds(livePour) > 0;
 
     return (
+        // The finished brew puts a text field at the bottom of a modal, below a
+        // scroller that has taken all the height there is -- so on iOS the
+        // software keyboard came up over the note being typed into. Android
+        // resizes the window under Expo's default
+        // `softwareKeyboardLayoutMode: "resize"` and needs nothing, which is
+        // why the behaviour is `undefined` there rather than a second
+        // adjustment on top of the OS's.
+        //
+        // Here and not on the scroller: `automaticallyAdjustKeyboardInsets`,
+        // the editor's answer, only moves what is inside the scroll view, and
+        // the judgement is deliberately outside it -- pinned under the summary
+        // rather than scrolled away with it.
+        <KeyboardAvoidingView style={{flex: 1, backgroundColor: palette.base}}
+                              behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
             {running && <BrewWakeLock />}
             {/* The nav row the mockup drew. `brew` is declared in the navigator
@@ -436,6 +451,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </YStack>
             )}
         </YStack>
+        </KeyboardAvoidingView>
     );
 }
 

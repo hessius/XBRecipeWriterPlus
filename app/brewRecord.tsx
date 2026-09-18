@@ -231,6 +231,16 @@ export default function BrewRecord({recipeLookup}: Props) {
                 read the end of it. */}
             <ScrollView ref={scroller} testID="record-scroll"
                         onLayout={(e) => setRecordHeight(e.nativeEvent.layout.height)}
+                        // The note field is low in this scroller, so iOS grows
+                        // the bottom inset by the keyboard's height and scrolls
+                        // it clear instead of typing behind the keys. The same
+                        // prop the editor uses, for the same field at the same
+                        // end of the same kind of screen. Android resizes the
+                        // window and needs nothing.
+                        automaticallyAdjustKeyboardInsets
+                        // A tap on a star while the keyboard is up rates the
+                        // brew rather than being eaten by the dismiss.
+                        keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{paddingBottom: 24, gap: 8}}>
             {watched ? (
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
