@@ -73,6 +73,8 @@ export type RecipeStore = {
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
     retrieveAllRecipes?: () => Recipe[] | null;
+    /** How many stored blobs cannot be read, for the settings diagnostics line. */
+    countUnreadableRecipes?: () => number;
     deleteAllRecipes?: () => void;
     insertRecipes?: (recipes: Recipe[]) => void;
     replaceAllRecipes?: (recipes: Recipe[]) => void;
@@ -157,6 +159,12 @@ export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
     librarySize: number;
+    /**
+     * How many stored blobs could not be read, for the settings diagnostics
+     * line. `queryRecipes` skips such a row so the library still opens (#124);
+     * this is the count that stops a vanished recipe from being a mystery.
+     */
+    unreadableCount: number;
     /** Whole-table counts for stock filters, keyed by filter id. */
     filterCounts: Record<string, number>;
     /** Whole-table counts for every tag, largest shelf first. */
@@ -219,6 +227,7 @@ export function useRecipeLibrary(
     const [revision, setRevision] = useState(0);
     const recipes = readLibrary(store, query, revision);
     const librarySize = readLibrarySize(store, revision);
+    const unreadableCount = readUnreadableCount(store, revision);
     const filterCounts = readFilterCounts(store, revision);
     const tagCounts = readTagCounts(store, revision);
     const authorCounts = readAuthorCounts(store, revision);
@@ -470,6 +479,7 @@ export function useRecipeLibrary(
     return {
         recipes,
         librarySize,
+        unreadableCount,
         filterCounts,
         tagCounts,
         authorCounts,
@@ -525,6 +535,20 @@ function readLibrarySize(db: RecipeStore, revision: number): number {
     // for an empty table, so from a store that has the method, null is the
     // answer "none" rather than the absence of one.
     return db.retrieveAllRecipes()?.length ?? 0;
+}
+
+/**
+ * How many stored blobs could not be read.
+ *
+ * Zero for a store that cannot answer, unlike the counts above that throw: this
+ * figure is a diagnostic, not a gate. A store without the method is a test stub
+ * or an older shape, and "no unreadable rows" is the honest thing to show for
+ * one that cannot look -- an absent count here costs nothing, where an absent
+ * library size would hide the whole list.
+ */
+function readUnreadableCount(db: RecipeStore, revision: number): number {
+    void revision;
+    return db.countUnreadableRecipes ? db.countUnreadableRecipes() : 0;
 }
 
 function readFilterCounts(db: RecipeStore, revision: number): Record<string, number> {

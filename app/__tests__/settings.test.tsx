@@ -67,6 +67,7 @@ jest.mock("@/components/XbrwToast", () => ({
 // the delete sheet and the merge preview read, and `mockApplyRestore` /
 // `mockDeleteAll` observe what the screen asks the library to do.
 let mockLibraryRecipes: Recipe[] = [];
+let mockUnreadableCount = 0;
 const mockRefresh = jest.fn();
 const mockDeleteAll = jest.fn();
 const mockApplyRestore = jest.fn();
@@ -86,6 +87,7 @@ jest.mock("@/hooks/useBrewHistory", () => ({
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({
         recipes:         mockLibraryRecipes,
+        unreadableCount: mockUnreadableCount,
         allRecipes:      () => mockLibraryRecipes,
         refresh:         mockRefresh,
         deleteRecipe:    jest.fn(),
@@ -182,6 +184,7 @@ describe("SettingsScreen", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockLibraryRecipes = [];
+        mockUnreadableCount = 0;
         // `clearAllMocks` forgets calls but keeps implementations, so a test
         // that made one of these reject would otherwise poison its successors.
         mockLoadSession.mockResolvedValue(null);
@@ -497,6 +500,20 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("librarySort")).toBe("rating");
         expect(restored.get("librarySortDirection")).toBe("asc");
+    });
+
+    it("shows how many saved recipes could not be read, and only then", async () => {
+        // Buys off the silence of skipping an unreadable blob (#124): the line
+        // is present when the library reports one and absent when it does not.
+        mockUnreadableCount = 2;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.getByText("2 saved recipes could not be read.")).toBeTruthy();
+    });
+
+    it("shows no unreadable-recipes note when the library is clean", async () => {
+        mockUnreadableCount = 0;
+        await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
+        expect(screen.queryByTestId("unreadable-recipes-note")).toBeNull();
     });
 
     it("carries the brew history into a backup", async () => {

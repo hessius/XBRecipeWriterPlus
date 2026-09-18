@@ -1,7 +1,7 @@
 import * as Application from "expo-application";
 import {useRouter} from "expo-router";
 import React, {useState} from "react";
-import {ScrollView, YStack} from "tamagui";
+import {ScrollView, Text, YStack} from "tamagui";
 
 import DeleteAllSheet from "@/components/DeleteAllSheet";
 import CardReadDiagnostic from "@/components/CardReadDiagnostic";
@@ -479,6 +479,26 @@ export default function SettingsScreen({settings}: Props) {
                 </SettingsSection>}
 
                 <SettingsSection title="Library">
+                    {library.unreadableCount > 0 && (
+                        // Bought off here: `queryRecipes` skips a blob it cannot
+                        // read so the library still opens (#124), and this is
+                        // the line that keeps that skip from being a silent
+                        // vanished recipe. Shown only when there is one, so a
+                        // healthy library carries no scar. A backup refuses over
+                        // the same row, so the note sits above the backup action
+                        // on purpose.
+                        <YStack testID="unreadable-recipes-note"
+                                paddingVertical="$3" paddingHorizontal="$4" gap="$1">
+                            <Text fontSize={16} color={palette.danger}>
+                                {library.unreadableCount === 1
+                                    ? "1 saved recipe could not be read."
+                                    : `${library.unreadableCount} saved recipes could not be read.`}
+                            </Text>
+                            <Text fontSize={13} color={palette.dim}>
+                                The rest of your library is fine. Keep a backup before deleting anything.
+                            </Text>
+                        </YStack>
+                    )}
                     <SettingsActionRow label="Back up my recipes"
                                        detail="Writes a file and hands it to the share sheet."
                                        onPress={onBackUp}/>

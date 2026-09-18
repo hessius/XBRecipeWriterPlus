@@ -66,20 +66,20 @@ which are intact. `migrateIndex` already treats an unreadable row as something
 to survive, so one path in this class has the right instinct and cannot be
 reached because the crash happens first.
 
-- [ ] **Policy: skip the row and count it.** A placeholder recipe is a second
+- [x] **Policy: skip the row and count it.** A placeholder recipe is a second
       kind of `Recipe` flowing through a library that assumes every one of them
       is real, and the editor, the card writer and the shelf resolvers would
       each need to learn about it. Skipping is the change that fits. Silence is
       the cost, so it is bought off in the next bullet rather than ignored.
-- [ ] One shared hydrate helper used by both read paths, so they cannot drift.
+- [x] One shared hydrate helper used by both read paths, so they cannot drift.
       It returns the recipe or `null`, and logs the uuid it could not read.
-- [ ] `allRecipes()` keeps throwing. A backup built from a table with an
+- [x] `allRecipes()` keeps throwing. A backup built from a table with an
       unreadable row must refuse rather than quietly ship a partial one; that
       instinct is already there and is right.
-- [ ] Surface the count somewhere the user can find it. Settings already has a
+- [x] Surface the count somewhere the user can find it. Settings already has a
       diagnostics-shaped corner; a line saying how many rows could not be read
       is enough, and it is what stops a vanished recipe from being a mystery.
-- [ ] Tests: a table with one bad blob renders the rest; the rendered count
+- [x] Tests: a table with one bad blob renders the rest; the rendered count
       matches what the list draws; a backup over the same table refuses.
 
 ## Task 4: A dose of 0 is a corrupt file, not a 15 g recipe (#117)

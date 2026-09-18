@@ -10,6 +10,32 @@ import {buildLibraryQuery, type FilterResolver, type LibraryQuery,
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
         projectRecipe, schemaHash} from './recipeIndex';
 
+/**
+ * Turn one stored row into a `Recipe`, or `null` if its blob cannot be read.
+ *
+ * The single guarded hydrate both read paths go through, so `queryRecipes` and
+ * `retrieveAllRecipes` cannot drift on what "unreadable" means (#124). A blob
+ * that will not parse used to throw here, and because `queryRecipes` runs
+ * during the library's first render, the throw took the whole home screen with
+ * it -- leaving the user no route to export, repair or even see the other
+ * recipes, all of which are intact. `migrateIndex` already survives such a row
+ * by clearing its index; that recovery could never be reached because this
+ * crash happened first.
+ *
+ * The uuid is logged rather than swallowed, so a vanished recipe leaves a
+ * trace. What each caller does with a `null` is deliberately different, and is
+ * the policy, not this function's: the library skips and counts it, a backup
+ * refuses over it.
+ */
+function hydrateRow(uuid: string, recipeJSON: string): Recipe | null {
+    try {
+        return new Recipe(undefined, recipeJSON);
+    } catch (error) {
+        console.warn(`RecipeDatabase: could not read recipe ${uuid}`, error);
+        return null;
+    }
+}
+
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
     private inTransaction = false;
@@ -505,8 +531,37 @@ class RecipeDatabase {
      */
     public queryRecipes(query: LibraryQuery, resolveFilter?: FilterResolver): Recipe[] {
         const {sql, params} = buildLibraryQuery(query, resolveFilter);
-        const rows = this.db.getAllSync(sql, params) as {recipeJSON: string}[];
-        return rows.map((row) => new Recipe(undefined, row.recipeJSON));
+        const rows = this.db.getAllSync(sql, params) as
+            {uuid: string; recipeJSON: string}[];
+        // Skip a row that cannot be read rather than throw: one corrupt blob
+        // must not take the whole library down. The silence is bought off by
+        // `countUnreadableRecipes`, which Settings shows.
+        const recipes: Recipe[] = [];
+        for (const row of rows) {
+            const recipe = hydrateRow(row.uuid, row.recipeJSON);
+            if (recipe !== null) recipes.push(recipe);
+        }
+        return recipes;
+    }
+
+    /**
+     * How many stored blobs cannot be read.
+     *
+     * The number that buys off `queryRecipes` skipping an unreadable row in
+     * silence (#124): Settings shows it, so a recipe that vanished from the
+     * list is a figure the user can find rather than a mystery. Counts through
+     * the same guarded hydrate the read paths use, so it counts exactly what
+     * the list skips.
+     */
+    public countUnreadableRecipes(): number {
+        const rows = this.db.getAllSync(
+            "SELECT uuid, recipeJSON FROM recipes;"
+        ) as {uuid: string; recipeJSON: string}[];
+        let unreadable = 0;
+        for (const row of rows) {
+            if (hydrateRow(row.uuid, row.recipeJSON) === null) unreadable += 1;
+        }
+        return unreadable;
     }
 
     public countRecipes(): number {
@@ -667,13 +722,26 @@ class RecipeDatabase {
 
     public retrieveAllRecipes(): Recipe[] | null {
         let recipesJSON: any[] = this.db.getAllSync(
-            `SELECT *
+            `SELECT uuid, recipeJSON
              FROM recipes;`
         );
         if (recipesJSON && recipesJSON.length > 0) {
             let recipes: Recipe[] = [];
             for (let i = 0; i < recipesJSON.length; i++) {
-                recipes.push(new Recipe(undefined, recipesJSON[i].recipeJSON));
+                const recipe = hydrateRow(
+                    recipesJSON[i].uuid, recipesJSON[i].recipeJSON
+                );
+                // Refuse rather than ship a partial backup. `queryRecipes`
+                // skips an unreadable row so the library still opens; a backup
+                // that quietly dropped it would be data loss wearing the
+                // costume of an export, so the same `null` throws here (#124).
+                if (recipe === null) {
+                    throw new Error(
+                        `Recipe ${recipesJSON[i].uuid} could not be read; ` +
+                        `refusing to build a partial backup`
+                    );
+                }
+                recipes.push(recipe);
             }
 
             return recipes;
