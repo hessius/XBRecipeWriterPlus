@@ -2179,4 +2179,93 @@ describe("picking a shelf's members", () => {
         expect(screen.getByText("Ethiopia")).toBeTruthy();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(3);
     });
+
+    it("sheds the library's own chrome while picking", async () => {
+        // Every one of these is a door out of the half-built shelf, and none
+        // of them do anything while picking. Drawing them spent the top third
+        // of the screen on controls that lead away from the task.
+        await startPicking();
+
+        expect(screen.getByTestId("shelf-picker-header")).toBeTruthy();
+        expect(screen.queryByLabelText("Read a card")).toBeNull();
+        expect(screen.queryByLabelText("Create a recipe")).toBeNull();
+    });
+
+    it("puts the chrome back when the picker is cancelled", async () => {
+        await startPicking();
+        await fireEvent.press(screen.getByTestId("shelf-picker-header-cancel"));
+
+        expect(screen.queryByTestId("shelf-picker-header")).toBeNull();
+        expect(screen.getByLabelText("Read a card")).toBeTruthy();
+    });
+
+    it("offers no rename for a shelf that has no name yet", async () => {
+        // A new shelf is named at the end, by the bar, once it has members to
+        // be named for. There is nothing here to rename.
+        await startPicking();
+
+        expect(screen.queryByTestId("shelf-picker-rename")).toBeNull();
+    });
+
+    it("renames a shelf, keeping everyone on it", async () => {
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:Evening")).toBeTruthy();
+        expect(screen.queryByTestId("shelf-tag:morning")).toBeNull();
+
+        // The member went with the name rather than being left behind on a
+        // shelf that no longer exists.
+        await fireEvent.press(screen.getByTestId("shelf-tag:Evening"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
+    it("refuses a rename onto a shelf that already exists", async () => {
+        const morning = named("Ethiopia");
+        morning.tags = ["morning"];
+        const evening = named("Kenya");
+        evening.tags = ["evening"];
+        await renderHome({recipes: [morning, evening]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "evening");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+            tone: "error", message: "There is already a shelf called evening."
+        }));
+        // A refused rename is not a half-done one: the sheet stays open on the
+        // name that was not accepted rather than closing as if it had been.
+        expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
+    });
+
+    it("allows a rename that only changes how the name is spelled", async () => {
+        // "morning" and "Morning" fold to one shelf everywhere downstream, so
+        // this is not a collision, it is the rename the user asked for.
+        const tagged = named("Ethiopia");
+        tagged.tags = ["morning"];
+        await renderHome({recipes: [tagged, named("Kenya")]});
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+
+        await fireEvent.press(screen.getByTestId("shelf-picker-rename"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Morning");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(screen.getByTestId("shelf-tag:Morning")).toBeTruthy();
+        await fireEvent.press(screen.getByTestId("shelf-tag:Morning"));
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
 });

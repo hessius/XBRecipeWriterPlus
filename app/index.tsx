@@ -47,6 +47,7 @@ import NameShelfSheet from "@/components/NameShelfSheet";
 import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import ShelfGrid from "@/components/ShelfGrid";
+import ShelfPickerHeader from "@/components/ShelfPickerHeader";
 import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
@@ -172,6 +173,7 @@ export default function HomeScreen({db, settings}: Props) {
     const picker = useShelfPicker();
     const [namingShelf, setNamingShelf] = useState(false);
     const [removingShelf, setRemovingShelf] = useState<string | null>(null);
+    const [renamingShelf, setRenamingShelf] = useState<string | null>(null);
     const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
@@ -389,6 +391,11 @@ export default function HomeScreen({db, settings}: Props) {
         ));
     }
 
+    // Narrowed once, here, rather than at each of the three places the header
+    // needs it: `picker.mode` is a union and a closure that reads it again
+    // inside a callback has to re-prove what the caller already knows.
+    const editingTag = picker.mode.kind === "editing" ? picker.mode.tag : null;
+
     function stopPicking() {
         setOnlySelected(false);
         picker.cancel();
@@ -460,6 +467,42 @@ export default function HomeScreen({db, settings}: Props) {
         }
         reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
         setNamingShelf(false);
+        stopPicking();
+    }
+
+    /**
+     * Give a shelf a different name, keeping everyone on it.
+     *
+     * A shelf is its tag, so a rename is two writes: take the old tag off its
+     * members, then put the new one on. In that order, and not the reverse,
+     * because `setTags` folds through `tagKey` and keeps the spelling it
+     * already has: adding "Morning" to a recipe that carries "morning" is not
+     * a change at all, so a rename that only re-spells a name would silently
+     * do nothing. Clearing first also frees each member's tag slot, so the cap
+     * cannot refuse a recipe its own shelf back.
+     *
+     * The members come from the picker rather than from the database, so a
+     * rename saves the ticks the user has made as well: the sheet is opened
+     * from inside an edit, and finishing one gesture while silently abandoning
+     * the other would be the worse surprise.
+     */
+    function renameShelf(name: string) {
+        if (renamingShelf === null) return;
+        const from = tagKey(renamingShelf);
+        // A name that only changes case is still this shelf, and refusing it
+        // would make the app disagree with itself: `tagKey` folds case, so
+        // "mornings" and "Mornings" are one shelf everywhere downstream. It is
+        // allowed through as the rename it is -- the display text changes and
+        // the membership does not.
+        const taken = library.tagCounts.some(({tag}) =>
+            tagKey(tag) === tagKey(name) && tagKey(tag) !== from);
+        if (taken) {
+            notify({tone: "error", message: `There is already a shelf called ${name}.`});
+            return;
+        }
+        library.setShelfMembers(renamingShelf, []);
+        reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
+        setRenamingShelf(null);
         stopPicking();
     }
 
@@ -838,7 +881,8 @@ export default function HomeScreen({db, settings}: Props) {
     // as a sibling and isolates nothing on its own, so one left out leaves the
     // library reachable underneath it.
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
-        || namingShelf || removingShelf !== null || overflowRecipe !== null;
+        || namingShelf || renamingShelf !== null
+        || removingShelf !== null || overflowRecipe !== null;
 
     // The sheet's own row, reachable without the long press that opens it. A
     // reader cannot make that gesture, so every verb the sheet offers is also an
@@ -891,6 +935,15 @@ export default function HomeScreen({db, settings}: Props) {
             <YStack flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
+                {picker.active ? (
+                    <ShelfPickerHeader
+                        title={editingTag ?? "NEW SHELF"}
+                        count={picker.count}
+                        onCancel={stopPicking}
+                        onRename={editingTag === null
+                            ? undefined
+                            : () => setRenamingShelf(editingTag)}/>
+                ) : (
                 <HomeHeader
                     count={library.librarySize}
                     collapsed={collapsed}
@@ -919,8 +972,9 @@ export default function HomeScreen({db, settings}: Props) {
                     onImport={() => setImportOpen(true)}
                     onNew={() => setNewOpen(true)}
                     onSettings={() => router.push("/settings")}/>
+                )}
 
-                <Collapsible open={!collapsed}>
+                <Collapsible open={!collapsed && !picker.active}>
                     <XStack gap="$3" paddingHorizontal="$3" paddingBottom="$3">
                         <CtaTile icon="scan" label="READ CARD"
                                  accessibilityLabel="Read a card" onPress={readCard}/>
@@ -1118,6 +1172,13 @@ export default function HomeScreen({db, settings}: Props) {
             <NameShelfSheet open={namingShelf} count={picker.count}
                             onOpenChange={setNamingShelf}
                             onName={nameShelf}/>
+
+            <NameShelfSheet open={renamingShelf !== null} count={picker.count}
+                            current={renamingShelf ?? undefined}
+                            onOpenChange={(next) => {
+                                if (!next) setRenamingShelf(null);
+                            }}
+                            onName={renameShelf}/>
 
             <SortSheet
                 open={sortOpen}
