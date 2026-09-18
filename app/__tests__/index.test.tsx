@@ -2155,6 +2155,40 @@ describe("picking a shelf's members", () => {
         expect(screen.getAllByRole("checkbox")).toHaveLength(1);
     });
 
+    // The one case SELECTED exists for: narrow to nothing, then review what is
+    // on the shelf being built. The list is drawn from the ticks, not the
+    // query, so an empty query must not paint NO MATCHES over the members.
+    it("lists the ticked recipes under SELECTED when the query matches nothing", async () => {
+        jest.useFakeTimers();
+        await startPicking();
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+
+        await fireEvent.press(screen.getByTestId("rail-search"));
+        await act(async () => {
+            await fireEvent.changeText(screen.getByTestId("rail-search-input"), "zzzzz");
+            jest.advanceTimersByTime(TYPING_DEBOUNCE_MS);
+        });
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.queryByText("NO MATCHES")).toBeNull();
+        expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+        jest.useRealTimers();
+    });
+
+    // The mirror: SELECTED on with nothing ticked used to draw a FlatList over
+    // an empty array, a blank area with no line. It gets its own copy now, not
+    // the search-and-filter one, because nothing was searched for.
+    it("draws its own line under SELECTED when nothing is ticked", async () => {
+        await startPicking();
+
+        await fireEvent.press(screen.getByTestId("rail-filter-picker:selected"));
+
+        expect(screen.queryByText("NO MATCHES")).toBeNull();
+        expect(screen.getByText("Tick a recipe to add it to this shelf.")).toBeTruthy();
+    });
+
     it("cancels back to the grid without writing anything", async () => {
         await startPicking();
 

@@ -161,6 +161,29 @@ function EmptyQuery({
     );
 }
 
+/**
+ * The empty state SELECTED draws when nothing has been ticked yet.
+ *
+ * Its own line rather than `EmptyQuery`'s: the SELECTED lens is not a search,
+ * so "no recipes match the current search or filters" would be answering a
+ * question the user never asked. The chip is how a shelf under construction is
+ * reviewed, so the line points back at the gesture that fills it.
+ */
+function EmptySelection() {
+    return (
+        <YStack flex={1} alignItems="center" justifyContent="center"
+                gap="$2" paddingHorizontal="$6" paddingVertical="$8">
+            <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                           color={palette.dim}>
+                NOTHING TICKED
+            </DotMatrixText>
+            <Text fontSize={13} textAlign="center" color={palette.muted}>
+                Tick a recipe to add it to this shelf.
+            </Text>
+        </YStack>
+    );
+}
+
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -330,7 +353,6 @@ export default function HomeScreen({db, settings}: Props) {
     }, [shareState]);
 
     const wholeLibraryEmpty = library.librarySize === 0;
-    const visibleEmpty = library.recipes.length === 0;
     /** The chip's own id, which is not a filter and never reaches a query. */
     const SELECTED_CHIP = "picker:selected";
     const offeredFilterIds = asStockFilters(availableFilters(
@@ -576,6 +598,16 @@ export default function HomeScreen({db, settings}: Props) {
         : shownRecipes.map((recipe, recipeIndex) => (
             {kind: "recipe" as const, recipe, recipeIndex}
         ));
+    // The empty branch gates on what the list actually draws, not on the
+    // query's count. While picking with SELECTED on, the rows come from the
+    // whole table rather than the query, so `library.recipes.length` and the
+    // rendered rows disagree in both directions: an empty query would paint NO
+    // MATCHES over the ticked members, and a matching query with nothing ticked
+    // would draw a blank area.
+    const listEmpty = listItems.length === 0;
+    // SELECTED is on and the shelf being built has nothing on it. Its own line,
+    // not the search-and-filter one, because nothing was searched for.
+    const nothingTicked = picker.active && onlySelected && listEmpty;
 
     // `importId` used to do double duty -- "is the sheet open" and "what to
     // import" -- which is why `""` meant open-with-nothing and `null` meant
@@ -1121,11 +1153,15 @@ export default function HomeScreen({db, settings}: Props) {
                                    setHiddenShelves(toggleHidden(hiddenShelves, id))}
                                onScroll={onScroll}
                                paddingBottom={insets.bottom + 8}/>
-                ) : visibleEmpty ? (
-                    <EmptyQuery
-                        search={libraryQuery.query.search}
-                        filters={activeFilterLabels}
-                        onClear={libraryQuery.clear}/>
+                ) : listEmpty ? (
+                    nothingTicked ? (
+                        <EmptySelection/>
+                    ) : (
+                        <EmptyQuery
+                            search={libraryQuery.query.search}
+                            filters={activeFilterLabels}
+                            onClear={libraryQuery.clear}/>
+                    )
                 ) : (
                     <FlatList
                         data={listItems}
