@@ -9,7 +9,21 @@ import type {Stall} from "./brew/stalls";
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
 /** How a recipe has gone: how many brews, and when the last of them was. */
-export type BrewSummary = {times: number; lastAt: number};
+export type BrewSummary = {
+    times: number;
+    lastAt: number;
+    /**
+     * The average of the ratings actually given, or 0 where none were.
+     *
+     * 0 is "nobody has said", not a verdict of nothing, which is why the
+     * average is taken over `NULLIF(rating, 0)`: counting silence as a nought
+     * would rank a much-brewed recipe below a once-disliked one for no reason
+     * but that it was brewed more often without comment.
+     */
+    avgRating: number;
+    /** How many of those brews carry a rating. */
+    rated: number;
+};
 
 type BrewRow = {
     id: string;
@@ -36,6 +50,8 @@ type BrewRow = {
     rating: number | null;
     note: string | null;
     pinned: number | null;
+    /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
+    watched: number | null;
     hasStream: number;
 };
 
@@ -78,6 +94,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 rating INTEGER NOT NULL DEFAULT 0,
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
+                watched INTEGER NOT NULL DEFAULT 1,
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -135,6 +152,14 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Defaulting to 1, because every brew recorded before a person could log
+    // one by hand is a brew the app watched. The column exists so the ones it
+    // did not watch can say so; it is not a flag anything else has to set.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN watched INTEGER NOT NULL DEFAULT 1;");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -172,8 +197,8 @@ class BrewDatabase {
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                     heldSeconds, stalls, plan, stageWater, rating,
-                                    note, pinned, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    note, pinned, watched, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
@@ -188,6 +213,7 @@ class BrewDatabase {
                     isRating(record.rating) ? record.rating : 0,
                     record.note ?? "",
                     record.pinned ? 1 : 0,
+                    record.watched === false ? 0 : 1,
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -226,13 +252,48 @@ class BrewDatabase {
      * of the app uses for a timestamp that does not exist.
      */
     public summaryFor(recipeUuid: string): BrewSummary {
-        const rows = this.db.getAllSync<{times: number; lastAt: number | null}>(
-            "SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt FROM brews WHERE recipeUuid = ?;",
+        const rows = this.db.getAllSync<{
+            times: number; lastAt: number | null;
+            avgRating: number | null; rated: number;
+        }>(
+            `SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt,
+                    AVG(NULLIF(rating, 0)) AS avgRating,
+                    COUNT(NULLIF(rating, 0)) AS rated
+             FROM brews WHERE recipeUuid = ?;`,
             [recipeUuid]
         );
         const row = rows[0];
-        if (row === undefined) return {times: 0, lastAt: 0};
-        return {times: row.times, lastAt: row.lastAt ?? 0};
+        if (row === undefined) return {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+        return {
+            times: row.times,
+            lastAt: row.lastAt ?? 0,
+            avgRating: row.avgRating ?? 0,
+            rated: row.rated
+        };
+    }
+
+    /**
+     * The latest brew of this recipe on the same day as `at`, if there is one.
+     *
+     * The recipe screen's star has one gesture and two outcomes: it rates
+     * today's brew where there is one, and writes a hand-logged brew where
+     * there is not. This is the question that chooses between them, and it is
+     * asked in local days rather than in hours because "today" is what the user
+     * means -- a cup at breakfast is still today's at supper, and a cup at
+     * 23:50 is not still today's at 00:10.
+     */
+    public brewOn(recipeUuid: string, at: number): string | null {
+        const start = new Date(at);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start.getTime());
+        end.setDate(end.getDate() + 1);
+        const rows = this.db.getAllSync<{id: string}>(
+            `SELECT id FROM brews
+             WHERE recipeUuid = ? AND startedAt >= ? AND startedAt < ?
+             ORDER BY startedAt DESC LIMIT 1;`,
+            [recipeUuid, start.getTime(), end.getTime()]
+        );
+        return rows[0]?.id ?? null;
     }
 
     /**
@@ -310,8 +371,8 @@ class BrewDatabase {
                     `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                         endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                         heldSeconds, stalls, plan, stageWater, rating,
-                                        note, pinned, hasStream)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
+                                        note, pinned, watched, hasStream)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
                     [
                         record.id, record.recipeUuid, record.recipeName, record.accent,
                         record.startedAt, record.pouringAt ?? 0,
@@ -322,7 +383,8 @@ class BrewDatabase {
                         JSON.stringify(record.stageWater ?? []),
                         isRating(record.rating) ? record.rating : 0,
                         record.note ?? "",
-                        record.pinned ? 1 : 0
+                        record.pinned ? 1 : 0,
+                        record.watched === false ? 0 : 1
                     ]
                 );
             });
@@ -434,6 +496,10 @@ function hydrate(row: BrewRow): StoredBrew {
         rating: row.rating ?? 0,
         note: row.note ?? "",
         pinned: row.pinned === 1,
+        // Emitted only when false, so a watched brew's record is byte for byte
+        // what it was before this column existed and the round trip stays
+        // honest about "absent means the app saw it".
+        ...(row.watched === 0 ? {watched: false} : {}),
         hasStream: row.hasStream === 1
     };
 }

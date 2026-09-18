@@ -53,7 +53,7 @@ describe("recipeIndex descriptors", () => {
         // `from` bodies, so changing a projection leaves this green; the
         // golden-projection test below is what catches that. When this does
         // fail: confirm the change was intended, then paste the new hash.
-        expect(schemaHash()).toBe("04d691f1");
+        expect(schemaHash()).toBe("dc2c76e3");
     });
 
     it("folds the revision into the hash", () => {
@@ -105,6 +105,7 @@ describe("projectRecipe", () => {
             sharedTableId: null,
             xid: null,
             sharedBy: null,
+            sharedByKey: null,
             favourite: 0,
             hasDescription: 0,
             description: null
@@ -226,9 +227,25 @@ describe("M5 descriptors", () => {
 
         expect(projected.xid).toBe("ABC12345");
         expect(projected.sharedBy).toBe("BrewMind");
+        expect(projected.sharedByKey).toBe("brewmind");
         expect(projected.favourite).toBe(1);
         expect(projected.hasDescription).toBe(1);
         expect(projected.description).toBe("Sunday morning");
+    });
+
+    it("folds an author's name the way tags are folded, not the way SQL would", () => {
+        // COLLATE NOCASE folds ASCII only, so under it these two would become
+        // two shelves holding different halves of one person's recipes.
+        const upper = new Recipe();
+        upper.sharedBy = "CAFÉ";
+        const lower = new Recipe();
+        lower.sharedBy = "café";
+
+        expect(projectRecipe(upper).sharedByKey)
+            .toBe(projectRecipe(lower).sharedByKey);
+        // And the display name is untouched, so a shelf is labelled the way the
+        // sharer spelled it.
+        expect(projectRecipe(upper).sharedBy).toBe("CAFÉ");
     });
 
     it("stores absence as null rather than an empty string", () => {
@@ -240,6 +257,7 @@ describe("M5 descriptors", () => {
         // what "this recipe has no XID" has to mean to a shelf query.
         expect(projected.xid).toBeNull();
         expect(projected.sharedBy).toBeNull();
+        expect(projected.sharedByKey).toBeNull();
         expect(projected.favourite).toBe(0);
         expect(projected.hasDescription).toBe(0);
         // The note's own column mirrors the presence flag: no note, no text to

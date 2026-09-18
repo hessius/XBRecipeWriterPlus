@@ -38,11 +38,19 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
     // and a history whose entries cannot be told apart cannot be navigated. In
     // particular the two chips are the only warning that a brew did not run to
     // plan, and reading them out is how a user decides whether to open it.
+    // A brew a person logged by hand. It has a rating and a date and nothing
+    // else: no water, no cup, no clock. Drawing those as noughts would say the
+    // machine measured nothing, which is a claim about the brew rather than
+    // about the app, and a much worse one.
+    const watched = brew.watched !== false;
+
     const label = [
         brew.recipeName,
         formatBrewDate(brew.startedAt),
-        `${Math.round(brew.cupTotal)} grams`,
-        formatBrewDuration(brew.startedAt, brew.endedAt),
+        ...(watched
+            ? [`${Math.round(brew.cupTotal)} grams`,
+               formatBrewDuration(brew.startedAt, brew.endedAt)]
+            : ["not watched"]),
         endedEarly ? "ended early" : undefined,
         stopped ? "stopped" : undefined,
         brew.hasStream ? undefined : "no trace kept",
@@ -89,12 +97,23 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
                         <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
                             {formatBrewDate(brew.startedAt)}
                         </DotMatrixText>
-                        <DotMatrixText fontSize={11} letterSpacing={1} color={palette.text}>
-                            {`${Math.round(brew.cupTotal)} G`}
-                        </DotMatrixText>
-                        <DotMatrixText fontSize={11} letterSpacing={1} color={palette.dim}>
-                            {formatBrewDuration(brew.startedAt, brew.endedAt)}
-                        </DotMatrixText>
+                        {watched ? (
+                            <>
+                                <DotMatrixText fontSize={11} letterSpacing={1}
+                                               color={palette.text}>
+                                    {`${Math.round(brew.cupTotal)} G`}
+                                </DotMatrixText>
+                                <DotMatrixText fontSize={11} letterSpacing={1}
+                                               color={palette.dim}>
+                                    {formatBrewDuration(brew.startedAt, brew.endedAt)}
+                                </DotMatrixText>
+                            </>
+                        ) : (
+                            <DotMatrixText fontSize={11} weight="bold"
+                                           letterSpacing={1.4} color={palette.muted}>
+                                NOT WATCHED
+                            </DotMatrixText>
+                        )}
                         {endedEarly && (
                             <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.4}
                                            color={palette.warn}>

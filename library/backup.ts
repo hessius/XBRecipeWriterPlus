@@ -556,7 +556,12 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // to disagree about what a star means. A 9 and a "5" are both refused.
     rating:     (v) => isRating(v),
     note:       (v) => typeof v === "string",
-    pinned:     (v) => typeof v === "boolean"
+    pinned:     (v) => typeof v === "boolean",
+    // A brew somebody logged by hand is the only record that carries this, and
+    // it is the only thing that record holds beyond its rating. Dropping it in
+    // transit would turn a typed verdict into a brew the app claims to have
+    // watched, with no water and no time to show for it.
+    watched:    (v) => typeof v === "boolean"
 };
 
 /** A record from a backup file, or null. Never throws. */
@@ -595,7 +600,11 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         bypass: record.bypass,
         rating: record.rating ?? 0,
         note: (record.note ?? "").slice(0, MAX_BACKUP_NOTE),
-        pinned: record.pinned ?? false
+        pinned: record.pinned ?? false,
+        // Undefined stays undefined: absent means the app watched it, and
+        // writing `true` here would put a field on every record in the file to
+        // say what its absence already says.
+        watched: record.watched
     };
 }
 

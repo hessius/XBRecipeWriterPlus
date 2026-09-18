@@ -549,6 +549,164 @@ export const DOT_ICONS = {
         "....#....",
         "....#....",
         "........."
+    ],
+    /**
+     * The shelf marks, one per auto shelf.
+     *
+     * Twelve glyphs is a lot to add to a set whose own rule is "keep it small",
+     * and the rule still holds: these are one closed set, drawn once, for one
+     * job. The auto shelves ship with the app and never change, so every glyph
+     * is authored at design time and no user ever picks one -- which is exactly
+     * why the art can be a drawing rather than something derived. A manual
+     * shelf, being open ended, takes the derived mark instead.
+     *
+     * Same two stroke classes as everything above: axis-aligned runs and pure
+     * diagonals. `shelfStrong` and `shelfLong` are deliberately the same frame
+     * filled and emptied, because that is what the two shelves are -- the same
+     * measure, more coffee or more water.
+     */
+    shelfTea: [
+        ".........",
+        "..#.#.#..",
+        "..#.#.#..",
+        ".........",
+        ".#######.",
+        ".#.....#.",
+        ".#.....#.",
+        "..#####..",
+        "........."
+    ],
+    /** A pod: a capsule tapering to its outlet. */
+    shelfPods: [
+        ".........",
+        ".#######.",
+        ".#######.",
+        ".#.....#.",
+        ".#.....#.",
+        "..#...#..",
+        "..#...#..",
+        "...###...",
+        "........."
+    ],
+    /** A cup with the brew coming over its rim. */
+    shelfOverflowOff: [
+        ".........",
+        ".#.....#.",
+        ".##...##.",
+        "...###...",
+        ".#######.",
+        ".#.....#.",
+        ".#.....#.",
+        "..#####..",
+        "........."
+    ],
+    /** A cone dripper on its stand: a brewer that is not the machine. */
+    shelfOtherBrewer: [
+        ".........",
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#....",
+        "....#....",
+        "...###...",
+        "........."
+    ],
+    /** One stream, one cup. */
+    shelfSinglePour: [
+        "....#....",
+        "....#....",
+        "....#....",
+        "....#....",
+        ".........",
+        ".#######.",
+        ".#.....#.",
+        "..#####..",
+        "........."
+    ],
+    /** A staircase of four: the shape a many-stage recipe draws. */
+    shelfManyStages: [
+        ".........",
+        "......###",
+        "......#..",
+        "....###..",
+        "....#....",
+        "..###....",
+        "..#......",
+        "###......",
+        "........."
+    ],
+    /** A hopper with the way out barred. */
+    shelfGrinderOff: [
+        "#########",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#....",
+        ".........",
+        ".#######.",
+        ".#######.",
+        "........."
+    ],
+    /** The X of xBloom, which is two pure diagonals and nothing else. */
+    shelfXbloom: [
+        "#.......#",
+        ".#.....#.",
+        "..#...#..",
+        "...#.#...",
+        "....#....",
+        "...#.#...",
+        "..#...#..",
+        ".#.....#.",
+        "#.......#"
+    ],
+    /** The measure, full. */
+    shelfStrong: [
+        ".........",
+        ".#######.",
+        ".#######.",
+        ".#######.",
+        ".#######.",
+        ".#######.",
+        ".#######.",
+        ".#######.",
+        "........."
+    ],
+    /** The same measure, mostly water. */
+    shelfLong: [
+        ".........",
+        ".#######.",
+        ".#.....#.",
+        ".#.....#.",
+        ".#.....#.",
+        ".#.....#.",
+        ".#.....#.",
+        ".#######.",
+        "........."
+    ],
+    /** Steam off a plate. */
+    shelfHot: [
+        "..#.#.#..",
+        "..#.#.#..",
+        "..#.#.#..",
+        "..#.#.#..",
+        "..#.#.#..",
+        ".........",
+        "#########",
+        "#########",
+        "........."
+    ],
+    /** A boxed plus: something newly put on the shelf. */
+    shelfRecent: [
+        "#########",
+        "#.......#",
+        "#...#...#",
+        "#...#...#",
+        "#.#####.#",
+        "#...#...#",
+        "#...#...#",
+        "#.......#",
+        "#########"
     ]
 } as const satisfies Record<string, readonly string[]>;
 

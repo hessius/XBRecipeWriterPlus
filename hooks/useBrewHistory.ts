@@ -1,6 +1,7 @@
 import {useState} from "react";
 
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
+import {isRating, unobservedBrew} from "@/library/brew/BrewRecord";
 import BrewDatabase, {type BrewSummary, type StoredBrew} from "@/library/BrewDatabase";
 
 /** The part of `BrewDatabase` history reads. Injected, so tests need no SQLite. */
@@ -27,20 +28,64 @@ export function sharedBrewDatabase(): BrewDatabase {
 export type BrewSummaryStore = {summaryFor: (recipeUuid: string) => BrewSummary};
 
 /**
- * How one recipe has gone, read once when the editor opens.
+ * What rating a recipe needs of the database. Injected by tests.
  *
- * Read in a state initialiser rather than an effect, which this codebase does
- * not allow to seed state, and not re-read while the screen is open: a brew
- * cannot be recorded from inside the editor, so there is nothing for a
- * subscription to hear.
+ * Four methods rather than one, because the star on a recipe is one gesture
+ * with two outcomes and the choice between them is a question only the table
+ * can answer.
  */
-export function useRecipeBrewSummary(
-    recipeUuid: string, store?: BrewSummaryStore
-): BrewSummary {
-    const [summary] = useState(
-        () => (store ?? sharedBrewDatabase()).summaryFor(recipeUuid)
+export type RecipeRatingStore = BrewSummaryStore & {
+    brewOn: (recipeUuid: string, at: number) => string | null;
+    judge: (id: string, judgement: {rating?: number; note?: string}) => void;
+    insert: (record: BrewRecord, samples: BrewSample[]) => void;
+};
+
+/**
+ * The star on a recipe: rate today's brew, or record one nobody watched.
+ *
+ * One entry point, and the mechanism is never explained because it never needs
+ * to be. In both cases the user has said this coffee was a four. If the app saw
+ * the brew, the verdict lands on it; if it did not -- a card written, a cup made
+ * at the machine -- it lands on a record carrying nothing else.
+ *
+ * It does not clear. `BrewStars` sends 0 when the lit star is pressed again,
+ * which is how a brew is returned to unrated, but here the stars are a summary
+ * of several brews and a tap that erased would have to choose whose verdict to
+ * erase. The brew record screen is where a verdict is taken back.
+ *
+ * The database is resolved inside the handler, never in render: opening SQLite
+ * while drawing is both a purity problem and, in a test, a native module that
+ * does not exist.
+ */
+export function useRecipeRating(
+    recipe: {uuid: string; name: string; accent: string},
+    store?: RecipeRatingStore
+): {summary: BrewSummary; rate: (rating: number) => void} {
+    const {uuid, name, accent} = recipe;
+    const [summary, setSummary] = useState<BrewSummary>(
+        () => (store ?? sharedBrewDatabase()).summaryFor(uuid)
     );
-    return summary;
+
+    function rate(rating: number): void {
+        // `isRating` admits 0, because 0 is how a brew is returned to unrated.
+        // A recipe has no such gesture, so 0 arriving here is the lit star
+        // being pressed again and the answer is to do nothing at all.
+        if (!isRating(rating) || rating < 1) return;
+        const database = store ?? sharedBrewDatabase();
+        const at = Date.now();
+        const today = database.brewOn(uuid, at);
+        if (today !== null) {
+            database.judge(today, {rating});
+        } else {
+            database.insert(
+                unobservedBrew({recipeUuid: uuid, recipeName: name, accent, rating, at}),
+                []
+            );
+        }
+        setSummary(database.summaryFor(uuid));
+    }
+
+    return {summary, rate};
 }
 
 /** The two writes a judgement makes. Injected by tests. */

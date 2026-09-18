@@ -1,4 +1,5 @@
 import Recipe from "./Recipe";
+import {tagKey} from "./tagKey";
 
 /**
  * The recipe index: every column derived from a recipe's JSON blob.
@@ -42,7 +43,7 @@ export type IndexColumn = {
  * `from` body leaves it identical. Changing a projection therefore fails on
  * the golden values, which is the prompt to bump this number.
  */
-export const INDEX_REVISION = 3;
+export const INDEX_REVISION = 4;
 
 /**
  * The Nordic letters that survive folding unchanged, because they are genuinely
@@ -188,6 +189,16 @@ export const INDEX_COLUMNS: IndexColumn[] = [
         // queries sharedBy yet; when one does, it needs that same treatment
         // rather than trusting this collation.
         from: (r) => r.sharedBy || null
+    },
+    {
+        // The folded form, and the one an author shelf matches on. The
+        // collation above folds ASCII only, so under it "CAFÉ" and "café"
+        // would become two shelves holding different halves of one person's
+        // recipes -- the same latent bug `recipe_tags` had before `tagKey`.
+        // The display name still comes from `sharedBy`, so a shelf is labelled
+        // the way the sharer spelled it.
+        name: "sharedByKey", type: "TEXT", indexed: true,
+        from: (r) => (r.sharedBy ? tagKey(r.sharedBy) : null)
     },
     {name: "favourite", type: "INTEGER", indexed: true, from: (r) => (r.favourite ? 1 : 0)},
     // Both the flag and the text, deliberately, because they answer different

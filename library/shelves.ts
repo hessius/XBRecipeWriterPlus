@@ -1,5 +1,6 @@
 import {
-    availableFilters, STOCK_FILTERS, STOCK_FILTER_ORDER, tagFilterId, type FilterId
+    authorFilterId, availableFilters, filterLabel, STOCK_FILTERS, STOCK_FILTER_ORDER,
+    tagFilterId, type FilterId
 } from "./libraryFilters";
 
 /**
@@ -59,10 +60,12 @@ export type Shelf = {
 export function buildShelves(input: {
     filterCounts: Readonly<Record<string, number>>;
     tagCounts: readonly {tag: string; count: number}[];
+    /** How many recipes arrived from each person, for the per-author shelves. */
+    authorCounts?: readonly {author: string; count: number}[];
     librarySize: number;
     applied?: readonly string[];
 }): Shelf[] {
-    const {filterCounts, tagCounts, librarySize, applied = []} = input;
+    const {filterCounts, tagCounts, authorCounts = [], librarySize, applied = []} = input;
 
     const manual: Shelf[] = tagCounts.map(({tag, count}) => ({
         id: tagFilterId(tag), label: tag, kind: "manual", count
@@ -84,5 +87,25 @@ export function buildShelves(input: {
             count: ordered[id] ?? 0
         }));
 
-    return [...manual, ...auto];
+    // Author shelves go through the same gate, and the gate matters more here
+    // than anywhere else: an author shelf is the likeliest of all of them to
+    // sit at one recipe, because most people share one. They are listed after
+    // the stock shelves rather than interleaved, so the app's own vocabulary
+    // stays in its fixed order and the open-ended half follows it.
+    const authorTotals: Record<string, number> = {};
+    for (const {author, count} of authorCounts) {
+        authorTotals[authorFilterId(author)] = count;
+    }
+    const byAuthor: Shelf[] = availableFilters(authorTotals, librarySize, applied)
+        .map((id) => ({
+            id,
+            label: filterLabel(id),
+            // Auto, because nobody assembled it: it is a question the app asks
+            // of the library, the same as TEA or STRONG. There is no membership
+            // to edit, only recipes that did or did not arrive from that person.
+            kind: "auto" as const,
+            count: authorTotals[id] ?? 0
+        }));
+
+    return [...manual, ...auto, ...byAuthor];
 }

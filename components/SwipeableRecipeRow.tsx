@@ -7,6 +7,7 @@ import Recipe from "@/library/Recipe";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import RecipeCard from "@/components/RecipeCard";
+import type {RecipeEvidence} from "@/library/libraryQuery";
 import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 import {canWriteToCard} from "@/library/cardLimits";
@@ -35,6 +36,8 @@ type Props = {
     showCoffeeMarker?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
     dottedProfile?: boolean;
+    /** Forwarded to the card: what this recipe's brews add up to. */
+    evidence?: RecipeEvidence;
     /** Brew this recipe. Present only when there is a machine to brew on. */
     onBrew?: () => void;
     /** Share a link to this recipe. */
@@ -150,6 +153,7 @@ export default function SwipeableRecipeRow({
                                                editing = false,
                                                showCoffeeMarker = true,
                                                dottedProfile = false,
+                                               evidence,
                                                onBrew,
                                                onShare,
                                                onWrite,
@@ -340,6 +344,7 @@ export default function SwipeableRecipeRow({
                 renderLeftActions={hasLeftActions ? renderLeftActions : undefined}
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
+                            evidence={evidence}
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
                             onBrew={onBrew}

@@ -181,6 +181,13 @@ export default function BrewRecord({recipeLookup}: Props) {
     // The record's own plan, or the live recipe for rows written before brews
     // kept one. A snapshot is preferred even when the recipe still exists: it
     // is what was actually brewed, and the recipe may have been edited since.
+    // A brew a person logged by hand. The machine never saw it, so there is
+    // no trace, no figure and no stage: only a name, a date and whatever the
+    // user said about it. Falling through to the summary would draw the
+    // recipe's pours as though they had been poured and noughts where the
+    // scale should be, putting a brew on the screen that never happened.
+    const watched = record.watched !== false;
+
     const snapshot = poursFromPlan(record.plan);
     const stages = snapshot.length > 0 ? snapshot : recipe?.pours ?? [];
 
@@ -225,35 +232,49 @@ export default function BrewRecord({recipeLookup}: Props) {
             <ScrollView ref={scroller} testID="record-scroll"
                         onLayout={(e) => setRecordHeight(e.nativeEvent.layout.height)}
                         contentContainerStyle={{paddingBottom: 24, gap: 8}}>
-            <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
-                <BrewSummary
-                    recipeName={record.recipeName}
-                    hasStream={record.hasStream}
-                    samples={samples}
-                    stages={stages}
-                    accent={accent}
-                    width={width}
-                    plannedSeconds={plannedSecs}
-                    water={brewWater}
-                    cup={record.cupTotal}
-                    seconds={durationSeconds}
-                    activeIndex={ladderFrontier(record.outcome, delivered)}
-                    stageWater={delivered}
-                    stalls={record.stalls ?? stages.map(() => [])}
-                    note={record.outcome === "endedOnMachine"
-                        ? ENDED_ON_MACHINE_NOTE : undefined}
-                    stagesUnavailable={snapshot.length === 0 && recipe === null}
-                    // `busy` is set synchronously at the press, before the
-                    // paint the export waits for, so the name is already
-                    // parked at its start by the time the shutter falls.
-                    nameStill={busy}
-                    selectedIndex={selectedIndex}
-                    onSelectStage={(index) =>
-                        setSelectedIndex((was) => (was === index ? null : index))}
-                    bypass={bypass}
-                    availableHeight={recordHeight}
-                />
-            </ViewShot>
+            {watched ? (
+                <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
+                    <BrewSummary
+                        recipeName={record.recipeName}
+                        hasStream={record.hasStream}
+                        samples={samples}
+                        stages={stages}
+                        accent={accent}
+                        width={width}
+                        plannedSeconds={plannedSecs}
+                        water={brewWater}
+                        cup={record.cupTotal}
+                        seconds={durationSeconds}
+                        activeIndex={ladderFrontier(record.outcome, delivered)}
+                        stageWater={delivered}
+                        stalls={record.stalls ?? stages.map(() => [])}
+                        note={record.outcome === "endedOnMachine"
+                            ? ENDED_ON_MACHINE_NOTE : undefined}
+                        stagesUnavailable={snapshot.length === 0 && recipe === null}
+                        // `busy` is set synchronously at the press, before the
+                        // paint the export waits for, so the name is already
+                        // parked at its start by the time the shutter falls.
+                        nameStill={busy}
+                        selectedIndex={selectedIndex}
+                        onSelectStage={(index) =>
+                            setSelectedIndex((was) => (was === index ? null : index))}
+                        bypass={bypass}
+                        availableHeight={recordHeight}
+                    />
+                </ViewShot>
+            ) : (
+                <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
+                    <DotMatrixText fontSize={20} weight="bold" letterSpacing={1.4}
+                                   color={palette.text}>
+                        {record.recipeName}
+                    </DotMatrixText>
+                    <DotMatrixText testID="record-not-watched" fontSize={13}
+                                   weight="bold" letterSpacing={1.6}
+                                   color={palette.muted}>
+                        NOT WATCHED
+                    </DotMatrixText>
+                </YStack>
+            )}
 
             {/* Below the figures rather than over them: the panel explains a
                 stage that stays highlighted above it, and a sheet would cover
@@ -303,12 +324,16 @@ export default function BrewRecord({recipeLookup}: Props) {
                 )}
             </YStack>
 
-            <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
-                <ExportButton label="Save as image" busy={busy}
-                              onPress={() => void shareImage()} />
-                <ExportButton label="Export the data" busy={busy}
-                              onPress={() => void shareData()} />
-            </XStack>
+            {/* Nothing to picture and no stream to hand over: both exports
+                would return an empty file for a brew the app never watched. */}
+            {watched && (
+                <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
+                    <ExportButton label="Save as image" busy={busy}
+                                  onPress={() => void shareImage()} />
+                    <ExportButton label="Export the data" busy={busy}
+                                  onPress={() => void shareData()} />
+                </XStack>
+            )}
             {/* Only when there is one to copy, and only for someone who has
                 found the machine console. A brew recorded before this existed,
                 or one whose log the retention sweep has taken, would otherwise

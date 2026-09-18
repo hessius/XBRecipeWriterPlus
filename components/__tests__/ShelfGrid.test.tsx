@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import ShelfGrid from "@/components/ShelfGrid";
+import Pour from "@/library/Pour";
 import type {Shelf} from "@/library/shelves";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -82,5 +83,47 @@ describe("ShelfGrid", () => {
         );
 
         expect(screen.getByRole("button", {name: "TEA, auto shelf, 1 recipe"})).toBeTruthy();
+    });
+
+    describe("the art it hands its tiles", () => {
+        it("gives an auto shelf the glyph drawn for it", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf()]} marks={{tea: {accents: ["#A"], profiles: [[]]}}}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-glyph")).toBeTruthy();
+        });
+
+        it("gives a manual shelf its members' profiles", async () => {
+            const pour = new Pour(1, 60);
+
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
+                           marks={{"tag:morning": {accents: ["#A"], profiles: [[pour]]}}}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-profiles")).toBeTruthy();
+        });
+
+        it("draws the variant a tester picked instead of the hybrid", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf()]} variant="mosaic"
+                           marks={{tea: {accents: ["#A"], profiles: [[]]}}}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-mosaic")).toBeTruthy();
+        });
+
+        it("draws a shelf it has no art for as a plain field", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onEditShelf={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-field")).toBeTruthy();
+        });
     });
 });

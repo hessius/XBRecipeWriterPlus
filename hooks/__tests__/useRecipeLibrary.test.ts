@@ -5,8 +5,9 @@ import type {BackupPayload} from "@/library/backup";
 import {
     resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
 } from "@/library/libraryFilters";
-import type {LibraryQuery} from "@/library/libraryQuery";
+import type {LibraryQuery, RecipeEvidence} from "@/library/libraryQuery";
 import Recipe from "@/library/Recipe";
+import {MARK_MEMBERS} from "@/components/ShelfMark";
 
 jest.mock("@/library/RecipeDatabase");
 
@@ -32,7 +33,10 @@ function stubDb(recipes: Recipe[]) {
         countRecipesByFilter: jest.fn((ids: readonly string[]) =>
             Object.fromEntries(ids.map((id) => [id, 0]))
         ),
-        countRecipesByTag: jest.fn((): {tag: string; count: number}[] => [])
+        countRecipesByTag: jest.fn((): {tag: string; count: number}[] => []),
+        brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({})),
+        shelfMembers: jest.fn((): Record<string, Recipe[]> => ({})),
+        countRecipesByAuthor: jest.fn((): {author: string; count: number}[] => [])
     };
 }
 
@@ -447,5 +451,166 @@ describe("the store it reads through", () => {
         await rerender(undefined);
 
         expect(RecipeDatabase).toHaveBeenCalledTimes(1);
+    });
+
+    describe("the evidence the cards carry", () => {
+        it("hands back what the store read", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.brewEvidence.mockReturnValue({
+                one: {brews: 3, lastBrewedAt: 1_000, avgRating: 4}
+            });
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.evidence["one"])
+                .toEqual({brews: 3, lastBrewedAt: 1_000, avgRating: 4});
+        });
+
+        it("re-reads it on a refresh, so a brew just judged shows up", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.brewEvidence.mockReturnValue({});
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+            expect(result.current.evidence).toEqual({});
+
+            db.brewEvidence.mockReturnValue({
+                one: {brews: 1, lastBrewedAt: 9, avgRating: 5}
+            });
+            await act(async () => { result.current.refresh(); });
+
+            expect(result.current.evidence["one"].brews).toBe(1);
+        });
+
+        it("is empty, not undefined, for a store that cannot report any", async () => {
+            // `brewEvidence` is optional on the store so the backup and test
+            // stubs elsewhere need not grow a method they have no use for.
+            const db = stubDb([named("Ethiopia")]);
+            const {brewEvidence: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.evidence).toEqual({});
+        });
+    });
+
+    describe("the art each shelf tile draws", () => {
+        it("asks for every stock shelf and every tag", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 3}]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("tea");
+            expect(asked).toContain("tag:morning");
+        });
+
+        // Art is read one synchronous query per shelf, on the thread that is
+        // drawing. A library shared into by two hundred people would otherwise
+        // pay for two hundred reads to draw none of them: a shelf of fewer than
+        // three is never offered, whatever the rail is filtered by.
+        it("does not read art for a shelf too small to be offered", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByTag.mockReturnValue([
+                {tag: "morning", count: 3}, {tag: "once", count: 2}
+            ]);
+            db.countRecipesByAuthor.mockReturnValue([
+                {author: "Anna", count: 3}, {author: "Bo", count: 1}
+            ]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("tag:morning");
+            expect(asked).toContain("sharedBy:Anna");
+            expect(asked).not.toContain("tag:once");
+            expect(asked).not.toContain("sharedBy:Bo");
+        });
+
+        // The ids are folded to one string so the read can be cached on it.
+        // Author names are the one part of an id a stranger wrote, so the fold
+        // cannot use a character a name is allowed to contain.
+        it("keeps two author shelves apart when a name holds the separator", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([
+                {author: "Anna\nBo", count: 3}, {author: "Cal", count: 3}
+            ]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("sharedBy:Anna\nBo");
+            expect(asked).toContain("sharedBy:Cal");
+            expect(asked).not.toContain("sharedBy:Anna");
+        });
+
+        it("asks for no more members than the mark will draw", async () => {
+            const db = stubDb([named("Ethiopia")]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const call = db.shelfMembers.mock.calls[0] as unknown as [unknown, unknown, number];
+            expect(call[2]).toBe(MARK_MEMBERS);
+        });
+
+        it("turns the members into accents and profiles", async () => {
+            const member = named("Ethiopia");
+            const db = stubDb([member]);
+            db.shelfMembers.mockReturnValue({tea: [member]});
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.shelfMarks["tea"].accents).toHaveLength(1);
+            expect(result.current.shelfMarks["tea"].profiles).toEqual([member.pours]);
+        });
+
+        it("leaves out a shelf with no members at all", async () => {
+            // The tile falls back to its plain field, which is what an empty
+            // shelf should look like -- not a mark drawn from nothing.
+            const db = stubDb([named("Ethiopia")]);
+            db.shelfMembers.mockReturnValue({tea: []});
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.shelfMarks["tea"]).toBeUndefined();
+        });
+
+        it("is empty for a store that cannot answer", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            const {shelfMembers: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.shelfMarks).toEqual({});
+        });
+    });
+
+    describe("who a recipe arrived from", () => {
+        it("hands back the counts the store read", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([{author: "BrewMind", count: 3}]);
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            expect(result.current.authorCounts).toEqual([{author: "BrewMind", count: 3}]);
+        });
+
+        it("asks for each author's shelf art too", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            db.countRecipesByAuthor.mockReturnValue([{author: "BrewMind", count: 3}]);
+
+            await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).toContain("sharedBy:BrewMind");
+        });
+
+        it("is empty for a store that cannot answer", async () => {
+            const db = stubDb([named("Ethiopia")]);
+            const {countRecipesByAuthor: _unused, ...without} = db;
+
+            const {result} = await renderHook(() => useRecipeLibrary(without));
+
+            expect(result.current.authorCounts).toEqual([]);
+        });
     });
 });

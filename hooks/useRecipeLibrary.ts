@@ -1,10 +1,16 @@
 import {useEffect, useRef, useState} from "react";
 
 import {mergeRecipes, type BackupPayload} from "@/library/backup";
+import {MARK_MEMBERS} from "@/components/ShelfMark";
+import {resolveAccent} from "@/library/accent";
 import {
-    resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
+    authorFilterId, MIN_COUNT, resolveLibraryFilter, resolveStockFilter,
+    STOCK_FILTER_ORDER,
+    tagFilterId
 } from "@/library/libraryFilters";
-import type {FilterResolver, LibraryQuery} from "@/library/libraryQuery";
+import type {FilterResolver, LibraryQuery,
+              RecipeEvidence} from "@/library/libraryQuery";
+import type Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {tagKey} from "@/library/tagKey";
@@ -40,6 +46,29 @@ export type RecipeStore = {
         resolveFilter?: FilterResolver
     ) => Record<string, number>;
     countRecipesByTag?: () => {tag: string; count: number}[];
+    /** How many recipes arrived from each person, for the per-author shelves. */
+    countRecipesByAuthor?: () => {author: string; count: number}[];
+    /**
+     * What each recipe's brews add up to, for the card's evidence.
+     *
+     * Optional, and its absence is simply no evidence rather than a throw: a
+     * card with nothing to show draws no suffix, which is exactly what a
+     * library of never-brewed recipes looks like anyway. Nothing is lost or
+     * misreported by a store that cannot answer, so this is the one count here
+     * that does not shout.
+     */
+    brewEvidence?: () => Record<string, RecipeEvidence>;
+    /**
+     * A few members of each shelf, for the art on its tile.
+     *
+     * Optional for the same reason as `brewEvidence`: a store that cannot
+     * answer costs a tile its picture and nothing else.
+     */
+    shelfMembers?: (
+        ids: readonly string[],
+        resolveFilter?: FilterResolver,
+        perShelf?: number
+    ) => Record<string, Recipe[]>;
     deleteRecipe: (uuid: string) => void;
     cloneRecipe: (uuid: string) => void;
     updateRecipe: (uuid: string, recipe: Recipe) => void;
@@ -118,6 +147,12 @@ export type RestoreOutcome =
  */
 export type ShelfWriteOutcome = {full: number; failed: number};
 
+/** What a shelf's mark is drawn from: its first few members, in shelf order. */
+export type ShelfMarkMembers = {
+    accents: string[];
+    profiles: Pour[][];
+};
+
 export type RecipeLibrary = {
     recipes: Recipe[];
     /** The whole table size, read without hydrating every recipe. */
@@ -126,6 +161,12 @@ export type RecipeLibrary = {
     filterCounts: Record<string, number>;
     /** Whole-table counts for every tag, largest shelf first. */
     tagCounts: {tag: string; count: number}[];
+    /** Whole-table counts for every person a recipe arrived from. */
+    authorCounts: {author: string; count: number}[];
+    /** What each recipe's brews add up to, keyed by uuid. Absent means none. */
+    evidence: Record<string, RecipeEvidence>;
+    /** The art each shelf's tile draws, keyed by shelf id. */
+    shelfMarks: Record<string, ShelfMarkMembers>;
     allRecipes: () => Recipe[];
     refresh: () => void;
     deleteRecipe: (recipe: Recipe) => void;
@@ -177,6 +218,17 @@ export function useRecipeLibrary(
     const librarySize = readLibrarySize(store, revision);
     const filterCounts = readFilterCounts(store, revision);
     const tagCounts = readTagCounts(store, revision);
+    const authorCounts = readAuthorCounts(store, revision);
+    const evidence = readEvidence(store, revision);
+    // Keyed by every shelf that could be drawn rather than by the ones the grid
+    // actually draws, because suppression depends on which filters are applied
+    // and the art does not: the same shelf shows the same members whether the
+    // user is standing in it or passing it. Joining the ids into one string is
+    // what lets the compiler cache this across renders -- an array rebuilt each
+    // render is a new dependency every time, and this reads SQLite.
+    const shelfMarks = readShelfMarks(
+        store, shelfIdsOf(tagCounts, authorCounts), revision
+    );
 
     // A restore that a second tap re-enters before the first has repainted
     // would read the same pre-`reload()` snapshot of `recipes`, compute the same
@@ -364,6 +416,9 @@ export function useRecipeLibrary(
         librarySize,
         filterCounts,
         tagCounts,
+        authorCounts,
+        evidence,
+        shelfMarks,
         allRecipes,
         refresh: reload,
         deleteRecipe,
@@ -437,7 +492,88 @@ function readTagCounts(db: RecipeStore, revision: number): {tag: string; count: 
     if (!db.countRecipesByTag) {
         throw new Error("This store cannot count tags");
     }
-    return db.countRecipesByTag();
+    // `?? []` for a store that has the method but answers nothing -- which is
+    // what an auto-mocked database does. A real one returns a row set, empty or
+    // not; the absent-method case above is the one that shouts.
+    return db.countRecipesByTag() ?? [];
+}
+
+/**
+ * What each recipe's brews add up to, re-read on the same revision counter as
+ * the list, so rating a recipe and coming back shows the new average.
+ */
+function readEvidence(
+    db: RecipeStore, revision: number
+): Record<string, RecipeEvidence> {
+    void revision;
+    return db.brewEvidence?.() ?? {};
+}
+
+/**
+ * Every shelf id that could be drawn, as one string.
+ *
+ * A primitive rather than an array so the read below can be cached on it, and
+ * JSON rather than a joined list because an author shelf's id ends in a name a
+ * stranger typed: `Smith, Anna` or a name carrying a newline would otherwise
+ * fold into two ids, and the shelf would ask for art under a name nobody has.
+ *
+ * Only the shelves that clear `MIN_COUNT` are listed. The upper suppression
+ * gate depends on what the rail is filtered by and the art does not, so it is
+ * deliberately not applied here -- but the floor is a property of the library
+ * itself, and a shelf under it is never drawn for anyone. The read below is one
+ * synchronous query per id on the thread that is drawing, so a library shared
+ * into by two hundred people must not pay two hundred reads to draw none.
+ */
+function shelfIdsOf(
+    tagCounts: readonly {tag: string; count: number}[],
+    authorCounts: readonly {author: string; count: number}[]
+): string {
+    return JSON.stringify([
+        ...STOCK_FILTER_ORDER,
+        ...tagCounts.filter(({count}) => count >= MIN_COUNT)
+            .map(({tag}) => tagFilterId(tag)),
+        ...authorCounts.filter(({count}) => count >= MIN_COUNT)
+            .map(({author}) => authorFilterId(author))
+    ]);
+}
+
+/**
+ * How many recipes arrived from each person.
+ *
+ * Optional like the two reads above, and empty rather than a throw when the
+ * store cannot answer: the cost is a grid with no author shelves on it, which
+ * is also what a library nobody has shared into looks like.
+ */
+function readAuthorCounts(
+    db: RecipeStore, revision: number
+): {author: string; count: number}[] {
+    void revision;
+    return db.countRecipesByAuthor?.() ?? [];
+}
+
+/**
+ * The members whose accents and profiles a shelf's mark is drawn from.
+ *
+ * Read on the same revision counter as the list, so a recipe joining a shelf
+ * changes the shelf's picture without a reload.
+ */
+function readShelfMarks(
+    db: RecipeStore, ids: string, revision: number
+): Record<string, ShelfMarkMembers> {
+    void revision;
+    const members = db.shelfMembers?.(
+        JSON.parse(ids) as string[], resolveLibraryFilter, MARK_MEMBERS
+    ) ?? {};
+
+    const marks: Record<string, ShelfMarkMembers> = {};
+    for (const [id, recipes] of Object.entries(members)) {
+        if (recipes.length === 0) continue;
+        marks[id] = {
+            accents:  recipes.map(resolveAccent),
+            profiles: recipes.map((recipe) => recipe.pours)
+        };
+    }
+    return marks;
 }
 
 export default useRecipeLibrary;

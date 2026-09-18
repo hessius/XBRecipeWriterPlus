@@ -812,6 +812,28 @@ describe("brew history through a backup", () => {
         expect(brew?.pinned).toBe(false);
     });
 
+    it("carries a hand-logged brew across as one", () => {
+        // The whole of this record is a rating somebody typed. A restore that
+        // dropped the flag would put a brew in the history claiming the app had
+        // watched it, with no water and no time to show for having done so.
+        const brew = reviveBrew(JSON.parse(JSON.stringify(
+            brewNamed("b1", {watched: false, rating: 4, pinned: true}))));
+
+        expect(brew?.watched).toBe(false);
+    });
+
+    it("leaves a watched brew silent about it", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1"))));
+
+        expect(brew?.watched).toBeUndefined();
+    });
+
+    it("refuses a record that says it was watched in the wrong words", () => {
+        expect(reviveBrew({
+            ...JSON.parse(JSON.stringify(brewNamed("b1"))), watched: "no"
+        })).toBeNull();
+    });
+
     it("does not let a file decide what a brew record contains", () => {
         const brew = reviveBrew({
             ...JSON.parse(JSON.stringify(brewNamed("b1"))),

@@ -85,3 +85,67 @@ describe("building the shelves", () => {
         })).toEqual([]);
     });
 });
+
+describe("per-author shelves", () => {
+    it("draws one shelf per person who shared", () => {
+        const shelves = buildShelves({
+            filterCounts: {}, tagCounts: [], librarySize: 20,
+            authorCounts: [{author: "BrewMind", count: 5}, {author: "Kaffe", count: 4}]
+        });
+
+        expect(shelves.map((s) => s.id))
+            .toEqual(["sharedBy:BrewMind", "sharedBy:Kaffe"]);
+        expect(shelves[0].label).toBe("FROM BrewMind");
+    });
+
+    it("calls them auto shelves, because nobody assembled them", () => {
+        // There is no membership to edit, only recipes that did or did not
+        // arrive from that person.
+        const shelves = buildShelves({
+            filterCounts: {}, tagCounts: [], librarySize: 20,
+            authorCounts: [{author: "BrewMind", count: 5}]
+        });
+
+        expect(shelves[0].kind).toBe("auto");
+    });
+
+    it("suppresses the person who shared one recipe", () => {
+        // The gate matters more here than anywhere else: most people share one.
+        const shelves = buildShelves({
+            filterCounts: {}, tagCounts: [], librarySize: 20,
+            authorCounts: [{author: "BrewMind", count: 1}]
+        });
+
+        expect(shelves).toEqual([]);
+    });
+
+    it("suppresses the person who shared almost the whole library", () => {
+        const shelves = buildShelves({
+            filterCounts: {}, tagCounts: [], librarySize: 10,
+            authorCounts: [{author: "BrewMind", count: 9}]
+        });
+
+        expect(shelves).toEqual([]);
+    });
+
+    it("draws a suppressed author shelf the user is standing in", () => {
+        const shelves = buildShelves({
+            filterCounts: {}, tagCounts: [], librarySize: 20,
+            authorCounts: [{author: "BrewMind", count: 1}],
+            applied: ["sharedBy:BrewMind"]
+        });
+
+        expect(shelves.map((s) => s.id)).toEqual(["sharedBy:BrewMind"]);
+    });
+
+    it("lists them after the app's own vocabulary, not among it", () => {
+        const shelves = buildShelves({
+            filterCounts: {tea: 5}, tagCounts: [{tag: "morning", count: 2}],
+            librarySize: 20,
+            authorCounts: [{author: "BrewMind", count: 5}]
+        });
+
+        expect(shelves.map((s) => s.id))
+            .toEqual(["tag:morning", "tea", "sharedBy:BrewMind"]);
+    });
+});

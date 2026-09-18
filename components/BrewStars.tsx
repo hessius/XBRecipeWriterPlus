@@ -23,6 +23,15 @@ type Props = {
      * accessible node inside one only makes the same words reachable twice.
      */
     announce?: boolean;
+    /**
+     * Whether pressing the lit star takes the rating back.
+     *
+     * True on a brew, where it is the only way back to unrated. False on a
+     * recipe, whose stars are an average of several brews: a tap that erased
+     * would have to choose whose verdict to erase, and a control that offered
+     * to clear something it cannot clear would be lying in its own label.
+     */
+    clearable?: boolean;
     size?: number;
     testID?: string;
 };
@@ -42,7 +51,7 @@ type Props = {
  * screen the user is tapping through is otherwise permanent.
  */
 export default function BrewStars(
-    {rating, onRate, announce = true, size = 18, testID}: Props
+    {rating, onRate, announce = true, clearable = true, size = 18, testID}: Props
 ) {
     const shown = onRate === undefined ? rating : MAX_RATING;
     if (shown <= 0) return null;
@@ -75,11 +84,11 @@ export default function BrewStars(
                            // the one that is already the rating says it will
                            // undo it.
                            accessibilityRole="button"
-                           accessibilityLabel={star === rating
+                           accessibilityLabel={clearable && star === rating
                                ? `Clear the rating, currently ${spokenRating(rating).toLowerCase()}`
                                : `Rate ${star === 1 ? "1 star" : `${star} stars`}`}
                            hitSlop={6}
-                           onPress={() => onRate(star === rating ? 0 : star)}>
+                           onPress={() => onRate(clearable && star === rating ? 0 : star)}>
                     <DotIcon name="favourite" size={size}
                              color={star <= rating ? palette.text : palette.muted}/>
                 </Pressable>

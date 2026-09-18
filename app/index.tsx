@@ -63,7 +63,7 @@ import {buildShelves} from "@/library/shelves";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
-import type {Settings} from "@/library/Settings";
+import {asShelfMarkVariant, type Settings} from "@/library/Settings";
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -175,6 +175,7 @@ export default function HomeScreen({db, settings}: Props) {
     const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
+    const [shelfMarkVariant] = useSetting("shelfMarkVariant", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -360,6 +361,7 @@ export default function HomeScreen({db, settings}: Props) {
     const shelves = buildShelves({
         filterCounts: library.filterCounts,
         tagCounts:    library.tagCounts,
+        authorCounts: library.authorCounts,
         librarySize:  library.librarySize,
         applied:      libraryQuery.query.filters
     });
@@ -995,6 +997,8 @@ export default function HomeScreen({db, settings}: Props) {
                     // that showed NO MATCHES instead of the shelves would hide
                     // the control the user came to it for.
                     <ShelfGrid shelves={shelves}
+                               marks={library.shelfMarks}
+                               variant={asShelfMarkVariant(shelfMarkVariant)}
                                onOpen={libraryQuery.openShelf}
                                onNewShelf={picker.startCreating}
                                onEditShelf={beginEditingShelf}
@@ -1045,6 +1049,7 @@ export default function HomeScreen({db, settings}: Props) {
                                 editing={editing}
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
+                                evidence={library.evidence[item.recipe.uuid]}
                                 bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
                                 onBounced={retireBounce}
                                 // Gated on a machine: a dead BREW in every row's

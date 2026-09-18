@@ -671,3 +671,55 @@ describe("bypass on the record screen", () => {
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });
 });
+
+// A brew somebody logged by hand. It has a rating, a note and a date, and
+// the machine never saw it: no trace, no figures, no stages. Drawing the
+// recipe's pours as though they had been poured would put a brew on the
+// screen that never happened.
+describe("a brew the app did not watch", () => {
+    beforeEach(() => {
+        mockParams = {id: "brew-1"};
+        summaryProps = undefined as unknown as Record<string, unknown>;
+        mockOpened = {
+            record: {...record, watched: false, pours: 0, waterTotal: 0,
+                     cupTotal: 0, heldSeconds: 0, endedAt: record.startedAt,
+                     hasStream: false, rating: 4},
+            samples: []
+        };
+    });
+
+    it("says so rather than drawing noughts", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
+
+        expect(screen.getByText("NOT WATCHED")).toBeTruthy();
+        expect(screen.queryByLabelText("Brew trace")).toBeNull();
+    });
+
+    it("does not reconstruct stages from the recipe as it stands now", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
+
+        expect(summaryProps).toBeUndefined();
+    });
+
+    it("still names the recipe", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
+
+        expect(screen.getByText("Ethiopia Guji")).toBeTruthy();
+    });
+
+    it("still offers the rating, which is the whole of the record", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
+
+        expect(screen.getByTestId("judgement-stars")).toBeTruthy();
+        expect(screen.getByTestId("judgement-note")).toBeTruthy();
+    });
+
+    // There is no picture to save and no stream to export, so offering
+    // either would hand back an empty file.
+    it("offers neither export", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
+
+        expect(screen.queryByText("Save as image")).toBeNull();
+        expect(screen.queryByText("Export the data")).toBeNull();
+    });
+});

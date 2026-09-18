@@ -171,6 +171,19 @@ export type BrewRecord = {
      * judgement whose trace has been swept is one that cannot be acted on.
      */
     pinned?: boolean;
+    /**
+     * Whether the app saw this brew happen. Absent means it did.
+     *
+     * False only on a brew a person logged by hand, which has no stream, no
+     * samples and no figures -- only a rating. Absent rather than `true` on
+     * every other record, so a brew written before this existed does not have
+     * to be migrated to go on saying what it always said.
+     *
+     * Explicit, rather than inferred from `waterTotal 0 and heldSeconds 0`: a
+     * brew refused for want of water has both of those at zero too, and the app
+     * watched it closely enough to know why it stopped.
+     */
+    watched?: boolean;
 };
 
 /** The ceiling of the scale, decided once in the design and read from here. */
@@ -282,4 +295,65 @@ export function poursFromPlan(plan: PlanStage[] | undefined): Pour[] {
 export function stageWaterFromSamples(samples: BrewSample[], stages: number): number[] {
     return Array.from({length: stages}, (_unused, index) =>
         stageWaterFrom(samples, index + 1));
+}
+
+/**
+ * An id for a brew.
+ *
+ * Time in base 36 and a little noise. Shared with the recorder rather than
+ * copied so that a hand-logged brew and a watched one cannot come to disagree
+ * about what a brew id looks like.
+ */
+export function newBrewId(): string {
+    return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+/**
+ * A brew that happened where the app could not see it.
+ *
+ * A user who writes cards and brews at the machine never produces a Bluetooth
+ * brew, so the rating axis would ship permanently empty for them. Rather than
+ * give the recipe a rating field of its own -- which #95 forbids, because the
+ * brew is the observation and the recipe is the inference -- they get the thing
+ * they actually have: a record carrying only what a person put there.
+ *
+ * `watched: false` is set explicitly rather than inferred from the zeros. A
+ * brew refused for want of water has no water and no held time either, and it
+ * is a brew the app watched closely enough to know why it stopped; filing that
+ * as something somebody typed would be a lie about both.
+ *
+ * Pinned on arrival, on the rule that keeps a judged brew: this record is
+ * nothing but a judgement. It has no samples for a sweep to take, so the pin
+ * costs nothing and says what it is.
+ */
+export function unobservedBrew(input: {
+    recipeUuid: string;
+    recipeName: string;
+    accent: string;
+    rating: number;
+    /** Injected by tests; the wall clock otherwise. */
+    at?: number;
+    id?: string;
+}): BrewRecord {
+    const at = input.at ?? Date.now();
+    return {
+        id: input.id ?? newBrewId(),
+        recipeUuid: input.recipeUuid,
+        recipeName: input.recipeName,
+        accent: input.accent,
+        startedAt: at,
+        // Zero, the app's own word for "it never poured". A first drop would
+        // be an invention, and the record draws from this.
+        pouringAt: 0,
+        endedAt: at,
+        outcome: "done",
+        failure: null,
+        pours: 0,
+        waterTotal: 0,
+        cupTotal: 0,
+        heldSeconds: 0,
+        rating: input.rating,
+        pinned: true,
+        watched: false
+    };
 }

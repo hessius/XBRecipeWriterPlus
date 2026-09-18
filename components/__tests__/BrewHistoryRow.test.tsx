@@ -1,6 +1,7 @@
 // components/__tests__/BrewHistoryRow.test.tsx
 import React from "react";
 import {StyleSheet} from "react-native";
+import {screen} from "@testing-library/react-native";
 
 import BrewHistoryRow from "@/components/BrewHistoryRow";
 import {palette} from "@/constants/colors";
@@ -177,5 +178,58 @@ describe("BrewHistoryRow", () => {
 
         expect(StyleSheet.flatten(getByText("ENDED EARLY").props.style).color)
             .toBe("#F0C24A");
+    });
+
+    // A brew somebody logged by hand has no water, no cup and no clock. Drawing
+    // the zeros says the machine measured nought, which is a different and much
+    // worse claim than "the app did not see this one".
+    describe("a brew the app did not watch", () => {
+        function unwatched() {
+            return brew({
+                watched: false, pours: 0, waterTotal: 0, cupTotal: 0,
+                heldSeconds: 0, endedAt: Date.UTC(2026, 8, 3, 7, 42), rating: 4
+            });
+        }
+
+        it("says so instead of drawing noughts", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow brew={unwatched()} onPress={jest.fn()}/>
+            );
+
+            expect(screen.getByText("NOT WATCHED")).toBeTruthy();
+            expect(screen.queryByText(/0 G/)).toBeNull();
+            expect(screen.queryByText("0:00")).toBeNull();
+        });
+
+        it("says so to a screen reader too", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow brew={unwatched()} onPress={jest.fn()}/>
+            );
+
+            const label = screen.getByRole("button").props.accessibilityLabel;
+            expect(label).toContain("not watched");
+            expect(label).not.toContain("0 grams");
+            // The rating is the whole point of the record, so it still speaks.
+            expect(label).toContain("4");
+        });
+
+        // The date is the one machine independent fact a hand-logged brew has,
+        // and a history sorted by time with no dates on some rows is unreadable.
+        it("keeps the date", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow brew={unwatched()} onPress={jest.fn()}/>
+            );
+
+            expect(screen.getByText(/2026|SEP|3/i)).toBeTruthy();
+        });
+
+        it("still draws the figures for a brew the app did watch", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow brew={brew()} onPress={jest.fn()}/>
+            );
+
+            expect(screen.queryByText("NOT WATCHED")).toBeNull();
+            expect(screen.getByText(/244 G/)).toBeTruthy();
+        });
     });
 });

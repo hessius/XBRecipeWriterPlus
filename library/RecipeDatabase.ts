@@ -5,7 +5,8 @@ import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
 import {ensureBrewTables} from './BrewDatabase';
-import {buildLibraryQuery, type FilterResolver, type LibraryQuery} from './libraryQuery';
+import {buildLibraryQuery, type FilterResolver, type LibraryQuery,
+        type RecipeEvidence} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
         projectRecipe, schemaHash} from './recipeIndex';
 
@@ -567,6 +568,101 @@ class RecipeDatabase {
             `SELECT MIN(tag) AS tag, COUNT(*) AS count FROM recipe_tags
              GROUP BY tagKey ORDER BY count DESC, tagKey ASC;`
         ) as {tag: string; count: number}[];
+    }
+
+    /**
+     * How many recipes arrived from each person, largest first.
+     *
+     * The `SELECT DISTINCT sharedBy` the per-author shelves were waiting on.
+     * Grouped on `sharedByKey`, the folded column, so one person who spelled
+     * their name two ways is one shelf; the label is `MIN(sharedBy)`, the same
+     * arrangement `countRecipesByTag` uses, so the shelf is named the way a
+     * human wrote it rather than the way SQL compares it.
+     *
+     * Recipes that came from nobody are excluded by the column being null for
+     * them, which is why `recipeIndex` writes null rather than an empty string.
+     */
+    public countRecipesByAuthor(): {author: string; count: number}[] {
+        return this.db.getAllSync(
+            `SELECT MIN(sharedBy) AS author, COUNT(*) AS count FROM recipes
+             WHERE sharedByKey IS NOT NULL
+             GROUP BY sharedByKey ORDER BY count DESC, sharedByKey ASC;`
+        ) as {author: string; count: number}[];
+    }
+
+    /**
+     * A few members of each shelf, for the art on its tile.
+     *
+     * At most `perShelf` recipes, taken in the shelf's own order, which is the
+     * grid's order: a shelf of forty drawn as forty staircases is a solid block,
+     * and the design caps the read at three. The cap is applied in SQL rather
+     * than by slicing afterwards, so a large shelf costs the same as a small
+     * one.
+     *
+     * One small query per shelf rather than one clever query for all of them.
+     * The alternative is a UNION of per-shelf limited subqueries, which is the
+     * same number of scans wearing a disguise, and unreadable. There are twelve
+     * stock shelves plus however many tags a person typed, each returning three
+     * rows of JSON.
+     *
+     * An unknown id is skipped rather than thrown on, unlike `countRecipesByFilter`:
+     * a count that silently answered zero would misreport the library, whereas a
+     * missing mark only costs a tile its picture.
+     */
+    public shelfMembers(
+        ids: readonly string[],
+        resolveFilter: FilterResolver = () => null,
+        perShelf = 3
+    ): Record<string, Recipe[]> {
+        const members: Record<string, Recipe[]> = {};
+        for (const id of ids) {
+            const clause = resolveFilter(id);
+            if (clause === null) continue;
+            const rows = this.db.getAllSync(
+                `SELECT recipeJSON FROM recipes WHERE (${clause.where})
+                 ORDER BY sortName ASC LIMIT ?;`,
+                [...(clause.params ?? []), perShelf]
+            ) as {recipeJSON: string}[];
+            members[id] = rows.map((row) => new Recipe(undefined, row.recipeJSON));
+        }
+        return members;
+    }
+
+    /**
+     * What each recipe's brews add up to, for the card's evidence suffix.
+     *
+     * One grouped read over `brews` rather than a column on the library query,
+     * because evidence does not depend on what the rail asked: the same three
+     * figures are true whichever filter is on and whichever axis is sorted, and
+     * a card drawn in a shelf room must say what it says in the list. The join
+     * is possible at all because both classes open `xbrecipewriter.db`.
+     *
+     * Recipes with no brews are simply absent, which is what the card reads as
+     * "nothing to show yet". A row of zeroes would have to be told apart from a
+     * genuine zero somewhere, and there is no such thing here.
+     */
+    public brewEvidence(): Record<string, RecipeEvidence> {
+        const rows = this.db.getAllSync(
+            `SELECT recipeUuid, COUNT(*) AS brews, MAX(startedAt) AS lastBrewedAt,
+                    -- NULLIF for the same reason the library query has it:
+                    -- 0 is the app's word for unrated, and averaging silence
+                    -- as a nought would be a verdict nobody gave.
+                    AVG(NULLIF(rating, 0)) AS avgRating
+             FROM brews GROUP BY recipeUuid;`
+        ) as {
+            recipeUuid: string; brews: number;
+            lastBrewedAt: number | null; avgRating: number | null;
+        }[];
+
+        const evidence: Record<string, RecipeEvidence> = {};
+        rows.forEach((row) => {
+            evidence[row.recipeUuid] = {
+                brews: row.brews,
+                lastBrewedAt: row.lastBrewedAt ?? 0,
+                avgRating: row.avgRating ?? 0
+            };
+        });
+        return evidence;
     }
 
     public retrieveAllRecipes(): Recipe[] | null {
