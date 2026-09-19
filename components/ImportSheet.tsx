@@ -12,8 +12,6 @@ import PasteOverlay from "@/components/PasteOverlay";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import type {RecipeImport} from "@/hooks/useRecipeImport";
-import {useSetting} from "@/hooks/useSetting";
-import type {Settings} from "@/library/Settings";
 
 const FIELD_LABEL = "Share link or pod code";
 const FORMAT_HINT = "Paste an xBloom share link, or a pod code like ETH120.";
@@ -50,8 +48,6 @@ type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     importer: RecipeImport;
-    /** Injected by tests. The one production call site omits it. */
-    settings?: Settings;
 };
 
 /**
@@ -61,8 +57,7 @@ type Props = {
  * whether the field is drawn and what is said when it fails belongs to
  * `useRecipeImport`.
  */
-export default function ImportSheet({open, onOpenChange, importer, settings}: Props) {
-    const [cloudAccountEnabled] = useSetting("cloudAccountEnabled", settings);
+export default function ImportSheet({open, onOpenChange, importer}: Props) {
     // `showField` and `focusField` are the hook's, not props: whether the field
     // is drawn and whether it grabs focus both follow from the import intent,
     // which only the hook knows, so they live in exactly one place. `showField`
@@ -244,12 +239,10 @@ export default function ImportSheet({open, onOpenChange, importer, settings}: Pr
                     one subject, and a second import route competing with a
                     found recipe is noise at the moment of decision.
 
-                    While the account feature is gated off the row, its caption
-                    and the rule above them are all absent, not disabled and not
-                    dimmed. A greyed-out row is still an advertisement, and this
-                    sheet has to look exactly as it did before the feature
-                    existed. */}
-                {state.status === "idle" && cloudAccountEnabled && (
+
+                    Drawn only while idle for the same reason: a found recipe
+                    has already answered the question the row asks. */}
+                {state.status === "idle" && (
                     <Pressable accessibilityRole="button"
                                accessibilityLabel={`${ACCOUNT_LABEL}, ${ACCOUNT_CAPTION}`}
                                onPress={() => {

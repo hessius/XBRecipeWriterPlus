@@ -3,7 +3,6 @@ import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 import ImportCloudScreen from "@/app/importCloud";
 import {notify} from "@/components/XbrwToast";
 import {renderWithProviders} from "@/test-utils/render";
-import {sharedSettings} from "@/hooks/useSetting";
 
 // The screen constructs a `new RecipeDatabase()` at module scope of the
 // component body; without this mock jest opens real expo-sqlite.
@@ -98,10 +97,6 @@ describe("importCloud", () => {
         // that makes this reject would poison every test after it. Restated
         // rather than assumed.
         jest.clearAllMocks();
-    // The account feature is gated off by default, and is not under test here.
-    // Turned on rather than the tests deleted: gated code still needs its
-    // coverage, and the gate is tested separately below.
-    sharedSettings().set("cloudAccountEnabled", true);
         mockHook.forgetAccount.mockResolvedValue(undefined);
         Object.assign(mockHook, {
             status: "signedOut",
@@ -583,22 +578,6 @@ describe("importCloud", () => {
         for (const node of caveats) {
             expect(String(node.props.children)).not.toMatch(/[\u2013\u2014]/);
         }
-    });
-
-    /**
-     * The route stays registered whether or not the feature is on, so this is
-     * the only thing standing between a stale deep link, or a navigation state
-     * restored from before the switch was turned off, and a screen that signs
-     * people in to an account.
-     */
-    it("sends you home instead of rendering when the feature is gated off", async () => {
-        sharedSettings().set("cloudAccountEnabled", false);
-
-        await renderWithProviders(<ImportCloudScreen/>);
-
-        expect(screen.getByTestId("redirect").props.children).toBe("/");
-        expect(screen.queryByLabelText("Email")).toBeNull();
-        expect(screen.queryByLabelText("Password")).toBeNull();
     });
 
     describe("a very large account", () => {

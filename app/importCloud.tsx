@@ -1,4 +1,3 @@
-import {Redirect} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {FlatList} from "react-native-gesture-handler";
@@ -9,8 +8,6 @@ import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useCloudImport} from "@/hooks/useCloudImport";
-import {useSetting} from "@/hooks/useSetting";
-import type {Settings} from "@/library/Settings";
 
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {CloudErrorKind} from "@/library/cloud/transport";
@@ -38,11 +35,6 @@ function recipes(count: number): string {
     return `${count} recipe${count === 1 ? "" : "s"}`;
 }
 
-type Props = {
-    /** Injected by tests. The route renders with the shared store. */
-    settings?: Settings;
-};
-
 const ERRORS: Record<CloudErrorKind, string> = {
     credentials: "Email or password not accepted.",
     unauthorised: "That sign-in has expired. Please sign in again.",
@@ -50,30 +42,7 @@ const ERRORS: Record<CloudErrorKind, string> = {
     server: "xBloom could not answer that just now.",
 };
 
-/**
- * The gate, and the reason it is a separate component from the screen.
- *
- * The route stays registered whether or not the feature is on, because a route
- * that appears and disappears is a navigator that has to be rebuilt. So this
- * has to hold the door instead, and it cannot do it with a condition inside
- * `AccountImportScreen`: `useCloudImport` reads the keychain on mount, and a
- * hook cannot be called conditionally. By the time a guard inside that function
- * could run, the read has already been queued. Only an earlier component that
- * never renders it at all keeps the promise that nothing runs while the gate is
- * off.
- *
- * `Redirect` rather than an effect calling `router.replace`: the screen must
- * not render even once, and `react-hooks/set-state-in-effect` is an error here
- * anyway. Home rather than back, because there may be no back -- a restored
- * navigation state or a stale deep link can land here as the first screen.
- */
-export default function ImportCloudScreen({settings}: Props = {}) {
-    const [cloudAccountEnabled] = useSetting("cloudAccountEnabled", settings);
-    if (!cloudAccountEnabled) return <Redirect href="/"/>;
-    return <AccountImportScreen/>;
-}
-
-function AccountImportScreen() {
+export default function ImportCloudScreen() {
     // One store for the screen's lifetime. Every `new RecipeDatabase()` opens
     // SQLite and replays the table setup, and this screen re-renders on every
     // keystroke into the email and password fields. `useRecipeLibrary` guards

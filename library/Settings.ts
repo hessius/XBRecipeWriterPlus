@@ -189,30 +189,6 @@ export const DEFAULTS = {
      */
     libraryView: "list" as LibraryView,
     /**
-     * Whether the xBloom account import exists at all.
-     *
-     * Off, and off for everybody until it is finished. The feature is built and
-     * tested, but the library screen it feeds is not ready for it: importing an
-     * entire cloud library turns a twenty recipe library into a hundred and
-     * twenty recipe one, and today that lands in a list with no search, no
-     * filter and no sort. Shipping it now would be a firehose pointed at an
-     * unorganised list, so it waits for M5.
-     *
-     * It lives here rather than on a branch because a branch this size sitting
-     * parallel to a rewrite of the library screen is a merge conflict with a
-     * countdown on it. Gated in main, the code is reviewed, tested and carried
-     * along by every refactor that follows it.
-     *
-     * Not `__DEV__`, and not an EAS channel: the testers who need it get a
-     * production TestFlight build like everyone else, and a gate they cannot
-     * reach is not a gate, it is a deletion. Reached through LABS below.
-     *
-     * While this is off, nothing of the feature runs: no endpoint is called, no
-     * keychain entry is read, and no door to it is drawn. See the audit in the
-     * pull request that added this key.
-     */
-    cloudAccountEnabled: false,
-    /**
      * Whether the LABS section is visible in settings.
      *
      * Off until somebody taps the version string on the about screen seven
@@ -284,22 +260,22 @@ export type SettingKey = keyof typeof DEFAULTS;
  * machine that, as far as it is concerned, does not exist -- and it would have
  * displaced whatever pairing that phone had made for itself.
  *
- * `labsUnlocked` and `cloudAccountEnabled` are held out for a different
- * reason: a backup file is not private. It goes to the share sheet, and the
- * whole point of the seven taps is that an unfinished feature is off for
- * everybody who has not deliberately gone looking for it. A tester's backup
- * restored by an ordinary user would hand them both switches without their
- * ever having asked, and they asked for their recipes back, not for LABS. The
- * cost of holding them out is that a new phone needs seven taps again.
+ * `labsUnlocked` is held out for a different reason: a backup file is not
+ * private. It goes to the share sheet, and the whole point of the seven taps
+ * is that an unfinished feature is off for everybody who has not deliberately
+ * gone looking for it. A tester's backup restored by an ordinary user would
+ * hand them the switch without their ever having asked, and they asked for
+ * their recipes back, not for LABS. The cost of holding it out is that a new
+ * phone needs seven taps again.
  *
  * Named here rather than simply omitted from the snapshot so that the
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
 export type BackupExcluded =
-    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "cloudAccountEnabled";
+    "machineDeviceId" | "lastCardRead" | "labsUnlocked";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
-    "machineDeviceId", "lastCardRead", "labsUnlocked", "cloudAccountEnabled"
+    "machineDeviceId", "lastCardRead", "labsUnlocked"
 ];
 
 /**

@@ -155,15 +155,11 @@ function backupOf(
 /**
  * A store with the xBloom account feature switched on.
  *
- * The feature is gated off by default, so the tests that are about the account
- * section have to turn it on. Turned on rather than deleted: gated code still
- * needs its coverage, and the gate itself is tested separately at the bottom of
- * this file.
+ * The account section is always drawn now. Kept as a named helper rather than
+ * inlined so the tests below still say out loud which ones are about it.
  */
 function accountOn(): Settings {
-    const settings = new Settings(memoryStorage());
-    settings.set("cloudAccountEnabled", true);
-    return settings;
+    return new Settings(memoryStorage());
 }
 
 function memoryStorage(): SettingsStorage {
@@ -896,29 +892,17 @@ describe("SettingsScreen", () => {
         expect(getByText("Don't keep traces")).toBeTruthy();
     });
 
-    describe("the gate", () => {
-        it("shows nothing about an xBloom account while the feature is off", async () => {
+    describe("Labs", () => {
+        it("offers the account section to everybody", async () => {
+            // No longer gated: the reason it was, an unorganised library, is
+            // what M5 fixed.
             await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
-            // The heading as well as the rows. A section title left behind
-            // would read as part of whatever section follows it.
-            expect(screen.queryByText("XBLOOM ACCOUNT")).toBeNull();
-            expect(screen.queryByRole("button", {name: /^Sign in/})).toBeNull();
-            expect(screen.queryByRole("button", {name: "Sign out"})).toBeNull();
+            expect(screen.getByText("XBLOOM ACCOUNT")).toBeTruthy();
+            expect(screen.getByRole("button", {name: /^Sign in/})).toBeTruthy();
         });
 
-        it("never asks the keychain about an account nobody enabled", async () => {
-            // The part of the gate that matters more than the drawing. Reading
-            // the token and then ignoring it would still be a Keychain prompt
-            // on a device, shown to somebody who has never heard of this
-            // feature.
-            await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
-
-            await waitFor(() => expect(screen.getByText("LIBRARY")).toBeTruthy());
-            expect(mockLoadSession).not.toHaveBeenCalled();
-        });
-
-        it("reads the account only once the feature is switched on", async () => {
+        it("reads the account on the way in", async () => {
             await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
 
             await waitFor(() => expect(mockLoadSession).toHaveBeenCalled());
@@ -928,34 +912,25 @@ describe("SettingsScreen", () => {
             await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
 
             expect(screen.queryByText("LABS")).toBeNull();
-            expect(screen.queryByText("xBloom account import")).toBeNull();
         });
 
-        it("offers the feature, and a way back out, once Labs is open", async () => {
+        it("offers a way back out once Labs is open", async () => {
             const settings = new Settings(memoryStorage());
             settings.set("labsUnlocked", true);
 
             await renderWithProviders(<SettingsScreen settings={settings}/>);
 
             expect(screen.getByText("LABS")).toBeTruthy();
-            // Said plainly rather than hedged. Somebody who switches this on
-            // and then hits a wall should have been told a wall was there in
-            // the same breath as being offered it.
-            expect(screen.getByText(/Unfinished and unsupported/)).toBeTruthy();
-
-            await fireEvent.press(screen.getByRole("switch",
-                {name: "xBloom account import"}));
-
-            expect(settings.get("cloudAccountEnabled")).toBe(true);
+            expect(screen.getByRole("button",
+                {name: "Hide Labs, Anything you switched on here stays on."})).toBeTruthy();
         });
 
-        it("closes Labs from inside it, and leaves what you switched on alone", async () => {
+        it("closes Labs from inside it, and leaves the rest of settings alone", async () => {
             // The way in can afford to be undiscoverable because nobody
             // arrives at it by accident. A way out that nobody can find is
             // just a trap.
             const settings = new Settings(memoryStorage());
             settings.set("labsUnlocked", true);
-            settings.set("cloudAccountEnabled", true);
 
             await renderWithProviders(<SettingsScreen settings={settings}/>);
 
@@ -963,23 +938,21 @@ describe("SettingsScreen", () => {
                 {name: "Hide Labs, Anything you switched on here stays on."}));
 
             expect(settings.get("labsUnlocked")).toBe(false);
-            expect(settings.get("cloudAccountEnabled")).toBe(true);
             expect(screen.queryByText("LABS")).toBeNull();
-            // Two separate switches, so the section going away does not take
-            // the account section with it.
+            // The section closing does not take the rest of the screen with it.
             expect(screen.getByText("XBLOOM ACCOUNT")).toBeTruthy();
         });
 
         it("will not let a backup file hand anybody Labs", async () => {
-            // A backup is not private: it goes to the share sheet. The keys are
-            // held out of the snapshot so one cannot carry them, and left out
+            // A backup is not private: it goes to the share sheet. The key is
+            // held out of the snapshot so one cannot carry it, and left out
             // of the allowlist above so a hand-written one cannot either. This
             // is the second of those two locks -- the first is the compile-time
             // `BackupExcluded`, which no test can observe.
             const storage = memoryStorage();
             mockPickBackup.mockResolvedValue(backupOf(
                 [recipeNamed("A", "u1")],
-                {labsUnlocked: true, cloudAccountEnabled: true, dotMatrixProfile: true}
+                {labsUnlocked: true, dotMatrixProfile: true}
             ));
             mockApplyRestore.mockReturnValue({status: "restored", added: 1});
             await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
@@ -993,8 +966,7 @@ describe("SettingsScreen", () => {
 
             const restored = new Settings(storage);
             expect(restored.get("labsUnlocked")).toBe(false);
-            expect(restored.get("cloudAccountEnabled")).toBe(false);
-            // The rest of the block still landed, so this is the two keys being
+            // The rest of the block still landed, so this is the key being
             // refused and not the restore quietly failing.
             expect(restored.get("dotMatrixProfile")).toBe(true);
         });
