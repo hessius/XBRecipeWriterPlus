@@ -1038,6 +1038,19 @@ export default function HomeScreen({db, settings}: Props) {
                     collapsed={collapsed}
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
+                    // Derived, never stored. It becomes true the moment a
+                    // connected machine answers with a low tank and no tap to
+                    // draw from, which is the moment the fact becomes knowable,
+                    // and false again as soon as the tank is filled and the
+                    // readings refreshed. Nothing has to remember to raise or
+                    // clear it, and a second connection to a machine that is
+                    // still low says so again.
+                    machineAlarm={
+                        machineStatus === "connected"
+                        && machineVitals !== null
+                        && machineVitals.waterFeed !== "tap"
+                        && !machineVitals.waterEnough
+                    }
                     machinePanel={remembered ? (
                         <MachinePanel
                             open={popoverOpen}

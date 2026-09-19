@@ -67,6 +67,8 @@ type Props = {
     canImport?: boolean;
     /** The machine link status, for the dot. */
     machineStatus?: LinkStatus;
+    /** The tank is low on a machine with no tap, for the dot's one-off warning. */
+    machineAlarm?: boolean;
     /** Called when the user taps the machine dot. */
     onMachinePress?: () => void;
     /** Called when the user taps TRY NOW in the popover. */
@@ -101,6 +103,7 @@ export default function HomeHeader({
     collapsed,
     canImport = true,
     machineStatus,
+    machineAlarm = false,
     onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
     machinePanel,
@@ -182,6 +185,7 @@ export default function HomeHeader({
                         <MachineDot
                             status={machineStatus}
                             collapsed={collapsed}
+                            alarm={machineAlarm}
                             onPress={onMachinePress}
                         />
                     )}

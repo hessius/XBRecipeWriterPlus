@@ -1,6 +1,12 @@
 import React, {useEffect} from "react";
 import {Pressable, StyleSheet} from "react-native";
-import Animated, {useAnimatedStyle, useSharedValue, withTiming} from "react-native-reanimated";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming
+} from "react-native-reanimated";
 
 import DotIcon from "@/components/DotIcon";
 import {palette} from "@/constants/colors";
@@ -12,6 +18,20 @@ type Props = {
     status: LinkStatus;
     /** Drives the desaturation. The header owns the threshold. */
     collapsed: boolean;
+    /**
+     * The tank is low on a machine that has no tap to draw from.
+     *
+     * Blinks amber a couple of times and then leaves the dot as it found it.
+     * It is deliberately not a resting colour: nothing is wrong with the link,
+     * which is the only thing this dot reports, and a machine parked on amber
+     * would be saying the connection is in trouble when it is not. A low tank
+     * is worth one glance at the moment it becomes knowable, which is when the
+     * machine first answers, and the panel below carries the details from then
+     * on.
+     *
+     * A plumbed machine never raises it: there is no tank to fill.
+     */
+    alarm?: boolean;
     onPress: () => void;
 };
 
@@ -66,7 +86,10 @@ const LOOKS: Record<LinkStatus, {icon: DotIconName; lit: string; dim: string | n
  * between them and the later sibling wins, which here would put the settings
  * glyph under a tap aimed at the dot.
  */
-export default function MachineDot({status, collapsed, onPress}: Props) {
+/** How many amber flashes. Two, then it settles: enough to catch, not a strobe. */
+const ALARM_FLASHES = 2;
+
+export default function MachineDot({status, collapsed, alarm = false, onPress}: Props) {
     const reduced = useReducedMotion();
     const look = LOOKS[status];
 
@@ -88,6 +111,33 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
     }, [collapsed, fades, reduced, tint]);
 
     const tintStyle = useAnimatedStyle(() => ({opacity: tint.value}));
+
+    /**
+     * The amber copy's opacity.
+     *
+     * A third copy cross-faded over the other two, for the reason the other two
+     * exist: `DotIcon` takes its colour as a prop and Reanimated drives styles,
+     * not props.
+     *
+     * Under Reduced Motion it is shown once and taken away rather than flashed.
+     * The warning is information, so suppressing it entirely would withhold
+     * something; it is the repetition that is the motion, so that is what goes.
+     */
+    const alarmed = useSharedValue(0);
+
+    useEffect(() => {
+        if (!alarm) {
+            alarmed.value = 0;
+            return;
+        }
+        const on = withTiming(1, {duration: DURATION.fast, easing: EASING.out});
+        const off = withTiming(0, {duration: DURATION.hold, easing: EASING.out});
+        alarmed.value = reduced
+            ? withSequence(on, withTiming(1, {duration: DURATION.deliberate}), off)
+            : withRepeat(withSequence(on, off), ALARM_FLASHES, false);
+    }, [alarm, reduced, alarmed]);
+
+    const alarmStyle = useAnimatedStyle(() => ({opacity: alarmed.value}));
 
     return (
         <Pressable
@@ -112,6 +162,15 @@ export default function MachineDot({status, collapsed, onPress}: Props) {
                 <DotIcon testID="machine-dot-lit" name={look.icon}
                          size={SIZE} color={look.lit}/>
             </Animated.View>
+            {alarm && (
+                <Animated.View
+                    testID="machine-dot-alarm"
+                    style={[StyleSheet.absoluteFill, styles.cover, alarmStyle]}
+                    pointerEvents="none">
+                    <DotIcon testID="machine-dot-alarm-icon" name={look.icon}
+                             size={SIZE} color={palette.warn}/>
+                </Animated.View>
+            )}
         </Pressable>
     );
 }
