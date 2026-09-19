@@ -8,7 +8,6 @@ import ShelfMark from "@/components/ShelfMark";
 import {onAccent, palette} from "@/constants/colors";
 import {shelfGlyph} from "@/constants/shelfGlyphs";
 import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
-import type {ShelfMarkVariant} from "@/library/Settings";
 import type {Shelf} from "@/library/shelves";
 
 /**
@@ -32,14 +31,13 @@ export const TILE_HEIGHT = 120;
  * swipe twice to learn it.
  */
 export default function ShelfTile({
-    shelf, members, variant = "hybrid", inverted = false, onPress, onActions,
+    shelf, members, inverted = false, onPress, onActions,
     onHide
 }: {
     shelf: Shelf;
     /** What this shelf's art is drawn from. Absent for an empty shelf. */
     members?: ShelfMarkMembers;
     /** Which art candidate to draw. From the LABS setting. */
-    variant?: ShelfMarkVariant;
     /**
      * Draw this tile accent-first: the shelf's colour fills the card and the
      * mark's square goes quiet. A preference.
@@ -118,10 +116,9 @@ export default function ShelfTile({
                     borderWidth={manual || inverted ? 0 : 1}
                     borderColor={palette.line}>
                 <XStack alignItems="flex-start" justifyContent="space-between">
-                    <ShelfMark kind={shelf.kind} variant={variant}
+                    <ShelfMark kind={shelf.kind}
                                glyph={shelfGlyph(shelf.id)}
                                accents={members?.accents}
-                               profiles={members?.profiles}
                                inverted={inverted}/>
                     {onActions && (
                         <Pressable accessibilityRole="button"

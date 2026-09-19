@@ -9,25 +9,6 @@ import type {LibraryView} from './libraryView';
  * key that is not here is a compile error at the call site, so there is no
  * stringly-typed lookup to typo.
  */
-/** The shelf art candidates §"Shelf art is a slot, not a decision" names. */
-export type ShelfMarkVariant = "hybrid" | "mosaic" | "profiles" | "glyph";
-
-/** The variant list, in the order the LABS row offers them. */
-export const SHELF_MARK_VARIANTS: readonly ShelfMarkVariant[] =
-    ["hybrid", "mosaic", "profiles", "glyph"];
-
-/**
- * A stored variant, or the default.
- *
- * Same shape and same reason as `asTemperatureUnit`: every consumer branches on
- * the string, so an unrecognised value would quietly mean whichever branch is
- * last. Only the four known names get through.
- */
-export function asShelfMarkVariant(value: unknown): ShelfMarkVariant {
-    return SHELF_MARK_VARIANTS.includes(value as ShelfMarkVariant)
-        ? value as ShelfMarkVariant
-        : "hybrid";
-}
 
 export const DEFAULTS = {
     /**
@@ -249,22 +230,6 @@ export const DEFAULTS = {
      * they enabled, which is the honest reading of two separate switches.
      */
     labsUnlocked: false,
-    /**
-     * Which art a shelf tile draws in its 44 pt square.
-     *
-     * The design leaves the mark deliberately unsettled and sends the
-     * candidates to testers, so this is a LABS row rather than a preference:
-     * the answer is going to arrive from the tester group, and then this key
-     * becomes a constant and the losing variants are deleted.
-     *
-     * `hybrid` is the leading candidate and the default. It is not a
-     * compromise between the other two: an auto shelf is a closed set that
-     * ships with the app, so it can carry a glyph drawn at design time, while a
-     * manual shelf is open ended and takes the mark derived from its members.
-     * The art then says which kind of shelf it is -- a glyph means the app
-     * found this shelf, stacked profiles mean you built it.
-     */
-    shelfMarkVariant: "hybrid" as ShelfMarkVariant,
     /**
      * Auto shelves the user has put away, as a comma-separated list of ids.
      *

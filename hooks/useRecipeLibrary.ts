@@ -154,7 +154,6 @@ export type ShelfWriteOutcome = {full: number; failed: number};
 /** What a shelf's mark is drawn from: its first few members, in shelf order. */
 export type ShelfMarkMembers = {
     accents: string[];
-    profiles: Pour[][];
 };
 
 export type RecipeLibrary = {
@@ -654,7 +653,7 @@ function readAuthorCounts(
 }
 
 /**
- * The members whose accents and profiles a shelf's mark is drawn from.
+ * The members whose accents a shelf's mark is drawn from.
  *
  * Read on the same revision counter as the list, so a recipe joining a shelf
  * changes the shelf's picture without a reload.
@@ -670,10 +669,7 @@ function readShelfMarks(
     const marks: Record<string, ShelfMarkMembers> = {};
     for (const [id, recipes] of Object.entries(members)) {
         if (recipes.length === 0) continue;
-        marks[id] = {
-            accents:  recipes.map(resolveAccent),
-            profiles: recipes.map((recipe) => recipe.pours)
-        };
+        marks[id] = {accents: recipes.map(resolveAccent)};
     }
     return marks;
 }

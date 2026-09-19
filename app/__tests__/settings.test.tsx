@@ -970,42 +970,6 @@ describe("SettingsScreen", () => {
             expect(screen.getByText("XBLOOM ACCOUNT")).toBeTruthy();
         });
 
-        it("offers the shelf art candidates once Labs is open", async () => {
-            // A LABS row rather than a preference: the design leaves the mark
-            // unsettled and sends the candidates to testers, so this switch
-            // exists to collect an answer and is deleted once there is one.
-            const settings = new Settings(memoryStorage());
-            settings.set("labsUnlocked", true);
-
-            await renderWithProviders(<SettingsScreen settings={settings}/>);
-
-            await fireEvent.press(screen.getByRole("radio", {name: "MOSAIC"}));
-
-            expect(settings.get("shelfMarkVariant")).toBe("mosaic");
-        });
-
-        it("keeps a tester's shelf art when a backup carries none", async () => {
-            // `asShelfMarkVariant` coerces, so restoring through it would
-            // overwrite a chosen variant with the default every time an older
-            // backup was opened.
-            const storage = memoryStorage();
-            new Settings(storage).set("shelfMarkVariant", "mosaic");
-            mockPickBackup.mockResolvedValue(backupOf(
-                [recipeNamed("A", "u1")], {dotMatrixProfile: true}
-            ));
-            mockApplyRestore.mockReturnValue({status: "restored", added: 1});
-            await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
-
-            await fireEvent.press(screen.getByRole("button",
-                {name: "Restore from a backup, Adds anything your library does not already have."}));
-            await settleSheet();
-            await fireEvent(screen.getByLabelText(/settings from this backup/i),
-                            "checkedChange", true);
-            await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
-
-            expect(new Settings(storage).get("shelfMarkVariant")).toBe("mosaic");
-        });
-
         it("will not let a backup file hand anybody Labs", async () => {
             // A backup is not private: it goes to the share sheet. The keys are
             // held out of the snapshot so one cannot carry them, and left out

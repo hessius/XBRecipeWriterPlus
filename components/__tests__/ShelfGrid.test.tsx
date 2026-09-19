@@ -2,7 +2,6 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import ShelfGrid from "@/components/ShelfGrid";
-import Pour from "@/library/Pour";
 import type {Shelf} from "@/library/shelves";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -136,29 +135,17 @@ describe("ShelfGrid", () => {
     describe("the art it hands its tiles", () => {
         it("gives an auto shelf the glyph drawn for it", async () => {
             await renderWithProviders(
-                <ShelfGrid shelves={[shelf()]} marks={{tea: {accents: ["#A"], profiles: [[]]}}}
+                <ShelfGrid shelves={[shelf()]} marks={{tea: {accents: ["#A"]}}}
                            onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
             expect(screen.getByTestId("shelf-mark-glyph")).toBeTruthy();
         });
 
-        it("gives a manual shelf its members' profiles", async () => {
-            const pour = new Pour(1, 60);
-
+        it("gives a manual shelf a mosaic of its members", async () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
-                           marks={{"tag:morning": {accents: ["#A"], profiles: [[pour]]}}}
-                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
-            );
-
-            expect(screen.getByTestId("shelf-mark-profiles")).toBeTruthy();
-        });
-
-        it("draws the variant a tester picked instead of the hybrid", async () => {
-            await renderWithProviders(
-                <ShelfGrid shelves={[shelf()]} variant="mosaic"
-                           marks={{tea: {accents: ["#A"], profiles: [[]]}}}
+                           marks={{"tag:morning": {accents: ["#A"]}}}
                            onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 
@@ -302,7 +289,7 @@ describe("ShelfGrid", () => {
         it("leaves the colour on the glyph square when upright", async () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf()]}
-                           marks={{tea: {accents: ["#A1B2C3"], profiles: [[]]}}}
+                           marks={{tea: {accents: ["#A1B2C3"]}}}
                            onOpen={jest.fn()} onNewShelf={jest.fn()}
                            onShelfActions={jest.fn()}/>
             );
@@ -313,7 +300,7 @@ describe("ShelfGrid", () => {
         it("takes the colour off the glyph square when inverted", async () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf()]}
-                           marks={{tea: {accents: ["#A1B2C3"], profiles: [[]]}}}
+                           marks={{tea: {accents: ["#A1B2C3"]}}}
                            invertAuto onOpen={jest.fn()} onNewShelf={jest.fn()}
                            onShelfActions={jest.fn()}/>
             );

@@ -1,5 +1,5 @@
 import {DOT_ICONS, DOT_ICON_GRID} from "@/constants/dotIcons";
-import {SHELF_GLYPHS, shelfGlyph} from "@/constants/shelfGlyphs";
+import {AUTHOR_SHELF_GLYPH, SHELF_GLYPHS, shelfGlyph} from "@/constants/shelfGlyphs";
 import {STOCK_FILTER_ORDER} from "@/library/libraryFilters";
 
 describe("the auto shelves' glyphs", () => {
@@ -15,6 +15,13 @@ describe("the auto shelves' glyphs", () => {
     it("gives each shelf its own glyph", () => {
         const drawn = Object.values(SHELF_GLYPHS);
         expect(new Set(drawn).size).toBe(drawn.length);
+    });
+
+    it("keeps the author glyph out of the stock ones", () => {
+        // Every author shelf shares it, so a stock shelf borrowing it would
+        // make two different kinds of shelf look like the same one.
+        expect(Object.values(SHELF_GLYPHS)).not.toContain(AUTHOR_SHELF_GLYPH);
+        expect(DOT_ICONS[AUTHOR_SHELF_GLYPH]).toBeDefined();
     });
 
     it("draws every one of them on the 9 by 9 grid", () => {
@@ -35,6 +42,21 @@ describe("the auto shelves' glyphs", () => {
     describe("shelfGlyph", () => {
         it("answers for an auto shelf", () => {
             expect(shelfGlyph("tea")).toBe("shelfTea");
+        });
+
+        it("answers for an author shelf, whose name nobody could draw for", () => {
+            // Auto is the kind of shelf that carries a glyph, and an author
+            // shelf is auto. Without this it fell through to the manual mark
+            // and read as a shelf somebody had built by hand.
+            expect(shelfGlyph("sharedBy:Nils")).toBe(AUTHOR_SHELF_GLYPH);
+        });
+
+        it("gives every author the same glyph, since none of them is drawn", () => {
+            expect(shelfGlyph("sharedBy:Nils")).toBe(shelfGlyph("sharedBy:Ada"));
+        });
+
+        it("answers nothing for a prefix with no author after it", () => {
+            expect(shelfGlyph("sharedBy:")).toBeNull();
         });
 
         it("answers nothing for a tag, which has no drawing", () => {

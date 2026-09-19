@@ -1,32 +1,28 @@
 import React from "react";
-import Svg, {Path} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
-import {buildProfilePath, PROFILE_STROKE_WIDTH} from "@/components/PourProfile";
 import {onAccent, palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
-import type Pour from "@/library/Pour";
-import type {ShelfMarkVariant} from "@/library/Settings";
 
 /**
  * The size the design fixes, and the reason it is fixed.
  *
- * §"Shelf art is a slot, not a decision" commits to a 44 pt square for every
- * variant so that swapping the art cannot reflow the grid. The art is going to
- * testers; the geometry is not, which is why it lives here rather than inside
- * whichever variant wins.
+ * §"Shelf art: a glyph for an auto shelf, a mosaic for a manual one" commits
+ * to a 44 pt square for both marks so that changing the art cannot reflow the
+ * grid. The section used to leave the art itself open; the tester group has
+ * since answered, but the geometry outlives the answer, which is why it is
+ * still fixed here.
  */
 export const MARK_SIZE = 44;
 
 /**
- * How many members any variant reads.
+ * How many members a mark reads.
  *
- * The design's cap, and it is a drawing rule rather than a query one: a shelf of
- * forty drawn as forty staircases is a solid block, and a mosaic of forty tiles
- * is a texture. Enforced here as well as in the query that supplies it, because
- * the component is what the cap is about -- a caller handing over more must not
- * be able to make the square illegible.
+ * The design's cap, and it is a drawing rule rather than a query one: a mosaic
+ * of forty tiles is a texture, not a mark. Enforced here as well as in the
+ * query that supplies it, because the component is what the cap is about -- a
+ * caller handing over more must not be able to make the square illegible.
  */
 export const MARK_MEMBERS = 3;
 
@@ -36,74 +32,62 @@ const GLYPH_SIZE = 26;
 /** The mosaic's gutter, in points. One dot of air, as the icons use. */
 const MOSAIC_GAP = 2;
 
-/** Radius shared by every variant, so a swap does not change the silhouette. */
+/** Radius shared by both marks, so the grid has one silhouette, not two. */
 const RADIUS = 10;
 
 /**
- * Which art this shelf takes, given the variant the tester picked.
+ * Which art this shelf takes.
  *
- * `hybrid` is the only branch with anything to decide, and what it decides is
- * the design's central claim: an auto shelf is a closed set that ships with the
- * app, so it carries a glyph drawn at design time, while a manual shelf is open
- * ended and takes a mark derived from its members. The art then says which kind
- * of shelf it is, without a caption saying so.
+ * The design's central claim, now settled: an auto shelf is a closed set that
+ * ships with the app, so it carries a glyph drawn at design time, while a
+ * manual shelf is open ended and takes a mosaic of its members' accents. The
+ * art then says which kind of shelf it is, without a caption saying so.
+ *
+ * It was a setting while the tester group was deciding, and the losing
+ * candidates have been deleted along with the switch. A function rather than
+ * an inlined conditional because the rule is the interesting part and it is
+ * worth being able to read it, and test it, on its own.
  */
-export function markFor(
-    variant: ShelfMarkVariant, kind: "auto" | "manual"
-): "mosaic" | "profiles" | "glyph" {
-    if (variant !== "hybrid") return variant;
-    return kind === "auto" ? "glyph" : "profiles";
+export function markFor(kind: "auto" | "manual"): "mosaic" | "glyph" {
+    return kind === "auto" ? "glyph" : "mosaic";
 }
 
 /**
  * The square a shelf's art is drawn in.
  *
  * Everything it draws arrives as a prop. Nothing is fetched here and nothing is
- * stored, so a mark cannot go stale against the shelf it sits on, and switching
- * variants cannot make one shelf disagree with another about what it holds.
+ * stored, so a mark cannot go stale against the shelf it sits on.
  *
- * A shelf whose members give the chosen variant nothing to draw falls back to
- * the plain accent field rather than to a different variant. A tile that
- * silently changed art when its last member left would read as two shelves.
+ * A shelf whose members give its mark nothing to draw falls back to the plain
+ * accent field rather than to the other mark. A tile that silently changed art
+ * when its last member left would read as two shelves.
  */
 export default function ShelfMark({
-    kind, variant = "hybrid", glyph, accents = [], profiles = [], inverted = false
+    kind, glyph, accents = [], inverted = false
 }: {
     kind: "auto" | "manual";
-    /** Which candidate to draw. From the LABS setting. */
-    variant?: ShelfMarkVariant;
     /** The glyph an auto shelf carries. Auto shelves only. */
     glyph?: DotIconName | null;
-    /** Member accents, dominant first. For the mosaic and glyph variants. */
+    /** Member accents, dominant first. */
     accents?: readonly string[];
-    /** Members' pour profiles, for the profile variant. */
-    profiles?: readonly Pour[][];
     /**
      * Swap the glyph square with its tile: the accent has gone to the card
      * behind this, so the square takes the quiet field and the glyph draws in
      * the accent it gave up.
      *
-     * Glyph variant only. The other two marks *are* the members' colours, so
-     * there is nothing in them to hand to a tile and nothing left over here.
+     * Glyph only. The mosaic *is* the members' colours, so there is nothing in
+     * it to hand to a tile and nothing left over here.
      */
     inverted?: boolean;
 }) {
-    // A glyph that was asked for and does not exist becomes the derived mark
-    // rather than an empty square. The glyphs are a closed set drawn at design
-    // time for the shelves that ship with the app; a per-author shelf is also
-    // `auto`, but it is named by a stranger, so there is no drawing for it and
-    // none can be invented. It is open ended in the way a tag is, so it takes
-    // what a tag takes.
-    const asked = markFor(variant, kind);
-    const mark = asked === "glyph" && glyph == null ? "profiles" : asked;
+    // An auto shelf with no glyph draws the mosaic rather than an empty square.
+    // Every auto shelf is supposed to have one -- the stock shelves are a
+    // closed set drawn at design time, and the per-author shelves share a
+    // single drawing -- so this is a floor under a bug, not a route anything
+    // is expected to take.
+    const asked = markFor(kind);
+    const mark = asked === "glyph" && glyph == null ? "mosaic" : asked;
     const members = accents.slice(0, MARK_MEMBERS);
-    // Paired before the empty ones are dropped, not after. The accent is what
-    // says which recipe a staircase belongs to, and a recipe with no pours
-    // leaves a hole in the profile list but not in the accent list: indexing
-    // one by the other's position draws a shape in a stranger's colour.
-    const shapes = profiles.slice(0, MARK_MEMBERS)
-        .map((pours, index) => ({pours, accent: accents[index] ?? palette.muted}))
-        .filter(({pours}) => pours.length > 0);
     const field = members[0] ?? palette.surface;
 
     if (mark === "glyph" && glyph != null) {
@@ -126,32 +110,11 @@ export default function ShelfMark({
         );
     }
 
-    if (mark === "profiles" && shapes.length > 0) {
-        return (
-            <Square testID="shelf-mark-profiles" background={palette.surface}>
-                <Svg width={MARK_SIZE} height={MARK_SIZE}
-                     viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`}>
-                    {shapes.map(({pours, accent}, index) => (
-                        <Path key={index} testID={`shelf-mark-profile-${index}`}
-                              // Inset so a staircase reaching the top of its
-                              // box is not clipped by the rounded corner.
-                              d={buildProfilePath(pours as Pour[],
-                                                  MARK_SIZE - 12, MARK_SIZE - 16)}
-                              translateX={6} translateY={10}
-                              fill="none"
-                              stroke={accent}
-                              strokeWidth={PROFILE_STROKE_WIDTH}/>
-                    ))}
-                </Svg>
-            </Square>
-        );
-    }
-
     if (mark === "mosaic" && members.length > 0) {
         // Four tiles from at most three accents: the dominant one takes the
         // spare corner rather than a fourth member being read, so the mosaic
-        // obeys the same member cap as the other variants and a shelf of one
-        // still fills its square instead of drawing a lone quarter.
+        // obeys the member cap above and a shelf of one still fills its square
+        // instead of drawing a lone quarter.
         const tiles = [0, 1, 2, 3].map((i) => members[i % members.length]);
         return (
             <Square testID="shelf-mark-mosaic" background={palette.surface}>
@@ -170,7 +133,7 @@ export default function ShelfMark({
     return <Square testID="shelf-mark-field" background={field}/>;
 }
 
-/** The 44 pt square itself, which every variant shares and none may resize. */
+/** The 44 pt square itself, which both marks share and neither may resize. */
 function Square({background, testID, children}: {
     background: string;
     testID: string;

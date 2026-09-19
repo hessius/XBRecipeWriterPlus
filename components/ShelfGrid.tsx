@@ -8,7 +8,6 @@ import DotMatrixText from "@/components/DotMatrixText";
 import ShelfTile from "@/components/ShelfTile";
 import {palette} from "@/constants/colors";
 import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
-import type {ShelfMarkVariant} from "@/library/Settings";
 import {hides} from "@/library/hiddenShelves";
 import type {Shelf} from "@/library/shelves";
 
@@ -53,10 +52,9 @@ function NewShelfButton({onPress}: {onPress: () => void}) {
     );
 }
 
-function Rows({shelves, marks, variant, inverted, onOpen, onActions, onHide}: {
+function Rows({shelves, marks, inverted, onOpen, onActions, onHide}: {
     shelves: readonly Shelf[];
     marks: Readonly<Record<string, ShelfMarkMembers>>;
-    variant: ShelfMarkVariant;
     inverted?: boolean;
     onOpen: (id: string) => void;
     onActions?: (tag: string) => void;
@@ -74,7 +72,6 @@ function Rows({shelves, marks, variant, inverted, onOpen, onActions, onHide}: {
                     {row.map((shelf) => (
                         <ShelfTile key={shelf.id} shelf={shelf}
                                    members={marks[shelf.id]}
-                                   variant={variant}
                                    inverted={inverted}
                                    onPress={() => onOpen(shelf.id)}
                                    onActions={onActions && (() => onActions(shelf.label))}
@@ -148,7 +145,7 @@ function HiddenShelves({shelves, onShow}: {
  * there is nothing to select here, only somewhere to go.
  */
 export default function ShelfGrid({
-    shelves, marks = {}, variant = "hybrid", invertAuto = false,
+    shelves, marks = {}, invertAuto = false,
     hidden = [], onOpen, onNewShelf, onShelfActions, onHideShelf, onScroll,
     paddingBottom = 0
 }: {
@@ -156,7 +153,6 @@ export default function ShelfGrid({
     /** What each shelf's art is drawn from, keyed by shelf id. */
     marks?: Readonly<Record<string, ShelfMarkMembers>>;
     /** Which art candidate to draw. From the LABS setting. */
-    variant?: ShelfMarkVariant;
     /** Draw auto tiles accent-first, the glyph square quiet. A preference. */
     invertAuto?: boolean;
     /**
@@ -222,7 +218,7 @@ export default function ShelfGrid({
             <YStack gap="$2">
                 <Heading label="YOUR SHELVES"/>
                 {manual.length > 0 && (
-                    <Rows shelves={manual} marks={marks} variant={variant}
+                    <Rows shelves={manual} marks={marks}
                           onOpen={onOpen} onActions={onShelfActions}/>
                 )}
                 {/*
@@ -238,7 +234,7 @@ export default function ShelfGrid({
                 <YStack gap="$2">
                     <Heading label="AUTO SHELVES"/>
                     {auto.length > 0 && (
-                        <Rows shelves={auto} marks={marks} variant={variant}
+                        <Rows shelves={auto} marks={marks}
                               inverted={invertAuto} onOpen={onOpen}
                               onHide={onHideShelf}/>
                     )}
