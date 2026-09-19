@@ -29,27 +29,24 @@ export function rowStyle(progress: number, contentHeight: number | null) {
 /**
  * The height to remember after a layout pass.
  *
- * A closed row is clipped to nothing, and a layout pass in that state reports
+ * A closed row is clipped to nothing, and a layout pass in that state can report
  * exactly that. Believing it is how the row came to have nothing to reopen to:
  * the content was measured at zero the moment it was hidden and stayed that way.
- * Only a row that is actually showing its content can say how tall it is.
+ * So a report of nothing is never believed, whatever state the row is in.
  *
- * The single exception is the first measurement. That one is taken with the
- * content lifted out of the row's flow precisely so that it can be trusted, and
- * it is the only measurement a row that mounted closed will ever be offered.
+ * Every positive number is believed, including from a closed row. Disbelieving
+ * those is a trap of its own, and it is the one that kept the machine panel shut
+ * until the app was reloaded: a row measured before its font had loaded learned
+ * a height too small to show anything, and when the font arrived and the content
+ * was laid out again the correction was discarded for having come from a closed
+ * row. Layout does not change a third time, so no further reading is ever
+ * offered and the row is wrong for the rest of the session.
+ *
+ * There is no need to distinguish the two cases. A row reports either nothing,
+ * which says only that it is clipped, or its content's real height.
  */
-export function nextHeight(
-    current: number | null,
-    measured: number,
-    open: boolean
-): number | null {
-    if (measured <= 0) {
-        return current;
-    }
-    if (current === null) {
-        return measured;
-    }
-    return open ? measured : current;
+export function nextHeight(current: number | null, measured: number): number | null {
+    return measured > 0 ? measured : current;
 }
 
 /** Out of the row's flow, but still the row's width, so text wraps as it will. */
@@ -127,7 +124,7 @@ export default function Collapsible({open, children}: Props) {
                       // fires whenever the row moves, and re-rendering the
                       // screen to store the same number would be wasted work.
                       const measured = event.nativeEvent.layout.height;
-                      setContentHeight((current) => nextHeight(current, measured, open));
+                      setContentHeight((current) => nextHeight(current, measured));
                   }}>
                 {children}
             </View>
