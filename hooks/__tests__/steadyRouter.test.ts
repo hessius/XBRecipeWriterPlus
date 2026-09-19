@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import steadyRouter, {forgetLastMove, isRepeat, SETTLE_MS, useSteadyRouter} from "@/hooks/steadyRouter";
+import steadyRouter, {forgetLastMove, isRepeat, noteRoute, SETTLE_MS, useSteadyRouter} from "@/hooks/steadyRouter";
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -91,6 +91,38 @@ describe("the steady router", () => {
     it("goes back once when a back button is tapped twice", async () => {
         // The same fault costs more here: two pops where one was meant skips
         // a screen the user never asked to leave.
+        const {result} = await renderHook(() => useSteadyRouter());
+
+        await act(async () => {
+            result.current.back();
+            result.current.back();
+        });
+
+        expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets the screen a back reveals be left again straight away", async () => {
+        // A back can put another screen's Back button directly under the
+        // finger that just pressed one. That second press is a different act
+        // on a different screen, and swallowing it would strand somebody one
+        // screen deeper than they asked to be. This is why a back is scoped to
+        // where it was pressed and a push is scoped to where it goes.
+        noteRoute("/brewRecord");
+        const {result} = await renderHook(() => useSteadyRouter());
+
+        await act(async () => {
+            result.current.back();
+            noteRoute("/brewHistory");
+            result.current.back();
+        });
+
+        expect(mockBack).toHaveBeenCalledTimes(2);
+    });
+
+    it("still counts two taps on one screen's back button once", async () => {
+        // The other half of the same rule: scoping it to the screen must not
+        // become no guard at all.
+        noteRoute("/brewHistory");
         const {result} = await renderHook(() => useSteadyRouter());
 
         await act(async () => {

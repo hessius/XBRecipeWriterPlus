@@ -1,7 +1,8 @@
 import React from "react";
-import {usePathname, useRouter} from "expo-router";
+import {usePathname} from "expo-router";
 
 import BrewMiniBar from "@/components/BrewMiniBar";
+import {useSteadyRouter} from "@/hooks/steadyRouter";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 
@@ -24,7 +25,7 @@ const SILENT = new Set(["/brew", "/brewRecord", "/brewHistory"]);
 
 export default function LiveBrewBar() {
     const {run, dismiss} = useLiveBrew();
-    const router = useRouter();
+    const router = useSteadyRouter();
     const pathname = usePathname();
 
     if (run === null || SILENT.has(pathname)) return null;

@@ -44,6 +44,30 @@ let last: Move | null = null;
 /** Forget the last move. For tests, which must not inherit each other's. */
 export function forgetLastMove(): void {
     last = null;
+    here = "";
+}
+
+/**
+ * Where the app is now, as the guard understands it.
+ *
+ * Kept here rather than read at the moment of a move because there is no way
+ * to ask expo-router imperatively; only a hook can answer, and the singleton
+ * router has no component to hang one on. `RouteWatcher` in the root layout
+ * tells this module instead, on every change of route.
+ *
+ * Empty until something says otherwise, which is the honest answer before the
+ * navigator has mounted and is the value tests start from.
+ */
+let here = "";
+
+/**
+ * Note the route the app is on. Called by `RouteWatcher`, once per change.
+ *
+ * Exported so the watcher can reach it; not part of the router's surface,
+ * because nothing that navigates should be telling the guard where it is.
+ */
+export function noteRoute(path: string): void {
+    here = path;
 }
 
 /** Records the move and says whether it should be made at all. */
@@ -78,7 +102,14 @@ function steady<R extends typeof router>(inner: R): R {
             }
         },
         back: () => {
-            if (claim("back")) inner.back();
+            // Scoped to the screen the press came from, because "back" is not
+            // one move the way a push to a named route is. A back can reveal
+            // another screen with its own Back button directly under the
+            // finger, and that second press is a different act on a different
+            // screen -- swallowing it would strand somebody one screen deeper
+            // than they asked to be. Two presses on the same screen's Back
+            // button are still the fumble this guards.
+            if (claim(`back:${here}`)) inner.back();
         }
     };
 }

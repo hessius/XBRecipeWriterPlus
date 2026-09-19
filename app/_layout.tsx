@@ -13,6 +13,7 @@ import {palette} from '@/constants/colors';
 import SplashOverlay from '@/components/SplashOverlay';
 import {startMachineLink} from '@/hooks/useMachine';
 import LiveBrewBar from '@/components/LiveBrewBar';
+import RouteWatcher from '@/components/RouteWatcher';
 import {LiveBrewProvider} from '@/hooks/useLiveBrew';
 import {sharedBrewDatabase, sweepOnLaunch} from '@/hooks/useBrewHistory';
 import {useSetting} from '@/hooks/useSetting';
@@ -163,6 +164,9 @@ export default function RootLayout() {
                                         {/* Beside the navigator, not inside a
                                             screen: a brew you walked away from
                                             has to still be there in Settings. */}
+                                        {/* Tells the navigation guard which
+                                            screen a Back press came from. */}
+                                        <RouteWatcher/>
                                         <LiveBrewBar/>
                                         <Toasts/>
                                         <StatusBar hidden={false}/>
