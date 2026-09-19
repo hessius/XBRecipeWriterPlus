@@ -1036,8 +1036,6 @@ export default function HomeScreen({db, settings}: Props) {
                 <HomeHeader
                     count={library.librarySize}
                     collapsed={collapsed}
-                    editing={editing}
-                    showEdit={!wholeLibraryEmpty}
                     canImport
                     machineStatus={remembered ? machineStatus : undefined}
                     machinePanel={remembered ? (
@@ -1056,7 +1054,6 @@ export default function HomeScreen({db, settings}: Props) {
                         setPopoverOpen((open) => !open);
                     }}
                     onMachineConnect={connectMachine}
-                    onToggleEdit={() => setEditing((current) => !current)}
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}
                     onNew={() => setNewOpen(true)}
@@ -1109,7 +1106,18 @@ export default function HomeScreen({db, settings}: Props) {
                         picking={picker.active}
                         onFilterToggle={libraryQuery.toggleFilterRail}
                         view={libraryQuery.view}
-                        onViewChange={libraryQuery.onViewChange}/>
+                        onViewChange={libraryQuery.onViewChange}
+                        // Offered where there are recipes on screen to act on:
+                        // the list, and a shelf standing open. The shelf grid
+                        // draws shelves, and edit has nothing to say about a
+                        // shelf, so it is left out there exactly as sort and
+                        // filter are.
+                        editing={editing}
+                        onToggleEdit={
+                            libraryQuery.view === "list" || inShelfRoom
+                                ? () => setEditing((current) => !current)
+                                : undefined
+                        }/>
                 )}
 
                 {wholeLibraryEmpty ? (
@@ -1131,6 +1139,7 @@ export default function HomeScreen({db, settings}: Props) {
                         evidence={library.evidence}
                         showCoffeeMarker={showCoffeeMarker}
                         dottedProfile={dottedProfile}
+                        editing={editing}
                         paddingBottom={insets.bottom + 8}/>
                 ) : libraryQuery.view === "shelves" && !picker.active ? (
                     // The grid steps aside while picking without changing the

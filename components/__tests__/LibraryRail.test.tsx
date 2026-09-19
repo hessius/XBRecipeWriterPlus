@@ -436,3 +436,46 @@ describe("the filters while the grid is showing", () => {
         expect(screen.getByRole("button", {name: "Tea filter"})).toBeTruthy();
     });
 });
+
+describe("the edit control", () => {
+    it("offers edit beside the view toggle when the owner supplies a handle", async () => {
+        // Its home used to be the top bar. It acts on the recipes on screen,
+        // which is what everything on this rail does.
+        const onToggleEdit = jest.fn();
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "list", onToggleEdit})}/>
+        );
+
+        await fireEvent.press(screen.getByTestId("rail-edit"));
+        expect(onToggleEdit).toHaveBeenCalledTimes(1);
+    });
+
+    it("says which way the toggle will go", async () => {
+        await renderWithProviders(
+            <LibraryRail {...railProps({
+                view: "list", editing: true, onToggleEdit: jest.fn()
+            })}/>
+        );
+        expect(screen.getByLabelText("Done editing")).toBeTruthy();
+    });
+
+    it("leaves edit out where the owner offers no handle", async () => {
+        // The shelf grid draws shelves, and edit has nothing to say about a
+        // shelf. Left out rather than dead, exactly as sort and filter are.
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "shelves"})}/>
+        );
+        expect(screen.queryByTestId("rail-edit")).toBeNull();
+    });
+
+    it("leaves edit out while members are being picked", async () => {
+        // Ticking members is already a selection mode. A second one over the
+        // top of it would be two ways to choose at once.
+        await renderWithProviders(
+            <LibraryRail {...railProps({
+                view: "list", picking: true, onToggleEdit: jest.fn()
+            })}/>
+        );
+        expect(screen.queryByTestId("rail-edit")).toBeNull();
+    });
+});

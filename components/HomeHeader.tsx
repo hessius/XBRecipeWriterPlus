@@ -63,10 +63,6 @@ type Props = {
     count: number;
     /** Whether the list has scrolled far enough for the tiles to have gone. */
     collapsed: boolean;
-    /** Whether the cards are currently showing their destructive actions. */
-    editing: boolean;
-    /** False when the library is empty: there is nothing to edit. */
-    showEdit: boolean;
     /** False until sub-project 5 gives import a way to be handed a recipe. */
     canImport?: boolean;
     /** The machine link status, for the dot. */
@@ -82,7 +78,6 @@ type Props = {
      * not have to know what a water level is to be able to make room for one.
      */
     machinePanel?: React.ReactNode;
-    onToggleEdit: () => void;
     onScan: () => void;
     onImport: () => void;
     onNew: () => void;
@@ -104,14 +99,11 @@ type Props = {
 export default function HomeHeader({
     count,
     collapsed,
-    editing,
-    showEdit,
     canImport = true,
     machineStatus,
     onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
     machinePanel,
-    onToggleEdit,
     onScan,
     onImport,
     onNew,
@@ -186,11 +178,6 @@ export default function HomeHeader({
                             <Action icon="plus" label="Create a recipe" onPress={onNew}/>
                         </XStack>
                     </Animated.View>
-                    {showEdit && (
-                        <Action icon="edit" active={editing}
-                                label={editing ? "Done editing" : "Edit recipes"}
-                                onPress={onToggleEdit}/>
-                    )}
                     {machineStatus !== undefined && (
                         <MachineDot
                             status={machineStatus}
