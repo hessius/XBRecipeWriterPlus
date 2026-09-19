@@ -76,6 +76,19 @@ type Props = {
     picking?: boolean;
     /** Reveal or hide the filter rail. */
     onFilterToggle: () => void;
+    /**
+     * Whether the rows are in edit mode, and the handle to turn it on and off.
+     *
+     * Edit used to sit in the top bar, next to the wordmark and settings. It
+     * belongs here instead: it acts on the recipes on screen, which is what
+     * every other control on this rail does, and the top bar had six touch
+     * targets fighting for the width beside the mark.
+     *
+     * Omitted rather than disabled where there is nothing to edit, the same way
+     * search and sort are: the shelf grid draws shelves, not recipes.
+     */
+    editing?: boolean;
+    onToggleEdit?: () => void;
 };
 
 // Locale-independent on purpose. These labels are a fixed English vocabulary,
@@ -233,7 +246,9 @@ export default function LibraryRail({
     picking = false,
     onFilterToggle,
     view,
-    onViewChange
+    onViewChange,
+    editing = false,
+    onToggleEdit
 }: Props) {
     const reduced = useReducedMotion();
 
@@ -308,6 +323,19 @@ export default function LibraryRail({
                             accessibilityLabel="Library view"
                             onChange={onViewChange}/>
         ]),
+        // Directly after the toggle, in both views that show recipes. Edit acts
+        // on what is on screen, which is what this whole rail does, and it was
+        // the sixth touch target in a top bar that had run out of room beside
+        // the wordmark.
+        //
+        // Absent while picking: ticking members is already a selection mode, and
+        // a second one over the top of it would be two ways to choose at once.
+        ...(onToggleEdit !== undefined && !picking ? [
+            <RailChip key="edit" testID="rail-edit" icon="edit"
+                      active={editing}
+                      accessibilityLabel={editing ? "Done editing" : "Edit recipes"}
+                      onPress={onToggleEdit}/>
+        ] : []),
         ...(asksOfTheList ? [
             <RailSearchChip key="search" state={searchState} onPress={onExpand}/>,
             <RailChip key="sort" testID="rail-sort" icon="sort"

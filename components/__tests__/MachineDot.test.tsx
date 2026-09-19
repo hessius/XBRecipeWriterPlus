@@ -161,3 +161,27 @@ describe("MachineDot", () => {
         expect(onPress).toHaveBeenCalled();
     });
 });
+
+describe("the low-tank warning", () => {
+    it("draws no warning copy when the tank is fine", async () => {
+        await renderWithProviders(
+            <MachineDot status="connected" collapsed={false} onPress={jest.fn()}/>
+        );
+        expect(
+            screen.queryByTestId("machine-dot-alarm", {includeHiddenElements: true})
+        ).toBeNull();
+    });
+
+    it("draws an amber copy over the green one when the tank is low", async () => {
+        // The machine is connected and working, so the dot settles green. The
+        // tank being low is worth one glance before it does, not a permanent
+        // colour: nothing is wrong with the link, which is what this dot is for.
+        await renderWithProviders(
+            <MachineDot status="connected" collapsed={false} alarm
+                        onPress={jest.fn()}/>
+        );
+
+        expect(drawn("machine-dot-alarm").colour).toBe(palette.warn);
+        expect(drawn("machine-dot-lit").colour).toBe(palette.success);
+    });
+});

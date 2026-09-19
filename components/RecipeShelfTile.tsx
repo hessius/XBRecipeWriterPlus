@@ -94,6 +94,17 @@ type Props = {
      * would be reachable only by a gesture a reader cannot make.
      */
     onHistory?: () => void;
+    /**
+     * Reveal the tile's actions as a visible control.
+     *
+     * A tile's acts are behind a long press, which is a shortcut rather than an
+     * affordance: nothing on screen says it is there. Edit mode is the answer
+     * the list already gives, where it turns the swipe-only destructive actions
+     * into visible ones, so the room gives the same answer in its own geometry
+     * and opens the same sheet the long press opens. No new acts, just a door
+     * that can be seen.
+     */
+    editing?: boolean;
 };
 
 /**
@@ -113,7 +124,7 @@ type Props = {
 export default function RecipeShelfTile({
     recipe, onPress, onLongPress, showCoffeeMarker = true, dottedProfile = false,
     evidence, onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite,
-    onHistory
+    onHistory, editing = false
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -225,6 +236,20 @@ export default function RecipeShelfTile({
                         </DotMatrixText>
                     )}
                     <XStack flex={1}/>
+                    {editing && (
+                        // Opens the sheet the long press opens, so edit mode
+                        // adds a way in rather than a second list of acts that
+                        // could drift from the first.
+                        <Pressable
+                            testID={`recipe-tile-actions-${recipe.uuid}`}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Actions for ${recipe.displayName()}`}
+                            hitSlop={8}
+                            onPress={onLongPress}>
+                            <DotIcon testID="recipe-tile-actions" name="overflow"
+                                     size={12} color={onAccent.marker}/>
+                        </Pressable>
+                    )}
                     {recipe.favourite && (
                         <DotIcon testID="recipe-tile-favourite" name="favourite"
                                  size={12} color={onAccent.marker}/>

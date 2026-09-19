@@ -223,3 +223,27 @@ describe("RecipeShelfTile", () => {
         expect(onDelete).toHaveBeenCalledTimes(1);
     });
 });
+
+describe("a tile in edit mode", () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it("shows no actions control until edit mode is on", async () => {
+        // A long press still opens them. The point of edit mode is that the
+        // door becomes visible, not that it appears for the first time.
+        await renderWithProviders(
+            <RecipeShelfTile recipe={named("Ethiopia")} {...HANDLERS}/>
+        );
+        expect(screen.queryByLabelText("Actions for Ethiopia")).toBeNull();
+    });
+
+    it("opens the same sheet the long press opens", async () => {
+        // The same handle, so edit mode cannot grow a second list of acts that
+        // drifts from the one the long press shows.
+        await renderWithProviders(
+            <RecipeShelfTile recipe={named("Ethiopia")} {...HANDLERS} editing/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Actions for Ethiopia"));
+        expect(HANDLERS.onLongPress).toHaveBeenCalledTimes(1);
+    });
+});

@@ -119,7 +119,12 @@ jest.mock("@/hooks/useShareRecipe", () => ({
 // settings.test.tsx.
 let mockRemembered = "";
 let mockMachineStatus = "disconnected";
-let mockMachineInfo: {waterEnough: boolean; mode: "PRO" | "EASY"; grindSize: number} | null = null;
+let mockMachineInfo: {
+    waterEnough: boolean;
+    waterFeed?: "tank" | "tap";
+    mode: "PRO" | "EASY";
+    grindSize: number;
+} | null = null;
 
 const mockOnLink = jest.fn((_listener: () => void) => () => undefined);
 const mockAskHowItIsDoing = jest.fn(async () => false);
@@ -2442,5 +2447,90 @@ describe("picking a shelf's members", () => {
         expect(screen.getByTestId("shelf-tag:Morning")).toBeTruthy();
         await fireEvent.press(screen.getByTestId("shelf-tag:Morning"));
         expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+});
+
+describe("the machine panel", () => {
+    // These pin the wiring: the dot is the only way into the panel, and a tap
+    // that does not mount it leaves the machine's water level and its connect
+    // button unreachable from the library with nothing on screen to say so.
+    //
+    // They do NOT guard the height bug that sent us here, and were kept only
+    // once that was understood. There is no layout under this renderer, so a
+    // panel measured too small to show anything is found by a query all the
+    // same. That fault lives in `Collapsible`'s arithmetic and is pinned there,
+    // where it can be seen.
+    it.each([
+        ["idle", "Machine not connected"],
+        ["connected", "Machine connected"],
+        ["connecting", "Machine connecting"],
+        ["disconnected", "Machine not in range"],
+        ["failed", "Machine not in range"]
+    ])("opens the panel from the %s dot", async (status, label) => {
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = status;
+        await renderHome({recipes: [named("Ethiopia")]});
+
+        expect(screen.queryByTestId("machine-panel")).toBeNull();
+
+        await act(async () => {
+            fireEvent.press(screen.getByLabelText(label));
+        });
+
+        expect(screen.getByTestId("machine-panel")).toBeTruthy();
+    });
+});
+
+describe("the low-tank warning on the dot", () => {
+    it("raises it when a connected machine answers with an empty tank", async () => {
+        // The moment the fact becomes knowable is the moment the machine
+        // answers, which is what the dot's one-off amber flash is for.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {
+            waterEnough: false, waterFeed: "tank", mode: "PRO", grindSize: 62
+        };
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        expect(
+            screen.getByTestId("machine-dot-alarm", {includeHiddenElements: true})
+        ).toBeTruthy();
+    });
+
+    it("stays quiet about a plumbed machine, which has no tank to fill", async () => {
+        // Asking someone to fill a tank that does not exist is worse than
+        // saying nothing.
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {
+            waterEnough: false, waterFeed: "tap", mode: "PRO", grindSize: 62
+        };
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        expect(
+            screen.queryByTestId("machine-dot-alarm", {includeHiddenElements: true})
+        ).toBeNull();
+    });
+
+    it("stays quiet when the tank is full", async () => {
+        mockRemembered = "machine-device-id";
+        mockMachineStatus = "connected";
+        mockMachineInfo = {
+            waterEnough: true, waterFeed: "tank", mode: "PRO", grindSize: 62
+        };
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        expect(
+            screen.queryByTestId("machine-dot-alarm", {includeHiddenElements: true})
+        ).toBeNull();
     });
 });

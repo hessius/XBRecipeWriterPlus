@@ -122,31 +122,48 @@ describe("rowStyle", () => {
 
 describe("nextHeight", () => {
     it("takes the measurement when the row is open", () => {
-        expect(nextHeight(null, 80, true)).toBe(80);
-        expect(nextHeight(80, 96, true)).toBe(96);
+        expect(nextHeight(null, 80)).toBe(80);
+        expect(nextHeight(80, 96)).toBe(96);
     });
 
     it("takes the first measurement even from a closed row", () => {
         // The first one is made with the content lifted out of the clipped row,
         // so a closed row's first report is as truthful as an open row's -- and
         // it is the only chance a row that mounted closed gets.
-        expect(nextHeight(null, 80, false)).toBe(80);
+        expect(nextHeight(null, 80)).toBe(80);
     });
 
-    it("ignores anything measured while the row is closed", () => {
+    it("ignores a closed row that reports nothing at all", () => {
         // This is what kept the tiles from ever coming back. Closed, the row is
         // clipped to nothing; a layout pass in that state reported a height of
         // zero, the row remembered it, and reopening then animated to zero --
         // the tiles were gone for good after the first scroll.
-        expect(nextHeight(80, 0, false)).toBe(80);
-        expect(nextHeight(80, 96, false)).toBe(80);
+        expect(nextHeight(80, 0)).toBe(80);
     });
 
     it("ignores a height of nothing even when open, having nothing to say", () => {
-        expect(nextHeight(80, 0, true)).toBe(80);
+        expect(nextHeight(80, 0)).toBe(80);
     });
 
     it("returns the height it was given back unchanged, so nothing re-renders", () => {
-        expect(nextHeight(80, 80, true)).toBe(80);
+        expect(nextHeight(80, 80)).toBe(80);
+    });
+});
+
+describe("a row that learned the wrong height while it was closed", () => {
+    it("takes a corrected measurement from a closed row", async () => {
+        // The trap that kept the machine panel shut until the app was reloaded.
+        //
+        // A row mounts closed and is measured before its font has loaded, so it
+        // learns a height far too small to show anything. When the font arrives
+        // the content is laid out again and reports the truth -- but the row is
+        // still closed, so the old rule threw that reading away. The layout does
+        // not change again, so no further reading is ever offered, and the row
+        // opens to the wrong height for the rest of the session.
+        //
+        // A closed row reporting nothing is already handled by the zero guard
+        // above. Any positive number it reports is its content's real height and
+        // there is no reason to disbelieve it.
+        expect(nextHeight(2, 96)).toBe(96);
     });
 });

@@ -69,7 +69,8 @@ export type RoomRecipeActions = {
  */
 export default function ShelfRoom({
     label, recipes, onBack, actionsFor, evidence = {}, manual = false,
-    showCoffeeMarker = true, dottedProfile = false, onScroll, paddingBottom = 0
+    showCoffeeMarker = true, dottedProfile = false, onScroll, paddingBottom = 0,
+    editing = false
 }: {
     /** The shelf's name, drawn as the room's heading. */
     label: string;
@@ -84,6 +85,8 @@ export default function ShelfRoom({
     recipes: readonly Recipe[];
     /** Leave the room, back to the grid. */
     onBack: () => void;
+    /** Show each tile's actions as a visible control rather than a long press. */
+    editing?: boolean;
     /** The acts the room can perform on one recipe, built by the screen. */
     actionsFor: (recipe: Recipe) => RoomRecipeActions;
     /**
@@ -179,7 +182,8 @@ export default function ShelfRoom({
                                     onDuplicate={acts.onDuplicate}
                                     onDelete={acts.onDelete}
                                     onToggleFavourite={acts.onToggleFavourite}
-                                    onHistory={acts.onHistory}/>
+                                    onHistory={acts.onHistory}
+                                    editing={editing}/>
                             );
                         })}
                         {/* Pad an odd last row to a full pair, so the final tile

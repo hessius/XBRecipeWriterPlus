@@ -9,9 +9,6 @@ function props(overrides = {}) {
     return {
         count:        7,
         collapsed:    false,
-        editing:      false,
-        showEdit:     true,
-        onToggleEdit: jest.fn(),
         onScan:       jest.fn(),
         onImport:     jest.fn(),
         onNew:        jest.fn(),
@@ -101,16 +98,16 @@ describe("HomeHeader", () => {
     });
 
     it("puts the arriving glyphs left of the ones already there", async () => {
-        // Edit and settings are present in both states. The action group is
-        // right-aligned, so inserting the new glyphs at its left edge grows it
-        // leftwards and leaves those two exactly where they were; inserting in
-        // the middle would slide them sideways on every collapse.
+        // Settings is present in both states. The action group is right-aligned,
+        // so inserting the new glyphs at its left edge grows it leftwards and
+        // leaves it exactly where it was; inserting in the middle would slide it
+        // sideways on every collapse.
         await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
         const order = screen.getAllByTestId("home-header-action")
             .map((node) => node.props.accessibilityLabel);
 
         expect(order).toEqual([
-            "Read a card", "Import a recipe", "Create a recipe", "Edit recipes", "Settings"
+            "Read a card", "Import a recipe", "Create a recipe", "Settings"
         ]);
     });
 
@@ -119,17 +116,15 @@ describe("HomeHeader", () => {
         const order = screen.getAllByTestId("home-header-action")
             .map((node) => node.props.accessibilityLabel);
 
-        expect(order).toEqual(["Edit recipes", "Settings"]);
+        expect(order).toEqual(["Settings"]);
     });
 
-    it("hides the edit toggle when there is nothing to edit", async () => {
-        await renderWithProviders(<HomeHeader {...props({showEdit: false, count: 0})}/>);
+    it("carries no edit toggle, which belongs to the rail", async () => {
+        // Edit acts on the recipes on screen, which is what the library rail
+        // does, and the top bar had run out of room beside the wordmark.
+        await renderWithProviders(<HomeHeader {...props({collapsed: true})}/>);
         expect(screen.queryByLabelText("Edit recipes")).toBeNull();
-    });
-
-    it("says which way the edit toggle will go", async () => {
-        await renderWithProviders(<HomeHeader {...props({editing: true})}/>);
-        expect(screen.getByLabelText("Done editing")).toBeTruthy();
+        expect(screen.queryByLabelText("Done editing")).toBeNull();
     });
 
     it("reports each action", async () => {
@@ -139,12 +134,10 @@ describe("HomeHeader", () => {
         await fireEvent.press(screen.getByLabelText("Read a card"));
         await fireEvent.press(screen.getByLabelText("Import a recipe"));
         await fireEvent.press(screen.getByLabelText("Settings"));
-        await fireEvent.press(screen.getByLabelText("Edit recipes"));
 
         expect(handlers.onScan).toHaveBeenCalledTimes(1);
         expect(handlers.onImport).toHaveBeenCalledTimes(1);
         expect(handlers.onSettings).toHaveBeenCalledTimes(1);
-        expect(handlers.onToggleEdit).toHaveBeenCalledTimes(1);
     });
 
     it("clears the status bar itself", async () => {
