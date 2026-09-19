@@ -1,4 +1,5 @@
-import {router, useLocalSearchParams, useNavigation} from "expo-router";
+import {useLocalSearchParams, useNavigation} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, Share, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";

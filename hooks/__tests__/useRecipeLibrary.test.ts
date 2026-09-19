@@ -552,7 +552,7 @@ describe("the store it reads through", () => {
             expect(call[2]).toBe(MARK_MEMBERS);
         });
 
-        it("turns the members into accents and profiles", async () => {
+        it("turns the members into the accents the mosaic is drawn from", async () => {
             const member = named("Ethiopia");
             const db = stubDb([member]);
             db.shelfMembers.mockReturnValue({tea: [member]});
@@ -560,7 +560,6 @@ describe("the store it reads through", () => {
             const {result} = await renderHook(() => useRecipeLibrary(db));
 
             expect(result.current.shelfMarks["tea"].accents).toHaveLength(1);
-            expect(result.current.shelfMarks["tea"].profiles).toEqual([member.pours]);
         });
 
         it("leaves out a shelf with no members at all", async () => {

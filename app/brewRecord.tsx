@@ -1,4 +1,5 @@
-import {router, useLocalSearchParams} from "expo-router";
+import {useLocalSearchParams} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useRef, useState} from "react";
 import {Pressable, ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";

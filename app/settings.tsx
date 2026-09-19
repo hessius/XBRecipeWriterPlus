@@ -1,5 +1,5 @@
 import * as Application from "expo-application";
-import {useRouter} from "expo-router";
+
 import React, {useState} from "react";
 import {ScrollView, Text, YStack} from "tamagui";
 
@@ -15,15 +15,14 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
+import {useSteadyRouter} from "@/hooks/steadyRouter";
 import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
 import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BrewRecord} from "@/library/brew/BrewRecord";
-import type {BackupExcluded, Settings, SettingKey, ShelfMarkVariant}
-    from "@/library/Settings";
-import {asShelfMarkVariant, SHELF_MARK_VARIANTS} from "@/library/Settings";
+import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
 import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {isLibraryView} from "@/library/libraryView";
 import {asTemperatureUnit} from "@/library/units";
@@ -38,19 +37,6 @@ const TEMPERATURE_OPTIONS = [
     {value: "F", label: "°F"}
 ] as const;
 
-/**
- * The shelf art candidates, in the order LABS offers them.
- *
- * Short labels because four segments share one row: the row is stacked by
- * `SettingsChoiceRow` either way, but a tester reading them in a list wants the
- * names the design uses, not sentences.
- */
-const SHELF_MARK_OPTIONS = [
-    {value: "hybrid", label: "AUTO"},
-    {value: "mosaic", label: "MOSAIC"},
-    {value: "profiles", label: "POURS"},
-    {value: "glyph", label: "GLYPH"}
-] as const;
 
 const VERSION = Application.nativeApplicationVersion ?? "unknown";
 
@@ -102,15 +88,9 @@ function restoredMessage(recipes: number, brews: number): string {
  * decision in place.
  */
 export default function SettingsScreen({settings}: Props) {
-    const router = useRouter();
+    const router = useSteadyRouter();
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
-    const [cloudAccountEnabled, setCloudAccountEnabled] =
-        useSetting("cloudAccountEnabled", settings);
-    // The gate is passed in rather than wrapped around the call, because a hook
-    // cannot be called conditionally. See the hook: while this is false it does
-    // not read the keychain, so a user who never opens LABS is never asked
-    // about one.
-    const cloud = useCloudSession(cloudAccountEnabled);
+    const cloud = useCloudSession();
 
     async function signOutOfCloud() {
         try {
@@ -159,8 +139,6 @@ export default function SettingsScreen({settings}: Props) {
     const [libraryFavouritesFirst, setLibraryFavouritesFirst] =
         useSetting("libraryFavouritesFirst", settings);
     const [libraryView, setLibraryView] = useSetting("libraryView", settings);
-    const [shelfMarkVariant, setShelfMarkVariant] =
-        useSetting("shelfMarkVariant", settings);
     const [invertAutoShelves, setInvertAutoShelves] =
         useSetting("invertAutoShelves", settings);
     // Read here only so the backup can carry it. The list itself belongs to the
@@ -204,7 +182,7 @@ export default function SettingsScreen({settings}: Props) {
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
-            libraryView, shelfMarkVariant, invertAutoShelves, hiddenShelves
+            libraryView, invertAutoShelves, hiddenShelves
         };
     }
 
@@ -317,12 +295,6 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (isLibraryView(incoming.libraryView)) {
             setLibraryView(incoming.libraryView);
-        }
-        // Guarded like the rest, and not with `asShelfMarkVariant`: that
-        // coerces, so a backup carrying nothing for this key would overwrite a
-        // tester's chosen variant with the default.
-        if (SHELF_MARK_VARIANTS.includes(incoming.shelfMarkVariant as ShelfMarkVariant)) {
-            setShelfMarkVariant(incoming.shelfMarkVariant as ShelfMarkVariant);
         }
         if (typeof incoming.invertAutoShelves === "boolean") {
             setInvertAutoShelves(incoming.invertAutoShelves);
@@ -492,7 +464,7 @@ export default function SettingsScreen({settings}: Props) {
                     looking to disconnect. The sheet must never carry that: it
                     is a place to bring something in, not a place to sever an
                     account. */}
-                {cloudAccountEnabled && <SettingsSection title="xBloom account">
+                <SettingsSection title="xBloom account">
                     {cloud.session === null ? (
                         <SettingsActionRow label="Sign in"
                                            detail="Bring across the recipes you made in the xBloom app."
@@ -511,7 +483,7 @@ export default function SettingsScreen({settings}: Props) {
                                                void signOutOfCloud();
                                            }}/>
                     )}
-                </SettingsSection>}
+                </SettingsSection>
 
                 <SettingsSection title="Library">
                     {unreadableCount > 0 && (
@@ -573,16 +545,6 @@ export default function SettingsScreen({settings}: Props) {
                     inside it -- what you switched on stays on, which is the
                     honest reading of two separate switches. */}
                 {labsUnlocked && <SettingsSection title="Labs">
-                    <SettingsToggleRow
-                        label="xBloom account import"
-                        description="Unfinished and unsupported. Brings your xBloom recipes across."
-                        value={cloudAccountEnabled} onChange={setCloudAccountEnabled}/>
-                    <SettingsChoiceRow
-                        label="Shelf art"
-                        description="Which mark a shelf tile draws. Unsettled: tell us which one reads best."
-                        value={shelfMarkVariant}
-                        options={SHELF_MARK_OPTIONS}
-                        onChange={(value) => setShelfMarkVariant(asShelfMarkVariant(value))}/>
                     <SettingsActionRow label="Hide Labs"
                                        detail="Anything you switched on here stays on."
                                        onPress={() => setLabsUnlocked(false)}/>

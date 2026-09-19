@@ -1,4 +1,5 @@
-import {router, useFocusEffect, useLocalSearchParams} from "expo-router";
+import {useFocusEffect, useLocalSearchParams} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useRef, useState} from "react";
 import {FlatList} from "react-native-gesture-handler";
 import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/ReanimatedSwipeable";

@@ -3,7 +3,6 @@ import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 import ImportCloudScreen from "@/app/importCloud";
 import {notify} from "@/components/XbrwToast";
 import {renderWithProviders} from "@/test-utils/render";
-import {sharedSettings} from "@/hooks/useSetting";
 
 // The screen constructs a `new RecipeDatabase()` at module scope of the
 // component body; without this mock jest opens real expo-sqlite.
@@ -61,16 +60,43 @@ const choosing = (over: Record<string, unknown> = {}) => {
     mockHook.plan = planWith(over);
 };
 
+/**
+ * Every word the screen shows, depth-first, which is the order it reads in.
+ *
+ * Text and placeholders both, because a field says what it is in its
+ * placeholder and this is used to check what sits above what.
+ *
+ * Walked rather than stringified: the screen is a `FlatList`, whose props hold
+ * React contexts that refer back to themselves, so `JSON.stringify` on the
+ * tree throws on the circle.
+ */
+function renderedText(): string[] {
+    const found: string[] = [];
+    const walk = (node: unknown): void => {
+        if (typeof node === "string") {
+            found.push(node);
+            return;
+        }
+        if (Array.isArray(node)) {
+            for (const child of node) walk(child);
+            return;
+        }
+        if (node === null || typeof node !== "object") return;
+        const placeholder = (node as {props?: {placeholder?: unknown}})
+            .props?.placeholder;
+        if (typeof placeholder === "string") found.push(placeholder);
+        if ("children" in node) walk((node as {children: unknown}).children);
+    };
+    walk(screen.toJSON());
+    return found;
+}
+
 describe("importCloud", () => {
     beforeEach(() => {
         // `clearAllMocks` clears calls but keeps implementations, so a test
         // that makes this reject would poison every test after it. Restated
         // rather than assumed.
         jest.clearAllMocks();
-    // The account feature is gated off by default, and is not under test here.
-    // Turned on rather than the tests deleted: gated code still needs its
-    // coverage, and the gate is tested separately below.
-    sharedSettings().set("cloudAccountEnabled", true);
         mockHook.forgetAccount.mockResolvedValue(undefined);
         Object.assign(mockHook, {
             status: "signedOut",
@@ -210,9 +236,13 @@ describe("importCloud", () => {
         // Capitalising it in the copy would quietly weaken this test.
         //
         // Rendered order, read off the tree itself. RNTL v14 has no query for
-        // "comes before", and the tree is serialised depth-first, so the two
-        // positions in it are the two positions on screen.
-        const tree = JSON.stringify(screen.toJSON());
+        // "comes before", so the text is gathered depth-first and its order in
+        // that list is its order on screen.
+        //
+        // Walked rather than stringified: the screen is a `FlatList`, whose
+        // props carry React contexts that refer back to themselves, so
+        // `JSON.stringify` on the tree throws on the circle.
+        const tree = renderedText().join("\u0000");
         const caveat = tree.indexOf("risk to your account");
         const field = tree.indexOf("Password");
 
@@ -550,19 +580,34 @@ describe("importCloud", () => {
         }
     });
 
-    /**
-     * The route stays registered whether or not the feature is on, so this is
-     * the only thing standing between a stale deep link, or a navigation state
-     * restored from before the switch was turned off, and a screen that signs
-     * people in to an account.
-     */
-    it("sends you home instead of rendering when the feature is gated off", async () => {
-        sharedSettings().set("cloudAccountEnabled", false);
+    describe("a very large account", () => {
+        it("does not lay out every row at once", async () => {
+            // The pagination cap is twenty pages of a hundred, so an account
+            // can hand this screen two thousand rows. Laying them all out is a
+            // spinning phone, and it is the reason the screen is a list rather
+            // than a scroll view with a map inside it.
+            choosing({
+                entries: Array.from({length: 400}, (_, i) =>
+                    entry({cloudId: i + 1, name: `Recipe ${i + 1}`}))
+            });
 
-        await renderWithProviders(<ImportCloudScreen/>);
+            await renderWithProviders(<ImportCloudScreen/>);
 
-        expect(screen.getByTestId("redirect").props.children).toBe("/");
-        expect(screen.queryByLabelText("Email")).toBeNull();
-        expect(screen.queryByLabelText("Password")).toBeNull();
+            await waitFor(() => expect(screen.getByText("Recipe 1")).toBeTruthy());
+            expect(screen.queryByText("Recipe 400")).toBeNull();
+        });
+
+        it("still counts every one of them on the button", async () => {
+            // A virtualised list must not become a virtualised decision: the
+            // button speaks for the whole account, not for the part drawn.
+            choosing({
+                entries: Array.from({length: 400}, (_, i) =>
+                    entry({cloudId: i + 1, name: `Recipe ${i + 1}`}))
+            });
+
+            await renderWithProviders(<ImportCloudScreen/>);
+
+            expect(screen.getByText("Import 400 recipes")).toBeTruthy();
+        });
     });
 });

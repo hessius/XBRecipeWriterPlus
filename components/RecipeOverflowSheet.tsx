@@ -1,4 +1,4 @@
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";

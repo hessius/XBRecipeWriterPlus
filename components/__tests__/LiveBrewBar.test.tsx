@@ -1,3 +1,4 @@
+import {fireEvent, screen} from "@testing-library/react-native";
 import React from "react";
 
 import LiveBrewBar from "@/components/LiveBrewBar";
@@ -9,9 +10,13 @@ let mockPathname = "/";
 const mockPush = jest.fn();
 let mockRun: object | null = null;
 
+// `router` as well as `useRouter`, because the bar's router now comes from
+// `steadyRouter`, which wraps both so that whichever door a screen came
+// through shares one answer to "what did we just do".
 jest.mock("expo-router", () => ({
     usePathname: () => mockPathname,
-    useRouter: () => ({push: mockPush})
+    router:      {push: mockPush, back: jest.fn(), replace: jest.fn()},
+    useRouter:   () => ({push: mockPush, back: jest.fn(), replace: jest.fn()})
 }));
 
 jest.mock("@/hooks/useLiveBrew", () => ({
@@ -67,5 +72,19 @@ describe("LiveBrewBar", () => {
         mockRun = null;
         const {queryByText} = await renderWithProviders(<LiveBrewBar />);
         expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
+    });
+
+    it("opens the brew once when the bar is tapped twice", async () => {
+        // The bar is mounted beside the navigator, so it is on screen almost
+        // everywhere and is exactly the sort of thing a finger catches twice.
+        // It was the one router caller the guard had missed.
+        await renderWithProviders(<LiveBrewBar />);
+
+        const open = screen.getByLabelText("Open the brew");
+        await fireEvent.press(open);
+        await fireEvent.press(open);
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith("/brew?view=1");
     });
 });

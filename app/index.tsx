@@ -4,7 +4,7 @@ import {BackHandler, Platform, Share} from "react-native";
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {useFocusEffect, useNavigation, useRouter} from "expo-router";
+import {useFocusEffect, useNavigation} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
 import {Button, Text, XStack, YStack} from "tamagui";
 
@@ -35,6 +35,7 @@ import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore, type ShelfWriteOutcome}
     from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {forgetLastMove, useSteadyRouter} from "@/hooks/steadyRouter";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
@@ -66,7 +67,7 @@ import {parseHidden, toggleHidden} from "@/library/hiddenShelves";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
-import {asShelfMarkVariant, type Settings} from "@/library/Settings";
+import {type Settings} from "@/library/Settings";
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -186,7 +187,7 @@ function EmptySelection() {
 
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
-    const router = useRouter();
+    const router = useSteadyRouter();
     const navigation = useNavigation();
 
     const libraryQuery = useLibraryQuery(settings);
@@ -213,7 +214,6 @@ export default function HomeScreen({db, settings}: Props) {
     const [onlySelected, setOnlySelected] = useState(false);
     const [showCoffeeMarker] = useSetting("showCoffeeMarker", settings);
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
-    const [shelfMarkVariant] = useSetting("shelfMarkVariant", settings);
     const [invertAutoShelves] = useSetting("invertAutoShelves", settings);
     const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
     // Written from the card-read sink below, never read here. The setter is the
@@ -711,6 +711,13 @@ export default function HomeScreen({db, settings}: Props) {
             // journey and may open one of its own.
             lastEditorPushAt = 0;
             lastBrewPushRef.current = 0;
+            // And for the same reason, the app-wide double-tap guard. It is a
+            // blunt instrument that only knows how long ago a move was made,
+            // and returning here is better evidence than any elapsed time that
+            // the move is over. Without this it would outlive the screen-level
+            // guards above and refuse a second, deliberate visit that they had
+            // deliberately allowed.
+            forgetLastMove();
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came
@@ -1165,7 +1172,6 @@ export default function HomeScreen({db, settings}: Props) {
                     // the control the user came to it for.
                     <ShelfGrid shelves={shelves}
                                marks={library.shelfMarks}
-                               variant={asShelfMarkVariant(shelfMarkVariant)}
                                invertAuto={invertAutoShelves}
                                hidden={parseHidden(hiddenShelves)}
                                onOpen={libraryQuery.openShelf}
@@ -1401,7 +1407,6 @@ export default function HomeScreen({db, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
-                settings={settings}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {

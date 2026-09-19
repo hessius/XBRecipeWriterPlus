@@ -445,49 +445,53 @@ The view toggle is built from the rail's own metrics rather than the shared
 `SortSheet`. Bending it to match the rail would change two screens that did not
 ask to be changed; matching it in a rail-owned control cannot.
 
-### Shelf art is a slot, not a decision
+### Shelf art: a glyph for an auto shelf, a mosaic for a manual one
 
-The mark is deliberately unsettled and is going to testers. What the spec commits
-to is the contract that lets any of the candidates drop in:
+**Settled.** This section originally left the mark open and shipped three
+candidates behind a LABS switch. The tester group answered; the switch, the
+setting key and the losing candidate are gone, and what is left is the rule:
 
 ```tsx
 <ShelfMark
   kind="auto" | "manual"
-  glyph={DotIcon | undefined}   // auto only
-  accents={string[]}            // dominant first
-  profiles={Pour[][]}           // up to 3 members
+  glyph={DotIcon | null}        // auto only
+  accents={string[]}            // dominant first, up to 3
   size={44}
 />
 ```
 
-- **44 pt square, always.** A variant swap cannot reflow the grid.
-- **All variants are fed from the same props.** Nothing is fetched, nothing is
-  stored, nothing can go stale.
-- **At most 3 members are read** for the profile variant, chosen by the shelf's
-  own sort, so a shelf of forty does not draw forty staircases.
-- **A dev setting selects the variant**, so one tester build carries all of them.
+- **An auto shelf carries a dot matrix glyph** from `constants/dotIcons.ts`,
+  drawn on an accent field. Auto shelves are a closed set that ships with the
+  app, so every glyph is drawn once at design time and no user ever picks one.
+  The 9 by 9 grid takes only axis aligned runs and pure diagonals.
+- **A manual shelf carries a 2 by 2 mosaic** of its members' accents, dominant
+  first. Manual shelves are open ended, so the mark has to be derived; a shelf
+  of one fills all four tiles rather than drawing a lone quarter.
+- **44 pt square, always**, and at most 3 members read. The geometry outlives
+  the decision.
+- **Nothing is fetched and nothing is stored** in the mark, so it cannot go
+  stale against the shelf it sits on.
 
-The candidates:
+The art carries meaning, which was always the point: a glyph says the app found
+this shelf, a mosaic says you built it.
 
-- **A: accent mosaic.** A 2 by 2 of member accents. Free, and at eight shelves
-  they are interchangeable, because there are only 8 coffee and 4 tea accents.
-- **B: superimposed pour profiles**, each member drawn in its own accent. The
-  only candidate where the picture is derived from the recipes rather than
-  decorating them: a single pour shelf looks flat, a four stage shelf looks
-  busy.
-- **C: accent field with a dot matrix glyph** from `constants/dotIcons.ts`,
-  remembering that the 9 by 9 grid takes only axis aligned runs and pure
-  diagonals.
+**The per-author shelves.** An author shelf is `auto`, but it is named by a
+stranger, so no glyph could be drawn for it in advance. Rather than let it fall
+through to the manual mark, where it would read as a shelf somebody had built
+by hand, every author shelf shares one drawing: `shelfAuthor`, a head and
+shoulders, the counterpart to `shelfMine`'s house. The tile carries the name;
+the glyph only has to say what kind of shelf it is. So the rule holds without
+an exception: every auto shelf carries a glyph.
 
-The leading hybrid is **C for auto shelves and B for manual ones**, which is more
-than a compromise. Auto shelves are a closed set that ships with the app, so
-every glyph is drawn once at design time. Manual shelves are open ended, so they
-take the derived mark. No user ever picks a glyph, and no shelf is ever left
-without a mark. The art then carries meaning: a glyph says the app found this
-shelf, stacked profiles say you built it.
+**Why the superimposed pour profiles lost.** They were the most interesting
+candidate, and the risk this section flagged is what sank them: pour profiles
+are already drawn on every recipe card, so a shelf of three showed the same
+three silhouettes as the cards beneath it and the grid read as a smaller copy
+of the list rather than a level above it. The mosaic has no such twin anywhere
+in the app, and a grid of mosaics and glyphs reads as one thing.
 
-The favourites shelf tests that grammar and passes it. Its membership is authored
-one tap at a time, so it takes the profile mark and sits under `YOUR SHELVES`.
+The favourites shelf tests the grammar and passes it. Its membership is authored
+one tap at a time, so it takes the mosaic and sits under `YOUR SHELVES`.
 
 It is the one shelf that is authored without being a tag. Its query is
 `favourite = 1` against the index column, not a tag lookup, because the favourite
@@ -496,10 +500,6 @@ swipe tray. Introducing a parallel `favourite` tag would give one piece of state
 two homes and a way to disagree with itself. So the rule is slightly wider than
 "manual means tag": a shelf is a query, most authored shelves query a tag, and
 this one queries the field that its own dedicated control writes.
-
-**One risk to watch in testing.** Pour profiles are already drawn on every recipe
-card. If a shelf of three shows the same three silhouettes as the cards beneath
-it, the grid may read as a smaller copy of the list rather than a level above it.
 
 ### Vocabulary
 

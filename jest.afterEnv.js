@@ -16,3 +16,16 @@
 beforeEach(() => {
     jest.requireMock("expo-secure-store").__store?.clear();
 });
+
+/**
+ * Forget the last navigation between tests.
+ *
+ * `hooks/steadyRouter` holds the last move at module scope on purpose: there
+ * is one navigation stack, so there is one answer to "what did we just do".
+ * Tests run far faster than a finger, so without this a screen pushed in one
+ * test is still spoken for when the next test pushes it, and the second push
+ * is swallowed as a double tap.
+ */
+beforeEach(() => {
+    jest.requireActual("./hooks/steadyRouter").forgetLastMove();
+});

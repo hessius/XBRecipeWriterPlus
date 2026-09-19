@@ -9,25 +9,6 @@ import type {LibraryView} from './libraryView';
  * key that is not here is a compile error at the call site, so there is no
  * stringly-typed lookup to typo.
  */
-/** The shelf art candidates §"Shelf art is a slot, not a decision" names. */
-export type ShelfMarkVariant = "hybrid" | "mosaic" | "profiles" | "glyph";
-
-/** The variant list, in the order the LABS row offers them. */
-export const SHELF_MARK_VARIANTS: readonly ShelfMarkVariant[] =
-    ["hybrid", "mosaic", "profiles", "glyph"];
-
-/**
- * A stored variant, or the default.
- *
- * Same shape and same reason as `asTemperatureUnit`: every consumer branches on
- * the string, so an unrecognised value would quietly mean whichever branch is
- * last. Only the four known names get through.
- */
-export function asShelfMarkVariant(value: unknown): ShelfMarkVariant {
-    return SHELF_MARK_VARIANTS.includes(value as ShelfMarkVariant)
-        ? value as ShelfMarkVariant
-        : "hybrid";
-}
 
 export const DEFAULTS = {
     /**
@@ -208,30 +189,6 @@ export const DEFAULTS = {
      */
     libraryView: "list" as LibraryView,
     /**
-     * Whether the xBloom account import exists at all.
-     *
-     * Off, and off for everybody until it is finished. The feature is built and
-     * tested, but the library screen it feeds is not ready for it: importing an
-     * entire cloud library turns a twenty recipe library into a hundred and
-     * twenty recipe one, and today that lands in a list with no search, no
-     * filter and no sort. Shipping it now would be a firehose pointed at an
-     * unorganised list, so it waits for M5.
-     *
-     * It lives here rather than on a branch because a branch this size sitting
-     * parallel to a rewrite of the library screen is a merge conflict with a
-     * countdown on it. Gated in main, the code is reviewed, tested and carried
-     * along by every refactor that follows it.
-     *
-     * Not `__DEV__`, and not an EAS channel: the testers who need it get a
-     * production TestFlight build like everyone else, and a gate they cannot
-     * reach is not a gate, it is a deletion. Reached through LABS below.
-     *
-     * While this is off, nothing of the feature runs: no endpoint is called, no
-     * keychain entry is read, and no door to it is drawn. See the audit in the
-     * pull request that added this key.
-     */
-    cloudAccountEnabled: false,
-    /**
      * Whether the LABS section is visible in settings.
      *
      * Off until somebody taps the version string on the about screen seven
@@ -249,22 +206,6 @@ export const DEFAULTS = {
      * they enabled, which is the honest reading of two separate switches.
      */
     labsUnlocked: false,
-    /**
-     * Which art a shelf tile draws in its 44 pt square.
-     *
-     * The design leaves the mark deliberately unsettled and sends the
-     * candidates to testers, so this is a LABS row rather than a preference:
-     * the answer is going to arrive from the tester group, and then this key
-     * becomes a constant and the losing variants are deleted.
-     *
-     * `hybrid` is the leading candidate and the default. It is not a
-     * compromise between the other two: an auto shelf is a closed set that
-     * ships with the app, so it can carry a glyph drawn at design time, while a
-     * manual shelf is open ended and takes the mark derived from its members.
-     * The art then says which kind of shelf it is -- a glyph means the app
-     * found this shelf, stacked profiles mean you built it.
-     */
-    shelfMarkVariant: "hybrid" as ShelfMarkVariant,
     /**
      * Auto shelves the user has put away, as a comma-separated list of ids.
      *
@@ -319,22 +260,22 @@ export type SettingKey = keyof typeof DEFAULTS;
  * machine that, as far as it is concerned, does not exist -- and it would have
  * displaced whatever pairing that phone had made for itself.
  *
- * `labsUnlocked` and `cloudAccountEnabled` are held out for a different
- * reason: a backup file is not private. It goes to the share sheet, and the
- * whole point of the seven taps is that an unfinished feature is off for
- * everybody who has not deliberately gone looking for it. A tester's backup
- * restored by an ordinary user would hand them both switches without their
- * ever having asked, and they asked for their recipes back, not for LABS. The
- * cost of holding them out is that a new phone needs seven taps again.
+ * `labsUnlocked` is held out for a different reason: a backup file is not
+ * private. It goes to the share sheet, and the whole point of the seven taps
+ * is that an unfinished feature is off for everybody who has not deliberately
+ * gone looking for it. A tester's backup restored by an ordinary user would
+ * hand them the switch without their ever having asked, and they asked for
+ * their recipes back, not for LABS. The cost of holding it out is that a new
+ * phone needs seven taps again.
  *
  * Named here rather than simply omitted from the snapshot so that the
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
 export type BackupExcluded =
-    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "cloudAccountEnabled";
+    "machineDeviceId" | "lastCardRead" | "labsUnlocked";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
-    "machineDeviceId", "lastCardRead", "labsUnlocked", "cloudAccountEnabled"
+    "machineDeviceId", "lastCardRead", "labsUnlocked"
 ];
 
 /**

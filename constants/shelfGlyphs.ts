@@ -1,6 +1,6 @@
 import type {DotIconName} from "@/constants/dotIcons";
 import type {FilterId} from "@/library/libraryFilters";
-import {isStockFilter} from "@/library/libraryFilters";
+import {authorFromFilterId, isStockFilter} from "@/library/libraryFilters";
 
 /**
  * The glyph each auto shelf carries.
@@ -14,7 +14,7 @@ import {isStockFilter} from "@/library/libraryFilters";
  *
  * Only auto shelves appear here. A manual shelf is a tag somebody typed, so
  * there is no glyph to have drawn for it and none is invented; it takes the
- * mark derived from its members instead.
+ * mosaic of its members instead.
  */
 export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     tea:           "shelfTea",
@@ -35,7 +35,24 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     recentlyAdded: "shelfRecent"
 };
 
-/** The glyph for a shelf id, or null for anything that is not an auto shelf. */
+/**
+ * The one drawing every per-author shelf shares.
+ *
+ * Separate from the map above because it is not keyed by a filter id: there is
+ * one author shelf per person who ever shared a recipe into this library, and
+ * no drawing can be made in advance for a name a stranger typed. The tile
+ * carries the name, so the glyph only has to say what kind of shelf it is.
+ */
+export const AUTHOR_SHELF_GLYPH: DotIconName = "shelfAuthor";
+
+/**
+ * The glyph for a shelf id, or null for anything that is not an auto shelf.
+ *
+ * Every auto shelf has one, including the per-author shelves, because auto is
+ * the kind of shelf that carries a glyph. A null here means a manual shelf,
+ * and a manual shelf takes the mosaic instead.
+ */
 export function shelfGlyph(id: string): DotIconName | null {
-    return isStockFilter(id) ? SHELF_GLYPHS[id] : null;
+    if (isStockFilter(id)) return SHELF_GLYPHS[id];
+    return authorFromFilterId(id) === null ? null : AUTHOR_SHELF_GLYPH;
 }

@@ -183,10 +183,10 @@ there is no shelf table at all. It also settles sorting, favourites, what a row
 says about itself, and a third deck on the recipe screen for everything that is
 neither a brew parameter nor a stage.
 
-One question is deliberately unsettled and is going to testers: what a shelf's
-mark looks like. Three candidates ship behind one row in LABS, the settings
-section M6 added. Not a `__DEV__` build flag: the whole point is that a tester
-on a production TestFlight build can switch between them.
+One question was deliberately left to testers: what a shelf's mark looks like.
+Three candidates shipped behind a LABS row, and the answer came back as a glyph
+for an automatic shelf and a mosaic of its recipes for a manual one. The row is
+gone with the question.
 
 #55 was the original post-brew notes and rating issue. It was closed as not
 planned on 14 September, superseded by the #95 chain, which owns rating capture
@@ -260,13 +260,22 @@ Push is deliberately create-only against name clashes rather than an update, so
 M6 has no conflict cases to resolve at all. Resolving them is the next project,
 not this one.
 
-**Built, and switched off.** #112 landed M6 in `main` behind two settings keys,
-both `false`: `cloudAccountEnabled` is the feature, `labsUnlocked` is whether a
-LABS section appears in settings at all. Neither reads `__DEV__` nor detects an
-EAS channel, so the gate holds in a production TestFlight build, which is how
-testers will get it. LABS is revealed by seven taps on the version line in
-About, and neither key rides in a backup, so a crafted backup file cannot hand
-anybody the feature.
+**Built, gated, then switched on.** #112 landed M6 in `main` behind
+`cloudAccountEnabled`, a settings key defaulting to `false`, reachable only
+through the LABS section. The gate existed for one reason: importing a whole
+cloud library into a list with no search, no filter and no sort is a firehose
+pointed at an unorganised screen. M5 is what made that survivable, so once M5
+landed the gate had nothing left to protect and the key was deleted rather than
+flipped. A switch that is on for everybody and cannot be turned off is not a
+setting, it is a branch nobody took.
+
+The import selection screen was virtualised at the same time. Pagination caps
+at twenty pages of a hundred, so an account can hand that screen two thousand
+rows, and it had been laying out every one of them.
+
+`labsUnlocked` remains, revealed by seven taps on the version line in About,
+and still does not ride in a backup. It is a general mechanism, not this
+feature's front door.
 
 It was built before M5, inverting the order this roadmap assumed, and it is
 released after it. See **Release order** below.
@@ -287,17 +296,17 @@ Build order and release order are not the same thing here, on purpose.
 | Version | Carries | State |
 |---|---|---|
 | 1.6.0 | M1 to M4, the create-recipe work, the grind-off fix | **shipped to TestFlight**, build 12, cut before M6 landed |
-| 1.7.0 | M5, with M6 still gated off | next |
-| 2.0.0 | M6, ungated | after M5 has been in the field |
+| 2.0.0 | M5, and M6 ungated with it | next |
 
 M6 is gated rather than branched because a branch that size parallel to an M5
 rewrite of the library screen is a merge conflict with a countdown on it.
 
-It is released after M5 because **M6 is a firehose pointed at an unorganised
+It was held back until M5 because **M6 is a firehose pointed at an unorganised
 list**. Importing an entire xBloom library is the fastest way to turn a
-twenty-recipe library into a hundred-recipe one, and until M5 ships that lands
-in a screen with no search, no filter, no sort and no shelves. M5 is what makes
-M6 survivable, not merely nicer.
+twenty-recipe library into a hundred-recipe one, and before M5 that landed in a
+screen with no search, no filter, no sort and no shelves. M5 is what makes M6
+survivable, not merely nicer, so the two ship together rather than a version
+apart: there is no longer a release in which M5 is present and M6 is withheld.
 
 2.0.0 rather than 1.8.0 because the major number marks the trust boundary
 moving. Up to and including M5 this app has never sent a user's credentials

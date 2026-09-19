@@ -1,5 +1,5 @@
 import * as Application from "expo-application";
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {Linking, Pressable} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
@@ -172,16 +172,28 @@ export default function AboutScreen({settings}: Props = {}) {
                 <AboutSection title="What leaves your phone">
                     <AboutParagraph>
                         Your recipes stay on this phone unless you ask to import
-                        or share one. There is no personal account, no sync and no
-                        analytics.
+                        or share one. There is no sync and no analytics, and
+                        XBRW++ has no account of its own.
                     </AboutParagraph>
                     <AboutParagraph>
                         Importing a shared recipe sends that recipe&apos;s ID to the
                         manufacturer&apos;s service in order to fetch it. Sharing sends
                         the recipe to the XBRW++ share service to create an xBloom
-                        link. Those two are the only things that use the network;
-                        leave both alone and XBRW++ sends nothing anywhere.
-                        A backup goes only where you send it.
+                        link. A backup goes only where you send it.
+                    </AboutParagraph>
+                    <AboutParagraph>
+                        You can also sign in to your own xBloom account and
+                        bring across the recipes you made there. Your email and
+                        password go to xBloom, over HTTPS, and nowhere else;
+                        XBRW++ never sees them and never stores the password.
+                        What is kept here afterwards is the token xBloom
+                        returns, your account number and your email address, so
+                        Settings can say which account is connected. Sign out
+                        deletes all three.
+                    </AboutParagraph>
+                    <AboutParagraph>
+                        Those three are the only things that use the network;
+                        leave them alone and XBRW++ sends nothing anywhere.
                     </AboutParagraph>
                     <AboutParagraph>
                         Brewing uses Bluetooth to reach the machine in the room

@@ -727,6 +727,27 @@ export const DOT_ICONS = {
         "........."
     ],
     /**
+     * A head and shoulders. The counterpart to `shelfMine`'s house: that shelf
+     * is the recipes that came from nobody, and this one is the recipes that
+     * came from somebody.
+     *
+     * One drawing for every author shelf, not one per person, which is the
+     * whole reason it can exist: an author is whatever a stranger typed into a
+     * share, so there is no drawing to have made in advance for them. The tile
+     * carries the name; this only has to say what kind of shelf it is.
+     */
+    shelfAuthor: [
+        "...###...",
+        "..#...#..",
+        "..#...#..",
+        "...###...",
+        ".........",
+        "..#####..",
+        ".#######.",
+        "#########",
+        "#########"
+    ],
+    /**
      * An hourglass run through, and the same hourglass still full.
      *
      * The strong/mild pair's trick, applied to duration: one frame, the sand

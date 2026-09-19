@@ -9,8 +9,10 @@ describe("DOT_ICONS", () => {
              "duplicate", "edit", "error", "favourite", "filter", "help", "import", "info",
              "link-off", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
              "refresh", "revert", "scan", "search", "settings", "share",
-             // The sixteen shelf marks, one per auto shelf. A closed set, drawn
-             // once: see the comment on them in `dotIcons.ts`.
+             // The seventeen shelf marks: one per stock auto shelf, plus the
+             // one every per-author shelf shares. A closed set, drawn once:
+             // see the comment on them in `dotIcons.ts`.
+             "shelfAuthor",
              "shelfFewStages", "shelfGrinderOff", "shelfHot", "shelfLongRatio",
              "shelfManyStages", "shelfMine", "shelfOtherBrewer",
              "shelfOverflowOff", "shelfPods", "shelfQuickBrew", "shelfRecent",

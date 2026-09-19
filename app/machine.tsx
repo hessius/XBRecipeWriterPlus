@@ -1,4 +1,4 @@
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useEffect, useRef, useState} from "react";
 import {ScrollView, TextInput} from "react-native";
 import * as Clipboard from "expo-clipboard";

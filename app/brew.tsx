@@ -1,4 +1,5 @@
-import {router, useLocalSearchParams} from "expo-router";
+import {useLocalSearchParams} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useEffect, useState} from "react";
 import {KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View}
     from "react-native";

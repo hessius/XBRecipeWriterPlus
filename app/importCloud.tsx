@@ -1,6 +1,6 @@
-import {Redirect, router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
-import {ScrollView} from "react-native";
+import {FlatList} from "react-native-gesture-handler";
 import {Button, Input, Text, YStack, type ColorTokens} from "tamagui";
 
 import CloudImportRow from "@/components/CloudImportRow";
@@ -8,8 +8,6 @@ import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useCloudImport} from "@/hooks/useCloudImport";
-import {useSetting} from "@/hooks/useSetting";
-import type {Settings} from "@/library/Settings";
 
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {CloudErrorKind} from "@/library/cloud/transport";
@@ -20,6 +18,14 @@ import type {CloudErrorKind} from "@/library/cloud/transport";
  * A full screen rather than a sheet: this is a form, a list that can be long,
  * and a decision per row. A sheet would put all three behind a keyboard.
  *
+ * The whole screen is one `FlatList`, and the list is the account's recipes.
+ * Everything else -- the sign-in form, the caveats, the counts, the import
+ * button -- rides in the header and footer. An account can hold two thousand
+ * recipes, which is the pagination cap, and laying out two thousand rows at
+ * once is a spinning phone; this way only what is on screen is drawn, and the
+ * screen still reads top to bottom as one thing rather than as a form with a
+ * separately scrolling list stuck in the middle of it.
+ *
  * The screen is layout. Every judgement it appears to make was made in
  * `buildImportPlan` and is tested there without a renderer.
  */
@@ -29,11 +35,6 @@ function recipes(count: number): string {
     return `${count} recipe${count === 1 ? "" : "s"}`;
 }
 
-type Props = {
-    /** Injected by tests. The route renders with the shared store. */
-    settings?: Settings;
-};
-
 const ERRORS: Record<CloudErrorKind, string> = {
     credentials: "Email or password not accepted.",
     unauthorised: "That sign-in has expired. Please sign in again.",
@@ -41,30 +42,7 @@ const ERRORS: Record<CloudErrorKind, string> = {
     server: "xBloom could not answer that just now.",
 };
 
-/**
- * The gate, and the reason it is a separate component from the screen.
- *
- * The route stays registered whether or not the feature is on, because a route
- * that appears and disappears is a navigator that has to be rebuilt. So this
- * has to hold the door instead, and it cannot do it with a condition inside
- * `AccountImportScreen`: `useCloudImport` reads the keychain on mount, and a
- * hook cannot be called conditionally. By the time a guard inside that function
- * could run, the read has already been queued. Only an earlier component that
- * never renders it at all keeps the promise that nothing runs while the gate is
- * off.
- *
- * `Redirect` rather than an effect calling `router.replace`: the screen must
- * not render even once, and `react-hooks/set-state-in-effect` is an error here
- * anyway. Home rather than back, because there may be no back -- a restored
- * navigation state or a stale deep link can land here as the first screen.
- */
-export default function ImportCloudScreen({settings}: Props = {}) {
-    const [cloudAccountEnabled] = useSetting("cloudAccountEnabled", settings);
-    if (!cloudAccountEnabled) return <Redirect href="/"/>;
-    return <AccountImportScreen/>;
-}
-
-function AccountImportScreen() {
+export default function ImportCloudScreen() {
     // One store for the screen's lifetime. Every `new RecipeDatabase()` opens
     // SQLite and replays the table setup, and this screen re-renders on every
     // keystroke into the email and password fields. `useRecipeLibrary` guards
@@ -80,6 +58,18 @@ function AccountImportScreen() {
     const [password, setPassword] = useState("");
 
     const selected = cloud.plan?.entries.filter((e) => e.selected) ?? [];
+
+    /**
+     * The rows the list draws, which is nothing until there are some to choose.
+     *
+     * Every other state of this screen has no rows at all, so the list is empty
+     * and the whole screen is its header and footer. That keeps one tree rather
+     * than two: a signed-out screen and a choosing screen are the same layout
+     * with a different amount in the middle.
+     */
+    const listed = cloud.status === "choosing" && cloud.plan
+        ? cloud.plan.entries
+        : [];
 
     /**
      * Take the password, then let go of it.
@@ -156,8 +146,16 @@ function AccountImportScreen() {
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="xBloom account" onBack={() => router.back()}/>
 
-            <ScrollView>
-                <YStack gap="$4" paddingHorizontal="$4" paddingBottom="$6">
+            <FlatList
+                data={listed}
+                keyExtractor={(item) => String(item.cloudId)}
+                renderItem={({item}) => (
+                    <YStack paddingHorizontal="$4" paddingBottom="$4">
+                        <CloudImportRow entry={item} onToggle={cloud.toggle}/>
+                    </YStack>
+                )}
+                ListHeaderComponent={
+                <YStack gap="$4" paddingHorizontal="$4" paddingBottom="$4">
                     {cloud.error && (
                         <Text color={palette.danger} fontSize={14}>
                             {ERRORS[cloud.error as CloudErrorKind]}
@@ -246,14 +244,14 @@ function AccountImportScreen() {
                                     a link.
                                 </Text>
                             )}
-
-                            {cloud.plan.entries.map((entry) => (
-                                <CloudImportRow
-                                    key={entry.cloudId}
-                                    entry={entry}
-                                    onToggle={cloud.toggle}/>
-                            ))}
-
+                        </>
+                    )}
+                </YStack>
+                }
+                ListFooterComponent={
+                <YStack gap="$4" paddingHorizontal="$4" paddingBottom="$6">
+                    {cloud.status === "choosing" && cloud.plan && (
+                        <>
                             {cloud.plan.unreadable > 0 && (
                                 // Said out loud. A recipe quietly missing from a
                                 // list is the one failure the user cannot notice.
@@ -320,7 +318,7 @@ function AccountImportScreen() {
                         </Button>
                     )}
                 </YStack>
-            </ScrollView>
+                }/>
         </YStack>
     );
 }

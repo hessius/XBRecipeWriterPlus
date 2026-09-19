@@ -2,14 +2,16 @@
 
 **XBRW++**
 
-Last updated: 2026-08-31
+Last updated: 2026-09-19
 
 ## The short version
 
-XBRW++ has no accounts, no analytics, no advertising, no tracking, and no crash
-reporting. If you never import or share a recipe, nothing you do in the app is
-sent anywhere. Sharing is optional; when you use it, the recipe fields listed
-below leave your device to create an xBloom link.
+XBRW++ has no account of its own, no analytics, no advertising, no tracking,
+and no crash reporting. If you never import or share a recipe, nothing you do
+in the app is sent anywhere. Sharing is optional; when you use it, the recipe
+fields listed below leave your device to create an xBloom link. Signing in to
+your own xBloom account is optional too; your password goes to xBloom and to
+nobody else, and is never stored.
 
 ## What stays on your device
 
@@ -21,7 +23,7 @@ the developer to see any of it unless you choose to share a recipe.
 
 ## When XBRW++ uses the network
 
-Two cases, both of which only happen because you asked for them.
+Three cases, all of which only happen because you asked for them.
 
 **Importing a recipe.** When you paste an xBloom link or ID, the app fetches that
 recipe from xBloom's public servers. Nothing about you is sent.
@@ -45,9 +47,26 @@ Two things about a shared link are worth knowing before you tap it:
 - Anyone who opens the link sees the recipe attributed to the XBRW++ account,
   not to you.
 
-**Importing and sharing are the only two things that use the network.** Leave
-both alone and XBRW++ sends nothing anywhere: reading cards, writing cards,
-editing, backup and restore all work with the network off.
+**Signing in to your xBloom account.** Entirely optional, and nothing about it
+runs until you sign in. If you do, your email address and password are sent over
+HTTPS to xBloom's own login endpoint, the same one their app uses. They go to
+xBloom and to nobody else: they are not sent to the XBRW++ share service, they
+are not logged, and the password is never written to storage.
+
+What is stored on your device afterwards is three things, in the operating
+system's secure storage (Keychain on iOS, Keystore on Android): the session
+token xBloom returned, which xBloom can revoke and which grants nothing on any
+other service; your account number, which xBloom's own calls need; and your
+email address, so Settings can show which account is connected. "Sign out"
+deletes all three. None of them ride in a backup file.
+
+Importing then asks xBloom for the recipes that account created, and writes
+them into the library on this device. Nothing is written back: XBRW++ does not
+create, change or delete anything in your xBloom account.
+
+**Those three are the only things that use the network.** Leave them alone and
+XBRW++ sends nothing anywhere: reading cards, writing cards, editing, backup
+and restore all work with the network off.
 
 These xBloom endpoints are unofficial and undocumented. They can change or stop
 working without notice.
@@ -81,9 +100,9 @@ that link is handled on your device to extract the recipe identifier.
 
 ## Children
 
-The app is a tool for operating a coffee brewer. It has no accounts, analytics,
-ads, tracking or crash reporting. If anyone shares a recipe, the same network
-section above applies.
+The app is a tool for operating a coffee brewer. It has no account of its own,
+and no analytics, ads, tracking or crash reporting. If anyone shares a recipe
+or signs in to an xBloom account, the same network section above applies.
 
 ## Changes
 

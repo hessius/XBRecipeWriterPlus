@@ -227,23 +227,66 @@ describe("RecipeShelfTile", () => {
 describe("a tile in edit mode", () => {
     beforeEach(() => jest.clearAllMocks());
 
+    // The glyph is hidden from the accessibility tree on purpose (see below),
+    // and RNTL's queries follow that tree rather than the touch one. Finding it
+    // takes saying so, which is itself a small assertion that it is hidden.
+    const SHOWN = {includeHiddenElements: true};
+
     it("shows no actions control until edit mode is on", async () => {
         // A long press still opens them. The point of edit mode is that the
         // door becomes visible, not that it appears for the first time.
+        const recipe = named("Ethiopia");
         await renderWithProviders(
-            <RecipeShelfTile recipe={named("Ethiopia")} {...HANDLERS}/>
+            <RecipeShelfTile recipe={recipe} {...HANDLERS}/>
         );
-        expect(screen.queryByLabelText("Actions for Ethiopia")).toBeNull();
+        expect(screen.queryByTestId(`recipe-tile-actions-${recipe.uuid}`, SHOWN))
+            .toBeNull();
     });
 
     it("opens the same sheet the long press opens", async () => {
         // The same handle, so edit mode cannot grow a second list of acts that
         // drifts from the one the long press shows.
+        const recipe = named("Ethiopia");
         await renderWithProviders(
-            <RecipeShelfTile recipe={named("Ethiopia")} {...HANDLERS} editing/>
+            <RecipeShelfTile recipe={recipe} {...HANDLERS} editing/>
         );
 
-        await fireEvent.press(screen.getByLabelText("Actions for Ethiopia"));
+        await fireEvent.press(
+            screen.getByTestId(`recipe-tile-actions-${recipe.uuid}`, SHOWN));
         expect(HANDLERS.onLongPress).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not announce the glyph as a second door to the same room", async () => {
+        // The tile is one accessibility element and already carries every act
+        // as an `accessibilityAction`. A nested button inside it would either
+        // be swallowed by the parent, which is the bug, or read out as a
+        // duplicate of what the rotor already offers, which is noise.
+        const recipe = named("Ethiopia");
+        await renderWithProviders(
+            <RecipeShelfTile recipe={recipe} {...HANDLERS} editing/>
+        );
+
+        // Absent from the default queries, which follow the accessibility
+        // tree, and present once hidden elements are included.
+        expect(screen.queryByTestId(`recipe-tile-actions-${recipe.uuid}`)).toBeNull();
+        const glyph = screen.getByTestId(`recipe-tile-actions-${recipe.uuid}`, SHOWN);
+        expect(glyph.props.accessibilityElementsHidden).toBe(true);
+        expect(glyph.props.importantForAccessibility).toBe("no-hide-descendants");
+        expect(screen.queryByLabelText("Actions for Ethiopia")).toBeNull();
+    });
+
+    it("still offers every act to a screen reader in edit mode", async () => {
+        // The reason hiding the glyph is safe rather than a removal: the acts
+        // were never behind it.
+        const recipe = named("Ethiopia");
+        await renderWithProviders(
+            <RecipeShelfTile recipe={recipe} {...HANDLERS} editing/>
+        );
+
+        const tile = screen.getByTestId(`recipe-tile-${recipe.uuid}`);
+        const names = (tile.props.accessibilityActions as {name: string}[])
+            .map((a) => a.name);
+        expect(names).toEqual(expect.arrayContaining(
+            ["share", "duplicate", "delete"]));
     });
 });
