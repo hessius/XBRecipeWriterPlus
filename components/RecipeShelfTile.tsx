@@ -240,10 +240,25 @@ export default function RecipeShelfTile({
                         // Opens the sheet the long press opens, so edit mode
                         // adds a way in rather than a second list of acts that
                         // could drift from the first.
+                        //
+                        // Hidden from the screen reader, and deliberately. The
+                        // tile is one accessibility element and already carries
+                        // every one of these acts as an `accessibilityAction`,
+                        // reachable from the rotor whether or not edit mode is
+                        // on -- so a screen reader user never needed the mode
+                        // in the first place. Announcing this glyph as well
+                        // would put a second door to the same room inside an
+                        // element that is already a door to it.
+                        //
+                        // The alternative the review suggested, lifting it out
+                        // to be a sibling of the accessible tile, would mean
+                        // absolutely positioning it over a row whose other
+                        // items vary in width, to gain a control that says
+                        // nothing new.
                         <Pressable
                             testID={`recipe-tile-actions-${recipe.uuid}`}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Actions for ${recipe.displayName()}`}
+                            accessibilityElementsHidden
+                            importantForAccessibility="no-hide-descendants"
                             hitSlop={8}
                             onPress={onLongPress}>
                             <DotIcon testID="recipe-tile-actions" name="overflow"
