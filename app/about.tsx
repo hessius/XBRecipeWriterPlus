@@ -1,5 +1,5 @@
 import * as Application from "expo-application";
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {Linking, Pressable} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";

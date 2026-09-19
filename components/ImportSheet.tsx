@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useEffect, useRef, useState} from "react";
 import {Keyboard, Pressable, TextInput} from "react-native";
 import {Input, Spinner, Text, XStack, YStack} from "tamagui";

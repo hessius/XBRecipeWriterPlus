@@ -4,7 +4,7 @@ import {BackHandler, Platform, Share} from "react-native";
 // gesture and each row's swipe gesture from fighting each other on Android.
 import {FlatList} from "react-native-gesture-handler";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {useFocusEffect, useNavigation, useRouter} from "expo-router";
+import {useFocusEffect, useNavigation} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
 import {Button, Text, XStack, YStack} from "tamagui";
 
@@ -35,6 +35,7 @@ import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore, type ShelfWriteOutcome}
     from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {forgetLastMove, useSteadyRouter} from "@/hooks/steadyRouter";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import NFC, {setNfcAlertIOS} from "@/library/NFC";
@@ -186,7 +187,7 @@ function EmptySelection() {
 
 export default function HomeScreen({db, settings}: Props) {
     const insets = useSafeAreaInsets();
-    const router = useRouter();
+    const router = useSteadyRouter();
     const navigation = useNavigation();
 
     const libraryQuery = useLibraryQuery(settings);
@@ -711,6 +712,13 @@ export default function HomeScreen({db, settings}: Props) {
             // journey and may open one of its own.
             lastEditorPushAt = 0;
             lastBrewPushRef.current = 0;
+            // And for the same reason, the app-wide double-tap guard. It is a
+            // blunt instrument that only knows how long ago a move was made,
+            // and returning here is better evidence than any elapsed time that
+            // the move is over. Without this it would outlive the screen-level
+            // guards above and refuse a second, deliberate visit that they had
+            // deliberately allowed.
+            forgetLastMove();
             // Regaining focus is the one signal that separates a redelivery of a
             // shared link from a deliberate re-share of it: a re-share only
             // happens after the user left the editor this import opened and came

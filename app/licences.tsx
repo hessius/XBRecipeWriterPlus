@@ -1,4 +1,4 @@
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {FlatList, Pressable, type ListRenderItemInfo} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";

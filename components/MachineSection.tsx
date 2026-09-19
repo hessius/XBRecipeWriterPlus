@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {Pressable} from "react-native";
-import {router} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import {Text, XStack, YStack} from "tamagui";
 
 import SettingsActionRow from "@/components/SettingsActionRow";

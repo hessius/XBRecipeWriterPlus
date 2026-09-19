@@ -1,4 +1,5 @@
-import {Redirect, router} from "expo-router";
+import {Redirect} from "expo-router";
+import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {ScrollView} from "react-native";
 import {Button, Input, Text, YStack, type ColorTokens} from "tamagui";

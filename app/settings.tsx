@@ -1,5 +1,5 @@
 import * as Application from "expo-application";
-import {useRouter} from "expo-router";
+
 import React, {useState} from "react";
 import {ScrollView, Text, YStack} from "tamagui";
 
@@ -15,6 +15,7 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
+import {useSteadyRouter} from "@/hooks/steadyRouter";
 import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
 import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
@@ -102,7 +103,7 @@ function restoredMessage(recipes: number, brews: number): string {
  * decision in place.
  */
 export default function SettingsScreen({settings}: Props) {
-    const router = useRouter();
+    const router = useSteadyRouter();
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
     const [cloudAccountEnabled, setCloudAccountEnabled] =
         useSetting("cloudAccountEnabled", settings);
