@@ -5,7 +5,8 @@
 [#280](https://github.com/graphefruit/Beanconqueror/issues/280), closed
 `not_planned` on 2025-08-23 without a comment.
 **Findings against** `graphefruit/Beanconqueror@master`, read 2026-09-20.
-**Status:** approved 2026-09-20.
+**Status:** approved 2026-09-20. Revised the same day after the maintainer
+responded (see §2.2.1).
 
 ## 1. What this is
 
@@ -88,14 +89,56 @@ design.
 
 The upstream ask is an **import API**, not xBloom support.
 
-This is partly strategy and partly honesty. The maintainer is overwhelmed and
-has been burned: #1163 was closed with "there hasn't been any success yet to
-get a collaboration with xBloom", and `grep -ri xbloom src/` returns nothing.
-A sixth bespoke vendor integration adds to his maintenance burden. One neutral
-verb with a published schema subtracts from it, because the next device emits
-the format instead of filing a feature request.
+#### 2.2.1 What the maintainer said, 2026-09-20
 
-It is also what #280 actually asked for.
+The proposal was put to graphefruit directly before this spec was finished. His
+position, paraphrased from that exchange:
+
+- **Size is settled.** "3kb sounds good."
+- **Chunking is mandatory, and he knows why:** "if the param gets to long it's
+  truncated and lost by the OS." This vindicates §4.1's explicit `n` chunk
+  count, which exists to catch exactly that.
+- **The open question is data, not transport:** "we need to talk about which
+  data and how to populate them, the json is currently giving some data but
+  like the stages etc aren't supported in bq."
+- **He is content with an xBloom-specific import**, and sceptical of
+  abstraction: "BQ already have several different implementations for SANREMO
+  you, Xenia, gaggiuino etc, every one behaves completely different."
+
+#### 2.2.2 Why neutral still, and where he is right
+
+His scepticism is earned and should not be argued away. Five integrations have
+taught him that devices do not generalise.
+
+But his five are all **pull** integrations: BC as client, polling a live device
+over its own protocol, where the semantics genuinely are incommensurable. This
+is a **push** of an already-normalised brew record that has stopped happening.
+The two are different problems, and the difference is where the abstraction
+belongs:
+
+- **Semantics do not generalise.** He is right. BC should map xBloom's fields
+  concretely, with no speculative interface for devices that do not exist.
+- **Transport does generalise.** Chunking, base64url, inflate, CRC, version
+  negotiation, truncation detection and validation are identical for every
+  sender, and are the part that is fiddly to get right. Solving them once per
+  vendor is the waste.
+
+So the synthesis this spec adopts: **one verb and one envelope, with a `source`
+discriminator and a per-source mapper.** BC implements the xBloom mapper first
+and only — concrete, testable, no abstraction on speculation. A second device
+later is a mapper function, not a new verb plus decoder plus chunker plus
+validator.
+
+The abstraction sits in the transport, not in the semantics. That concedes his
+point in full and keeps the value.
+
+#### 2.2.3 The rest of the case
+
+It is also what #280 actually asked for, and it matters for tone: the
+maintainer is overwhelmed, and #1163 was closed three weeks before this
+proposal with "there hasn't been any success yet to get a collaboration with
+xBloom". `grep -ri xbloom src/` returns nothing. A proposal landing that soon
+after must say plainly that XBRW++ is not the vendor.
 
 Every existing BC integration — Gaggiuino, Meticulous, Sanremo, Xenia, Move2 —
 has BC as the client pulling from a device acting as server. Nothing pushes in.
@@ -287,6 +330,57 @@ maintainer's decision, not ours to make for him. xBloom gets the text chip.
 this is not an injection risk, but it is length-capped and non-empty-checked in
 the same validation pass as everything else, or a crafted link renders a chip
 the width of a paragraph.
+
+## 4.5 What maps where, and what BC does not have to support
+
+The maintainer's open question is "which data and how to populate them ... like
+the stages etc aren't supported in bq". The answer is that **stages do not need
+to be supported. They need to be carried.** Everything we hold lands in one of
+three tiers, and only the first requires BC to do anything.
+
+**Tier 1, flattened into fields BC already has:**
+
+| Ours | BC field | Note |
+| --- | --- | --- |
+| `dose` (§3) | `grind_weight` | |
+| `waterTotal` | `brew_quantity` + type `ML` | |
+| `cupTotal` | `brew_beverage_quantity` + type `GR` | |
+| duration | `brew_time` (+ms) | |
+| stage 1 temperature | `brew_temperature` | BC has one, we have per stage |
+| `grindSize` (§3) | `grind_size` | string; 81 omits |
+| `grinderRpm` (§3) | `mill_speed` | |
+| stage 1 pause | `coffee_blooming_time` | judgement call, flagged |
+| first `cup > 0` | `coffee_first_drip_time` | measured, not stopwatched |
+| `samples.water` | `BrewFlow.waterDispensed` | |
+| `samples.cup` | `BrewFlow.weight` | |
+
+**Tier 2, human-readable in `note`.** The generated summary spells out every
+stage: volume, temperature, pattern, agitation, pause. It renders in BC today,
+in a field that already exists, with **zero upstream work**. A BC user reading
+a brew sees the stages whether or not BC ever models them.
+
+**Tier 3, structural in `imported.params`.** Plan, pour pattern, agitation,
+bypass, stalls, xPod id. BC stores it and never parses it. It survives BC's
+backup, and it is there if anyone ever wants to draw an xBloom stage ladder.
+
+So "not supported in BQ" stops being a blocker: tier 2 makes stages visible
+without a data model, and tier 3 makes them recoverable without a commitment.
+
+**What BC has and we do not:** bean, mill, preparation, water, `tds`, pressure.
+All are left for the user or omitted; none is guessed.
+
+### 4.5.1 Open questions for the maintainer
+
+Genuinely open, and his to answer:
+
+1. **`realtimeFlow`** — should we compute flow and send it, or send
+   `waterDispensed` and let BC derive it as it does for scales?
+2. **Placement** — is `customInformation.imported` the right home, or would he
+   rather it sat elsewhere?
+3. **Temperature** — is flattening per-stage temperature to stage 1's value
+   acceptable, or should it travel only in `flow.temperature`?
+4. **Mill and preparation** — match by name with create-on-miss, or always
+   leave them to the user?
 
 ## 5. The XBRW++ side
 
