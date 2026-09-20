@@ -360,19 +360,30 @@ describe("brew record", () => {
 
             await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
         });
-        it("shows the Beanconqueror credit with the action", async () => {
+        it("announces the Beanconqueror credit as a link", async () => {
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.getByText("Handoff for Beanconqueror · keep your brew diary there."))
-                .toBeTruthy();
+            expect(screen.getByRole("link", {name: "Open Beanconqueror website"})).toBeTruthy();
+            expect(screen.getByText("Beanconqueror keeps the brew diary.")).toBeTruthy();
+        });
+
+        it("opens the Beanconqueror site once when the credit is pressed", async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await fireEvent.press(screen.getByRole("link", {name: "Open Beanconqueror website"}));
+
+            await waitFor(() => {
+                expect(openURL).toHaveBeenCalledTimes(1);
+                expect(openURL).toHaveBeenCalledWith("https://beanconqueror.com");
+            });
         });
 
         it("does not show the Beanconqueror credit without the action", async () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.queryByText("Handoff for Beanconqueror · keep your brew diary there."))
-                .toBeNull();
+            expect(screen.queryByRole("link", {name: "Open Beanconqueror website"})).toBeNull();
+            expect(screen.queryByText("Beanconqueror keeps the brew diary.")).toBeNull();
         });
     });
 

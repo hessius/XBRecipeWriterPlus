@@ -1,7 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useRef, useState} from "react";
-import {Pressable, ScrollView, useWindowDimensions} from "react-native";
+import {Linking, Pressable, ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -59,6 +59,34 @@ type Props = {
     /** Injected by tests to avoid opening the real SQLite database. */
     recipeLookup?: RecipeLookup;
 };
+
+function HandoffCredit({credit, siteUrl, accessibilityLabel}: {
+    credit: string;
+    siteUrl: string;
+    accessibilityLabel: string;
+}) {
+    return (
+        <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={accessibilityLabel}
+            style={({pressed}) => ({
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 44,
+                opacity: pressed ? 0.6 : 1
+            })}
+            onPress={() => {
+                Linking.openURL(siteUrl).catch(() => notify({
+                    tone:    "error",
+                    message: "Could not open that link."
+                }));
+            }}>
+            <Text color={palette.brand} fontSize={12} fontWeight="600" textAlign="center">
+                {credit}
+            </Text>
+        </Pressable>
+    );
+}
 
 /**
  * A single recorded brew, frozen.
@@ -361,9 +389,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                         )}
                     </XStack>
                     {showHandoff && (
-                        <Text color={palette.muted} fontSize={12} textAlign="center">
-                            {handoffTarget.credit}
-                        </Text>
+                        <HandoffCredit credit={handoffTarget.credit}
+                                       siteUrl={handoffTarget.siteUrl}
+                                       accessibilityLabel={handoffTarget.siteAccessibilityLabel} />
                     )}
                 </YStack>
             )}

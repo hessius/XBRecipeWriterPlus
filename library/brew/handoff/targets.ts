@@ -8,6 +8,8 @@ export type HandoffTarget = {
     name: string;
     buttonLabel: string;
     credit: string;
+    siteUrl: string;
+    siteAccessibilityLabel: string;
 };
 
 /**
@@ -29,9 +31,19 @@ export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
         id:          "beanconqueror",
         name:        "Beanconqueror",
         buttonLabel: "Send to Beanconqueror",
-        credit:      "Handoff for Beanconqueror · keep your brew diary there."
+        credit:      "Beanconqueror keeps the brew diary.",
+        siteUrl:     "https://beanconqueror.com",
+        siteAccessibilityLabel: "Open Beanconqueror website"
     }
 ];
+
+const CAN_HAND_OFF: Record<BrewOutcome, boolean> = {
+    done:           true,
+    endedOnMachine: false,
+    cancelled:      false,
+    lostContact:    false,
+    failed:         false
+};
 
 /**
  * Only a finished brew is safe to hand over: anything else would create a row
@@ -42,5 +54,5 @@ export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
  * and this predicate is the single edit point if the product decision changes.
  */
 export function canHandOff(outcome: BrewOutcome): boolean {
-    return outcome === "done";
+    return CAN_HAND_OFF[outcome];
 }
