@@ -168,12 +168,52 @@ function tenths(value: number): number {
 
 function flowFromSamples(samples: BrewSample[]): HandoffFlow {
     return {
-        // A future downsample(flow, everyNth): HandoffFlow belongs here so the codec can change fidelity without rewriting flow.t.
         fidelity: "full",
         t: deltaCode(samples.map((sample) => Math.round(sample.at))),
         waterDispensed: deltaCode(samples.map((sample) => tenths(sample.water))),
         weight: deltaCode(samples.map((sample) => tenths(sample.cup)))
     };
+}
+
+export function downsample(flow: HandoffFlow, factor: number): HandoffFlow | null {
+    if (factor <= 1 || flow.t.length < 2) return null;
+
+    const times = decodeDeltas(flow.t);
+    const indices = times
+        .map((_time, index) => index)
+        .filter((index) => index % factor === 0);
+    if (indices.length < 2) return null;
+
+    const retainedTimes = indices.map((index) => times[index]);
+    const meanInterval = (retainedTimes[retainedTimes.length - 1] - retainedTimes[0])
+        / (retainedTimes.length - 1);
+    if (meanInterval > 1_000) return null;
+    const temperature = flow.temperature;
+
+    return {
+        fidelity: "downsampled",
+        t: deltaCode(retainedTimes),
+        waterDispensed: deltaCode(retainDecoded(flow.waterDispensed, indices)),
+        weight: deltaCode(retainDecoded(flow.weight, indices)),
+        ...(temperature !== undefined
+            ? {temperature: indices.map((index) => temperature[index])}
+            : {})
+    };
+}
+
+function decodeDeltas(values: number[]): number[] {
+    const out: number[] = [];
+    let total = 0;
+    values.forEach((value) => {
+        total += value;
+        out.push(total);
+    });
+    return out;
+}
+
+function retainDecoded(values: number[], indices: number[]): number[] {
+    const decoded = decodeDeltas(values);
+    return indices.map((index) => decoded[index]);
 }
 
 function metricsFromPlan(plan: StoredBrew["plan"]): HandoffMetric[] {
