@@ -1,4 +1,14 @@
-import {podCoffeeFromPodsVo, podCoffeeFromStored} from "@/library/podCoffee";
+import {podCoffeeFromPodsVo, podCoffeeFromStored, podImageUrl} from "@/library/podCoffee";
+
+describe("podImageUrl", () => {
+    it("accepts only an https URL carried by pod artwork", () => {
+        expect(podImageUrl("https://example.com/pod.png")).toBe("https://example.com/pod.png");
+        expect(podImageUrl("http://example.com/pod.png")).toBeUndefined();
+        expect(podImageUrl("javascript:alert(1)")).toBeUndefined();
+        expect(podImageUrl("  ")).toBeUndefined();
+        expect(podImageUrl(42)).toBeUndefined();
+    });
+});
 
 describe("podCoffeeFromPodsVo", () => {
     it("reads the fields a real pod carries", () => {

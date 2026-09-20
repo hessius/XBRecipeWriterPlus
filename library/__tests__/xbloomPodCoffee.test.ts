@@ -109,4 +109,32 @@ describe("xBloom pod coffee import", () => {
         expect(recipe.coffee?.imageUrl).toBe("https://example.com/pod.jpg");
         expect(recipe.imageURL).toBe(recipe.coffee?.imageUrl);
     });
+
+    it("rejects a plain-HTTP artwork fallback when a pod has no coffee name", () => {
+        const recipe = importedRecipe({
+            recipeVo: recipeVo({
+                podsVo: {
+                    id:        "NLC001",
+                    imagePath: "http://example.com/pod.jpg"
+                }
+            })
+        });
+
+        expect(recipe.coffee).toBeUndefined();
+        expect(recipe.imageURL).toBeUndefined();
+    });
+
+    it("keeps an HTTPS artwork fallback when a pod has no coffee name", () => {
+        const recipe = importedRecipe({
+            recipeVo: recipeVo({
+                podsVo: {
+                    id:        "NLC001",
+                    imagePath: "https://example.com/pod.jpg"
+                }
+            })
+        });
+
+        expect(recipe.coffee).toBeUndefined();
+        expect(recipe.imageURL).toBe("https://example.com/pod.jpg");
+    });
 });

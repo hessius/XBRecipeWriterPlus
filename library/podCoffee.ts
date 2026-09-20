@@ -31,10 +31,10 @@ function text(value: unknown): string | undefined {
  * third-party response is first touched: the endpoint is undocumented and
  * nothing guarantees the shape it returns.
  *
- * This is intentionally stricter than `Recipe.imageURL`, its looser sibling
- * read from the same xBloom field. Task 3 should converge the two.
+ * This is shared by coffee metadata and recipe artwork so both paths apply the
+ * same decorative-image rule.
  */
-function httpsUrl(value: unknown): string | undefined {
+export function podImageUrl(value: unknown): string | undefined {
     const raw = text(value);
     if (raw === undefined) return undefined;
     try {
@@ -59,7 +59,7 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
     const aromatics = text(record[fields.aromatics]);
     const note = text(record[fields.note]);
     const beanMix = text(record[fields.beanMix]);
-    const imageUrl = httpsUrl(record[fields.imageUrl]);
+    const imageUrl = podImageUrl(record[fields.imageUrl]);
 
     if (origin !== undefined) coffee.origin = origin;
     if (process !== undefined) coffee.process = process;

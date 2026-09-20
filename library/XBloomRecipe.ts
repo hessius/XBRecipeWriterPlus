@@ -3,7 +3,7 @@ import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
 import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
 } from "@/library/bypassLimits";
-import {podCoffeeFromPodsVo} from "@/library/podCoffee";
+import {podCoffeeFromPodsVo, podImageUrl} from "@/library/podCoffee";
 import type {ImportSource} from "./importInput";
 
 /**
@@ -99,16 +99,16 @@ export class XBloomRecipe {
             }
             const podsVo = this.xbRecipeJSON.recipeVo.podsVo;
             applyPodCoffee(recipe, podsVo);
+            // Backup restore already strips non-HTTPS recipe artwork; imports
+            // use the same rule. The fallback keeps nameless pod artwork that
+            // `podCoffeeFromPodsVo` must ignore because it cannot match a bean.
             if (recipe.coffee !== undefined) {
-                // Named pod artwork follows the coffee validator, so the same
-                // `podsVo.imagePath` cannot be accepted for the library but
-                // rejected from the export.
                 if (recipe.coffee.imageUrl !== undefined) {
                     recipe.imageURL = recipe.coffee.imageUrl;
                 }
             } else {
-                const imagePath = podsVo?.imagePath;
-                if (typeof imagePath === "string") {
+                const imagePath = podImageUrl(podsVo?.imagePath);
+                if (imagePath !== undefined) {
                     recipe.imageURL = imagePath;
                 }
             }
