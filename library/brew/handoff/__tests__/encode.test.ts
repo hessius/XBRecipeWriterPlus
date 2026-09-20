@@ -1,69 +1,9 @@
 import {gunzipSync} from "fflate";
 
 import {MAX_URL_CHARS, encodeHandoff} from "@/library/brew/handoff/encode";
-import {buildEnvelope, downsample, type HandoffEnvelope, type HandoffFlow} from "@/library/brew/handoff/envelope";
-import type {BrewSample, PlanStage} from "@/library/brew/BrewRecord";
-import type {StoredBrew} from "@/library/BrewDatabase";
-import {AGITATION, POUR_PATTERN} from "@/library/Pour";
-
-const plan: PlanStage[] = [
-    {
-        pourNumber: 1, volume: 40, temperature: 94, flowRate: 40,
-        agitation: AGITATION.BEFORE_ON_AFTER_OFF,
-        pourPattern: POUR_PATTERN.SPIRAL, pauseTime: 30
-    },
-    {
-        pourNumber: 2, volume: 100, temperature: 92, flowRate: 50,
-        agitation: AGITATION.ALL_OFF,
-        pourPattern: POUR_PATTERN.CIRCULAR, pauseTime: 15
-    },
-    {
-        pourNumber: 3, volume: 100, temperature: 90, flowRate: 50,
-        agitation: AGITATION.BEFORE_OFF_AFTER_ON,
-        pourPattern: POUR_PATTERN.CENTERED, pauseTime: 0
-    },
-    {
-        pourNumber: 4, volume: 80, temperature: 88, flowRate: 45,
-        agitation: AGITATION.ALL_OFF,
-        pourPattern: POUR_PATTERN.CENTERED, pauseTime: 0
-    }
-];
-
-function brew(overrides: Partial<StoredBrew> = {}): StoredBrew {
-    return {
-        id: "brew-1",
-        recipeUuid: "recipe-1",
-        recipeName: "Gummy Worms",
-        accent: "#c8752f",
-        startedAt: Date.UTC(2026, 8, 19, 7, 41, 3, 852),
-        endedAt: Date.UTC(2026, 8, 19, 7, 45, 3, 852),
-        outcome: "done",
-        failure: null,
-        pours: 4,
-        waterTotal: 320,
-        cupTotal: 276,
-        heldSeconds: 0,
-        hasStream: true,
-        plan,
-        stageWater: [40, 100, 100, 80],
-        dose: 20,
-        ratio: 16,
-        grindSize: 62,
-        grinderRpm: 6_400,
-        grinderUsed: true,
-        coffee: {
-            name: "Kenya Sakami Gloria Natural Batian",
-            origin: "Nabiswa, Kenya",
-            process: "Natural",
-            variety: "Batian",
-            aromatics: "Cherry・strawberry・blueberry",
-            beanMix: "Single Origin",
-            note: "A producer narrative.",
-            imageUrl: "https://example.com/pod.png"
-        },
-        ...overrides
-    };
-}
+import {buildEnvelope, type HandoffEnvelope, type HandoffFlow} from "@/library/brew/handoff/envelope";
+import {brew, decodeDeltas, extendedPlan} from "@/library/brew/handoff/__tests__/fixtures";
+import type {BrewSample} from "@/library/brew/BrewRecord";
 
 function samples(count: number, intervalMs = 100): BrewSample[] {
     let seed = 0x0bad_f00d;
@@ -74,6 +14,7 @@ function samples(count: number, intervalMs = 100): BrewSample[] {
         return seed / 0x1_0000_0000;
     }
 
+    // Deliberate entropy keeps gzip from making budget assertions vacuous.
     return Array.from({length: count}, (_value, index) => {
         const pour = Math.min(4, Math.floor(index / Math.max(1, Math.ceil(count / 4))) + 1);
         const pouring = index % Math.max(1, Math.ceil(count / 4)) < Math.ceil(count / 4) * 0.63;
@@ -90,7 +31,15 @@ function samples(count: number, intervalMs = 100): BrewSample[] {
 }
 
 function envelopeFromSamples(count: number, intervalMs = 100): HandoffEnvelope {
-    return buildEnvelope(brew(), samples(count, intervalMs));
+    return buildEnvelope(brew({
+        endedAt: Date.UTC(2026, 8, 19, 7, 45, 3, 852),
+        pours: 4,
+        waterTotal: 320,
+        cupTotal: 276,
+        plan: extendedPlan,
+        stageWater: [40, 100, 100, 80],
+        dose: 20
+    }), samples(count, intervalMs));
 }
 
 function payload(overrides: Partial<HandoffEnvelope> = {}): HandoffEnvelope {
@@ -124,6 +73,7 @@ function flow(count: number, intervalMs = 100): HandoffFlow {
     return {
         fidelity: "full",
         t: Array.from({length: count}, (_value, index) => index === 0 ? 0 : intervalMs),
+        // Deliberate entropy keeps gzip from making budget assertions vacuous.
         waterDispensed: Array.from({length: count}, (_value, index) => {
             if (index === 0) return 0;
             waterSeed = (waterSeed * 1_664_525 + 1_013_904_223) >>> 0;
@@ -137,29 +87,13 @@ function flow(count: number, intervalMs = 100): HandoffFlow {
     };
 }
 
-function decodeDeltas(values: number[]): number[] {
-    const out: number[] = [];
-    let total = 0;
-    values.forEach((value) => {
-        total += value;
-        out.push(total);
-    });
-    return out;
-}
-
 /**
  * Independent reader written against Beanconqueror's parameter convention,
- * not against encode.ts internals.
+ * not against encode.ts internals. Keep it local: moving this toward shared
+ * code is the first step to it quietly depending on the encoder.
  */
 function decode(url: string): HandoffEnvelope {
-    const params = new URL(url).searchParams;
-    const indices = [...params.keys()]
-        .filter((key) => /^shareBrew\d+$/.test(key))
-        .map((key) => Number(key.slice("shareBrew".length)))
-        .sort((a, b) => a - b);
-    const joined = indices.map((index) => params.get(`shareBrew${index}`) ?? "").join("");
-
-    expect(joined).toHaveLength(Number(params.get("len")));
+    const joined = chunks(url).join("");
 
     const padded = joined
         .replace(/-/g, "+")
@@ -196,12 +130,12 @@ describe("encodeHandoff", () => {
     });
 
     it("declares the joined base64url payload length", () => {
-        const {url, chars} = encodeHandoff(envelopeFromSamples(2_400));
+        const {url, urlChars} = encodeHandoff(envelopeFromSamples(2_400));
         const params = new URL(url).searchParams;
         const joined = chunks(url).join("");
 
         expect(Number(params.get("len"))).toBe(joined.length);
-        expect(chars).toBe(url.length);
+        expect(urlChars).toBe(url.length);
     });
 
     it("splits the payload into 400-character chunks", () => {
@@ -220,7 +154,7 @@ describe("encodeHandoff", () => {
         const encoded = encodeHandoff(envelopeFromSamples(2_400));
 
         expect(encoded.fidelity).toBe("full");
-        expect(encoded.chars).toBeLessThan(MAX_URL_CHARS);
+        expect(encoded.urlChars).toBeLessThan(MAX_URL_CHARS);
         expect(decode(encoded.url).flow?.t).toHaveLength(2_400);
     });
 
@@ -233,7 +167,7 @@ describe("encodeHandoff", () => {
         const stride = originalTimes.indexOf(decodedTimes[1]!);
 
         expect(encoded.fidelity).toBe("downsampled");
-        expect(encoded.chars).toBeLessThanOrEqual(MAX_URL_CHARS);
+        expect(encoded.urlChars).toBeLessThanOrEqual(MAX_URL_CHARS);
         expect(decoded.flow?.fidelity).toBe("downsampled");
         expect(decoded.flow!.t.length).toBeLessThan(original.flow!.t.length);
         expect(stride).toBeGreaterThan(1);
@@ -251,7 +185,7 @@ describe("encodeHandoff", () => {
         const decoded = decode(encoded.url);
 
         expect(encoded.fidelity).toBe("none");
-        expect(encoded.chars).toBeLessThanOrEqual(MAX_URL_CHARS);
+        expect(encoded.urlChars).toBeLessThanOrEqual(MAX_URL_CHARS);
         expect(decoded).not.toHaveProperty("flow");
         expect(decoded.brew.note).toBe("This note is the reason for the export.");
     });
@@ -261,13 +195,7 @@ describe("encodeHandoff", () => {
         const encoded = encodeHandoff(original);
 
         expect(encoded.fidelity).toBe("none");
-        expect(encoded.chars).toBeLessThanOrEqual(MAX_URL_CHARS);
+        expect(encoded.urlChars).toBeLessThanOrEqual(MAX_URL_CHARS);
         expect(decode(encoded.url)).toStrictEqual(original);
-    });
-});
-
-describe("downsample", () => {
-    it("returns null when thinning would push the mean interval past the 1 Hz floor", () => {
-        expect(downsample(flow(10, 1_000), 2)).toBeNull();
     });
 });

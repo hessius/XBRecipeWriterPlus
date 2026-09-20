@@ -1,8 +1,9 @@
 // Produces the vendor-neutral description of a finished brew: recipe figures,
 // planned targets, measured flow and provenance. This module knows what a brew
-// is and nothing about transport. Compression, chunking and any fidelity
-// degradation belong to the codec layer; delete this sentence before putting
-// those concerns here.
+// is and nothing about transport. Compression and chunking belong to the codec
+// layer. What thinning means lives here, because thinning a delta-coded array
+// is only correct after decoding it. Whether and when to thin is policy and
+// lives in the codec: encode.ts calls downsample and never reads flow.t.
 import appConfig from "@/app.json";
 import {brewNote} from "@/library/brew/brewNote";
 import {stageSpans} from "@/library/brew/brewShape";
@@ -19,6 +20,7 @@ import type {PodCoffee} from "@/library/podCoffee";
 
 const REPOSITORY_URL = "https://github.com/hessius/XBRecipeWriterPlus";
 const SOURCE_NAME = "XBRecipeWriter++";
+const MIN_SAMPLE_INTERVAL_MS = 1_000; // 1 Hz floor
 
 type Quantity<Unit extends string> = {
     value: number;
@@ -46,7 +48,7 @@ export type HandoffFlow = {
     waterDispensed: number[];
     /** Cup weight in 0.1 g, delta-coded. */
     weight: number[];
-    /** Measured temperature only. XBRW++ has no measured temperature stream. */
+    /** Absolute, not delta-coded. XBRW++ emits no measured temperature today, so this branch is untested. */
     temperature?: number[];
 };
 
@@ -175,9 +177,16 @@ function flowFromSamples(samples: BrewSample[]): HandoffFlow {
     };
 }
 
+/**
+ * Returns a thinner copy of flow, or null when there is nothing useful to thin
+ * or thinning would breach the 1 Hz floor. Below roughly one sample per second
+ * the trace stops reading as a trace. Callers treat both null cases the same:
+ * stop the ladder and drop flow rather than ship a misleading line.
+ */
 export function downsample(flow: HandoffFlow, factor: number): HandoffFlow | null {
     if (factor <= 1 || flow.t.length < 2) return null;
 
+    // Drop samples only after decoding; dropping entries from a delta array silently changes totals and shifts the trace.
     const times = decodeDeltas(flow.t);
     const indices = times
         .map((_time, index) => index)
@@ -187,7 +196,7 @@ export function downsample(flow: HandoffFlow, factor: number): HandoffFlow | nul
     const retainedTimes = indices.map((index) => times[index]);
     const meanInterval = (retainedTimes[retainedTimes.length - 1] - retainedTimes[0])
         / (retainedTimes.length - 1);
-    if (meanInterval > 1_000) return null;
+    if (meanInterval > MIN_SAMPLE_INTERVAL_MS) return null;
     const temperature = flow.temperature;
 
     return {
