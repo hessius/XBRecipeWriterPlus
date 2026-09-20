@@ -24,14 +24,11 @@ function recipeVo(overrides: Record<string, unknown> = {}) {
     };
 }
 
-function importedRecipe(response: Record<string, unknown>): Recipe {
-    const xb = XBloomRecipe.fromAccountRow({}) as unknown as {
-        xbRecipeJSON: unknown; getRecipe(): Recipe | null;
-    };
-    xb.xbRecipeJSON = response;
+function importedRecipe(row: Record<string, unknown>): Recipe {
+    const xb = XBloomRecipe.fromAccountRow(row);
     const recipe = xb.getRecipe();
-    expect(recipe).not.toBeNull();
-    return recipe!;
+    if (recipe === null) throw new Error("Expected account row to import");
+    return recipe;
 }
 
 describe("applyPodCoffee", () => {
@@ -40,24 +37,12 @@ describe("applyPodCoffee", () => {
 
         applyPodCoffee(recipe, {
             theName:   "Kenya Sakami Gloria Natural Batian",
-            origin:    "Nabiswa, Kenya",
-            process:   "Natural",
-            varietal:  "Batian",
-            flavor:    "Cherry・strawberry・blueberry",
-            introduce: "A producer narrative.",
-            type:      "Single Origin",
             imagePath: "https://example.com/pod.jpg"
         });
 
         expect(recipe.coffee).toEqual({
-            name:      "Kenya Sakami Gloria Natural Batian",
-            origin:    "Nabiswa, Kenya",
-            process:   "Natural",
-            variety:   "Batian",
-            aromatics: "Cherry・strawberry・blueberry",
-            note:      "A producer narrative.",
-            beanMix:   "Single Origin",
-            imageUrl:  "https://example.com/pod.jpg"
+            name:     "Kenya Sakami Gloria Natural Batian",
+            imageUrl: "https://example.com/pod.jpg"
         });
     });
 
@@ -73,7 +58,7 @@ describe("applyPodCoffee", () => {
 
 describe("xBloom pod coffee import", () => {
     it("comes back without coffee when the response has no podsVo", () => {
-        const recipe = importedRecipe({recipeVo: recipeVo()});
+        const recipe = importedRecipe(recipeVo());
 
         expect(recipe.coffee).toBeUndefined();
         expect(recipe.imageURL).toBeUndefined();
@@ -81,60 +66,83 @@ describe("xBloom pod coffee import", () => {
     });
 
     it("validates the attached coffee rather than trusting the pod response", () => {
-        const recipe = importedRecipe({
-            recipeVo: recipeVo({
-                podsVo: {
-                    id:        "NLC001",
-                    theName:   "Kenya Sakami Gloria Natural Batian",
-                    imagePath: "http://example.com/pod.jpg"
-                }
-            })
-        });
+        const recipe = importedRecipe(recipeVo({
+            podsVo: {
+                id:        "NLC001",
+                theName:   "Kenya Sakami Gloria Natural Batian",
+                imagePath: "http://example.com/pod.jpg"
+            }
+        }));
 
         expect(recipe.coffee).toEqual({name: "Kenya Sakami Gloria Natural Batian"});
         expect(recipe.imageURL).toBeUndefined();
     });
 
     it("uses the coffee image as the recipe artwork when a pod names its coffee", () => {
-        const recipe = importedRecipe({
-            recipeVo: recipeVo({
-                podsVo: {
-                    id:        "NLC001",
-                    theName:   "Kenya Sakami Gloria Natural Batian",
-                    imagePath: "https://example.com/pod.jpg"
-                }
-            })
-        });
+        const recipe = importedRecipe(recipeVo({
+            podsVo: {
+                id:        "NLC001",
+                theName:   "Kenya Sakami Gloria Natural Batian",
+                imagePath: "https://example.com/pod.jpg"
+            }
+        }));
 
         expect(recipe.coffee?.imageUrl).toBe("https://example.com/pod.jpg");
         expect(recipe.imageURL).toBe(recipe.coffee?.imageUrl);
     });
 
     it("rejects a plain-HTTP artwork fallback when a pod has no coffee name", () => {
-        const recipe = importedRecipe({
-            recipeVo: recipeVo({
-                podsVo: {
-                    id:        "NLC001",
-                    imagePath: "http://example.com/pod.jpg"
-                }
-            })
-        });
+        const recipe = importedRecipe(recipeVo({
+            podsVo: {
+                id:        "NLC001",
+                imagePath: "http://example.com/pod.jpg"
+            }
+        }));
 
         expect(recipe.coffee).toBeUndefined();
         expect(recipe.imageURL).toBeUndefined();
     });
 
     it("keeps an HTTPS artwork fallback when a pod has no coffee name", () => {
-        const recipe = importedRecipe({
-            recipeVo: recipeVo({
-                podsVo: {
-                    id:        "NLC001",
-                    imagePath: "https://example.com/pod.jpg"
-                }
-            })
-        });
+        const recipe = importedRecipe(recipeVo({
+            podsVo: {
+                id:        "NLC001",
+                imagePath: "https://example.com/pod.jpg"
+            }
+        }));
 
         expect(recipe.coffee).toBeUndefined();
         expect(recipe.imageURL).toBe("https://example.com/pod.jpg");
+    });
+});
+
+describe("xBloom pod preview artwork", () => {
+    async function fetchedPreviewImage(imagePath: string) {
+        global.fetch = jest.fn(async () => ({
+            ok:     true,
+            status: 200,
+            json:   async () => ({
+                recipeVo: {
+                    theName: "Preview recipe",
+                    podsVo:  {
+                        subtitle: "Preview pod",
+                        imagePath
+                    }
+                }
+            })
+        })) as unknown as typeof fetch;
+
+        const xb = new XBloomRecipe({kind: "xid", xid: "NLC001"});
+        await xb.fetchRecipeDetail();
+        return xb.getImageURL();
+    }
+
+    it("rejects plain-HTTP preview artwork", async () => {
+        await expect(fetchedPreviewImage("http://example.com/pod.jpg")).resolves.toBe("");
+    });
+
+    it("keeps HTTPS preview artwork", async () => {
+        await expect(fetchedPreviewImage("https://example.com/pod.jpg"))
+            .resolves.toBe("https://example.com/pod.jpg");
     });
 });

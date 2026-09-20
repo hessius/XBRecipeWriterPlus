@@ -102,16 +102,9 @@ export class XBloomRecipe {
             // Backup restore already strips non-HTTPS recipe artwork; imports
             // use the same rule. The fallback keeps nameless pod artwork that
             // `podCoffeeFromPodsVo` must ignore because it cannot match a bean.
-            if (recipe.coffee !== undefined) {
-                if (recipe.coffee.imageUrl !== undefined) {
-                    recipe.imageURL = recipe.coffee.imageUrl;
-                }
-            } else {
-                const imagePath = podImageUrl(podsVo?.imagePath);
-                if (imagePath !== undefined) {
-                    recipe.imageURL = imagePath;
-                }
-            }
+            // XBRW's `imageURL` and BC's `imageUrl` share a source, not an owner.
+            const artwork = recipe.coffee?.imageUrl ?? podImageUrl(podsVo?.imagePath);
+            if (artwork !== undefined) recipe.imageURL = artwork;
             recipe.grindSize = grindSize;
             recipe.xid = xid;
 
@@ -316,7 +309,7 @@ export class XBloomRecipe {
                 this.name = recipeVo.theName;
                 if (recipeVo.podsVo) {
                     this.subtitle = recipeVo.podsVo.subtitle;
-                    this.imageURL = recipeVo.podsVo.imagePath;
+                    this.imageURL = podImageUrl(recipeVo.podsVo.imagePath) ?? "";
                     console.log(this.name);
                     console.log(this.imageURL)
                 }
