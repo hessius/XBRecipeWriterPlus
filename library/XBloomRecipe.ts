@@ -3,7 +3,19 @@ import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
 import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
 } from "@/library/bypassLimits";
+import {podCoffeeFromPodsVo} from "@/library/podCoffee";
 import type {ImportSource} from "./importInput";
+
+/**
+ * Attach the pod's coffee to the recipe it brewed, if it named one.
+ *
+ * Exported so it can be tested without a network call, and so the one place
+ * that reads `podsVo` for coffee is not buried inside a fetch.
+ */
+export function applyPodCoffee(recipe: Recipe, podsVo: unknown): void {
+    const coffee = podCoffeeFromPodsVo(podsVo);
+    if (coffee !== null) recipe.coffee = coffee;
+}
 
 export class XBloomRecipe {
     private xbRecipeJSON: any | null = null
@@ -85,9 +97,20 @@ export class XBloomRecipe {
             if (typeof detail.shareMemberHead === "string") {
                 recipe.sharedByAvatar = detail.shareMemberHead;
             }
-            const imagePath = this.xbRecipeJSON.recipeVo.podsVo?.imagePath;
-            if (typeof imagePath === "string") {
-                recipe.imageURL = imagePath;
+            const podsVo = this.xbRecipeJSON.recipeVo.podsVo;
+            applyPodCoffee(recipe, podsVo);
+            if (recipe.coffee !== undefined) {
+                // Named pod artwork follows the coffee validator, so the same
+                // `podsVo.imagePath` cannot be accepted for the library but
+                // rejected from the export.
+                if (recipe.coffee.imageUrl !== undefined) {
+                    recipe.imageURL = recipe.coffee.imageUrl;
+                }
+            } else {
+                const imagePath = podsVo?.imagePath;
+                if (typeof imagePath === "string") {
+                    recipe.imageURL = imagePath;
+                }
             }
             recipe.grindSize = grindSize;
             recipe.xid = xid;
