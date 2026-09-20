@@ -381,8 +381,10 @@ test asserts the property rather than trusting it.
   },
 
   "imported": {                    // optional, opaque to BC
-    "source": "xbloom",            // stable lowercase key, for icon lookup
-    "sourceName": "xBloom Studio", // display text, always present
+    "source": "xbrw",              // the APP that wrote this, for icon lookup
+    "sourceName": "XBRecipeWriter++",
+    "sourceUrl": "https://github.com/hessius/XBRecipeWriterPlus",
+    "device": "xBloom Studio",     // the MACHINE, display text
     "schema": 1,
     "params": { /* plan, pattern, agitation, bypass, stalls, xid */ }
   }
@@ -398,6 +400,14 @@ stopwatch.
 
 **`bloomTime` is a judgement call**, taken from stage 1's pause. The schema doc
 says so rather than presenting it as measured.
+
+**`source` is the application, not the machine.** An earlier draft used
+`"xbloom"` for both, which conflated two different facts. The payload dialect
+is set by whatever *wrote* the record, so `source` identifies the sending app
+and `device` carries the hardware as display text. This matters beyond
+tidiness: the provenance chip answers "where did this come from", whose honest
+answer is an app, and keying the icon map on the app is what makes §4.4.1
+legally trivial.
 
 **`imported.params` is opaque by contract.** BC stores it and never parses it.
 Nothing in BC's generic schema knows what a pour pattern is, which is the point
@@ -429,23 +439,26 @@ optional field:
 ```ts
 export interface ICustomInformationBrew {
   visualizer_id: string;
-  imported?: { source: string; sourceName: string; schema: number; params: any };
+  imported?: {
+    source: string; sourceName: string; sourceUrl?: string;
+    device?: string; schema: number; params: any;
+  };
 }
 ```
 
 No enum, no switch, no rendering coupling, and it persists through BC's backup
-like everything else on `Brew`. `source: "xbloom"` is data, not a case
+like everything else on `Brew`. `source: "xbrw"` is data, not a case
 statement, so **no vendor name enters BC's type system**.
 
 ### 4.4 The provenance chip
 
-Vendor branding without vendor branching. BC's logos are files at
+Sender branding without sender branching. BC's logos are files at
 `src/assets/custom-ion-icons/beanconqueror-<vendor>-logo.svg`, registered as
 `ion-icon` names, so the chip is a map lookup with a text fallback:
 
 ```html
 @if (brew?.customInformation?.imported; as imported) {
-  <ion-chip outline="true">
+  <ion-chip outline="true" (click)="openSource(imported)">
     @if (importIcon) { <ion-icon [name]="importIcon" /> }
     {{ imported.sourceName }}
   </ion-chip>
@@ -454,18 +467,23 @@ Vendor branding without vendor branching. BC's logos are files at
 
 `importIcon = IMPORT_SOURCE_ICONS[imported.source] ?? null`.
 
-- Known vendor → a logo chip, like Meticulous.
-- Unknown vendor → a text chip reading "xBloom Studio". The general case, not a
-  degraded one.
-- Adding a vendor later → an SVG and one map line. A two-line PR that needs no
+- Known sender → a logo chip, like Meticulous.
+- Unknown sender → a text chip reading "XBRecipeWriter++". The general case,
+  not a degraded one.
+- Adding a sender later → an SVG and one map line. A two-line PR that needs no
   understanding of the import path.
+
+`sourceUrl` makes the chip tappable, which is the whole of our attribution ask
+(§4.4.3). It is validated as `https:` and opened through BC's existing external
+link path; a `javascript:` or `file:` URL from a crafted link must never reach
+an opener.
 
 `sourceName` arrives from an untrusted URL. Angular escapes interpolation, so
 this is not an injection risk, but it is length-capped and non-empty-checked in
 the same validation pass as everything else, or a crafted link renders a chip
 the width of a paragraph.
 
-### 4.4.1 We ship the illustration, not the logo
+### 4.4.1 We ship the illustration, not xBloom's logo
 
 An earlier draft said "we ship the mechanism and an empty map", on the reasoning
 that pushing a vendor's trademark into someone else's GPL repository was the
@@ -499,10 +517,10 @@ So the line to draw is clear:
   stylized line drawing of the machine, in the register the other forty sit
   in — 200×200, `fill="none"`, no brand colour, no wordmark, drawn by us and
   not traced from xBloom's marketing renders or product photography.
-- **We do not contribute a logo.** No `beanconqueror-xbloom-logo.svg`. That set
-  belongs to integrations whose vendors supplied the artwork, and we are not
-  xBloom and cannot supply it. The provenance chip keeps its text fallback,
-  which §4.4 already treats as the general case rather than a degraded one.
+- **We do not contribute an xBloom logo.** No `beanconqueror-xbloom-logo.svg`.
+  That set belongs to integrations whose vendors supplied the artwork, and we
+  are not xBloom and cannot supply it. What goes in the logo slot is our own
+  mark, not theirs — §4.4.2.
 - **We do not mirror the heavy register.** The 356–900 KB traced files belong
   to live-connection integrations. An xBloom arriving over a link is not a
   connected device in BC's sense, and half a megabyte in someone else's bundle
@@ -511,7 +529,70 @@ So the line to draw is clear:
 This is a branded integration in exactly the way Chemex and Kalita are branded
 integrations: named, drawn, and unaffiliated.
 
-### 4.4.2 `PREPARATION_TYPES.XBLOOM`
+### 4.4.2 Two slots, two marks
+
+The logo slot has an occupant after all, and it is not xBloom's. The two icon
+slots answer different questions, and the answers are different marks:
+
+| Slot | Question | Mark |
+| --- | --- | --- |
+| Preparation type | What did you brew on? | An xBloom. Original line drawing, §4.4.1 |
+| Provenance chip | Where did this record come from? | **XBRecipeWriter++.** Our own logo |
+
+Putting our logo on the preparation type would assert that the coffee was
+brewed with XBRecipeWriter++, which is false, and it would sit in a list where
+every other entry is a vessel. Putting the machine on the provenance chip would
+answer the wrong question. This is the reason `source` names the app and
+`device` names the hardware (§4.2).
+
+The chip is ours by right: `assets/branding/xbrw-icon.svg` was drawn for this
+project and is ours to license. **That removes the only legally awkward asset
+from the PR.** The chip was otherwise going to be bare text, so this is a
+strict improvement as well as a simpler contribution — we grant our own mark
+rather than asking a maintainer to accept someone else's.
+
+Two practical constraints on the file. It is 1024×1024 with an opaque black
+`rect` and two Gaussian-blur filters, which in BC's `ion-icon` set renders as a
+black square and ignores theming entirely. A **flattened monochrome variant**
+is needed: no filters, no background, sized to the icon set. BC's logo slot
+does permit brand colour — `meticulous-logo.svg` carries `#EE380F` — so colour
+is available if it reads better, but the filters and the background are not.
+
+The grant should be stated rather than implied. `LICENSE` covers this
+repository's contributions under MIT and `NOTICE` draws that line; a
+contributed mark needs one explicit sentence in the PR granting use for the
+purpose of identifying this integration. GPL covers code, not trademarks, and
+leaving it unsaid would hand the maintainer an ambiguity he did not ask for.
+
+### 4.4.3 Discovery, and how much to ask for
+
+The chip attributes but does not discover: only someone who has already
+imported a brew ever sees it. A BC user who owns an xBloom and has never heard
+of XBRW++ has no path to us at all. Three asks, smallest first, genuinely
+independent, and he can take any subset:
+
+1. **The chip is tappable**, opening `sourceUrl`. Attribution, plus a route
+   onward for anyone who has already received a brew. Cost: one click handler
+   and a scheme check.
+2. **`docs/import-api.md` lists known senders.** Documentation, no UI, no
+   promotional surface. It also serves the neutral design: the point of a
+   published schema is that a list of implementers can exist.
+3. **A line under the xBloom preparation type**, noting that brews can be
+   imported from XBRecipeWriter++. This is the only one that reaches a user who
+   has never imported anything, because choosing that preparation type is the
+   moment they self-identify as an xBloom owner.
+
+The third is the real ask and should be presented as such rather than slipped
+in. It is promotional surface in someone else's app, from a project he has no
+relationship with, in a repository where he has already declined an xBloom
+integration once. If he takes one and two and refuses the third, that is a
+reasonable place to land and the feature is undamaged.
+
+**We reciprocate regardless**, stated up front rather than offered as a trade:
+XBRW++ points at Beanconqueror from its own export surface (§5.3). That costs
+him nothing, does not depend on his answer, and is the half of this we control.
+
+### 4.4.4 `PREPARATION_TYPES.XBLOOM`
 
 The consequence of the above is that xBloom becomes a preparation type rather
 than only a string in an envelope. Three touch points, all one-liners:
@@ -597,11 +678,13 @@ Genuinely open, and his to answer:
    against existing beans by name, or ignore the block until bean creation is
    designed separately? We are content with "ignore it for now"; the block is
    optional and a decoder that drops it still produces a correct brew.
-6. **The preparation type and illustration** (§4.4.1) — we would like to
-   contribute `PREPARATION_TYPES.XBLOOM` and an original stylized drawing in
-   the same register as V60 and Chemex, and explicitly **not** a logo. Does he
-   want it in the same PR, a separate one, or not at all? We have no stake in
-   the answer beyond wanting it asked rather than assumed.
+6. **The preparation type, the marks and the hints** (§4.4.1–§4.4.3) — we would
+   like to contribute `PREPARATION_TYPES.XBLOOM` with an original stylized
+   drawing in the same register as V60 and Chemex, **our own** logo for the
+   provenance chip, a tappable chip, a known-senders list in the docs, and a
+   line under the xBloom preparation type pointing at XBRW++. The last is the
+   real ask and the easiest to refuse; the first four are cheap. Any subset is
+   fine, and none of it is required for a brew to land correctly.
 
 ## 5. The XBRW++ side
 
@@ -671,6 +754,14 @@ maintainer's agreement, and is deleted once released.
 Everything in §3, §5.1 and the two pure modules ships and earns its keep with
 the flag off.
 
+**The reciprocal pointer.** When the action is enabled, the export surface
+names Beanconqueror and links to it: a one-line credit, copy following
+`docs/copy.md` and the no-dash rule, with the BC name as plain text rather than
+a logo we have no licence to ship. This is not contingent on §4.4.3 — it is
+offered whatever he decides, because the good-faith half of an integration
+should not be conditional on getting the promotional half. It costs one string
+and it is entirely ours to give.
+
 ## 6. Degradation and errors
 
 ### 6.1 The size budget
@@ -712,6 +803,18 @@ reaching the form is worse than a rejected link. A chunk count that disagrees
 with `n`, bad base64, failed inflate or CRC, wrong `v`, missing required
 fields, absurd magnitudes, over-long `sourceName` — each produces BC's existing
 error message and no partial state.
+
+`sourceUrl` deserves its own line because it is the one field that becomes an
+action rather than text. It is rejected unless it parses and its scheme is
+`https:`; a `javascript:` or `file:` URL arriving from a crafted link must
+never reach an opener. The chip is not rendered as tappable when `sourceUrl`
+is absent or refused.
+
+`sourceUrl` deserves its own line because it is the one field that becomes an
+action rather than text. It is rejected unless it parses and its scheme is
+`https:`; a `javascript:` or `file:` URL arriving from a crafted link must
+never reach an opener. The chip is not rendered as tappable when it is absent
+or refused.
 
 ## 7. Proof
 
@@ -762,20 +865,28 @@ setup.
 | `src/services/intentHandler/intent-handler.service.ts` | one `else if` for `ADD_BREW`, plus the `?shareBrew0=` sibling |
 | `src/services/brewImport/brewImport.service.ts` *(new)* | decode, inflate, validate, build `Brew` + `BrewFlow` |
 | `src/services/uiBrewHelper.ts` | `addBrewFromImport(brew, brewFlow)` |
-| `src/components/brew-information/…` | the provenance chip and icon map |
+| `src/components/brew-information/…` | the provenance chip, icon map, and the tappable `sourceUrl` handler |
+| `src/assets/custom-ion-icons/beanconqueror-xbrw-logo.svg` *(new)* | **our** mark, flattened and granted, §4.4.2 |
 | `src/enums/preparations/preparationTypes.ts` | `XBLOOM` |
 | `src/classes/preparation/preparation.ts` | one `getIcon()` case; `getPresetStyleType()` needs none |
 | `src/assets/custom-ion-icons/beanconqueror-preparation-xbloom.svg` *(new)* | original stylized illustration, §4.4.1 |
-| `src/assets/i18n/*.json` | error strings, preparation label |
-| `docs/import-api.md` *(new)* | the schema, so anyone can emit it |
+| `src/assets/i18n/*.json` | error strings, preparation label, the §4.4.3 hint |
+| `docs/import-api.md` *(new)* | the schema, so anyone can emit it, plus the known-senders list |
 
 Inflate uses `@zip.js/zip.js`, already a dependency. **No new packages.**
 
-The preparation type and the illustration are **separable from the rest**. If
-the maintainer wants the transport without the branding, or the branding
-reviewed on its own, they split cleanly along the table above: nothing in the
-import path reads `PREPARATION_TYPES.XBLOOM`, and the illustration is a file
-plus one `case`. Offering them as two commits is the courteous default.
+The preparation type, the two icons and the §4.4.3 hints are **separable from
+the rest**. If the maintainer wants the transport without the branding, or the
+branding reviewed on its own, they split cleanly along the table above: nothing
+in the import path reads `PREPARATION_TYPES.XBLOOM`, and neither icon is
+required for a brew to land correctly. Offering them as separate commits is the
+courteous default.
+
+**The xBloom illustration is deferred until he agrees.** Drawing it is
+illustration work rather than code, it must match the line weight of `v60` and
+`chemex` rather than be a traced silhouette, and commissioning it before there
+is a decision would be spending effort to create an obligation. The text
+fallback covers the gap in the meantime.
 
 ### 8.1 The write-up, before the code
 
@@ -822,7 +933,10 @@ Stated so it does not creep in:
   and the mill name under-claims instead.
 - **No xBloom logo or wordmark upstream**, and nothing traced from xBloom's
   product photography or marketing renders. §4.4.1 draws the line: an original
-  stylized illustration, in BC's own register, and nothing else.
+  stylized illustration, in BC's own register, and nothing else. The logo slot
+  carries **our** mark, which is ours to grant (§4.4.2).
+- **No paid or commissioned artwork before there is an agreement.** The
+  illustration is deferred (§8).
 - **No writing into BC's storage.** `uiStorage.__importBackup` overwrites whole
   keys, so a file carrying a `BREWS` array replaces the user's entire history.
   #123 found this. Nothing here goes near it.
