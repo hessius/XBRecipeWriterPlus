@@ -71,10 +71,10 @@ UUIDs into local storage, resolved strictly by UUID **with no name fallback**:
 Bean with `uuid: ''` and no error raised. `canBrewBoolean = hasBeans &&
 hasPreparationMethods && hasMills` is a hard precondition on brewing at all.
 
-XBRW++ holds **no bean data whatsoever** — there is no roaster, origin, process
-or roast date on `Recipe` or `XBloomRecipe`, and the only coffee identity we
-have is a recipe name and an xPod id. Guessing at someone's shelf from a recipe
-name would produce silent mis-attribution, which is worse than asking.
+For a **user-authored recipe** XBRW++ holds no bean data at all. There is no
+roaster, origin, process or roast date on `Recipe`, and the only coffee
+identity is a recipe name someone typed. Guessing at a person's shelf from a
+recipe name would produce silent mis-attribution, which is worse than asking.
 
 So the link carries brew figures, and the form is where the user settles the
 bean, the mill and the preparation method. `grinderName` and
@@ -84,6 +84,57 @@ the right thing when a match exists, and are harmless when it does not.
 The consequence to accept: **there is no fully automatic export.** A human
 confirms each brew. That was requested, and it is not available under this
 design.
+
+### 2.1.1 The exception: an xPod knows its coffee
+
+An earlier draft of this section said we hold "no bean data whatsoever". That
+was wrong, and the correction matters enough to record rather than quietly
+overwrite. It was drawn from a test fixture in which `podsVo.subtitle` was
+`"Ethiopia"`, which invited the reading that `subtitle` carries origin.
+
+A probe of the live endpoint (`tRecipeDetailOfPods.thtml`, pods `NLC001`
+through `NLC005`) shows `subtitle` is **empty** on real pods, and that
+`podsVo` is far richer than we use. We read three of its thirteen fields:
+
+| `podsVo` | Example (`NLC001`) | BC `Bean` |
+| --- | --- | --- |
+| `theName` | Kenya Sakami Gloria Natural Batian | `name` |
+| `origin` | Nabiswa, Kenya | `variety[].origin` |
+| `process` | Natural | `variety[].processing` |
+| `varietal` | Batian | `variety[].variety` |
+| `flavor` | Cherry・strawberry・blueberry | `aromatics` |
+| `introduce` | producer narrative, ~400 words | `note` |
+| `type` | Single Origin | `beanMix` |
+| `roast` | `1` | `degreeOfRoast`, **meaning unverified** |
+| `imagePath` | S3 URL | bean photo |
+
+`roast` was `1` on all five pods sampled, so whether it is a roast level or a
+constant is unknown. It is **not mapped** until a pod is found that differs.
+There is no roaster and no roast date; both are simply absent, and BC's fields
+for them stay empty rather than being invented.
+
+That is close to a complete BC bean rather than a weak name hint. Three rules
+keep it from undoing the decision above:
+
+1. **Captured at import, not at export.** We already make a network call when
+   importing an xPod recipe, so the coffee is stored on the `Recipe` then. An
+   export must not depend on an undocumented third-party API being reachable;
+   putting a live fetch in the middle of a user action makes the feature fail
+   on a train.
+2. **Snapshotted onto the brew record**, like `recipeName`, `accent` and
+   `plan`. A recipe later re-pointed at a different pod must not rewrite what
+   last month's brew says it was made with.
+3. **Always a hint, never a UUID.** BC resolves beans by UUID with no name
+   fallback (above), so this can only prefill or suggest. It can never assert
+   that a brew belongs to an existing bean, and bean *creation* stays out of
+   scope (§9).
+
+**Default: attached when the recipe is an unedited xBloom import** (`source ===
+"import"` with an `xid` and no subsequent user edit), and off once the recipe
+has been edited. The reasoning is that an untouched pod recipe almost certainly
+brewed that pod, whereas an edited one is the case the user described: a recipe
+kept and reused with a different coffee. It is one tap either way in the export
+sheet, and BC's form is a second confirmation regardless.
 
 ### 2.2 Vendor-neutral, deliberately
 
@@ -177,6 +228,8 @@ optional so existing rows read exactly as they do now — the convention
 | `ratio?: number` | `recipe.ratio` | enables `getBrewRatio()`, EY |
 | `grindSize?: number` | `recipe.grindSize`, 40–81 | `grind_size` (a string upstream) |
 | `grinderRpm?: number` | `recipe.grindRPM` | `mill_speed` |
+| `grinderUsed?: boolean` | `recipe.grinder` | whether `mill` may be claimed |
+| `coffee?: PodCoffee` | `recipe.coffee`, §2.1.1 | `bean` hints |
 
 **Copied, not joined**, like `recipeName`, `accent` and `plan`. Editing or
 deleting a recipe must not rewrite history, which matters more here than
@@ -191,6 +244,70 @@ says the coffee was pre-ground.
 one recipe) and #98 (aggregate by recipe) both need it: two brews cannot be
 compared without knowing whether the dose or the grind moved between them. It
 ships on its own schedule, with the export gated off.
+
+### 3.1 The mill is the machine, when the grinder ran
+
+`recipe.grinder` is a plain boolean, so this needs no inference: when it is
+true the xBloom ground the coffee, and `mill` can be asserted rather than
+guessed. `grinderRpm` goes to `mill_speed` and `grindSize` to `grind_size`,
+both already in the table above.
+
+When it is false the coffee was ground somewhere we know nothing about. `mill`
+is then **omitted entirely** rather than defaulted, and the note says the
+coffee was pre-ground. This is the same judgement as the `grindSize === 81`
+rule and must stay consistent with it: the two are the same fact read from two
+places, and `grinderUsed` is recorded so a later reader does not have to
+recover it from a sentinel.
+
+The mill **name** is deliberately under-claimed as `"xBloom"` rather than
+`"xBloom Studio"`. BC matches mills by UUID and creates on miss, so a wrongly
+specific name becomes a permanent duplicate in someone's mill list that they
+did not ask for and will not know to clean up. A vaguer truth costs nothing; a
+confident error costs a row forever.
+
+We could be more specific, and currently throw the means away. `Transport.ts`
+reads the advertised BLE name into `FoundMachine.name` at scan time, and
+nothing persists it: `Settings.DEFAULTS` holds `machineDeviceId` and no name.
+Keeping it is a small change. Whether that string actually separates the two
+models is **not answerable from our code** — it depends on what each firmware
+advertises, and the proper route would be the BLE Device Information Service
+(`0x180A`) `Model Number String`, which we have never read. Both are
+observations to make, not conclusions to reason to, and neither blocks this
+design.
+
+### 3.2 `adaptedModel` is the model discriminator, and we hardcode it
+
+Found while probing the pod endpoint for §2.1.1, and recorded here because it
+is a live correctness issue in its own right rather than a Beanconqueror
+matter.
+
+The same pod returns a **different recipe per model**:
+
+| xid | model 1 grind | model 2 grind | model 1 dose | model 2 dose |
+| --- | --- | --- | --- | --- |
+| NLC001 | 55 | 26 | 15 | 15 |
+| NLC002 | 48 | 24 | 15 | 15 |
+| NLC003 | 58 | 26 | 15 | 15 |
+| NLC004 | 55 | 25 | 18 | 15 |
+| NLC005 | 57 | 27 | 18 | 15 |
+
+Flow rates differ too. `podsVo` is byte-identical across the two, which is the
+tell: the coffee is model-independent, the brew recipe is not. Only `1` and `2`
+return rows; `0` and `3` come back empty.
+
+**Model 1 is the xBloom Studio**, confirmed against the official app, which
+shows grind 55 for `NLC001`. Model 2 is therefore the original xBloom, and its
+grind band of roughly 24–27 sits **below `GRIND_SIZE.min = 40`** in
+`cardLimits.ts` — our card encoding cannot represent an original's grind
+setting at all. This is consistent with #68, which hardware-verified the 40–80
+band on a Studio.
+
+We send `adaptedModel: 1` from six call sites, and `api/_lib/payload.ts:162`
+rejects anything else. That was a deliberate single-partition choice and it
+serves the common machine correctly. The unknown consequence was that original
+owners receive Studio grind settings. **This is out of scope here and belongs
+in its own issue**; it is written down because the evidence was gathered in
+this session and would otherwise be lost.
 
 ## 4. The wire format
 
@@ -244,6 +361,17 @@ test asserts the property rather than trusting it.
     "note": "…generated stage summary…"
   },
 
+  "bean": {                        // optional, §2.1.1; hints only, never a UUID
+    "name": "Kenya Sakami Gloria Natural Batian",
+    "origin": "Nabiswa, Kenya",
+    "process": "Natural",
+    "variety": "Batian",
+    "aromatics": "Cherry・strawberry・blueberry",
+    "beanMix": "Single Origin",
+    "note": "…producer narrative…",
+    "imageUrl": "https://…png"
+  },
+
   "flow": {                        // optional
     "fidelity": "full",            // "full" | "downsampled"
     "t":              [ … ],       // ms, delta-coded
@@ -275,6 +403,16 @@ says so rather than presenting it as measured.
 Nothing in BC's generic schema knows what a pour pattern is, which is the point
 of a neutral design. The data survives BC's own backup, and is there if anyone
 ever wants to draw an xBloom stage ladder.
+
+**`bean` is absent far more often than present.** It appears only for an
+unedited xPod recipe (§2.1.1). Every field in it is optional, no field is a
+UUID, and a decoder that ignores the block entirely must still produce a
+correct brew. `roaster` and `roastingDate` are not in the block because the pod
+endpoint does not carry them; they are left for the user rather than invented.
+
+**`grinderName` is omitted, not defaulted, when the grinder did not run**
+(§3.1), and stays `"xBloom"` rather than naming a model we cannot yet
+distinguish.
 
 ### 4.3 Where `imported` lives, and why not `preparationDeviceBrew`
 
@@ -353,6 +491,7 @@ three tiers, and only the first requires BC to do anything.
 | first `cup > 0` | `coffee_first_drip_time` | measured, not stopwatched |
 | `samples.water` | `BrewFlow.waterDispensed` | |
 | `samples.cup` | `BrewFlow.weight` | |
+| `coffee.*` (§2.1.1) | `Bean` prefill | xPod only, hints, never a UUID |
 
 **Tier 2, human-readable in `note`.** The generated summary spells out every
 stage: volume, temperature, pattern, agitation, pause. It renders in BC today,
@@ -366,8 +505,10 @@ backup, and it is there if anyone ever wants to draw an xBloom stage ladder.
 So "not supported in BQ" stops being a blocker: tier 2 makes stages visible
 without a data model, and tier 3 makes them recoverable without a commitment.
 
-**What BC has and we do not:** bean, mill, preparation, water, `tds`, pressure.
-All are left for the user or omitted; none is guessed.
+**What BC has and we do not:** mill identity beyond "an xBloom ran" (§3.1),
+preparation, water, `tds`, pressure, and — for every recipe that is not an
+unedited xPod import — the bean. All are left for the user or omitted; none is
+guessed.
 
 ### 4.5.1 Open questions for the maintainer
 
@@ -380,7 +521,14 @@ Genuinely open, and his to answer:
 3. **Temperature** — is flattening per-stage temperature to stage 1's value
    acceptable, or should it travel only in `flow.temperature`?
 4. **Mill and preparation** — match by name with create-on-miss, or always
-   leave them to the user?
+   leave them to the user? Relevant to §3.1: we under-claim the mill as
+   `"xBloom"` precisely because create-on-miss makes a wrong name permanent.
+5. **The `bean` block** (§2.1.1) — for xPod brews we can supply a near-complete
+   bean: name, origin, process, varietal, flavour notes and a producer
+   narrative. Should BC prefill a **new** bean from it, offer it as a match
+   against existing beans by name, or ignore the block until bean creation is
+   designed separately? We are content with "ignore it for now"; the block is
+   optional and a decoder that drops it still produces a correct brew.
 
 ## 5. The XBRW++ side
 
@@ -390,9 +538,15 @@ without a brew.
 | Module | Responsibility |
 | --- | --- |
 | `library/brew/brewNote.ts` | The human-readable stage summary. Pure, no dependencies. |
-| `library/brew/handoff/envelope.ts` | `StoredBrew` + samples → the neutral object. Knows the schema, unit tags, `firstDripTime`, the `imported` block. No compression, no URLs. |
+| `library/brew/handoff/envelope.ts` | `StoredBrew` + samples → the neutral object. Knows the schema, unit tags, `firstDripTime`, the `bean` and `imported` blocks. No compression, no URLs. |
 | `library/brew/handoff/encode.ts` | Object → chunked URL. Columnar-delta, gzip, base64url, size budget. Knows nothing about brews. |
 | `hooks/useBrewHandoff.ts` | The action: gather, encode, open, handle refusal. |
+
+The xPod coffee is captured **outside** these modules, in the import path that
+already talks to the pod endpoint (§2.1.1), and snapshotted onto the brew
+record alongside the widened #109 fields. `envelope.ts` reads it off the record
+and never fetches. That keeps the one network dependency where a network
+already was.
 
 **One new dependency:** `fflate` for gzip. Pure JS, around 8 KB, no native code,
 so no prebuild and no `expo.version` bump. React Native has no built-in zlib.
@@ -557,7 +711,10 @@ Ordered by his interest:
 6. We do the work: PR, tests, docs, i18n. He reviews.
 7. Honest limits, stated before he finds them: iOS-measured only; Android
    reasoned; the bean stays user-chosen because UUID resolution has no name
-   fallback and we refuse to guess at someone's shelf.
+   fallback and we refuse to guess at someone's shelf. The one exception,
+   offered rather than assumed: an unedited xPod recipe carries real coffee
+   data from xBloom's pod endpoint (§2.1.1), so the link can prefill a bean
+   where it actually knows one.
 
 And, plainly, given #1163: **we are not xBloom.** XBRW++ is a third-party
 community app; xBloom has no involvement in it and has not asked for this. He
@@ -570,7 +727,14 @@ as the thing he already declined.
 Stated so it does not creep in:
 
 - **No automatic export on brew finish.** §2.1 rules it out.
-- **No bean creation**, and no guessing at an existing one.
+- **No bean creation**, and no guessing at an existing one. The xPod `bean`
+  block (§2.1.1) is a prefill hint; whether BC ever creates from it is his call
+  (§4.5.1 q5), not something this design assumes.
+- **No fix for the `adaptedModel` grind-scale split.** §3.2 records the
+  evidence; the fix belongs in its own issue and touches the import and share
+  paths, not the export.
+- **No BLE model detection.** §3.1 says why it cannot be concluded from code,
+  and the mill name under-claims instead.
 - **No writing into BC's storage.** `uiStorage.__importBackup` overwrites whole
   keys, so a file carrying a `BREWS` array replaces the user's entire history.
   #123 found this. Nothing here goes near it.
