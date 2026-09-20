@@ -46,6 +46,7 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "fflate": "^0.8.3",
     "patch-package": "^8.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
