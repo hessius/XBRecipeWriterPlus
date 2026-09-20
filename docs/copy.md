@@ -582,7 +582,6 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.handoff.beanconqueror.label` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewRecord.tsx`) | Button to hand a completed brew to Beanconqueror. Hidden behind `HANDOFF_ENABLED` until Beanconqueror can read the link. | `Send to Beanconqueror` |
 | `brewRecord.handoff.beanconqueror.credit` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].credit`, passed from `app/brewRecord.tsx`) | One-line reciprocal credit shown beside the Beanconqueror handoff action while the gate is enabled. Pressing it opens Beanconqueror's project site. | `Beanconqueror keeps the brew diary.` |
 | `brewRecord.handoff.beanconqueror.credit.a11y` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].siteAccessibilityLabel`, passed from `app/brewRecord.tsx`) | (a11y) Label for the tappable reciprocal credit link. | `Open Beanconqueror website` |
-| `brewRecord.handoff.beanconqueror.siteOpenFailed` | `app/brewRecord.tsx` | Error toast when the Beanconqueror project site link cannot be opened. | `Could not open that link.` |
 | `brewRecord.handoff.openFailed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened, usually because Beanconqueror is not installed. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewRecord.handoff.tooLarge` | `hooks/useBrewHandoff.ts:10` | Error toast when the handoff payload still cannot fit in a URL after dropping every lossy fallback. | `This brew is too large to hand over to Beanconqueror.` |
 
@@ -887,7 +886,7 @@ messages from `hooks/useBackup.ts` and `library/backup.ts`.
 | `about.section.licences` | `app/about.tsx:172` | Section heading. | `Third-party licences` |
 | `about.licences.p1` | `app/about.tsx:174` | Paragraph. `${LICENCES.length}` is the package count. | `This app stands on ${LICENCES.length} open-source packages. Where a package ships its licence text, it is reproduced in full, along with the copyright notice that licence requires. Where it ships only a name, that is recorded.` |
 | `about.link.licences` | `app/about.tsx:179` | Link to the licences screen. | `Read the licences` |
-| `about.link.error` | `app/about.tsx:240` | Error toast when a link cannot open. | `Could not open that link.` |
+| `shared.link.openFailed` | `components/LinkText.tsx` (`LINK_OPEN_FAILED`) | Error toast when a shared text link cannot open. | `Could not open that link.` |
 
 #### About ticker (`app/about.tsx:34`, `TICKER_LINES`)
 

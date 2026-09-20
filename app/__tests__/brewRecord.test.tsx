@@ -11,15 +11,22 @@ import type {RecipeLookup} from "@/app/brewRecord";
 import {sharedSettings} from "@/hooks/useSetting";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+import {
+    brewRecordFixture as record,
+    type BrewRecordOpenResult
+} from "@/test-utils/brewRecordMocks";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import type {BrewSample} from "@/library/brew/BrewRecord";
 import type Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
+import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
+// This file forces the handoff gate on so the hidden UI can be exercised. The
+// pre-existing layout assertions in this file therefore describe staging, not
+// the currently shipped screen.
 jest.mock("@/library/brew/handoff/targets", () => {
     const actual = jest.requireActual("@/library/brew/handoff/targets");
     return {
@@ -33,9 +40,7 @@ jest.mock("@/library/brew/handoff/targets", () => {
  * `frames` is optional here only: the real `open()` always returns one, but a
  * test that is not about the frame log should not have to say so.
  */
-type OpenResult =
-    {record: StoredBrew; samples: BrewSample[]; frames?: string} | null;
-let mockOpened: OpenResult = null;
+let mockOpened: BrewRecordOpenResult = null;
 
 // Settable per test — defaults to the `id` case; set to `{latest: "1"}` for
 // the latest-branch tests.
@@ -47,11 +52,17 @@ let mockBrews: StoredBrew[] = [];
 // The judgement writes the screen makes, recorded rather than performed.
 const mockJudgementStore = {judge: jest.fn(), setPinned: jest.fn()};
 
-jest.mock("expo-router", () => ({
-    router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
-    useLocalSearchParams: () => mockParams,
-    useNavigation: () => ({setOptions: (...args: unknown[]) => mockSetOptions(...args)})
-}));
+jest.mock("expo-router", () => {
+    const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
+        "@/test-utils/brewRecordMocks"
+    );
+    return mocks.createExpoRouterMock({
+        push: (...args: unknown[]) => mockPush(...args),
+        back: jest.fn(),
+        setOptions: (...args: unknown[]) => mockSetOptions(...args),
+        params: () => mockParams
+    });
+});
 
 // `useSetting` reaches for the shared SQLite-backed store, which cannot open
 // under Jest. The frame-log button rides the machine-console gate, so the
@@ -59,18 +70,16 @@ jest.mock("expo-router", () => ({
 jest.mock("@/hooks/useSetting", () =>
     require("@/test-utils/settingsMock").settingsMock());
 
-jest.mock("@/hooks/useBrewHistory", () => ({
-    useBrewHistory: () => ({
-        brews: mockBrews,
-        remove: jest.fn(),
-        open: () => mockOpened
-    }),
-    // The real judgement hook over a fake store: the screen's seeding, the
-    // local state and the write-through are the things under test, and
-    // reimplementing them here would be testing the mock.
-    useBrewJudgement: jest.requireActual("@/hooks/useBrewHistory").useBrewJudgement,
-    sharedBrewDatabase: () => mockJudgementStore
-}));
+jest.mock("@/hooks/useBrewHistory", () => {
+    const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
+        "@/test-utils/brewRecordMocks"
+    );
+    return mocks.createBrewHistoryMock({
+        brews: () => mockBrews,
+        opened: () => mockOpened,
+        judgementStore: () => mockJudgementStore
+    });
+});
 
 // Provide a minimal pour-less recipe for the ladder, avoiding the need to
 // construct a full Recipe object in tests.
@@ -119,13 +128,6 @@ const twoPours = {
         new Pour(2, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10)
     ]
 } as unknown as Recipe;
-
-const record: StoredBrew = {
-    id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
-    accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
-    failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
-    hasStream: true
-};
 
 describe("brew record", () => {
     beforeEach(() => {
@@ -326,6 +328,7 @@ describe("brew record", () => {
 
     describe("Beanconqueror handoff", () => {
         let openURL: jest.SpiedFunction<typeof Linking.openURL>;
+        const [handoffTarget] = HANDOFF_TARGETS;
 
         beforeEach(() => {
             openURL = jest.spyOn(Linking, "openURL");
@@ -340,7 +343,7 @@ describe("brew record", () => {
         it("offers Beanconqueror handoff for a completed brew when the gate is on", async () => {
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.getByLabelText("Send to Beanconqueror")).toBeTruthy();
+            expect(screen.getByLabelText(handoffTarget.buttonLabel)).toBeTruthy();
         });
 
         it("does not offer Beanconqueror handoff for a failed brew when the gate is on", async () => {
@@ -348,7 +351,8 @@ describe("brew record", () => {
 
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.queryByLabelText("Send to Beanconqueror")).toBeNull();
+            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
         });
 
         it("opens Beanconqueror once when the handoff action is pressed", async () => {
@@ -356,25 +360,29 @@ describe("brew record", () => {
                 <BrewRecord recipeLookup={mockLookup} />
             );
 
-            await fireEvent.press(getByLabelText("Send to Beanconqueror"));
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
 
             await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
         });
         it("announces the Beanconqueror credit as a link", async () => {
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.getByRole("link", {name: "Open Beanconqueror website"})).toBeTruthy();
-            expect(screen.getByText("Beanconqueror keeps the brew diary.")).toBeTruthy();
+            expect(screen.getByRole("link", {
+                name: handoffTarget.siteAccessibilityLabel
+            })).toBeTruthy();
+            expect(screen.getByText(handoffTarget.credit)).toBeTruthy();
         });
 
         it("opens the Beanconqueror site once when the credit is pressed", async () => {
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            await fireEvent.press(screen.getByRole("link", {name: "Open Beanconqueror website"}));
+            await fireEvent.press(screen.getByRole("link", {
+                name: handoffTarget.siteAccessibilityLabel
+            }));
 
             await waitFor(() => {
                 expect(openURL).toHaveBeenCalledTimes(1);
-                expect(openURL).toHaveBeenCalledWith("https://beanconqueror.com");
+                expect(openURL).toHaveBeenCalledWith(handoffTarget.siteUrl);
             });
         });
 
@@ -382,8 +390,11 @@ describe("brew record", () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.queryByRole("link", {name: "Open Beanconqueror website"})).toBeNull();
-            expect(screen.queryByText("Beanconqueror keeps the brew diary.")).toBeNull();
+            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.queryByRole("link", {
+                name: handoffTarget.siteAccessibilityLabel
+            })).toBeNull();
+            expect(screen.queryByText(handoffTarget.credit)).toBeNull();
         });
     });
 
@@ -710,14 +721,7 @@ describe("the frame log of a brew", () => {
 });
 
 describe("bypass on the record screen", () => {
-    const aRecord: StoredBrew = {
-        id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
-        accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
-        failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
-        hasStream: true
-    };
-
-    async function renderRecord(r: StoredBrew) {
+    async function renderRecord(r: typeof record) {
         mockParams = {id: r.id};
         mockOpened = {
             record: r,
@@ -729,16 +733,16 @@ describe("bypass on the record screen", () => {
 
     it("draws the bypass a record kept", async () => {
         await renderRecord({
-            ...aRecord,
+            ...record,
             waterTotal: 245,
             bypass: {volume: 5, temperature: 85, delivered: 5, startedAt: 183_000}
-        } as StoredBrew);
+        });
         expect(screen.getByTestId("rung-bypass")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
     });
 
     it("draws an old record exactly as before", async () => {
-        await renderRecord(aRecord);
+        await renderRecord(record);
         expect(screen.queryByTestId("rung-bypass")).toBeNull();
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });

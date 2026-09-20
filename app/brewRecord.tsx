@@ -1,7 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useRef, useState} from "react";
-import {Linking, Pressable, ScrollView, useWindowDimensions} from "react-native";
+import {ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -12,6 +12,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import * as Clipboard from "expo-clipboard";
 
 import ExportButton from "@/components/ExportButton";
+import LinkText from "@/components/LinkText";
 import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
@@ -24,7 +25,7 @@ import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
-import * as handoffTargets from "@/library/brew/handoff/targets";
+import {canHandOff, HANDOFF_ENABLED, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -59,34 +60,6 @@ type Props = {
     /** Injected by tests to avoid opening the real SQLite database. */
     recipeLookup?: RecipeLookup;
 };
-
-function HandoffCredit({credit, siteUrl, accessibilityLabel}: {
-    credit: string;
-    siteUrl: string;
-    accessibilityLabel: string;
-}) {
-    return (
-        <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={accessibilityLabel}
-            style={({pressed}) => ({
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: 44,
-                opacity: pressed ? 0.6 : 1
-            })}
-            onPress={() => {
-                Linking.openURL(siteUrl).catch(() => notify({
-                    tone:    "error",
-                    message: "Could not open that link."
-                }));
-            }}>
-            <Text color={palette.brand} fontSize={12} fontWeight="600" textAlign="center">
-                {credit}
-            </Text>
-        </Pressable>
-    );
-}
 
 /**
  * A single recorded brew, frozen.
@@ -200,10 +173,10 @@ export default function BrewRecord({recipeLookup}: Props) {
     }
 
     const {record, samples} = opened;
-    const handoffTarget = handoffTargets.HANDOFF_TARGETS[0];
-    const showHandoff = handoffTargets.HANDOFF_ENABLED
-        && handoffTarget !== undefined
-        && handoffTargets.canHandOff(record.outcome);
+    // The record screen renders the first target only; adding a second target
+    // means revisiting this selection rather than assuming it appears here.
+    const [handoffTarget] = HANDOFF_TARGETS;
+    const showHandoff = HANDOFF_ENABLED && canHandOff(record.outcome);
     // `?? ""` because a record opened before the frame log existed — and any
     // stand-in for the store — simply has no log, which is a brew with nothing
     // to copy rather than an error.
@@ -382,16 +355,24 @@ export default function BrewRecord({recipeLookup}: Props) {
                                       onPress={() => void shareImage()} />
                         <ExportButton label="Export the data" busy={busy}
                                       onPress={() => void shareData()} />
-                        {showHandoff && (
+                    </XStack>
+                    {showHandoff && (
+                        // At Doto's maximum 1.4x accessibility scale, the
+                        // Beanconqueror label cannot share a three-way split
+                        // with the two exports; a full row gives it width.
+                        <XStack>
                             <ExportButton label={handoffTarget.buttonLabel}
                                           busy={handoffBusy}
                                           onPress={() => void sendHandoff()} />
-                        )}
-                    </XStack>
+                        </XStack>
+                    )}
                     {showHandoff && (
-                        <HandoffCredit credit={handoffTarget.credit}
-                                       siteUrl={handoffTarget.siteUrl}
-                                       accessibilityLabel={handoffTarget.siteAccessibilityLabel} />
+                        <LinkText label={handoffTarget.credit}
+                                  url={handoffTarget.siteUrl}
+                                  accessibilityLabel={handoffTarget.siteAccessibilityLabel}
+                                  fontSize={12}
+                                  textAlign="center"
+                                  alignItems="center" />
                     )}
                 </YStack>
             )}

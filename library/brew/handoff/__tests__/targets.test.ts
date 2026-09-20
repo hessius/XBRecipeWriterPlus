@@ -26,7 +26,7 @@ describe("handoff targets", () => {
 
         for (const target of HANDOFF_TARGETS) {
             for (const key of copy) {
-                expect(target[key]).not.toMatch(/[-–—]/);
+                expect(target[key]).not.toMatch(/[-\u00AD\u2010-\u2015\u2212]/);
             }
         }
     });

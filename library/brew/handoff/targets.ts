@@ -23,8 +23,9 @@ export type HandoffTarget = {
 export const HANDOFF_ENABLED = false;
 
 /**
- * The first handoff target. Kept as a list so adding another consumer later is
- * data rather than a branch in the record screen.
+ * Handoff destinations. The record screen currently renders the first entry;
+ * adding another consumer is data, but each caller still has to decide how to
+ * present more than one target.
  */
 export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
     {
@@ -37,6 +38,8 @@ export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
     }
 ];
 
+// The Record shape is the exhaustiveness check: adding a BrewOutcome must break
+// compilation here until the handoff rule for that outcome is decided.
 const CAN_HAND_OFF: Record<BrewOutcome, boolean> = {
     done:           true,
     endedOnMachine: false,
