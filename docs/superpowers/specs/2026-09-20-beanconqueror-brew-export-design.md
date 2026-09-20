@@ -125,9 +125,9 @@ keep it from undoing the decision above:
    `plan`. A recipe later re-pointed at a different pod must not rewrite what
    last month's brew says it was made with.
 3. **Always a hint, never a UUID.** BC resolves beans by UUID with no name
-   fallback (above), so this can only prefill or suggest. It can never assert
-   that a brew belongs to an existing bean, and bean *creation* stays out of
-   scope (§9).
+   fallback (above), so the block can only ever be matched by name against
+   beans the user already has (§4.5.1 decision 5). On a miss it is dropped and
+   the coffee's name goes in the note. Bean *creation* stays out of scope (§9).
 
 **Default: attached when the recipe is an unedited xBloom import** (`source ===
 "import"` with an `xid` and no subsequent user edit), and off once the recipe
@@ -377,7 +377,7 @@ test asserts the property rather than trusting it.
     "t":              [ … ],       // ms, delta-coded
     "waterDispensed": [ … ],       // 0.1 g, delta-coded
     "weight":         [ … ],       // 0.1 g, delta-coded
-    "temperature":    [ … ]        // optional
+    "temperature":    [ … ]        // optional; XBRW++ never emits it, §4.5.1 d3
   },
 
   "imported": {                    // optional, opaque to BC
@@ -400,6 +400,12 @@ stopwatch.
 
 **`bloomTime` is a judgement call**, taken from stage 1's pause. The schema doc
 says so rather than presenting it as measured.
+
+**`flow.temperature` exists in the schema and we never populate it.** The
+envelope is neutral, and a sender with a temperature probe should have somewhere
+to put its readings. We have none: `BrewSample` is `{at, water, cup, pour}`.
+Emitting the plan's per-stage figures here would dress an intention up as a
+measurement, which §4.5.1 decision 3 refuses.
 
 **`source` is the application, not the machine.** An earlier draft used
 `"xbloom"` for both, which conflated two different facts. The payload dialect
@@ -659,32 +665,111 @@ preparation, water, `tds`, pressure, and — for every recipe that is not an
 unedited xPod import — the bean. All are left for the user or omitted; none is
 guessed.
 
-### 4.5.1 Open questions for the maintainer
+### 4.5.1 Decisions taken, and why
 
-Genuinely open, and his to answer:
+An earlier draft left six questions for the maintainer. That was the wrong
+shape of ask. Six open questions is homework handed to someone who has already
+said he is stretched; six decisions with reasons is a review, which is both
+less work and easier to disagree with. Each of these is a position we can
+defend and none is expensive to reverse.
 
-1. **`realtimeFlow`** — should we compute flow and send it, or send
-   `waterDispensed` and let BC derive it as it does for scales?
-2. **Placement** — is `customInformation.imported` the right home, or would he
-   rather it sat elsewhere?
-3. **Temperature** — is flattening per-stage temperature to stage 1's value
-   acceptable, or should it travel only in `flow.temperature`?
-4. **Mill and preparation** — match by name with create-on-miss, or always
-   leave them to the user? Relevant to §3.1: we under-claim the mill as
-   `"xBloom"` precisely because create-on-miss makes a wrong name permanent.
-5. **The `bean` block** (§2.1.1) — for xPod brews we can supply a near-complete
-   bean: name, origin, process, varietal, flavour notes and a producer
-   narrative. Should BC prefill a **new** bean from it, offer it as a match
-   against existing beans by name, or ignore the block until bean creation is
-   designed separately? We are content with "ignore it for now"; the block is
-   optional and a decoder that drops it still produces a correct brew.
-6. **The preparation type, the marks and the hints** (§4.4.1–§4.4.3) — we would
-   like to contribute `PREPARATION_TYPES.XBLOOM` with an original stylized
-   drawing in the same register as V60 and Chemex, **our own** logo for the
-   provenance chip, a tappable chip, a known-senders list in the docs, and a
-   line under the xBloom preparation type pointing at XBRW++. The last is the
-   real ask and the easiest to refuse; the first four are cheap. Any subset is
-   fine, and none of it is required for a brew to land correctly.
+**Every one of them is marked in `docs/import-api.md`, and any of them can be
+overruled in review without redesigning anything.**
+
+**1. Flow: we send what we measured, and no derivative.**
+
+`waterDispensed` and `weight` only. No `realtimeFlow`.
+
+Flow is a derivative of weight, and BC already computes its own:
+`IBrewWeightFlow` carries `calculated_real_flow`, `smoothed_weight` and
+`not_mutated_weight`, which is a smoothing pipeline tuned to scale hardware.
+A curve we smoothed our way, sitting on the same axes as natively produced
+curves, is a subtle inconsistency that would be noticed later and blamed on the
+import. Sending the measurement and letting BC derive keeps imported and native
+brews identical in shape, and it survives BC changing its smoothing.
+
+Partial series are ordinary rather than degraded: `BrewFlow`'s constructor
+initialises all thirteen arrays to `[]`, and a pour-over logged with a scale
+already has an empty `pressureFlow`. We are not introducing a new case.
+
+It is also free bytes in a 2.3 KB budget.
+
+**2. Placement: `customInformation.imported`, as designed.**
+
+§4.3 gives the reasoning — `preparationDeviceBrew` threads live-connection
+state through screens built for a connected machine. One optional field on a
+one-field interface, no enum, no switch. It is additive and it is the single
+cheapest thing in this document to move, so it is not worth blocking on.
+
+**3. Temperature: the scalar only. We do not fabricate a series.**
+
+`brew_temperature` gets stage 1's temperature. `temperatureFlow` stays empty.
+
+BC does have a per-instant `IBrewTemperatureFlow`, and per-stage temperature
+would map onto it neatly — which is exactly the trap. **We do not measure
+temperature.** `BrewSample` is `{at, water, cup, pour}`; the per-stage figures
+are what the recipe *asked for*, not what a probe read. Emitting a planned step
+function into a series that sits beside measured water and weight would assert
+a measurement we never took.
+
+So the plan's temperatures travel as tier 2 (the note) and tier 3
+(`imported.params`), where they are labelled as plan. This is the same
+judgement as `bloomTime`, which §4.2 already flags rather than dresses up.
+
+**4. Mill and preparation: match or nothing. Never create.**
+
+BC's own precedent decides this. `findBeanByInternalShareCode` looks up an
+incoming reference and, on a miss, does nothing at all — `if (bean) { ... }`
+with no `else`. An incoming reference in BC matches an existing entity or is
+silently dropped; nothing in the codebase creates one on behalf of a link.
+
+So: case-insensitive name match against **non-archived** entries, because
+`repeatLastBrewForBeanByInternalShareCode` filters on `finished === false` for
+bean, mill and preparation alike. No match means the field is left unset and
+the form asks, which is already guaranteed to work: `canBrewBoolean` requires
+the user to own at least one mill and one preparation before they can brew at
+all.
+
+This is also why §3.1 under-claims the mill name as `"xBloom"`. Under
+match-or-nothing a wrong name simply fails to match and costs nothing, whereas
+under create-on-miss it would be a permanent duplicate. The conservative
+transport rule and the conservative naming rule support each other.
+
+**5. Bean: match by name, and nothing more in v1.**
+
+The same precedent, the same answer. The `bean` block (§2.1.1) is matched
+against existing non-archived beans by name; on a miss the block is dropped and
+the coffee's name appears in the note, so the user can see what it was while
+choosing for themselves.
+
+Bean **creation** stays out (§9). It is a larger conversation than this feature
+and it would make an import able to write new top-level entities into someone's
+library, which is a much bigger trust ask than adding one brew.
+
+Worth recording for later rather than proposing now: BC's existing bean share
+link already creates beans today, with no upstream change at all. An xPod
+coffee could in principle be delivered that way. It is rejected for v1 because
+handing a user two links for one brew is a poor experience, but it means bean
+creation is reachable without new machinery if anyone wants it.
+
+**6. The marks and the hints: offered, separable, pre-emptively droppable.**
+
+§4.4.1 to §4.4.3. We contribute `PREPARATION_TYPES.XBLOOM`, an original
+stylized drawing in the V60 and Chemex register, our own logo for the
+provenance chip, a tappable chip, and a known-senders list in the docs.
+
+The one genuine ask is the line under the xBloom preparation type, and it is
+offered in its own commit with the expectation that it may be declined. Nothing
+in the import path reads the enum member and no brew depends on either icon, so
+every piece of this can be dropped without touching the feature.
+
+**The decoder detail we owe him.** BC's flow series carry `timestamp` and
+`brew_time` as **strings**, and value entries as `old`/`actual` pairs rather
+than single readings. The decoder reconstructs both: the pair falls out of the
+delta encoding for free, since the previous value is what the delta was applied
+to, and both time fields are derived from `t`. This is BC's format, produced by
+BC's decoder, from our neutral envelope — which is the whole point of not
+shaping the wire format like BC's internals (§4).
 
 ## 5. The XBRW++ side
 
@@ -906,11 +991,16 @@ Ordered by his interest:
    offered as a separate commit he can take or leave.
 6. We do the work: PR, tests, docs, i18n. He reviews.
 7. Honest limits, stated before he finds them: iOS-measured only; Android
-   reasoned; the bean stays user-chosen because UUID resolution has no name
-   fallback and we refuse to guess at someone's shelf. The one exception,
-   offered rather than assumed: an unedited xPod recipe carries real coffee
-   data from xBloom's pod endpoint (§2.1.1), so the link can prefill a bean
-   where it actually knows one.
+   reasoned; the bean stays user-chosen, because BC's own precedent is
+   match-or-nothing and we are not going to be the first thing in the codebase
+   that writes new entities into a library from a link. For an unedited xPod
+   recipe we do hold real coffee data (§2.1.1), and even then we only match it
+   by name and otherwise put the name in the note.
+8. **Decisions, not questions.** §4.5.1 settles all six and shows the working,
+   including the two places BC's own code made the choice for us. He is being
+   asked to review positions rather than answer a quiz, and each one names what
+   it would cost to reverse. This is the difference between a contribution and
+   a support request, and it is the point of the whole write-up.
 
 And, plainly, given #1163: **we are not xBloom.** XBRW++ is a third-party
 community app; xBloom has no involvement in it and has not asked for this. He
@@ -925,7 +1015,7 @@ Stated so it does not creep in:
 - **No automatic export on brew finish.** §2.1 rules it out.
 - **No bean creation**, and no guessing at an existing one. The xPod `bean`
   block (§2.1.1) is a prefill hint; whether BC ever creates from it is his call
-  (§4.5.1 q5), not something this design assumes.
+  (§4.5.1 decision 5), not something this design assumes.
 - **No fix for the `adaptedModel` grind-scale split.** §3.2 records the
   evidence; the fix belongs in its own issue and touches the import and share
   paths, not the export.
