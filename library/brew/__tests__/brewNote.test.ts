@@ -1,4 +1,4 @@
-import {AGITATION, POUR_PATTERN} from "@/library/Pour";
+import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {brewNote} from "@/library/brew/brewNote";
 import type {BrewRecord, PlanStage} from "@/library/brew/BrewRecord";
 
@@ -77,7 +77,8 @@ Stage 3  100 ml   90°C   centred, agitate after
 15 g · 1:16 · grind 62 · 1 stage · xBloom`);
     });
 
-    it("treats the unset agitation sentinel as no agitation", () => {
+    it("keeps the unset agitation sentinel from reading as both agitation flags", () => {
+        // This defends against bit-mask wording: every bit of -1 is set, but an unset stage has no agitation.
         expect(brewNote(record({
             plan: [{
                 pourNumber: 1, volume: 40, temperature: 94, flowRate: 40,
@@ -86,6 +87,38 @@ Stage 3  100 ml   90°C   centred, agitate after
             }],
             pours: 1
         })).split("\n")[0]).toBe("Stage 1   40 ml   94°C   spiral");
+    });
+
+    it.each([
+        POUR_PATTERN.CENTERED,
+        POUR_PATTERN.CIRCULAR,
+        POUR_PATTERN.SPIRAL
+    ])("keeps pattern %i wording aligned with Pour", (pourPattern) => {
+        const note = brewNote(record({
+            plan: [{
+                pourNumber: 1, volume: 40, temperature: 94, flowRate: 40,
+                agitation: AGITATION.ALL_OFF,
+                pourPattern, pauseTime: 0
+            }],
+            pours: 1
+        }));
+
+        expect(note.split("\n")[0])
+            .toBe(`Stage 1   40 ml   94°C   ${Pour.getPourPatternText(pourPattern).toLowerCase()}`);
+    });
+
+    it("uses a neutral word for an unrecognised pour pattern", () => {
+        const note = brewNote(record({
+            plan: [{
+                pourNumber: 1, volume: 40, temperature: 94, flowRate: 40,
+                agitation: AGITATION.ALL_OFF,
+                pourPattern: 7, pauseTime: 0
+            }],
+            pours: 1
+        }));
+
+        expect(note.split("\n")[0]).toBe("Stage 1   40 ml   94°C   pour");
+        expect(note).not.toMatch(/error/i);
     });
 
     it("renders the footer alone when the plan is missing", () => {

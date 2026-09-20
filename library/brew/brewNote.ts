@@ -1,9 +1,14 @@
-import Pour, {AGITATION} from "@/library/Pour";
+import {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {grinderRan, type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
 
 const WRAP_WIDTH = 72;
 const DESCRIPTOR_COLUMN = 25;
+const PATTERN_WORD: Record<number, string> = {
+    [POUR_PATTERN.CENTERED]: "centred",
+    [POUR_PATTERN.CIRCULAR]: "circular",
+    [POUR_PATTERN.SPIRAL]: "spiral"
+};
 
 function stageHead(stage: PlanStage, index: number): string {
     const stageNumber = Number.isFinite(stage.pourNumber) ? stage.pourNumber : index + 1;
@@ -12,7 +17,7 @@ function stageHead(stage: PlanStage, index: number): string {
 }
 
 function agitationPhrase(agitation: number): string | undefined {
-    switch (agitation < 0 ? AGITATION.ALL_OFF : agitation) {
+    switch (agitation) {
         case AGITATION.BEFORE_ON_AFTER_OFF:
             return "agitate before";
         case AGITATION.BEFORE_OFF_AFTER_ON:
@@ -24,8 +29,13 @@ function agitationPhrase(agitation: number): string | undefined {
     }
 }
 
+function patternWord(pattern: number): string {
+    // BrewDatabase hydrates plan JSON without validating pourPattern, so corrupt rows need neutral wording.
+    return PATTERN_WORD[pattern] ?? "pour";
+}
+
 function descriptorParts(stage: PlanStage): string[] {
-    const parts = [Pour.getPourPatternText(stage.pourPattern).toLowerCase()];
+    const parts = [patternWord(stage.pourPattern)];
     const agitation = agitationPhrase(stage.agitation);
     if (agitation !== undefined) parts.push(agitation);
     if (stage.pauseTime > 0) parts.push(`then wait ${stage.pauseTime} s`);
