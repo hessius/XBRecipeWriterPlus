@@ -293,6 +293,10 @@ export function planFromPours(pours: Pour[]): PlanStage[] {
     }));
 }
 
+/** Whether a value is a finite number read from a record or hydrated JSON. */
+export const numeric = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value);
+
 /**
  * Back into `Pour`s, because the ladder calls `getAgitationBefore` and friends.
  *
@@ -302,8 +306,6 @@ export function planFromPours(pours: Pour[]): PlanStage[] {
  */
 export function poursFromPlan(plan: PlanStage[] | undefined): Pour[] {
     if (!Array.isArray(plan)) return [];
-    const numeric = (value: unknown): value is number =>
-        typeof value === "number" && Number.isFinite(value);
     if (!plan.every((stage) => stage !== null && typeof stage === "object"
         && numeric(stage.volume) && numeric(stage.temperature)
         && numeric(stage.agitation) && numeric(stage.pourPattern))) {

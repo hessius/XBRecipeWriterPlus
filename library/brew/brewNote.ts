@@ -1,19 +1,24 @@
+/**
+ * Plain-text brew summary for export into Beanconqueror under XBRW++'s name.
+ *
+ * The result is user-facing copy, not a debug dump, so missing stage number,
+ * volume or temperature, corrupt stored rows and future firmware values are
+ * rendered neutrally instead of leaking internals. The ladder is fixed-width so
+ * wrapped descriptors line up in another app's plain text field.
+ */
 import {AGITATION, POUR_PATTERN} from "@/library/Pour";
-import {grinderRan, type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
+import {grinderRan, numeric, type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
 
 const WRAP_WIDTH = 72;
 const DESCRIPTOR_COLUMN = 25;
-const PATTERN_WORD: Record<number, string> = {
-    [POUR_PATTERN.CENTERED]: "centred",
-    [POUR_PATTERN.CIRCULAR]: "circular",
-    [POUR_PATTERN.SPIRAL]: "spiral"
-};
 
 function stageHead(stage: PlanStage, index: number): string {
-    const stageNumber = Number.isFinite(stage.pourNumber) ? stage.pourNumber : index + 1;
-    return `Stage ${stageNumber}${String(stage.volume).padStart(5)} ml`
-        + `${String(stage.temperature).padStart(5)}°C   `;
+    const stageNumber = numeric(stage.pourNumber) ? stage.pourNumber : index + 1;
+    const volume = numeric(stage.volume) ? String(stage.volume) : "";
+    const temperature = numeric(stage.temperature) ? String(stage.temperature) : "";
+    return `Stage ${stageNumber}${volume.padStart(5)} ml`
+        + `${temperature.padStart(5)}°C   `;
 }
 
 function agitationPhrase(agitation: number): string | undefined {
@@ -30,8 +35,16 @@ function agitationPhrase(agitation: number): string | undefined {
 }
 
 function patternWord(pattern: number): string {
-    // BrewDatabase hydrates plan JSON without validating pourPattern, so corrupt rows need neutral wording.
-    return PATTERN_WORD[pattern] ?? "pour";
+    switch (pattern) {
+        case POUR_PATTERN.CENTERED:
+            return "centred";
+        case POUR_PATTERN.CIRCULAR:
+            return "circular";
+        case POUR_PATTERN.SPIRAL:
+            return "spiral";
+        default:
+            return "pour";
+    }
 }
 
 function descriptorParts(stage: PlanStage): string[] {
@@ -45,9 +58,10 @@ function descriptorParts(stage: PlanStage): string[] {
 function stageLine(stage: PlanStage, index: number): string {
     const head = stageHead(stage, index);
     const continuation = " ".repeat(DESCRIPTOR_COLUMN);
-    const lines = [head + descriptorParts(stage)[0]];
+    const [first, ...rest] = descriptorParts(stage);
+    const lines = [head + first];
 
-    for (const part of descriptorParts(stage).slice(1)) {
+    for (const part of rest) {
         const joined = `${lines[lines.length - 1]}, ${part}`;
         if (joined.length > WRAP_WIDTH) {
             lines[lines.length - 1] += ",";
@@ -60,19 +74,19 @@ function stageLine(stage: PlanStage, index: number): string {
     return lines.join("\n");
 }
 
-function numberPart(value: number | undefined, label: string): string | undefined {
-    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+function numberPart(value: unknown, label: string): string | undefined {
+    if (!numeric(value)) return undefined;
     return `${value} ${label}`;
 }
 
 function footer(record: BrewRecord): string {
     const parts = [
         numberPart(record.dose, "g"),
-        typeof record.ratio === "number" && Number.isFinite(record.ratio)
+        numeric(record.ratio)
             ? `1:${record.ratio}`
             : undefined,
         grinderRan(record) ? `grind ${record.grindSize}` : undefined,
-        typeof record.pours === "number" && Number.isFinite(record.pours) && record.pours > 0
+        numeric(record.pours) && record.pours > 0
             ? `${record.pours} ${record.pours === 1 ? "stage" : "stages"}`
             : undefined,
         DEVICE_NAME
@@ -83,7 +97,7 @@ function footer(record: BrewRecord): string {
 
 export function brewNote(record: BrewRecord): string {
     const foot = footer(record);
-    if (record.plan === undefined) return foot;
+    if (!Array.isArray(record.plan) || record.plan.length === 0) return foot;
 
     const ladder = record.plan.map((stage, index) => stageLine(stage, index)).join("\n");
     return `${ladder}\n\n${foot}`;
