@@ -1,3 +1,8 @@
+// Produces the vendor-neutral description of a finished brew: recipe figures,
+// planned targets, measured flow and provenance. This module knows what a brew
+// is and nothing about transport. Compression, chunking and any fidelity
+// degradation belong to the codec layer; delete this sentence before putting
+// those concerns here.
 import appConfig from "@/app.json";
 import {brewNote} from "@/library/brew/brewNote";
 import {stageSpans} from "@/library/brew/brewShape";
@@ -5,7 +10,8 @@ import {
     grinderRan,
     numeric,
     poursFromPlan,
-    type BrewSample
+    type BrewSample,
+    type PlanStage
 } from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -17,6 +23,19 @@ const SOURCE_NAME = "XBRecipeWriter++";
 type Quantity<Unit extends string> = {
     value: number;
     unit: Unit;
+};
+
+export type HandoffEnvelope = {
+    v: 1;
+    app: {
+        name: string;
+        version: string;
+    };
+    brew: HandoffBrew;
+    bean?: PodCoffee;
+    flow?: HandoffFlow;
+    metrics?: HandoffMetric[];
+    imported: HandoffImported;
 };
 
 export type HandoffFlow = {
@@ -35,6 +54,7 @@ export type HandoffMetric = {
     key: string;
     name: string;
     unit: string;
+    /** "target" and "measured" are different claims; merging them misrepresents a plan as a reading. */
     kind: "target" | "measured";
     /** Absolute milliseconds since brew start. */
     t: number[];
@@ -64,32 +84,16 @@ export type HandoffBrew = {
 
 export type HandoffImported = {
     source: "xbrw";
-    sourceName: typeof SOURCE_NAME;
-    sourceUrl: typeof REPOSITORY_URL;
-    device: typeof DEVICE_NAME;
+    sourceName: string;
+    sourceUrl?: string;
+    device?: string;
     schema: 1;
     params: Record<string, unknown>;
 };
 
-export type HandoffEnvelope = {
-    v: 1;
-    app: {
-        name: string;
-        version: string;
-    };
-    brew: HandoffBrew;
-    bean?: PodCoffee;
-    flow?: HandoffFlow;
-    metrics?: HandoffMetric[];
-    imported: HandoffImported;
-};
-
 export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffEnvelope {
-    const firstStage = Array.isArray(brew.plan) ? brew.plan[0] : undefined;
-    const firstDrip = firstDripTime(samples);
     const flow = brew.hasStream && samples.length > 0 ? flowFromSamples(samples) : undefined;
     const metrics = metricsFromPlan(brew.plan);
-    const ranGrinder = grinderRan(brew);
 
     return {
         v: 1,
@@ -98,25 +102,7 @@ export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffE
             // `expo-constants` is runtime state; the static app config is the value Jest and native builds share.
             version: appConfig.expo.version
         },
-        brew: {
-            date: new Date(brew.startedAt).toISOString(),
-            ...(numeric(brew.dose) ? {doseIn: {value: brew.dose, unit: "g" as const}} : {}),
-            waterIn: {value: brew.waterTotal, unit: "ml"},
-            beverageOut: {value: brew.cupTotal, unit: "g"},
-            brewTime: secondsFromMilliseconds(brew.endedAt - brew.startedAt),
-            ...(numeric(firstStage?.temperature) ? {temperature: firstStage.temperature} : {}),
-            ...(numeric(brew.ratio) ? {ratio: brew.ratio} : {}),
-            ...(ranGrinder && numeric(brew.grindSize) ? {grindSize: String(brew.grindSize)} : {}),
-            ...(ranGrinder && numeric(brew.grinderRpm) ? {grinderRpm: brew.grinderRpm} : {}),
-            ...(ranGrinder ? {grinderName: DEVICE_NAME} : {}),
-            preparationMethod: DEVICE_NAME,
-            // A bloom is inferred from the first programmed wait, not measured by the machine.
-            ...(numeric(firstStage?.pauseTime) && firstStage.pauseTime > 0
-                ? {bloomTime: firstStage.pauseTime}
-                : {}),
-            ...(firstDrip !== undefined ? {firstDripTime: firstDrip} : {}),
-            note: brewNote(brew)
-        },
+        brew: brewFigures(brew, samples),
         ...(brew.coffee !== undefined ? {bean: brew.coffee} : {}),
         ...(flow !== undefined ? {flow} : {}),
         ...(metrics.length > 0 ? {metrics} : {}),
@@ -132,7 +118,33 @@ export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffE
     };
 }
 
+function brewFigures(brew: StoredBrew, samples: BrewSample[]): HandoffBrew {
+    const firstStage = Array.isArray(brew.plan) ? brew.plan[0] : undefined;
+    const firstDrip = firstDripTime(samples);
+    const grinderDidRun = grinderRan(brew);
+
+    return {
+        date: new Date(brew.startedAt).toISOString(),
+        ...(numeric(brew.dose) ? {doseIn: {value: brew.dose, unit: "g" as const}} : {}),
+        waterIn: {value: brew.waterTotal, unit: "ml"},
+        beverageOut: {value: brew.cupTotal, unit: "g"},
+        brewTime: secondsFromMilliseconds(brew.endedAt - brew.startedAt),
+        ...(numeric(firstStage?.temperature) ? {temperature: firstStage.temperature} : {}),
+        ...(numeric(brew.ratio) ? {ratio: brew.ratio} : {}),
+        ...(grinderDidRun && numeric(brew.grindSize) ? {grindSize: String(brew.grindSize)} : {}),
+        ...(grinderDidRun && numeric(brew.grinderRpm) ? {grinderRpm: brew.grinderRpm} : {}),
+        ...(grinderDidRun ? {grinderName: DEVICE_NAME} : {}),
+        preparationMethod: DEVICE_NAME,
+        ...(numeric(firstStage?.pauseTime) && firstStage.pauseTime > 0
+            ? {bloomTime: firstStage.pauseTime}
+            : {}),
+        ...(firstDrip !== undefined ? {firstDripTime: firstDrip} : {}),
+        note: brewNote(brew)
+    };
+}
+
 function secondsFromMilliseconds(milliseconds: number): number {
+    // A device clock correction can leave endedAt earlier than startedAt on imported records.
     return Math.round(Math.max(0, milliseconds) / 100) / 10;
 }
 
@@ -150,12 +162,17 @@ function deltaCode(values: number[]): number[] {
     });
 }
 
+function tenths(value: number): number {
+    return Math.round(value * 10);
+}
+
 function flowFromSamples(samples: BrewSample[]): HandoffFlow {
     return {
+        // A future downsample(flow, everyNth): HandoffFlow belongs here so the codec can change fidelity without rewriting flow.t.
         fidelity: "full",
         t: deltaCode(samples.map((sample) => Math.round(sample.at))),
-        waterDispensed: deltaCode(samples.map((sample) => Math.round(sample.water * 10))),
-        weight: deltaCode(samples.map((sample) => Math.round(sample.cup * 10)))
+        waterDispensed: deltaCode(samples.map((sample) => tenths(sample.water))),
+        weight: deltaCode(samples.map((sample) => tenths(sample.cup)))
     };
 }
 
@@ -167,6 +184,7 @@ function metricsFromPlan(plan: StoredBrew["plan"]): HandoffMetric[] {
     const v: number[] = [];
 
     pours.forEach((pour, index) => {
+        // Repeat v at absolute-ms boundaries so linear renderers draw flats, then jumps; flow.t is delta-coded.
         t.push(Math.round(spans[index].start * 1000), Math.round(spans[index].end * 1000));
         v.push(pour.temperature, pour.temperature);
     });
@@ -181,9 +199,16 @@ function metricsFromPlan(plan: StoredBrew["plan"]): HandoffMetric[] {
     }];
 }
 
+function planWithoutPourNumbers(plan: PlanStage[]): Omit<PlanStage, "pourNumber">[] {
+    return plan.map(({pourNumber: _pourNumber, ...stage}) => stage);
+}
+
 function importedParams(brew: StoredBrew): Record<string, unknown> {
+    const plan = Array.isArray(brew.plan) ? planWithoutPourNumbers(brew.plan) : undefined;
+
     return {
-        ...(Array.isArray(brew.plan) && brew.plan.length > 0 ? {plan: brew.plan} : {}),
+        // The stage index already carries pourNumber as index + 1, so omit it from the repeated payload.
+        ...(plan !== undefined && plan.length > 0 ? {plan} : {}),
         ...(Array.isArray(brew.stageWater) && brew.stageWater.length > 0
             ? {stageWater: brew.stageWater}
             : {}),

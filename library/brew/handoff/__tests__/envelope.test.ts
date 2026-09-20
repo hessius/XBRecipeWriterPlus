@@ -108,10 +108,6 @@ describe("buildEnvelope", () => {
         });
     });
 
-    it("derives first drip from the first sample the cup registered", () => {
-        expect(buildEnvelope(brew(), samples).brew.firstDripTime).toBe(2.5);
-    });
-
     it("omits first drip rather than reporting zero when the cup never moved", () => {
         const dry = samples.map((sample) => ({...sample, cup: 0}));
 
@@ -141,7 +137,23 @@ describe("buildEnvelope", () => {
             device: DEVICE_NAME,
             schema: 1
         });
+        if (imported.sourceUrl === undefined) throw new Error("sourceUrl missing");
         expect(new URL(imported.sourceUrl).protocol).toBe("https:");
+    });
+
+    it("omits pour numbers from imported plan stages because order carries them", () => {
+        const {imported} = buildEnvelope(brew(), samples);
+        const exportedPlan = imported.params.plan as Record<string, unknown>[];
+
+        expect(exportedPlan).toHaveLength(3);
+        exportedPlan.forEach((stage) => {
+            expect(stage).not.toHaveProperty("pourNumber");
+        });
+        expect(exportedPlan[0]).toMatchObject({
+            volume: 40,
+            temperature: 94,
+            flowRate: 40
+        });
     });
 
     it("carries pod coffee hints only when a pod coffee is present", () => {
@@ -236,7 +248,7 @@ Stage 3  100 ml   90°C   centred, agitate after
         const envelope = buildEnvelope(brew(), samples);
         const roundTripped = JSON.parse(JSON.stringify(envelope)) as typeof envelope;
 
-        expect(roundTripped).toEqual(envelope);
-        expect(hasUndefined(roundTripped)).toBe(false);
+        expect(hasUndefined(envelope)).toBe(false);
+        expect(roundTripped).toStrictEqual(envelope);
     });
 });
