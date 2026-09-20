@@ -460,14 +460,82 @@ Vendor branding without vendor branching. BC's logos are files at
 - Adding a vendor later → an SVG and one map line. A two-line PR that needs no
   understanding of the import path.
 
-**We ship the mechanism and an empty map.** The xBloom mark belongs to xBloom;
-pushing a vendor's trademark into someone else's GPL repository is the
-maintainer's decision, not ours to make for him. xBloom gets the text chip.
-
 `sourceName` arrives from an untrusted URL. Angular escapes interpolation, so
 this is not an injection risk, but it is length-capped and non-empty-checked in
 the same validation pass as everything else, or a crafted link renders a chip
 the width of a paragraph.
+
+### 4.4.1 We ship the illustration, not the logo
+
+An earlier draft said "we ship the mechanism and an empty map", on the reasoning
+that pushing a vendor's trademark into someone else's GPL repository was the
+maintainer's call. Having actually used the app, that was over-cautious, and it
+misread what BC does.
+
+BC's `PREPARATION_TYPES` enum names **46 brewers**, and almost all of them are
+trademarks belonging to companies with no involvement in the project: Hario
+V60, Chemex, AeroPress, Kalita Wave, Bialetti, Origami, Orea, Cafelat, Flair,
+Fellow Stagg, Espro Bloom, Moccamaster, Delter, December, Cafec, Tricolate,
+ROK, Ratio Six, Karlsbader Kanne. Naming a product in order to identify it is
+ordinary use, and it is the house pattern, not an exception to it.
+
+The asset set has **two visually distinct registers**, and the difference is
+not cosmetic:
+
+| Register | Examples | Size | What it is |
+| --- | --- | --- | --- |
+| Stylized illustration | `preparation-v60` 2.8 KB, `-chemex` 3.6 KB, `-aeropress` 3.1 KB, `-kono` 1.3 KB, `-origami` 1.1 KB | 1–11 KB | Original line drawing, 200×200, `fill="none"`, hand-authored paths |
+| Traced product artwork | `preparation-gaggiuino` 900 KB, `-sanremo-you` 703 KB, `-meticulous` 574 KB, `-xenia` 395 KB, `-move2` 356 KB | 356–900 KB | Detailed renders, and only for the five live-connection integrations |
+
+The `beanconqueror-<vendor>-logo.svg` files are a third thing again, and
+smaller than either: `meticulous-logo.svg` is an Adobe Illustrator export
+carrying the brand red `#EE380F`. Those are **real vendor logos**, and they
+exist for the five machines BC actually integrates with, whose makers had
+reason to hand over brand assets.
+
+So the line to draw is clear:
+
+- **We contribute `beanconqueror-preparation-xbloom.svg`**: an original
+  stylized line drawing of the machine, in the register the other forty sit
+  in — 200×200, `fill="none"`, no brand colour, no wordmark, drawn by us and
+  not traced from xBloom's marketing renders or product photography.
+- **We do not contribute a logo.** No `beanconqueror-xbloom-logo.svg`. That set
+  belongs to integrations whose vendors supplied the artwork, and we are not
+  xBloom and cannot supply it. The provenance chip keeps its text fallback,
+  which §4.4 already treats as the general case rather than a degraded one.
+- **We do not mirror the heavy register.** The 356–900 KB traced files belong
+  to live-connection integrations. An xBloom arriving over a link is not a
+  connected device in BC's sense, and half a megabyte in someone else's bundle
+  is a poor way to introduce yourself.
+
+This is a branded integration in exactly the way Chemex and Kalita are branded
+integrations: named, drawn, and unaffiliated.
+
+### 4.4.2 `PREPARATION_TYPES.XBLOOM`
+
+The consequence of the above is that xBloom becomes a preparation type rather
+than only a string in an envelope. Three touch points, all one-liners:
+
+1. `PREPARATION_TYPES.XBLOOM = 'XBLOOM'` in the enum.
+2. `case PREPARATION_TYPES.XBLOOM: return 'beanconqueror-preparation-xbloom';`
+   in `Preparation.getIcon()`.
+3. Registration of the SVG alongside the other custom ion icons, plus i18n
+   label.
+
+`getPresetStyleType()` needs **no** case: its `default` is
+`PREPARATION_STYLE_TYPE.POUR_OVER`, which is what an xBloom is. The five
+`ESPRESSO` cases are the exceptions, and we are not one.
+
+This also gives the `preparationMethod` name hint of §4.2 a real target. Before
+this section it was a string that might coincidentally match something a user
+had typed; with the type present, matching is meaningful and the dropdown opens
+on the right entry.
+
+**It stays orthogonal to the transport.** §2.2 is unchanged: the `ADD_BREW`
+verb, the envelope and the `source` discriminator remain vendor-neutral, and a
+second device could be added without touching any of it. The branding lives
+entirely in presentation, which is precisely where BC already keeps it for the
+other forty-six.
 
 ## 4.5 What maps where, and what BC does not have to support
 
@@ -529,6 +597,11 @@ Genuinely open, and his to answer:
    against existing beans by name, or ignore the block until bean creation is
    designed separately? We are content with "ignore it for now"; the block is
    optional and a decoder that drops it still produces a correct brew.
+6. **The preparation type and illustration** (§4.4.1) — we would like to
+   contribute `PREPARATION_TYPES.XBLOOM` and an original stylized drawing in
+   the same register as V60 and Chemex, and explicitly **not** a logo. Does he
+   want it in the same PR, a separate one, or not at all? We have no stake in
+   the answer beyond wanting it asked rather than assumed.
 
 ## 5. The XBRW++ side
 
@@ -690,10 +763,19 @@ setup.
 | `src/services/brewImport/brewImport.service.ts` *(new)* | decode, inflate, validate, build `Brew` + `BrewFlow` |
 | `src/services/uiBrewHelper.ts` | `addBrewFromImport(brew, brewFlow)` |
 | `src/components/brew-information/…` | the provenance chip and icon map |
-| `src/assets/i18n/*.json` | error strings |
+| `src/enums/preparations/preparationTypes.ts` | `XBLOOM` |
+| `src/classes/preparation/preparation.ts` | one `getIcon()` case; `getPresetStyleType()` needs none |
+| `src/assets/custom-ion-icons/beanconqueror-preparation-xbloom.svg` *(new)* | original stylized illustration, §4.4.1 |
+| `src/assets/i18n/*.json` | error strings, preparation label |
 | `docs/import-api.md` *(new)* | the schema, so anyone can emit it |
 
 Inflate uses `@zip.js/zip.js`, already a dependency. **No new packages.**
+
+The preparation type and the illustration are **separable from the rest**. If
+the maintainer wants the transport without the branding, or the branding
+reviewed on its own, they split cleanly along the table above: nothing in the
+import path reads `PREPARATION_TYPES.XBLOOM`, and the illustration is a file
+plus one `case`. Offering them as two commits is the courteous default.
 
 ### 8.1 The write-up, before the code
 
@@ -707,7 +789,10 @@ Ordered by his interest:
 4. base64url has no `+`, so the Android query-param bug he worked around cannot
    occur.
 5. Neutral by design. One verb, any device, published schema. He implements it
-   once instead of accepting a sixth bespoke integration.
+   once instead of accepting a sixth bespoke integration. Branding is
+   orthogonal and lives where his already does: a preparation type and a
+   stylized illustration, in the register V60 and Chemex sit in (§4.4.1),
+   offered as a separate commit he can take or leave.
 6. We do the work: PR, tests, docs, i18n. He reviews.
 7. Honest limits, stated before he finds them: iOS-measured only; Android
    reasoned; the bean stays user-chosen because UUID resolution has no name
@@ -735,6 +820,9 @@ Stated so it does not creep in:
   paths, not the export.
 - **No BLE model detection.** §3.1 says why it cannot be concluded from code,
   and the mill name under-claims instead.
+- **No xBloom logo or wordmark upstream**, and nothing traced from xBloom's
+  product photography or marketing renders. §4.4.1 draws the line: an original
+  stylized illustration, in BC's own register, and nothing else.
 - **No writing into BC's storage.** `uiStorage.__importBackup` overwrites whole
   keys, so a file carrying a `BREWS` array replaces the user's entire history.
   #123 found this. Nothing here goes near it.
