@@ -15,19 +15,10 @@
  * is not a risk worth taking for a table this small.
  */
 
-import {GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import {GRINDER_OFF_VALUE} from "./Recipe";
 
 /** The finest grind a card can store. Below this, `grindSize - 40` goes negative. */
 export const CARD_GRIND_MIN = 40;
-
-/**
- * The value that means "grinder off" rather than a coarseness.
- *
- * `GRINDER_OFF` is the byte on the card; the number a user sees is that byte
- * plus the offset. Conflating the two is a mistake that has already been made
- * once, in the original text of #52.
- */
-const GRINDER_OFF_VALUE = GRIND_SIZE_OFFSET + GRINDER_OFF;
 
 export type GrindBand = {
     /** Short enough to sit on a row label beside the field's own name. */

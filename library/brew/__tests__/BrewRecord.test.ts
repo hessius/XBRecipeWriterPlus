@@ -1,6 +1,8 @@
 import Pour from "@/library/Pour";
+import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 import {finalOutcome, planFromPours, poursFromPlan, stageWaterFromSamples,
-        stallsFromSamples, summarise, type BrewSample, type BypassRecord, type PlanStage} from "@/library/brew/BrewRecord";
+        stallsFromSamples, summarise, grinderRan, type BrewSample, type BypassRecord,
+        type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
 
 function samples(rows: [number, number, number][]): BrewSample[] {
     return rows.map(([at, water, cup]) => ({at, water, cup, pour: 1}));
@@ -218,5 +220,30 @@ describe("BypassRecord", () => {
             volume: 5, temperature: 85, delivered: 0, startedAt: null
         };
         expect(JSON.parse(JSON.stringify(bypass)).startedAt).toBeNull();
+    });
+});
+
+describe("grinderRan", () => {
+    it("is false when the recipe said the grinder was off", () => {
+        expect(grinderRan({grinderUsed: false, grindSize: 62} as BrewRecord)).toBe(false);
+    });
+
+    it("is false at the grinder-off sentinel even when the boolean disagrees", () => {
+        // The two are the same fact read from two places (spec §3.1). When
+        // they disagree the cautious reading wins, because claiming a mill
+        // that did not run creates a row in somebody's list forever.
+        expect(grinderRan({grinderUsed: true, grindSize: GRINDER_OFF_VALUE} as BrewRecord)).toBe(false);
+    });
+
+    it("is true when both agree the grinder ran", () => {
+        expect(grinderRan({grinderUsed: true, grindSize: 62} as BrewRecord)).toBe(true);
+    });
+
+    it("is false on an old row that records neither", () => {
+        expect(grinderRan({} as BrewRecord)).toBe(false);
+    });
+
+    it("is false when only the boolean was recorded", () => {
+        expect(grinderRan({grinderUsed: true} as BrewRecord)).toBe(false);
     });
 });

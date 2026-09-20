@@ -17,6 +17,14 @@ export const CUP_TYPE = {
 export const GRINDER_OFF: number = 41;
 // Grind size is stored on the NFC card with offset (grind_size_value - 40)
 export const GRIND_SIZE_OFFSET = 40;
+/**
+ * The value that means "grinder off" rather than a coarseness.
+ *
+ * `GRINDER_OFF` is the byte on the card; the number a user sees is that byte
+ * plus the offset. Conflating the two is a mistake that has already been made
+ * once, in the original text of #52.
+ */
+export const GRINDER_OFF_VALUE = GRIND_SIZE_OFFSET + GRINDER_OFF;
 /** The XID occupies card bytes 32-38 inclusive. */
 export const XID_LENGTH = 7;
 
@@ -952,7 +960,7 @@ class Recipe {
 
         this.grindSize = data[41 + poursDataLength] + GRIND_SIZE_OFFSET
 
-        if (this.grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
+        if (this.grindSize === GRINDER_OFF_VALUE) {
             this.grinder = false;
         }
 

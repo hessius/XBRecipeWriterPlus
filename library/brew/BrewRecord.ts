@@ -1,5 +1,7 @@
 import type {BrewFailure} from "@/library/machine/Machine";
+import type {PodCoffee} from "@/library/podCoffee";
 import Pour from "@/library/Pour";
+import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 import {stageWaterFrom, stallsInStage, type Stall} from "./stalls";
 
@@ -184,6 +186,27 @@ export type BrewRecord = {
      * watched it closely enough to know why it stopped.
      */
     watched?: boolean;
+    /**
+     * What the recipe asked for, copied at brew time.
+     *
+     * All optional, so every row written before this reads exactly as it did
+     * — the convention `pouringAt`, `plan`, `stageWater`, `stalls` and
+     * `bypass` already follow.
+     *
+     * Copied rather than joined for the reason `recipeName` and `plan` are,
+     * which matters more here than elsewhere: a brew exported last month and
+     * re-exported today must produce the same numbers (spec §3).
+     */
+    dose?: number;
+    /** The recipe's ratio. Without it a consumer cannot derive extraction yield. */
+    ratio?: number;
+    /** 40-80, or 81 for a grinder that was off. */
+    grindSize?: number;
+    grinderRpm?: number;
+    /** `recipe.grinder`. Whether the xBloom ground the coffee itself. */
+    grinderUsed?: boolean;
+    /** The pod's coffee, when the recipe came from an xPod import (spec §2.1.1). */
+    coffee?: PodCoffee;
 };
 
 /** The ceiling of the scale, decided once in the design and read from here. */
@@ -198,6 +221,20 @@ export function isRating(value: unknown): value is number {
 }
 
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
+
+/**
+ * Whether the xBloom ground this brew's coffee.
+ *
+ * Two independent records of one fact: the boolean the recipe carried, and
+ * the 81 sentinel in the grind size. They should never disagree, and if they
+ * do the cautious reading wins — a mill claimed in error becomes a row in
+ * somebody's list that they did not ask for and will not know to clean up
+ * (spec §3.1).
+ */
+export function grinderRan(record: BrewRecord): boolean {
+    if (record.grinderUsed !== true) return false;
+    return record.grindSize !== undefined && record.grindSize !== GRINDER_OFF_VALUE;
+}
 
 /**
  * Derive the figures a record keeps from the stream it keeps them for.

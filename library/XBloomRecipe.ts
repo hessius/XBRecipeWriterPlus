@@ -1,5 +1,5 @@
 import Pour, {POUR_PATTERN} from "./Pour";
-import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import Recipe, {CUP_TYPE, GRINDER_OFF_VALUE} from "./Recipe";
 import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
 } from "@/library/bypassLimits";
@@ -65,11 +65,11 @@ export class XBloomRecipe {
             let recipe = new Recipe(undefined, undefined);
             let ratio: number = this.xbRecipeJSON.recipeVo.grandWater;
 
-            let grindSize: number = this.xbRecipeJSON.recipeVo.grinderSize ?? GRIND_SIZE_OFFSET + GRINDER_OFF;
+            let grindSize: number = this.xbRecipeJSON.recipeVo.grinderSize ?? GRINDER_OFF_VALUE;
             let isSetGrinderSize: number = this.xbRecipeJSON.recipeVo.isSetGrinderSize ?? 2;
 
             // 2 means grinder is disabled
-            if (isSetGrinderSize === 2 || grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
+            if (isSetGrinderSize === 2 || grindSize === GRINDER_OFF_VALUE) {
                 recipe.grinder = false;
             }
 
