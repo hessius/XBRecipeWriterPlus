@@ -377,8 +377,19 @@ test asserts the property rather than trusting it.
     "t":              [ … ],       // ms, delta-coded
     "waterDispensed": [ … ],       // 0.1 g, delta-coded
     "weight":         [ … ],       // 0.1 g, delta-coded
-    "temperature":    [ … ]        // optional; XBRW++ never emits it, §4.5.1 d3
+    "temperature":    [ … ]        // optional; MEASURED only. XBRW++ emits none
   },
+
+  "metrics": [                     // optional, declared labelled series
+    {
+      "key":  "targetTemperature",
+      "name": "Target temp",
+      "unit": "°C",
+      "kind": "target",            // "target" | "measured"
+      "t": [ 0, 50000, 96000, 141000 ],
+      "v": [ 94, 93, 93, 93 ]
+    }
+  ],
 
   "imported": {                    // optional, opaque to BC
     "source": "xbrw",              // the APP that wrote this, for icon lookup
@@ -403,9 +414,26 @@ says so rather than presenting it as measured.
 
 **`flow.temperature` exists in the schema and we never populate it.** The
 envelope is neutral, and a sender with a temperature probe should have somewhere
-to put its readings. We have none: `BrewSample` is `{at, water, cup, pour}`.
-Emitting the plan's per-stage figures here would dress an intention up as a
-measurement, which §4.5.1 decision 3 refuses.
+to put its readings. We have none: `BrewSample` is `{at, water, cup, pour}` and
+the machine's `Notification` union carries no temperature at all. That array is
+for measurements, and we have no measurement to put in it.
+
+**`metrics` is where a declared series goes**, and it is the honest home for
+our per-stage temperature (§4.5.1 decision 3). It maps one-to-one onto BC's
+`customMetrics` and `customAxes`, which `graph-helper.service.ts` already
+renders as Plotly traces on their own axes with a translated name and a legend
+chip, so it costs no upstream work.
+
+`kind` is the point of the block. `"measured"` and `"target"` are different
+claims about the world, and a schema that cannot tell them apart invites
+exactly the misrepresentation §4.5.1 decision 3 was worried about. It also
+generalises: a sender with a pressure or flow *target* alongside its readings
+has somewhere truthful to put both.
+
+`t` here is absolute milliseconds and is **not** tied to `flow.t`. A step
+function changes only at stage boundaries, so a four-stage brew is four points
+rather than a value per sample, and the series costs nothing against the size
+budget.
 
 **`source` is the application, not the machine.** An earlier draft used
 `"xbloom"` for both, which conflated two different facts. The payload dialect
@@ -639,14 +667,15 @@ three tiers, and only the first requires BC to do anything.
 | `waterTotal` | `brew_quantity` + type `ML` | |
 | `cupTotal` | `brew_beverage_quantity` + type `GR` | |
 | duration | `brew_time` (+ms) | |
-| stage 1 temperature | `brew_temperature` | BC has one, we have per stage |
+| stage 1 temperature | `brew_temperature` | a setpoint, and a truer number than the field usually holds |
 | `grindSize` (§3) | `grind_size` | string; 81 omits |
 | `grinderRpm` (§3) | `mill_speed` | |
 | stage 1 pause | `coffee_blooming_time` | judgement call, flagged |
 | first `cup > 0` | `coffee_first_drip_time` | measured, not stopwatched |
 | `samples.water` | `BrewFlow.waterDispensed` | |
 | `samples.cup` | `BrewFlow.weight` | |
-| `coffee.*` (§2.1.1) | `Bean` prefill | xPod only, hints, never a UUID |
+| `coffee.*` (§2.1.1) | `Bean` name match | xPod only, match or drop, never a UUID |
+| `metrics[]` | `BrewFlow.customMetrics` + `customAxes` | per-stage target temperature; already rendered |
 
 **Tier 2, human-readable in `note`.** The generated summary spells out every
 stage: volume, temperature, pattern, agitation, pause. It renders in BC today,
@@ -659,6 +688,12 @@ backup, and it is there if anyone ever wants to draw an xBloom stage ladder.
 
 So "not supported in BQ" stops being a blocker: tier 2 makes stages visible
 without a data model, and tier 3 makes them recoverable without a commitment.
+
+And one dimension of a stage does better than "carried". The temperature
+profile is **drawn**, on BC's own chart, through `customMetrics` — machinery
+that already exists and already renders. That is the strongest available answer
+to "the stages aren't supported": for the axis that matters most to an xBloom
+user, they turn out to be.
 
 **What BC has and we do not:** mill identity beyond "an xBloom ran" (§3.1),
 preparation, water, `tds`, pressure, and — for every recipe that is not an
@@ -701,20 +736,51 @@ state through screens built for a connected machine. One optional field on a
 one-field interface, no enum, no switch. It is additive and it is the single
 cheapest thing in this document to move, so it is not worth blocking on.
 
-**3. Temperature: the scalar only. We do not fabricate a series.**
+**3. Temperature: the scalar, plus a labelled target series.**
 
-`brew_temperature` gets stage 1's temperature. `temperatureFlow` stays empty.
+`brew_temperature` gets stage 1. The per-stage figures travel as a **declared
+target metric** (§4.2), not as `temperatureFlow`.
 
-BC does have a per-instant `IBrewTemperatureFlow`, and per-stage temperature
-would map onto it neatly — which is exactly the trap. **We do not measure
-temperature.** `BrewSample` is `{at, water, cup, pour}`; the per-stage figures
-are what the recipe *asked for*, not what a probe read. Emitting a planned step
-function into a series that sits beside measured water and weight would assert
-a measurement we never took.
+An earlier draft sent the scalar and nothing else, on the reasoning that
+emitting the plan's temperatures would dress an intention up as a measurement.
+That applied a standard BC does not apply to itself, and it threw away
+something that actually distinguishes xBloom recipes.
 
-So the plan's temperatures travel as tier 2 (the note) and tier 3
-(`imported.params`), where they are labelled as plan. This is the same
-judgement as `bloomTime`, which §4.2 already flags rather than dresses up.
+**We still do not measure temperature.** The machine's `Notification` union is
+`status`, `event`, `waterWeight`, `cupWeight`, `MachineInfo` and `unknown`;
+every temperature symbol in `library/machine/` is outbound. That fact is
+unchanged and it is why the series is labelled.
+
+But two things make the earlier conclusion wrong:
+
+1. **`brew_temperature` is natively an intention.** A V60 user types what they
+   set the kettle to; it then drifts in the gooseneck, over the pour, and in
+   their memory. An xBloom's figure is a commanded setpoint on a closed-loop
+   heated machine, tracked by the hardware. Against that field's typical
+   content ours is the *more* faithful number, not the less.
+2. **Per-stage temperature is a real distinction.** A brew at 94/93/93/93 and
+   one at 92/88/85 are different brews. Dropping the profile to a single
+   scalar loses the thing an xBloom user would most want to compare.
+
+The reason not to use `temperatureFlow` is narrower than "it is not measured":
+its fields are `actual_temperature` and `old_temperature`, which is sensed
+language, and a synthesized series there sits on the same axis as genuinely
+measured water and weight with nothing to tell them apart.
+
+`customMetrics` and `customAxes` are the right home, and BC built them for
+exactly this. `graph-helper.service.ts` turns each entry into a Plotly scatter
+trace on its own axis from `y11` upward, with a translated name, light and dark
+colours, and a legend chip. **This needs no upstream change whatsoever** — it
+is existing, rendered machinery, so the profile becomes visible on the chart
+without asking him for anything.
+
+The axis is named "Target temp" and carries `°C`. Nothing claims to be a
+reading, the data is on the graph where it can be compared, and if the machine
+ever starts reporting a probe value the series moves to `temperatureFlow` and
+the label changes with it.
+
+Cost on the wire is close to nothing: a step function changes only at stage
+boundaries, so a four-stage brew is four points.
 
 **4. Mill and preparation: match or nothing. Never create.**
 
