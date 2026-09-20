@@ -603,6 +603,9 @@ describe("BrewRecorder", () => {
 
         expect(records[0].record.ratio).toBeUndefined();
         expect(records[0].record.grindSize).toBeUndefined();
+        expect(records[0].record.grinderUsed).toBeUndefined();
+        expect(records[0].record.dose).toBe(15);
+        expect(records[0].record.grinderRpm).toBe(120);
     });
 
     it("keeps grinder-off as a recorded grinder setting", () => {

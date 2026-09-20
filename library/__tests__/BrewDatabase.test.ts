@@ -168,7 +168,12 @@ const stream: BrewSample[] = [
     {at: 1000, water: 4, cup: 2, pour: 1}
 ];
 
-function recorderRecord(recipe: Recipe, id = "brew-1"): BrewRecord {
+/**
+ * A record built by the real recorder rather than by hand, so the one presence
+ * rule the two layers express separately — BrewRecorder's `grindSize > 0` and
+ * hydrate's — is checked against each other rather than against a fixture.
+ */
+function recorderRecord(recipe: Recipe, id: string): BrewRecord {
     let phase: (p: BrewPhase) => void = () => {};
     let saved: BrewRecord | undefined;
     const machine: RecorderMachine = {
@@ -180,7 +185,7 @@ function recorderRecord(recipe: Recipe, id = "brew-1"): BrewRecord {
         recipe,
         now: () => 1_000_000,
         newId: () => id,
-        onRecord: (record) => { saved = record; }
+        onRecord: (emitted) => { saved = emitted; }
     });
     recorder.start();
     phase({name: "done"});
@@ -529,7 +534,7 @@ describe("the recipe snapshot for export", () => {
         });
     });
 
-    it("round-trips the recipe snapshot shape produced by the recorder", () => {
+    it("round-trips a full recipe snapshot from the recorder", () => {
         const db = new BrewDatabase();
         const fullRecipe = recorderRecipe();
         fullRecipe.dosage = 15;
@@ -550,16 +555,19 @@ describe("the recipe snapshot for export", () => {
             grinderUsed: full.grinderUsed,
             coffee: full.coffee
         });
+    });
 
+    it("keeps the recorder's omissions omitted through the database", () => {
+        const db = new BrewDatabase();
         const defaults = recorderRecord(recorderRecipe(), "brew-defaults");
         db.insert(defaults, []);
         const defaultsBack = db.get("brew-defaults");
-        expect(defaultsBack?.dose).toBe(defaults.dose);
-        expect(defaultsBack?.ratio).toBe(defaults.ratio);
-        expect(defaultsBack?.grindSize).toBe(defaults.grindSize);
-        expect(defaultsBack?.grinderRpm).toBe(defaults.grinderRpm);
-        expect(defaultsBack?.grinderUsed).toBe(defaults.grinderUsed);
-        expect(defaultsBack?.coffee).toBe(defaults.coffee);
+        expect(defaultsBack?.ratio).toBeUndefined();
+        expect(defaultsBack?.grindSize).toBeUndefined();
+        expect(defaultsBack?.grinderUsed).toBeUndefined();
+        expect(defaultsBack?.coffee).toBeUndefined();
+        expect(defaultsBack?.dose).toBe(15);
+        expect(defaultsBack?.grinderRpm).toBe(120);
     });
 
     it("ignores a coffee column that is not JSON", () => {
