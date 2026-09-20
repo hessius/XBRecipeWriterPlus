@@ -235,6 +235,14 @@ describe("grinderRan", () => {
         expect(grinderRan({grinderUsed: true, grindSize: GRINDER_OFF_VALUE} as BrewRecord)).toBe(false);
     });
 
+    it("is false at the not-recorded grind size sentinel", () => {
+        expect(grinderRan({grinderUsed: true, grindSize: 0} as BrewRecord)).toBe(false);
+    });
+
+    it("is false above the grinder's brewing band", () => {
+        expect(grinderRan({grinderUsed: true, grindSize: 200} as BrewRecord)).toBe(false);
+    });
+
     it("is true when both agree the grinder ran", () => {
         expect(grinderRan({grinderUsed: true, grindSize: 62} as BrewRecord)).toBe(true);
     });
