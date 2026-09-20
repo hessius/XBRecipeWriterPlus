@@ -30,6 +30,9 @@ function text(value: unknown): string | undefined {
  * Checked here rather than at the far end because this is where the
  * third-party response is first touched: the endpoint is undocumented and
  * nothing guarantees the shape it returns.
+ *
+ * This is intentionally stricter than `Recipe.imageURL`, its looser sibling
+ * read from the same xBloom field. Task 3 should converge the two.
  */
 function httpsUrl(value: unknown): string | undefined {
     const raw = text(value);
@@ -41,16 +44,7 @@ function httpsUrl(value: unknown): string | undefined {
     }
 }
 
-type PodCoffeeFields = {
-    name: string;
-    origin: string;
-    process: string;
-    variety: string;
-    aromatics: string;
-    note: string;
-    beanMix: string;
-    imageUrl: string;
-};
+type PodCoffeeFields = Record<keyof Required<PodCoffee>, string>;
 
 function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee | null {
     if (value === null || typeof value !== "object") return null;
@@ -84,7 +78,7 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
  * (spec §4.5.1 decision 5), so a block without one cannot do anything except
  * take up room in the URL.
  */
-export function podCoffeeFrom(podsVo: unknown): PodCoffee | null {
+export function podCoffeeFromPodsVo(podsVo: unknown): PodCoffee | null {
     return podCoffeeFromRecord(podsVo, {
         name: "theName",
         origin: "origin",

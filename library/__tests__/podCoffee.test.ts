@@ -1,8 +1,8 @@
-import {podCoffeeFrom, podCoffeeFromStored} from "@/library/podCoffee";
+import {podCoffeeFromPodsVo, podCoffeeFromStored} from "@/library/podCoffee";
 
-describe("podCoffeeFrom", () => {
+describe("podCoffeeFromPodsVo", () => {
     it("reads the fields a real pod carries", () => {
-        expect(podCoffeeFrom({
+        expect(podCoffeeFromPodsVo({
             theName: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
             process: "Natural",
@@ -25,32 +25,32 @@ describe("podCoffeeFrom", () => {
     });
 
     it("does not map roast, whose meaning is unverified", () => {
-        const coffee = podCoffeeFrom({theName: "X", roast: 3});
+        const coffee = podCoffeeFromPodsVo({theName: "X", roast: 3});
         expect(coffee).not.toBeNull();
         expect(Object.keys(coffee!)).not.toContain("degreeOfRoast");
     });
 
     it("drops empty strings rather than carrying them", () => {
         // subtitle is empty on real pods; so is origin on some.
-        expect(podCoffeeFrom({theName: "X", origin: "", process: "  "}))
+        expect(podCoffeeFromPodsVo({theName: "X", origin: "", process: "  "}))
             .toEqual({name: "X"});
     });
 
     it("is null without a name, which is the only field worth matching on", () => {
-        expect(podCoffeeFrom({origin: "Kenya"})).toBeNull();
+        expect(podCoffeeFromPodsVo({origin: "Kenya"})).toBeNull();
         // Parsed endpoint JSON can carry an invalid typed value where the pod name should be.
-        expect(podCoffeeFrom({theName: 42})).toBeNull();
+        expect(podCoffeeFromPodsVo({theName: 42})).toBeNull();
         // The trust boundary should reject a non-object payload before looking for fields.
-        expect(podCoffeeFrom("nonsense")).toBeNull();
-        expect(podCoffeeFrom(null)).toBeNull();
-        expect(podCoffeeFrom(undefined)).toBeNull();
+        expect(podCoffeeFromPodsVo("nonsense")).toBeNull();
+        expect(podCoffeeFromPodsVo(null)).toBeNull();
+        expect(podCoffeeFromPodsVo(undefined)).toBeNull();
     });
 
     it("refuses an image that is not https", () => {
-        expect(podCoffeeFrom({theName: "X", imagePath: "javascript:alert(1)"}))
+        expect(podCoffeeFromPodsVo({theName: "X", imagePath: "javascript:alert(1)"}))
             .toEqual({name: "X"});
         // A plain-HTTP downgrade is the realistic bad image URL from the undocumented endpoint.
-        expect(podCoffeeFrom({theName: "X", imagePath: "http://example.com/p.png"}))
+        expect(podCoffeeFromPodsVo({theName: "X", imagePath: "http://example.com/p.png"}))
             .toEqual({name: "X"});
     });
 });

@@ -275,8 +275,6 @@ class Recipe {
                 this.defaultCups = 0; // only used for Tea
             }
             this.grinder = jsonRecipe.grinder ?? true;
-            const coffee = podCoffeeFromStored(jsonRecipe.coffee);
-            if (coffee !== null) this.coffee = coffee;
             this.backup = jsonRecipe.backup ?? [];
             this.offline_backup = jsonRecipe.offline_backup ?? [];
             this.uid = jsonRecipe.uid ?? [];
@@ -349,6 +347,8 @@ class Recipe {
             if (typeof jsonRecipe.favourite === "boolean") {
                 this.favourite = jsonRecipe.favourite;
             }
+            const coffee = podCoffeeFromStored(jsonRecipe.coffee);
+            if (coffee !== null) this.coffee = coffee;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;

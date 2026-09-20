@@ -22,7 +22,25 @@ describe("Recipe.coffee", () => {
 
     it("ignores a coffee block that is not an object with a name", () => {
         expect(new Recipe(undefined, recipeJsonWith("Kenya")).coffee).toBeUndefined();
-        expect(new Recipe(undefined, recipeJsonWith({origin: "Kenya"})).coffee).toBeUndefined();
+
+        const raw = JSON.parse(recipeJsonWith({origin: "Kenya"})) as Record<string, unknown>;
+        raw.ratio = 17;
+        raw.pours = [{
+            pourNumber: 0,
+            volume: 100,
+            temperature: 93,
+            flowRate: 4,
+            agitation: 0,
+            pourPattern: 0,
+            pauseTime: 30
+        }];
+
+        const back = new Recipe(undefined, JSON.stringify(raw));
+
+        expect(back.coffee).toBeUndefined();
+        // A corrupt coffee block must not abort loading the rest of the recipe.
+        expect(back.pours).toHaveLength(1);
+        expect(back.ratio).toBe(17);
     });
 
     it("drops unknown stored fields rather than trusting them", () => {

@@ -304,6 +304,9 @@ function isHttpsUrl(value: unknown): boolean {
  *
  * So these are stripped and the recipe is kept. That asymmetry is the point,
  * and it is why they are not simply added to the map above.
+ * `coffee` is validated by the `Recipe` constructor under the same forgiveness
+ * contract and must not be added to `RECIPE_FIELDS`, where a bad value would
+ * reject the whole recipe.
  */
 const DROPPABLE_RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     sharedBy:       (v) => typeof v === "string" && v.length <= MAX_SHARED_BY,
