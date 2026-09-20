@@ -41,27 +41,31 @@ function httpsUrl(value: unknown): string | undefined {
     }
 }
 
-/**
- * Read a `podsVo` object into the subset we keep.
- *
- * Null without a name. The name is the only field BC can match a bean on
- * (spec §4.5.1 decision 5), so a block without one cannot do anything except
- * take up room in the URL.
- */
-export function podCoffeeFrom(podsVo: unknown): PodCoffee | null {
-    if (podsVo === null || typeof podsVo !== "object") return null;
-    const vo = podsVo as Record<string, unknown>;
-    const name = text(vo.theName);
+type PodCoffeeFields = {
+    name: string;
+    origin: string;
+    process: string;
+    variety: string;
+    aromatics: string;
+    note: string;
+    beanMix: string;
+    imageUrl: string;
+};
+
+function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee | null {
+    if (value === null || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    const name = text(record[fields.name]);
     if (name === undefined) return null;
 
     const coffee: PodCoffee = {name};
-    const origin = text(vo.origin);
-    const process = text(vo.process);
-    const variety = text(vo.varietal);
-    const aromatics = text(vo.flavor);
-    const note = text(vo.introduce);
-    const beanMix = text(vo.type);
-    const imageUrl = httpsUrl(vo.imagePath);
+    const origin = text(record[fields.origin]);
+    const process = text(record[fields.process]);
+    const variety = text(record[fields.variety]);
+    const aromatics = text(record[fields.aromatics]);
+    const note = text(record[fields.note]);
+    const beanMix = text(record[fields.beanMix]);
+    const imageUrl = httpsUrl(record[fields.imageUrl]);
 
     if (origin !== undefined) coffee.origin = origin;
     if (process !== undefined) coffee.process = process;
@@ -71,4 +75,44 @@ export function podCoffeeFrom(podsVo: unknown): PodCoffee | null {
     if (beanMix !== undefined) coffee.beanMix = beanMix;
     if (imageUrl !== undefined) coffee.imageUrl = imageUrl;
     return coffee;
+}
+
+/**
+ * Read a `podsVo` object into the subset we keep.
+ *
+ * Null without a name. The name is the only field BC can match a bean on
+ * (spec §4.5.1 decision 5), so a block without one cannot do anything except
+ * take up room in the URL.
+ */
+export function podCoffeeFrom(podsVo: unknown): PodCoffee | null {
+    return podCoffeeFromRecord(podsVo, {
+        name: "theName",
+        origin: "origin",
+        process: "process",
+        variety: "varietal",
+        aromatics: "flavor",
+        note: "introduce",
+        beanMix: "type",
+        imageUrl: "imagePath"
+    });
+}
+
+/**
+ * Read coffee metadata back from XBRW++'s own stored recipe JSON.
+ *
+ * Stored recipe JSON is not trusted input: backups and restores pass through
+ * the same constructor, so keep the validation beside the xBloom reader rather
+ * than assigning a persisted object directly.
+ */
+export function podCoffeeFromStored(value: unknown): PodCoffee | null {
+    return podCoffeeFromRecord(value, {
+        name: "name",
+        origin: "origin",
+        process: "process",
+        variety: "variety",
+        aromatics: "aromatics",
+        note: "note",
+        beanMix: "beanMix",
+        imageUrl: "imageUrl"
+    });
 }

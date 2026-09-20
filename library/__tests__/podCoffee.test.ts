@@ -1,4 +1,4 @@
-import {podCoffeeFrom} from "@/library/podCoffee";
+import {podCoffeeFrom, podCoffeeFromStored} from "@/library/podCoffee";
 
 describe("podCoffeeFrom", () => {
     it("reads the fields a real pod carries", () => {
@@ -52,5 +52,50 @@ describe("podCoffeeFrom", () => {
         // A plain-HTTP downgrade is the realistic bad image URL from the undocumented endpoint.
         expect(podCoffeeFrom({theName: "X", imagePath: "http://example.com/p.png"}))
             .toEqual({name: "X"});
+    });
+});
+
+describe("podCoffeeFromStored", () => {
+    it("reads the fields stored on our recipe JSON", () => {
+        expect(podCoffeeFromStored({
+            name: " Kenya Sakami Gloria Natural Batian ",
+            origin: "Nabiswa, Kenya",
+            process: "Natural",
+            variety: "Batian",
+            aromatics: "Cherry・strawberry・blueberry",
+            note: "A producer narrative.",
+            beanMix: "Single Origin",
+            imageUrl: "https://example.com/pod.png",
+            roast: 1
+        })).toEqual({
+            name: "Kenya Sakami Gloria Natural Batian",
+            origin: "Nabiswa, Kenya",
+            process: "Natural",
+            variety: "Batian",
+            aromatics: "Cherry・strawberry・blueberry",
+            note: "A producer narrative.",
+            beanMix: "Single Origin",
+            imageUrl: "https://example.com/pod.png"
+        });
+    });
+
+    it("drops empty, non-string, unknown, and non-https values", () => {
+        expect(podCoffeeFromStored({
+            name: "X",
+            origin: "",
+            process: 42,
+            variety: "  ",
+            aromatics: ["berry"],
+            imageUrl: "http://example.com/pod.png",
+            roast: 1
+        })).toEqual({name: "X"});
+    });
+
+    it("is null without a stored name", () => {
+        expect(podCoffeeFromStored({origin: "Kenya"})).toBeNull();
+        expect(podCoffeeFromStored({name: ""})).toBeNull();
+        expect(podCoffeeFromStored("nonsense")).toBeNull();
+        expect(podCoffeeFromStored(null)).toBeNull();
+        expect(podCoffeeFromStored(undefined)).toBeNull();
     });
 });

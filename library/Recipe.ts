@@ -1,6 +1,7 @@
 import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
+import {podCoffeeFromStored, type PodCoffee} from "./podCoffee";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
 import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
@@ -110,6 +111,15 @@ class Recipe {
     public grindSize: number = -1;
     public grindRPM: number = 120;
     public grinder: boolean = true;
+    /**
+     * The coffee this recipe's pod carries, when it came from an xPod import.
+     *
+     * Captured at import rather than at export, because an export must not
+     * depend on an undocumented third-party endpoint being reachable: putting
+     * a live fetch inside a user action makes the feature fail on a train
+     * (spec §2.1.1).
+     */
+    public coffee?: PodCoffee;
     public pours: Pour[] = [];
     public checksum: number = -1;
     public cupType: number = CUP_TYPE.XPOD;
@@ -265,6 +275,8 @@ class Recipe {
                 this.defaultCups = 0; // only used for Tea
             }
             this.grinder = jsonRecipe.grinder ?? true;
+            const coffee = podCoffeeFromStored(jsonRecipe.coffee);
+            if (coffee !== null) this.coffee = coffee;
             this.backup = jsonRecipe.backup ?? [];
             this.offline_backup = jsonRecipe.offline_backup ?? [];
             this.uid = jsonRecipe.uid ?? [];
