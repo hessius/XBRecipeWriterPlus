@@ -38,12 +38,19 @@ describe("podCoffeeFrom", () => {
 
     it("is null without a name, which is the only field worth matching on", () => {
         expect(podCoffeeFrom({origin: "Kenya"})).toBeNull();
+        // Parsed endpoint JSON can carry an invalid typed value where the pod name should be.
+        expect(podCoffeeFrom({theName: 42})).toBeNull();
+        // The trust boundary should reject a non-object payload before looking for fields.
+        expect(podCoffeeFrom("nonsense")).toBeNull();
         expect(podCoffeeFrom(null)).toBeNull();
         expect(podCoffeeFrom(undefined)).toBeNull();
     });
 
     it("refuses an image that is not https", () => {
         expect(podCoffeeFrom({theName: "X", imagePath: "javascript:alert(1)"}))
+            .toEqual({name: "X"});
+        // A plain-HTTP downgrade is the realistic bad image URL from the undocumented endpoint.
+        expect(podCoffeeFrom({theName: "X", imagePath: "http://example.com/p.png"}))
             .toEqual({name: "X"});
     });
 });
