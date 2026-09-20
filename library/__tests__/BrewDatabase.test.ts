@@ -1,6 +1,10 @@
 import BrewDatabase from "@/library/BrewDatabase";
+import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
+import type {BrewPhase} from "@/library/machine/Machine";
+import Pour from "@/library/Pour";
+import Recipe from "@/library/Recipe";
 
 /**
  * An in-memory stand-in for expo-sqlite, in the same spirit as the one in
@@ -163,6 +167,34 @@ const stream: BrewSample[] = [
     {at: 0, water: 0, cup: 0, pour: 1},
     {at: 1000, water: 4, cup: 2, pour: 1}
 ];
+
+function recorderRecord(recipe: Recipe, id = "brew-1"): BrewRecord {
+    let phase: (p: BrewPhase) => void = () => {};
+    let saved: BrewRecord | undefined;
+    const machine: RecorderMachine = {
+        onNotification: () => () => {},
+        onPhase: (l) => { phase = l; return () => { phase = () => {}; }; }
+    };
+    const recorder = new BrewRecorder({
+        machine,
+        recipe,
+        now: () => 1_000_000,
+        newId: () => id,
+        onRecord: (record) => { saved = record; }
+    });
+    recorder.start();
+    phase({name: "done"});
+    recorder.stop();
+    if (saved === undefined) throw new Error("Recorder did not emit a brew");
+    return saved;
+}
+
+function recorderRecipe(): Recipe {
+    const r = new Recipe();
+    r.name = "Recorder recipe";
+    r.pours = [new Pour(1, 40, 93, 40, 0, 0, 20)];
+    return r;
+}
 
 describe("BrewDatabase", () => {
     it("counts a recipe's brews and dates the last of them", () => {
@@ -495,6 +527,39 @@ describe("the recipe snapshot for export", () => {
             name: "Original coffee",
             imageUrl: "https://example.com/old.png"
         });
+    });
+
+    it("round-trips the recipe snapshot shape produced by the recorder", () => {
+        const db = new BrewDatabase();
+        const fullRecipe = recorderRecipe();
+        fullRecipe.dosage = 15;
+        fullRecipe.ratio = 16;
+        fullRecipe.grindSize = 62;
+        fullRecipe.grindRPM = 90;
+        fullRecipe.grinder = true;
+        fullRecipe.coffee = {name: "Kenya Sakami"};
+        const full = recorderRecord(fullRecipe, "brew-full");
+
+        db.insert(full, []);
+        const fullBack = db.get("brew-full");
+        expect(fullBack).toMatchObject({
+            dose: full.dose,
+            ratio: full.ratio,
+            grindSize: full.grindSize,
+            grinderRpm: full.grinderRpm,
+            grinderUsed: full.grinderUsed,
+            coffee: full.coffee
+        });
+
+        const defaults = recorderRecord(recorderRecipe(), "brew-defaults");
+        db.insert(defaults, []);
+        const defaultsBack = db.get("brew-defaults");
+        expect(defaultsBack?.dose).toBe(defaults.dose);
+        expect(defaultsBack?.ratio).toBe(defaults.ratio);
+        expect(defaultsBack?.grindSize).toBe(defaults.grindSize);
+        expect(defaultsBack?.grinderRpm).toBe(defaults.grinderRpm);
+        expect(defaultsBack?.grinderUsed).toBe(defaults.grinderUsed);
+        expect(defaultsBack?.coffee).toBe(defaults.coffee);
     });
 
     it("ignores a coffee column that is not JSON", () => {

@@ -36,13 +36,16 @@ function clock(start = 1_000_000) {
     return {now: () => at, advance: (ms: number) => { at += ms; }};
 }
 
-function build(overrides: Partial<{onRecord: (r: BrewRecord, s: BrewSample[]) => void}> = {}) {
+function build(overrides: Partial<{
+    onRecord: (r: BrewRecord, s: BrewSample[]) => void;
+    recipe: Recipe;
+}> = {}) {
     const fake = fakeMachine();
     const time = clock();
     const records: {record: BrewRecord; samples: BrewSample[]}[] = [];
     const recorder = new BrewRecorder({
         machine: fake.machine,
-        recipe: recipe(),
+        recipe: overrides.recipe ?? recipe(),
         now: time.now,
         newId: () => "brew-1",
         onRecord: overrides.onRecord ?? ((record, samples) => records.push({record, samples}))
@@ -566,6 +569,81 @@ describe("BrewRecorder", () => {
         // Two entries for two planned stages, so the ladder always gets a full
         // set -- the trailing 0 is the assertion, not the 25.
         expect(records[0].record.stageWater).toEqual([25, 0]);
+    });
+
+    it("keeps the recipe figures and pod coffee it was started from", () => {
+        const r = recipe();
+        r.dosage = 15;
+        r.ratio = 16;
+        r.grindSize = 62;
+        r.grindRPM = 90;
+        r.grinder = true;
+        r.coffee = {name: "Kenya Sakami"};
+        const {fake, records} = build({recipe: r});
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "done"});
+
+        expect(records[0].record).toMatchObject({
+            dose: 15,
+            ratio: 16,
+            grindSize: 62,
+            grinderRpm: 90,
+            grinderUsed: true,
+            coffee: {name: "Kenya Sakami"}
+        });
+    });
+
+    it("does not turn unset recipe defaults into recorded figures", () => {
+        const r = new Recipe();
+        const {fake, records} = build({recipe: r});
+
+        fake.phase({name: "done"});
+
+        expect(records[0].record.ratio).toBeUndefined();
+        expect(records[0].record.grindSize).toBeUndefined();
+    });
+
+    it("keeps grinder-off as a recorded grinder setting", () => {
+        const r = recipe();
+        r.grinder = false;
+        r.grindSize = 81;
+        const {fake, records} = build({recipe: r});
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.grindSize).toBe(81);
+        expect(records[0].record.grinderUsed).toBe(false);
+    });
+
+    it("leaves coffee absent when the recipe has no pod coffee", () => {
+        const {fake, records} = build();
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.coffee).toBeUndefined();
+    });
+
+    it("copies the pod coffee instead of holding the recipe object", () => {
+        const r = recipe();
+        r.coffee = {name: "Original coffee", imageUrl: "https://example.com/old.png"};
+        const {fake, records} = build({recipe: r});
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        fake.phase({name: "done"});
+        r.coffee.name = "Mutated coffee";
+        r.coffee.imageUrl = "https://example.com/new.png";
+
+        expect(records[0].record.coffee).toEqual({
+            name: "Original coffee",
+            imageUrl: "https://example.com/old.png"
+        });
     });
 });
 

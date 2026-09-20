@@ -374,6 +374,17 @@ export default class BrewRecorder {
             // it said even after the recipe is edited or deleted.
             plan: planFromPours(recipe.pours),
             stageWater: stageWaterFromSamples(this.collected, recipe.pours.length),
+            // `-1` is the recipe sentinel for "not set"; a brew record must
+            // not claim a ratio or grind it never really had.
+            ...(recipe.dosage > 0 ? {dose: recipe.dosage} : {}),
+            ...(recipe.ratio > 0 ? {ratio: recipe.ratio} : {}),
+            ...(recipe.grindSize > 0 ? {grindSize: recipe.grindSize} : {}),
+            ...(recipe.grindRPM > 0 ? {grinderRpm: recipe.grindRPM} : {}),
+            // BrewDatabase uses the grind-size sentinel to tell recorded
+            // `false` from an old default, and grinderRan cannot use a
+            // grinder flag without a card grind band either.
+            ...(recipe.grindSize > 0 ? {grinderUsed: recipe.grinder} : {}),
+            ...(recipe.coffee === undefined ? {} : {coffee: {...recipe.coffee}}),
             // Spread rather than assigned, so a recipe with no bypass leaves
             // the key off the row entirely and reads back as an old record.
             ...(bypass === undefined ? {} : {bypass}),
