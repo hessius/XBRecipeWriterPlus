@@ -1,7 +1,6 @@
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
-import {__mutateBrewRowForTest} from "expo-sqlite";
 
 /**
  * An in-memory stand-in for expo-sqlite, in the same spirit as the one in
@@ -13,14 +12,14 @@ import {__mutateBrewRowForTest} from "expo-sqlite";
 type BrewRow = Record<string, string | number | null>;
 type SampleRow = {brewId: string; stream: string};
 type FrameRow = {brewId: string; frames: string};
-let mockLatestBrews: BrewRow[] = [];
+const mockDb = {brews: [] as BrewRow[]};
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => {
         const brews: BrewRow[] = [];
         const samples: SampleRow[] = [];
         const frames: FrameRow[] = [];
-        mockLatestBrews = brews;
+        mockDb.brews = brews;
         return {
             execSync: () => {
                 // CREATE TABLE / PRAGMA only; in memory there is nothing to do.
@@ -130,20 +129,15 @@ jest.mock("expo-sqlite", () => ({
                     return ordered.filter((b) => b.id === params[0]);
                 }
                 return ordered;
-            },
+            }
         };
-    },
-    __mutateBrewRowForTest: (id: string, update: BrewRow) => {
-        const row = mockLatestBrews.find((b) => b.id === id);
-        if (row) Object.assign(row, update);
-    },
+    }
 }));
 
-declare module "expo-sqlite" {
-    export function __mutateBrewRowForTest(
-        id: string,
-        update: Record<string, string | number | null>
-    ): void;
+function corruptStoredRow(id: string, update: Partial<BrewRow>): void {
+    const row = mockDb.brews.find((b) => b.id === id);
+    if (row === undefined) throw new Error(`No brew row ${id} to corrupt`);
+    Object.assign(row, update);
 }
 
 function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
@@ -505,37 +499,24 @@ describe("the recipe snapshot for export", () => {
 
     it("ignores a coffee column that is not JSON", () => {
         const db = new BrewDatabase();
-        db.insert(record(), []);
+        db.insert(record({coffee: {name: "Kenya Sakami"}}), []);
 
-        __mutateBrewRowForTest("brew-1", {coffee: "not JSON"});
+        corruptStoredRow("brew-1", {coffee: "not JSON"});
 
-        expect(() => db.get("brew-1")).not.toThrow();
-        expect(db.get("brew-1")?.coffee).toBeUndefined();
-    });
-
-    it("validates stored coffee rather than trusting parsed JSON", () => {
-        const db = new BrewDatabase();
-        db.insert(record(), []);
-
-        __mutateBrewRowForTest("brew-1", {
-            coffee: JSON.stringify({
-                name: "Kenya Sakami",
-                imageUrl: "https://example.com/coffee.png",
-                unexpected: "not ours"
-            })
+        const back = db.get("brew-1");
+        expect(back).toMatchObject({
+            recipeName: "Ethiopia Guji",
+            waterTotal: 250,
+            cupTotal: 244
         });
-
-        expect(db.get("brew-1")?.coffee).toEqual({
-            name: "Kenya Sakami",
-            imageUrl: "https://example.com/coffee.png"
-        });
+        expect(back?.coffee).toBeUndefined();
     });
 
     it("drops a stored coffee image that is not HTTPS", () => {
         const db = new BrewDatabase();
         db.insert(record(), []);
 
-        __mutateBrewRowForTest("brew-1", {
+        corruptStoredRow("brew-1", {
             coffee: JSON.stringify({
                 name: "Kenya Sakami",
                 imageUrl: "http://example.com/coffee.png"

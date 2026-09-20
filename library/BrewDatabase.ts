@@ -4,6 +4,7 @@ import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
 import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
+import type {PodCoffee} from "./podCoffee";
 import {podCoffeeFromStored} from "./podCoffee";
 
 /** A record as it comes back out, with whether its stream survived retention. */
@@ -61,7 +62,7 @@ type BrewRow = {
     grindSize: number;
     /** 0 on rows written before it, which reads as "not recorded". */
     grinderRpm: number;
-    /** 0 on rows written before it and when recorded as false. */
+    /** 0 on rows written before it and when recorded as false; grindSize > 0 marks recordedness. */
     grinderUsed: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
@@ -274,7 +275,7 @@ class BrewDatabase {
                     record.grindSize ?? 0,
                     record.grinderRpm ?? 0,
                     record.grinderUsed === true ? 1 : 0,
-                    record.coffee === undefined ? "" : JSON.stringify(record.coffee),
+                    record.coffee ? JSON.stringify(record.coffee) : "",
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -574,7 +575,7 @@ function hydrate(row: BrewRow): StoredBrew {
     };
 }
 
-function coffeeFromStoredColumn(value: string): BrewRecord["coffee"] | null {
+function coffeeFromStoredColumn(value: string): PodCoffee | null {
     if (value === "") return null;
     try {
         return podCoffeeFromStored(JSON.parse(value));
