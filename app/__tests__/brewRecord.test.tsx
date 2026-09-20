@@ -1,6 +1,6 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
-import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {Linking, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
@@ -19,6 +19,15 @@ import {planFromPours} from "@/library/brew/BrewRecord";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
+
+jest.mock("@/library/brew/handoff/targets", () => {
+    const actual = jest.requireActual("@/library/brew/handoff/targets");
+    return {
+        __esModule: true,
+        ...actual,
+        HANDOFF_ENABLED: true
+    };
+});
 
 /**
  * `frames` is optional here only: the real `open()` always returns one, but a
@@ -313,6 +322,58 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByLabelText("Save as image")).toBeTruthy();
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
+    });
+
+    describe("Beanconqueror handoff", () => {
+        let openURL: jest.SpiedFunction<typeof Linking.openURL>;
+
+        beforeEach(() => {
+            openURL = jest.spyOn(Linking, "openURL");
+            openURL.mockReset();
+            openURL.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        it("offers Beanconqueror handoff for a completed brew when the gate is on", async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.getByLabelText("Send to Beanconqueror")).toBeTruthy();
+        });
+
+        it("does not offer Beanconqueror handoff for a failed brew when the gate is on", async () => {
+            mockOpened = {record: {...record, outcome: "failed"}, samples: []};
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.queryByLabelText("Send to Beanconqueror")).toBeNull();
+        });
+
+        it("opens Beanconqueror once when the handoff action is pressed", async () => {
+            const {getByLabelText} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText("Send to Beanconqueror"));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+        });
+        it("shows the Beanconqueror credit with the action", async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.getByText("Handoff for Beanconqueror · keep your brew diary there."))
+                .toBeTruthy();
+        });
+
+        it("does not show the Beanconqueror credit without the action", async () => {
+            mockOpened = {record: {...record, outcome: "failed"}, samples: []};
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.queryByText("Handoff for Beanconqueror · keep your brew diary there."))
+                .toBeNull();
+        });
     });
 
     // ── Finding 1: ?latest=1 branch ─────────────────────────────────────────

@@ -17,12 +17,14 @@ import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
+import {useBrewHandoff} from "@/hooks/useBrewHandoff";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
+import * as handoffTargets from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -121,6 +123,10 @@ export default function BrewRecord({recipeLookup}: Props) {
             scroller.current?.scrollTo({y: 0, animated: false});
         }
     );
+    // Handoff opens Beanconqueror directly and keeps its own in-flight guard.
+    // The share exports are separate actions with separate state, so one busy
+    // export should not disable a different handoff path that can still run.
+    const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(() => opened);
 
     // Seeded from the record that is already in memory, so the screen shows
     // the verdict the user gave at the end of the brew rather than an empty
@@ -166,6 +172,10 @@ export default function BrewRecord({recipeLookup}: Props) {
     }
 
     const {record, samples} = opened;
+    const handoffTarget = handoffTargets.HANDOFF_TARGETS[0];
+    const showHandoff = handoffTargets.HANDOFF_ENABLED
+        && handoffTarget !== undefined
+        && handoffTargets.canHandOff(record.outcome);
     // `?? ""` because a record opened before the frame log existed — and any
     // stand-in for the store — simply has no log, which is a brew with nothing
     // to copy rather than an error.
@@ -338,12 +348,24 @@ export default function BrewRecord({recipeLookup}: Props) {
             {/* Nothing to picture and no stream to hand over: both exports
                 would return an empty file for a brew the app never watched. */}
             {watched && (
-                <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
-                    <ExportButton label="Save as image" busy={busy}
-                                  onPress={() => void shareImage()} />
-                    <ExportButton label="Export the data" busy={busy}
-                                  onPress={() => void shareData()} />
-                </XStack>
+                <YStack gap="$2" paddingHorizontal={SCREEN_PADDING}>
+                    <XStack gap="$3">
+                        <ExportButton label="Save as image" busy={busy}
+                                      onPress={() => void shareImage()} />
+                        <ExportButton label="Export the data" busy={busy}
+                                      onPress={() => void shareData()} />
+                        {showHandoff && (
+                            <ExportButton label={handoffTarget.buttonLabel}
+                                          busy={handoffBusy}
+                                          onPress={() => void sendHandoff()} />
+                        )}
+                    </XStack>
+                    {showHandoff && (
+                        <Text color={palette.muted} fontSize={12} textAlign="center">
+                            {handoffTarget.credit}
+                        </Text>
+                    )}
+                </YStack>
             )}
             {/* Only when there is one to copy, and only for someone who has
                 found the machine console. A brew recorded before this existed,
@@ -363,4 +385,3 @@ export default function BrewRecord({recipeLookup}: Props) {
         </YStack>
     );
 }
-
