@@ -317,7 +317,7 @@ refactor is a decoder change there rather than silent breakage here.
 ### 4.1 Transport
 
 ```
-beanconqueror://ADD_BREW?v=1&n=8&shareBrew0=…&shareBrew1=…
+beanconqueror://ADD_BREW?len=3942&shareBrew0=…&shareBrew1=…
 ```
 
 400-character chunks in `shareBrewN` params, mirroring the `shareUserBeanN`
@@ -325,11 +325,18 @@ convention and regex style upstream already uses, so the handler reads as
 idiomatic BC. An `https://beanconqueror.com/?shareBrew0=…` sibling is accepted
 too, matching how the bean share has both forms.
 
-`n` is the chunk count. The bean share infers it from a regex over the param
-names and needs no count; carrying it explicitly lets the decoder reject a
-truncated URL **before** inflating, with a precise reason rather than a generic
-failure. gzip's own CRC32 catches corruption within the chunks, so the two
-together cover both truncation and mangling.
+`len` is the payload length in characters. The bean share infers its chunk
+count from a regex over the param names and carries no length; carrying one
+explicitly lets the decoder reject a truncated URL **before** inflating, with a
+precise reason rather than a generic failure. gzip's own CRC32 catches
+corruption within the chunks, so the two together cover both truncation and
+mangling.
+
+This earned its place immediately. The first PoC run reported `declared: 3940,
+received: 1954, intact: NO` and named the fault in one line; without it the only
+symptom was an opaque `TypeError: Extra bytes past the end` from the inflater.
+Prefer a length to a chunk count: a count tells you a chunk is missing, a length
+tells you a chunk is *short*.
 
 **Codec:** `JSON → gzip → base64url → chunk`.
 
@@ -923,9 +930,9 @@ gzip stream that fails to inflate, and the user sees a generic "unrecognised
 link" with no idea why.
 
 `encode.ts` enforces a **32,768-character budget on the assembled URL**, scheme
-and every param included, not on the payload alone. That is roughly ten times a
-typical brew and far below any plausible platform ceiling. Over budget, it
-degrades in defined steps:
+and every param included, not on the payload alone. That is roughly eight times
+a typical brew and a third of the 97,120 characters measured intact in §7.1, so
+it is conservative at both ends. Over budget, it degrades in defined steps:
 
 1. Full stream. Essentially always.
 2. Halve the sample rate, repeatedly, while over budget.
@@ -969,30 +976,81 @@ or refused.
 
 ## 7. Proof
 
-Only one rung is genuinely unknown; the rest is arithmetic or unit-testable.
-
 - **PoC-0 — payload size. Done.** §1.2.
 - **PoC-1 — format round trip.** A test in this repository: encode a real brew,
   decode it with a **from-scratch reader written against BC's field list**, and
-  assert every target field lands. No BC checkout, no GPL contact. The
-  `cardFixtures.ts` discipline: an independent reimplementation, so the round
-  trip proves something instead of restating the encoder.
-- **PoC-2 — the real unknown.** A BC fork branch with the handler, in a
-  simulator, receiving an actual ~3 KB `beanconqueror://ADD_BREW` URL.
-  **Whether a URL that size survives Capacitor's `appUrlOpen` cannot be derived
-  by arithmetic.**
+  assert every target field lands. The `cardFixtures.ts` discipline: an
+  independent reimplementation, so the round trip proves something instead of
+  restating the encoder.
+- **PoC-2 — the real unknown. Done, and it passes.** §7.1.
 
-**PoC-2 is iOS only.** Android has never been verified on SDK 57 (#5), so we
-cannot test it honestly. The write-up states the Android position as reasoning
-rather than measurement: the Binder transaction limit is around 1 MB and this
-payload is roughly 0.3% of it, and confirmation is invited from the maintainer
-or an Android user.
+### 7.1 PoC-2: measured, not reasoned
 
-**The PR is opened only if PoC-2 passes.** It is also the artefact for the
-conversation: a branch to check out and a video of a brew landing in his own
-add form is a different proposition from a feature request.
+Run on 2026-09-20 against a fork of BC at `main`, built for an iPhone 16 Pro
+simulator on iOS 18.3. The receiver was about 120 lines: a decoder plus an
+`ADD_BREW` branch in `IntentHandlerService.handleDeepLink`, reporting the
+lengths it saw before doing anything with them.
 
-### 7.1 Tests
+The sender was a script producing the envelope this spec describes, for a
+realistic 4 stage brew: 2,400 flow samples at 100 ms, the stage plan, the pod
+coffee block, the `targetTemperature` metric and the generated note.
+
+| | JSON | gzip | base64url | chunks | URL |
+| --- | --- | --- | --- | --- | --- |
+| Realistic brew | 27,803 B | 2,960 B | 3,942 | 10 | **4,095 chars** |
+
+**Result: delivered whole.** `intact: YES`, and the decoder read back the
+sender name, the device, the dose, the temperature, **all 2,400 flow samples**
+and the `targetTemperature` metric.
+
+Then the ceiling, because a pass at the size we need says nothing about the
+margin:
+
+| Samples | URL chars | Chunks | Delivered |
+| --- | --- | --- | --- |
+| 2,400 | 4,095 | 10 | intact |
+| 96,000 | **97,120** | **235** | **intact** |
+
+A 97 KB URL across 235 params arrived byte-exact. That is roughly **24 times**
+the size we actually need. The transport is not a constraint on this design;
+the size work in §1.2 buys margin, not feasibility.
+
+### 7.2 The 2 KB truncation is real, and it is the tooling
+
+The first run failed, and the failure is worth recording because it is exactly
+the symptom the maintainer remembers.
+
+Fired with `xcrun simctl openurl`, a 4,095-character URL arrived as **2,047
+characters** — 5 of 10 chunks, cut mid-payload at what is plainly a 2 KB
+buffer. The same URL, from a link tapped in Safari on the same simulator in the
+same minute, arrived complete.
+
+So `simctl openurl` truncates at 2,048 bytes and the OS does not. **Anyone who
+has tested a long deep link from the command line has measured the command
+line.** This is a plausible origin for the received wisdom that long params are
+lost, and it is worth passing upstream on its own.
+
+What this does *not* prove: Android, and a physical device. Android has never
+been verified on SDK 57 (#5), so we cannot test it honestly, and we keep the
+chunking regardless. The Binder transaction limit is around 1 MB and the real
+payload is roughly 0.4% of it; confirmation is invited rather than claimed.
+
+### 7.3 Two findings for upstream, unrelated to us
+
+- **`@zip.js/zip.js` is already a BC dependency**, and `DecompressionStream`
+  has been in WebKit since iOS 16.4. gzip therefore costs upstream **no new
+  dependency**. This is why the codec is gzip rather than brotli, which would
+  have needed one: on the PoC envelope brotli was 2,551 bytes against gzip's
+  2,960, which is 545 base64 characters. Against 24x of headroom that is not
+  worth a dependency.
+- **BC does not currently build for an Apple Silicon simulator.** A pod sets
+  `EXCLUDED_ARCHS[sdk=iphonesimulator*] = arm64`, which forces x86_64, and
+  `@capgo/capacitor-llm` ships no x86_64 slice, so the build fails on
+  `unable to resolve module dependency: 'CLiteRTLM'`. The PoC dropped that one
+  pod from the Podfile to get a simulator build. Reported as a courtesy, not as
+  a request.
+
+### 7.4 Tests
 
 In XBRW++:
 
@@ -1025,6 +1083,12 @@ setup.
 | `docs/import-api.md` *(new)* | the schema, so anyone can emit it, plus the known-senders list |
 
 Inflate uses `@zip.js/zip.js`, already a dependency. **No new packages.**
+
+The PoC used the native `DecompressionStream('gzip')` instead, which is simpler
+and needs nothing at all, but it only reaches back to iOS 16.4 while BC's
+deployment target is 16.0. The shipped decoder should prefer
+`DecompressionStream` when present and fall back to `@zip.js/zip.js`, so the
+common path carries no library and the floor is still covered.
 
 The preparation type, the two icons and the §4.4.3 hints are **separable from
 the rest**. If the maintainer wants the transport without the branding, or the
