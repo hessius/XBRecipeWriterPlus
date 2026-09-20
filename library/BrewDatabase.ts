@@ -4,6 +4,7 @@ import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
 import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
+import {podCoffeeFromStored} from "./podCoffee";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
@@ -52,6 +53,18 @@ type BrewRow = {
     pinned: number | null;
     /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
     watched: number | null;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    dose: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    ratio: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    grindSize: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    grinderRpm: number;
+    /** 0 on rows written before it and when recorded as false. */
+    grinderUsed: number;
+    /** JSON, the pod coffee as it stood. `''` on rows written before it. */
+    coffee: string;
     hasStream: number;
 };
 
@@ -95,6 +108,12 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
                 watched INTEGER NOT NULL DEFAULT 1,
+                dose REAL NOT NULL DEFAULT 0,
+                ratio REAL NOT NULL DEFAULT 0,
+                grindSize INTEGER NOT NULL DEFAULT 0,
+                grinderRpm INTEGER NOT NULL DEFAULT 0,
+                grinderUsed INTEGER NOT NULL DEFAULT 0,
+                coffee TEXT NOT NULL DEFAULT '',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -160,6 +179,40 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Rows written before these six existed keep zero or an empty string,
+    // which reads as "not recorded"; zero is not a live dose, ratio, grind
+    // or RPM value, and SQLite has no undefined or boolean.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN dose REAL NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN ratio REAL NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN grindSize INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN grinderRpm INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync(
+            "ALTER TABLE brews ADD COLUMN grinderUsed INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN coffee TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -197,8 +250,10 @@ class BrewDatabase {
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                     heldSeconds, stalls, plan, stageWater, rating,
-                                    note, pinned, watched, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                                    note, pinned, watched, dose, ratio,
+                                    grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                         ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
@@ -214,6 +269,12 @@ class BrewDatabase {
                     record.note ?? "",
                     record.pinned ? 1 : 0,
                     record.watched === false ? 0 : 1,
+                    record.dose ?? 0,
+                    record.ratio ?? 0,
+                    record.grindSize ?? 0,
+                    record.grinderRpm ?? 0,
+                    record.grinderUsed === true ? 1 : 0,
+                    record.coffee === undefined ? "" : JSON.stringify(record.coffee),
                     samples.length > 0 ? 1 : 0
                 ]
             );
@@ -474,6 +535,7 @@ function hydrate(row: BrewRow): StoredBrew {
     const stalls = jsonOf<Stall[]>(row.stalls);
     const plan = jsonOf<PlanStage>(row.plan);
     const stageWater = jsonOf<number>(row.stageWater);
+    const coffee = coffeeFromStoredColumn(row.coffee);
     return {
         id: row.id,
         recipeUuid: row.recipeUuid,
@@ -500,8 +562,25 @@ function hydrate(row: BrewRow): StoredBrew {
         // what it was before this column existed and the round trip stays
         // honest about "absent means the app saw it".
         ...(row.watched === 0 ? {watched: false} : {}),
+        ...(row.dose > 0 ? {dose: row.dose} : {}),
+        ...(row.ratio > 0 ? {ratio: row.ratio} : {}),
+        ...(row.grindSize > 0 ? {grindSize: row.grindSize} : {}),
+        ...(row.grinderRpm > 0 ? {grinderRpm: row.grinderRpm} : {}),
+        // The boolean's 0 default is indistinguishable from a recorded false.
+        // A recorded grind size is the marker that this row knew the column.
+        ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
+        ...(coffee !== null ? {coffee} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+function coffeeFromStoredColumn(value: string): BrewRecord["coffee"] | null {
+    if (value === "") return null;
+    try {
+        return podCoffeeFromStored(JSON.parse(value));
+    } catch {
+        return null;
+    }
 }
 
 function jsonOf<T>(value: string | null): T[] {
