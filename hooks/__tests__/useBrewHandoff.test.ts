@@ -1,7 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 import {Linking} from "react-native";
 
-import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import {HANDOFF_OPEN_FAILED, HANDOFF_TOO_LARGE, useBrewHandoff} from "@/hooks/useBrewHandoff";
 import type {BrewExportSource} from "@/hooks/useBrewExport";
 import {notify} from "@/components/XbrwToast";
 import * as handoffEncode from "@/library/brew/handoff/encode";
@@ -9,8 +9,8 @@ import {brew, samples} from "@/library/brew/handoff/__tests__/fixtures";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
-const openURL = Linking.openURL as jest.MockedFunction<typeof Linking.openURL>;
 const notifyMock = notify as jest.MockedFunction<typeof notify>;
+let openURL: jest.SpiedFunction<typeof Linking.openURL>;
 
 function source(): BrewExportSource {
     return {record: brew(), samples};
@@ -18,10 +18,13 @@ function source(): BrewExportSource {
 
 describe("useBrewHandoff", () => {
     beforeEach(() => {
-        jest.restoreAllMocks();
+        openURL = jest.spyOn(Linking, "openURL");
         openURL.mockReset();
         openURL.mockResolvedValue(undefined);
         notifyMock.mockClear();
+    });
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
     it("opens a Beanconqueror brew handoff URL", async () => {
@@ -47,6 +50,12 @@ describe("useBrewHandoff", () => {
 
         await act(async () => {
             first = result.current.send();
+            await Promise.resolve();
+        });
+
+        expect(result.current.busy).toBe(true);
+
+        await act(async () => {
             second = result.current.send();
             expect(openURL).toHaveBeenCalledTimes(1);
             release();
@@ -54,6 +63,19 @@ describe("useBrewHandoff", () => {
         });
 
         expect(openURL).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows another handoff after the first one completes", async () => {
+        const {result} = await renderHook(() => useBrewHandoff(source));
+
+        await act(async () => {
+            await result.current.send();
+        });
+        await act(async () => {
+            await result.current.send();
+        });
+
+        expect(openURL).toHaveBeenCalledTimes(2);
     });
 
     it("reports a rejected open to the user as a Beanconqueror error", async () => {
@@ -66,7 +88,7 @@ describe("useBrewHandoff", () => {
 
         expect(notifyMock).toHaveBeenCalledWith({
             tone: "error",
-            message: expect.stringContaining("Beanconqueror")
+            message: HANDOFF_OPEN_FAILED
         });
     });
 
@@ -81,7 +103,7 @@ describe("useBrewHandoff", () => {
         expect(result.current.busy).toBe(false);
     });
 
-    it("reports an encoding failure and clears busy", async () => {
+    it("reports an encoding failure as an oversized brew and clears busy", async () => {
         jest.spyOn(handoffEncode, "encodeHandoff").mockImplementationOnce(() => {
             throw new Error("too large");
         });
@@ -94,7 +116,11 @@ describe("useBrewHandoff", () => {
         expect(openURL).not.toHaveBeenCalled();
         expect(notifyMock).toHaveBeenCalledWith({
             tone: "error",
-            message: expect.stringContaining("Beanconqueror")
+            message: HANDOFF_TOO_LARGE
+        });
+        expect(notifyMock).not.toHaveBeenCalledWith({
+            tone: "error",
+            message: HANDOFF_OPEN_FAILED
         });
         expect(result.current.busy).toBe(false);
     });
@@ -111,15 +137,9 @@ describe("useBrewHandoff", () => {
         expect(result.current.busy).toBe(false);
     });
 
-    it("uses failure copy without any dash characters", async () => {
-        openURL.mockRejectedValueOnce(new Error("no handler"));
-        const {result} = await renderHook(() => useBrewHandoff(source));
-
-        await act(async () => {
-            await result.current.send();
-        });
-
-        const message = notifyMock.mock.calls[0][0].message;
-        expect(message).not.toMatch(/[-–—]/);
+    it("uses handoff failure copy without any dash characters", () => {
+        for (const message of [HANDOFF_OPEN_FAILED, HANDOFF_TOO_LARGE]) {
+            expect(message).not.toMatch(/[-–—]/);
+        }
     });
 });
