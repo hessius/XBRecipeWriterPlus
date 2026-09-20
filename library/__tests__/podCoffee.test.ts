@@ -1,0 +1,49 @@
+import {podCoffeeFrom} from "@/library/podCoffee";
+
+describe("podCoffeeFrom", () => {
+    it("reads the fields a real pod carries", () => {
+        expect(podCoffeeFrom({
+            theName: "Kenya Sakami Gloria Natural Batian",
+            origin: "Nabiswa, Kenya",
+            process: "Natural",
+            varietal: "Batian",
+            flavor: "Cherry・strawberry・blueberry",
+            introduce: "A producer narrative.",
+            type: "Single Origin",
+            imagePath: "https://example.com/pod.png",
+            roast: 1
+        })).toEqual({
+            name: "Kenya Sakami Gloria Natural Batian",
+            origin: "Nabiswa, Kenya",
+            process: "Natural",
+            variety: "Batian",
+            aromatics: "Cherry・strawberry・blueberry",
+            note: "A producer narrative.",
+            beanMix: "Single Origin",
+            imageUrl: "https://example.com/pod.png"
+        });
+    });
+
+    it("does not map roast, whose meaning is unverified", () => {
+        const coffee = podCoffeeFrom({theName: "X", roast: 3});
+        expect(coffee).not.toBeNull();
+        expect(Object.keys(coffee!)).not.toContain("degreeOfRoast");
+    });
+
+    it("drops empty strings rather than carrying them", () => {
+        // subtitle is empty on real pods; so is origin on some.
+        expect(podCoffeeFrom({theName: "X", origin: "", process: "  "}))
+            .toEqual({name: "X"});
+    });
+
+    it("is null without a name, which is the only field worth matching on", () => {
+        expect(podCoffeeFrom({origin: "Kenya"})).toBeNull();
+        expect(podCoffeeFrom(null)).toBeNull();
+        expect(podCoffeeFrom(undefined)).toBeNull();
+    });
+
+    it("refuses an image that is not https", () => {
+        expect(podCoffeeFrom({theName: "X", imagePath: "javascript:alert(1)"}))
+            .toEqual({name: "X"});
+    });
+});
