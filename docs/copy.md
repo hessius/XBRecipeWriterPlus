@@ -579,6 +579,7 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.export.image` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:167` and `app/brew.tsx:319`) | Button to export as an image. Drawn upper-cased in Doto; the sentence-case value here is also the spoken a11y label, which is why it is stored this way round. | `Save as image` |
 | `brewRecord.export.data` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:169` and `app/brew.tsx:321`) | Button to export the underlying data as JSON. | `Export the data` |
 | `brewRecord.export.busy` | `components/ExportButton.tsx:34` | Replaces either label while the capture and share sheet are in flight, so a press is visibly acknowledged. | `WORKING…` |
+| `brewRecord.handoff.failed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened or the handoff payload cannot fit in a URL. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 
 ---
 
