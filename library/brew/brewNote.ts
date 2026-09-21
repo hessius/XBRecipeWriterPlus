@@ -11,6 +11,7 @@
 import {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {grinderRan, numeric, type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
+import type {BackfilledField} from "@/library/brew/handoff/backfill";
 
 function stageHead(stage: PlanStage, index: number): string[] {
     const stageNumber = numeric(stage.pourNumber) ? stage.pourNumber : index + 1;
@@ -82,10 +83,33 @@ function footer(record: BrewRecord): string {
     return parts.filter((part): part is string => part !== undefined).join(" · ");
 }
 
-export function brewNote(record: BrewRecord): string {
+function list(items: string[]): string {
+    if (items.length <= 1) return items[0] ?? "";
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+function backfillLine(filled: BackfilledField[]): string | undefined {
+    const labels: string[] = [];
+    if (filled.includes("dose")) labels.push("dose");
+    if (filled.includes("ratio")) labels.push("ratio");
+    // Grind size, RPM and whether the grinder ran are one grinder setting to a user.
+    if (filled.some((field) => (
+        field === "grindSize" || field === "grinderRpm" || field === "grinderUsed"
+    ))) {
+        labels.push("grinder");
+    }
+    if (labels.length === 0) return undefined;
+    const subject = list(labels);
+    return `${subject[0].toUpperCase()}${subject.slice(1)} read from the recipe, not this recording.`;
+}
+
+export function brewNote(record: BrewRecord, backfilled: BackfilledField[] = []): string {
     const foot = footer(record);
-    if (!Array.isArray(record.plan) || record.plan.length === 0) return foot;
+    const source = backfillLine(backfilled);
+    const footerWithSource = source === undefined ? foot : `${foot}\n${source}`;
+    if (!Array.isArray(record.plan) || record.plan.length === 0) return footerWithSource;
 
     const ladder = record.plan.map((stage, index) => stageLine(stage, index)).join("\n");
-    return `${ladder}\n\n${foot}`;
+    return `${ladder}\n\n${footerWithSource}`;
 }

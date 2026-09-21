@@ -118,6 +118,32 @@ describe("buildEnvelope", () => {
 15 g · 1:16 · grind 62 · 3 stages · xBloom`);
     });
 
+    it("announces recipe values only when the caller says they were backfilled", () => {
+        const envelope = buildEnvelope(brew({dose: undefined, ratio: undefined}), samples, [
+            "dose",
+            "ratio"
+        ]);
+
+        expect(envelope.brew.note).toContain(
+            "Dose and ratio read from the recipe, not this recording."
+        );
+    });
+
+    it("carries backfilled brew figures into the exported envelope", () => {
+        const envelope = buildEnvelope(brew({
+            dose: 18,
+            ratio: 15,
+            grindSize: 63,
+            grinderRpm: 90,
+            grinderUsed: true
+        }), samples, ["dose", "ratio", "grindSize", "grinderRpm", "grinderUsed"]);
+
+        expect(envelope.brew.doseIn).toEqual({value: 18, unit: "g"});
+        expect(envelope.brew.ratio).toBe(15);
+        expect(envelope.brew.grindSize).toBe("63");
+        expect(envelope.brew.note).toContain("Dose, ratio and grinder read from the recipe");
+    });
+
     it("exports swept-stream brews without flow but with their figures intact", () => {
         const envelope = buildEnvelope(brew({hasStream: false}), samples);
 

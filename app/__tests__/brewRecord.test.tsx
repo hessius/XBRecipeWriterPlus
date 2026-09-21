@@ -70,6 +70,10 @@ jest.mock("expo-router", () => {
 jest.mock("@/hooks/useSetting", () =>
     require("@/test-utils/settingsMock").settingsMock());
 
+jest.mock("@/library/RecipeDatabase", () => jest.fn(() => ({
+    getRecipe: jest.fn(() => null)
+})));
+
 jest.mock("@/hooks/useBrewHistory", () => {
     const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
         "@/test-utils/brewRecordMocks"

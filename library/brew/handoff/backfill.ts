@@ -2,7 +2,7 @@ import type Recipe from "@/library/Recipe";
 import {type BrewRecord, numeric} from "@/library/brew/BrewRecord";
 
 export type BackfilledField = "dose" | "ratio" | "grindSize" | "grinderRpm" | "grinderUsed";
-export type Backfill = {record: BrewRecord; filled: BackfilledField[]};
+export type Backfill<T extends BrewRecord = BrewRecord> = {record: T; filled: BackfilledField[]};
 
 /**
  * Stable order for user-facing copy that names which recipe values were used.
@@ -15,7 +15,7 @@ const BACKFILL_ORDER: BackfilledField[] = [
     "grinderUsed"
 ];
 
-export function backfillFromRecipe(record: BrewRecord, recipe: Recipe): Backfill {
+export function backfillFromRecipe<T extends BrewRecord>(record: T, recipe: Recipe): Backfill<T> {
     const filled: BackfilledField[] = [];
     const updates: Partial<BrewRecord> = {};
 

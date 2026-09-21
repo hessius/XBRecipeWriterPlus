@@ -180,7 +180,8 @@ describe("brewNote", () => {
             }))),
             brewNote(record(oneStage({agitation: AGITATION.BEFORE_ON_AFTER_ON}))),
             brewNote(record(oneStage())),
-            brewNote(record(oneStage({pourPattern: 7}))) // not a POUR_PATTERN value
+            brewNote(record(oneStage({pourPattern: 7}))), // not a POUR_PATTERN value
+            brewNote(record(), ["dose", "ratio", "grindSize", "grinderRpm", "grinderUsed"])
         ].join("\n");
 
         expect(notes).not.toMatch(/[-\u2013\u2014]/);
@@ -200,5 +201,25 @@ describe("brewNote", () => {
             grindSize: undefined,
             grinderUsed: undefined
         }))).toBe("3 stages · xBloom");
+    });
+
+    it("names only the fields that were read from the recipe", () => {
+        const note = brewNote(record({dose: undefined}), ["dose"]);
+
+        expect(note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+#2 · 100 ml · 92°C · circular · wait 20 s
+#3 · 100 ml · 90°C · centred · agitate after
+
+1:16 · grind 62 · 3 stages · xBloom
+Dose read from the recipe, not this recording.`);
+        expect(note).not.toContain("ratio read");
+        expect(note).not.toContain("grinder read");
+    });
+
+    it("collapses grinder backfill details into one user word", () => {
+        const note = brewNote(record(), ["grindSize", "grinderRpm", "grinderUsed"]);
+
+        expect(note).toContain("Grinder read from the recipe, not this recording.");
+        expect(note).not.toMatch(/grind size|rpm|used/i);
     });
 });

@@ -4,6 +4,8 @@ import {Linking} from "react-native";
 import {notify} from "@/components/XbrwToast";
 import {buildEnvelope} from "@/library/brew/handoff/envelope";
 import {encodeHandoff} from "@/library/brew/handoff/encode";
+import {backfillFromRecipe} from "@/library/brew/handoff/backfill";
+import RecipeDatabase from "@/library/RecipeDatabase";
 import type {BrewExportSource} from "@/hooks/useBrewExport";
 
 export const HANDOFF_OPEN_FAILED = "Could not open Beanconqueror. Make sure it is installed and try again.";
@@ -33,7 +35,11 @@ export function useBrewHandoff(source: () => BrewExportSource | null) {
         isSendingRef.current = true;
         setBusy(true);
         try {
-            const envelope = buildEnvelope(opened.record, opened.samples);
+            const recipe = new RecipeDatabase().getRecipe(opened.record.recipeUuid);
+            const backfill = recipe === null
+                ? {record: opened.record, filled: []}
+                : backfillFromRecipe(opened.record, recipe);
+            const envelope = buildEnvelope(backfill.record, opened.samples, backfill.filled);
             let url: string;
             try {
                 // Our side has no fidelity copy: `flow.fidelity` stays inside

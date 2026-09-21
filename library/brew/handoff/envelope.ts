@@ -15,6 +15,7 @@ import {
     type PlanStage
 } from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
+import type {BackfilledField} from "@/library/brew/handoff/backfill";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {PodCoffee} from "@/library/podCoffee";
 
@@ -93,7 +94,11 @@ export type HandoffImported = {
     params: Record<string, unknown>;
 };
 
-export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffEnvelope {
+export function buildEnvelope(
+    brew: StoredBrew,
+    samples: BrewSample[],
+    backfilled: BackfilledField[] = []
+): HandoffEnvelope {
     const flow = brew.hasStream && samples.length > 0 ? flowFromSamples(samples) : undefined;
     const metrics = metricsFromPlan(brew.plan);
 
@@ -104,7 +109,7 @@ export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffE
             // `expo-constants` is runtime state; the static app config is the value Jest and native builds share.
             version: appConfig.expo.version
         },
-        brew: brewFigures(brew, samples),
+        brew: brewFigures(brew, samples, backfilled),
         ...(brew.coffee !== undefined ? {bean: brew.coffee} : {}),
         ...(flow !== undefined ? {flow} : {}),
         ...(metrics.length > 0 ? {metrics} : {}),
@@ -120,7 +125,11 @@ export function buildEnvelope(brew: StoredBrew, samples: BrewSample[]): HandoffE
     };
 }
 
-function brewFigures(brew: StoredBrew, samples: BrewSample[]): HandoffBrew {
+function brewFigures(
+    brew: StoredBrew,
+    samples: BrewSample[],
+    backfilled: BackfilledField[]
+): HandoffBrew {
     const firstStage = Array.isArray(brew.plan) ? brew.plan[0] : undefined;
     const firstDrip = firstDripTime(samples);
     const grinderDidRun = grinderRan(brew);
@@ -141,7 +150,7 @@ function brewFigures(brew: StoredBrew, samples: BrewSample[]): HandoffBrew {
             ? {bloomTime: firstStage.pauseTime}
             : {}),
         ...(firstDrip !== undefined ? {firstDripTime: firstDrip} : {}),
-        note: brewNote(brew)
+        note: brewNote(brew, backfilled)
     };
 }
 

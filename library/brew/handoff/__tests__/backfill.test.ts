@@ -1,6 +1,7 @@
 import type {BrewRecord} from "@/library/brew/BrewRecord";
 import {backfillFromRecipe, type BackfilledField} from "@/library/brew/handoff/backfill";
 import {brew} from "@/library/brew/handoff/__tests__/fixtures";
+import type {StoredBrew} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 
 function recipe(overrides: Partial<Pick<
@@ -24,6 +25,8 @@ const backfilledFields: BackfilledField[] = [
     "grinderRpm",
     "grinderUsed"
 ];
+
+function acceptsStored(_record: StoredBrew): void {}
 
 describe("backfillFromRecipe", () => {
     it("fills absent brew figures from the recipe in stable order", () => {
@@ -155,5 +158,21 @@ describe("backfillFromRecipe", () => {
         expect(backfill.record).not.toBe(old);
         expect(old).toStrictEqual(beforeRecord);
         expect(source).toMatchObject(beforeRecipe);
+    });
+
+    it("keeps a StoredBrew as a StoredBrew through the backfill", () => {
+        const stored = brew({
+            dose: undefined,
+            ratio: undefined,
+            grindSize: undefined,
+            grinderRpm: undefined,
+            grinderUsed: undefined,
+            hasStream: true
+        });
+
+        const backfill = backfillFromRecipe(stored, recipe());
+
+        acceptsStored(backfill.record);
+        expect(backfill.record.hasStream).toBe(true);
     });
 });
