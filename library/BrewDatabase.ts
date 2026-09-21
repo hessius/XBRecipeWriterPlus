@@ -2,7 +2,13 @@ import * as SQLite from "expo-sqlite";
 
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
-import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
+import type {
+    BrewOutcome,
+    BrewRecord,
+    BrewSample,
+    BypassRecord,
+    PlanStage
+} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
 import type {PodCoffee} from "./podCoffee";
 import {podCoffeeFromStored} from "./podCoffee";
@@ -54,6 +60,8 @@ type BrewRow = {
     pinned: number | null;
     /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
     watched: number | null;
+    /** JSON, the bypass as it stood. `''` on rows written before it. */
+    bypass: string;
     /** 0 on rows written before it, which reads as "not recorded". */
     dose: number;
     /** 0 on rows written before it, which reads as "not recorded". */
@@ -109,6 +117,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
                 watched INTEGER NOT NULL DEFAULT 1,
+                bypass TEXT NOT NULL DEFAULT '',
                 dose REAL NOT NULL DEFAULT 0,
                 ratio REAL NOT NULL DEFAULT 0,
                 grindSize INTEGER NOT NULL DEFAULT 0,
@@ -214,6 +223,14 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Rows written before `bypass` existed read as "no bypass", exactly as
+    // every recipe without one does; an empty string is the JSON-column
+    // sentinel already used by `coffee`.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN bypass TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -250,11 +267,11 @@ class BrewDatabase {
             this.db.runSync(
                 `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                     endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, stalls, plan, stageWater, rating,
-                                    note, pinned, watched, dose, ratio,
+                                    heldSeconds, stalls, plan, stageWater, bypass,
+                                    rating, note, pinned, watched, dose, ratio,
                                     grindSize, grinderRpm, grinderUsed, coffee, hasStream)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                         ?, ?, ?, ?, ?, ?, ?);`,
+                         ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     record.id, record.recipeUuid, record.recipeName, record.accent,
                     record.startedAt, record.pouringAt ?? 0,
@@ -263,6 +280,7 @@ class BrewDatabase {
                     JSON.stringify(record.stalls ?? []),
                     JSON.stringify(record.plan ?? []),
                     JSON.stringify(record.stageWater ?? []),
+                    record.bypass ? JSON.stringify(record.bypass) : "",
                     // A restore carries a judgement in with the record, so the
                     // insert has to take one. A live brew never does: nothing
                     // has been drunk yet at the moment the row is written.
@@ -536,6 +554,7 @@ function hydrate(row: BrewRow): StoredBrew {
     const stalls = jsonOf<Stall[]>(row.stalls);
     const plan = jsonOf<PlanStage>(row.plan);
     const stageWater = jsonOf<number>(row.stageWater);
+    const bypass = bypassFromStoredColumn(row.bypass);
     const coffee = coffeeFromStoredColumn(row.coffee);
     return {
         id: row.id,
@@ -563,6 +582,7 @@ function hydrate(row: BrewRow): StoredBrew {
         // what it was before this column existed and the round trip stays
         // honest about "absent means the app saw it".
         ...(row.watched === 0 ? {watched: false} : {}),
+        ...(bypass !== null ? {bypass} : {}),
         ...(row.dose > 0 ? {dose: row.dose} : {}),
         ...(row.ratio > 0 ? {ratio: row.ratio} : {}),
         ...(row.grindSize > 0 ? {grindSize: row.grindSize} : {}),
@@ -579,6 +599,29 @@ function coffeeFromStoredColumn(value: string): PodCoffee | null {
     if (value === "") return null;
     try {
         return podCoffeeFromStored(JSON.parse(value));
+    } catch {
+        return null;
+    }
+}
+
+function bypassFromStoredColumn(value: string): BypassRecord | null {
+    if (value === "") return null;
+    try {
+        const parsed = JSON.parse(value) as Partial<BypassRecord>;
+        if (
+            typeof parsed.volume !== "number"
+            || typeof parsed.temperature !== "number"
+            || typeof parsed.delivered !== "number"
+            || !(typeof parsed.startedAt === "number" || parsed.startedAt === null)
+        ) {
+            return null;
+        }
+        return {
+            volume: parsed.volume,
+            temperature: parsed.temperature,
+            delivered: parsed.delivered,
+            startedAt: parsed.startedAt
+        };
     } catch {
         return null;
     }

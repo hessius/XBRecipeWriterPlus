@@ -465,6 +465,51 @@ describe("the plan and the delivered water", () => {
     });
 });
 
+describe("the bypass snapshot", () => {
+    it("round-trips the bypass with its start time", () => {
+        const bypass = {volume: 35, temperature: 88, delivered: 32, startedAt: 174_000};
+        const db = new BrewDatabase();
+
+        db.insert(record({bypass}), []);
+
+        expect(db.get("brew-1")?.bypass).toEqual(bypass);
+    });
+
+    it("round-trips a bypass that never started", () => {
+        const bypass = {volume: 35, temperature: 88, delivered: 0, startedAt: null};
+        const db = new BrewDatabase();
+
+        db.insert(record({bypass}), []);
+
+        expect(db.get("brew-1")?.bypass).toEqual(bypass);
+    });
+
+    it("leaves bypass absent when it was not recorded", () => {
+        const db = new BrewDatabase();
+
+        db.insert(record(), []);
+
+        expect(db.get("brew-1")?.bypass).toBeUndefined();
+    });
+
+    it("ignores a bypass column that is not JSON", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            bypass: {volume: 35, temperature: 88, delivered: 32, startedAt: 174_000}
+        }), []);
+
+        corruptStoredRow("brew-1", {bypass: "not JSON"});
+
+        const back = db.get("brew-1");
+        expect(back).toMatchObject({
+            recipeName: "Ethiopia Guji",
+            waterTotal: 250,
+            cupTotal: 244
+        });
+        expect(back?.bypass).toBeUndefined();
+    });
+});
+
 describe("the recipe snapshot for export", () => {
     it("round-trips the brew recipe and pod coffee fields", () => {
         const coffee = {
