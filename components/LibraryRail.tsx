@@ -323,19 +323,6 @@ export default function LibraryRail({
                             accessibilityLabel="Library view"
                             onChange={onViewChange}/>
         ]),
-        // Directly after the toggle, in both views that show recipes. Edit acts
-        // on what is on screen, which is what this whole rail does, and it was
-        // the sixth touch target in a top bar that had run out of room beside
-        // the wordmark.
-        //
-        // Absent while picking: ticking members is already a selection mode, and
-        // a second one over the top of it would be two ways to choose at once.
-        ...(onToggleEdit !== undefined && !picking ? [
-            <RailChip key="edit" testID="rail-edit" icon="edit"
-                      active={editing}
-                      accessibilityLabel={editing ? "Done editing" : "Edit recipes"}
-                      onPress={onToggleEdit}/>
-        ] : []),
         ...(asksOfTheList ? [
             <RailSearchChip key="search" state={searchState} onPress={onExpand}/>,
             <RailChip key="sort" testID="rail-sort" icon="sort"
@@ -366,6 +353,24 @@ export default function LibraryRail({
         );
     }
 
+    // Edit is pinned to the trailing edge rather than joining the scrolling
+    // cluster. It acts on the list the same way the others do, but it is the
+    // one control that switches a mode rather than asking a question, and the
+    // platform puts that at the trailing edge. Outside the scroller it is also
+    // the one control that can never be scrolled out of reach, which matters
+    // most for the one you use to get back out of editing.
+    //
+    // Absent while picking: ticking members is already a selection mode, and a
+    // second one over the top of it would be two ways to choose at once.
+    const editChip = onToggleEdit !== undefined && !picking
+        ? (
+            <RailChip testID="rail-edit" icon="edit"
+                      active={editing}
+                      accessibilityLabel={editing ? "Done editing" : "Edit recipes"}
+                      onPress={onToggleEdit}/>
+        )
+        : null;
+
     return (
         <Animated.View style={padding} testID="library-rail">
             {/* The field is drawn over this row, so the row is its coordinate
@@ -384,7 +389,35 @@ export default function LibraryRail({
                         importantForAccessibility={
                             searchOpen ? "no-hide-descendants" : "auto"
                         }>
-                    {cluster}
+                    {/* The cluster scrolls. Five controls, one of them a
+                        segmented pair and one of them naming a sort axis, are
+                        wider than a 320 pt phone, and the row used to simply
+                        run off the edge with no way to reach what fell off.
+                        The short axis labels keep the common case on screen;
+                        this is the backstop for the rest, so a control can be
+                        crowded but never lost.
+
+                        `flexShrink` and no `flexGrow`: the scroller hugs its
+                        chips while they fit, so the trailing Edit stays beside
+                        them rather than being pushed to the far edge of a
+                        half-empty rail, and gives way to it when they do not. */}
+                    <ScrollView testID="rail-control-row"
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{flexGrow: 0, flexShrink: 1}}
+                                contentContainerStyle={{
+                                    gap:        CHIP_GAP,
+                                    alignItems: "center"
+                                }}>
+                        {cluster}
+                    </ScrollView>
+                    {editChip !== null && (
+                        // Takes the leftover width so Edit sits at the trailing
+                        // edge whether or not the cluster fills the rail.
+                        <XStack flex={1} justifyContent="flex-end">
+                            {editChip}
+                        </XStack>
+                    )}
                 </XStack>
 
                 {searchOpen && (

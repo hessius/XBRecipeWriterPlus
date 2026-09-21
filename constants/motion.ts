@@ -27,6 +27,20 @@ export const DURATION = {
  */
 export const TYPING_DEBOUNCE_MS = 600;
 
+/**
+ * How long the connection dot goes on flashing amber about a low tank.
+ *
+ * It was two flashes, which is the right length for something the user is
+ * already looking at. A low tank becomes knowable the moment the machine first
+ * answers, which is a moment the user spends watching the machine rather than
+ * the phone, so two flashes were regularly over before anyone looked down. Half
+ * a minute is long enough to survive walking back to the counter and still
+ * short enough that the dot is not a permanent amber fixture, which it must
+ * never become: nothing is wrong with the link, and the link is the only thing
+ * this dot reports.
+ */
+export const LOW_WATER_FLASH_MS = 30_000;
+
 /** Timing curves, for anything the system drives. */export const EASING = {
     /** Entering. */
     out:   Easing.bezier(0.2, 0.85, 0.3, 1),

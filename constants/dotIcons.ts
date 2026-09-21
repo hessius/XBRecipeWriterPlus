@@ -229,17 +229,27 @@ export const DOT_ICONS = {
         "...#.#...",
         "....#...."
     ],
-    /** Four lit cells: the same diamond at its smallest drawable size. */
-    "link-off": [
-        ".........",
-        ".........",
-        ".........",
-        ".........",
+    /**
+     * The full diamond, drawn as an outline with its sides broken: the link
+     * that is not there.
+     *
+     * It replaced a four-dot diamond, which was a smaller mark for a quieter
+     * state and read on device as a speck rather than as a report. The whole
+     * shape at the same size as the other two says the indicator is present
+     * and has an answer; the gaps say what the answer is. Distinct from
+     * `link-wait`'s unbroken outline on shape rather than on colour alone, so
+     * the two survive the header's desaturation the way the set is meant to.
+     */
+    "link-gone": [
         "....#....",
         "...#.#...",
-        "....#....",
         ".........",
-        "........."
+        ".#.....#.",
+        "#.......#",
+        ".#.....#.",
+        ".........",
+        "...#.#...",
+        "....#...."
     ],
     /**
      * A blocky question mark: the help marker.
@@ -436,6 +446,26 @@ export const DOT_ICONS = {
         "..#####..",
         ".##...##.",
         ".#.....#."
+    ],
+    /**
+     * A clock: the brews that already happened.
+     *
+     * A rounded ring with two hands struck from the centre, one up and one
+     * right. Both hands are axis-aligned runs and the ring is the same rounded
+     * square `scan` draws its outer band as, so every dot lands on the grid.
+     * The hands stop one dot short of the ring: run them into it and the two
+     * shapes merge into a single blob at header size.
+     */
+    history: [
+        "..#####..",
+        ".#.....#.",
+        "#...#...#",
+        "#...#...#",
+        "#...###.#",
+        "#.......#",
+        "#.......#",
+        ".#.....#.",
+        "..#####.."
     ],
     /**
      * A circular arrow: ask again for a fresh reading.

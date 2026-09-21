@@ -74,6 +74,13 @@ type Props = {
     /** Called when the user taps TRY NOW in the popover. */
     onMachineConnect?: () => void;
     /**
+     * Opens the brew history.
+     *
+     * Optional so a caller that has no history to show can leave the slot
+     * empty rather than draw a button onto a screen with nothing behind it.
+     */
+    onBrewHistory?: () => void;
+    /**
      * Rendered directly beneath the header row.
      *
      * A node rather than the machine's readings themselves: the header should
@@ -106,6 +113,7 @@ export default function HomeHeader({
     machineAlarm = false,
     onMachinePress = () => undefined,
     onMachineConnect = () => undefined,
+    onBrewHistory,
     machinePanel,
     onScan,
     onImport,
@@ -188,6 +196,14 @@ export default function HomeHeader({
                             alarm={machineAlarm}
                             onPress={onMachinePress}
                         />
+                    )}
+                    {/* The slot the edit toggle left when it moved down into
+                        the rail. History belongs here rather than in the rail:
+                        the rail's controls all act on the library that is on
+                        screen, and this leaves it for a different screen. */}
+                    {onBrewHistory !== undefined && (
+                        <Action icon="history" label="Brew history"
+                                onPress={onBrewHistory}/>
                     )}
                     <Action icon="settings" label="Settings" onPress={onSettings}/>
                 </XStack>

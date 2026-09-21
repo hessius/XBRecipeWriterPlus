@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, within} from "@testing-library/react-native";
 
 import LibraryRail, {type RailFilter} from "@/components/LibraryRail";
 import {CHIP_HEIGHT} from "@/components/RailChip";
@@ -466,6 +466,20 @@ describe("the edit control", () => {
             <LibraryRail {...railProps({view: "shelves"})}/>
         );
         expect(screen.queryByTestId("rail-edit")).toBeNull();
+    });
+
+    it("keeps edit out of the scrolling cluster, at the trailing edge", async () => {
+        // The one control that switches a mode rather than asking a question,
+        // and the one you need to get back out of editing. Inside the scroller
+        // a crowded rail could carry it off the edge.
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "list", onToggleEdit: jest.fn()})}/>
+        );
+
+        const cluster = screen.getByTestId("rail-control-row");
+        expect(within(cluster).queryByTestId("rail-edit")).toBeNull();
+        expect(within(cluster).getByTestId("rail-sort")).toBeTruthy();
+        expect(screen.getByTestId("rail-edit")).toBeTruthy();
     });
 
     it("leaves edit out while members are being picked", async () => {

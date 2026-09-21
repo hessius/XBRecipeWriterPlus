@@ -39,10 +39,25 @@ describe("the vocabulary", () => {
     it("labels each chip in Doto caps from the design table", () => {
         expect(chipLabel("name")).toBe("NAME");
         expect(chipLabel("added")).toBe("ADDED");
-        expect(chipLabel("lastBrewed")).toBe("LAST BREWED");
-        expect(chipLabel("timesBrewed")).toBe("TIMES BREWED");
         expect(chipLabel("rating")).toBe("RATING");
         expect(chipLabel("ratio")).toBe("RATIO");
+    });
+
+    it("shortens the two-word axes for the chip, but not for the sheet", () => {
+        // The rail holds five controls on a narrow phone and a two-word axis
+        // pushed the last of them off the edge. The sheet has the room, so it
+        // keeps the full name and only the chip is shortened.
+        expect(chipLabel("lastBrewed")).toBe("BREWED");
+        expect(chipLabel("timesBrewed")).toBe("TIMES");
+        expect(SORT_AXES.lastBrewed.label).toBe("LAST BREWED");
+        expect(SORT_AXES.timesBrewed.label).toBe("TIMES BREWED");
+    });
+
+    it("falls back to the full label for an axis with no short form", () => {
+        for (const axis of Object.keys(SORT_AXES) as SortAxis[]) {
+            const spec = SORT_AXES[axis];
+            if (spec.chip === undefined) expect(chipLabel(axis)).toBe(spec.label);
+        }
     });
 
     it("words each direction verbatim from the design table", () => {

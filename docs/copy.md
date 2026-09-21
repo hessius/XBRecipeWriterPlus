@@ -83,6 +83,7 @@ tray, and the overflow sheet.
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `home.cta.readCard` | `app/index.tsx:474` (a11y) | (a11y) The circular "read a card" button on the home screen. | `Read a card` |
+| `home.header.brewHistory` | `components/HomeHeader.tsx` (a11y) | (a11y) Clock glyph beside Settings, in the slot the edit toggle left when it moved into the rail. Opens the unfiltered brew history. | `Brew history` |
 | `home.toast.alreadyInLibrary.open` | `constants/copy.ts:19` (via `app/index.tsx:247`) | Info toast when a shared/imported recipe is already saved and is simply reopened. | `Already in your library` |
 | `home.toast.cardRead` | `app/index.tsx:336` | Success toast after a card is read. | `Recipe read from card` |
 | `home.toast.holdCard` | `constants/copy.ts:32` (via `app/index.tsx:364`) | Instruction toast shown while waiting for the card. | `Hold the card to the top of the phone.` |

@@ -219,4 +219,28 @@ describe("HomeHeader", () => {
 
         expect(onNew).toHaveBeenCalled();
     });
+
+    it("offers brew history in the slot the edit toggle left", async () => {
+        const onBrewHistory = jest.fn();
+        await renderWithProviders(<HomeHeader {...props({onBrewHistory})}/>);
+
+        await fireEvent.press(screen.getByLabelText("Brew history"));
+
+        expect(onBrewHistory).toHaveBeenCalled();
+    });
+
+    it("draws no history glyph when there is nowhere to send it", async () => {
+        await renderWithProviders(<HomeHeader {...props()}/>);
+        expect(screen.queryByLabelText("Brew history")).toBeNull();
+    });
+
+    it("keeps history reachable while the header is expanded", async () => {
+        // The three arriving glyphs park at zero width until the list
+        // collapses. History is not one of them: it sits beside settings and
+        // is present in both states, like everything outside the slide.
+        await renderWithProviders(
+            <HomeHeader {...props({collapsed: false, onBrewHistory: jest.fn()})}/>
+        );
+        expect(screen.getByLabelText("Brew history")).toBeTruthy();
+    });
 });

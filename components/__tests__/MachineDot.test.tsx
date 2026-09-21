@@ -39,9 +39,12 @@ describe("MachineDot", () => {
         it.each([
             ["connected", "link-on", palette.success],
             ["connecting", "link-wait", palette.warn],
-            ["idle", "link-off", palette.muted],
-            ["disconnected", "link-off", palette.muted],
-            ["failed", "link-off", palette.muted]
+            // The whole diamond, broken, for all three. The grey says nobody
+            // has asked for a machine yet; the faint red says one was asked
+            // for and did not answer.
+            ["idle", "link-gone", palette.muted],
+            ["disconnected", "link-gone", palette.dangerFaint],
+            ["failed", "link-gone", palette.dangerFaint]
         ] as const)("draws %s as %s", async (status, icon, colour) => {
             await renderWithProviders(
                 <MachineDot status={status} collapsed={false} onPress={() => undefined}/>
