@@ -9,6 +9,7 @@ import {brewNote} from "@/library/brew/brewNote";
 import {stageSpans} from "@/library/brew/brewShape";
 import {
     grinderRan,
+    isRating,
     numeric,
     poursFromPlan,
     type BrewSample,
@@ -82,6 +83,13 @@ export type HandoffBrew = {
     bloomTime?: number;
     /** Seconds from brew start to first non-zero cup reading. */
     firstDripTime?: number;
+    /**
+     * Whole stars out of `MAX_RATING`, and only when the user gave one. Absent
+     * rather than 0 for an unrated brew: 0 is a verdict on this scale, and a
+     * reader that took it literally would file every unrated brew as the worst
+     * cup its owner has ever had.
+     */
+    rating?: number;
     note: string;
 };
 
@@ -150,6 +158,7 @@ function brewFigures(
             ? {bloomTime: firstStage.pauseTime}
             : {}),
         ...(firstDrip !== undefined ? {firstDripTime: firstDrip} : {}),
+        ...(isRating(brew.rating) && brew.rating > 0 ? {rating: brew.rating} : {}),
         note: brewNote(brew, backfilled)
     };
 }

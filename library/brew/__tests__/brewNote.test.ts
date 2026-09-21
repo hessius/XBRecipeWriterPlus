@@ -1,5 +1,5 @@
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
-import {brewNote} from "@/library/brew/brewNote";
+import {brewNote, MAX_CARRIED_NOTE} from "@/library/brew/brewNote";
 import type {BrewRecord, PlanStage} from "@/library/brew/BrewRecord";
 
 const stages: PlanStage[] = [
@@ -66,6 +66,35 @@ describe("brewNote", () => {
 #3 · 100 ml · 90°C · centred · agitate after
 
 15 g · 1:16 · grind 62 · 3 stages · xBloom`);
+    });
+
+    /**
+     * The point of the export is the brew somebody had, and the sharpest thing
+     * a record holds is what they typed about it. The generated ladder is
+     * context for that verdict, so it follows rather than leads.
+     */
+    it("puts what the user typed above what the app generated", () => {
+        const note = brewNote(record({note: "Too sour, grind finer"}));
+
+        expect(note.startsWith("Too sour, grind finer\n\n")).toBe(true);
+        expect(note).toContain("3 stages · xBloom");
+    });
+
+    it("says nothing extra when the user typed nothing", () => {
+        expect(brewNote(record({note: "   "})).startsWith("#1")).toBe(true);
+        expect(brewNote(record({note: undefined})).startsWith("#1")).toBe(true);
+    });
+
+    /**
+     * The note field the user types into has no ceiling of its own, and the
+     * reader at the other end refuses an over-long note outright rather than
+     * truncating it. Unclamped, one long note would fail the whole hand-off.
+     */
+    it("clamps a note too long for the reader to accept", () => {
+        const note = brewNote(record({note: "x".repeat(MAX_CARRIED_NOTE + 500)}));
+
+        expect(note.startsWith("x".repeat(MAX_CARRIED_NOTE) + "\n\n")).toBe(true);
+        expect(note).not.toContain("x".repeat(MAX_CARRIED_NOTE + 1));
     });
 
     it("omits the grind when the grinder did not run", () => {

@@ -104,12 +104,29 @@ function backfillLine(filled: BackfilledField[]): string | undefined {
     return `${subject[0].toUpperCase()}${subject.slice(1)} read from the recipe, not this recording.`;
 }
 
+/**
+ * What the user typed, first and clamped.
+ *
+ * First because a note the app wrote about its own stages is context for a
+ * verdict somebody typed, not the other way round. Clamped because the brew
+ * note field has no ceiling of its own, while the reader at the other end
+ * refuses a note over its own limit outright -- an unclamped novel would not
+ * arrive truncated, it would fail the whole hand-off.
+ */
+export const MAX_CARRIED_NOTE = 4000;
+
+function typedNote(record: BrewRecord): string | undefined {
+    const typed = (record.note ?? "").trim();
+    return typed === "" ? undefined : typed.slice(0, MAX_CARRIED_NOTE);
+}
+
 export function brewNote(record: BrewRecord, backfilled: BackfilledField[] = []): string {
     const foot = footer(record);
     const source = backfillLine(backfilled);
     const footerWithSource = source === undefined ? foot : `${foot}\n${source}`;
-    if (!Array.isArray(record.plan) || record.plan.length === 0) return footerWithSource;
-
-    const ladder = record.plan.map((stage, index) => stageLine(stage, index)).join("\n");
-    return `${ladder}\n\n${footerWithSource}`;
+    const typed = typedNote(record);
+    const machine = !Array.isArray(record.plan) || record.plan.length === 0
+        ? footerWithSource
+        : `${record.plan.map((stage, index) => stageLine(stage, index)).join("\n")}\n\n${footerWithSource}`;
+    return typed === undefined ? machine : `${typed}\n\n${machine}`;
 }

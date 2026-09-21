@@ -13,6 +13,20 @@ function hasUndefined(value: unknown): boolean {
 }
 
 describe("buildEnvelope", () => {
+    /**
+     * A rating the user typed is a verdict, and dropping it would hand the
+     * other app a brew nobody had an opinion about. Absent rather than 0 when
+     * unrated: 0 is a point on this scale, not a gap in it.
+     */
+    it("carries a rating the user gave", () => {
+        expect(buildEnvelope(brew({rating: 4}), samples).brew.rating).toBe(4);
+    });
+
+    it("says nothing about the rating of a brew nobody rated", () => {
+        expect(buildEnvelope(brew({rating: 0}), samples).brew.rating).toBeUndefined();
+        expect(buildEnvelope(brew(), samples).brew.rating).toBeUndefined();
+    });
+
     it("carries every brew figure with the units and bare values the schema names", () => {
         const envelope = buildEnvelope(brew(), samples);
 
