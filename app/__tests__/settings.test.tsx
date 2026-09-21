@@ -925,6 +925,22 @@ describe("SettingsScreen", () => {
                 {name: "Hide Labs, Anything you switched on here stays on."})).toBeTruthy();
         });
 
+        it("switches the Beanconqueror handoff on from Labs", async () => {
+            const settings = new Settings(memoryStorage());
+            settings.set("labsUnlocked", true);
+
+            await renderWithProviders(<SettingsScreen settings={settings}/>);
+
+            // Named in terms of what goes wrong, because the failure lands in
+            // somebody else's app where it reads as our bug.
+            expect(screen.getByText(/can read the link/)).toBeTruthy();
+
+            await fireEvent.press(screen.getByRole("switch",
+                {name: "Send brews to Beanconqueror"}));
+
+            expect(settings.get("beanconquerorHandoff")).toBe(true);
+        });
+
         it("closes Labs from inside it, and leaves the rest of settings alone", async () => {
             // The way in can afford to be undiscoverable because nobody
             // arrives at it by accident. A way out that nobody can find is
@@ -952,7 +968,8 @@ describe("SettingsScreen", () => {
             const storage = memoryStorage();
             mockPickBackup.mockResolvedValue(backupOf(
                 [recipeNamed("A", "u1")],
-                {labsUnlocked: true, dotMatrixProfile: true}
+                {labsUnlocked: true, beanconquerorHandoff: true,
+                 dotMatrixProfile: true}
             ));
             mockApplyRestore.mockReturnValue({status: "restored", added: 1});
             await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
@@ -966,8 +983,9 @@ describe("SettingsScreen", () => {
 
             const restored = new Settings(storage);
             expect(restored.get("labsUnlocked")).toBe(false);
-            // The rest of the block still landed, so this is the key being
-            // refused and not the restore quietly failing.
+            expect(restored.get("beanconquerorHandoff")).toBe(false);
+            // The rest of the block still landed, so this is the Labs keys
+            // being refused and not the restore quietly failing.
             expect(restored.get("dotMatrixProfile")).toBe(true);
         });
     });

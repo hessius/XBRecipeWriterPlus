@@ -10,16 +10,6 @@ export type HandoffTarget = {
 };
 
 /**
- * Off until Beanconqueror can read the link upstream. Before that PR lands, a
- * visible action would open Beanconqueror only to produce "unrecognised link".
- *
- * Flip this to true only after the upstream reader is available to users; the
- * follow-up release should also decide whether the temporary gate can be
- * deleted entirely.
- */
-export const HANDOFF_ENABLED = false;
-
-/**
  * Handoff destinations. The record screen currently renders the first entry;
  * adding another consumer is data, but each caller still has to decide how to
  * present more than one target.

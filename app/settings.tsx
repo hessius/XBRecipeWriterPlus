@@ -90,6 +90,8 @@ function restoredMessage(recipes: number, brews: number): string {
 export default function SettingsScreen({settings}: Props) {
     const router = useSteadyRouter();
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
+    const [beanconquerorHandoff, setBeanconquerorHandoff] =
+        useSetting("beanconquerorHandoff", settings);
     const cloud = useCloudSession();
 
     async function signOutOfCloud() {
@@ -545,6 +547,10 @@ export default function SettingsScreen({settings}: Props) {
                     inside it -- what you switched on stays on, which is the
                     honest reading of two separate switches. */}
                 {labsUnlocked && <SettingsSection title="Labs">
+                    <SettingsToggleRow
+                        label="Send brews to Beanconqueror"
+                        description="Needs a version of Beanconqueror that can read the link. Older ones will say they do not recognise it."
+                        value={beanconquerorHandoff} onChange={setBeanconquerorHandoff}/>
                     <SettingsActionRow label="Hide Labs"
                                        detail="Anything you switched on here stays on."
                                        onPress={() => setLabsUnlocked(false)}/>

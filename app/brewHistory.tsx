@@ -14,7 +14,7 @@ import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
-import {HANDOFF_ENABLED} from "@/library/brew/handoff/targets";
+import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
@@ -234,6 +234,7 @@ function SwipeableBrewRow({
 export default function BrewHistory() {
     const {recipeUuid} = useLocalSearchParams<{recipeUuid?: string}>();
     const {brews, open, remove, refresh} = useBrewHistory();
+    const [handoffEnabled] = useSetting("beanconquerorHandoff");
     const handoff = useBrewBatchHandoff((id) => {
         const opened = open(id);
         return opened === null ? null : {record: opened.record, samples: opened.samples};
@@ -350,7 +351,7 @@ export default function BrewHistory() {
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <HistoryHeader recipeName={recipeName} count={filtered.length} />
-            {HANDOFF_ENABLED && (
+            {handoffEnabled && (
                 <SelectionActionRow
                     selecting={selecting}
                     count={selectedIds.length}

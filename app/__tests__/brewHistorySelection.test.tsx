@@ -4,6 +4,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 import BrewHistory from "@/app/brewHistory";
 import {renderWithProviders} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {sharedSettings} from "@/hooks/useSetting";
 
 const mockPush = jest.fn();
 let mockBrews: StoredBrew[] = [];
@@ -13,9 +14,13 @@ const mockSend = jest.fn();
 const mockFits = jest.fn();
 const mockReset = jest.fn();
 
-jest.mock("@/library/brew/handoff/targets", () => ({
-    HANDOFF_ENABLED: true
-}));
+// The selection row is behind the Labs gate, so every test here needs it on.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+
+beforeEach(() => {
+    sharedSettings().set("beanconquerorHandoff", true);
+});
 
 jest.mock("@/hooks/useBrewBatchHandoff", () => ({
     useBrewBatchHandoff: () => ({

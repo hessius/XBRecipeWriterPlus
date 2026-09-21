@@ -24,7 +24,7 @@ import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
-import {canHandOff, HANDOFF_ENABLED, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -109,6 +109,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // ride on. Read here rather than beside the button because it is a hook
     // and the "brew not found" return below is earlier.
     const [consoleFound] = useSetting("machineConsoleAcknowledged");
+    const [handoffEnabled] = useSetting("beanconquerorHandoff");
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
@@ -175,7 +176,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // The record screen renders the first target only; adding a second target
     // means revisiting this selection rather than assuming it appears here.
     const [handoffTarget] = HANDOFF_TARGETS;
-    const showHandoff = HANDOFF_ENABLED && canHandOff(record.outcome);
+    const showHandoff = handoffEnabled && canHandOff(record.outcome);
     // `?? ""` because a record opened before the frame log existed — and any
     // stand-in for the store — simply has no log, which is a brew with nothing
     // to copy rather than an error.

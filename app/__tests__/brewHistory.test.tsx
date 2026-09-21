@@ -27,6 +27,11 @@ jest.mock("expo-router", () => {
     };
 });
 
+// Left at the real default, so the gate assertion below describes what a
+// default install draws. brewHistorySelection.test.tsx switches it on.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+
 jest.mock("@/hooks/useBrewHistory", () => ({
     useBrewHistory: () => ({
         brews: mockBrews,

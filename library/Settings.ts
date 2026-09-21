@@ -189,6 +189,20 @@ export const DEFAULTS = {
      */
     libraryView: "list" as LibraryView,
     /**
+     * Offer to send a finished brew to Beanconqueror.
+     *
+     * Off until the reader is in Beanconqueror's own release. Before then the
+     * link opens their app only for it to say it does not recognise the URL,
+     * which reads as our bug in their app, so the action stays out of the way
+     * of anyone not deliberately testing it.
+     *
+     * A setting rather than the build-time constant this replaces, because
+     * that constant meant a tester needed a build of their own. Reached
+     * through LABS, so the switch is no easier to find by accident than the
+     * feature deserves, and it survives a relaunch like any other preference.
+     */
+    beanconquerorHandoff: false,
+    /**
      * Whether the LABS section is visible in settings.
      *
      * Off until somebody taps the version string on the about screen seven
@@ -273,9 +287,9 @@ export type SettingKey = keyof typeof DEFAULTS;
  * in a backup or on this list, never quietly missing from both.
  */
 export type BackupExcluded =
-    "machineDeviceId" | "lastCardRead" | "labsUnlocked";
+    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
-    "machineDeviceId", "lastCardRead", "labsUnlocked"
+    "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff"
 ];
 
 /**

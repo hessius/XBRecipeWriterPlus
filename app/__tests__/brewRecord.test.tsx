@@ -24,16 +24,12 @@ import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
-// This file forces the handoff gate on so the hidden UI can be exercised. The
-// pre-existing layout assertions in this file therefore describe staging, not
-// the currently shipped screen.
-jest.mock("@/library/brew/handoff/targets", () => {
-    const actual = jest.requireActual("@/library/brew/handoff/targets");
-    return {
-        __esModule: true,
-        ...actual,
-        HANDOFF_ENABLED: true
-    };
+// This file switches the handoff gate on so the hidden UI can be exercised.
+// The pre-existing layout assertions in this file therefore describe the
+// screen as a Labs tester sees it, not the one a default install draws.
+// brewRecordHandoffGate.test.tsx covers the shipped default.
+beforeEach(() => {
+    sharedSettings().set("beanconquerorHandoff", true);
 });
 
 /**

@@ -548,7 +548,7 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.empty.title` | `app/brewHistory.tsx:154` | Doto empty-state heading. | `NO BREWS YET` |
 | `brewHistory.empty.body` | `app/brewHistory.tsx:157` | Empty-state sub-line. | `Brew a recipe and it will appear here.` |
 | `brewHistory.selection.select.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Enters batch-selection mode for Beanconqueror handoff. | `Select brews` |
-| `brewHistory.selection.select` | `app/brewHistory.tsx` | Doto action-row label. Hidden while Beanconqueror handoff is disabled. | `SELECT` |
+| `brewHistory.selection.select` | `app/brewHistory.tsx` | Doto action-row label. Hidden while the `beanconquerorHandoff` Labs setting is off. | `SELECT` |
 | `brewHistory.selection.count.none` | `app/brewHistory.tsx` | Selection-mode count with nothing selected. | `0 brews selected` |
 | `brewHistory.selection.count.one` | `app/brewHistory.tsx` | Selection-mode count with one selected brew. | `1 brew selected` |
 | `brewHistory.selection.count.many` | `app/brewHistory.tsx` | Selection-mode count. `${count}` is the number of selected brews. | `${count} brews selected` |
@@ -592,9 +592,7 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.export.image` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:167` and `app/brew.tsx:319`) | Button to export as an image. Drawn upper-cased in Doto; the sentence-case value here is also the spoken a11y label, which is why it is stored this way round. | `Save as image` |
 | `brewRecord.export.data` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:169` and `app/brew.tsx:321`) | Button to export the underlying data as JSON. | `Export the data` |
 | `brewRecord.export.busy` | `components/ExportButton.tsx:34` | Replaces either label while the capture and share sheet are in flight, so a press is visibly acknowledged. | `WORKING…` |
-| `brewRecord.handoff.beanconqueror.label` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewRecord.tsx`) | Button to hand a completed brew to Beanconqueror. Hidden behind `HANDOFF_ENABLED` until Beanconqueror can read the link. | `Send to Beanconqueror` |
-| `brewRecord.handoff.beanconqueror.credit` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].credit`, passed from `app/brewRecord.tsx`) | One-line reciprocal credit shown beside the Beanconqueror handoff action while the gate is enabled. Pressing it opens Beanconqueror's project site. | `Beanconqueror keeps the brew diary.` |
-| `brewRecord.handoff.beanconqueror.credit.a11y` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].siteAccessibilityLabel`, passed from `app/brewRecord.tsx`) | (a11y) Label for the tappable reciprocal credit link. | `Open Beanconqueror website` |
+| `brewRecord.handoff.beanconqueror.label` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewRecord.tsx`) | Button to hand a completed brew to Beanconqueror. Hidden behind the `beanconquerorHandoff` Labs setting until Beanconqueror can read the link. | `Send to Beanconqueror` |
 | `brewRecord.handoff.openFailed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened, usually because Beanconqueror is not installed. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewRecord.handoff.tooLarge` | `hooks/useBrewHandoff.ts:10` | Error toast when the handoff payload still cannot fit in a URL after dropping every lossy fallback. | `This brew is too large to hand over to Beanconqueror.` |
 
@@ -850,6 +848,8 @@ messages from `hooks/useBackup.ts` and `library/backup.ts`.
 | `settings.deleteAll.confirm` | `components/DeleteAllSheet.tsx:34` (`deleteLabel`) | Destructive confirm label. `${subject}` is "1 recipe"/"N recipes". | `Delete all ${subject}` |
 | `settings.deleteAll.keep.a11y` | `components/DeleteAllSheet.tsx:56` (a11y) | (a11y) Cancel button. | `Keep my recipes` |
 | `settings.deleteAll.keep` | `components/DeleteAllSheet.tsx:58` | Cancel button label. | `Keep my recipes` |
+| `settings.labs.handoff.label` | `app/settings.tsx` | Labs toggle for the Beanconqueror handoff. | `Send brews to Beanconqueror` |
+| `settings.labs.handoff.description` | `app/settings.tsx` | Why the toggle is off by default, in terms of what goes wrong if it is switched on too early. | `Needs a version of Beanconqueror that can read the link. Older ones will say they do not recognise it.` |
 
 ### Backup / restore messages (`hooks/useBackup.ts`, `library/backup.ts`)
 

@@ -1,8 +1,8 @@
 /**
- * Kept separate from brewRecord.test.tsx because that file mocks the feature
+ * Kept separate from brewRecord.test.tsx because that file switches the Labs
  * gate on to exercise the hidden action. Merging this file would destroy the
- * only test that imports the real HANDOFF_ENABLED constant the shipping app
- * uses.
+ * only test that leaves `beanconquerorHandoff` at the value a default install
+ * has, which is what a user who has never opened Labs actually sees.
  */
 import React from "react";
 
@@ -62,7 +62,7 @@ describe("brew record handoff gate", () => {
         };
     });
 
-    it("does not offer Beanconqueror handoff while the real gate is off", async () => {
+    it("does not offer Beanconqueror handoff while the Labs setting is off", async () => {
         const mockLookup: RecipeLookup = {
             getRecipe: jest.fn(() => ({pours: []}) as unknown as Recipe)
         };
