@@ -5,11 +5,21 @@ import {downsample, type HandoffEnvelope, type HandoffFlow} from "@/library/brew
 /**
  * Entire assembled URL budget: scheme and every parameter included.
  *
- * 32,768 is roughly eight times a typical brew and about a third of the
- * 97,120 characters measured to arrive byte-exact on iOS 18.3, so it is
- * conservative at both ends. Android is not yet measured.
+ * 131,072 is about a third of the 393,216 characters measured to arrive
+ * byte-exact on iOS 26.6 (device probe, September 2026), which was itself
+ * only the top of the ladder we could test: Beanconqueror's collector caps a
+ * payload at 1,024 chunks of 400 characters, so the transport never showed a
+ * ceiling at all. The old 32,768 was set against a 97,120 measurement and was
+ * an order of magnitude more cautious than it needed to be, which cost a long
+ * brew its full trace for nothing.
+ *
+ * Generous is cheap here because truncation cannot corrupt an import: the URL
+ * carries `len`, and the receiver compares it against what it reassembled
+ * before inflating anything, so a short delivery fails cleanly and loudly
+ * rather than importing half a brew. **Android is still entirely unmeasured**,
+ * and this is the number to revisit when it is.
  */
-export const MAX_URL_CHARS = 32_768;
+export const MAX_URL_CHARS = 131_072;
 
 // Mirrors Beanconqueror's existing shareUserBeanN chunk convention.
 const CHUNK_CHARS = 400;
@@ -17,6 +27,13 @@ const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 const SINGLE_URL_PREFIX = "beanconqueror://ADD_BREW";
 const BATCH_URL_PREFIX = "beanconqueror://ADD_BREWS";
 
+/**
+ * A batch gets the same budget as one brew, which at roughly 4,000 characters
+ * a brew is something like thirty of them with every trace whole. Kept as its
+ * own constant because the two paths answer to different things: this one is
+ * the most a user can select at once, where the single budget is the point at
+ * which one brew starts losing detail.
+ */
 export const MAX_BATCH_URL_CHARS = MAX_URL_CHARS;
 
 type HandoffFlowFidelity = NonNullable<HandoffEnvelope["flow"]>["fidelity"];

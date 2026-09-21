@@ -201,7 +201,7 @@ describe("encodeHandoff", () => {
     });
 
     it("downsamples enormous brews until they fit without shifting retained timestamps", () => {
-        const original = payload({flow: flow(24_000)});
+        const original = payload({flow: flow(120_000)});
         const originalTimes = decodeDeltas(original.flow!.t);
         const encoded = encodeHandoff(original);
         const decoded = decode(encoded.url);
