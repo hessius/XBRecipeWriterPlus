@@ -14,11 +14,16 @@ export const MAX_URL_CHARS = 32_768;
 // Mirrors Beanconqueror's existing shareUserBeanN chunk convention.
 const CHUNK_CHARS = 400;
 const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-const URL_PREFIX = "beanconqueror://ADD_BREW";
+const SINGLE_URL_PREFIX = "beanconqueror://ADD_BREW";
+const BATCH_URL_PREFIX = "beanconqueror://ADD_BREWS";
+
+export const MAX_BATCH_URL_CHARS = MAX_URL_CHARS;
 
 type HandoffFlowFidelity = NonNullable<HandoffEnvelope["flow"]>["fidelity"];
 
 export type HandoffEncodingFidelity = HandoffFlowFidelity | "none";
+
+export type HandoffBatch = {v: 1; brews: HandoffEnvelope[]};
 
 /**
  * A handoff URL plus the fidelity state needed for UI copy.
@@ -40,6 +45,24 @@ export function encodeHandoff(envelope: HandoffEnvelope): EncodedHandoff {
     if (encoded.urlChars <= MAX_URL_CHARS) return encoded;
 
     return degradeToFit(envelope, envelope.flow) ?? encodeWithoutFlow(envelope);
+}
+
+export function encodeHandoffBatch(envelopes: HandoffEnvelope[]): EncodedHandoff {
+    const batch = batchPayload(envelopes);
+    const encoded = encodeAt(batch, batchFidelity(envelopes), BATCH_URL_PREFIX);
+    if (encoded.urlChars > MAX_BATCH_URL_CHARS) {
+        // Batch exports refuse rather than reusing the single-brew fidelity ladder:
+        // if someone selected ten brews, silently thinning or dropping all ten traces
+        // would leave them no way to tell what fidelity Beanconqueror received.
+        throw new Error(`Beanconqueror batch handoff URL exceeds ${MAX_BATCH_URL_CHARS} characters`);
+    }
+    return encoded;
+}
+
+export function batchFits(envelopes: HandoffEnvelope[]): boolean {
+    if (envelopes.length === 0) return false;
+    return encodeAt(batchPayload(envelopes), batchFidelity(envelopes), BATCH_URL_PREFIX).urlChars
+        <= MAX_BATCH_URL_CHARS;
 }
 
 /**
@@ -76,9 +99,13 @@ function encodeWithinBudget(envelope: HandoffEnvelope, fidelity: HandoffEncoding
     return encoded;
 }
 
-function encodeAt(envelope: HandoffEnvelope, fidelity: HandoffEncodingFidelity): EncodedHandoff {
-    const encodedPayload = payload(envelope);
-    const handoffUrl = url(encodedPayload);
+function encodeAt(
+    handoffPayload: HandoffEnvelope | HandoffBatch,
+    fidelity: HandoffEncodingFidelity,
+    urlPrefix = SINGLE_URL_PREFIX
+): EncodedHandoff {
+    const encodedPayload = payload(handoffPayload);
+    const handoffUrl = url(encodedPayload, urlPrefix);
 
     return {
         url: handoffUrl,
@@ -87,13 +114,30 @@ function encodeAt(envelope: HandoffEnvelope, fidelity: HandoffEncodingFidelity):
     };
 }
 
-function payload(envelope: HandoffEnvelope): string {
-    return base64Url(gzipSync(strToU8(JSON.stringify(envelope))));
+function batchPayload(envelopes: HandoffEnvelope[]): HandoffBatch {
+    if (envelopes.length === 0) {
+        throw new Error("Beanconqueror batch handoff requires at least one brew");
+    }
+    return {v: 1, brews: envelopes};
 }
 
-function url(payload: string): string {
+/**
+ * A batch never thins a trace, so it can never report "downsampled": it either
+ * carries every trace whole or it was refused. A brew that simply has no
+ * stream is not a thinned one, so a mixed selection is still "full" — the
+ * traces that exist are all complete.
+ */
+function batchFidelity(envelopes: HandoffEnvelope[]): HandoffEncodingFidelity {
+    return envelopes.some((envelope) => envelope.flow !== undefined) ? "full" : "none";
+}
+
+function payload(handoffPayload: HandoffEnvelope | HandoffBatch): string {
+    return base64Url(gzipSync(strToU8(JSON.stringify(handoffPayload))));
+}
+
+function url(payload: string, urlPrefix: string): string {
     // gzip's CRC catches corrupt chunk contents only after inflating; len catches truncation first.
-    return `${URL_PREFIX}?len=${payload.length}${chunks(payload)
+    return `${urlPrefix}?len=${payload.length}${chunks(payload)
         .map((chunk, index) => `&shareBrew${index}=${chunk}`)
         .join("")}`;
 }

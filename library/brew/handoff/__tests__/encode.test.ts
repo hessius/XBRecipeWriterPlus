@@ -1,6 +1,13 @@
-import {gunzipSync} from "fflate";
+import {gzipSync, gunzipSync, strToU8} from "fflate";
 
-import {MAX_URL_CHARS, encodeHandoff} from "@/library/brew/handoff/encode";
+import {
+    MAX_BATCH_URL_CHARS,
+    MAX_URL_CHARS,
+    batchFits,
+    encodeHandoff,
+    encodeHandoffBatch,
+    type HandoffBatch
+} from "@/library/brew/handoff/encode";
 import {buildEnvelope, type HandoffEnvelope, type HandoffFlow} from "@/library/brew/handoff/envelope";
 import {brew, decodeDeltas, extendedPlan} from "@/library/brew/handoff/__tests__/fixtures";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -66,9 +73,9 @@ function payload(overrides: Partial<HandoffEnvelope> = {}): HandoffEnvelope {
     };
 }
 
-function flow(count: number, intervalMs = 100): HandoffFlow {
-    let waterSeed = 0x1234_5678;
-    let weightSeed = 0x9abc_def0;
+function flow(count: number, intervalMs = 100, salt = 0): HandoffFlow {
+    let waterSeed = 0x1234_5678 ^ salt;
+    let weightSeed = 0x9abc_def0 ^ salt;
 
     return {
         fidelity: "full",
@@ -87,12 +94,40 @@ function flow(count: number, intervalMs = 100): HandoffFlow {
     };
 }
 
+function batchEnvelope(index: number, flowSamples = 800): HandoffEnvelope {
+    return payload({
+        brew: {
+            ...payload().brew,
+            date: new Date(Date.UTC(2026, 8, 20, 10, index, 0)).toISOString(),
+            note: `Stage 1 · export ${index}`
+        },
+        flow: flow(flowSamples, 100, index)
+    });
+}
+
+function legacySingleUrl(envelope: HandoffEnvelope): string {
+    const encoded = Buffer.from(gzipSync(strToU8(JSON.stringify(envelope))))
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/g, "");
+    const chunkParams: string[] = [];
+    for (let offset = 0; offset < encoded.length; offset += 400) {
+        chunkParams.push(`shareBrew${chunkParams.length}=${encoded.slice(offset, offset + 400)}`);
+    }
+    return `beanconqueror://ADD_BREW?len=${encoded.length}&${chunkParams.join("&")}`;
+}
+
 /**
  * Independent reader written against Beanconqueror's parameter convention,
  * not against encode.ts internals. Keep it local: moving this toward shared
  * code is the first step to it quietly depending on the encoder.
  */
 function decode(url: string): HandoffEnvelope {
+    return decodePayload<HandoffEnvelope>(url);
+}
+
+function decodePayload<T>(url: string): T {
     const joined = chunks(url).join("");
 
     const padded = joined
@@ -101,7 +136,7 @@ function decode(url: string): HandoffEnvelope {
         .padEnd(Math.ceil(joined.length / 4) * 4, "=");
     const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
 
-    return JSON.parse(new TextDecoder().decode(gunzipSync(bytes))) as HandoffEnvelope;
+    return JSON.parse(new TextDecoder().decode(gunzipSync(bytes))) as T;
 }
 
 function chunks(url: string): string[] {
@@ -114,6 +149,13 @@ function chunks(url: string): string[] {
 }
 
 describe("encodeHandoff", () => {
+    it("keeps the single-brew ADD_BREW URL byte-for-byte stable", () => {
+        const original = payload();
+        const encoded = encodeHandoff(original);
+
+        expect(encoded.url).toBe(legacySingleUrl(original));
+    });
+
     it("round-trips through an independent reader", () => {
         const original = envelopeFromSamples(2_400);
         const {url} = encodeHandoff(original);
@@ -197,5 +239,78 @@ describe("encodeHandoff", () => {
         expect(encoded.fidelity).toBe("none");
         expect(encoded.urlChars).toBeLessThanOrEqual(MAX_URL_CHARS);
         expect(decode(encoded.url)).toStrictEqual(original);
+    });
+});
+
+describe("encodeHandoffBatch", () => {
+    it("uses ADD_BREWS and round-trips complete envelopes with intact flow traces", () => {
+        const originals = [batchEnvelope(1), batchEnvelope(2), batchEnvelope(3)];
+        const encoded = encodeHandoffBatch(originals);
+        const decoded = decodePayload<HandoffBatch>(encoded.url);
+
+        expect(encoded.url).toMatch(/^beanconqueror:\/\/ADD_BREWS\?len=\d+&shareBrew0=/);
+        expect(decoded).toStrictEqual({v: 1, brews: originals});
+        decoded.brews.forEach((brewEnvelope, index) => {
+            expect(brewEnvelope.flow).toStrictEqual(originals[index].flow);
+            expect(brewEnvelope.flow?.fidelity).toBe("full");
+            expect(brewEnvelope.flow?.t).toHaveLength(800);
+        });
+    });
+
+    it("keeps a single-element batch on the ADD_BREWS action", () => {
+        const original = batchEnvelope(1);
+        const encoded = encodeHandoffBatch([original]);
+
+        expect(encoded.url).toMatch(/^beanconqueror:\/\/ADD_BREWS\?/);
+        expect(decodePayload<HandoffBatch>(encoded.url)).toStrictEqual({v: 1, brews: [original]});
+    });
+
+    it("refuses an oversized batch instead of thinning any trace", () => {
+        const originals = Array.from({length: 14}, (_value, index) => batchEnvelope(index, 2_400));
+        const untouchedFlows = originals.map((envelope) => envelope.flow);
+
+        expect(() => encodeHandoffBatch(originals)).toThrow(
+            `Beanconqueror batch handoff URL exceeds ${MAX_BATCH_URL_CHARS} characters`
+        );
+        originals.forEach((envelope, index) => {
+            expect(envelope.flow).toStrictEqual(untouchedFlows[index]);
+            expect(envelope.flow?.fidelity).toBe("full");
+            expect(envelope.flow?.t).toHaveLength(2_400);
+        });
+    });
+
+    it("reports the same batch boundary as the encoder enforces", () => {
+        const envelopes = Array.from({length: 20}, (_value, index) => batchEnvelope(index, 2_400));
+        const firstTooLarge = envelopes.findIndex((_envelope, index) =>
+            !batchFits(envelopes.slice(0, index + 1))
+        );
+
+        expect(firstTooLarge).toBeGreaterThan(0);
+        const fitting = envelopes.slice(0, firstTooLarge);
+        const oversized = envelopes.slice(0, firstTooLarge + 1);
+
+        expect(batchFits(fitting)).toBe(true);
+        expect(encodeHandoffBatch(fitting).urlChars).toBeLessThanOrEqual(MAX_BATCH_URL_CHARS);
+        expect(batchFits(oversized)).toBe(false);
+        expect(() => encodeHandoffBatch(oversized)).toThrow(
+            `Beanconqueror batch handoff URL exceeds ${MAX_BATCH_URL_CHARS} characters`
+        );
+    });
+
+    it("rejects empty batches instead of producing a no-op URL", () => {
+        expect(batchFits([])).toBe(false);
+        expect(() => encodeHandoffBatch([])).toThrow(
+            "Beanconqueror batch handoff requires at least one brew"
+        );
+    });
+});
+
+describe("batch fidelity", () => {
+    it("never reports a thinned trace, because a batch refuses instead of thinning", () => {
+        const withFlow = batchEnvelope(1);
+        const {flow: _flow, ...withoutFlow} = batchEnvelope(2);
+
+        expect(encodeHandoffBatch([withFlow, withoutFlow]).fidelity).toBe("full");
+        expect(encodeHandoffBatch([withoutFlow]).fidelity).toBe("none");
     });
 });
