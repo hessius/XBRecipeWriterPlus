@@ -5,9 +5,11 @@ import {
 } from "@/library/brew/handoff/targets";
 
 describe("handoff targets", () => {
-    it("allows only completed brews to be handed over", () => {
+    it("hands over the brews that produced a drink and no others", () => {
         expect(canHandOff("done")).toBe(true);
-        expect(canHandOff("endedOnMachine")).toBe(false);
+        // Short of plan, but poured and drunk, and the record carries the
+        // water that actually came out.
+        expect(canHandOff("endedOnMachine")).toBe(true);
         expect(canHandOff("cancelled")).toBe(false);
         expect(canHandOff("lostContact")).toBe(false);
         expect(canHandOff("failed")).toBe(false);

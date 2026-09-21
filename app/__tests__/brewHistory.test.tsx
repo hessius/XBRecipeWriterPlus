@@ -183,9 +183,13 @@ describe("brew history", () => {
         expect(queryByTestId("history-header-recipe")).toBeNull();
     });
 
-    it("does not show batch selection while Beanconqueror handoff is disabled", async () => {
-        const {queryByLabelText} = await renderWithProviders(<BrewHistory />);
-        expect(queryByLabelText("Select brews")).toBeNull();
+    it("offers selection but not sending while Beanconqueror handoff is disabled", async () => {
+        // Selecting several brews to delete them stands on its own, so the
+        // Labs gate hides the Send button rather than the whole row.
+        const {queryByLabelText, getByLabelText} = await renderWithProviders(<BrewHistory />);
+        expect(getByLabelText("Select brews")).toBeTruthy();
+        await fireEvent.press(getByLabelText("Select brews"));
+        expect(queryByLabelText("Send selected brews to Beanconqueror")).toBeNull();
     });
 
     it("shows a delete tile that opens a confirmation before removing", async () => {

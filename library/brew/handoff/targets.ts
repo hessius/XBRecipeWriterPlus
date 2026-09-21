@@ -26,19 +26,23 @@ export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
 // compilation here until the handoff rule for that outcome is decided.
 const CAN_HAND_OFF: Record<BrewOutcome, boolean> = {
     done:           true,
-    endedOnMachine: false,
+    endedOnMachine: true,
     cancelled:      false,
     lostContact:    false,
     failed:         false
 };
 
 /**
- * Only a finished brew is safe to hand over: anything else would create a row
- * in someone's coffee diary for coffee they never drank.
+ * Only a brew that produced a drink is safe to hand over: anything else would
+ * create a row in someone's coffee diary for coffee they never drank.
  *
- * `endedOnMachine` is intentionally still false even though it can produce a
- * real cup when the user stops the machine. Widening that later is plausible,
- * and this predicate is the single edit point if the product decision changes.
+ * `endedOnMachine` passes. It is a brew the machine called complete that
+ * delivered materially less water than the plan asked for, which is what a
+ * ratio or dose change on the machine looks like from here. The cup was still
+ * poured and still drunk, and the record carries the water that actually came
+ * out rather than the water that was planned, so the diary row it writes is
+ * true. The three that fail are the ones where nothing was drunk or where the
+ * app stopped watching and cannot say what happened.
  */
 export function canHandOff(outcome: BrewOutcome): boolean {
     return CAN_HAND_OFF[outcome];

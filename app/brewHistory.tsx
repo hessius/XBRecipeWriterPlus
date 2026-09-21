@@ -16,6 +16,7 @@ import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {canHandOff} from "@/library/brew/handoff/targets";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
 const PUSH_GUARD_MS = 2000;
@@ -90,27 +91,42 @@ function DeleteTile({onPress}: {onPress: () => void}) {
 }
 
 /**
- * The batch handoff controls, above the list.
+ * The selection controls, above the list.
  *
  * Its own row rather than a slot on `ScreenHeader`, which several screens share
  * and none of the others has an action for: one screen's button is not a reason
  * to grow the chrome every pushed screen draws.
+ *
+ * Delete and Send share the top row and the count sits under them. They were
+ * on one row with the count until a two-digit selection pushed the buttons off
+ * the edge on a narrow phone.
+ *
+ * Selecting is available whether or not the handoff is switched on, because
+ * deleting several brews at once is worth having on its own. Only the Send
+ * button is behind the gate.
  */
 function SelectionActionRow({
     selecting,
     count,
+    blocked,
     fits,
     busy,
+    canSend,
     onSelect,
     onSend,
+    onDelete,
     onCancel
 }: {
     selecting: boolean;
     count: number;
+    /** How many of the selected brews cannot be handed over. */
+    blocked: number;
     fits: boolean;
     busy: boolean;
+    canSend: boolean;
     onSelect: () => void;
     onSend: () => void;
+    onDelete: () => void;
     onCancel: () => void;
 }) {
     if (!selecting) {
@@ -138,20 +154,33 @@ function SelectionActionRow({
         <YStack paddingHorizontal="$4" paddingVertical="$2" gap="$2"
                 borderBottomWidth={1} borderColor={palette.line}>
             <XStack alignItems="center" justifyContent="space-between" gap="$3">
-                <Text color={palette.dim} fontSize={13}>
-                    {count === 1 ? "1 brew selected" : `${count} brews selected`}
-                </Text>
+                <Button
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete selected brews"
+                    accessibilityState={{disabled: count === 0}}
+                    disabled={count === 0}
+                    opacity={count === 0 ? 0.5 : 1}
+                    chromeless
+                    size="$2"
+                    onPress={onDelete}>
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                   color={palette.danger}>
+                        DELETE
+                    </DotMatrixText>
+                </Button>
                 <XStack gap="$2" alignItems="center">
                     {/* The same outlined Doto button the record screen sends a
                         single brew with, so the batch action reads as the same
                         action rather than a second, louder one. */}
-                    <ExportButton
-                        label="Send"
-                        accessibilityLabel="Send selected brews to Beanconqueror"
-                        busy={busy}
-                        disabled={count === 0 || tooLarge}
-                        onPress={onSend}
-                    />
+                    {canSend && (
+                        <ExportButton
+                            label="Send"
+                            accessibilityLabel="Send selected brews to Beanconqueror"
+                            busy={busy}
+                            disabled={count === 0 || tooLarge || blocked > 0}
+                            onPress={onSend}
+                        />
+                    )}
                     <Button
                         accessibilityRole="button"
                         accessibilityLabel="Cancel selection"
@@ -165,9 +194,24 @@ function SelectionActionRow({
                     </Button>
                 </XStack>
             </XStack>
+            <Text color={palette.dim} fontSize={13}>
+                {count === 1 ? "1 brew selected" : `${count} brews selected`}
+            </Text>
             {tooLarge && (
                 <Text color={palette.warn} fontSize={12}>
                     Select fewer brews to send them together.
+                </Text>
+            )}
+            {/* A brew that was cancelled, that failed, or that the app stopped
+                watching has no drink behind it, so it stays selectable for
+                delete but blocks the send rather than being quietly dropped
+                from it. Sending the rest without saying so would write a
+                different diary than the one the user picked. */}
+            {canSend && blocked > 0 && (
+                <Text testID="selection-blocked" color={palette.warn} fontSize={12}>
+                    {blocked === 1
+                        ? "1 selected brew did not finish, so it cannot be sent."
+                        : `${blocked} selected brews did not finish, so they cannot be sent.`}
                 </Text>
             )}
         </YStack>
@@ -247,6 +291,10 @@ export default function BrewHistory() {
     const [selecting, setSelecting] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionFits, setSelectionFits] = useState(false);
+    // True while the batch delete confirmation is open. Kept apart from
+    // `pendingDeleteId` because the two delete different things and say so
+    // differently: one names a brew, the other counts them.
+    const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
     // Keep a ref to the currently-open swipeable so it can be closed when the
     // confirmation sheet is dismissed without deleting.
     const swipeableRef = useRef<SwipeableMethods | null>(null);
@@ -263,6 +311,14 @@ export default function BrewHistory() {
     const filtered = recipeUuid
         ? brews.filter((b) => b.recipeUuid === recipeUuid)
         : brews;
+
+    // How many of the selected brews cannot be handed over. Counted from the
+    // rows on screen rather than from the database so it agrees with what the
+    // user can actually see and tick.
+    const blockedCount = selectedIds.filter((id) => {
+        const brew = filtered.find((candidate) => candidate.id === id);
+        return brew !== undefined && !canHandOff(brew.outcome);
+    }).length;
 
     function handlePress(brew: StoredBrew) {
         if (selecting) {
@@ -292,6 +348,7 @@ export default function BrewHistory() {
         setSelecting(false);
         setSelectedIds([]);
         setSelectionFits(false);
+        setConfirmingBatchDelete(false);
         handoff.reset();
     }
 
@@ -305,7 +362,13 @@ export default function BrewHistory() {
 
     async function handleSelectionSend() {
         if (selectedIds.length === 0 || !selectionFits || handoff.busy) return;
+        if (blockedCount > 0) return;
         await handoff.send(selectedIds);
+        handleSelectCancel();
+    }
+
+    function handleSelectionDelete() {
+        for (const id of selectedIds) remove(id);
         handleSelectCancel();
     }
 
@@ -351,17 +414,21 @@ export default function BrewHistory() {
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <HistoryHeader recipeName={recipeName} count={filtered.length} />
-            {handoffEnabled && (
-                <SelectionActionRow
-                    selecting={selecting}
-                    count={selectedIds.length}
-                    fits={selectionFits}
-                    busy={handoff.busy}
-                    onSelect={handleSelectStart}
-                    onSend={() => void handleSelectionSend()}
-                    onCancel={handleSelectCancel}
-                />
-            )}
+            {/* Always rendered. Selecting several brews to delete them is worth
+                having whether or not the handoff is switched on; the gate is
+                carried into the row and hides the Send button alone. */}
+            <SelectionActionRow
+                selecting={selecting}
+                count={selectedIds.length}
+                blocked={blockedCount}
+                fits={selectionFits}
+                busy={handoff.busy}
+                canSend={handoffEnabled}
+                onSelect={handleSelectStart}
+                onSend={() => void handleSelectionSend()}
+                onDelete={() => setConfirmingBatchDelete(true)}
+                onCancel={handleSelectCancel}
+            />
             <FlatList
                 data={filtered}
                 keyExtractor={(item) => item.id}
@@ -400,6 +467,37 @@ export default function BrewHistory() {
                         chromeless
                         onPress={handleDeleteCancel}>
                         Keep this brew
+                    </Button>
+                </YStack>
+            </XbrwSheet>
+
+            {/* The batch equivalent, opened from the selection row. It counts
+                the brews rather than naming them: a list of names long enough
+                to be worth batching is longer than a sheet can show. */}
+            <XbrwSheet
+                open={confirmingBatchDelete}
+                onOpenChange={(next) => { if (!next) setConfirmingBatchDelete(false); }}
+                title="Delete brews"
+                heightPercent={40}>
+                <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
+                    <Text fontSize={15} color={palette.text}>
+                        {selectedIds.length === 1
+                            ? "Delete 1 brew? This cannot be undone."
+                            : `Delete ${selectedIds.length} brews? This cannot be undone.`}
+                    </Text>
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete the selected brews"
+                        backgroundColor={palette.danger}
+                        onPress={handleSelectionDelete}>
+                        Delete
+                    </Button>
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Keep these brews"
+                        chromeless
+                        onPress={() => setConfirmingBatchDelete(false)}>
+                        Keep these brews
                     </Button>
                 </YStack>
             </XbrwSheet>
