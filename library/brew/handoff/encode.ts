@@ -28,13 +28,36 @@ const SINGLE_URL_PREFIX = "beanconqueror://ADD_BREW";
 const BATCH_URL_PREFIX = "beanconqueror://ADD_BREWS";
 
 /**
- * A batch gets the same budget as one brew, which at roughly 4,000 characters
- * a brew is something like thirty of them with every trace whole. Kept as its
- * own constant because the two paths answer to different things: this one is
- * the most a user can select at once, where the single budget is the point at
- * which one brew starts losing detail.
+ * A batch gets the same budget as one brew. It is almost never what stops a
+ * batch: gzip finds so much in common between repeated brews that a hundred of
+ * them assemble into around sixty thousand characters, well inside this. The
+ * two limits below are what actually bite.
  */
 export const MAX_BATCH_URL_CHARS = MAX_URL_CHARS;
+
+/**
+ * The most brews one link may carry.
+ *
+ * Beanconqueror's decoder refuses a longer batch outright, so this is its
+ * number rather than ours, kept here so the user is told to select fewer while
+ * they are still choosing rather than watching the other app reject the lot.
+ */
+export const MAX_BATCH_BREWS = 100;
+
+/**
+ * The most JSON a batch may inflate to on the receiving side.
+ *
+ * Beanconqueror inflates a handoff through a cap, because the payload is
+ * attacker-controlled gzip and an uncapped inflate is a zip bomb waiting to
+ * happen. That cap is the real ceiling on a batch: a whole brew is roughly
+ * twenty kilobytes of JSON and compresses to a few hundred characters, so a
+ * selection runs out of inflated bytes long before it runs out of URL.
+ *
+ * Checked here as well as there so the two cannot disagree quietly. If this
+ * ever exceeds Beanconqueror's figure, batches that fit by our reckoning will
+ * be refused by theirs, which the user sees as a send that did nothing.
+ */
+export const MAX_BATCH_INFLATED_BYTES = 4 * 1024 * 1024;
 
 type HandoffFlowFidelity = NonNullable<HandoffEnvelope["flow"]>["fidelity"];
 
@@ -66,6 +89,9 @@ export function encodeHandoff(envelope: HandoffEnvelope): EncodedHandoff {
 
 export function encodeHandoffBatch(envelopes: HandoffEnvelope[]): EncodedHandoff {
     const batch = batchPayload(envelopes);
+    const refusal = batchRefusal(envelopes, batch);
+    if (refusal !== null) throw new Error(refusal);
+
     const encoded = encodeAt(batch, batchFidelity(envelopes), BATCH_URL_PREFIX);
     if (encoded.urlChars > MAX_BATCH_URL_CHARS) {
         // Batch exports refuse rather than reusing the single-brew fidelity ladder:
@@ -78,8 +104,28 @@ export function encodeHandoffBatch(envelopes: HandoffEnvelope[]): EncodedHandoff
 
 export function batchFits(envelopes: HandoffEnvelope[]): boolean {
     if (envelopes.length === 0) return false;
-    return encodeAt(batchPayload(envelopes), batchFidelity(envelopes), BATCH_URL_PREFIX).urlChars
+    const batch = batchPayload(envelopes);
+    if (batchRefusal(envelopes, batch) !== null) return false;
+    return encodeAt(batch, batchFidelity(envelopes), BATCH_URL_PREFIX).urlChars
         <= MAX_BATCH_URL_CHARS;
+}
+
+/**
+ * Why Beanconqueror would turn this batch away, or null if it would take it.
+ *
+ * Both limits belong to the receiver, so they are checked before the expensive
+ * part: there is no sense compressing two megabytes to find out it was never
+ * going to be accepted.
+ */
+function batchRefusal(envelopes: HandoffEnvelope[], batch: HandoffBatch): string | null {
+    if (envelopes.length > MAX_BATCH_BREWS) {
+        return `Beanconqueror batch handoff holds at most ${MAX_BATCH_BREWS} brews`;
+    }
+    const inflated = new TextEncoder().encode(JSON.stringify(batch)).length;
+    if (inflated > MAX_BATCH_INFLATED_BYTES) {
+        return `Beanconqueror batch handoff exceeds ${MAX_BATCH_INFLATED_BYTES} inflated bytes`;
+    }
+    return null;
 }
 
 /**

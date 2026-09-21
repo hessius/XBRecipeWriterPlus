@@ -1,6 +1,8 @@
 import {gzipSync, gunzipSync, strToU8} from "fflate";
 
 import {
+    MAX_BATCH_BREWS,
+    MAX_BATCH_INFLATED_BYTES,
     MAX_BATCH_URL_CHARS,
     MAX_URL_CHARS,
     batchFits,
@@ -294,6 +296,35 @@ describe("encodeHandoffBatch", () => {
         expect(batchFits(oversized)).toBe(false);
         expect(() => encodeHandoffBatch(oversized)).toThrow(
             `Beanconqueror batch handoff URL exceeds ${MAX_BATCH_URL_CHARS} characters`
+        );
+    });
+
+    // The two limits below belong to Beanconqueror, not to us. They are
+    // checked here so the app can say "select fewer" while the user is still
+    // choosing, instead of handing over a link the other app throws away.
+    it("refuses more brews than Beanconqueror will accept in one link", () => {
+        const withinLimit = Array.from({length: MAX_BATCH_BREWS}, (_value, index) =>
+            batchEnvelope(index, 2));
+        const overLimit = [...withinLimit, batchEnvelope(MAX_BATCH_BREWS, 2)];
+
+        expect(batchFits(withinLimit)).toBe(true);
+        expect(batchFits(overLimit)).toBe(false);
+        expect(() => encodeHandoffBatch(overLimit)).toThrow(
+            `Beanconqueror batch handoff holds at most ${MAX_BATCH_BREWS} brews`
+        );
+    });
+
+    it("refuses a batch that would inflate past what the reader will accept", () => {
+        // A note is the cheapest way to make a large payload that gzip cannot
+        // shrink away, which is the point: the URL would be comfortable here
+        // and the inflated JSON would not.
+        const wordy = batchEnvelope(0, 2);
+        wordy.brew.note = Array.from({length: MAX_BATCH_INFLATED_BYTES / 8},
+            (_value, index) => `note ${index}`).join(" ");
+
+        expect(batchFits([wordy])).toBe(false);
+        expect(() => encodeHandoffBatch([wordy])).toThrow(
+            `Beanconqueror batch handoff exceeds ${MAX_BATCH_INFLATED_BYTES} inflated bytes`
         );
     });
 
