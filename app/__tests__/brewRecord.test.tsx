@@ -355,7 +355,42 @@ describe("brew record", () => {
             expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
         });
 
-        it("opens Beanconqueror once when the handoff action is pressed", async () => {
+        it("asks what the coffee was before handing over a brew from beans", async () => {
+            const {getByLabelText} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+
+            // The machine cannot know what was in the hopper, so the send waits
+            // on the one person who does.
+            expect(screen.getByTestId("bean-name-field")).toBeTruthy();
+            expect(openURL).not.toHaveBeenCalled();
+        });
+
+        it("opens Beanconqueror once the coffee question is answered", async () => {
+            const {getByLabelText, getByTestId} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+            // The sheet animates in, and while it is animating its buttons are
+            // in the tree and findable but their press is discarded. Retrying
+            // the press is the only honest wait for it, since the thing being
+            // waited on is the press landing. Same trap as brew history's
+            // delete confirmation.
+            await waitFor(async () => {
+                await fireEvent.press(getByTestId("bean-name-skip"));
+                expect(openURL).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        it("opens Beanconqueror straight away for a pod brew, which knows its coffee", async () => {
+            mockOpened = {
+                record: {...record, coffee: {name: "Kenya Sakami"}},
+                samples: []
+            };
+
             const {getByLabelText} = await renderWithProviders(
                 <BrewRecord recipeLookup={mockLookup} />
             );
@@ -363,6 +398,7 @@ describe("brew record", () => {
             await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
 
             await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(screen.queryByTestId("bean-name-field")).toBeNull();
         });
         it("does not offer the handoff without the action", async () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};

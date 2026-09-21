@@ -18,6 +18,8 @@ import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import BeanNameSheet from "@/components/BeanNameSheet";
+import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
@@ -128,6 +130,11 @@ export default function BrewRecord({recipeLookup}: Props) {
     // The share exports are separate actions with separate state, so one busy
     // export should not disable a different handoff path that can still run.
     const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(() => opened);
+    // The machine knows what a pod was and never what a hopper held, so the
+    // coffee is only ever a question for a brew that came from beans. Asked
+    // here and not in the batch path: once is a courtesy, once per brew across
+    // a selection is a questionnaire.
+    const [namingBean, setNamingBean] = useState(false);
 
     // Seeded from the record that is already in memory, so the screen shows
     // the verdict the user gave at the end of the brew rather than an empty
@@ -223,7 +230,15 @@ export default function BrewRecord({recipeLookup}: Props) {
     const brewWater = Math.max(0, record.waterTotal - (bypass?.delivered ?? 0));
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} gap="$2">
+        <YStack flex={1} backgroundColor={palette.base}>
+            {/* Hidden from a screen reader while the bean sheet is up. A
+                Tamagui sheet renders as a sibling on Android and isolates
+                nothing on its own, so the screen underneath stays reachable
+                unless it is hidden from here. The sheet sits outside this
+                subtree so it never hides itself. */}
+            <YStack flex={1} gap="$2"
+                    accessibilityElementsHidden={namingBean}
+                    importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
                 that name immediately below, and it has to, because the capture
                 needs it. A header repeating it would say the same word twice in
@@ -363,7 +378,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                         <XStack>
                             <ExportButton label={handoffTarget.buttonLabel}
                                           busy={handoffBusy}
-                                          onPress={() => void sendHandoff()} />
+                                          onPress={() => {
+                                              if (record.coffee === undefined) {
+                                                  setNamingBean(true);
+                                                  return;
+                                              }
+                                              void sendHandoff();
+                                          }} />
                         </XStack>
                     )}
                 </YStack>
@@ -383,6 +404,11 @@ export default function BrewRecord({recipeLookup}: Props) {
                 </XStack>
             )}
             </ScrollView>
+            </YStack>
+
+            <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
+                           suggestion={beanNameFromRecipe(record.recipeName) ?? ""}
+                           onConfirm={(name) => void sendHandoff(name)} />
         </YStack>
     );
 }

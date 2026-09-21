@@ -604,6 +604,14 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.export.data` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:169` and `app/brew.tsx:321`) | Button to export the underlying data as JSON. | `Export the data` |
 | `brewRecord.export.busy` | `components/ExportButton.tsx:34` | Replaces either label while the capture and share sheet are in flight, so a press is visibly acknowledged. | `WORKING…` |
 | `brewRecord.handoff.beanconqueror.label` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewRecord.tsx`) | Button to hand a brew that produced a drink to Beanconqueror. Hidden behind the `beanconquerorHandoff` Labs setting, and on a brew that was cancelled, failed, or lost contact. | `Send to Beanconqueror` |
+| `brewRecord.handoff.bean.title` | `components/BeanNameSheet.tsx` | Sheet heading asked before a brew from beans is handed over, since the machine only knows the coffee for a pod. | `What was the coffee?` |
+| `brewRecord.handoff.bean.hint` | `components/BeanNameSheet.tsx` | Says what Beanconqueror will try if the field is left empty, naming the guess taken from the recipe. | `Beanconqueror will look for a bean by this name. Skip and it will try "<name>".` |
+| `brewRecord.handoff.bean.hintNone` | `components/BeanNameSheet.tsx` | The same, for a recipe whose name yields no guess at all. | `Beanconqueror will look for a bean by this name. Skip to let it pick one.` |
+| `brewRecord.handoff.bean.skip` | `components/BeanNameSheet.tsx` | Sends without typing a name, letting the guess (or Beanconqueror's own default) stand. | `SKIP` |
+| `brewRecord.handoff.bean.send` | `components/BeanNameSheet.tsx` | Sends with the typed name. Dimmed until something is typed. | `SEND` |
+| `brewRecord.handoff.bean.field.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The coffee name field. | `Coffee name` |
+| `brewRecord.handoff.bean.skip.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The skip button. | `Send without naming the coffee` |
+| `brewRecord.handoff.bean.send.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The send button. | `Send with this coffee name` |
 | `brewRecord.handoff.openFailed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened, usually because Beanconqueror is not installed. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewRecord.handoff.tooLarge` | `hooks/useBrewHandoff.ts:10` | Error toast when the handoff payload still cannot fit in a URL after dropping every lossy fallback. | `This brew is too large to hand over to Beanconqueror.` |
 

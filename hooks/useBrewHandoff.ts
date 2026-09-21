@@ -18,6 +18,12 @@ export const HANDOFF_TOO_LARGE = "This brew is too large to hand over to Beancon
  * `useBrewExport`, so a screen can defer reading the final persisted brew
  * until somebody actually asks to send it.
  *
+ * `send` takes an optional bean name, which a screen collects from the user
+ * before calling. It is a hint, not a requirement: with none, the envelope
+ * falls back to a name derived from the recipe, and Beanconqueror falls back
+ * again from there. The batch path passes nothing, because asking once per
+ * brew across a selection would be a questionnaire.
+ *
  * The handoff is guarded against a second press while the deep link is still in
  * flight: the guard is a ref, set synchronously before the first `await`, so a
  * double tap cannot open Beanconqueror twice. `busy` is the same fact as state,
@@ -28,7 +34,7 @@ export function useBrewHandoff(source: () => BrewExportSource | null) {
     const isSendingRef = useRef(false);
     const [busy, setBusy] = useState(false);
 
-    async function send() {
+    async function send(beanName?: string) {
         if (isSendingRef.current) return;
         const opened = source();
         if (opened === null) return;
@@ -39,7 +45,7 @@ export function useBrewHandoff(source: () => BrewExportSource | null) {
             const backfill = recipe === null
                 ? {record: opened.record, filled: []}
                 : backfillFromRecipe(opened.record, recipe);
-            const envelope = buildEnvelope(backfill.record, opened.samples, backfill.filled);
+            const envelope = buildEnvelope(backfill.record, opened.samples, backfill.filled, beanName);
             let url: string;
             try {
                 // Our side has no fidelity copy: `flow.fidelity` stays inside

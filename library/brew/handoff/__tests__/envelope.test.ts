@@ -109,7 +109,43 @@ describe("buildEnvelope", () => {
             imageUrl: "https://example.com/pod.png"
         });
 
-        expect(buildEnvelope(brew({coffee: undefined}), samples)).not.toHaveProperty("bean");
+        // Without a pod the bean is a guess rather than a reading, so it
+        // carries a name and nothing else: Beanconqueror only offers to create
+        // a bean when an unmatched one arrives with real detail attached.
+        expect(buildEnvelope(brew({coffee: undefined}), samples).bean)
+            .toEqual({name: "Gummy Worms"});
+    });
+
+    it("guesses a bean name from the recipe when there is no pod", () => {
+        const envelope = buildEnvelope(
+            brew({coffee: undefined, recipeName: "Ethiopia Guji - Drop Coffee"}),
+            samples
+        );
+
+        expect(envelope.bean).toEqual({name: "Ethiopia Guji"});
+    });
+
+    it("prefers a name the user typed over the one guessed from the recipe", () => {
+        const envelope = buildEnvelope(
+            brew({coffee: undefined, recipeName: "Morning Blend"}),
+            samples, [], "Kenya Nyeri"
+        );
+
+        expect(envelope.bean).toEqual({name: "Kenya Nyeri"});
+    });
+
+    it("keeps the pod's coffee even when a name is typed", () => {
+        const envelope = buildEnvelope(brew(), samples, [], "Something Else");
+
+        expect(envelope.bean?.name).toBe("Kenya Sakami Gloria Natural Batian");
+    });
+
+    it("sends no bean when neither a pod nor a recipe name offers one", () => {
+        const envelope = buildEnvelope(
+            brew({coffee: undefined, recipeName: "   "}), samples
+        );
+
+        expect(envelope).not.toHaveProperty("bean");
     });
 
     it("omits grinder hints and grind size when the grinder did not run", () => {
@@ -206,7 +242,9 @@ describe("buildEnvelope", () => {
         expect(envelope.brew).not.toHaveProperty("grindSize");
         expect(envelope.brew).not.toHaveProperty("grinderRpm");
         expect(envelope.brew).not.toHaveProperty("grinderName");
-        expect(envelope).not.toHaveProperty("bean");
+        // The old record still has a recipe name, and a guessed bean name is
+        // the one thing this change can offer a brew recorded before it.
+        expect(envelope.bean).toEqual({name: "Gummy Worms"});
         expect(envelope).not.toHaveProperty("metrics");
         expect(hasUndefined(envelope)).toBe(false);
     });

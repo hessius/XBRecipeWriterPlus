@@ -19,6 +19,7 @@ import {DEVICE_NAME} from "@/library/brew/handoff/device";
 import type {BackfilledField} from "@/library/brew/handoff/backfill";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {PodCoffee} from "@/library/podCoffee";
+import {beanNameFromRecipe} from "./beanName";
 
 const REPOSITORY_URL = "https://github.com/hessius/XBRecipeWriterPlus";
 const SOURCE_NAME = "XBRecipeWriter++";
@@ -105,10 +106,12 @@ export type HandoffImported = {
 export function buildEnvelope(
     brew: StoredBrew,
     samples: BrewSample[],
-    backfilled: BackfilledField[] = []
+    backfilled: BackfilledField[] = [],
+    beanNameHint?: string
 ): HandoffEnvelope {
     const flow = brew.hasStream && samples.length > 0 ? flowFromSamples(samples) : undefined;
     const metrics = metricsFromPlan(brew.plan);
+    const bean = beanFor(brew, beanNameHint);
 
     return {
         v: 1,
@@ -118,7 +121,7 @@ export function buildEnvelope(
             version: appConfig.expo.version
         },
         brew: brewFigures(brew, samples, backfilled),
-        ...(brew.coffee !== undefined ? {bean: brew.coffee} : {}),
+        ...(bean !== undefined ? {bean} : {}),
         ...(flow !== undefined ? {flow} : {}),
         ...(metrics.length > 0 ? {metrics} : {}),
         imported: {
@@ -131,6 +134,28 @@ export function buildEnvelope(
             params: importedParams(brew)
         }
     };
+}
+
+/**
+ * The bean to name in the envelope.
+ *
+ * A pod knows its coffee outright and always wins: it was read off the
+ * machine's own record rather than guessed. Everything else gets a hint --
+ * what the user typed before sending, or failing that the recipe's own name,
+ * which is what people tend to call a coffee by anyway.
+ *
+ * A hint is a bare name and nothing else, on purpose. Beanconqueror offers to
+ * create a bean only when an unmatched one arrives carrying real detail
+ * (origin, process, note), so a name alone can be matched against the user's
+ * list without ever proposing to add a row they did not ask for.
+ */
+function beanFor(brew: StoredBrew, hint?: string): PodCoffee | undefined {
+    if (brew.coffee !== undefined) return brew.coffee;
+    const typed = hint?.trim();
+    const name = typed !== undefined && typed !== ""
+        ? typed
+        : beanNameFromRecipe(brew.recipeName);
+    return name === undefined ? undefined : {name};
 }
 
 function brewFigures(
