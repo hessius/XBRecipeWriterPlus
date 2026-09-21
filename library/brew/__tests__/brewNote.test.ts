@@ -61,9 +61,9 @@ function oneStage(overrides: Partial<PlanStage> = {}): Partial<BrewRecord> {
 
 describe("brewNote", () => {
     it("renders a finished brew as a stage ladder and footer", () => {
-        expect(brewNote(record())).toBe(`Stage 1   40 ml   94°C   spiral, agitate before, then wait 30 s
-Stage 2  100 ml   92°C   circular, then wait 20 s
-Stage 3  100 ml   90°C   centred, agitate after
+        expect(brewNote(record())).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+#2 · 100 ml · 92°C · circular · wait 20 s
+#3 · 100 ml · 90°C · centred · agitate after
 
 15 g · 1:16 · grind 62 · 3 stages · xBloom`);
     });
@@ -71,38 +71,58 @@ Stage 3  100 ml   90°C   centred, agitate after
     it("omits the grind when the grinder did not run", () => {
         const note = brewNote(record({grinderUsed: false, grindSize: 81}));
 
-        expect(note).toBe(`Stage 1   40 ml   94°C   spiral, agitate before, then wait 30 s
-Stage 2  100 ml   92°C   circular, then wait 20 s
-Stage 3  100 ml   90°C   centred, agitate after
+        expect(note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+#2 · 100 ml · 92°C · circular · wait 20 s
+#3 · 100 ml · 90°C · centred · agitate after
 
 15 g · 1:16 · 3 stages · xBloom`);
         expect(note).not.toContain("grind");
     });
 
-    it("wraps a long descriptor to the descriptor column between parts", () => {
+    it("keeps a long descriptor on one stage line", () => {
         expect(brewNote(record(oneStage({
             agitation: AGITATION.BEFORE_ON_AFTER_ON,
             pauseTime: 45
-        })))).toBe(`Stage 1   40 ml   94°C   spiral, agitate before and after,
-                         then wait 45 s
+        })))).toBe(`#1 · 40 ml · 94°C · spiral · agitate both · wait 45 s
 
 15 g · 1:16 · grind 62 · 1 stage · xBloom`);
     });
 
-    it("indents a wrapped descriptor to the column the head ends at", () => {
-        const [head, continuation] = brewNote(record(oneStage({
+    // A stage carrying every field is the worst case. Beanconqueror renders
+    // notes in a narrow no-wrap <pre>, so the budget is what keeps a stage
+    // readable there; a line that grows past it has gained a field or lost
+    // its short wording, and either is worth noticing.
+    it("keeps a fully loaded stage line within the width budget", () => {
+        const [line] = brewNote(record(oneStage({
+            agitation: AGITATION.BEFORE_ON_AFTER_ON,
+            pauseTime: 30
+        }))).split("\n");
+
+        expect(line.length).toBeLessThanOrEqual(56);
+    });
+
+    it("keeps a stage without agitation comfortably short", () => {
+        const [line] = brewNote(record(oneStage({
+            agitation: AGITATION.ALL_OFF,
+            pauseTime: 20
+        }))).split("\n");
+
+        expect(line.length).toBeLessThanOrEqual(45);
+    });
+
+    it("does not emit old continuation indentation", () => {
+        const note = brewNote(record(oneStage({
             agitation: AGITATION.BEFORE_ON_AFTER_ON,
             pauseTime: 45
-        }))).split("\n");
-        const indent = continuation?.match(/^ +/)?.[0] ?? "";
+        })));
 
-        expect(indent).toHaveLength(head?.indexOf("spiral") ?? -1);
+        expect(note).not.toMatch(/^ {2,}\S/m);
     });
 
     it("keeps the unset agitation sentinel from reading as both agitation flags", () => {
         // This defends against bit-mask wording: every bit of -1 is set, but an unset stage has no agitation.
         expect(brewNote(record(oneStage({agitation: -1}))).split("\n")[0])
-            .toBe("Stage 1   40 ml   94°C   spiral");
+            .toBe("#1 · 40 ml · 94°C · spiral");
     });
 
     // The note keeps its own wording because Pour.getPourPatternText defaults to "Error",
@@ -114,14 +134,14 @@ Stage 3  100 ml   90°C   centred, agitate after
     ])("keeps pattern %i wording aligned with Pour", (pourPattern) => {
         const note = brewNote(record(oneStage({pourPattern})));
 
-        expect(note.split("\n")[0]?.slice("Stage 1   40 ml   94°C   ".length))
+        expect(note.split("\n")[0]?.split(" · ")[3])
             .toBe(Pour.getPourPatternText(pourPattern).toLowerCase());
     });
 
     it("uses a neutral word for an unrecognised pour pattern", () => {
         const note = brewNote(record(oneStage({pourPattern: 7}))); // not a POUR_PATTERN value
 
-        expect(note.split("\n")[0]).toBe("Stage 1   40 ml   94°C   pour");
+        expect(note.split("\n")[0]).toBe("#1 · 40 ml · 94°C · pour");
         expect(note).not.toMatch(/error/i);
     });
 
@@ -138,13 +158,18 @@ Stage 3  100 ml   90°C   centred, agitate after
             .toBe("15 g · 1:16 · grind 62 · 3 stages · xBloom");
     });
 
-    it("keeps a stage line well formed when stored volume and temperature are missing", () => {
+    it("keeps a stage line neutral when stored stage fields are missing", () => {
         const note = brewNote(record(oneStage({
+            pourNumber: undefined as unknown as number,
             volume: undefined as unknown as number,
             temperature: undefined as unknown as number
         })));
 
-        expect(note.split("\n")[0]).toBe("Stage 1      ml     °C   spiral");
+        // The stage number falls back to its position, and a volume or
+        // temperature that was never recorded is left out rather than printed
+        // as a bare unit.
+        expect(note.split("\n")[0]).toBe("#1 · spiral");
+        expect(note).not.toMatch(/undefined|NaN/);
     });
 
     it("uses no dashes anywhere", () => {
@@ -162,7 +187,7 @@ Stage 3  100 ml   90°C   centred, agitate after
     });
 
     it("keeps long pauses in seconds", () => {
-        expect(brewNote(record(oneStage({pauseTime: 360})))).toBe(`Stage 1   40 ml   94°C   spiral, then wait 360 s
+        expect(brewNote(record(oneStage({pauseTime: 360})))).toBe(`#1 · 40 ml · 94°C · spiral · wait 360 s
 
 15 g · 1:16 · grind 62 · 1 stage · xBloom`);
     });

@@ -111,9 +111,9 @@ describe("buildEnvelope", () => {
     });
 
     it("carries the generated note", () => {
-        expect(buildEnvelope(brew(), samples).brew.note).toBe(`Stage 1   40 ml   94°C   spiral, agitate before, then wait 30 s
-Stage 2  100 ml   92°C   circular, then wait 15 s
-Stage 3  100 ml   90°C   centred, agitate after
+        expect(buildEnvelope(brew(), samples).brew.note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+#2 · 100 ml · 92°C · circular · wait 15 s
+#3 · 100 ml · 90°C · centred · agitate after
 
 15 g · 1:16 · grind 62 · 3 stages · xBloom`);
     });

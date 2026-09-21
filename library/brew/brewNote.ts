@@ -3,22 +3,24 @@
  *
  * The result is user-facing copy, not a debug dump, so missing stage number,
  * volume or temperature, corrupt stored rows and future firmware values are
- * rendered neutrally instead of leaking internals. The ladder is fixed-width so
- * wrapped descriptors line up in another app's plain text field.
+ * rendered neutrally instead of leaking internals. Each stage stays on one
+ * compact line because Beanconqueror once rendered notes in a narrow
+ * no-wrap <pre>, where aligned columns overflowed and left continuation
+ * indents stranded.
  */
 import {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {grinderRan, numeric, type BrewRecord, type PlanStage} from "@/library/brew/BrewRecord";
 import {DEVICE_NAME} from "@/library/brew/handoff/device";
 
-const WRAP_WIDTH = 72;
-const DESCRIPTOR_COLUMN = 25;
-
-function stageHead(stage: PlanStage, index: number): string {
+function stageHead(stage: PlanStage, index: number): string[] {
     const stageNumber = numeric(stage.pourNumber) ? stage.pourNumber : index + 1;
-    const volume = numeric(stage.volume) ? String(stage.volume) : "";
-    const temperature = numeric(stage.temperature) ? String(stage.temperature) : "";
-    return `Stage ${stageNumber}${volume.padStart(5)} ml`
-        + `${temperature.padStart(5)}°C   `;
+    // A missing volume or temperature is dropped rather than printed as a bare
+    // unit: "#1 ·  ml" reads as a bug, where "#1" simply reads as unrecorded.
+    return [
+        `#${stageNumber}`,
+        ...(numeric(stage.volume) ? [`${stage.volume} ml`] : []),
+        ...(numeric(stage.temperature) ? [`${stage.temperature}°C`] : [])
+    ];
 }
 
 function agitationPhrase(agitation: number): string | undefined {
@@ -28,7 +30,7 @@ function agitationPhrase(agitation: number): string | undefined {
         case AGITATION.BEFORE_OFF_AFTER_ON:
             return "agitate after";
         case AGITATION.BEFORE_ON_AFTER_ON:
-            return "agitate before and after";
+            return "agitate both";
         default:
             return undefined;
     }
@@ -51,27 +53,12 @@ function descriptorParts(stage: PlanStage): string[] {
     const parts = [patternWord(stage.pourPattern)];
     const agitation = agitationPhrase(stage.agitation);
     if (agitation !== undefined) parts.push(agitation);
-    if (stage.pauseTime > 0) parts.push(`then wait ${stage.pauseTime} s`);
+    if (stage.pauseTime > 0) parts.push(`wait ${stage.pauseTime} s`);
     return parts;
 }
 
 function stageLine(stage: PlanStage, index: number): string {
-    const head = stageHead(stage, index);
-    const continuation = " ".repeat(DESCRIPTOR_COLUMN);
-    const [first, ...rest] = descriptorParts(stage);
-    const lines = [head + first];
-
-    for (const part of rest) {
-        const joined = `${lines[lines.length - 1]}, ${part}`;
-        if (joined.length > WRAP_WIDTH) {
-            lines[lines.length - 1] += ",";
-            lines.push(continuation + part);
-        } else {
-            lines[lines.length - 1] = joined;
-        }
-    }
-
-    return lines.join("\n");
+    return [...stageHead(stage, index), ...descriptorParts(stage)].join(" · ");
 }
 
 function numberPart(value: unknown, label: string): string | undefined {
