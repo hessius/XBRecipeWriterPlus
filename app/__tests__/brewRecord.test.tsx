@@ -364,37 +364,12 @@ describe("brew record", () => {
 
             await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
         });
-        it("announces the Beanconqueror credit as a link", async () => {
-            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-
-            expect(screen.getByRole("link", {
-                name: handoffTarget.siteAccessibilityLabel
-            })).toBeTruthy();
-            expect(screen.getByText(handoffTarget.credit)).toBeTruthy();
-        });
-
-        it("opens the Beanconqueror site once when the credit is pressed", async () => {
-            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-
-            await fireEvent.press(screen.getByRole("link", {
-                name: handoffTarget.siteAccessibilityLabel
-            }));
-
-            await waitFor(() => {
-                expect(openURL).toHaveBeenCalledTimes(1);
-                expect(openURL).toHaveBeenCalledWith(handoffTarget.siteUrl);
-            });
-        });
-
-        it("does not show the Beanconqueror credit without the action", async () => {
+        it("does not offer the handoff without the action", async () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
             expect(screen.getByLabelText("Save as image")).toBeTruthy();
-            expect(screen.queryByRole("link", {
-                name: handoffTarget.siteAccessibilityLabel
-            })).toBeNull();
-            expect(screen.queryByText(handoffTarget.credit)).toBeNull();
+            expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
         });
     });
 

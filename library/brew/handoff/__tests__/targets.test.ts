@@ -14,14 +14,9 @@ describe("handoff targets", () => {
     });
 
     it("keeps user-facing target copy dash-free", () => {
-        const copy: (keyof Pick<
-            HandoffTarget,
-            "name" | "buttonLabel" | "credit" | "siteAccessibilityLabel"
-        >)[] = [
+        const copy: (keyof Pick<HandoffTarget, "name" | "buttonLabel">)[] = [
             "name",
-            "buttonLabel",
-            "credit",
-            "siteAccessibilityLabel"
+            "buttonLabel"
         ];
 
         for (const target of HANDOFF_TARGETS) {
@@ -29,9 +24,5 @@ describe("handoff targets", () => {
                 expect(target[key]).not.toMatch(/[-\u00AD\u2010-\u2015\u2212]/);
             }
         }
-    });
-
-    it("carries Beanconqueror's project site as the link target", () => {
-        expect(HANDOFF_TARGETS[0].siteUrl).toBe("https://beanconqueror.com");
     });
 });

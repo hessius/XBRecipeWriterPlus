@@ -1,7 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useRef, useState} from "react";
-import {ScrollView, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, useWindowDimensions} from "react-native";
 import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -12,7 +12,6 @@ import DotMatrixText from "@/components/DotMatrixText";
 import * as Clipboard from "expo-clipboard";
 
 import ExportButton from "@/components/ExportButton";
-import LinkText from "@/components/LinkText";
 import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
@@ -365,14 +364,6 @@ export default function BrewRecord({recipeLookup}: Props) {
                                           busy={handoffBusy}
                                           onPress={() => void sendHandoff()} />
                         </XStack>
-                    )}
-                    {showHandoff && (
-                        <LinkText label={handoffTarget.credit}
-                                  url={handoffTarget.siteUrl}
-                                  accessibilityLabel={handoffTarget.siteAccessibilityLabel}
-                                  fontSize={12}
-                                  textAlign="center"
-                                  alignItems="center" />
                     )}
                 </YStack>
             )}

@@ -7,9 +7,6 @@ export type HandoffTarget = {
     id: string;
     name: string;
     buttonLabel: string;
-    credit: string;
-    siteUrl: string;
-    siteAccessibilityLabel: string;
 };
 
 /**
@@ -31,10 +28,7 @@ export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
     {
         id:          "beanconqueror",
         name:        "Beanconqueror",
-        buttonLabel: "Send to Beanconqueror",
-        credit:      "Beanconqueror keeps the brew diary.",
-        siteUrl:     "https://beanconqueror.com",
-        siteAccessibilityLabel: "Open Beanconqueror website"
+        buttonLabel: "Send to Beanconqueror"
     }
 ];
 
