@@ -707,6 +707,36 @@ describe("a history restored from a backup", () => {
         expect(db.samples("b1")).toEqual([]);
     });
 
+    /**
+     * The restore used to name a shorter column list than the live insert, so
+     * a brew that came back from a backup arrived with no dose, no ratio, no
+     * grinder and no bypass -- and an export of it handed another app a brew
+     * with no coffee in it. Both paths write through one statement now, and
+     * this is what says so.
+     */
+    it("carries the recipe snapshot an export needs", () => {
+        const db = new BrewDatabase();
+        db.restore([record({
+            id: "b1",
+            dose: 18,
+            ratio: 16,
+            grindSize: 62,
+            grinderRpm: 90,
+            grinderUsed: true,
+            coffee: {name: "Ethiopia Guji", origin: "Ethiopia"},
+            bypass: {volume: 40, temperature: 88, delivered: 40, startedAt: 190_000}
+        })]);
+
+        const restored = db.get("b1");
+        expect(restored?.dose).toBe(18);
+        expect(restored?.ratio).toBe(16);
+        expect(restored?.grindSize).toBe(62);
+        expect(restored?.grinderRpm).toBe(90);
+        expect(restored?.grinderUsed).toBe(true);
+        expect(restored?.coffee).toMatchObject({name: "Ethiopia Guji"});
+        expect(restored?.bypass).toMatchObject({volume: 40});
+    });
+
     it("carries the judgement in with the record", () => {
         const db = new BrewDatabase();
         db.restore([record({id: "b1", rating: 4, note: "Too sour", pinned: true})]);

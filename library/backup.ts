@@ -597,7 +597,17 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // it is the only thing that record holds beyond its rating. Dropping it in
     // transit would turn a typed verdict into a brew the app claims to have
     // watched, with no water and no time to show for it.
-    watched:    (v) => typeof v === "boolean"
+    watched:    (v) => typeof v === "boolean",
+    // The recipe snapshot, taken at brew time. Absent from every backup made
+    // before the export existed, so optional, and checked only to shape: a
+    // stored dose is read back through the same guards a live row is, and
+    // `coffee` is re-validated on hydration the way `bypass` is.
+    dose:        isNumber,
+    ratio:       isNumber,
+    grindSize:   isNumber,
+    grinderRpm:  isNumber,
+    grinderUsed: (v) => typeof v === "boolean",
+    coffee:      isPlainObject
 };
 
 /** A record from a backup file, or null. Never throws. */
@@ -640,7 +650,17 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         // Undefined stays undefined: absent means the app watched it, and
         // writing `true` here would put a field on every record in the file to
         // say what its absence already says.
-        watched: record.watched
+        watched: record.watched,
+        // Carried through because the record is rebuilt field by field: a
+        // field this list forgets is a field the restore drops, and these are
+        // what an export hands to another app. Undefined stays undefined so an
+        // old backup does not gain a dose of nothing.
+        dose: record.dose,
+        ratio: record.ratio,
+        grindSize: record.grindSize,
+        grinderRpm: record.grinderRpm,
+        grinderUsed: record.grinderUsed,
+        coffee: record.coffee
     };
 }
 

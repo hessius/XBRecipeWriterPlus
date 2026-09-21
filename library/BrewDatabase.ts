@@ -260,43 +260,58 @@ class BrewDatabase {
      * report was lost — after the brew had already ended and there was nothing
      * left to ask.
      */
+    /**
+     * The one statement that writes a brew row, for both a live brew and a
+     * restore. Shared rather than written twice because it already went wrong
+     * once: the restore path named a shorter column list, so a brew that came
+     * back from a backup silently lost its dose, ratio, grinder and bypass --
+     * the very figures an export hands to another app.
+     *
+     * @param hasStream whether a stream is being written alongside. A restore
+     * never carries one: a backup holds records, not the sample streams, which
+     * is what `false` says here.
+     */
+    private writeBrewRow(record: BrewRecord, hasStream: boolean): void {
+        this.db.runSync(
+            `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
+                                endedAt, outcome, failure, pours, waterTotal, cupTotal,
+                                heldSeconds, stalls, plan, stageWater, bypass,
+                                rating, note, pinned, watched, dose, ratio,
+                                grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+                record.id, record.recipeUuid, record.recipeName, record.accent,
+                record.startedAt, record.pouringAt ?? 0,
+                record.endedAt, record.outcome, record.failure,
+                record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
+                JSON.stringify(record.stalls ?? []),
+                JSON.stringify(record.plan ?? []),
+                JSON.stringify(record.stageWater ?? []),
+                record.bypass ? JSON.stringify(record.bypass) : "",
+                // A restore carries a judgement in with the record, so the
+                // insert has to take one. A live brew never does: nothing
+                // has been drunk yet at the moment the row is written.
+                isRating(record.rating) ? record.rating : 0,
+                record.note ?? "",
+                record.pinned ? 1 : 0,
+                record.watched === false ? 0 : 1,
+                record.dose ?? 0,
+                record.ratio ?? 0,
+                record.grindSize ?? 0,
+                record.grinderRpm ?? 0,
+                record.grinderUsed === true ? 1 : 0,
+                record.coffee ? JSON.stringify(record.coffee) : "",
+                hasStream ? 1 : 0
+            ]
+        );
+    }
+
     public insert(record: BrewRecord, samples: BrewSample[], frames = ""): void {
         // One transaction, so a brew never half-exists: a record with a
         // truncated stream would draw a trace that stops in mid-air.
         this.db.withTransactionSync(() => {
-            this.db.runSync(
-                `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
-                                    endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, stalls, plan, stageWater, bypass,
-                                    rating, note, pinned, watched, dose, ratio,
-                                    grindSize, grinderRpm, grinderUsed, coffee, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                         ?, ?, ?, ?, ?, ?, ?, ?);`,
-                [
-                    record.id, record.recipeUuid, record.recipeName, record.accent,
-                    record.startedAt, record.pouringAt ?? 0,
-                    record.endedAt, record.outcome, record.failure,
-                    record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
-                    JSON.stringify(record.stalls ?? []),
-                    JSON.stringify(record.plan ?? []),
-                    JSON.stringify(record.stageWater ?? []),
-                    record.bypass ? JSON.stringify(record.bypass) : "",
-                    // A restore carries a judgement in with the record, so the
-                    // insert has to take one. A live brew never does: nothing
-                    // has been drunk yet at the moment the row is written.
-                    isRating(record.rating) ? record.rating : 0,
-                    record.note ?? "",
-                    record.pinned ? 1 : 0,
-                    record.watched === false ? 0 : 1,
-                    record.dose ?? 0,
-                    record.ratio ?? 0,
-                    record.grindSize ?? 0,
-                    record.grinderRpm ?? 0,
-                    record.grinderUsed === true ? 1 : 0,
-                    record.coffee ? JSON.stringify(record.coffee) : "",
-                    samples.length > 0 ? 1 : 0
-                ]
-            );
+            this.writeBrewRow(record, samples.length > 0);
             if (samples.length > 0) {
                 // One JSON row rather than 2 400 rows per brew. Nothing ever
                 // queries inside a stream — it is read whole to draw a line, and
@@ -447,26 +462,7 @@ class BrewDatabase {
         if (toAdd.length === 0) return 0;
         this.db.withTransactionSync(() => {
             toAdd.forEach((record) => {
-                this.db.runSync(
-                    `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
-                                        endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                        heldSeconds, stalls, plan, stageWater, rating,
-                                        note, pinned, watched, hasStream)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
-                    [
-                        record.id, record.recipeUuid, record.recipeName, record.accent,
-                        record.startedAt, record.pouringAt ?? 0,
-                        record.endedAt, record.outcome, record.failure,
-                        record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
-                        JSON.stringify(record.stalls ?? []),
-                        JSON.stringify(record.plan ?? []),
-                        JSON.stringify(record.stageWater ?? []),
-                        isRating(record.rating) ? record.rating : 0,
-                        record.note ?? "",
-                        record.pinned ? 1 : 0,
-                        record.watched === false ? 0 : 1
-                    ]
-                );
+                this.writeBrewRow(record, false);
             });
         });
         return toAdd.length;
