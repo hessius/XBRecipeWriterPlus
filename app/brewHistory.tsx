@@ -8,10 +8,13 @@ import {Button, Text, XStack, YStack} from "tamagui";
 import BrewHistoryRow from "@/components/BrewHistoryRow";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import ExportButton from "@/components/ExportButton";
 import ScreenHeader from "@/components/ScreenHeader";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
+import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {HANDOFF_ENABLED} from "@/library/brew/handoff/targets";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
@@ -87,6 +90,91 @@ function DeleteTile({onPress}: {onPress: () => void}) {
 }
 
 /**
+ * The batch handoff controls, above the list.
+ *
+ * Its own row rather than a slot on `ScreenHeader`, which several screens share
+ * and none of the others has an action for: one screen's button is not a reason
+ * to grow the chrome every pushed screen draws.
+ */
+function SelectionActionRow({
+    selecting,
+    count,
+    fits,
+    busy,
+    onSelect,
+    onSend,
+    onCancel
+}: {
+    selecting: boolean;
+    count: number;
+    fits: boolean;
+    busy: boolean;
+    onSelect: () => void;
+    onSend: () => void;
+    onCancel: () => void;
+}) {
+    if (!selecting) {
+        return (
+            <XStack paddingHorizontal="$4" paddingVertical="$2" justifyContent="flex-end"
+                    borderBottomWidth={1} borderColor={palette.line}>
+                <Button
+                    accessibilityRole="button"
+                    accessibilityLabel="Select brews"
+                    chromeless
+                    size="$2"
+                    onPress={onSelect}>
+                    <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                   color={palette.dim}>
+                        SELECT
+                    </DotMatrixText>
+                </Button>
+            </XStack>
+        );
+    }
+
+    const tooLarge = count > 0 && !fits;
+
+    return (
+        <YStack paddingHorizontal="$4" paddingVertical="$2" gap="$2"
+                borderBottomWidth={1} borderColor={palette.line}>
+            <XStack alignItems="center" justifyContent="space-between" gap="$3">
+                <Text color={palette.dim} fontSize={13}>
+                    {count === 1 ? "1 brew selected" : `${count} brews selected`}
+                </Text>
+                <XStack gap="$2" alignItems="center">
+                    {/* The same outlined Doto button the record screen sends a
+                        single brew with, so the batch action reads as the same
+                        action rather than a second, louder one. */}
+                    <ExportButton
+                        label="Send"
+                        accessibilityLabel="Send selected brews to Beanconqueror"
+                        busy={busy}
+                        disabled={count === 0 || tooLarge}
+                        onPress={onSend}
+                    />
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel selection"
+                        chromeless
+                        size="$2"
+                        onPress={onCancel}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                       color={palette.dim}>
+                            CANCEL
+                        </DotMatrixText>
+                    </Button>
+                </XStack>
+            </XStack>
+            {tooLarge && (
+                <Text color={palette.warn} fontSize={12}>
+                    Select fewer brews to send them together.
+                </Text>
+            )}
+        </YStack>
+    );
+}
+
+/**
  * One swipeable brew history row.
  *
  * Extracted as a component so that the Swipeable ref is owned by the row
@@ -96,16 +184,21 @@ function DeleteTile({onPress}: {onPress: () => void}) {
 function SwipeableBrewRow({
     brew,
     onPress,
-    onDeleteRequest
+    onDeleteRequest,
+    selecting,
+    selected
 }: {
     brew: StoredBrew;
     onPress: () => void;
     onDeleteRequest: (ref: React.RefObject<SwipeableMethods | null>) => void;
+    selecting: boolean;
+    selected: boolean;
 }) {
     const rowRef = useRef<SwipeableMethods | null>(null);
     return (
         <Swipeable
             ref={rowRef}
+            enabled={!selecting}
             friction={2}
             rightThreshold={40}
             overshootRight={false}
@@ -121,7 +214,12 @@ function SwipeableBrewRow({
                     <DeleteTile onPress={() => onDeleteRequest(rowRef)} />
                 </XStack>
             )}>
-            <BrewHistoryRow brew={brew} onPress={onPress} />
+            <BrewHistoryRow
+                brew={brew}
+                onPress={onPress}
+                selectionMode={selecting}
+                selected={selected}
+            />
         </Swipeable>
     );
 }
@@ -135,12 +233,19 @@ function SwipeableBrewRow({
  */
 export default function BrewHistory() {
     const {recipeUuid} = useLocalSearchParams<{recipeUuid?: string}>();
-    const {brews, remove, refresh} = useBrewHistory();
+    const {brews, open, remove, refresh} = useBrewHistory();
+    const handoff = useBrewBatchHandoff((id) => {
+        const opened = open(id);
+        return opened === null ? null : {record: opened.record, samples: opened.samples};
+    });
 
     const lastPushRef = useRef(0);
     // The id of the brew the user has swiped and tapped Delete on, waiting for
     // confirmation. Null when no confirmation sheet is open.
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    const [selecting, setSelecting] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [selectionFits, setSelectionFits] = useState(false);
     // Keep a ref to the currently-open swipeable so it can be closed when the
     // confirmation sheet is dismissed without deleting.
     const swipeableRef = useRef<SwipeableMethods | null>(null);
@@ -159,6 +264,10 @@ export default function BrewHistory() {
         : brews;
 
     function handlePress(brew: StoredBrew) {
+        if (selecting) {
+            toggleSelected(brew.id);
+            return;
+        }
         // eslint-disable-next-line react-hooks/purity
         if (Date.now() - lastPushRef.current < PUSH_GUARD_MS) return;
         // eslint-disable-next-line react-hooks/purity
@@ -169,6 +278,34 @@ export default function BrewHistory() {
     function handleDeleteRequest(brew: StoredBrew, ref: React.RefObject<SwipeableMethods | null>) {
         swipeableRef.current = ref.current;
         setPendingDeleteId(brew.id);
+    }
+
+    function handleSelectStart() {
+        setSelecting(true);
+        setSelectedIds([]);
+        setSelectionFits(false);
+        handoff.reset();
+    }
+
+    function handleSelectCancel() {
+        setSelecting(false);
+        setSelectedIds([]);
+        setSelectionFits(false);
+        handoff.reset();
+    }
+
+    function toggleSelected(id: string) {
+        const next = selectedIds.includes(id)
+            ? selectedIds.filter((selectedId) => selectedId !== id)
+            : [...selectedIds, id];
+        setSelectedIds(next);
+        setSelectionFits(handoff.fits(next));
+    }
+
+    async function handleSelectionSend() {
+        if (selectedIds.length === 0 || !selectionFits || handoff.busy) return;
+        await handoff.send(selectedIds);
+        handleSelectCancel();
     }
 
     function handleDeleteConfirm() {
@@ -213,6 +350,17 @@ export default function BrewHistory() {
     return (
         <YStack flex={1} backgroundColor={palette.base}>
             <HistoryHeader recipeName={recipeName} count={filtered.length} />
+            {HANDOFF_ENABLED && (
+                <SelectionActionRow
+                    selecting={selecting}
+                    count={selectedIds.length}
+                    fits={selectionFits}
+                    busy={handoff.busy}
+                    onSelect={handleSelectStart}
+                    onSend={() => void handleSelectionSend()}
+                    onCancel={handleSelectCancel}
+                />
+            )}
             <FlatList
                 data={filtered}
                 keyExtractor={(item) => item.id}
@@ -221,6 +369,8 @@ export default function BrewHistory() {
                         brew={item}
                         onPress={() => handlePress(item)}
                         onDeleteRequest={(ref) => handleDeleteRequest(item, ref)}
+                        selecting={selecting}
+                        selected={selectedIds.includes(item.id)}
                     />
                 )}
                 contentContainerStyle={{paddingVertical: 8}}

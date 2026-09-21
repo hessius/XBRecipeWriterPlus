@@ -178,6 +178,11 @@ describe("brew history", () => {
         expect(queryByTestId("history-header-recipe")).toBeNull();
     });
 
+    it("does not show batch selection while Beanconqueror handoff is disabled", async () => {
+        const {queryByLabelText} = await renderWithProviders(<BrewHistory />);
+        expect(queryByLabelText("Select brews")).toBeNull();
+    });
+
     it("shows a delete tile that opens a confirmation before removing", async () => {
         // The Swipeable is mocked to render its right actions inline, so the
         // "Delete brew" tile is always visible in the test tree.

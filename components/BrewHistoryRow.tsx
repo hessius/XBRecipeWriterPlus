@@ -11,6 +11,8 @@ import {formatBrewDate, formatBrewDuration} from "@/library/brew/brewFormat";
 type Props = {
     brew: StoredBrew;
     onPress: () => void;
+    selectionMode?: boolean;
+    selected?: boolean;
 };
 
 
@@ -24,7 +26,7 @@ const STOPPED_OUTCOMES: ReadonlySet<string> =
  * The coloured mark preserves the accent at brew time — a recoloured or deleted
  * recipe does not rewrite its own history.
  */
-export default function BrewHistoryRow({brew, onPress}: Props) {
+export default function BrewHistoryRow({brew, onPress, selectionMode = false, selected = false}: Props) {
     // Named outcomes, not "anything but done". A brew the machine finished
     // short is not a failure and must not sit in the history wearing the same
     // red chip as one that was cancelled or lost the link -- that would
@@ -67,10 +69,27 @@ export default function BrewHistoryRow({brew, onPress}: Props) {
         // the drawer closed. The recipe list never showed this only because its
         // cards are painted with the recipe's accent.
         <Pressable accessibilityRole="button" accessibilityLabel={label}
+                   accessibilityState={selectionMode ? {selected} : undefined}
                    onPress={onPress}
                    style={{backgroundColor: palette.base}}>
             <XStack gap="$3" paddingVertical="$3" paddingHorizontal="$3"
                     alignItems="center">
+                {selectionMode && (
+                    // Not `brand`: the palette reserves the mark's magenta for
+                    // the app being itself and explicitly not for a state, so a
+                    // selected row is drawn in the ordinary text colour.
+                    <View
+                        testID={selected ? "history-row-selected" : "history-row-unselected"}
+                        style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            borderWidth: 2,
+                            borderColor: selected ? palette.text : palette.dim,
+                            backgroundColor: selected ? palette.text : palette.base
+                        }}
+                    />
+                )}
                 <View
                     testID="history-row-mark"
                     style={{width: 8, height: 8, borderRadius: 4,

@@ -547,6 +547,19 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.title` | `app/brewHistory.tsx:116` | Screen header title. | `Brew history` |
 | `brewHistory.empty.title` | `app/brewHistory.tsx:154` | Doto empty-state heading. | `NO BREWS YET` |
 | `brewHistory.empty.body` | `app/brewHistory.tsx:157` | Empty-state sub-line. | `Brew a recipe and it will appear here.` |
+| `brewHistory.selection.select.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Enters batch-selection mode for Beanconqueror handoff. | `Select brews` |
+| `brewHistory.selection.select` | `app/brewHistory.tsx` | Doto action-row label. Hidden while Beanconqueror handoff is disabled. | `SELECT` |
+| `brewHistory.selection.count.none` | `app/brewHistory.tsx` | Selection-mode count with nothing selected. | `0 brews selected` |
+| `brewHistory.selection.count.one` | `app/brewHistory.tsx` | Selection-mode count with one selected brew. | `1 brew selected` |
+| `brewHistory.selection.count.many` | `app/brewHistory.tsx` | Selection-mode count. `${count}` is the number of selected brews. | `${count} brews selected` |
+| `brewHistory.selection.send.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Sends the selected brews to Beanconqueror. | `Send selected brews to Beanconqueror` |
+| `brewHistory.selection.send` | `app/brewHistory.tsx` | Doto action-row label. | `SEND` |
+| `brewHistory.selection.cancel.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Leaves selection mode and clears the selected brews. | `Cancel selection` |
+| `brewHistory.selection.cancel` | `app/brewHistory.tsx` | Doto action-row label. | `CANCEL` |
+| `brewHistory.selection.tooLarge` | `app/brewHistory.tsx` | Warning shown when the selected batch will not fit in one Beanconqueror handoff URL. | `Select fewer brews to send them together.` |
+| `brewHistory.handoff.empty` | `hooks/useBrewBatchHandoff.ts` | Error toast when every selected brew disappeared before sending. | `No selected brews could be sent. They may have been deleted.` |
+| `brewHistory.handoff.tooLarge` | `hooks/useBrewBatchHandoff.ts` | Error toast if the batch is too large at send time. Usually prevented by the selection warning. | `That selection is too large to send to Beanconqueror at once.` |
+| `brewHistory.handoff.openFailed` | `hooks/useBrewBatchHandoff.ts` | Error toast when iOS or Android rejects the Beanconqueror deep link. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewHistory.row.delete.a11y` | `app/brewHistory.tsx:32` (a11y) | (a11y) Swipe delete on a history row. | `Delete brew` |
 | `brewHistory.row.delete.label` | `app/brewHistory.tsx:45` | Doto label on the delete tile. | `DELETE` |
 | `brewHistory.confirm.title` | `app/brewHistory.tsx:182` | Title of the delete-confirmation dialog. | `Delete brew` |
