@@ -380,7 +380,7 @@ describe("brew record", () => {
             // waited on is the press landing. Same trap as brew history's
             // delete confirmation.
             await waitFor(async () => {
-                await fireEvent.press(getByTestId("bean-name-skip"));
+                await fireEvent.press(getByTestId("bean-name-send"));
                 expect(openURL).toHaveBeenCalledTimes(1);
             });
         });

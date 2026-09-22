@@ -171,7 +171,11 @@ function brewFigures(
         date: new Date(brew.startedAt).toISOString(),
         ...(numeric(brew.dose) ? {doseIn: {value: brew.dose, unit: "g" as const}} : {}),
         waterIn: {value: brew.waterTotal, unit: "ml"},
-        beverageOut: {value: brew.cupTotal, unit: "g"},
+        // Rounded, unlike the water figure. The cup weight comes off a scale
+        // that reports tenths, and a tenth of a gram of coffee is below what
+        // anybody pours to or tastes: "195.3 g" claims a precision the drink
+        // does not have, and Beanconqueror prints what it is given.
+        beverageOut: {value: Math.round(brew.cupTotal), unit: "g"},
         brewTime: secondsFromMilliseconds(brew.endedAt - brew.startedAt),
         ...(numeric(firstStage?.temperature) ? {temperature: firstStage.temperature} : {}),
         ...(numeric(brew.ratio) ? {ratio: brew.ratio} : {}),

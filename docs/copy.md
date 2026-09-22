@@ -554,7 +554,7 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.selection.count.one` | `app/brewHistory.tsx` | Selection-mode count with one selected brew. | `1 brew selected` |
 | `brewHistory.selection.count.many` | `app/brewHistory.tsx` | Selection-mode count. `${count}` is the number of selected brews. | `${count} brews selected` |
 | `brewHistory.selection.send.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Sends the selected brews to Beanconqueror. | `Send selected brews to Beanconqueror` |
-| `brewHistory.selection.send` | `app/brewHistory.tsx` | Doto action-row label. Hidden while the `beanconquerorHandoff` Labs setting is off. | `SEND` |
+| `brewHistory.selection.send` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewHistory.tsx`) | Doto action-row label, shared with the single-brew button so both read as the same action. Hidden while the `beanconquerorHandoff` Labs setting is off. | `Send to Beanconqueror` |
 | `brewHistory.selection.delete.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Opens the confirmation for deleting every selected brew. | `Delete selected brews` |
 | `brewHistory.selection.delete` | `app/brewHistory.tsx` | Doto action-row label, beside SEND. | `DELETE` |
 | `brewHistory.selection.cancel.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Leaves selection mode and clears the selected brews. | `Cancel selection` |
@@ -607,11 +607,10 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.handoff.bean.title` | `components/BeanNameSheet.tsx` | Sheet heading asked before a brew from beans is handed over, since the machine only knows the coffee for a pod. | `What was the coffee?` |
 | `brewRecord.handoff.bean.hint` | `components/BeanNameSheet.tsx` | Says what Beanconqueror will try if the field is left empty, naming the guess taken from the recipe. | `Beanconqueror will look for a bean by this name. Skip and it will try "<name>".` |
 | `brewRecord.handoff.bean.hintNone` | `components/BeanNameSheet.tsx` | The same, for a recipe whose name yields no guess at all. | `Beanconqueror will look for a bean by this name. Skip to let it pick one.` |
-| `brewRecord.handoff.bean.skip` | `components/BeanNameSheet.tsx` | Sends without typing a name, letting the guess (or Beanconqueror's own default) stand. | `SKIP` |
-| `brewRecord.handoff.bean.send` | `components/BeanNameSheet.tsx` | Sends with the typed name. Dimmed until something is typed. | `SEND` |
+| `brewRecord.handoff.bean.send` | `components/BeanNameSheet.tsx` | One button in two states. Reads `SKIP` while the field is empty or whitespace, letting the guess (or Beanconqueror's own default) stand, and `SEND` once a name is typed. | `SKIP` / `SEND` |
 | `brewRecord.handoff.bean.field.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The coffee name field. | `Coffee name` |
-| `brewRecord.handoff.bean.skip.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The skip button. | `Send without naming the coffee` |
-| `brewRecord.handoff.bean.send.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The send button. | `Send with this coffee name` |
+| `brewRecord.handoff.bean.send.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The button, while the field is empty. | `Send without naming the coffee` |
+| `brewRecord.handoff.bean.send.named.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The button, once a name is typed. | `Send with this coffee name` |
 | `brewRecord.handoff.openFailed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened, usually because Beanconqueror is not installed. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewRecord.handoff.tooLarge` | `hooks/useBrewHandoff.ts:10` | Error toast when the handoff payload still cannot fit in a URL after dropping every lossy fallback. | `This brew is too large to hand over to Beanconqueror.` |
 

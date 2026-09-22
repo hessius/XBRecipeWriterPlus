@@ -23,11 +23,16 @@ const MAX_LENGTH = 40;
  *
  * The field starts empty and the sheet says what will be tried if it stays
  * that way: a name taken from the recipe, because a recipe is usually named
- * after the coffee. Skipping is a whole button rather than a dismissal, so
- * getting past the sheet costs one tap and no typing. Either way the send goes
- * through -- Beanconqueror never refuses an unmatched bean, it falls back to a
- * default and says so in the brew note -- so this sheet is an opportunity to
- * do better, never a gate.
+ * after the coffee.
+ *
+ * There is one button, not two. It says SKIP while the field is empty and SEND
+ * once something is typed, because both were always the same button: they sent
+ * the brew, and differed only in whether a name went with it. Two buttons made
+ * that look like a decision, and left a dimmed SEND sitting next to a live SKIP
+ * as if the sheet could be failed. It cannot: the send goes through either way
+ * -- Beanconqueror never refuses an unmatched bean, it falls back to a default
+ * and says so in the brew note -- so this sheet is an opportunity to do better,
+ * never a gate.
  */
 export default function BeanNameSheet({
     open, onOpenChange, suggestion, onConfirm
@@ -93,36 +98,20 @@ export default function BeanNameSheet({
                         paddingVertical: 12
                     }]}/>
 
-                <XStack gap="$3">
-                    <XStack flex={1}
-                            accessibilityRole="button"
-                            accessibilityLabel="Send without naming the coffee"
-                            testID="bean-name-skip"
-                            onPress={() => confirm("")}
-                            height={48} alignItems="center" justifyContent="center"
-                            borderRadius="$4"
-                            borderWidth={1} borderColor={palette.line}>
-                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
-                                       color={palette.muted}>
-                            SKIP
-                        </DotMatrixText>
-                    </XStack>
-
-                    <XStack flex={1}
-                            accessibilityRole="button"
-                            accessibilityLabel="Send with this coffee name"
-                            accessibilityState={{disabled: trimmed.length === 0}}
-                            testID="bean-name-confirm"
-                            onPress={trimmed.length === 0 ? undefined : () => confirm(trimmed)}
-                            opacity={trimmed.length === 0 ? 0.35 : 1}
-                            height={48} alignItems="center" justifyContent="center"
-                            borderRadius="$4"
-                            backgroundColor={palette.text}>
-                        <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
-                                       color={onAccent.text}>
-                            SEND
-                        </DotMatrixText>
-                    </XStack>
+                <XStack
+                    accessibilityRole="button"
+                    accessibilityLabel={trimmed.length === 0
+                        ? "Send without naming the coffee"
+                        : "Send with this coffee name"}
+                    testID="bean-name-send"
+                    onPress={() => confirm(trimmed)}
+                    height={48} alignItems="center" justifyContent="center"
+                    borderRadius="$4"
+                    backgroundColor={palette.text}>
+                    <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
+                                   color={onAccent.text}>
+                        {trimmed.length === 0 ? "SKIP" : "SEND"}
+                    </DotMatrixText>
                 </XStack>
             </YStack>
         </XbrwSheet>

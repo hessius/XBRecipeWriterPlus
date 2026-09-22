@@ -31,7 +31,7 @@ function agitationPhrase(agitation: number): string | undefined {
         case AGITATION.BEFORE_OFF_AFTER_ON:
             return "agitate after";
         case AGITATION.BEFORE_ON_AFTER_ON:
-            return "agitate both";
+            return "agitate before and after";
         default:
             return undefined;
     }
@@ -120,13 +120,34 @@ function typedNote(record: BrewRecord): string | undefined {
     return typed === "" ? undefined : typed.slice(0, MAX_CARRIED_NOTE);
 }
 
+/**
+ * The recipe's name, heading the stages it produced.
+ *
+ * Beanconqueror files a brew under a bean and a preparation method, neither of
+ * which is the recipe: two brews of the same beans on the same machine are
+ * indistinguishable in a list without it. The name goes above the stages
+ * rather than in the footer because it is what the stages are of, and a reader
+ * scanning down wants to know that before reading them.
+ */
+function recipeHeading(record: BrewRecord): string | undefined {
+    const name = (record.recipeName ?? "").trim();
+    return name === "" ? undefined : name;
+}
+
 export function brewNote(record: BrewRecord, backfilled: BackfilledField[] = []): string {
     const foot = footer(record);
     const source = backfillLine(backfilled);
     const footerWithSource = source === undefined ? foot : `${foot}\n${source}`;
     const typed = typedNote(record);
-    const machine = !Array.isArray(record.plan) || record.plan.length === 0
+    const heading = recipeHeading(record);
+    const stages = !Array.isArray(record.plan) || record.plan.length === 0
+        ? undefined
+        : record.plan.map((stage, index) => stageLine(stage, index)).join("\n");
+    // The heading belongs to the stages, so it is dropped with them: a lone
+    // name above a footer would look like a section that had lost its contents.
+    const body = stages === undefined
         ? footerWithSource
-        : `${record.plan.map((stage, index) => stageLine(stage, index)).join("\n")}\n\n${footerWithSource}`;
-    return typed === undefined ? machine : `${typed}\n\n${machine}`;
+        : [heading, stages].filter((part) => part !== undefined).join("\n")
+            + `\n\n${footerWithSource}`;
+    return typed === undefined ? body : `${typed}\n\n${body}`;
 }

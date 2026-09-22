@@ -40,7 +40,7 @@ describe("BeanNameSheet", () => {
                            onConfirm={onConfirm}/>
         );
 
-        await fireEvent.press(screen.getByTestId("bean-name-skip"));
+        await fireEvent.press(screen.getByTestId("bean-name-send"));
 
         expect(onConfirm).toHaveBeenCalledWith("");
     });
@@ -52,20 +52,42 @@ describe("BeanNameSheet", () => {
         );
 
         await fireEvent.changeText(screen.getByTestId("bean-name-field"), "  Kenya Nyeri ");
-        await fireEvent.press(screen.getByTestId("bean-name-confirm"));
+        await fireEvent.press(screen.getByTestId("bean-name-send"));
 
         expect(onConfirm).toHaveBeenCalledWith("Kenya Nyeri");
     });
 
-    it("refuses to send an empty name through the send button", async () => {
+    // One button in two states, so the label is the only thing that says
+    // whether a name is going with the brew.
+    it("reads as SKIP until something is typed, then as SEND", async () => {
+        await renderWithProviders(
+            <BeanNameSheet open onOpenChange={noop} suggestion="" onConfirm={noop}/>
+        );
+
+        expect(screen.getByText("SKIP")).toBeTruthy();
+        expect(screen.queryByText("SEND")).toBeNull();
+
+        await fireEvent.changeText(screen.getByTestId("bean-name-field"), "Kenya");
+
+        expect(screen.getByText("SEND")).toBeTruthy();
+        expect(screen.queryByText("SKIP")).toBeNull();
+    });
+
+    // Whitespace is not a name, so the button goes back to offering the guess
+    // rather than promising to send something it would only trim away.
+    it("falls back to SKIP when the field holds only whitespace", async () => {
         const onConfirm = jest.fn();
         await renderWithProviders(
             <BeanNameSheet open onOpenChange={noop} suggestion="" onConfirm={onConfirm}/>
         );
 
-        await fireEvent.press(screen.getByTestId("bean-name-confirm"));
+        await fireEvent.changeText(screen.getByTestId("bean-name-field"), "   ");
 
-        expect(onConfirm).not.toHaveBeenCalled();
+        expect(screen.getByText("SKIP")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("bean-name-send"));
+
+        expect(onConfirm).toHaveBeenCalledWith("");
     });
 
     it("closes itself once an answer is given", async () => {
@@ -75,7 +97,7 @@ describe("BeanNameSheet", () => {
                            onConfirm={noop}/>
         );
 
-        await fireEvent.press(screen.getByTestId("bean-name-skip"));
+        await fireEvent.press(screen.getByTestId("bean-name-send"));
 
         expect(onOpenChange).toHaveBeenCalledWith(false);
     });

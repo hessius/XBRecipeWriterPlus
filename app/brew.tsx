@@ -27,11 +27,15 @@ import {sharedBrewDatabase, useBrewJudgement, type HistoryStore, type JudgementS
     from "@/hooks/useBrewHistory";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import BeanNameSheet from "@/components/BeanNameSheet";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
+import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import Recipe from "@/library/Recipe";
@@ -190,6 +194,21 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const {shotRef, shareImage, shareData, busy} = useBrewExport(
         () => latestExport(historyStore ?? sharedBrewDatabase())
     );
+    // Beanconqueror reads the same just-written row the exports do. It is
+    // offered here as well as on the record screen because this is the screen
+    // the user is on when the cup is poured, and a handoff you have to go
+    // looking for in history afterwards is one nobody makes.
+    //
+    // Its own busy flag, like the record screen's: a share sheet that is open
+    // should not grey out a handoff that could still run.
+    const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(
+        () => latestExport(historyStore ?? sharedBrewDatabase())
+    );
+    // The machine knows what a pod was and never what a hopper held, so the
+    // coffee is only ever a question for a brew that came from beans.
+    const [namingBean, setNamingBean] = useState(false);
+    const [handoffTarget] = HANDOFF_TARGETS;
     // The verdict goes on the row the run has just written, which is why the id
     // is resolved on press rather than on render: at the moment this screen
     // draws the row may not exist yet, and the finished brew is always the
@@ -236,7 +255,12 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         // rather than scrolled away with it.
         <KeyboardAvoidingView style={{flex: 1, backgroundColor: palette.base}}
                               behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3">
+        {/* Hidden from the reader while the bean sheet is up. XbrwSheet is
+            not a modal, so on Android `accessibilityViewIsModal` on the sheet
+            does not take the screen behind it out of the reader's path. */}
+        <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3"
+                accessibilityElementsHidden={namingBean}
+                importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
             {running && <BrewWakeLock />}
             {/* The nav row the mockup drew. `brew` is declared in the navigator
                 with `headerShown: false`, so this is the only bar. */}
@@ -445,6 +469,32 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                                           onPress={() => void shareData()} />
                         </XStack>
                     )}
+                    {phase.name === "done" && handoffEnabled
+                        && canHandOff(finalOutcome("done", brewWater, plannedWater)) && (
+                        // Read through `canHandOff` rather than assumed from
+                        // the phase. Reaching "done" today means one of the two
+                        // outcomes that may be handed over, but the rule for
+                        // that lives in one place and this screen asks it the
+                        // same question the record screen does.
+                        //
+                        // A full row of its own for the same reason as there:
+                        // at Doto's 1.4x accessibility scale the Beanconqueror
+                        // label cannot share a split with the two exports.
+                        <XStack>
+                            <ExportButton label={handoffTarget.buttonLabel}
+                                          busy={handoffBusy}
+                                          onPress={() => {
+                                              const source = latestExport(
+                                                  historyStore ?? sharedBrewDatabase()
+                                              );
+                                              if (source?.record.coffee === undefined) {
+                                                  setNamingBean(true);
+                                                  return;
+                                              }
+                                              void sendHandoff();
+                                          }} />
+                        </XStack>
+                    )}
                     {/* No DONE. The chevron in the nav row dismisses the modal,
                         and a second control duplicated it — painted in
                         `palette.line`, the hairline colour, which is why it
@@ -452,6 +502,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </YStack>
             )}
         </YStack>
+
+        <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
+                       suggestion={beanNameFromRecipe(recipe.name) ?? ""}
+                       onConfirm={(name) => void sendHandoff(name)} />
         </KeyboardAvoidingView>
     );
 }

@@ -16,7 +16,7 @@ import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import {canHandOff} from "@/library/brew/handoff/targets";
+import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
 const PUSH_GUARD_MS = 2000;
@@ -168,13 +168,14 @@ function SelectionActionRow({
                         DELETE
                     </DotMatrixText>
                 </Button>
-                <XStack gap="$2" alignItems="center">
-                    {/* The same outlined Doto button the record screen sends a
-                        single brew with, so the batch action reads as the same
-                        action rather than a second, louder one. */}
+                <XStack gap="$2" alignItems="center" flexShrink={1} minWidth={0}>
+                    {/* The same outlined Doto button, and the same words, the
+                        record screen sends a single brew with, so the batch
+                        action reads as the same action rather than a second,
+                        louder one. A bare "Send" did not say where to. */}
                     {canSend && (
                         <ExportButton
-                            label="Send"
+                            label={HANDOFF_TARGETS[0].buttonLabel}
                             accessibilityLabel="Send selected brews to Beanconqueror"
                             busy={busy}
                             disabled={count === 0 || tooLarge || blocked > 0}

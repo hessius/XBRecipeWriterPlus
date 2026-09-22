@@ -61,7 +61,8 @@ function oneStage(overrides: Partial<PlanStage> = {}): Partial<BrewRecord> {
 
 describe("brewNote", () => {
     it("renders a finished brew as a stage ladder and footer", () => {
-        expect(brewNote(record())).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+        expect(brewNote(record())).toBe(`House recipe
+#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
 #2 · 100 ml · 92°C · circular · wait 20 s
 #3 · 100 ml · 90°C · centred · agitate after
 
@@ -81,8 +82,8 @@ describe("brewNote", () => {
     });
 
     it("says nothing extra when the user typed nothing", () => {
-        expect(brewNote(record({note: "   "})).startsWith("#1")).toBe(true);
-        expect(brewNote(record({note: undefined})).startsWith("#1")).toBe(true);
+        expect(brewNote(record({note: "   "})).startsWith("House recipe\n#1")).toBe(true);
+        expect(brewNote(record({note: undefined})).startsWith("House recipe\n#1")).toBe(true);
     });
 
     /**
@@ -100,7 +101,8 @@ describe("brewNote", () => {
     it("omits the grind when the grinder did not run", () => {
         const note = brewNote(record({grinderUsed: false, grindSize: 81}));
 
-        expect(note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+        expect(note).toBe(`House recipe
+#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
 #2 · 100 ml · 92°C · circular · wait 20 s
 #3 · 100 ml · 90°C · centred · agitate after
 
@@ -112,7 +114,8 @@ describe("brewNote", () => {
         expect(brewNote(record(oneStage({
             agitation: AGITATION.BEFORE_ON_AFTER_ON,
             pauseTime: 45
-        })))).toBe(`#1 · 40 ml · 94°C · spiral · agitate both · wait 45 s
+        })))).toBe(`House recipe
+#1 · 40 ml · 94°C · spiral · agitate before and after · wait 45 s
 
 15 g · 1:16 · grind 62 · 1 stage · xBloom`);
     });
@@ -120,18 +123,21 @@ describe("brewNote", () => {
     // A stage carrying every field is the worst case. Beanconqueror renders
     // notes in a narrow no-wrap <pre>, so the budget is what keeps a stage
     // readable there; a line that grows past it has gained a field or lost
-    // its short wording, and either is worth noticing.
+    // its short wording, and either is worth noticing. The budget is the
+    // worst case as it stands rather than a limit Beanconqueror imposes: it
+    // was raised from 56 when "agitate both" became "agitate before and
+    // after", which reads as English at the cost of twelve characters.
     it("keeps a fully loaded stage line within the width budget", () => {
-        const [line] = brewNote(record(oneStage({
+        const [, line] = brewNote(record(oneStage({
             agitation: AGITATION.BEFORE_ON_AFTER_ON,
             pauseTime: 30
         }))).split("\n");
 
-        expect(line.length).toBeLessThanOrEqual(56);
+        expect(line.length).toBeLessThanOrEqual(65);
     });
 
     it("keeps a stage without agitation comfortably short", () => {
-        const [line] = brewNote(record(oneStage({
+        const [, line] = brewNote(record(oneStage({
             agitation: AGITATION.ALL_OFF,
             pauseTime: 20
         }))).split("\n");
@@ -150,7 +156,7 @@ describe("brewNote", () => {
 
     it("keeps the unset agitation sentinel from reading as both agitation flags", () => {
         // This defends against bit-mask wording: every bit of -1 is set, but an unset stage has no agitation.
-        expect(brewNote(record(oneStage({agitation: -1}))).split("\n")[0])
+        expect(brewNote(record(oneStage({agitation: -1}))).split("\n")[1])
             .toBe("#1 · 40 ml · 94°C · spiral");
     });
 
@@ -163,15 +169,37 @@ describe("brewNote", () => {
     ])("keeps pattern %i wording aligned with Pour", (pourPattern) => {
         const note = brewNote(record(oneStage({pourPattern})));
 
-        expect(note.split("\n")[0]?.split(" · ")[3])
+        expect(note.split("\n")[1]?.split(" · ")[3])
             .toBe(Pour.getPourPatternText(pourPattern).toLowerCase());
     });
 
     it("uses a neutral word for an unrecognised pour pattern", () => {
         const note = brewNote(record(oneStage({pourPattern: 7}))); // not a POUR_PATTERN value
 
-        expect(note.split("\n")[0]).toBe("#1 · 40 ml · 94°C · pour");
+        expect(note.split("\n")[1]).toBe("#1 · 40 ml · 94°C · pour");
         expect(note).not.toMatch(/error/i);
+    });
+
+    it("heads the stages with the recipe name", () => {
+        const note = brewNote(record());
+
+        expect(note.split("\n")[0]).toBe("House recipe");
+    });
+
+    it.each([
+        ["missing", undefined],
+        ["blank", "   "]
+    ])("omits the heading when the recipe name is %s", (_label, recipeName) => {
+        const note = brewNote(record({recipeName: recipeName as string | undefined}));
+
+        expect(note.startsWith("#1 ")).toBe(true);
+    });
+
+    // A name with no stages under it would read as a heading that had lost
+    // its section, so it goes when they do.
+    it("drops the heading along with the stages", () => {
+        expect(brewNote(record({plan: undefined})))
+            .not.toContain("House recipe");
     });
 
     it("renders the footer alone when the plan is missing", () => {
@@ -197,7 +225,7 @@ describe("brewNote", () => {
         // The stage number falls back to its position, and a volume or
         // temperature that was never recorded is left out rather than printed
         // as a bare unit.
-        expect(note.split("\n")[0]).toBe("#1 · spiral");
+        expect(note.split("\n")[1]).toBe("#1 · spiral");
         expect(note).not.toMatch(/undefined|NaN/);
     });
 
@@ -217,7 +245,8 @@ describe("brewNote", () => {
     });
 
     it("keeps long pauses in seconds", () => {
-        expect(brewNote(record(oneStage({pauseTime: 360})))).toBe(`#1 · 40 ml · 94°C · spiral · wait 360 s
+        expect(brewNote(record(oneStage({pauseTime: 360})))).toBe(`House recipe
+#1 · 40 ml · 94°C · spiral · wait 360 s
 
 15 g · 1:16 · grind 62 · 1 stage · xBloom`);
     });
@@ -235,7 +264,8 @@ describe("brewNote", () => {
     it("names only the fields that were read from the recipe", () => {
         const note = brewNote(record({dose: undefined}), ["dose"]);
 
-        expect(note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+        expect(note).toBe(`House recipe
+#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
 #2 · 100 ml · 92°C · circular · wait 20 s
 #3 · 100 ml · 90°C · centred · agitate after
 

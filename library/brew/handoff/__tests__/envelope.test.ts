@@ -161,7 +161,8 @@ describe("buildEnvelope", () => {
     });
 
     it("carries the generated note", () => {
-        expect(buildEnvelope(brew(), samples).brew.note).toBe(`#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
+        expect(buildEnvelope(brew(), samples).brew.note).toBe(`Gummy Worms
+#1 · 40 ml · 94°C · spiral · agitate before · wait 30 s
 #2 · 100 ml · 92°C · circular · wait 15 s
 #3 · 100 ml · 90°C · centred · agitate after
 
@@ -201,6 +202,14 @@ describe("buildEnvelope", () => {
         expect(envelope.brew.waterIn).toEqual({value: 240, unit: "ml"});
         expect(envelope.brew.beverageOut).toEqual({value: 204, unit: "g"});
         expect(envelope.brew.doseIn).toEqual({value: 15, unit: "g"});
+    });
+
+    // The scale reports tenths; the drink is not accurate to a tenth of a
+    // gram and Beanconqueror prints whatever it is handed.
+    it("rounds the beverage weight to a whole gram", () => {
+        const envelope = buildEnvelope(brew({cupTotal: 195.34}), samples);
+
+        expect(envelope.brew.beverageOut).toEqual({value: 195, unit: "g"});
     });
 
     it("omits flow when no samples were kept", () => {
