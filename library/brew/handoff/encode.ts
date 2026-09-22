@@ -29,8 +29,8 @@ const BATCH_URL_PREFIX = "beanconqueror://ADD_BREWS";
 
 /**
  * A batch gets the same budget as one brew. It is almost never what stops a
- * batch: gzip finds so much in common between repeated brews that a hundred of
- * them assemble into around sixty thousand characters, well inside this. The
+ * batch: gzip finds so much in common between repeated brews that fifty of
+ * them assemble into around thirty thousand characters, well inside this. The
  * two limits below are what actually bite.
  */
 export const MAX_BATCH_URL_CHARS = MAX_URL_CHARS;
@@ -41,8 +41,16 @@ export const MAX_BATCH_URL_CHARS = MAX_URL_CHARS;
  * Beanconqueror's decoder refuses a longer batch outright, so this is its
  * number rather than ours, kept here so the user is told to select fewer while
  * they are still choosing rather than watching the other app reject the lot.
+ *
+ * It was a hundred until review pointed out that the figure never reconciled
+ * with the inflate ceiling below: a full-trace brew is nearer sixty kilobytes
+ * of JSON than twenty, so a hundred of them would have been refused at around
+ * sixty-five. Fifty is roughly three megabytes, comfortably inside four, and
+ * the number is bounded as much by what the receiver does with a batch as by
+ * its size -- Beanconqueror rewrites its whole brew collection twice per
+ * imported brew, so a long batch is a long freeze on the other side.
  */
-export const MAX_BATCH_BREWS = 100;
+export const MAX_BATCH_BREWS = 50;
 
 /**
  * The most JSON a batch may inflate to on the receiving side.
@@ -50,7 +58,7 @@ export const MAX_BATCH_BREWS = 100;
  * Beanconqueror inflates a handoff through a cap, because the payload is
  * attacker-controlled gzip and an uncapped inflate is a zip bomb waiting to
  * happen. That cap is the real ceiling on a batch: a whole brew is roughly
- * twenty kilobytes of JSON and compresses to a few hundred characters, so a
+ * sixty kilobytes of JSON and compresses to a few hundred characters, so a
  * selection runs out of inflated bytes long before it runs out of URL.
  *
  * Checked here as well as there so the two cannot disagree quietly. If this
