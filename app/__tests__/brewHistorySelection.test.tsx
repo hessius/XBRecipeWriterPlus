@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen} from "@testing-library/react-native";
 
 import BrewHistory from "@/app/brewHistory";
 import {renderWithProviders} from "@/test-utils/render";
@@ -81,6 +81,21 @@ function makeBrews(): StoredBrew[] {
          failure: null, pours: 3, waterTotal: 200, cupTotal: 195,
          heldSeconds: 0, hasStream: false}
     ];
+}
+
+/**
+ * Let a just-opened sheet finish arriving before it is touched.
+ *
+ * `XbrwSheet` slides in on the frame after it mounts (a `requestAnimationFrame`
+ * that flips it from closed to shown), and a press dispatched into that gap is
+ * dropped. The confirmation's own text is in the tree before that frame lands,
+ * so a test that presses as soon as it can read the text wins the race most of
+ * the time and loses it occasionally. Waiting a frame makes it deterministic.
+ */
+async function settleSheet(): Promise<void> {
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+    });
 }
 
 describe("brew history batch selection", () => {
@@ -203,6 +218,7 @@ describe("brew history batch selection", () => {
         await fireEvent.press(screen.getByLabelText("Delete selected brews"));
 
         expect(screen.getByText("Delete 2 brews? This cannot be undone.")).toBeTruthy();
+        await settleSheet();
         await fireEvent.press(screen.getByLabelText("Delete the selected brews"));
 
         expect(mockRemove).toHaveBeenCalledWith("a");
@@ -216,6 +232,7 @@ describe("brew history batch selection", () => {
         await fireEvent.press(screen.getByLabelText("Select brews"));
         await fireEvent.press(screen.getByLabelText(/^Ethiopia Guji,/));
         await fireEvent.press(screen.getByLabelText("Delete selected brews"));
+        await settleSheet();
         await fireEvent.press(screen.getByLabelText("Keep these brews"));
 
         expect(mockRemove).not.toHaveBeenCalled();
