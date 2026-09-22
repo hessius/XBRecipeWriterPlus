@@ -35,6 +35,7 @@ import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
@@ -487,7 +488,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                                               const source = latestExport(
                                                   historyStore ?? sharedBrewDatabase()
                                               );
-                                              if (source?.record.coffee === undefined) {
+                                              if (source == null
+                                                  || handoffCoffee(source.record, recipe) === undefined) {
                                                   setNamingBean(true);
                                                   return;
                                               }

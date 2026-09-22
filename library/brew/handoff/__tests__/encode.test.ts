@@ -61,6 +61,7 @@ function payload(overrides: Partial<HandoffEnvelope> = {}): HandoffEnvelope {
             beverageOut: {value: 204, unit: "g"},
             brewTime: 188,
             preparationMethod: "xBloom",
+        preparationType: "XBLOOM",
             note: "Stage 1"
         },
         imported: {

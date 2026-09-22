@@ -20,6 +20,7 @@ import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHandoff} from "@/hooks/useBrewHandoff";
 import BeanNameSheet from "@/components/BeanNameSheet";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
+import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
@@ -379,7 +380,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                             <ExportButton label={handoffTarget.buttonLabel}
                                           busy={handoffBusy}
                                           onPress={() => {
-                                              if (record.coffee === undefined) {
+                                              if (handoffCoffee(record, recipe) === undefined) {
                                                   setNamingBean(true);
                                                   return;
                                               }

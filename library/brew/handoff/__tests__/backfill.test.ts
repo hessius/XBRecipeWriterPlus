@@ -1,12 +1,16 @@
 import type {BrewRecord} from "@/library/brew/BrewRecord";
-import {backfillFromRecipe, type BackfilledField} from "@/library/brew/handoff/backfill";
+import {
+    backfillFromRecipe,
+    type BackfilledField,
+    handoffCoffee
+} from "@/library/brew/handoff/backfill";
 import {brew} from "@/library/brew/handoff/__tests__/fixtures";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 
 function recipe(overrides: Partial<Pick<
     Recipe,
-    "dosage" | "ratio" | "grindSize" | "grindRPM" | "grinder"
+    "dosage" | "ratio" | "grindSize" | "grindRPM" | "grinder" | "coffee"
 >> = {}): Recipe {
     const result = new Recipe();
     result.dosage = 18;
@@ -174,5 +178,46 @@ describe("backfillFromRecipe", () => {
 
         acceptsStored(backfill.record);
         expect(backfill.record.hasStream).toBe(true);
+    });
+});
+
+describe("pod coffee", () => {
+    const pod = {name: "Ethiopia Guji", origin: "Ethiopia"};
+
+    it("takes the recipe's coffee when the brew predates the coffee column", () => {
+        const old = brew({coffee: undefined});
+
+        const backfill = backfillFromRecipe(old, recipe({coffee: pod}));
+
+        expect(backfill.record.coffee).toEqual(pod);
+    });
+
+    it("does not report the coffee as a backfilled figure", () => {
+        const old = brew({coffee: undefined});
+
+        const backfill = backfillFromRecipe(old, recipe({coffee: pod}));
+
+        expect(backfill.filled).not.toContain("coffee");
+    });
+
+    it("keeps the brew's own coffee over the recipe's", () => {
+        const recorded = {name: "Kenya Nyeri"};
+        const old = brew({coffee: recorded});
+
+        const backfill = backfillFromRecipe(old, recipe({coffee: pod}));
+
+        expect(backfill.record.coffee).toEqual(recorded);
+    });
+
+    it("reaches the recipe's coffee when the brew has none", () => {
+        expect(handoffCoffee(brew({coffee: undefined}), recipe({coffee: pod}))).toEqual(pod);
+    });
+
+    it("is undefined when neither the brew nor the recipe names a coffee", () => {
+        expect(handoffCoffee(brew({coffee: undefined}), recipe())).toBeUndefined();
+    });
+
+    it("is undefined when the recipe has been deleted", () => {
+        expect(handoffCoffee(brew({coffee: undefined}), null)).toBeUndefined();
     });
 });

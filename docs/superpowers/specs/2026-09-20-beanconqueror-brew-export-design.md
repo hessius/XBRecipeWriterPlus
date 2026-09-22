@@ -363,6 +363,7 @@ test asserts the property rather than trusting it.
     "grindSize": "62",                              // string, as BC's field is
     "grinderName": "xBloom",                        // name hint -> mill
     "preparationMethod": "xBloom",                  // name hint -> method_of_preparation
+    "preparationType": "XBLOOM",                    // BC PREPARATION_TYPES; links by type
     "bloomTime": 50,                                // -> coffee_blooming_time
     "firstDripTime": 31,                            // -> coffee_first_drip_time
     "note": "…generated stage summary…"

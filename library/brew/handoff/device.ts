@@ -13,3 +13,18 @@
  * One constant, so it is one edit when we can tell (spec §3.1).
  */
 export const DEVICE_NAME = "xBloom";
+
+/**
+ * The Beanconqueror preparation type this machine brews with.
+ *
+ * A name alone is not enough. Beanconqueror links a preparation by type first,
+ * because the type is the stable identity and the name is whatever the user
+ * called it, and it only offers to create a missing preparation when the
+ * incoming type is one it knows. Sending the name without this leaves a
+ * library that has no xBloom preparation with no way to be onboarded: the
+ * import is refused rather than offering to add it.
+ *
+ * The value is Beanconqueror's `PREPARATION_TYPES.XBLOOM`. An importer that
+ * does not know it ignores it and falls back to matching on the name.
+ */
+export const PREPARATION_TYPE = "XBLOOM";

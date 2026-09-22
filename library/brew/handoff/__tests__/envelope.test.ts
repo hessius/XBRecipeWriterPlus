@@ -1,5 +1,5 @@
 import {buildEnvelope, downsample, type HandoffFlow} from "@/library/brew/handoff/envelope";
-import {DEVICE_NAME} from "@/library/brew/handoff/device";
+import {DEVICE_NAME, PREPARATION_TYPE} from "@/library/brew/handoff/device";
 import {brew, decodeDeltas, samples} from "@/library/brew/handoff/__tests__/fixtures";
 import appConfig from "@/app.json";
 
@@ -44,6 +44,7 @@ describe("buildEnvelope", () => {
             grinderRpm: 6_400,
             grinderName: DEVICE_NAME,
             preparationMethod: DEVICE_NAME,
+            preparationType: PREPARATION_TYPE,
             bloomTime: 30,
             firstDripTime: 2.5
         });
@@ -277,5 +278,14 @@ describe("downsample", () => {
         };
 
         expect(downsample(flow, 2)).toBeNull();
+    });
+});
+
+describe("preparation", () => {
+    it("names the preparation type as well as the method", () => {
+        // Beanconqueror links a preparation by type and only offers to create
+        // a missing one when it recognises the type. Sending the name alone
+        // leaves a library with no xBloom preparation unable to import.
+        expect(buildEnvelope(brew(), samples).brew.preparationType).toBe("XBLOOM");
     });
 });

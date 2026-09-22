@@ -15,7 +15,7 @@ import {
     type BrewSample,
     type PlanStage
 } from "@/library/brew/BrewRecord";
-import {DEVICE_NAME} from "@/library/brew/handoff/device";
+import {DEVICE_NAME, PREPARATION_TYPE} from "@/library/brew/handoff/device";
 import type {BackfilledField} from "@/library/brew/handoff/backfill";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {PodCoffee} from "@/library/podCoffee";
@@ -80,6 +80,12 @@ export type HandoffBrew = {
     grinderRpm?: number;
     grinderName?: string;
     preparationMethod: string;
+    /**
+     * Beanconqueror's preparation type. Sent alongside the name so the
+     * importer can link by type, and can offer to create the preparation when
+     * the library has none.
+     */
+    preparationType: string;
     /** Seconds; stage 1 pause, not a measurement. */
     bloomTime?: number;
     /** Seconds from brew start to first non-zero cup reading. */
@@ -183,6 +189,7 @@ function brewFigures(
         ...(grinderDidRun && numeric(brew.grinderRpm) ? {grinderRpm: brew.grinderRpm} : {}),
         ...(grinderDidRun ? {grinderName: DEVICE_NAME} : {}),
         preparationMethod: DEVICE_NAME,
+        preparationType: PREPARATION_TYPE,
         ...(numeric(firstStage?.pauseTime) && firstStage.pauseTime > 0
             ? {bloomTime: firstStage.pauseTime}
             : {}),
