@@ -6,8 +6,12 @@ describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
             ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
-             "duplicate", "edit", "error", "favourite", "filter", "help", "import", "info",
-             "link-off", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
+             "duplicate", "edit", "error", "favourite", "filter", "help", "history",
+             "import", "info",
+             // `link-gone` replaced `link-off`, a four-dot speck that read as
+             // an artefact rather than as a report. Nothing draws the old one
+             // now, and the file's own rule is to keep the set small.
+             "link-gone", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
              "refresh", "revert", "scan", "search", "settings", "share",
              // The seventeen shelf marks: one per stock auto shelf, plus the
              // one every per-author shelf shares. A closed set, drawn once:

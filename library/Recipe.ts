@@ -1,6 +1,7 @@
 import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
+import {podCoffeeFromStored, type PodCoffee} from "./podCoffee";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
 import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
@@ -16,6 +17,14 @@ export const CUP_TYPE = {
 export const GRINDER_OFF: number = 41;
 // Grind size is stored on the NFC card with offset (grind_size_value - 40)
 export const GRIND_SIZE_OFFSET = 40;
+/**
+ * The value that means "grinder off" rather than a coarseness.
+ *
+ * `GRINDER_OFF` is the byte on the card; the number a user sees is that byte
+ * plus the offset. Conflating the two is a mistake that has already been made
+ * once, in the original text of #52.
+ */
+export const GRINDER_OFF_VALUE = GRIND_SIZE_OFFSET + GRINDER_OFF;
 /** The XID occupies card bytes 32-38 inclusive. */
 export const XID_LENGTH = 7;
 
@@ -110,6 +119,15 @@ class Recipe {
     public grindSize: number = -1;
     public grindRPM: number = 120;
     public grinder: boolean = true;
+    /**
+     * The coffee this recipe's pod carries, when it came from an xPod import.
+     *
+     * Captured at import rather than at export, because an export must not
+     * depend on an undocumented third-party endpoint being reachable: putting
+     * a live fetch inside a user action makes the feature fail on a train
+     * (spec §2.1.1).
+     */
+    public coffee?: PodCoffee;
     public pours: Pour[] = [];
     public checksum: number = -1;
     public cupType: number = CUP_TYPE.XPOD;
@@ -337,6 +355,8 @@ class Recipe {
             if (typeof jsonRecipe.favourite === "boolean") {
                 this.favourite = jsonRecipe.favourite;
             }
+            const coffee = podCoffeeFromStored(jsonRecipe.coffee);
+            if (coffee !== null) this.coffee = coffee;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;
@@ -940,7 +960,7 @@ class Recipe {
 
         this.grindSize = data[41 + poursDataLength] + GRIND_SIZE_OFFSET
 
-        if (this.grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
+        if (this.grindSize === GRINDER_OFF_VALUE) {
             this.grinder = false;
         }
 

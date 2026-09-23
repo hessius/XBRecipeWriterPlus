@@ -510,6 +510,12 @@ describe("HomeScreen", () => {
         expect(mockPush).toHaveBeenCalledWith("/settings");
     });
 
+    it("opens brew history from the header", async () => {
+        await renderWithProviders(<HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>);
+        await fireEvent.press(screen.getByLabelText("Brew history"));
+        expect(mockPush).toHaveBeenCalledWith("/brewHistory");
+    });
+
     it("reveals the row actions when editing is turned on", async () => {
         await renderWithProviders(<HomeScreen db={store([named("Ethiopia")])} settings={new Settings(memoryStorage())}/>);
         // Hidden elements are included on purpose: the glyph is hidden from the
@@ -1402,12 +1408,16 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(screen.getByLabelText("Machine connected")).toBeTruthy();
     });
 
-    it("hides the machine dot when no machine has been paired", async () => {
+    it("shows the machine dot before any machine has been paired", async () => {
+        // It used to be hidden until a machine was remembered, which meant the
+        // one control that connects a machine only appeared once you had
+        // already connected one. The panel's TRY NOW scans and remembers, so
+        // this is where a first connection starts.
         mockRemembered = "";
         await renderWithProviders(
             <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
         );
-        expect(screen.queryByLabelText(/machine/i)).toBeNull();
+        expect(screen.getByLabelText("Machine not connected")).toBeTruthy();
     });
 
     it("shows vitals immediately when machine.info is set at mount (task 1: seeding)", async () => {

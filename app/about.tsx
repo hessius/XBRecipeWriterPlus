@@ -1,11 +1,12 @@
 import * as Application from "expo-application";
 import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
-import {Linking, Pressable} from "react-native";
+import {Pressable} from "react-native";
 import {ScrollView, Text, YStack} from "tamagui";
 
 import AboutTicker from "@/components/AboutTicker";
 import DotMatrixText from "@/components/DotMatrixText";
+import LinkText from "@/components/LinkText";
 import LivingMark from "@/components/LivingMark";
 import ScreenHeader from "@/components/ScreenHeader";
 import Wordmark from "@/components/Wordmark";
@@ -233,10 +234,10 @@ export default function AboutScreen({settings}: Props = {}) {
                         this app still writes. Serge Baranov&apos;s XBRecipeWriterPlus
                         is the fork this one grew from.
                     </AboutParagraph>
-                    <AboutLink label="XBRecipeWriter, by terminaldisclaimer" url={ORIGINAL_URL}/>
-                    <AboutLink label="XBRecipeWriterPlus, by Serge Baranov" url={FORK_URL}/>
-                    <AboutLink label="Source code" url={REPO_URL}/>
-                    <AboutLink label="Report an issue" url={ISSUES_URL}/>
+                    <LinkText label="XBRecipeWriter, by terminaldisclaimer" url={ORIGINAL_URL}/>
+                    <LinkText label="XBRecipeWriterPlus, by Serge Baranov" url={FORK_URL}/>
+                    <LinkText label="Source code" url={REPO_URL}/>
+                    <LinkText label="Report an issue" url={ISSUES_URL}/>
                 </AboutSection>
 
                 <AboutSection title="Third-party licences">
@@ -246,7 +247,7 @@ export default function AboutScreen({settings}: Props = {}) {
                         in full, along with the copyright notice that licence
                         requires. Where it ships only a name, that is recorded.
                     </AboutParagraph>
-                    <AboutLink label="Read the licences" onPress={() => router.push("/licences")}/>
+                    <LinkText label="Read the licences" onPress={() => router.push("/licences")}/>
                 </AboutSection>
             </ScrollView>
         </YStack>
@@ -284,39 +285,5 @@ function AboutParagraph({children}: {children: React.ReactNode}) {
         <Text fontSize={14} lineHeight={21} color={palette.dim} paddingBottom="$2">
             {children}
         </Text>
-    );
-}
-
-/**
- * A tappable line.
- *
- * A bare `Text` with an `onPress` is about thirty points tall and gives no
- * feedback; `Pressable` with a minimum height is what `SettingsActionRow` uses,
- * and these are the same kind of affordance.
- */
-function AboutLink({label, url, onPress}: {label: string; url?: string; onPress?: () => void}) {
-    return (
-        <Pressable accessibilityRole="link" accessibilityLabel={label}
-                   style={({pressed}) => ({minHeight: 44, justifyContent: "center",
-                       opacity: pressed ? 0.6 : 1})}
-                   onPress={() => {
-                       if (onPress !== undefined) return onPress();
-                       // `openURL` rejects when nothing can handle the scheme —
-                       // a managed device with no browser, say. Unhandled, that
-                       // is a red box in development and silence in production.
-                       if (url !== undefined) {
-                           Linking.openURL(url).catch(() => notify({
-                               tone: "error",
-                               message: "Could not open that link."
-                           }));
-                       }
-                   }}>
-            {/* Brand magenta rather than an underline: the only coloured thing
-                in a block of grey prose reads as "this is a link" without
-                dressing the prose itself up as a hyperlink. */}
-            <Text fontSize={14} fontWeight="600" color={palette.brand}>
-                {label}
-            </Text>
-        </Pressable>
     );
 }

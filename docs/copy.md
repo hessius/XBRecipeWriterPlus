@@ -83,6 +83,7 @@ tray, and the overflow sheet.
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `home.cta.readCard` | `app/index.tsx:474` (a11y) | (a11y) The circular "read a card" button on the home screen. | `Read a card` |
+| `home.header.brewHistory` | `components/HomeHeader.tsx` (a11y) | (a11y) Clock glyph beside Settings, in the slot the edit toggle left when it moved into the rail. Opens the unfiltered brew history. | `Brew history` |
 | `home.toast.alreadyInLibrary.open` | `constants/copy.ts:19` (via `app/index.tsx:247`) | Info toast when a shared/imported recipe is already saved and is simply reopened. | `Already in your library` |
 | `home.toast.cardRead` | `app/index.tsx:336` | Success toast after a card is read. | `Recipe read from card` |
 | `home.toast.holdCard` | `constants/copy.ts:32` (via `app/index.tsx:364`) | Instruction toast shown while waiting for the card. | `Hold the card to the top of the phone.` |
@@ -547,6 +548,29 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewHistory.title` | `app/brewHistory.tsx:116` | Screen header title. | `Brew history` |
 | `brewHistory.empty.title` | `app/brewHistory.tsx:154` | Doto empty-state heading. | `NO BREWS YET` |
 | `brewHistory.empty.body` | `app/brewHistory.tsx:157` | Empty-state sub-line. | `Brew a recipe and it will appear here.` |
+| `brewHistory.selection.select.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Enters selection mode, for deleting several brews or handing them to Beanconqueror. | `Select brews` |
+| `brewHistory.selection.select` | `app/brewHistory.tsx` | Doto action-row label. Always shown: selecting several brews to delete them does not depend on the handoff. | `SELECT` |
+| `brewHistory.selection.count.none` | `app/brewHistory.tsx` | Selection-mode count with nothing selected. | `0 brews selected` |
+| `brewHistory.selection.count.one` | `app/brewHistory.tsx` | Selection-mode count with one selected brew. | `1 brew selected` |
+| `brewHistory.selection.count.many` | `app/brewHistory.tsx` | Selection-mode count. `${count}` is the number of selected brews. | `${count} brews selected` |
+| `brewHistory.selection.send.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Sends the selected brews to Beanconqueror. | `Send selected brews to Beanconqueror` |
+| `brewHistory.selection.send` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewHistory.tsx`) | Doto action-row label, shared with the single-brew button so both read as the same action. Hidden while the `beanconquerorHandoff` Labs setting is off. | `Send to Beanconqueror` |
+| `brewHistory.selection.delete.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Opens the confirmation for deleting every selected brew. | `Delete selected brews` |
+| `brewHistory.selection.delete` | `app/brewHistory.tsx` | Doto action-row label, beside SEND. | `DELETE` |
+| `brewHistory.selection.cancel.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Leaves selection mode and clears the selected brews. | `Cancel selection` |
+| `brewHistory.selection.cancel` | `app/brewHistory.tsx` | Doto action-row label. | `CANCEL` |
+| `brewHistory.selection.tooLarge` | `app/brewHistory.tsx` | Warning shown when the selected batch will not fit in one Beanconqueror handoff URL. | `Select fewer brews to send them together.` |
+| `brewHistory.selection.blocked.one` | `app/brewHistory.tsx` | Warning when one selected brew was cancelled, failed, or lost contact, so the send is blocked. It stays selectable for delete. | `1 selected brew did not finish, so it cannot be sent.` |
+| `brewHistory.selection.blocked.many` | `app/brewHistory.tsx` | Plural of the above. `${blocked}` is how many. | `${blocked} selected brews did not finish, so they cannot be sent.` |
+| `brewHistory.selection.delete.title` | `app/brewHistory.tsx` | Title of the batch delete confirmation sheet. | `Delete brews` |
+| `brewHistory.selection.delete.body.one` | `app/brewHistory.tsx` | Batch delete confirmation with one brew selected. | `Delete 1 brew? This cannot be undone.` |
+| `brewHistory.selection.delete.body.many` | `app/brewHistory.tsx` | Batch delete confirmation. `${count}` is how many are selected. | `Delete ${count} brews? This cannot be undone.` |
+| `brewHistory.selection.delete.confirm.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Confirms the batch delete. | `Delete the selected brews` |
+| `brewHistory.selection.delete.cancel.a11y` | `app/brewHistory.tsx` (a11y) | (a11y) Dismisses the batch delete without removing anything. | `Keep these brews` |
+| `brewHistory.selection.delete.cancel` | `app/brewHistory.tsx` | Button that dismisses the batch delete confirmation. | `Keep these brews` |
+| `brewHistory.handoff.empty` | `hooks/useBrewBatchHandoff.ts` | Error toast when every selected brew disappeared before sending. | `No selected brews could be sent. They may have been deleted.` |
+| `brewHistory.handoff.tooLarge` | `hooks/useBrewBatchHandoff.ts` | Error toast if the batch is too large at send time. Usually prevented by the selection warning. | `That selection is too large to send to Beanconqueror at once.` |
+| `brewHistory.handoff.openFailed` | `hooks/useBrewBatchHandoff.ts` | Error toast when iOS or Android rejects the Beanconqueror deep link. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewHistory.row.delete.a11y` | `app/brewHistory.tsx:32` (a11y) | (a11y) Swipe delete on a history row. | `Delete brew` |
 | `brewHistory.row.delete.label` | `app/brewHistory.tsx:45` | Doto label on the delete tile. | `DELETE` |
 | `brewHistory.confirm.title` | `app/brewHistory.tsx:182` | Title of the delete-confirmation dialog. | `Delete brew` |
@@ -579,6 +603,16 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 | `brewRecord.export.image` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:167` and `app/brew.tsx:319`) | Button to export as an image. Drawn upper-cased in Doto; the sentence-case value here is also the spoken a11y label, which is why it is stored this way round. | `Save as image` |
 | `brewRecord.export.data` | `components/ExportButton.tsx` (`label`, passed from `app/brewRecord.tsx:169` and `app/brew.tsx:321`) | Button to export the underlying data as JSON. | `Export the data` |
 | `brewRecord.export.busy` | `components/ExportButton.tsx:34` | Replaces either label while the capture and share sheet are in flight, so a press is visibly acknowledged. | `WORKING…` |
+| `brewRecord.handoff.beanconqueror.label` | `library/brew/handoff/targets.ts` (`HANDOFF_TARGETS[0].buttonLabel`, passed from `app/brewRecord.tsx`) | Button to hand a brew that produced a drink to Beanconqueror. Hidden behind the `beanconquerorHandoff` Labs setting, and on a brew that was cancelled, failed, or lost contact. | `Send to Beanconqueror` |
+| `brewRecord.handoff.bean.title` | `components/BeanNameSheet.tsx` | Sheet heading asked before a brew from beans is handed over, since the machine only knows the coffee for a pod. | `What was the coffee?` |
+| `brewRecord.handoff.bean.hint` | `components/BeanNameSheet.tsx` | Says what Beanconqueror will try if the field is left empty, naming the guess taken from the recipe. | `Beanconqueror will look for a bean by this name. Skip and it will try "<name>".` |
+| `brewRecord.handoff.bean.hintNone` | `components/BeanNameSheet.tsx` | The same, for a recipe whose name yields no guess at all. | `Beanconqueror will look for a bean by this name. Skip to let it pick one.` |
+| `brewRecord.handoff.bean.send` | `components/BeanNameSheet.tsx` | One button in two states. Reads `SKIP` while the field is empty or whitespace, letting the guess (or Beanconqueror's own default) stand, and `SEND` once a name is typed. | `SKIP` / `SEND` |
+| `brewRecord.handoff.bean.field.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The coffee name field. | `Coffee name` |
+| `brewRecord.handoff.bean.send.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The button, while the field is empty. | `Send without naming the coffee` |
+| `brewRecord.handoff.bean.send.named.a11y` | `components/BeanNameSheet.tsx` (a11y) | (a11y) The button, once a name is typed. | `Send with this coffee name` |
+| `brewRecord.handoff.openFailed` | `hooks/useBrewHandoff.ts:9` | Error toast when the Beanconqueror deep link cannot be opened, usually because Beanconqueror is not installed. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
+| `brewRecord.handoff.tooLarge` | `hooks/useBrewHandoff.ts:10` | Error toast when the handoff payload still cannot fit in a URL after dropping every lossy fallback. | `This brew is too large to hand over to Beanconqueror.` |
 
 ---
 
@@ -832,6 +866,8 @@ messages from `hooks/useBackup.ts` and `library/backup.ts`.
 | `settings.deleteAll.confirm` | `components/DeleteAllSheet.tsx:34` (`deleteLabel`) | Destructive confirm label. `${subject}` is "1 recipe"/"N recipes". | `Delete all ${subject}` |
 | `settings.deleteAll.keep.a11y` | `components/DeleteAllSheet.tsx:56` (a11y) | (a11y) Cancel button. | `Keep my recipes` |
 | `settings.deleteAll.keep` | `components/DeleteAllSheet.tsx:58` | Cancel button label. | `Keep my recipes` |
+| `settings.labs.handoff.label` | `app/settings.tsx` | Labs toggle for the Beanconqueror handoff. | `Send brews to Beanconqueror` |
+| `settings.labs.handoff.description` | `app/settings.tsx` | Why the toggle is off by default, in terms of what goes wrong if it is switched on too early. | `Needs a version of Beanconqueror that can read the link. Older ones will say they do not recognise it.` |
 
 ### Backup / restore messages (`hooks/useBackup.ts`, `library/backup.ts`)
 
@@ -881,7 +917,7 @@ messages from `hooks/useBackup.ts` and `library/backup.ts`.
 | `about.section.licences` | `app/about.tsx:172` | Section heading. | `Third-party licences` |
 | `about.licences.p1` | `app/about.tsx:174` | Paragraph. `${LICENCES.length}` is the package count. | `This app stands on ${LICENCES.length} open-source packages. Where a package ships its licence text, it is reproduced in full, along with the copyright notice that licence requires. Where it ships only a name, that is recorded.` |
 | `about.link.licences` | `app/about.tsx:179` | Link to the licences screen. | `Read the licences` |
-| `about.link.error` | `app/about.tsx:240` | Error toast when a link cannot open. | `Could not open that link.` |
+| `shared.link.openFailed` | `components/LinkText.tsx` (`LINK_OPEN_FAILED`) | Error toast when a shared text link cannot open. | `Could not open that link.` |
 
 #### About ticker (`app/about.tsx:34`, `TICKER_LINES`)
 

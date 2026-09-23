@@ -1,6 +1,6 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
-import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {Linking, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
@@ -11,22 +11,32 @@ import type {RecipeLookup} from "@/app/brewRecord";
 import {sharedSettings} from "@/hooks/useSetting";
 import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+import {
+    brewRecordFixture as record,
+    type BrewRecordOpenResult
+} from "@/test-utils/brewRecordMocks";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import type {BrewSample} from "@/library/brew/BrewRecord";
 import type Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
+import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
+
+// This file switches the handoff gate on so the hidden UI can be exercised.
+// The pre-existing layout assertions in this file therefore describe the
+// screen as a Labs tester sees it, not the one a default install draws.
+// brewRecordHandoffGate.test.tsx covers the shipped default.
+beforeEach(() => {
+    sharedSettings().set("beanconquerorHandoff", true);
+});
 
 /**
  * `frames` is optional here only: the real `open()` always returns one, but a
  * test that is not about the frame log should not have to say so.
  */
-type OpenResult =
-    {record: StoredBrew; samples: BrewSample[]; frames?: string} | null;
-let mockOpened: OpenResult = null;
+let mockOpened: BrewRecordOpenResult = null;
 
 // Settable per test — defaults to the `id` case; set to `{latest: "1"}` for
 // the latest-branch tests.
@@ -38,11 +48,17 @@ let mockBrews: StoredBrew[] = [];
 // The judgement writes the screen makes, recorded rather than performed.
 const mockJudgementStore = {judge: jest.fn(), setPinned: jest.fn()};
 
-jest.mock("expo-router", () => ({
-    router: {push: (...args: unknown[]) => mockPush(...args), back: jest.fn()},
-    useLocalSearchParams: () => mockParams,
-    useNavigation: () => ({setOptions: (...args: unknown[]) => mockSetOptions(...args)})
-}));
+jest.mock("expo-router", () => {
+    const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
+        "@/test-utils/brewRecordMocks"
+    );
+    return mocks.createExpoRouterMock({
+        push: (...args: unknown[]) => mockPush(...args),
+        back: jest.fn(),
+        setOptions: (...args: unknown[]) => mockSetOptions(...args),
+        params: () => mockParams
+    });
+});
 
 // `useSetting` reaches for the shared SQLite-backed store, which cannot open
 // under Jest. The frame-log button rides the machine-console gate, so the
@@ -50,18 +66,20 @@ jest.mock("expo-router", () => ({
 jest.mock("@/hooks/useSetting", () =>
     require("@/test-utils/settingsMock").settingsMock());
 
-jest.mock("@/hooks/useBrewHistory", () => ({
-    useBrewHistory: () => ({
-        brews: mockBrews,
-        remove: jest.fn(),
-        open: () => mockOpened
-    }),
-    // The real judgement hook over a fake store: the screen's seeding, the
-    // local state and the write-through are the things under test, and
-    // reimplementing them here would be testing the mock.
-    useBrewJudgement: jest.requireActual("@/hooks/useBrewHistory").useBrewJudgement,
-    sharedBrewDatabase: () => mockJudgementStore
-}));
+jest.mock("@/library/RecipeDatabase", () => jest.fn(() => ({
+    getRecipe: jest.fn(() => null)
+})));
+
+jest.mock("@/hooks/useBrewHistory", () => {
+    const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
+        "@/test-utils/brewRecordMocks"
+    );
+    return mocks.createBrewHistoryMock({
+        brews: () => mockBrews,
+        opened: () => mockOpened,
+        judgementStore: () => mockJudgementStore
+    });
+});
 
 // Provide a minimal pour-less recipe for the ladder, avoiding the need to
 // construct a full Recipe object in tests.
@@ -110,13 +128,6 @@ const twoPours = {
         new Pour(2, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10)
     ]
 } as unknown as Recipe;
-
-const record: StoredBrew = {
-    id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
-    accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
-    failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
-    hasStream: true
-};
 
 describe("brew record", () => {
     beforeEach(() => {
@@ -313,6 +324,89 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByLabelText("Save as image")).toBeTruthy();
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
+    });
+
+    describe("Beanconqueror handoff", () => {
+        let openURL: jest.SpiedFunction<typeof Linking.openURL>;
+        const [handoffTarget] = HANDOFF_TARGETS;
+
+        beforeEach(() => {
+            openURL = jest.spyOn(Linking, "openURL");
+            openURL.mockReset();
+            openURL.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        it("offers Beanconqueror handoff for a completed brew when the gate is on", async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.getByLabelText(handoffTarget.buttonLabel)).toBeTruthy();
+        });
+
+        it("does not offer Beanconqueror handoff for a failed brew when the gate is on", async () => {
+            mockOpened = {record: {...record, outcome: "failed"}, samples: []};
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
+        });
+
+        it("asks what the coffee was before handing over a brew from beans", async () => {
+            const {getByLabelText} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+
+            // The machine cannot know what was in the hopper, so the send waits
+            // on the one person who does.
+            expect(screen.getByTestId("bean-name-field")).toBeTruthy();
+            expect(openURL).not.toHaveBeenCalled();
+        });
+
+        it("opens Beanconqueror once the coffee question is answered", async () => {
+            const {getByLabelText, getByTestId} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+            // The sheet animates in, and while it is animating its buttons are
+            // in the tree and findable but their press is discarded. Retrying
+            // the press is the only honest wait for it, since the thing being
+            // waited on is the press landing. Same trap as brew history's
+            // delete confirmation.
+            await waitFor(async () => {
+                await fireEvent.press(getByTestId("bean-name-send"));
+                expect(openURL).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        it("opens Beanconqueror straight away for a pod brew, which knows its coffee", async () => {
+            mockOpened = {
+                record: {...record, coffee: {name: "Kenya Sakami"}},
+                samples: []
+            };
+
+            const {getByLabelText} = await renderWithProviders(
+                <BrewRecord recipeLookup={mockLookup} />
+            );
+
+            await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(screen.queryByTestId("bean-name-field")).toBeNull();
+        });
+        it("does not offer the handoff without the action", async () => {
+            mockOpened = {record: {...record, outcome: "failed"}, samples: []};
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
+        });
     });
 
     // ── Finding 1: ?latest=1 branch ─────────────────────────────────────────
@@ -638,14 +732,7 @@ describe("the frame log of a brew", () => {
 });
 
 describe("bypass on the record screen", () => {
-    const aRecord: StoredBrew = {
-        id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
-        accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
-        failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
-        hasStream: true
-    };
-
-    async function renderRecord(r: StoredBrew) {
+    async function renderRecord(r: typeof record) {
         mockParams = {id: r.id};
         mockOpened = {
             record: r,
@@ -657,16 +744,16 @@ describe("bypass on the record screen", () => {
 
     it("draws the bypass a record kept", async () => {
         await renderRecord({
-            ...aRecord,
+            ...record,
             waterTotal: 245,
             bypass: {volume: 5, temperature: 85, delivered: 5, startedAt: 183_000}
-        } as StoredBrew);
+        });
         expect(screen.getByTestId("rung-bypass")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
     });
 
     it("draws an old record exactly as before", async () => {
-        await renderRecord(aRecord);
+        await renderRecord(record);
         expect(screen.queryByTestId("rung-bypass")).toBeNull();
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });

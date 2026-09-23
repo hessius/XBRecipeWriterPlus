@@ -847,6 +847,8 @@ describe("brew history through a backup", () => {
         ["a fractional rating", {rating: 3.5}],
         ["a note that is not a string", {note: 5}],
         ["stalls that are not stalls", {stalls: [[1, 2]]}],
+        ["a plan stage that is not an object", {plan: [null]}],
+        ["a plan stage that is a bare number", {plan: [3]}],
         ["an outcome this app never writes", {outcome: "exploded"}],
         ["a missing id", {id: undefined}],
         ["a water total that is not a number", {waterTotal: "lots"}],
@@ -898,6 +900,43 @@ describe("brew history through a backup", () => {
     it("refuses a record that says it was watched in the wrong words", () => {
         expect(reviveBrew({
             ...JSON.parse(JSON.stringify(brewNamed("b1"))), watched: "no"
+        })).toBeNull();
+    });
+
+    /**
+     * The record is rebuilt field by field, so a field this list forgets is a
+     * field the restore drops. These six are what an export hands to another
+     * app: without them a restored brew goes across with no coffee in it.
+     */
+    it("carries the recipe snapshot an export needs", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            dose: 18,
+            ratio: 16,
+            grindSize: 62,
+            grinderRpm: 90,
+            grinderUsed: true,
+            coffee: {name: "Ethiopia Guji", origin: "Ethiopia"}
+        }))));
+
+        expect(brew?.dose).toBe(18);
+        expect(brew?.ratio).toBe(16);
+        expect(brew?.grindSize).toBe(62);
+        expect(brew?.grinderRpm).toBe(90);
+        expect(brew?.grinderUsed).toBe(true);
+        expect(brew?.coffee).toMatchObject({name: "Ethiopia Guji"});
+    });
+
+    it("leaves a backup made before the export silent about the snapshot", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1"))));
+
+        expect(brew?.dose).toBeUndefined();
+        expect(brew?.grinderUsed).toBeUndefined();
+        expect(brew?.coffee).toBeUndefined();
+    });
+
+    it("refuses a record whose dose is not a number", () => {
+        expect(reviveBrew({
+            ...JSON.parse(JSON.stringify(brewNamed("b1"))), dose: "eighteen"
         })).toBeNull();
     });
 

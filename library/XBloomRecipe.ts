@@ -1,9 +1,21 @@
 import Pour, {POUR_PATTERN} from "./Pour";
-import Recipe, {CUP_TYPE, GRIND_SIZE_OFFSET, GRINDER_OFF} from "./Recipe";
+import Recipe, {CUP_TYPE, GRINDER_OFF_VALUE} from "./Recipe";
 import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
 } from "@/library/bypassLimits";
+import {podCoffeeFromPodsVo, podImageUrl} from "@/library/podCoffee";
 import type {ImportSource} from "./importInput";
+
+/**
+ * Attach the pod's coffee to the recipe it brewed, if it named one.
+ *
+ * Exported so it can be tested without a network call, and so the one place
+ * that reads `podsVo` for coffee is not buried inside a fetch.
+ */
+export function applyPodCoffee(recipe: Recipe, podsVo: unknown): void {
+    const coffee = podCoffeeFromPodsVo(podsVo);
+    if (coffee !== null) recipe.coffee = coffee;
+}
 
 export class XBloomRecipe {
     private xbRecipeJSON: any | null = null
@@ -53,11 +65,11 @@ export class XBloomRecipe {
             let recipe = new Recipe(undefined, undefined);
             let ratio: number = this.xbRecipeJSON.recipeVo.grandWater;
 
-            let grindSize: number = this.xbRecipeJSON.recipeVo.grinderSize ?? GRIND_SIZE_OFFSET + GRINDER_OFF;
+            let grindSize: number = this.xbRecipeJSON.recipeVo.grinderSize ?? GRINDER_OFF_VALUE;
             let isSetGrinderSize: number = this.xbRecipeJSON.recipeVo.isSetGrinderSize ?? 2;
 
             // 2 means grinder is disabled
-            if (isSetGrinderSize === 2 || grindSize === GRIND_SIZE_OFFSET + GRINDER_OFF) {
+            if (isSetGrinderSize === 2 || grindSize === GRINDER_OFF_VALUE) {
                 recipe.grinder = false;
             }
 
@@ -85,10 +97,14 @@ export class XBloomRecipe {
             if (typeof detail.shareMemberHead === "string") {
                 recipe.sharedByAvatar = detail.shareMemberHead;
             }
-            const imagePath = this.xbRecipeJSON.recipeVo.podsVo?.imagePath;
-            if (typeof imagePath === "string") {
-                recipe.imageURL = imagePath;
-            }
+            const podsVo = this.xbRecipeJSON.recipeVo.podsVo;
+            applyPodCoffee(recipe, podsVo);
+            // Backup restore already strips non-HTTPS recipe artwork; imports
+            // use the same rule. The fallback keeps nameless pod artwork that
+            // `podCoffeeFromPodsVo` must ignore because it cannot match a bean.
+            // XBRW's `imageURL` and BC's `imageUrl` share a source, not an owner.
+            const artwork = recipe.coffee?.imageUrl ?? podImageUrl(podsVo?.imagePath);
+            if (artwork !== undefined) recipe.imageURL = artwork;
             recipe.grindSize = grindSize;
             recipe.xid = xid;
 
@@ -293,7 +309,7 @@ export class XBloomRecipe {
                 this.name = recipeVo.theName;
                 if (recipeVo.podsVo) {
                     this.subtitle = recipeVo.podsVo.subtitle;
-                    this.imageURL = recipeVo.podsVo.imagePath;
+                    this.imageURL = podImageUrl(recipeVo.podsVo.imagePath) ?? "";
                     console.log(this.name);
                     console.log(this.imageURL)
                 }

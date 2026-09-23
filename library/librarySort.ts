@@ -103,8 +103,21 @@ function nameOrder(direction: SortDirection): string {
 }
 
 type AxisSpec = {
-    /** The chip label, in Doto caps. */
+    /** The full name of the axis, in Doto caps. The sort sheet's row. */
     label: string;
+    /**
+     * A shorter form for the rail chip, where one is needed.
+     *
+     * The chip sits in a row that already holds a segmented view toggle and
+     * three other controls, and a two-word axis pushed the last of them off the
+     * edge of a narrow phone. The rail scrolls now, so nothing is ever lost,
+     * but a control you have to scroll to is a control you stop using: this is
+     * what keeps the common case on screen without one.
+     *
+     * Only the two-word axes carry one. The rest are already a single word and
+     * a second spelling of the same word would be a second thing to keep true.
+     */
+    chip?: string;
     /** The two direction words, taken verbatim from the design's table. */
     directionLabels: Record<SortDirection, string>;
     /**
@@ -145,6 +158,7 @@ export const SORT_AXES: Record<SortAxis, AxisSpec> = {
     },
     lastBrewed: {
         label: "LAST BREWED",
+        chip:  "BREWED",
         spoken: {axis: "last brewed", directions: {asc: "longest ago first", desc: "most recent first"}},
         directionLabels: {asc: "LONGEST AGO", desc: "RECENT"},
         defaultDirection: "desc",
@@ -152,6 +166,7 @@ export const SORT_AXES: Record<SortAxis, AxisSpec> = {
     },
     timesBrewed: {
         label: "TIMES BREWED",
+        chip:  "TIMES",
         spoken: {axis: "times brewed", directions: {asc: "least brewed first", desc: "most brewed first"}},
         directionLabels: {asc: "LEAST", desc: "MOST"},
         defaultDirection: "desc",
@@ -235,7 +250,8 @@ export function defaultDirection(axis: unknown): SortDirection {
 
 /** The chip label for an axis, in Doto caps. */
 export function chipLabel(axis: unknown): string {
-    return SORT_AXES[asSortAxis(axis)].label;
+    const spec = SORT_AXES[asSortAxis(axis)];
+    return spec.chip ?? spec.label;
 }
 
 /**

@@ -42,7 +42,13 @@ export function RailSearchChip({state, onPress}: {
                 // they are off. The fill arrives with the cursor.
                 backgroundColor={palette.none} borderColor={palette.line}
                 pressStyle={{opacity: 0.7}}>
-            <DotIcon name="search" size={ICON_SIZE} color={palette.dim}/>
+            {/* The same ink the sort and filter chips use when they are off.
+                It was `palette.dim`, which made the one control in the row that
+                is never filled also the only one drawn in a lighter grey, and
+                it read on device as a disabled button rather than an idle one.
+                The chips carry their state in the fill; the glyph does not
+                carry a second, quieter copy of it. */}
+            <DotIcon name="search" size={ICON_SIZE} color={palette.text}/>
         </XStack>
     );
 }

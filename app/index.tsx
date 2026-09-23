@@ -1044,7 +1044,19 @@ export default function HomeScreen({db, settings}: Props) {
                     count={library.librarySize}
                     collapsed={collapsed}
                     canImport
-                    machineStatus={remembered ? machineStatus : undefined}
+                    // Shown whether or not a machine has ever been paired. It
+                    // was hidden until one was remembered, which meant the one
+                    // control that connects a machine only appeared once you
+                    // had connected one: a first-time user had nowhere to
+                    // start. Idle draws grey and the panel offers TRY NOW,
+                    // which scans and remembers, so the first connection now
+                    // happens through the same drawer as every one after it.
+                    // With nothing remembered the dot is idle whatever the
+                    // link last said. There is nothing to be out of range
+                    // from, and forgetting a machine leaves the link on its
+                    // last status, which would otherwise show a faint red
+                    // "not in range" to someone who has no machine at all.
+                    machineStatus={remembered === "" ? "idle" : machineStatus}
                     // Derived, never stored. It becomes true the moment a
                     // connected machine answers with a low tank and no tap to
                     // draw from, which is the moment the fact becomes knowable,
@@ -1058,7 +1070,7 @@ export default function HomeScreen({db, settings}: Props) {
                         && machineVitals.waterFeed !== "tap"
                         && !machineVitals.waterEnough
                     }
-                    machinePanel={remembered ? (
+                    machinePanel={(
                         <MachinePanel
                             open={popoverOpen}
                             status={machineStatus}
@@ -1068,7 +1080,7 @@ export default function HomeScreen({db, settings}: Props) {
                             onRefreshWater={refreshWater}
                             onConnect={connectMachine}
                         />
-                    ) : undefined}
+                    )}
                     onMachinePress={() => {
                         setPopoverNow(Date.now());
                         setPopoverOpen((open) => !open);
@@ -1077,6 +1089,7 @@ export default function HomeScreen({db, settings}: Props) {
                     onScan={readCard}
                     onImport={() => setImportOpen(true)}
                     onNew={() => setNewOpen(true)}
+                    onBrewHistory={() => router.push("/brewHistory")}
                     onSettings={() => router.push("/settings")}/>
                 )}
 

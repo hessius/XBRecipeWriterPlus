@@ -304,6 +304,9 @@ function isHttpsUrl(value: unknown): boolean {
  *
  * So these are stripped and the recipe is kept. That asymmetry is the point,
  * and it is why they are not simply added to the map above.
+ * `coffee` is validated by the `Recipe` constructor under the same forgiveness
+ * contract and must not be added to `RECIPE_FIELDS`, where a bad value would
+ * reject the whole recipe.
  */
 const DROPPABLE_RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     sharedBy:       (v) => typeof v === "string" && v.length <= MAX_SHARED_BY,
@@ -581,7 +584,11 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     stalls:     (v) => Array.isArray(v) && v.every((stage) =>
         Array.isArray(stage) && stage.every((stall) =>
             isPlainObject(stall) && isNumber(stall.atMl) && isNumber(stall.seconds))),
-    plan:       (v) => Array.isArray(v),
+    // Only that every entry is an object: the fields inside are the machine's
+    // and change with firmware, so the door cannot name them without refusing
+    // next year's brews. `null` is not a stage under any firmware, and a
+    // reader that walks one crashes.
+    plan:       (v) => Array.isArray(v) && v.every(isPlainObject),
     stageWater: isNumberArray,
     bypass:     isPlainObject,
     // Whole, on the scale, and nothing else: `isRating` is the same predicate
@@ -594,7 +601,17 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // it is the only thing that record holds beyond its rating. Dropping it in
     // transit would turn a typed verdict into a brew the app claims to have
     // watched, with no water and no time to show for it.
-    watched:    (v) => typeof v === "boolean"
+    watched:    (v) => typeof v === "boolean",
+    // The recipe snapshot, taken at brew time. Absent from every backup made
+    // before the export existed, so optional, and checked only to shape: a
+    // stored dose is read back through the same guards a live row is, and
+    // `coffee` is re-validated on hydration the way `bypass` is.
+    dose:        isNumber,
+    ratio:       isNumber,
+    grindSize:   isNumber,
+    grinderRpm:  isNumber,
+    grinderUsed: (v) => typeof v === "boolean",
+    coffee:      isPlainObject
 };
 
 /** A record from a backup file, or null. Never throws. */
@@ -637,7 +654,17 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         // Undefined stays undefined: absent means the app watched it, and
         // writing `true` here would put a field on every record in the file to
         // say what its absence already says.
-        watched: record.watched
+        watched: record.watched,
+        // Carried through because the record is rebuilt field by field: a
+        // field this list forgets is a field the restore drops, and these are
+        // what an export hands to another app. Undefined stays undefined so an
+        // old backup does not gain a dose of nothing.
+        dose: record.dose,
+        ratio: record.ratio,
+        grindSize: record.grindSize,
+        grinderRpm: record.grinderRpm,
+        grinderUsed: record.grinderUsed,
+        coffee: record.coffee
     };
 }
 

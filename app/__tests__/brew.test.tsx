@@ -2,6 +2,7 @@ import React from "react";
 import {Dimensions, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
+import {Linking} from "react-native";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -12,6 +13,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import Pour from "@/library/Pour";
 import type {BypassView} from "@/library/brew/bypassState";
 import Recipe from "@/library/Recipe";
+import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 const mockUseKeepAwake = jest.fn();
 
@@ -43,6 +45,9 @@ const record: StoredBrew = {
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 let mockPhase: BrewPhase = {name: "pouring", pour: 1, pours: 2};
+// The Labs gate, off by default here so the rest of the file describes the
+// screen a default install draws.
+let mockHandoffEnabled = false;
 let mockSamples: unknown[] = [];
 let mockElapsed = 12;
 let mockStageElapsed = 12;
@@ -152,10 +157,18 @@ jest.mock("@/hooks/useMachine", () => ({
 jest.mock("@/hooks/useSetting", () => {
     const useSetting = (key: string) => {
         if (key === "firstBrewDone") return [mockFirstBrewDone, jest.fn()];
+        if (key === "beanconquerorHandoff") return [mockHandoffEnabled, jest.fn()];
         return [undefined, jest.fn()];
     };
     return {__esModule: true, default: useSetting, useSetting};
 });
+
+// The handoff reaches for the recipe behind the brew to backfill dose, ratio
+// and grind. Nothing here is about that lookup, and a real one would open
+// SQLite in every test in this file.
+jest.mock("@/library/RecipeDatabase", () => jest.fn(() => ({
+    getRecipe: jest.fn(() => null)
+})));
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -194,6 +207,7 @@ beforeEach(() => {
     mockHolding = false;
     mockCanOfferPro = false;
     mockFirstBrewDone = true;
+    mockHandoffEnabled = false;
     mockError = null;
     traceAnimationArgs = [];
     mockBypass = undefined;
@@ -703,5 +717,87 @@ describe("bypass on the live brew screen", () => {
         });
         expect(screen.getByText("240")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
+    });
+});
+
+// The handoff shares its plumbing with the record screen; what is tested here
+// is that the finished brew screen offers it at all, reads the same gate, and
+// asks the same coffee question -- because this, not history, is the screen
+// the user is on when the cup is poured.
+describe("Beanconqueror handoff on the finished brew", () => {
+    const [handoffTarget] = HANDOFF_TARGETS;
+    let openURL: jest.SpiedFunction<typeof Linking.openURL>;
+
+    beforeEach(() => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        mockHandoffEnabled = true;
+        openURL = jest.spyOn(Linking, "openURL");
+        openURL.mockReset();
+        openURL.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    const store = (brew: StoredBrew = record) => ({
+        all: () => [brew], samples: () => []
+    });
+
+    it("offers the handoff when the gate is on", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <Brew historyStore={store()} />
+        );
+
+        expect(getByLabelText(handoffTarget.buttonLabel)).toBeTruthy();
+    });
+
+    it("keeps the handoff out of a default install", async () => {
+        mockHandoffEnabled = false;
+
+        const {queryByLabelText, getByLabelText} = await renderWithProviders(
+            <Brew historyStore={store()} />
+        );
+
+        expect(getByLabelText("Export the data")).toBeTruthy();
+        expect(queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
+    });
+
+    it("asks what the coffee was before handing over a brew from beans", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <Brew historyStore={store()} />
+        );
+
+        await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+
+        expect(screen.getByTestId("bean-name-field")).toBeTruthy();
+        expect(openURL).not.toHaveBeenCalled();
+    });
+
+    it("opens Beanconqueror once the coffee question is answered", async () => {
+        const {getByLabelText, getByTestId} = await renderWithProviders(
+            <Brew historyStore={store()} />
+        );
+
+        await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+        // The sheet gates its own open on a frame, so during the entrance the
+        // button is findable but its press goes nowhere. Retrying the press
+        // inside waitFor is the only honest wait for it.
+        await waitFor(async () => {
+            await fireEvent.press(getByTestId("bean-name-send"));
+            expect(openURL).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    it("opens Beanconqueror straight away for a pod brew, which knows its coffee", async () => {
+        const {getByLabelText} = await renderWithProviders(
+            <Brew historyStore={store({...record, coffee: {name: "Kenya Sakami"}})} />
+        );
+
+        await fireEvent.press(getByLabelText(handoffTarget.buttonLabel));
+
+        await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+        expect(screen.queryByTestId("bean-name-field")).toBeNull();
     });
 });

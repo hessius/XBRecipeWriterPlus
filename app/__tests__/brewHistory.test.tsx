@@ -27,6 +27,11 @@ jest.mock("expo-router", () => {
     };
 });
 
+// Left at the real default, so the gate assertion below describes what a
+// default install draws. brewHistorySelection.test.tsx switches it on.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+
 jest.mock("@/hooks/useBrewHistory", () => ({
     useBrewHistory: () => ({
         brews: mockBrews,
@@ -176,6 +181,15 @@ describe("brew history", () => {
     it("shows no recipe subtitle when nothing is filtered", async () => {
         const {queryByTestId} = await renderWithProviders(<BrewHistory />);
         expect(queryByTestId("history-header-recipe")).toBeNull();
+    });
+
+    it("offers selection but not sending while Beanconqueror handoff is disabled", async () => {
+        // Selecting several brews to delete them stands on its own, so the
+        // Labs gate hides the Send button rather than the whole row.
+        const {queryByLabelText, getByLabelText} = await renderWithProviders(<BrewHistory />);
+        expect(getByLabelText("Select brews")).toBeTruthy();
+        await fireEvent.press(getByLabelText("Select brews"));
+        expect(queryByLabelText("Send selected brews to Beanconqueror")).toBeNull();
     });
 
     it("shows a delete tile that opens a confirmation before removing", async () => {

@@ -74,6 +74,17 @@ export const palette = {
     /** Recoverable problems and cautions. */
     warn:    "#F0C24A",
     /**
+     * A red that is saying something small.
+     *
+     * The connection dot when the machine is not there. It is not an error and
+     * nothing has gone wrong, so `danger` at 7.52:1 would shout a fault the
+     * user does not have; it is also not nothing, which is what the grey it
+     * replaced said. Picked to land at 3.99:1 on `base`, within a hair of
+     * `muted`'s 4.12:1, so it carries exactly the visual weight of the grey it
+     * took over from and differs from it only in hue.
+     */
+    dangerFaint: "#8A625E",
+    /**
      * `success` and `warn`, desaturated.
      *
      * For chrome that has stepped back — today, the connection dot as the

@@ -11,7 +11,7 @@ import Animated, {
 import DotIcon from "@/components/DotIcon";
 import {palette} from "@/constants/colors";
 import type {DotIconName} from "@/constants/dotIcons";
-import {DURATION, EASING, useReducedMotion} from "@/constants/motion";
+import {DURATION, EASING, LOW_WATER_FLASH_MS, useReducedMotion} from "@/constants/motion";
 import type {LinkStatus} from "@/hooks/useMachine";
 
 type Props = {
@@ -62,11 +62,18 @@ const LABELS: Record<LinkStatus, string> = {
  * `muted` is a pixel-identical overdraw on every frame of every scroll.
  */
 const LOOKS: Record<LinkStatus, {icon: DotIconName; lit: string; dim: string | null}> = {
-    connected:    {icon: "link-on",   lit: palette.success, dim: palette.successMuted},
-    connecting:   {icon: "link-wait", lit: palette.warn,    dim: palette.warnMuted},
-    idle:         {icon: "link-off",  lit: palette.muted,   dim: null},
-    disconnected: {icon: "link-off",  lit: palette.muted,   dim: null},
-    failed:       {icon: "link-off",  lit: palette.muted,   dim: null}
+    connected:    {icon: "link-on",   lit: palette.success,     dim: palette.successMuted},
+    connecting:   {icon: "link-wait", lit: palette.warn,        dim: palette.warnMuted},
+    // Not connected and not trying. The whole diamond, broken, so the
+    // indicator reads as present and answering rather than as a speck, but
+    // grey: nobody has asked for a machine yet and nothing is missing.
+    idle:         {icon: "link-gone", lit: palette.muted,       dim: null},
+    // Asked for, and not there. The same broken shape in the faint red, which
+    // is the one difference between "no machine yet" and "your machine is not
+    // answering" -- and the reason `dangerFaint` is weighted to match `muted`
+    // rather than to stand out.
+    disconnected: {icon: "link-gone", lit: palette.dangerFaint, dim: null},
+    failed:       {icon: "link-gone", lit: palette.dangerFaint, dim: null}
 };
 
 /**
@@ -86,8 +93,16 @@ const LOOKS: Record<LinkStatus, {icon: DotIconName; lit: string; dim: string | n
  * between them and the later sibling wins, which here would put the settings
  * glyph under a tap aimed at the dot.
  */
-/** How many amber flashes. Two, then it settles: enough to catch, not a strobe. */
-const ALARM_FLASHES = 2;
+/**
+ * How many amber flashes fill the low-tank window.
+ *
+ * Derived rather than stated, so the window is the number that is tuned and
+ * the flash rate follows from the motion constants. One flash is a rise and a
+ * rest, which is where the two durations come from.
+ */
+const ALARM_FLASHES = Math.round(
+    LOW_WATER_FLASH_MS / (DURATION.fast + DURATION.hold)
+);
 
 export default function MachineDot({status, collapsed, alarm = false, onPress}: Props) {
     const reduced = useReducedMotion();

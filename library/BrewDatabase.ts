@@ -2,8 +2,16 @@ import * as SQLite from "expo-sqlite";
 
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
-import type {BrewOutcome, BrewRecord, BrewSample, PlanStage} from "./brew/BrewRecord";
+import type {
+    BrewOutcome,
+    BrewRecord,
+    BrewSample,
+    BypassRecord,
+    PlanStage
+} from "./brew/BrewRecord";
 import type {Stall} from "./brew/stalls";
+import type {PodCoffee} from "./podCoffee";
+import {podCoffeeFromStored} from "./podCoffee";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
@@ -52,6 +60,20 @@ type BrewRow = {
     pinned: number | null;
     /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
     watched: number | null;
+    /** JSON, the bypass as it stood. `''` on rows written before it. */
+    bypass: string;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    dose: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    ratio: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    grindSize: number;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    grinderRpm: number;
+    /** 0 on rows written before it and when recorded as false; grindSize > 0 marks recordedness. */
+    grinderUsed: number;
+    /** JSON, the pod coffee as it stood. `''` on rows written before it. */
+    coffee: string;
     hasStream: number;
 };
 
@@ -95,6 +117,13 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
                 watched INTEGER NOT NULL DEFAULT 1,
+                bypass TEXT NOT NULL DEFAULT '',
+                dose REAL NOT NULL DEFAULT 0,
+                ratio REAL NOT NULL DEFAULT 0,
+                grindSize INTEGER NOT NULL DEFAULT 0,
+                grinderRpm INTEGER NOT NULL DEFAULT 0,
+                grinderUsed INTEGER NOT NULL DEFAULT 0,
+                coffee TEXT NOT NULL DEFAULT '',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -160,6 +189,48 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // Rows written before these six existed keep zero or an empty string,
+    // which reads as "not recorded"; zero is not a live dose, ratio, grind
+    // or RPM value, and SQLite has no undefined or boolean.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN dose REAL NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN ratio REAL NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN grindSize INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN grinderRpm INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync(
+            "ALTER TABLE brews ADD COLUMN grinderUsed INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN coffee TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    // Rows written before `bypass` existed read as "no bypass", exactly as
+    // every recipe without one does; an empty string is the JSON-column
+    // sentinel already used by `coffee`.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN bypass TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
 }
 
 /**
@@ -189,34 +260,58 @@ class BrewDatabase {
      * report was lost — after the brew had already ended and there was nothing
      * left to ask.
      */
+    /**
+     * The one statement that writes a brew row, for both a live brew and a
+     * restore. Shared rather than written twice because it already went wrong
+     * once: the restore path named a shorter column list, so a brew that came
+     * back from a backup silently lost its dose, ratio, grinder and bypass --
+     * the very figures an export hands to another app.
+     *
+     * @param hasStream whether a stream is being written alongside. A restore
+     * never carries one: a backup holds records, not the sample streams, which
+     * is what `false` says here.
+     */
+    private writeBrewRow(record: BrewRecord, hasStream: boolean): void {
+        this.db.runSync(
+            `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
+                                endedAt, outcome, failure, pours, waterTotal, cupTotal,
+                                heldSeconds, stalls, plan, stageWater, bypass,
+                                rating, note, pinned, watched, dose, ratio,
+                                grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+                record.id, record.recipeUuid, record.recipeName, record.accent,
+                record.startedAt, record.pouringAt ?? 0,
+                record.endedAt, record.outcome, record.failure,
+                record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
+                JSON.stringify(record.stalls ?? []),
+                JSON.stringify(record.plan ?? []),
+                JSON.stringify(record.stageWater ?? []),
+                record.bypass ? JSON.stringify(record.bypass) : "",
+                // A restore carries a judgement in with the record, so the
+                // insert has to take one. A live brew never does: nothing
+                // has been drunk yet at the moment the row is written.
+                isRating(record.rating) ? record.rating : 0,
+                record.note ?? "",
+                record.pinned ? 1 : 0,
+                record.watched === false ? 0 : 1,
+                record.dose ?? 0,
+                record.ratio ?? 0,
+                record.grindSize ?? 0,
+                record.grinderRpm ?? 0,
+                record.grinderUsed === true ? 1 : 0,
+                record.coffee ? JSON.stringify(record.coffee) : "",
+                hasStream ? 1 : 0
+            ]
+        );
+    }
+
     public insert(record: BrewRecord, samples: BrewSample[], frames = ""): void {
         // One transaction, so a brew never half-exists: a record with a
         // truncated stream would draw a trace that stops in mid-air.
         this.db.withTransactionSync(() => {
-            this.db.runSync(
-                `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
-                                    endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                    heldSeconds, stalls, plan, stageWater, rating,
-                                    note, pinned, watched, hasStream)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-                [
-                    record.id, record.recipeUuid, record.recipeName, record.accent,
-                    record.startedAt, record.pouringAt ?? 0,
-                    record.endedAt, record.outcome, record.failure,
-                    record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
-                    JSON.stringify(record.stalls ?? []),
-                    JSON.stringify(record.plan ?? []),
-                    JSON.stringify(record.stageWater ?? []),
-                    // A restore carries a judgement in with the record, so the
-                    // insert has to take one. A live brew never does: nothing
-                    // has been drunk yet at the moment the row is written.
-                    isRating(record.rating) ? record.rating : 0,
-                    record.note ?? "",
-                    record.pinned ? 1 : 0,
-                    record.watched === false ? 0 : 1,
-                    samples.length > 0 ? 1 : 0
-                ]
-            );
+            this.writeBrewRow(record, samples.length > 0);
             if (samples.length > 0) {
                 // One JSON row rather than 2 400 rows per brew. Nothing ever
                 // queries inside a stream — it is read whole to draw a line, and
@@ -367,26 +462,7 @@ class BrewDatabase {
         if (toAdd.length === 0) return 0;
         this.db.withTransactionSync(() => {
             toAdd.forEach((record) => {
-                this.db.runSync(
-                    `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
-                                        endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                        heldSeconds, stalls, plan, stageWater, rating,
-                                        note, pinned, watched, hasStream)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
-                    [
-                        record.id, record.recipeUuid, record.recipeName, record.accent,
-                        record.startedAt, record.pouringAt ?? 0,
-                        record.endedAt, record.outcome, record.failure,
-                        record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
-                        JSON.stringify(record.stalls ?? []),
-                        JSON.stringify(record.plan ?? []),
-                        JSON.stringify(record.stageWater ?? []),
-                        isRating(record.rating) ? record.rating : 0,
-                        record.note ?? "",
-                        record.pinned ? 1 : 0,
-                        record.watched === false ? 0 : 1
-                    ]
-                );
+                this.writeBrewRow(record, false);
             });
         });
         return toAdd.length;
@@ -474,6 +550,8 @@ function hydrate(row: BrewRow): StoredBrew {
     const stalls = jsonOf<Stall[]>(row.stalls);
     const plan = jsonOf<PlanStage>(row.plan);
     const stageWater = jsonOf<number>(row.stageWater);
+    const bypass = bypassFromStoredColumn(row.bypass);
+    const coffee = coffeeFromStoredColumn(row.coffee);
     return {
         id: row.id,
         recipeUuid: row.recipeUuid,
@@ -500,8 +578,49 @@ function hydrate(row: BrewRow): StoredBrew {
         // what it was before this column existed and the round trip stays
         // honest about "absent means the app saw it".
         ...(row.watched === 0 ? {watched: false} : {}),
+        ...(bypass !== null ? {bypass} : {}),
+        ...(row.dose > 0 ? {dose: row.dose} : {}),
+        ...(row.ratio > 0 ? {ratio: row.ratio} : {}),
+        ...(row.grindSize > 0 ? {grindSize: row.grindSize} : {}),
+        ...(row.grinderRpm > 0 ? {grinderRpm: row.grinderRpm} : {}),
+        // The boolean's 0 default is indistinguishable from a recorded false.
+        // A recorded grind size is the marker that this row knew the column.
+        ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
+        ...(coffee !== null ? {coffee} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+function coffeeFromStoredColumn(value: string): PodCoffee | null {
+    if (value === "") return null;
+    try {
+        return podCoffeeFromStored(JSON.parse(value));
+    } catch {
+        return null;
+    }
+}
+
+function bypassFromStoredColumn(value: string): BypassRecord | null {
+    if (value === "") return null;
+    try {
+        const parsed = JSON.parse(value) as Partial<BypassRecord>;
+        if (
+            typeof parsed.volume !== "number"
+            || typeof parsed.temperature !== "number"
+            || typeof parsed.delivered !== "number"
+            || !(typeof parsed.startedAt === "number" || parsed.startedAt === null)
+        ) {
+            return null;
+        }
+        return {
+            volume: parsed.volume,
+            temperature: parsed.temperature,
+            delivered: parsed.delivered,
+            startedAt: parsed.startedAt
+        };
+    } catch {
+        return null;
+    }
 }
 
 function jsonOf<T>(value: string | null): T[] {

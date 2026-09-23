@@ -1,6 +1,10 @@
 import BrewDatabase from "@/library/BrewDatabase";
+import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
+import type {BrewPhase} from "@/library/machine/Machine";
+import Pour from "@/library/Pour";
+import Recipe from "@/library/Recipe";
 
 /**
  * An in-memory stand-in for expo-sqlite, in the same spirit as the one in
@@ -12,12 +16,14 @@ import {unobservedBrew} from "@/library/brew/BrewRecord";
 type BrewRow = Record<string, string | number | null>;
 type SampleRow = {brewId: string; stream: string};
 type FrameRow = {brewId: string; frames: string};
+const mockDb = {brews: [] as BrewRow[]};
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => {
         const brews: BrewRow[] = [];
         const samples: SampleRow[] = [];
         const frames: FrameRow[] = [];
+        mockDb.brews = brews;
         return {
             execSync: () => {
                 // CREATE TABLE / PRAGMA only; in memory there is nothing to do.
@@ -81,6 +87,8 @@ jest.mock("expo-sqlite", () => ({
                     if (index >= 0) brews.splice(index, 1);
                 } else if (/^\s*DELETE FROM brews\s*$/i.test(source)) {
                     brews.length = 0;
+                } else {
+                    throw new Error(`Unexpected SQL: ${source}`);
                 }
             },
             getAllSync: (source: string, params: (string | number)[] = []) => {
@@ -130,6 +138,12 @@ jest.mock("expo-sqlite", () => ({
     }
 }));
 
+function corruptStoredRow(id: string, update: Partial<BrewRow>): void {
+    const row = mockDb.brews.find((b) => b.id === id);
+    if (row === undefined) throw new Error(`No brew row ${id} to corrupt`);
+    Object.assign(row, update);
+}
+
 function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
     return {
         id: "brew-1",
@@ -153,6 +167,39 @@ const stream: BrewSample[] = [
     {at: 0, water: 0, cup: 0, pour: 1},
     {at: 1000, water: 4, cup: 2, pour: 1}
 ];
+
+/**
+ * A record built by the real recorder rather than by hand, so the one presence
+ * rule the two layers express separately — BrewRecorder's `grindSize > 0` and
+ * hydrate's — is checked against each other rather than against a fixture.
+ */
+function recorderRecord(recipe: Recipe, id: string): BrewRecord {
+    let phase: (p: BrewPhase) => void = () => {};
+    let saved: BrewRecord | undefined;
+    const machine: RecorderMachine = {
+        onNotification: () => () => {},
+        onPhase: (l) => { phase = l; return () => { phase = () => {}; }; }
+    };
+    const recorder = new BrewRecorder({
+        machine,
+        recipe,
+        now: () => 1_000_000,
+        newId: () => id,
+        onRecord: (emitted) => { saved = emitted; }
+    });
+    recorder.start();
+    phase({name: "done"});
+    recorder.stop();
+    if (saved === undefined) throw new Error("Recorder did not emit a brew");
+    return saved;
+}
+
+function recorderRecipe(): Recipe {
+    const r = new Recipe();
+    r.name = "Recorder recipe";
+    r.pours = [new Pour(1, 40, 93, 40, 0, 0, 20)];
+    return r;
+}
 
 describe("BrewDatabase", () => {
     it("counts a recipe's brews and dates the last of them", () => {
@@ -418,6 +465,186 @@ describe("the plan and the delivered water", () => {
     });
 });
 
+describe("the bypass snapshot", () => {
+    it("round-trips the bypass with its start time", () => {
+        const bypass = {volume: 35, temperature: 88, delivered: 32, startedAt: 174_000};
+        const db = new BrewDatabase();
+
+        db.insert(record({bypass}), []);
+
+        expect(db.get("brew-1")?.bypass).toEqual(bypass);
+    });
+
+    it("round-trips a bypass that never started", () => {
+        const bypass = {volume: 35, temperature: 88, delivered: 0, startedAt: null};
+        const db = new BrewDatabase();
+
+        db.insert(record({bypass}), []);
+
+        expect(db.get("brew-1")?.bypass).toEqual(bypass);
+    });
+
+    it("leaves bypass absent when it was not recorded", () => {
+        const db = new BrewDatabase();
+
+        db.insert(record(), []);
+
+        expect(db.get("brew-1")?.bypass).toBeUndefined();
+    });
+
+    it("ignores a bypass column that is not JSON", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            bypass: {volume: 35, temperature: 88, delivered: 32, startedAt: 174_000}
+        }), []);
+
+        corruptStoredRow("brew-1", {bypass: "not JSON"});
+
+        const back = db.get("brew-1");
+        expect(back).toMatchObject({
+            recipeName: "Ethiopia Guji",
+            waterTotal: 250,
+            cupTotal: 244
+        });
+        expect(back?.bypass).toBeUndefined();
+    });
+});
+
+describe("the recipe snapshot for export", () => {
+    it("round-trips the brew recipe and pod coffee fields", () => {
+        const coffee = {
+            name: "Kenya Sakami Gloria Natural Batian",
+            origin: "Nabiswa, Kenya",
+            process: "Natural",
+            variety: "Batian",
+            aromatics: "Cherry · strawberry · blueberry",
+            note: "Producer notes",
+            beanMix: "Single Origin",
+            imageUrl: "https://example.com/coffee.png"
+        };
+        const db = new BrewDatabase();
+
+        db.insert(record({
+            dose: 15,
+            ratio: 16,
+            grindSize: 55,
+            grinderRpm: 120,
+            grinderUsed: true,
+            coffee
+        }), []);
+
+        expect(db.get("brew-1")).toMatchObject({
+            dose: 15,
+            ratio: 16,
+            grindSize: 55,
+            grinderRpm: 120,
+            grinderUsed: true,
+            coffee
+        });
+    });
+
+    it("leaves the recipe snapshot absent when it was not recorded", () => {
+        const db = new BrewDatabase();
+
+        db.insert(record(), []);
+
+        const back = db.get("brew-1");
+        expect(back?.dose).toBeUndefined();
+        expect(back?.ratio).toBeUndefined();
+        expect(back?.grindSize).toBeUndefined();
+        expect(back?.grinderRpm).toBeUndefined();
+        expect(back?.grinderUsed).toBeUndefined();
+        expect(back?.coffee).toBeUndefined();
+    });
+
+    it("keeps a recorded disabled grinder distinct from an unrecorded one", () => {
+        const db = new BrewDatabase();
+
+        db.insert(record({grindSize: 55, grinderUsed: false}), []);
+
+        expect(db.get("brew-1")?.grinderUsed).toBe(false);
+    });
+
+    it("copies the coffee snapshot instead of holding the original object", () => {
+        const coffee = {name: "Original coffee", imageUrl: "https://example.com/old.png"};
+        const db = new BrewDatabase();
+
+        db.insert(record({coffee}), []);
+        coffee.name = "Mutated coffee";
+        coffee.imageUrl = "https://example.com/new.png";
+
+        expect(db.get("brew-1")?.coffee).toEqual({
+            name: "Original coffee",
+            imageUrl: "https://example.com/old.png"
+        });
+    });
+
+    it("round-trips a full recipe snapshot from the recorder", () => {
+        const db = new BrewDatabase();
+        const fullRecipe = recorderRecipe();
+        fullRecipe.dosage = 15;
+        fullRecipe.ratio = 16;
+        fullRecipe.grindSize = 62;
+        fullRecipe.grindRPM = 90;
+        fullRecipe.grinder = true;
+        fullRecipe.coffee = {name: "Kenya Sakami"};
+        const full = recorderRecord(fullRecipe, "brew-full");
+
+        db.insert(full, []);
+        const fullBack = db.get("brew-full");
+        expect(fullBack).toMatchObject({
+            dose: full.dose,
+            ratio: full.ratio,
+            grindSize: full.grindSize,
+            grinderRpm: full.grinderRpm,
+            grinderUsed: full.grinderUsed,
+            coffee: full.coffee
+        });
+    });
+
+    it("keeps the recorder's omissions omitted through the database", () => {
+        const db = new BrewDatabase();
+        const defaults = recorderRecord(recorderRecipe(), "brew-defaults");
+        db.insert(defaults, []);
+        const defaultsBack = db.get("brew-defaults");
+        expect(defaultsBack?.ratio).toBeUndefined();
+        expect(defaultsBack?.grindSize).toBeUndefined();
+        expect(defaultsBack?.grinderUsed).toBeUndefined();
+        expect(defaultsBack?.coffee).toBeUndefined();
+        expect(defaultsBack?.dose).toBe(15);
+        expect(defaultsBack?.grinderRpm).toBe(120);
+    });
+
+    it("ignores a coffee column that is not JSON", () => {
+        const db = new BrewDatabase();
+        db.insert(record({coffee: {name: "Kenya Sakami"}}), []);
+
+        corruptStoredRow("brew-1", {coffee: "not JSON"});
+
+        const back = db.get("brew-1");
+        expect(back).toMatchObject({
+            recipeName: "Ethiopia Guji",
+            waterTotal: 250,
+            cupTotal: 244
+        });
+        expect(back?.coffee).toBeUndefined();
+    });
+
+    it("drops a stored coffee image that is not HTTPS", () => {
+        const db = new BrewDatabase();
+        db.insert(record(), []);
+
+        corruptStoredRow("brew-1", {
+            coffee: JSON.stringify({
+                name: "Kenya Sakami",
+                imageUrl: "http://example.com/coffee.png"
+            })
+        });
+
+        expect(db.get("brew-1")?.coffee).toEqual({name: "Kenya Sakami"});
+    });
+});
+
 /**
  * The frame log is kept per brew because the machine's own history is in
  * memory and dies with a JS reload — which is exactly how the first field
@@ -478,6 +705,36 @@ describe("a history restored from a backup", () => {
         expect(db.all().map((brew) => brew.id).sort()).toEqual(["b1", "b2"]);
         expect(db.get("b1")?.hasStream).toBe(false);
         expect(db.samples("b1")).toEqual([]);
+    });
+
+    /**
+     * The restore used to name a shorter column list than the live insert, so
+     * a brew that came back from a backup arrived with no dose, no ratio, no
+     * grinder and no bypass -- and an export of it handed another app a brew
+     * with no coffee in it. Both paths write through one statement now, and
+     * this is what says so.
+     */
+    it("carries the recipe snapshot an export needs", () => {
+        const db = new BrewDatabase();
+        db.restore([record({
+            id: "b1",
+            dose: 18,
+            ratio: 16,
+            grindSize: 62,
+            grinderRpm: 90,
+            grinderUsed: true,
+            coffee: {name: "Ethiopia Guji", origin: "Ethiopia"},
+            bypass: {volume: 40, temperature: 88, delivered: 40, startedAt: 190_000}
+        })]);
+
+        const restored = db.get("b1");
+        expect(restored?.dose).toBe(18);
+        expect(restored?.ratio).toBe(16);
+        expect(restored?.grindSize).toBe(62);
+        expect(restored?.grinderRpm).toBe(90);
+        expect(restored?.grinderUsed).toBe(true);
+        expect(restored?.coffee).toMatchObject({name: "Ethiopia Guji"});
+        expect(restored?.bypass).toMatchObject({volume: 40});
     });
 
     it("carries the judgement in with the record", () => {

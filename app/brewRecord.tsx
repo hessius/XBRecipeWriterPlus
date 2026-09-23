@@ -17,12 +17,17 @@ import ScreenHeader from "@/components/ScreenHeader";
 import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
+import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import BeanNameSheet from "@/components/BeanNameSheet";
+import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
+import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
+import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -107,6 +112,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // ride on. Read here rather than beside the button because it is a hook
     // and the "brew not found" return below is earlier.
     const [consoleFound] = useSetting("machineConsoleAcknowledged");
+    const [handoffEnabled] = useSetting("beanconquerorHandoff");
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
@@ -121,6 +127,15 @@ export default function BrewRecord({recipeLookup}: Props) {
             scroller.current?.scrollTo({y: 0, animated: false});
         }
     );
+    // Handoff opens Beanconqueror directly and keeps its own in-flight guard.
+    // The share exports are separate actions with separate state, so one busy
+    // export should not disable a different handoff path that can still run.
+    const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(() => opened);
+    // The machine knows what a pod was and never what a hopper held, so the
+    // coffee is only ever a question for a brew that came from beans. Asked
+    // here and not in the batch path: once is a courtesy, once per brew across
+    // a selection is a questionnaire.
+    const [namingBean, setNamingBean] = useState(false);
 
     // Seeded from the record that is already in memory, so the screen shows
     // the verdict the user gave at the end of the brew rather than an empty
@@ -166,6 +181,10 @@ export default function BrewRecord({recipeLookup}: Props) {
     }
 
     const {record, samples} = opened;
+    // The record screen renders the first target only; adding a second target
+    // means revisiting this selection rather than assuming it appears here.
+    const [handoffTarget] = HANDOFF_TARGETS;
+    const showHandoff = handoffEnabled && canHandOff(record.outcome);
     // `?? ""` because a record opened before the frame log existed — and any
     // stand-in for the store — simply has no log, which is a brew with nothing
     // to copy rather than an error.
@@ -212,7 +231,15 @@ export default function BrewRecord({recipeLookup}: Props) {
     const brewWater = Math.max(0, record.waterTotal - (bypass?.delivered ?? 0));
 
     return (
-        <YStack flex={1} backgroundColor={palette.base} gap="$2">
+        <YStack flex={1} backgroundColor={palette.base}>
+            {/* Hidden from a screen reader while the bean sheet is up. A
+                Tamagui sheet renders as a sibling on Android and isolates
+                nothing on its own, so the screen underneath stays reachable
+                unless it is hidden from here. The sheet sits outside this
+                subtree so it never hides itself. */}
+            <YStack flex={1} gap="$2"
+                    accessibilityElementsHidden={namingBean}
+                    importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
                 that name immediately below, and it has to, because the capture
                 needs it. A header repeating it would say the same word twice in
@@ -338,12 +365,30 @@ export default function BrewRecord({recipeLookup}: Props) {
             {/* Nothing to picture and no stream to hand over: both exports
                 would return an empty file for a brew the app never watched. */}
             {watched && (
-                <XStack gap="$3" paddingHorizontal={SCREEN_PADDING}>
-                    <ExportButton label="Save as image" busy={busy}
-                                  onPress={() => void shareImage()} />
-                    <ExportButton label="Export the data" busy={busy}
-                                  onPress={() => void shareData()} />
-                </XStack>
+                <YStack gap="$2" paddingHorizontal={SCREEN_PADDING}>
+                    <XStack gap="$3">
+                        <ExportButton label="Save as image" busy={busy}
+                                      onPress={() => void shareImage()} />
+                        <ExportButton label="Export the data" busy={busy}
+                                      onPress={() => void shareData()} />
+                    </XStack>
+                    {showHandoff && (
+                        // At Doto's maximum 1.4x accessibility scale, the
+                        // Beanconqueror label cannot share a three-way split
+                        // with the two exports; a full row gives it width.
+                        <XStack>
+                            <ExportButton label={handoffTarget.buttonLabel}
+                                          busy={handoffBusy}
+                                          onPress={() => {
+                                              if (handoffCoffee(record, recipe) === undefined) {
+                                                  setNamingBean(true);
+                                                  return;
+                                              }
+                                              void sendHandoff();
+                                          }} />
+                        </XStack>
+                    )}
+                </YStack>
             )}
             {/* Only when there is one to copy, and only for someone who has
                 found the machine console. A brew recorded before this existed,
@@ -360,7 +405,11 @@ export default function BrewRecord({recipeLookup}: Props) {
                 </XStack>
             )}
             </ScrollView>
+            </YStack>
+
+            <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
+                           suggestion={beanNameFromRecipe(record.recipeName) ?? ""}
+                           onConfirm={(name) => void sendHandoff(name)} />
         </YStack>
     );
 }
-
