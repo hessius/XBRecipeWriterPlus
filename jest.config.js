@@ -18,6 +18,14 @@ const extraEsmPackages = [
 
 module.exports = {
     preset: "jest-expo",
+    // Jest's 5 s default is a guess about how fast the machine is, not a budget
+    // these tests were written to. The heaviest screen suites render the whole
+    // library through Tamagui and sit close to it, so once enough suites run in
+    // parallel for the workers to contend, they tip over -- and a timed-out
+    // test takes the rest of its `describe` with it, because it leaves its tree
+    // mounted and the next test cannot find the chrome it looks for. Nothing
+    // here hangs; a real hang still fails, just later.
+    testTimeout: 20_000,
     testMatch: ["**/*.test.ts", "**/*.test.tsx"],
     // `tools/` holds the store-screenshot generator, a separate Next.js app.
     // Nothing in it is part of the phone app, and its dependency tree should
