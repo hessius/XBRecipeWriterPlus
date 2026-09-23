@@ -847,6 +847,8 @@ describe("brew history through a backup", () => {
         ["a fractional rating", {rating: 3.5}],
         ["a note that is not a string", {note: 5}],
         ["stalls that are not stalls", {stalls: [[1, 2]]}],
+        ["a plan stage that is not an object", {plan: [null]}],
+        ["a plan stage that is a bare number", {plan: [3]}],
         ["an outcome this app never writes", {outcome: "exploded"}],
         ["a missing id", {id: undefined}],
         ["a water total that is not a number", {waterTotal: "lots"}],

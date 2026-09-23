@@ -129,7 +129,7 @@ function batchRefusal(envelopes: HandoffEnvelope[], batch: HandoffBatch): string
     if (envelopes.length > MAX_BATCH_BREWS) {
         return `Beanconqueror batch handoff holds at most ${MAX_BATCH_BREWS} brews`;
     }
-    const inflated = new TextEncoder().encode(JSON.stringify(batch)).length;
+    const inflated = strToU8(JSON.stringify(batch)).length;
     if (inflated > MAX_BATCH_INFLATED_BYTES) {
         return `Beanconqueror batch handoff exceeds ${MAX_BATCH_INFLATED_BYTES} inflated bytes`;
     }
@@ -224,9 +224,11 @@ function chunks(payload: string): string[] {
 /**
  * RFC 4648 §5 base64url, unpadded.
  *
- * Hand-written because Hermes ships neither `btoa` nor `TextEncoder`.
- * Node has both, so a `btoa` "simplification" passes every test here and
- * fails on the first real phone. The URL alphabet (`-_`, no `=`) is what
+ * Hand-written because Hermes does not ship `btoa`. Node does, so a `btoa`
+ * "simplification" passes every test here and fails on the first real phone.
+ * Bytes come from fflate's `strToU8` rather than `TextEncoder` for the same
+ * reason: one UTF-8 encoder, already a dependency, on every runtime we target.
+ * The URL alphabet (`-_`, no `=`) is what
  * keeps the payload out of percent-encoding, which would inflate it by
  * roughly a third against a fixed URL budget.
  */

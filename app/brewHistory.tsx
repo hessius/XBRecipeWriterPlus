@@ -412,38 +412,51 @@ export default function BrewHistory() {
         );
     }
 
+    // Every open sheet has to be named here. On Android a Tamagui sheet renders
+    // as a sibling of the screen and isolates nothing on its own, so one left
+    // out leaves the rows and the selection actions reachable underneath a
+    // destructive confirmation -- see `components/XbrwSheet.tsx`.
+    const screenCovered = pendingBrew !== null || confirmingBatchDelete;
+
     return (
         <YStack flex={1} backgroundColor={palette.base}>
-            <HistoryHeader recipeName={recipeName} count={filtered.length} />
-            {/* Always rendered. Selecting several brews to delete them is worth
-                having whether or not the handoff is switched on; the gate is
-                carried into the row and hides the Send button alone. */}
-            <SelectionActionRow
-                selecting={selecting}
-                count={selectedIds.length}
-                blocked={blockedCount}
-                fits={selectionFits}
-                busy={handoff.busy}
-                canSend={handoffEnabled}
-                onSelect={handleSelectStart}
-                onSend={() => void handleSelectionSend()}
-                onDelete={() => setConfirmingBatchDelete(true)}
-                onCancel={handleSelectCancel}
-            />
-            <FlatList
-                data={filtered}
-                keyExtractor={(item) => item.id}
-                renderItem={({item}) => (
-                    <SwipeableBrewRow
-                        brew={item}
-                        onPress={() => handlePress(item)}
-                        onDeleteRequest={(ref) => handleDeleteRequest(item, ref)}
-                        selecting={selecting}
-                        selected={selectedIds.includes(item.id)}
-                    />
-                )}
-                contentContainerStyle={{paddingVertical: 8}}
-            />
+            {/* The Android half of what `accessibilityViewIsModal` does on iOS.
+                The sheets sit outside this subtree, so they never hide
+                themselves. */}
+            <YStack flex={1} testID="brew-history-content"
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
+                <HistoryHeader recipeName={recipeName} count={filtered.length} />
+                {/* Always rendered. Selecting several brews to delete them is worth
+                    having whether or not the handoff is switched on; the gate is
+                    carried into the row and hides the Send button alone. */}
+                <SelectionActionRow
+                    selecting={selecting}
+                    count={selectedIds.length}
+                    blocked={blockedCount}
+                    fits={selectionFits}
+                    busy={handoff.busy}
+                    canSend={handoffEnabled}
+                    onSelect={handleSelectStart}
+                    onSend={() => void handleSelectionSend()}
+                    onDelete={() => setConfirmingBatchDelete(true)}
+                    onCancel={handleSelectCancel}
+                />
+                <FlatList
+                    data={filtered}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({item}) => (
+                        <SwipeableBrewRow
+                            brew={item}
+                            onPress={() => handlePress(item)}
+                            onDeleteRequest={(ref) => handleDeleteRequest(item, ref)}
+                            selecting={selecting}
+                            selected={selectedIds.includes(item.id)}
+                        />
+                    )}
+                    contentContainerStyle={{paddingVertical: 8}}
+                />
+            </YStack>
 
             {/* Confirmation sheet — shown after swipe+tap, before the delete lands. */}
             <XbrwSheet

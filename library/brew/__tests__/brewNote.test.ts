@@ -91,11 +91,30 @@ describe("brewNote", () => {
      * reader at the other end refuses an over-long note outright rather than
      * truncating it. Unclamped, one long note would fail the whole hand-off.
      */
-    it("clamps a note too long for the reader to accept", () => {
+    it("clamps the whole note, not just the typed part, to what the reader accepts", () => {
         const note = brewNote(record({note: "x".repeat(MAX_CARRIED_NOTE + 500)}));
 
-        expect(note.startsWith("x".repeat(MAX_CARRIED_NOTE) + "\n\n")).toBe(true);
-        expect(note).not.toContain("x".repeat(MAX_CARRIED_NOTE + 1));
+        expect(note.length).toBeLessThanOrEqual(MAX_CARRIED_NOTE);
+        // The typed novel is what gives way; the stages it is a verdict on
+        // still arrive, which is the whole point of the export.
+        expect(note).toContain("#1 · 40 ml · 94°C");
+        expect(note.startsWith("x")).toBe(true);
+    });
+
+    it("keeps a note that is exactly at the cap inside it once the stages are added", () => {
+        const note = brewNote(record({note: "x".repeat(MAX_CARRIED_NOTE)}));
+
+        expect(note.length).toBe(MAX_CARRIED_NOTE);
+        expect(note).toContain("House recipe");
+    });
+
+    it("renders a stored stage that is not an object at all without renumbering the rest", () => {
+        // `plan` crosses the backup boundary as a bare array, so `null` can
+        // reach here. A crash would take the export down with it.
+        const note = brewNote(record({plan: [null, {pourNumber: 2, volume: 100}] as never}));
+
+        expect(note).toContain("#1 · pour");
+        expect(note).toContain("#2 · 100 ml");
     });
 
     it("omits the grind when the grinder did not run", () => {

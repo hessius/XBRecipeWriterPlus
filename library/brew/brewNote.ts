@@ -112,12 +112,40 @@ function backfillLine(filled: BackfilledField[]): string | undefined {
  * note field has no ceiling of its own, while the reader at the other end
  * refuses a note over its own limit outright -- an unclamped novel would not
  * arrive truncated, it would fail the whole hand-off.
+ *
+ * The ceiling is on the whole note, not on the typed fragment: clamping only
+ * what was typed and then appending the stages puts a note that was exactly at
+ * the limit back over it, and the receiver refuses the lot.
  */
 export const MAX_CARRIED_NOTE = 4000;
 
-function typedNote(record: BrewRecord): string | undefined {
+const NOTE_SEPARATOR = "\n\n";
+
+/**
+ * The typed note gets whatever the generated body leaves.
+ *
+ * The body is bounded by the recipe and is the thing being exported; the typed
+ * note is the only unbounded part, so it is the only part with anything to
+ * give. A note left with no room at all is dropped rather than cut to nothing,
+ * which would otherwise leave a stray blank line above the stages.
+ */
+function typedNote(record: BrewRecord, bodyLength: number): string | undefined {
     const typed = (record.note ?? "").trim();
-    return typed === "" ? undefined : typed.slice(0, MAX_CARRIED_NOTE);
+    if (typed === "") return undefined;
+    const room = MAX_CARRIED_NOTE - bodyLength - NOTE_SEPARATOR.length;
+    return room <= 0 ? undefined : typed.slice(0, room);
+}
+
+/**
+ * A stored stage that is not an object at all.
+ *
+ * `plan` crosses a trust boundary as a bare array, so an entry can be `null`.
+ * It keeps its place in the numbering and renders as neutrally as a stage
+ * whose fields are simply all missing, which is what this module promises to
+ * do with a corrupt row -- dropping it would silently renumber the ones after.
+ */
+function planStage(stage: PlanStage): PlanStage {
+    return typeof stage === "object" && stage !== null ? stage : ({} as PlanStage);
 }
 
 /**
@@ -138,16 +166,20 @@ export function brewNote(record: BrewRecord, backfilled: BackfilledField[] = [])
     const foot = footer(record);
     const source = backfillLine(backfilled);
     const footerWithSource = source === undefined ? foot : `${foot}\n${source}`;
-    const typed = typedNote(record);
     const heading = recipeHeading(record);
     const stages = !Array.isArray(record.plan) || record.plan.length === 0
         ? undefined
-        : record.plan.map((stage, index) => stageLine(stage, index)).join("\n");
+        : record.plan.map((stage, index) => stageLine(planStage(stage), index)).join("\n");
     // The heading belongs to the stages, so it is dropped with them: a lone
     // name above a footer would look like a section that had lost its contents.
     const body = stages === undefined
         ? footerWithSource
         : [heading, stages].filter((part) => part !== undefined).join("\n")
             + `\n\n${footerWithSource}`;
-    return typed === undefined ? body : `${typed}\n\n${body}`;
+    const typed = typedNote(record, body.length);
+    // The slice only bites when the generated body alone is over the limit,
+    // which needs a recipe with far more stages than a machine will run. There
+    // is nothing else to give back at that point.
+    return (typed === undefined ? body : `${typed}${NOTE_SEPARATOR}${body}`)
+        .slice(0, MAX_CARRIED_NOTE);
 }

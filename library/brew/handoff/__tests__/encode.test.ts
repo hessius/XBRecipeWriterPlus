@@ -346,3 +346,25 @@ describe("batch fidelity", () => {
         expect(encodeHandoffBatch([withoutFlow]).fidelity).toBe("none");
     });
 });
+
+describe("the batch path on Hermes", () => {
+    // Hermes does not ship the web encoders the way Node does, so anything that
+    // reaches for a global here passes every test and fails on the first real
+    // phone. `encode.ts` already hand-rolls base64 for that reason; the byte
+    // count has to come from the same place.
+    it("sizes a batch without reaching for a global text encoder", () => {
+        const encoders = {TextEncoder: global.TextEncoder, TextDecoder: global.TextDecoder};
+        // @ts-expect-error -- standing in for a runtime that has neither.
+        delete global.TextEncoder;
+        // @ts-expect-error -- as above.
+        delete global.TextDecoder;
+
+        try {
+            const envelopes = [batchEnvelope(1), batchEnvelope(2)];
+            expect(batchFits(envelopes)).toBe(true);
+            expect(encodeHandoffBatch(envelopes).urlChars).toBeGreaterThan(0);
+        } finally {
+            Object.assign(global, encoders);
+        }
+    });
+});

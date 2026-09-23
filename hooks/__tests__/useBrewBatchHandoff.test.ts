@@ -170,6 +170,33 @@ describe("useBrewBatchHandoff", () => {
         expect(openURL).not.toHaveBeenCalled();
     });
 
+    it("opens the recipe database once for a whole selection, not once per brew", async () => {
+        // The constructor replays SQLite table setup, so one per brew turned
+        // ticking a fifty-brew batch into fifty openings and sending it into
+        // fifty more.
+        const {result} = await renderHook(() => useBrewBatchHandoff(source({
+            a: {record: brew({id: "a"}), samples},
+            b: {record: brew({id: "b"}), samples},
+            c: {record: brew({id: "c"}), samples}
+        })));
+
+        result.current.fits(["a"]);
+        result.current.fits(["a", "b"]);
+        await act(async () => {
+            await result.current.send(["a", "b", "c"]);
+        });
+
+        expect(RecipeDatabaseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not open the recipe database for a selection nobody makes", async () => {
+        await renderHook(() => useBrewBatchHandoff(source({
+            a: {record: brew({id: "a"}), samples}
+        })));
+
+        expect(RecipeDatabaseMock).not.toHaveBeenCalled();
+    });
+
     it("ignores a second press while the first handoff is still in flight", async () => {
         let release!: () => void;
         openURL.mockImplementationOnce(

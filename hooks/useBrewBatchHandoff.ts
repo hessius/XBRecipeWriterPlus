@@ -37,11 +37,23 @@ export function useBrewBatchHandoff(load: (id: string) => BatchSource | null) {
     // ignores the cache and builds afresh, so what is actually handed over is
     // always the database as it stands at the press.
     const builtRef = useRef(new Map<string, HandoffEnvelope>());
+    // One database for the life of the hook, opened on the first lookup.
+    //
+    // The constructor opens SQLite and replays table setup, so a database per
+    // brew made a fifty-brew batch do that work fifty times to tick the boxes
+    // and fifty more to send. Lazy so a history screen nobody selects on never
+    // opens it at all.
+    const recipesRef = useRef<RecipeDatabase | null>(null);
+
+    function recipes(): RecipeDatabase {
+        recipesRef.current ??= new RecipeDatabase();
+        return recipesRef.current;
+    }
 
     function build(id: string): HandoffEnvelope | null {
         const opened = load(id);
         if (opened === null) return null;
-        const recipe = new RecipeDatabase().getRecipe(opened.record.recipeUuid);
+        const recipe = recipes().getRecipe(opened.record.recipeUuid);
         const backfill = recipe === null
             ? {record: opened.record, filled: []}
             : backfillFromRecipe(opened.record, recipe);

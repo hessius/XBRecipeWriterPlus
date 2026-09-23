@@ -132,6 +132,23 @@ describe("brew history batch selection", () => {
         expect(screen.getByTestId("history-row-selected")).toBeTruthy();
     });
 
+    // On Android a Tamagui sheet renders as a sibling and isolates nothing, so
+    // without this guard TalkBack could still reach the rows and the DELETE
+    // button underneath a destructive confirmation.
+    it("takes the history away from the reader while a delete sheet covers it", async () => {
+        await renderWithProviders(<BrewHistory />);
+        const content = () => screen.getByTestId("brew-history-content", {includeHiddenElements: true});
+
+        expect(content().props.accessibilityElementsHidden).toBe(false);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        await fireEvent.press(screen.getByLabelText(/^Ethiopia Guji,/));
+        await fireEvent.press(screen.getByLabelText("Delete selected brews"));
+
+        expect(content().props.accessibilityElementsHidden).toBe(true);
+        expect(content().props.importantForAccessibility).toBe("no-hide-descendants");
+    });
+
     it("keeps send disabled with an empty selection", async () => {
         await renderWithProviders(<BrewHistory />);
 

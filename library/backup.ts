@@ -584,7 +584,11 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     stalls:     (v) => Array.isArray(v) && v.every((stage) =>
         Array.isArray(stage) && stage.every((stall) =>
             isPlainObject(stall) && isNumber(stall.atMl) && isNumber(stall.seconds))),
-    plan:       (v) => Array.isArray(v),
+    // Only that every entry is an object: the fields inside are the machine's
+    // and change with firmware, so the door cannot name them without refusing
+    // next year's brews. `null` is not a stage under any firmware, and a
+    // reader that walks one crashes.
+    plan:       (v) => Array.isArray(v) && v.every(isPlainObject),
     stageWater: isNumberArray,
     bypass:     isPlainObject,
     // Whole, on the scale, and nothing else: `isRating` is the same predicate
