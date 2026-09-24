@@ -26,7 +26,10 @@ jest.mock("@/library/RecipeDatabase");
 // than the store behind it, because the store is reached through the module's
 // own binding and a mocked export would not be seen from inside it. What the
 // hook reads is covered by its own test.
-let mockBrewSummary = {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+let mockBrewSummary = {
+    times: 0, lastAt: 0, avgRating: 0, rated: 0,
+    meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+};
 const mockRate = jest.fn();
 jest.mock("@/hooks/useBrewHistory", () => ({
     ...jest.requireActual("@/hooks/useBrewHistory"),

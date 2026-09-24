@@ -18,12 +18,19 @@ type BrewRow = Record<string, string | number | null>;
 type SampleRow = {brewId: string; stream: string};
 type FrameRow = {brewId: string; frames: string};
 const mockDb = {brews: [] as BrewRow[]};
+let sampleReads = 0;
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => {
         const brews: BrewRow[] = [];
         const samples: SampleRow[] = [];
         const frames: FrameRow[] = [];
+        const countsAsBrewed = (b: BrewRow) =>
+            b.outcome === "done" || b.outcome === "endedOnMachine";
+        const isMeasured = (b: BrewRow) => countsAsBrewed(b) && b.watched !== 0;
+        const isTimed = (b: BrewRow) =>
+            isMeasured(b) && typeof b.pouringAt === "number" && b.pouringAt > 0;
+        const isRated = (b: BrewRow) => countsAsBrewed(b) && (b.rating as number) > 0;
         mockDb.brews = brews;
         return {
             execSync: () => {
@@ -94,6 +101,7 @@ jest.mock("expo-sqlite", () => ({
             },
             getAllSync: (source: string, params: (string | number)[] = []) => {
                 if (/FROM brew_samples/i.test(source)) {
+                    sampleReads += 1;
                     return samples.filter((s) => s.brewId === params[0]);
                 }
                 if (/FROM brew_frames/i.test(source)) {
@@ -101,24 +109,39 @@ jest.mock("expo-sqlite", () => ({
                 }
                 const ordered = [...brews]
                     .sort((a, b) => (b.startedAt as number) - (a.startedAt as number));
-                if (/COUNT\(\*\) AS times/i.test(source)) {
+                if (/AS meanBrewSeconds/i.test(source)) {
                     const mine = ordered.filter((b) => b.recipeUuid === params[0]);
-                    const rated = mine.filter((b) => (b.rating as number) > 0);
+                    const counted = mine.filter(countsAsBrewed);
+                    const measured = mine.filter(isMeasured);
+                    const timed = mine.filter(isTimed);
+                    const rated = mine.filter(isRated);
                     return [{
-                        times:  mine.length,
+                        times:  counted.length,
                         rated:  rated.length,
                         // AVG over no rows is NULL as well, and over
-                        // NULLIF(rating, 0) that is what an unrated recipe
+                        // CASE WHEN rated that is what an unrated recipe
                         // gives: the caller has to survive it here too.
                         avgRating: rated.length === 0
                             ? null
                             : rated.reduce((sum, b) => sum + (b.rating as number), 0)
                                 / rated.length,
+                        meanBrewSeconds: timed.length === 0
+                            ? null
+                            : timed.reduce(
+                                (sum, b) => sum
+                                    + ((b.endedAt as number) - (b.pouringAt as number)) / 1000,
+                                0
+                            ) / timed.length,
+                        meanCupMl: measured.length === 0
+                            ? null
+                            : measured.reduce((sum, b) => sum + (b.cupTotal as number), 0)
+                                / measured.length,
+                        abandoned: mine.filter((b) => !countsAsBrewed(b)).length,
                         // SQL's MAX over no rows is NULL, not 0, and the caller
                         // has to survive that: the mock must say so too.
-                        lastAt: mine.length === 0
+                        lastAt: counted.length === 0
                             ? null
-                            : Math.max(...mine.map((b) => b.startedAt as number))
+                            : Math.max(...counted.map((b) => b.startedAt as number))
                     }];
                 }
                 if (/SELECT id FROM brews/i.test(source)) {
@@ -126,9 +149,13 @@ jest.mock("expo-sqlite", () => ({
                     return ordered
                         .filter((b) => b.recipeUuid === uuid
                             && (b.startedAt as number) >= from
-                            && (b.startedAt as number) < until)
+                            && (b.startedAt as number) < until
+                            && countsAsBrewed(b))
                         .slice(0, 1)
                         .map((b) => ({id: b.id}));
+                }
+                if (/WHERE recipeUuid = \?/i.test(source)) {
+                    return ordered.filter((b) => b.recipeUuid === params[0]);
                 }
                 if (/WHERE id = \?/i.test(source)) {
                     return ordered.filter((b) => b.id === params[0]);
@@ -226,7 +253,10 @@ describe("BrewDatabase", () => {
         db.insert(record({id: "c", recipeUuid: "uuid-2", startedAt: 5_000}), []);
 
         expect(db.summaryFor("uuid-1"))
-            .toEqual({times: 2, lastAt: 9_000, avgRating: 0, rated: 0});
+            .toEqual({
+                times: 2, lastAt: 9_000, avgRating: 0, rated: 0,
+                meanBrewSeconds: 195, meanCupMl: 244, abandoned: 0
+            });
     });
 
     it("answers for a recipe never brewed without inventing a date", () => {
@@ -236,7 +266,10 @@ describe("BrewDatabase", () => {
         db.insert(record({recipeUuid: "uuid-2"}), []);
 
         expect(db.summaryFor("uuid-1"))
-            .toEqual({times: 0, lastAt: 0, avgRating: 0, rated: 0});
+            .toEqual({
+                times: 0, lastAt: 0, avgRating: 0, rated: 0,
+                meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+            });
     });
 
     it("round-trips a record", () => {
@@ -860,6 +893,99 @@ describe("a brew the app never watched", () => {
 });
 
 describe("what a recipe's history adds up to", () => {
+    it("counts only brews that produced a cup", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "done-a", recipeUuid: "uuid-1"}), []);
+        db.insert(record({id: "done-b", recipeUuid: "uuid-1"}), []);
+        db.insert(record({id: "done-c", recipeUuid: "uuid-1"}), []);
+        db.insert(record({id: "cancelled", recipeUuid: "uuid-1", outcome: "cancelled"}), []);
+        db.insert(record({id: "failed", recipeUuid: "uuid-1", outcome: "failed"}), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({times: 3});
+    });
+
+    it("counts a brew ended on the machine as a cup", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "short", recipeUuid: "uuid-1", outcome: "endedOnMachine"}), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({times: 1});
+    });
+
+    it("leaves only cancelled brews out of the brewed figures", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "cancelled", recipeUuid: "uuid-1", startedAt: 9_000,
+            outcome: "cancelled", rating: 5
+        }), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({
+            times: 0, lastAt: 0, avgRating: 0, rated: 0,
+            meanBrewSeconds: 0, meanCupMl: 0, abandoned: 1
+        });
+    });
+
+    it("keeps the last brewed date on the last counted brew", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "good", recipeUuid: "uuid-1", startedAt: 2_000}), []);
+        db.insert(record({
+            id: "cancelled", recipeUuid: "uuid-1", startedAt: 9_000,
+            outcome: "cancelled"
+        }), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({times: 1, lastAt: 2_000});
+    });
+
+    it("keeps hand-logged brews out of measured means", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "watched", recipeUuid: "uuid-1", startedAt: 1_000,
+            pouringAt: 2_000, endedAt: 12_000, cupTotal: 200, rating: 4
+        }), []);
+        db.insert(unobservedBrew({
+            id: "hand", recipeUuid: "uuid-1", recipeName: "Ethiopia",
+            accent: "#f00", rating: 5, at: 20_000
+        }), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({
+            times: 2, lastAt: 20_000, avgRating: 4.5, rated: 2,
+            meanBrewSeconds: 10, meanCupMl: 200
+        });
+    });
+
+    it("lets an untimed measured brew count for cup volume only", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "untimed", recipeUuid: "uuid-1", pouringAt: 0,
+            endedAt: 20_000, cupTotal: 180
+        }), []);
+        db.insert(record({
+            id: "timed", recipeUuid: "uuid-1", pouringAt: 5_000,
+            endedAt: 20_000, cupTotal: 220
+        }), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({
+            meanBrewSeconds: 15, meanCupMl: 200
+        });
+    });
+
+    it("counts every non-cup outcome as abandoned", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "cancelled", outcome: "cancelled"}), []);
+        db.insert(record({id: "lost", outcome: "lostContact"}), []);
+        db.insert(record({id: "failed", outcome: "failed"}), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({abandoned: 3});
+    });
+
+    it("returns zeroes for every aggregate when there is no history", () => {
+        const db = new BrewDatabase();
+
+        expect(db.summaryFor("uuid-1")).toEqual({
+            times: 0, lastAt: 0, avgRating: 0, rated: 0,
+            meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+        });
+    });
+
     it("averages only the brews somebody rated", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "a", recipeUuid: "uuid-1", rating: 5}), []);
@@ -879,6 +1005,58 @@ describe("what a recipe's history adds up to", () => {
         db.insert(record({recipeUuid: "uuid-1"}), []);
 
         expect(db.summaryFor("uuid-1")).toMatchObject({avgRating: 0, rated: 0});
+    });
+});
+
+describe("one recipe's brew list", () => {
+    it("returns every brew for the recipe, newest first", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "old", recipeUuid: "uuid-1", startedAt: 1}), []);
+        db.insert(record({
+            id: "cancelled", recipeUuid: "uuid-1", startedAt: 3, outcome: "cancelled"
+        }), []);
+        db.insert(record({id: "other", recipeUuid: "uuid-2", startedAt: 4}), []);
+        db.insert(record({id: "new", recipeUuid: "uuid-1", startedAt: 5}), []);
+
+        // Aggregates exclude a cancelled brew from evidence, but the history
+        // list is a diary: if it happened, the user is entitled to see it.
+        expect(db.brewsFor("uuid-1").map((brew) => brew.id))
+            .toEqual(["new", "cancelled", "old"]);
+    });
+
+    it("returns nothing for a recipe with no brews", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "other", recipeUuid: "uuid-2"}), []);
+
+        expect(db.brewsFor("uuid-1")).toEqual([]);
+    });
+
+    it("does not load streams but still reports whether one exists", () => {
+        const db = new BrewDatabase();
+        db.insert(record({id: "with-stream", recipeUuid: "uuid-1"}), stream);
+        sampleReads = 0;
+
+        const [brew] = db.brewsFor("uuid-1");
+
+        expect(sampleReads).toBe(0);
+        expect(brew.hasStream).toBe(true);
+    });
+
+    it("carries the plan each brew ran", () => {
+        const db = new BrewDatabase();
+        const oldPlan = [
+            {pourNumber: 1, volume: 40, temperature: 93, flowRate: 40,
+             agitation: 1, pourPattern: 0, pauseTime: 20}
+        ];
+        const newPlan = [
+            {pourNumber: 1, volume: 55, temperature: 92, flowRate: 50,
+             agitation: 2, pourPattern: 1, pauseTime: 10}
+        ];
+        db.insert(record({id: "old", recipeUuid: "uuid-1", startedAt: 1, plan: oldPlan}), []);
+        db.insert(record({id: "new", recipeUuid: "uuid-1", startedAt: 2, plan: newPlan}), []);
+
+        expect(db.brewsFor("uuid-1").map((brew) => brew.plan))
+            .toEqual([newPlan, oldPlan]);
     });
 });
 
@@ -914,6 +1092,16 @@ describe("today's brew", () => {
     it("does not answer with another recipe's brew", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "theirs", recipeUuid: "uuid-2", startedAt: noon}), []);
+
+        expect(db.brewOn("uuid-1", noon)).toBeNull();
+    });
+
+    it("does not answer with a cancelled brew", () => {
+        const db = new BrewDatabase();
+        db.insert(record({
+            id: "cancelled", recipeUuid: "uuid-1", startedAt: noon,
+            outcome: "cancelled"
+        }), []);
 
         expect(db.brewOn("uuid-1", noon)).toBeNull();
     });

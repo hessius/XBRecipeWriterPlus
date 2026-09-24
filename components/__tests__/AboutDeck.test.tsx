@@ -3,6 +3,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutDeck from "@/components/AboutDeck";
 import {palette} from "@/constants/colors";
+import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -10,12 +11,20 @@ function recipeWith(over: Partial<Recipe> = {}): Recipe {
     return Object.assign(new Recipe(), over);
 }
 
+function summary(overrides: Partial<BrewSummary> = {}): BrewSummary {
+    return {
+        times: 0, lastAt: 0, avgRating: 0, rated: 0,
+        meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0,
+        ...overrides
+    };
+}
+
 function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
     return {
         recipe:             recipeWith(),
         accent:             palette.info,
         showAvatar:         false,
-        brews:              {times: 0, lastAt: 0, avgRating: 0, rated: 0},
+        brews:              summary(),
         showHint:           false,
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),
@@ -84,7 +93,7 @@ describe("AboutDeck", () => {
 
     it("passes the brew count through to the history line", async () => {
         await renderWithProviders(
-            <AboutDeck {...props({brews: {times: 2, lastAt: 0, avgRating: 0, rated: 0}})}/>
+            <AboutDeck {...props({brews: summary({times: 2})})}/>
         );
 
         expect(screen.getByTestId("history-summary"))

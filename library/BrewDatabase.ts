@@ -1,5 +1,11 @@
 import * as SQLite from "expo-sqlite";
 
+import {
+    COUNTED_SQL,
+    MEASURED_SQL,
+    RATED_SQL,
+    TIMED_SQL
+} from "@/library/brew/brewPopulation";
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
 import type {
@@ -16,21 +22,27 @@ import {podCoffeeFromStored} from "./podCoffee";
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
-/** How a recipe has gone: how many brews, and when the last of them was. */
+/** How a recipe has gone: how many cups, and what the evidence says. */
 export type BrewSummary = {
+    /** Counted brews only: cups the user could drink. */
     times: number;
+    /** The latest counted brew, or 0 when there is no such cup. */
     lastAt: number;
     /**
-     * The average of the ratings actually given, or 0 where none were.
+     * The average over rated brews only, or 0 where none were.
      *
-     * 0 is "nobody has said", not a verdict of nothing, which is why the
-     * average is taken over `NULLIF(rating, 0)`: counting silence as a nought
-     * would rank a much-brewed recipe below a once-disliked one for no reason
-     * but that it was brewed more often without comment.
+     * Rated means counted and `rating > 0`: a verdict on a cancelled brew does
+     * not move the average printed beside a count it did not join.
      */
     avgRating: number;
-    /** How many of those brews carry a rating. */
+    /** How many rated brews entered `avgRating`. */
     rated: number;
+    /** Mean seconds over timed brews: counted, watched, and with a first drop. */
+    meanBrewSeconds: number;
+    /** Mean cup volume over measured brews: counted and watched. */
+    meanCupMl: number;
+    /** Rows for this recipe that did not count as cups. */
+    abandoned: number;
 };
 
 type BrewRow = {
@@ -338,10 +350,26 @@ class BrewDatabase {
     }
 
     /**
-     * How a recipe has gone, in the two figures the ABOUT deck asks for.
+     * The rows for one recipe, newest first.
+     *
+     * Unlike `summaryFor`, this deliberately returns cancelled, failed and
+     * lost-contact rows too. Aggregates answer "how many cups"; history is a
+     * diary, and a stopped brew is still something the user may need to see.
+     */
+    public brewsFor(recipeUuid: string): StoredBrew[] {
+        return this.db
+            .getAllSync<BrewRow>(
+                "SELECT * FROM brews WHERE recipeUuid = ? ORDER BY startedAt DESC;",
+                [recipeUuid]
+            )
+            .map(hydrate);
+    }
+
+    /**
+     * How a recipe has gone, in the figures the ABOUT deck asks for.
      *
      * Counted in SQL rather than by reading the rows, because the editor asks
-     * this on open and the answer is two numbers: pulling every brew of a
+     * this on open and the answer is a few numbers: pulling every brew of a
      * much-used recipe across to count them would be work done to throw away.
      *
      * `lastAt` is 0 for a recipe never brewed, matching the sentinel the rest
@@ -351,20 +379,40 @@ class BrewDatabase {
         const rows = this.db.getAllSync<{
             times: number; lastAt: number | null;
             avgRating: number | null; rated: number;
+            meanBrewSeconds: number | null; meanCupMl: number | null;
+            abandoned: number;
         }>(
-            `SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt,
-                    AVG(NULLIF(rating, 0)) AS avgRating,
-                    COUNT(NULLIF(rating, 0)) AS rated
+            `SELECT
+                    COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS times,
+                    MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastAt,
+                    AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating,
+                    COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                    AVG(CASE WHEN ${TIMED_SQL} THEN (endedAt - pouringAt) / 1000.0 END)
+                        AS meanBrewSeconds,
+                    AVG(CASE WHEN ${MEASURED_SQL} THEN cupTotal END) AS meanCupMl,
+                    COALESCE(SUM(CASE WHEN NOT (${COUNTED_SQL}) THEN 1 ELSE 0 END), 0)
+                        AS abandoned
              FROM brews WHERE recipeUuid = ?;`,
             [recipeUuid]
         );
         const row = rows[0];
-        if (row === undefined) return {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+        if (row === undefined) {
+            return {
+                times: 0, lastAt: 0, avgRating: 0, rated: 0,
+                meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+            };
+        }
+        // SQL means over empty populations are NULL. The app's summary
+        // sentinel is 0 here too: it means "nothing to average", not zero ml
+        // in the cup or a zero-second brew.
         return {
             times: row.times,
             lastAt: row.lastAt ?? 0,
             avgRating: row.avgRating ?? 0,
-            rated: row.rated
+            rated: row.rated,
+            meanBrewSeconds: row.meanBrewSeconds ?? 0,
+            meanCupMl: row.meanCupMl ?? 0,
+            abandoned: row.abandoned
         };
     }
 
@@ -373,8 +421,11 @@ class BrewDatabase {
      *
      * The recipe screen's star has one gesture and two outcomes: it rates
      * today's brew where there is one, and writes a hand-logged brew where
-     * there is not. This is the question that chooses between them, and it is
-     * asked in local days rather than in hours because "today" is what the user
+     * there is not. This is the question that chooses between them, and the
+     * brew it returns must be one a rating can mean something on: judging a
+     * cancelled brew would be a verdict the recipe's average rightly ignores.
+     *
+     * Asked in local days rather than in hours because "today" is what the user
      * means -- a cup at breakfast is still today's at supper, and a cup at
      * 23:50 is not still today's at 00:10.
      */
@@ -386,6 +437,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<{id: string}>(
             `SELECT id FROM brews
              WHERE recipeUuid = ? AND startedAt >= ? AND startedAt < ?
+             AND ${COUNTED_SQL}
              ORDER BY startedAt DESC LIMIT 1;`,
             [recipeUuid, start.getTime(), end.getTime()]
         );
