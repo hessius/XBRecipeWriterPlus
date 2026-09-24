@@ -5,6 +5,7 @@ import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
 import {ensureBrewTables} from './BrewDatabase';
+import {COUNTED_SQL, RATED_SQL} from './brew/brewPopulation';
 import {buildLibraryQuery, type FilterResolver, type LibraryQuery,
         type RecipeEvidence} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
@@ -735,17 +736,20 @@ class RecipeDatabase {
      * a card drawn in a shelf room must say what it says in the list. The join
      * is possible at all because both classes open `xbrecipewriter.db`.
      *
-     * Recipes with no brews are simply absent, which is what the card reads as
-     * "nothing to show yet". A row of zeroes would have to be told apart from a
-     * genuine zero somewhere, and there is no such thing here.
+     * Recipes with no rows are simply absent. A recipe whose rows are all
+     * stopped brews does get an entry with `brews` 0, and the card reads that
+     * the same way: no evidence line, because there was no cup.
      */
     public brewEvidence(): Record<string, RecipeEvidence> {
         const rows = this.db.getAllSync(
-            `SELECT recipeUuid, COUNT(*) AS brews, MAX(startedAt) AS lastBrewedAt,
-                    -- NULLIF for the same reason the library query has it:
-                    -- 0 is the app's word for unrated, and averaging silence
-                    -- as a nought would be a verdict nobody gave.
-                    AVG(NULLIF(rating, 0)) AS avgRating
+            `SELECT recipeUuid,
+                    COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS brews,
+                    MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastBrewedAt,
+                    -- Count and recency draw from counted brews only: cups the
+                    -- user could drink. Ratings draw from that same population,
+                    -- and then only where rating > 0, so a cancelled row with a
+                    -- stray verdict cannot show beside a count of nothing.
+                    AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
              FROM brews GROUP BY recipeUuid;`
         ) as {
             recipeUuid: string; brews: number;

@@ -1,3 +1,4 @@
+import {COUNTED_SQL, RATED_SQL} from "./brew/brewPopulation";
 import {orderByFragment, type SortAxis, type SortDirection} from "./librarySort";
 import {foldSortKey, type IndexValue} from "./recipeIndex";
 import {tagKey} from "./tagKey";
@@ -204,13 +205,15 @@ export function buildLibraryQuery(
     const sql = `SELECT recipes.uuid AS uuid, recipes.recipeJSON AS recipeJSON
 FROM recipes
 LEFT JOIN (
-    SELECT recipeUuid, MAX(startedAt) AS lastBrewedAt, COUNT(*) AS brewCount,
-           -- NULLIF, because 0 is the app's word for "not rated", not a
-           -- verdict of nothing. Averaged as a zero it would drag a recipe
-           -- below one the user actually disliked, so an unrated brew has to
-           -- leave the average alone entirely. A recipe with no rated brews
-           -- ends up NULL here, which is the never-rated-last guard's hook.
-           AVG(NULLIF(rating, 0)) AS avgRating
+    SELECT recipeUuid,
+           MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastBrewedAt,
+           COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS brewCount,
+           -- Count and recency draw from counted brews only: cups the user
+           -- could drink. Ratings draw from that same population, and then
+           -- only where rating > 0, so the average printed beside the count
+           -- describes the same cups. A cancelled brew with a stray verdict
+           -- therefore cannot appear as an orphaned score on a card.
+           AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
     FROM brews
     GROUP BY recipeUuid
 ) AS brewStats ON brewStats.recipeUuid = recipes.uuid${where}

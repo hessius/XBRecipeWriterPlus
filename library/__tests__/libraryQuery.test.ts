@@ -4,6 +4,8 @@ import {
     type FilterResolver,
     type LibraryQuery
 } from "@/library/libraryQuery";
+import type {BrewOutcome} from "@/library/brew/BrewRecord";
+import {evidenceLine} from "@/library/recipeEvidence";
 
 /**
  * Two kinds of test in one file, and they check different things.
@@ -51,8 +53,9 @@ describe("the built statement", () => {
         // names, so the join must expose them whatever the axis. Pinned so a
         // rename on either side is caught here rather than at runtime.
         const {sql} = buildLibraryQuery(query());
-        expect(sql).toContain("MAX(startedAt) AS lastBrewedAt");
-        expect(sql).toContain("COUNT(*) AS brewCount");
+        expect(sql).toContain("MAX(CASE WHEN");
+        expect(sql).toContain("AS lastBrewedAt");
+        expect(sql).toContain("AS brewCount");
         expect(sql).toContain("LEFT JOIN");
     });
 
@@ -143,6 +146,8 @@ type Spec = {
     brews?: number[];
     /** The rating of each brew, index-aligned with `brews`. 0 is unrated. */
     ratings?: number[];
+    /** How each brew ended, index-aligned with `brews`. Defaults to done. */
+    outcomes?: BrewOutcome[];
 };
 
 function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, string> {
@@ -170,7 +175,7 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
                 [
                     `${recipe.uuid}-${index}`, recipe.uuid, "n", "a", startedAt,
-                    0, startedAt, "completed", null, 1,
+                    0, startedAt, spec.outcomes?.[index] ?? "done", null, 1,
                     0, 0, 0, "[]", "[]", "[]", spec.ratings?.[index] ?? 0, 0
                 ]
             );
@@ -274,6 +279,21 @@ describe("querying a real database", () => {
             .toEqual(["older", "recent", "never"]);
     });
 
+    it("dates a recipe by its last counted brew, not its last stopped row", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            apparentRecent: {
+                name: "A", createdAt: 1, ratio: 15,
+                brews: [100, 900], outcomes: ["done", "cancelled"]
+            },
+            actuallyRecent: {name: "B", createdAt: 2, ratio: 15, brews: [500]},
+            never: {name: "C", createdAt: 3, ratio: 15}
+        });
+
+        expect(order(db, query({sort: "lastBrewed", direction: "desc"}), uuids))
+            .toEqual(["actuallyRecent", "apparentRecent", "never"]);
+    });
+
     it("keeps the never-brewed last under times-brewed in both directions", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
@@ -286,6 +306,32 @@ describe("querying a real database", () => {
         // LEAST: zero would lead a naive sort; the guard forces it last.
         expect(order(db, query({sort: "timesBrewed", direction: "asc"}), uuids))
             .toEqual(["once", "most", "never"]);
+    });
+
+    it("counts only brews that produced a cup under times-brewed", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            twoCups: {
+                name: "A", createdAt: 1, ratio: 15,
+                brews: [1, 2, 3], outcomes: ["done", "cancelled", "endedOnMachine"]
+            },
+            oneCup: {
+                name: "B", createdAt: 2, ratio: 15,
+                brews: [1, 2], outcomes: ["done", "failed"]
+            },
+            onlyCancelled: {
+                name: "C", createdAt: 3, ratio: 15,
+                brews: [1, 2], outcomes: ["cancelled", "lostContact"]
+            },
+            never: {name: "D", createdAt: 4, ratio: 15}
+        });
+
+        expect(order(db, query({sort: "timesBrewed", direction: "desc"}), uuids))
+            .toEqual(["twoCups", "oneCup", "onlyCancelled", "never"]);
+        // LEAST still starts with a real cup. A recipe with only stopped rows
+        // belongs with the never-brewed, not ahead of something drinkable.
+        expect(order(db, query({sort: "timesBrewed", direction: "asc"}), uuids))
+            .toEqual(["oneCup", "twoCups", "never", "onlyCancelled"]);
     });
 
     it("sorts by rating, best and worst first", () => {
@@ -330,6 +376,32 @@ describe("querying a real database", () => {
 
         expect(order(db, query({sort: "rating", direction: "desc"}), uuids))
             .toEqual(["praised", "liked"]);
+    });
+
+    it("averages ratings from the counted population only", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            honest: {
+                name: "A", createdAt: 1, ratio: 15,
+                brews: [1, 2], ratings: [1, 5], outcomes: ["done", "cancelled"]
+            },
+            liked: {name: "B", createdAt: 2, ratio: 15, brews: [1], ratings: [2]}
+        });
+
+        expect(order(db, query({sort: "rating", direction: "desc"}), uuids))
+            .toEqual(["liked", "honest"]);
+    });
+
+    it("prints no evidence line for a recipe whose only brews were cancelled", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            stopped: {
+                name: "A", createdAt: 1, ratio: 15,
+                brews: [1, 2], ratings: [5, 4], outcomes: ["cancelled", "failed"]
+            }
+        });
+
+        expect(evidenceLine(db.brewEvidence()[uuids.stopped])).toBeNull();
     });
 
     it("searches name, tag, xid, author and description, and nothing else", () => {
