@@ -133,7 +133,8 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
             CREATE TABLE IF NOT EXISTS brew_frames (
                 brewId TEXT PRIMARY KEY NOT NULL,
                 frames TEXT NOT NULL
-            );`);
+            );
+            CREATE INDEX IF NOT EXISTS idx_brews_recipeUuid ON brews(recipeUuid);`);
     // Rows written before `pouringAt` existed keep the 0 default, which
     // reads as "no first drop recorded" and falls back to `startedAt`.
     // `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite

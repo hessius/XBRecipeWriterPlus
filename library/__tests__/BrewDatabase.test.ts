@@ -1,10 +1,11 @@
-import BrewDatabase from "@/library/BrewDatabase";
+import BrewDatabase, {ensureBrewTables} from "@/library/BrewDatabase";
 import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
+import {createTestDatabase} from "@/test-utils/sqlite";
 
 /**
  * An in-memory stand-in for expo-sqlite, in the same spirit as the one in
@@ -202,6 +203,22 @@ function recorderRecipe(): Recipe {
 }
 
 describe("BrewDatabase", () => {
+    it("indexes brews by recipe uuid", () => {
+        const db = createTestDatabase();
+
+        ensureBrewTables(db as Parameters<typeof ensureBrewTables>[0]);
+
+        expect(db.getAllSync(`
+            SELECT name, sql
+            FROM sqlite_master
+            WHERE type = 'index' AND tbl_name = 'brews'
+            ORDER BY name;
+        `)).toContainEqual({
+            name: "idx_brews_recipeUuid",
+            sql: "CREATE INDEX idx_brews_recipeUuid ON brews(recipeUuid)"
+        });
+    });
+
     it("counts a recipe's brews and dates the last of them", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "a", recipeUuid: "uuid-1", startedAt: 1_000}), []);
