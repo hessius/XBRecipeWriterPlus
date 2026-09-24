@@ -1,10 +1,12 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 import {processColor, StyleSheet} from "react-native";
+import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import BrewTrace from "@/components/BrewTrace";
 import {drawnFontSize} from "@/components/DotMatrixText";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import {BAND_FLOOR, BAND_TOP} from "@/library/brew/tempBand";
 import Pour from "@/library/Pour";
 import {accents, cupLineFor, palette} from "@/constants/colors";
 
@@ -36,6 +38,19 @@ async function draw(props: Partial<React.ComponentProps<typeof BrewTrace>> = {})
             {...props}
         />
     );
+}
+
+function renderedNodes(
+    node: ReactTestRendererJSON | ReactTestRendererJSON[] | null
+): ReactTestRendererJSON[] {
+    if (node === null) return [];
+    if (Array.isArray(node)) return node.flatMap(renderedNodes);
+    return [
+        node,
+        ...(node.children ?? []).flatMap((child) =>
+            typeof child === "string" ? [] : renderedNodes(child)
+        )
+    ];
 }
 
 describe("BrewTrace", () => {
@@ -224,9 +239,13 @@ describe("BrewTrace", () => {
             new Pour(1, 40, 93, 40, 0, 0, 30),
             new Pour(2, 100, 93, 40, 0, 0, 0)
         ];
-        const {getByTestId} = await draw({pours: flat, plannedSeconds: 65});
-        expect(getByTestId("trace-temp-1").props.y1)
-            .toBeCloseTo(getByTestId("trace-temp-0").props.y1);
+        const {getByLabelText, getByTestId} = await draw({pours: flat, plannedSeconds: 65});
+        const y = getByTestId("trace-temp-0").props.y1;
+        expect(getByTestId("trace-temp-1").props.y1).toBeCloseTo(y);
+
+        const svgHeight = getByLabelText("Brew trace").props.height;
+        expect(y).toBeGreaterThan(svgHeight * BAND_TOP);
+        expect(y).toBeLessThan(svgHeight * BAND_FLOOR);
     });
 
     it("stops a rule at the end of its pour", async () => {
@@ -252,11 +271,37 @@ describe("BrewTrace", () => {
         expect(rule.props.x2 - rule.props.x1).toBeGreaterThanOrEqual(2);
     });
 
-    it("draws the rules in the label grey and nothing else", async () => {
+    it("draws the rules in the label grey and no fill or hue", async () => {
         const {getByTestId} = await draw();
-        expect(getByTestId("trace-temp-0").props.stroke).toEqual(
+        const rule = getByTestId("trace-temp-0");
+        expect(rule.props.stroke).toEqual(
             expect.objectContaining({payload: processColor(palette.dim)})
         );
+        expect(rule.props.stroke).not.toEqual(
+            expect.objectContaining({payload: processColor(TEST_ACCENT)})
+        );
+        expect(rule.props.stroke).not.toEqual(
+            expect.objectContaining({payload: processColor(palette.warn)})
+        );
+        expect(rule.props.stroke).not.toEqual(
+            expect.objectContaining({payload: processColor(palette.danger)})
+        );
+        expect(rule.props.fill).toBeNull();
+    });
+
+    it("links each temperature fade to its own absolute gradient", async () => {
+        const {getByTestId, toJSON} = await draw();
+        const fade = getByTestId("trace-temp-fade-0");
+        const gradient = renderedNodes(toJSON())
+            .find((node) => node.props.name === "tempFade-0");
+
+        expect(gradient).toBeTruthy();
+        expect(fade.props.fill.brushRef).toBe(gradient!.props.name);
+        expect(fade.props.height).toBe(16);
+        // react-native-svg renders userSpaceOnUse as its native enum value.
+        expect(gradient!.props.gradientUnits).toBe(1);
+        expect(gradient!.props.y1).toBe(fade.props.y);
+        expect(gradient!.props.y2).toBe(fade.props.y + fade.props.height);
     });
 
     it("draws every rule before any water has moved", async () => {

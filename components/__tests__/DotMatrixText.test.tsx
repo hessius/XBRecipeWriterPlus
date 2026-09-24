@@ -8,6 +8,7 @@ import DotMatrixText, {
     DOTO_FAMILIES,
     DOTO_MAX_FONT_SCALE,
     DOTO_MIN_FONT_SIZE,
+    dotMatrixTextProps,
     dotMatrixSvgProps,
     drawnFontSize
 } from "@/components/DotMatrixText";
@@ -35,6 +36,15 @@ describe("DotMatrixText", () => {
 
         it("reports the drawn size, because SVG text is not scaled by the OS", () => {
             expect(dotMatrixSvgProps({fontSize: 11}).fontSize).toBe(drawnFontSize(11));
+        });
+
+        it("uses the same tracking default as plain dot-matrix props", () => {
+            expect(dotMatrixSvgProps().letterSpacing)
+                .toBe(dotMatrixTextProps().style.letterSpacing);
+        });
+
+        it("lets callers override tracking", () => {
+            expect(dotMatrixSvgProps({letterSpacing: 1.2}).letterSpacing).toBe(1.2);
         });
     });
 

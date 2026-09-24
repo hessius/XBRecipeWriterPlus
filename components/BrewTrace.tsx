@@ -10,7 +10,7 @@ import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
-import {MIN_MARK_WIDTH, temperatureBand, temperatureMarks} from "@/library/brew/tempBand";
+import {temperatureBand, temperatureMarks} from "@/library/brew/tempBand";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -193,21 +193,10 @@ export default function BrewTrace({
         ? undefined
         : {
             x: (bypassFrom / box.maxT) * box.width,
-            width: Math.max((bypassWide / box.maxT) * box.width, MIN_MARK_WIDTH),
+            width: Math.max((bypassWide / box.maxT) * box.width, 2),
             y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
-            height: Math.max((bypassMl / box.maxV) * svgHeight, MIN_MARK_WIDTH)
+            height: Math.max((bypassMl / box.maxV) * svgHeight, 2)
           };
-
-    // The stages a temperature belongs to. `stages ?? pours` is the same
-    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
-    // `stages`, so reading `pours` alone would draw nothing in history.
-    const tempStages = stages ?? pours;
-    // Computed from the brew stages only. Never widened for the bypass: a 55
-    // degree bypass would stretch the band far enough to put the brew's own
-    // rules about five pixels apart, which is the whole readability of the
-    // chart spent on one number that is not part of its thermal shape.
-    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
-    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
 
     if (compact) {
         return (
@@ -250,6 +239,17 @@ export default function BrewTrace({
         );
     }
 
+    // The stages a temperature belongs to. `stages ?? pours` is the same
+    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
+    // `stages`, so reading `pours` alone would draw nothing in history.
+    const tempStages = stages ?? pours;
+    // Computed from the brew stages only. Never widened for the bypass: a 55
+    // degree bypass would stretch the band far enough to put the brew's own
+    // rules about five pixels apart, which is the whole readability of the
+    // chart spent on one number that is not part of its thermal shape.
+    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
+    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
+
     const chart = (
         <Svg width={width} height={svgHeight} accessibilityRole="image"
              accessibilityLabel="Brew trace">
@@ -258,6 +258,7 @@ export default function BrewTrace({
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
+                    {/* userSpaceOnUse encodes absolute y; a duplicated id moves the fade vertically. */}
                     {marks.map((mark, i) => (
                         <LinearGradient
                             key={`tempFade-${i}`}
@@ -302,6 +303,7 @@ export default function BrewTrace({
                             stroke={palette.dim}
                             strokeWidth={2}
                             strokeLinecap="round"
+                            fill="none"
                         />
                     </React.Fragment>
                 ))}

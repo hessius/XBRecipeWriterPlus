@@ -102,11 +102,16 @@ export function dotMatrixTextProps(
  * sizing would pass the chart by.
  */
 export function dotMatrixSvgProps(
-    {fontSize = 14, weight = "bold"}: {fontSize?: number; weight?: DotoWeight} = {}
+    {fontSize = 14, weight = "bold", letterSpacing = 0.5}: {
+        fontSize?: number;
+        weight?: DotoWeight;
+        letterSpacing?: number;
+    } = {}
 ) {
     return {
         fontFamily: DOTO_FAMILIES[weight],
-        fontSize: drawnFontSize(fontSize)
+        fontSize: drawnFontSize(fontSize),
+        letterSpacing
     };
 }
 
