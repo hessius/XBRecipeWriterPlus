@@ -90,7 +90,9 @@ function ratingStore(seed: BrewRecord[] = []) {
                     ? 0
                     : rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length,
                 rated: rated.length,
+                timed: 0,
                 meanBrewSeconds: 0,
+                measured: 0,
                 meanCupMl: 0,
                 abandoned: mine.filter((r) => !countsAsBrewed(r)).length
             };

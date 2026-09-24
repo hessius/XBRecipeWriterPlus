@@ -25,7 +25,7 @@ jest.mock("@/library/RecipeDatabase");
 // hook reads is covered by its own test.
 let mockBrewSummary = {
     times: 0, lastAt: 0, avgRating: 0, rated: 0,
-    meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+    timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
 };
 const mockRate = jest.fn();
 jest.mock("@/hooks/useBrewHistory", () => ({

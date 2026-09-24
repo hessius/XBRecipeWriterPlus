@@ -8,7 +8,7 @@ import {renderWithProviders} from "@/test-utils/render";
 function summary(overrides: Partial<BrewSummary> = {}): BrewSummary {
     return {
         times: 0, lastAt: 0, avgRating: 0, rated: 0,
-        meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0,
+        timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0,
         ...overrides
     };
 }

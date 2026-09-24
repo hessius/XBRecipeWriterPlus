@@ -37,8 +37,12 @@ export type BrewSummary = {
     avgRating: number;
     /** How many rated brews entered `avgRating`. */
     rated: number;
+    /** How many timed brews entered `meanBrewSeconds`; when 0, the mean is meaningless. */
+    timed: number;
     /** Mean seconds over timed brews: counted, watched, and with a first drop. */
     meanBrewSeconds: number;
+    /** How many measured brews entered `meanCupMl`; when 0, the mean is meaningless. */
+    measured: number;
     /** Mean cup volume over measured brews: counted and watched. */
     meanCupMl: number;
     /** Rows for this recipe that did not count as cups. */
@@ -379,6 +383,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<{
             times: number; lastAt: number | null;
             avgRating: number | null; rated: number;
+            timed: number; measured: number;
             meanBrewSeconds: number | null; meanCupMl: number | null;
             abandoned: number;
         }>(
@@ -387,8 +392,10 @@ class BrewDatabase {
                     MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastAt,
                     AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating,
                     COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                    COUNT(CASE WHEN ${TIMED_SQL} THEN 1 END) AS timed,
                     AVG(CASE WHEN ${TIMED_SQL} THEN (endedAt - pouringAt) / 1000.0 END)
                         AS meanBrewSeconds,
+                    COUNT(CASE WHEN ${MEASURED_SQL} THEN 1 END) AS measured,
                     AVG(CASE WHEN ${MEASURED_SQL} THEN cupTotal END) AS meanCupMl,
                     COALESCE(SUM(CASE WHEN NOT (${COUNTED_SQL}) THEN 1 ELSE 0 END), 0)
                         AS abandoned
@@ -399,7 +406,8 @@ class BrewDatabase {
         if (row === undefined) {
             return {
                 times: 0, lastAt: 0, avgRating: 0, rated: 0,
-                meanBrewSeconds: 0, meanCupMl: 0, abandoned: 0
+                timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0,
+                abandoned: 0
             };
         }
         // SQL means over empty populations are NULL. The app's summary
@@ -410,7 +418,9 @@ class BrewDatabase {
             lastAt: row.lastAt ?? 0,
             avgRating: row.avgRating ?? 0,
             rated: row.rated,
+            timed: row.timed,
             meanBrewSeconds: row.meanBrewSeconds ?? 0,
+            measured: row.measured,
             meanCupMl: row.meanCupMl ?? 0,
             abandoned: row.abandoned
         };
