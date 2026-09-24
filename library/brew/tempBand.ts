@@ -36,7 +36,7 @@ const STEP = 5;
 
 export type TempBand = {min: number; max: number};
 
-function hasSetTemperature(temp: number): boolean {
+export function hasSetTemperature(temp: number): boolean {
     return temp > 0;
 }
 

@@ -68,7 +68,7 @@ stage's **pour only**, with a short gradient fading below it.
 | --- | --- |
 | Rule | `palette.dim`, stroke width 2, round caps, full opacity |
 | Fade | Rect from the rule down 16px, vertical gradient `palette.dim` 0.38 to 0 |
-| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, baseline 4px above it |
+| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, above it when it fits and flipped below it when it would clip |
 | Depth | Behind the water fill, the water line, the cup line and the plan line |
 
 ### Why a rule and not a filled column
@@ -106,6 +106,12 @@ short pour's rule. The label is allowed to overhang its own rule. The space
 beside it is a wait and is empty by construction, so there is nothing to collide
 with. The degree sign is kept; it is not worth trading legibility for a third of
 the width.
+
+Vertically, the label belongs to its own rule before it belongs to the band
+edge. Its normal baseline sits 4px above the rule. If that would clip at the top
+of the plot, the label flips below the rule with the same visual gap. The band
+itself is not moved down to make room for this edge case: that would squash the
+temperature shape for every recipe to solve one label.
 
 ### A flat recipe repeats its label
 

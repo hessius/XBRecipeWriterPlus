@@ -11,8 +11,8 @@ import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
-import {bandY, BAND_FLOOR, BAND_TOP, temperatureBand, temperatureInBand,
-        temperatureMarks} from "@/library/brew/tempBand";
+import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
+        temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -106,22 +106,18 @@ const TEMP_FADE_TOP = 0.38;
  * collide with, and trading the degree sign for width would cost more than it
  * saves.
  *
- * The edge labels are the same size, and not by choice: `DotMatrixText` will
- * not draw Doto below eleven points however small a size a call site asks for,
- * which is why the nine-point legend is really eleven too. Hierarchy here comes
- * from position rather than size, and that is the right answer anyway: a bar
- * whose scale is unstated is a lie, so the scale is not a footnote.
- *
  * Both are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
  * the palette documents it as not a text colour.
  */
 const TEMP_LABEL = 11;
-const TEMP_EDGE_LABEL = 11;
 /** Clearance between a reading's baseline and the rule it labels. */
 const TEMP_LABEL_GAP = 4;
 
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
+
+/** Minimum rendered bypass box size on the volume axis, unrelated to temperature mark width. */
+const BYPASS_BOX_MIN = 2;
 
 /** Below this an overrun is rounding, not a hold worth naming. */
 const GAP_FLOOR_SECONDS = 2;
@@ -129,11 +125,29 @@ const GAP_FLOOR_SECONDS = 2;
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
 
-function tempLabelY(ruleY: number, svgHeight: number, fontSize = TEMP_LABEL): number {
-    return Math.min(
-        Math.max(ruleY - TEMP_LABEL_GAP, drawnFontSize(fontSize)),
-        svgHeight
-    );
+function tempLabelY(ruleY: number, svgHeight: number): number {
+    const above = ruleY - TEMP_LABEL_GAP;
+    if (above >= drawnFontSize(TEMP_LABEL)) return above;
+    // Top-edge labels flip below their own rule instead of sharing a clamped
+    // baseline, so the reading stays attached to the rule it describes.
+    return Math.min(ruleY + TEMP_LABEL_GAP + drawnFontSize(TEMP_LABEL), svgHeight);
+}
+
+function bandMaxLabelY(svgHeight: number): number {
+    return drawnFontSize(TEMP_LABEL);
+}
+
+function bandMinLabelY(svgHeight: number): number {
+    return Math.min(svgHeight * BAND_FLOOR + drawnFontSize(TEMP_LABEL), svgHeight);
+}
+
+function bypassBoxLabelY(y: number, height: number, svgHeight: number): number {
+    const centred = y + height / 2 + drawnFontSize(TEMP_LABEL) / 3;
+    if (centred >= drawnFontSize(TEMP_LABEL) && centred <= svgHeight) return centred;
+    if (centred < drawnFontSize(TEMP_LABEL)) {
+        return Math.min(y + height + TEMP_LABEL_GAP + drawnFontSize(TEMP_LABEL), svgHeight);
+    }
+    return Math.max(y - TEMP_LABEL_GAP, drawnFontSize(TEMP_LABEL));
 }
 
 /** what was asked for, what the machine did, what landed
@@ -225,9 +239,9 @@ export default function BrewTrace({
         ? undefined
         : {
             x: (bypassFrom / box.maxT) * box.width,
-            width: Math.max((bypassWide / box.maxT) * box.width, 2),
+            width: Math.max((bypassWide / box.maxT) * box.width, BYPASS_BOX_MIN),
             y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
-            height: Math.max((bypassMl / box.maxV) * svgHeight, 2)
+            height: Math.max((bypassMl / box.maxV) * svgHeight, BYPASS_BOX_MIN)
           };
 
     if (compact) {
@@ -327,7 +341,11 @@ export default function BrewTrace({
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
-                    {/* userSpaceOnUse encodes absolute y; a duplicated id moves the fade vertically. */}
+                    {/*
+                      userSpaceOnUse encodes absolute y and SVG ids are
+                      module-global; a duplicated id in a second chart would
+                      move the fade vertically, not only recolour it.
+                    */}
                     {tempDraws.map((mark) => (
                         <LinearGradient
                             key={mark.gradientId}
@@ -391,33 +409,31 @@ export default function BrewTrace({
                         <SvgText
                             testID="trace-band-max"
                             x={width - 2}
-                            y={tempLabelY(svgHeight * BAND_TOP, svgHeight, TEMP_EDGE_LABEL)}
+                            y={bandMaxLabelY(svgHeight)}
                             textAnchor="end"
                             fill={palette.dim}
-                            {...dotMatrixSvgProps({fontSize: TEMP_EDGE_LABEL})}
+                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
                         >
                             {`${tempBand.max}`}
                         </SvgText>
                         <SvgText
                             testID="trace-band-min"
                             x={width - 2}
-                            y={Math.min(
-                                svgHeight * BAND_FLOOR + drawnFontSize(TEMP_EDGE_LABEL),
-                                svgHeight
-                            )}
+                            y={bandMinLabelY(svgHeight)}
                             textAnchor="end"
                             fill={palette.dim}
-                            {...dotMatrixSvgProps({fontSize: TEMP_EDGE_LABEL})}
+                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
                         >
                             {`${tempBand.min}`}
                         </SvgText>
                     </React.Fragment>
                 )}
-                {bypassBox && bypass && bypassMark === undefined && tempBand !== undefined && (
+                {bypassBox && bypass && bypassMark === undefined && tempBand !== undefined
+                 && hasSetTemperature(bypass.temperature) && (
                     <SvgText
                         testID="trace-bypass-temp"
                         x={bypassBox.x + bypassBox.width / 2}
-                        y={bypassBox.y + bypassBox.height / 2 + drawnFontSize(TEMP_LABEL) / 3}
+                        y={bypassBoxLabelY(bypassBox.y, bypassBox.height, svgHeight)}
                         textAnchor="middle"
                         fill={palette.dim}
                         {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}

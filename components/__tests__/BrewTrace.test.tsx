@@ -64,6 +64,29 @@ function svgScalar(value: number | number[]): number {
     return Array.isArray(value) ? value[0] : value;
 }
 
+function expectRuleLabelAttached(
+    rule: {props: Record<string, unknown>},
+    label: {props: Record<string, unknown>}
+) {
+    expect(typeof rule.props.y1).toBe("number");
+    const ruleY = rule.props.y1 as number;
+    const labelY = svgScalar(label.props.y as number | number[]);
+    if (labelY < ruleY) {
+        expect(ruleY - labelY).toBeCloseTo(4, 1);
+    } else {
+        expect(labelY - ruleY - drawnFontSize(11)).toBeCloseTo(4, 1);
+    }
+}
+
+function expectTempLabelStyle(label: {props: Record<string, unknown>}) {
+    expect(label.props.fill).toEqual(
+        expect.objectContaining({payload: processColor(palette.dim)})
+    );
+    expect(label.props.font).toEqual(
+        expect.objectContaining({fontFamily: "Doto-Bold"})
+    );
+}
+
 describe("BrewTrace", () => {
     it("draws the plan dashed", async () => {
         const {getByTestId} = await draw();
@@ -327,14 +350,25 @@ describe("BrewTrace", () => {
         expect(svgTextContent(getByTestId("trace-temp-label-1"))).toBe("93°");
     });
 
-    it("keeps a top-edge temperature label inside the plot", async () => {
-        const {getByTestId} = await draw({
-            pours: [new Pour(1, 40, 100, 40, 0, 0, 0)],
-            plannedSeconds: 10
-        });
+    it("keeps each reading attached to its own rule when labels flip below", async () => {
+        const close = [
+            new Pour(1, 40, 100, 40, 0, 0, 20),
+            new Pour(2, 40, 99, 40, 0, 0, 0)
+        ];
+        const {getByTestId} = await draw({pours: close, plannedSeconds: 40});
+        const label0 = getByTestId("trace-temp-label-0");
+        const label1 = getByTestId("trace-temp-label-1");
 
-        expect(svgScalar(getByTestId("trace-temp-label-0").props.y))
-            .toBeGreaterThanOrEqual(drawnFontSize(11));
+        expectRuleLabelAttached(getByTestId("trace-temp-0"), label0);
+        expectRuleLabelAttached(getByTestId("trace-temp-1"), label1);
+        expect(svgScalar(label0.props.y)).not.toBeCloseTo(svgScalar(label1.props.y));
+    });
+
+    it("centres a stage label on its own rule", async () => {
+        const {getByTestId} = await draw();
+        const rule = getByTestId("trace-temp-0");
+        const label = getByTestId("trace-temp-label-0");
+        expect(svgScalar(label.props.x)).toBeCloseTo((rule.props.x1 + rule.props.x2) / 2);
     });
 
     it("prints both ends of the band, since heights are not comparable between recipes", async () => {
@@ -346,6 +380,10 @@ describe("BrewTrace", () => {
         expect(svgTextContent(getByTestId("trace-band-min"))).toBe("85");
         expect(svgScalar(getByTestId("trace-band-max").props.y))
             .toBeGreaterThanOrEqual(drawnFontSize(11));
+        expect(svgScalar(getByTestId("trace-band-min").props.y))
+            .toBeGreaterThan(svgScalar(getByTestId("trace-band-max").props.y));
+        expect(svgScalar(getByTestId("trace-band-max").props.x)).toBe(298);
+        expect(svgScalar(getByTestId("trace-band-min").props.x)).toBe(298);
     });
 
     it("prints no band edges when there is nothing to scale", async () => {
@@ -411,6 +449,7 @@ describe("BrewTrace", () => {
                      startedAt: 65, state: "done"}
         });
         expect(getByTestId("trace-temp-bypass")).toBeTruthy();
+        expect(svgTextContent(getByTestId("trace-temp-label-bypass"))).toBe("88°");
     });
 
     it("draws the bypass mark at the bypass temperature", async () => {
@@ -442,6 +481,21 @@ describe("BrewTrace", () => {
         expect(gradient!.props.y2).toBe(fade.props.y + fade.props.height);
     });
 
+    it("draws bypass marks at both band edges with the same label styling", async () => {
+        for (const temperature of [85, 100]) {
+            const view = await draw({
+                pours: brewing,
+                plannedSeconds: 65,
+                bypass: {volume: 60, temperature, delivered: 60,
+                         startedAt: 65, state: "done"}
+            });
+            const label = view.getByTestId("trace-temp-label-bypass");
+            expect(view.getByTestId("trace-temp-bypass")).toBeTruthy();
+            expect(svgTextContent(label)).toBe(`${temperature}°`);
+            expectTempLabelStyle(label);
+        }
+    });
+
     it("draws no rule for a bypass the band cannot hold", async () => {
         // 55 degrees against an 85..100 band. Widening to fit it would put the
         // brew's own rules about five pixels apart.
@@ -454,6 +508,29 @@ describe("BrewTrace", () => {
         expect(queryByTestId("trace-temp-bypass")).toBeNull();
         // It still says how hot it was, in the box it already owns.
         expect(svgTextContent(getByTestId("trace-bypass-temp"))).toBe("55°");
+    });
+
+    it("does not print an unset bypass temperature", async () => {
+        const {queryByTestId} = await draw({
+            pours: brewing,
+            plannedSeconds: 65,
+            bypass: {volume: 60, temperature: -1, delivered: 60,
+                     startedAt: 65, state: "done"}
+        });
+        expect(queryByTestId("trace-temp-bypass")).toBeNull();
+        expect(queryByTestId("trace-bypass-temp")).toBeNull();
+    });
+
+    it("keeps an out-of-band bypass reading visible near the plot edge", async () => {
+        const {getByTestId} = await draw({
+            pours: brewing,
+            plannedSeconds: 65,
+            bypass: {volume: 4, temperature: 55, delivered: 4,
+                     startedAt: 65, state: "done"}
+        });
+
+        expect(svgScalar(getByTestId("trace-bypass-temp").props.y))
+            .toBeGreaterThanOrEqual(drawnFontSize(11));
     });
 
     it("never widens the band to admit a bypass", async () => {
