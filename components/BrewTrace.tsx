@@ -113,6 +113,10 @@ const TEMP_LABEL = 11;
 /** Clearance between a reading's baseline and the rule it labels. */
 const TEMP_LABEL_GAP = 4;
 
+function tempLabelHeadroom(): number {
+    return drawnFontSize(TEMP_LABEL) + TEMP_LABEL_GAP;
+}
+
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
 
@@ -214,7 +218,10 @@ export default function BrewTrace({
     // shape as the full chart, while still deriving speech from marks that
     // would really be drawn. The original plan's snippet sat below this return.
     const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
-    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
+    const tempHeadroom = tempLabelHeadroom();
+    const marks = tempBand === undefined
+        ? []
+        : temperatureMarks(tempStages, tempBand, box, tempHeadroom);
     const accessibilityLabel = temperatureAccessibilityLabel(marks);
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
@@ -317,7 +324,7 @@ export default function BrewTrace({
         : {
             x: bypassBox.x,
             width: bypassBox.width,
-            y: bandY(bypass.temperature, tempBand, svgHeight),
+            y: bandY(bypass.temperature, tempBand, svgHeight, tempHeadroom),
             temperature: bypass.temperature
           };
     const tempDraws = [

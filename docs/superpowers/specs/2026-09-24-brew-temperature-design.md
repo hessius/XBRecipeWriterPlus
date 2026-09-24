@@ -107,11 +107,11 @@ beside it is a wait and is empty by construction, so there is nothing to collide
 with. The degree sign is kept; it is not worth trading legibility for a third of
 the width.
 
-Vertically, the label's baseline sits 4px above its rule. The band reserves
-headroom for that label row by placing its top far enough below the plot's top,
-so a label never has to flip below or clamp away from the rule it names. That
-keeps vertical order consistent: higher text still means hotter water, just as
-higher rules do.
+Vertically, the label's baseline sits 4px above its rule. The band top is the
+larger of its proportional top and the actual label headroom
+(`drawnFontSize(11) + 4px`), so a label never has to flip below or clamp away
+from the rule it names. That keeps vertical order consistent: higher text still
+means hotter water, just as higher rules do.
 
 ### A flat recipe repeats its label
 

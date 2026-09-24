@@ -1,6 +1,6 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
-import {processColor, StyleSheet} from "react-native";
+import {PixelRatio, processColor, StyleSheet} from "react-native";
 import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import BrewTrace from "@/components/BrewTrace";
@@ -362,6 +362,37 @@ describe("BrewTrace", () => {
         expectRuleLabelAttached(getByTestId("trace-temp-1"), label1);
         expect(svgScalar(label0.props.y)).toBeLessThan(svgScalar(label1.props.y));
         expect(svgScalar(label0.props.y)).toBeGreaterThanOrEqual(drawnFontSize(11));
+    });
+
+    it("reserves absolute headroom for the hottest label at normal and capped font scale", async () => {
+        for (const scale of [1, 1.4]) {
+            const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(scale);
+            const view = await draw({
+                pours: [
+                    new Pour(1, 40, 100, 40, 0, 0, 20),
+                    new Pour(2, 40, 90, 40, 0, 0, 0)
+                ],
+                height: 100,
+                plannedSeconds: 40
+            });
+            const rule = view.getByTestId("trace-temp-0");
+            const label = view.getByTestId("trace-temp-label-0");
+
+            expectRuleLabelAttached(rule, label);
+            expect(svgScalar(label.props.y)).toBeGreaterThanOrEqual(drawnFontSize(11));
+            expect(rule.props.y1).toBeCloseTo(drawnFontSize(11) + 4, 1);
+            scaleSpy.mockRestore();
+        }
+    });
+
+    it("uses the proportional band top on a tall chart", async () => {
+        const {getByTestId, getByLabelText} = await draw({
+            pours: [new Pour(1, 40, 100, 40, 0, 0, 0)],
+            height: 1200,
+            plannedSeconds: 10
+        });
+        const svgHeight = getByLabelText("Brew trace, 100 degrees").props.height;
+        expect(getByTestId("trace-temp-0").props.y1).toBeCloseTo(svgHeight * BAND_TOP, 1);
     });
 
     it("centres a stage label on its own rule", async () => {

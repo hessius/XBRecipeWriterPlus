@@ -88,6 +88,16 @@ describe("bandY", () => {
         const band = {min: 85, max: 100};
         expect(bandY(90, band, 200)).toBeGreaterThan(bandY(94, band, 200));
     });
+
+    it("honours reserved headroom when the proportional top is too small", () => {
+        const band = {min: 85, max: 100};
+        expect(bandY(100, band, 100, 24)).toBe(24);
+    });
+
+    it("keeps the proportional top when it is larger than reserved headroom", () => {
+        const band = {min: 85, max: 100};
+        expect(bandY(100, band, 1000, 24)).toBeCloseTo(1000 * BAND_TOP);
+    });
 });
 
 describe("temperatureInBand", () => {
@@ -158,5 +168,12 @@ describe("temperatureMarks", () => {
 
     it("draws nothing without stages", () => {
         expect(temperatureMarks([], {min: 85, max: 100}, box)).toEqual([]);
+    });
+
+    it("passes reserved headroom through to each mark's y position", () => {
+        const hot = [new Pour(1, 40, 100, 40, 0, 0, 0)];
+        const short: Box = {...box, height: 100};
+        expect(temperatureMarks(hot, {min: 85, max: 100}, short, 24)[0].y)
+            .toBe(24);
     });
 });

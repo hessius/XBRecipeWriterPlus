@@ -82,11 +82,11 @@ export function temperatureBand(temps: number[]): TempBand | undefined {
  * The vertical region the band occupies, as fractions of the plot height.
  *
  * Fixed even though the degrees it spans are not, so the marks never wander
- * into the busy lower half where the water fill and the cup line live. The
- * top also reserves the chart label's row, so every rule can keep its reading
- * above it and vertical order always means temperature.
+ * into the busy lower half where the water fill and the cup line live. Callers
+ * can reserve more absolute headroom for labels, because text size is not a
+ * fraction of the chart height.
  */
-export const BAND_TOP = 0.13;
+export const BAND_TOP = 0.05;
 export const BAND_FLOOR = 0.45;
 
 /**
@@ -105,8 +105,10 @@ export type TempMark = {
 };
 
 /** Where a temperature sits in the plot. Screen coordinates, so downward. */
-export function bandY(temp: number, band: TempBand, height: number): number {
-    const top = height * BAND_TOP;
+export function bandY(
+    temp: number, band: TempBand, height: number, reservedHeadroom = 0
+): number {
+    const top = Math.max(height * BAND_TOP, reservedHeadroom);
     const floor = height * BAND_FLOOR;
     const span = band.max - band.min;
     if (span <= 0) return top;
@@ -127,7 +129,7 @@ export function temperatureInBand(temp: number, band: TempBand): boolean {
  * drawn for free.
  */
 export function temperatureMarks(
-    stages: Pour[], band: TempBand, box: Box
+    stages: Pour[], band: TempBand, box: Box, reservedHeadroom = 0
 ): TempMark[] {
     if (stages.length === 0 || box.maxT <= 0) return [];
     const marks: TempMark[] = [];
@@ -143,7 +145,7 @@ export function temperatureMarks(
         marks.push({
             x,
             width: Math.max(end - x, MIN_MARK_WIDTH),
-            y: bandY(temperature, band, box.height),
+            y: bandY(temperature, band, box.height, reservedHeadroom),
             temperature
         });
     });
