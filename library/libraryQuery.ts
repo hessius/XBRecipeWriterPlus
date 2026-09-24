@@ -1,4 +1,4 @@
-import {COUNTED_SQL, RATED_SQL} from "./brew/brewPopulation";
+import {brewEvidenceAggregates} from "./brew/brewPopulation";
 import {orderByFragment, type SortAxis, type SortDirection} from "./librarySort";
 import {foldSortKey, type IndexValue} from "./recipeIndex";
 import {tagKey} from "./tagKey";
@@ -125,10 +125,9 @@ function searchClause(
  * What a recipe's brews add up to, as the card reports them.
  *
  * Three figures and no recipe: the card already has the recipe. A recipe with
- * no brews has no entry at all rather than an entry of zeroes, because there is
- * nothing here that a zero would be the true answer to -- an unrated brew
- * leaves the average alone entirely, and a recipe never brewed has no last
- * brew to date.
+ * no brew rows has no entry at all. A recipe with only stopped rows can have an
+ * entry whose brew count is 0, which the card reads the same way: nothing to
+ * show, because no row is evidence of a cup.
  */
 export type RecipeEvidence = {
     /** The average of the ratings given, or 0 where none were. */
@@ -206,14 +205,11 @@ export function buildLibraryQuery(
 FROM recipes
 LEFT JOIN (
     SELECT recipeUuid,
-           MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastBrewedAt,
-           COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS brewCount,
-           -- Count and recency draw from counted brews only: cups the user
-           -- could drink. Ratings draw from that same population, and then
-           -- only where rating > 0, so the average printed beside the count
-           -- describes the same cups. A cancelled brew with a stray verdict
-           -- therefore cannot appear as an orphaned score on a card.
-           AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+           ${brewEvidenceAggregates({
+               count: "brewCount",
+               lastBrewedAt: "lastBrewedAt",
+               avgRating: "avgRating"
+           })}
     FROM brews
     GROUP BY recipeUuid
 ) AS brewStats ON brewStats.recipeUuid = recipes.uuid${where}

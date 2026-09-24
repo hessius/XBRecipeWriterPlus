@@ -34,6 +34,34 @@ export const MEASURED_SQL = `(${COUNTED_SQL} AND watched = 1)`;
 export const TIMED_SQL = `(${MEASURED_SQL} AND pouringAt > 0)`;
 export const RATED_SQL = `(${COUNTED_SQL} AND rating > 0)`;
 
+type BrewEvidenceAliases = {
+    count: string;
+    lastBrewedAt: string;
+    avgRating: string;
+};
+
+/**
+ * The three brew-evidence aggregates shared by library sorting and card copy.
+ *
+ * Both call sites need the same expression shape with different aliases:
+ * `buildLibraryQuery` sorts by `brewCount`, while `RecipeDatabase.brewEvidence`
+ * returns `brews` for the card. Keeping the expressions here means a future
+ * change cannot make the card say one thing while the sort order uses another.
+ *
+ * No `WHERE`: count, recency and rating draw different subsets from one grouped
+ * scan. Count and recency are counted brews only, and ratings are rated rows
+ * from that same counted population.
+ */
+export function brewEvidenceAggregates({
+    count,
+    lastBrewedAt,
+    avgRating
+}: BrewEvidenceAliases): string {
+    return `MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS ${lastBrewedAt},
+           COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS ${count},
+           AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS ${avgRating}`;
+}
+
 type CountedFields = {
     /** Raw SQLite rows hydrate `outcome` from TEXT before it is narrowed. */
     outcome: string;

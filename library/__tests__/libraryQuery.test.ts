@@ -49,14 +49,24 @@ function query(overrides: Partial<LibraryQuery> = {}): LibraryQuery {
 
 describe("the built statement", () => {
     it("always joins the brew aggregate under the contract column names", () => {
-        // librarySort's never-brewed-last guards key on exactly these two
-        // names, so the join must expose them whatever the axis. Pinned so a
-        // rename on either side is caught here rather than at runtime.
+        // Behaviour is covered below with real SQLite. This only checks the
+        // aggregate remains present under the names the sort vocabulary reads.
         const {sql} = buildLibraryQuery(query());
         expect(sql).toContain("MAX(CASE WHEN");
         expect(sql).toContain("AS lastBrewedAt");
         expect(sql).toContain("AS brewCount");
         expect(sql).toContain("LEFT JOIN");
+    });
+
+    it("uses the same aggregate expressions as the card evidence query", () => {
+        const aggregate = buildLibraryQuery(query()).sql
+            .match(/SELECT recipeUuid,\n(?<body>[\s\S]+?)\n    FROM brews/)?.groups?.body;
+
+        expect(aggregate?.replace("AS brewCount", "AS brews")).toContain(
+            `MAX(CASE WHEN (outcome IN ('done', 'endedOnMachine')) THEN startedAt END) AS lastBrewedAt,
+           COALESCE(SUM(CASE WHEN (outcome IN ('done', 'endedOnMachine')) THEN 1 ELSE 0 END), 0) AS brews,
+           AVG(CASE WHEN ((outcome IN ('done', 'endedOnMachine')) AND rating > 0) THEN rating END) AS avgRating`
+        );
     });
 
     it("selects the blob so a whole recipe can be hydrated", () => {

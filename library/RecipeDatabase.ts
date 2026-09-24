@@ -5,7 +5,7 @@ import {reassignIfCrossed} from './accent';
 import {copyName} from './duplicates';
 import {tagKey} from './tagKey';
 import {ensureBrewTables} from './BrewDatabase';
-import {COUNTED_SQL, RATED_SQL} from './brew/brewPopulation';
+import {brewEvidenceAggregates} from './brew/brewPopulation';
 import {buildLibraryQuery, type FilterResolver, type LibraryQuery,
         type RecipeEvidence} from './libraryQuery';
 import {columnDefinitions, indexStatements, INDEX_COLUMNS, type IndexValue,
@@ -743,13 +743,11 @@ class RecipeDatabase {
     public brewEvidence(): Record<string, RecipeEvidence> {
         const rows = this.db.getAllSync(
             `SELECT recipeUuid,
-                    COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS brews,
-                    MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastBrewedAt,
-                    -- Count and recency draw from counted brews only: cups the
-                    -- user could drink. Ratings draw from that same population,
-                    -- and then only where rating > 0, so a cancelled row with a
-                    -- stray verdict cannot show beside a count of nothing.
-                    AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+                    ${brewEvidenceAggregates({
+                        count: "brews",
+                        lastBrewedAt: "lastBrewedAt",
+                        avgRating: "avgRating"
+                    })}
              FROM brews GROUP BY recipeUuid;`
         ) as {
             recipeUuid: string; brews: number;
