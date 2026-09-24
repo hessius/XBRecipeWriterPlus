@@ -1,4 +1,17 @@
-import {temperatureBand, BAND_MIN, BAND_MAX, MIN_SPAN} from "@/library/brew/tempBand";
+import {
+    bandY,
+    temperatureBand,
+    temperatureMarks,
+    BAND_FLOOR,
+    BAND_MAX,
+    BAND_MIN,
+    BAND_TOP,
+    MIN_MARK_WIDTH,
+    MIN_SPAN
+} from "@/library/brew/tempBand";
+import {stageSpans} from "@/library/brew/brewShape";
+import Pour from "@/library/Pour";
+import type {Box} from "@/library/brew/brewShape";
 
 describe("temperatureBand", () => {
     it("has no band without temperatures", () => {
@@ -45,12 +58,6 @@ describe("temperatureBand", () => {
         expect(temperatureBand([60, 95])).toEqual({min: 55, max: 100});
     });
 });
-
-import {bandY, temperatureMarks, BAND_TOP, BAND_FLOOR, MIN_MARK_WIDTH}
-    from "@/library/brew/tempBand";
-import {stageSpans} from "@/library/brew/brewShape";
-import Pour from "@/library/Pour";
-import type {Box} from "@/library/brew/brewShape";
 
 // 40 ml at 4.0 ml/s is a 10 s pour, then a 30 s pause; then 100 ml, 25 s, no
 // pause. Planned 65 s.
