@@ -45,3 +45,68 @@ describe("temperatureBand", () => {
         expect(temperatureBand([60, 95])).toEqual({min: 55, max: 100});
     });
 });
+
+import {bandY, temperatureMarks, BAND_TOP, BAND_FLOOR, MIN_MARK_WIDTH}
+    from "@/library/brew/tempBand";
+import {stageSpans} from "@/library/brew/brewShape";
+import Pour from "@/library/Pour";
+import type {Box} from "@/library/brew/brewShape";
+
+// 40 ml at 4.0 ml/s is a 10 s pour, then a 30 s pause; then 100 ml, 25 s, no
+// pause. Planned 65 s.
+const stepped = [
+    new Pour(1, 40, 94, 40, 0, 0, 30),
+    new Pour(2, 100, 90, 40, 0, 0, 0)
+];
+const box: Box = {width: 400, height: 200, maxT: 65, maxV: 140};
+
+describe("bandY", () => {
+    it("puts the band's top at the top of its region and its floor at the bottom", () => {
+        const band = {min: 85, max: 100};
+        expect(bandY(100, band, 200)).toBeCloseTo(200 * BAND_TOP);
+        expect(bandY(85, band, 200)).toBeCloseTo(200 * BAND_FLOOR);
+    });
+
+    it("runs downward, because screen coordinates do", () => {
+        const band = {min: 85, max: 100};
+        expect(bandY(90, band, 200)).toBeGreaterThan(bandY(94, band, 200));
+    });
+});
+
+describe("temperatureMarks", () => {
+    it("draws one mark per stage", () => {
+        expect(temperatureMarks(stepped, {min: 85, max: 100}, box)).toHaveLength(2);
+    });
+
+    it("stops each mark at the end of its pour, not the end of its stage", () => {
+        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box);
+        const spans = stageSpans(stepped);
+        // The first stage pours for 10 s of its 40 s. A mark that ran to the
+        // stage boundary would claim a water temperature during the pause.
+        expect(marks[0].x + marks[0].width)
+            .toBeCloseTo((spans[0].pourEnd / box.maxT) * box.width, 1);
+        expect(marks[0].x + marks[0].width)
+            .toBeLessThan((spans[0].end / box.maxT) * box.width);
+    });
+
+    it("carries the temperature so the caller can print it", () => {
+        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box);
+        expect(marks.map((m) => m.temperature)).toEqual([94, 90]);
+    });
+
+    it("keeps a tiny pour visible", () => {
+        const rinse = [new Pour(1, 2, 94, 40, 0, 0, 300)];
+        const wide: Box = {width: 400, height: 200, maxT: 300, maxV: 2};
+        expect(temperatureMarks(rinse, {min: 85, max: 100}, wide)[0].width)
+            .toBeGreaterThanOrEqual(MIN_MARK_WIDTH);
+    });
+
+    it("draws nothing without an axis", () => {
+        expect(temperatureMarks(stepped, {min: 85, max: 100},
+                                {...box, maxT: 0})).toEqual([]);
+    });
+
+    it("draws nothing without stages", () => {
+        expect(temperatureMarks([], {min: 85, max: 100}, box)).toEqual([]);
+    });
+});

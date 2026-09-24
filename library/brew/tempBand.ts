@@ -1,3 +1,6 @@
+import {stageSpans, type Box} from "@/library/brew/brewShape";
+import type Pour from "@/library/Pour";
+
 /**
  * The temperature band, and where each stage's mark sits inside it.
  *
@@ -65,4 +68,62 @@ export function temperatureBand(temps: number[]): TempBand | undefined {
     }
 
     return {min, max};
+}
+
+/**
+ * The vertical region the band occupies, as fractions of the plot height.
+ *
+ * Fixed even though the degrees it spans are not, so the marks never wander
+ * into the busy lower half where the water fill and the cup line live, and so
+ * the 16 px fades have somewhere to finish.
+ */
+export const BAND_TOP = 0.05;
+export const BAND_FLOOR = 0.45;
+
+/**
+ * The narrowest a mark may be drawn.
+ *
+ * A 5 ml rinse on a five minute recipe is a fraction of a pixel wide. Same
+ * floor the bypass box already uses, for the same reason.
+ */
+export const MIN_MARK_WIDTH = 2;
+
+export type TempMark = {
+    x: number;
+    width: number;
+    y: number;
+    temperature: number;
+};
+
+/** Where a temperature sits in the plot. Screen coordinates, so downward. */
+export function bandY(temp: number, band: TempBand, height: number): number {
+    const top = height * BAND_TOP;
+    const floor = height * BAND_FLOOR;
+    const span = band.max - band.min;
+    if (span <= 0) return top;
+    return top + ((band.max - temp) / span) * (floor - top);
+}
+
+/**
+ * One mark per stage, spanning that stage's **pour only**.
+ *
+ * Not the whole stage: a stage is mostly waiting, and a mark drawn across the
+ * wait asserts a water temperature at a moment when no water is moving. The
+ * gaps between marks are therefore the pauses, which is the recipe's rhythm
+ * drawn for free.
+ */
+export function temperatureMarks(
+    stages: Pour[], band: TempBand, box: Box
+): TempMark[] {
+    if (stages.length === 0 || box.maxT <= 0) return [];
+    return stageSpans(stages).map((span, i) => {
+        const x = (span.start / box.maxT) * box.width;
+        const end = (span.pourEnd / box.maxT) * box.width;
+        return {
+            x,
+            width: Math.max(end - x, MIN_MARK_WIDTH),
+            y: bandY(stages[i].temperature, band, box.height),
+            temperature: stages[i].temperature
+        };
+    });
 }
