@@ -205,6 +205,99 @@ describe("BrewTrace", () => {
             expect.objectContaining({payload: processColor(cupLineFor(TEST_ACCENT))})
         );
     });
+
+    it("draws a rule per stage, descending with the temperature", async () => {
+        const descending = [
+            new Pour(1, 40, 94, 40, 0, 0, 30),
+            new Pour(2, 100, 92, 40, 0, 0, 20),
+            new Pour(3, 100, 90, 40, 0, 0, 0)
+        ];
+        const {getByTestId} = await draw({pours: descending, plannedSeconds: 110});
+        const y = (i: number) => getByTestId(`trace-temp-${i}`).props.y1;
+        // Screen coordinates run downward, so a cooler stage sits lower.
+        expect(y(1)).toBeGreaterThan(y(0));
+        expect(y(2)).toBeGreaterThan(y(1));
+    });
+
+    it("draws a flat recipe as one height", async () => {
+        const flat = [
+            new Pour(1, 40, 93, 40, 0, 0, 30),
+            new Pour(2, 100, 93, 40, 0, 0, 0)
+        ];
+        const {getByTestId} = await draw({pours: flat, plannedSeconds: 65});
+        expect(getByTestId("trace-temp-1").props.y1)
+            .toBeCloseTo(getByTestId("trace-temp-0").props.y1);
+    });
+
+    it("stops a rule at the end of its pour", async () => {
+        // Stage 1 pours 40 ml at 4 ml/s, so 10 s of a 40 s stage. A rule that
+        // ran to the stage boundary would cover the 30 s pause.
+        const {getByTestId} = await draw({
+            pours: [new Pour(1, 40, 94, 40, 0, 0, 30), new Pour(2, 100, 90, 40, 0, 0, 0)],
+            plannedSeconds: 65,
+            width: 260
+        });
+        const rule = getByTestId("trace-temp-0");
+        // 10 s of 65 s across 260 px is 40 px. The stage ends at 40 s, 160 px.
+        expect(rule.props.x2).toBeCloseTo(40, 0);
+    });
+
+    it("keeps a rinse pour visible", async () => {
+        const {getByTestId} = await draw({
+            pours: [new Pour(1, 2, 94, 40, 0, 0, 290), new Pour(2, 100, 90, 40, 0, 0, 0)],
+            plannedSeconds: 315,
+            width: 260
+        });
+        const rule = getByTestId("trace-temp-0");
+        expect(rule.props.x2 - rule.props.x1).toBeGreaterThanOrEqual(2);
+    });
+
+    it("draws the rules in the label grey and nothing else", async () => {
+        const {getByTestId} = await draw();
+        expect(getByTestId("trace-temp-0").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(palette.dim)})
+        );
+    });
+
+    it("draws every rule before any water has moved", async () => {
+        // Live, the whole temperature plan is known the moment the recipe is
+        // sent, and is drawn from t=0 exactly as the plan line is. Nobody reads
+        // the plan line as having happened, so a grey mark ahead of the water
+        // already means intent in this chart.
+        const {getByTestId} = await draw({
+            pours: [
+                new Pour(1, 40, 94, 40, 0, 0, 30),
+                new Pour(2, 100, 90, 40, 0, 0, 0)
+            ],
+            samples: [],
+            plannedSeconds: 65
+        });
+        expect(getByTestId("trace-temp-1")).toBeTruthy();
+    });
+
+    it("draws no rules for a record with no stages", async () => {
+        // A brew written before `plan` existed. It draws as it always did.
+        const {queryByTestId} = await draw({pours: [], plannedSeconds: 0});
+        expect(queryByTestId("trace-temp-0")).toBeNull();
+    });
+
+    it("compact draws no temperature at all", async () => {
+        const {queryByTestId} = await draw({compact: true});
+        expect(queryByTestId("trace-temp-0")).toBeNull();
+    });
+
+    it("reads the temperature from the stages when there is no plan", async () => {
+        // A summary hides the plan line by passing `pours={[]}` and supplies
+        // `stages` separately. Reading `pours` alone would silently draw
+        // nothing in history, which is the main place this is for.
+        const {getByTestId} = await draw({
+            pours: [],
+            stages: [new Pour(1, 40, 94, 40, 0, 0, 0)],
+            samples: samples([0, 0, 0], [10_000, 40, 20]),
+            plannedSeconds: 0
+        });
+        expect(getByTestId("trace-temp-0")).toBeTruthy();
+    });
 });
 
 describe("the trace as it was drawn", () => {

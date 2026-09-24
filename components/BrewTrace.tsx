@@ -10,6 +10,7 @@ import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
+import {MIN_MARK_WIDTH, temperatureBand, temperatureMarks} from "@/library/brew/tempBand";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -79,6 +80,20 @@ function rowHeight(fontSize: number): number {
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
 const FILL_BOTTOM = 0;
+
+/**
+ * The fade beneath a temperature rule, and its opacity at the rule.
+ *
+ * A bare rule reads as a boundary; a rule with a little weight under it reads
+ * as a body of water at a temperature. Short enough never to reach the water
+ * fill, so the grey and the accent never mix.
+ *
+ * Not a filled column: a column encodes temperature twice, as a height and as
+ * an area, and area is the louder of the two while meaning nothing at all. A
+ * hot stage is not a bigger stage.
+ */
+const TEMP_FADE = 16;
+const TEMP_FADE_TOP = 0.38;
 
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
@@ -163,7 +178,7 @@ export default function BrewTrace({
     // them in as a prop would let the shading drift off the chart it shades.
     const bounds = stageBounds(samples, stages ?? pours);
     const selected = selectedIndex !== null ? bounds[selectedIndex] : undefined;
-    const band = selected && box.maxT > 0 ? {
+    const selectionBand = selected && box.maxT > 0 ? {
         x: (selected.start / box.maxT) * box.width,
         width: Math.max(((selected.end - selected.start) / box.maxT) * box.width, 1)
     } : undefined;
@@ -178,10 +193,21 @@ export default function BrewTrace({
         ? undefined
         : {
             x: (bypassFrom / box.maxT) * box.width,
-            width: Math.max((bypassWide / box.maxT) * box.width, 2),
+            width: Math.max((bypassWide / box.maxT) * box.width, MIN_MARK_WIDTH),
             y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
-            height: Math.max((bypassMl / box.maxV) * svgHeight, 2)
+            height: Math.max((bypassMl / box.maxV) * svgHeight, MIN_MARK_WIDTH)
           };
+
+    // The stages a temperature belongs to. `stages ?? pours` is the same
+    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
+    // `stages`, so reading `pours` alone would draw nothing in history.
+    const tempStages = stages ?? pours;
+    // Computed from the brew stages only. Never widened for the bypass: a 55
+    // degree bypass would stretch the band far enough to put the brew's own
+    // rules about five pixels apart, which is the whole readability of the
+    // chart spent on one number that is not part of its thermal shape.
+    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
+    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
 
     if (compact) {
         return (
@@ -232,11 +258,23 @@ export default function BrewTrace({
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
+                    {marks.map((mark, i) => (
+                        <LinearGradient
+                            key={`tempFade-${i}`}
+                            id={`tempFade-${i}`}
+                            gradientUnits="userSpaceOnUse"
+                            x1="0" y1={mark.y} x2="0" y2={mark.y + TEMP_FADE}
+                        >
+                            <Stop offset="0" stopColor={palette.dim}
+                                  stopOpacity={TEMP_FADE_TOP} />
+                            <Stop offset="1" stopColor={palette.dim} stopOpacity={0} />
+                        </LinearGradient>
+                    ))}
                 </Defs>
-                {band && (
+                {selectionBand && (
                     <Rect
                         testID="trace-band"
-                        x={band.x} y={0} width={band.width} height={svgHeight}
+                        x={selectionBand.x} y={0} width={selectionBand.width} height={svgHeight}
                         fill={palette.raised}
                     />
                 )}
@@ -248,6 +286,24 @@ export default function BrewTrace({
                         stroke={palette.line}
                         strokeWidth={1}
                     />
+                ))}
+                {marks.map((mark, i) => (
+                    <React.Fragment key={`temp-${i}`}>
+                        <Rect
+                            testID={`trace-temp-fade-${i}`}
+                            x={mark.x} y={mark.y}
+                            width={mark.width} height={TEMP_FADE}
+                            fill={`url(#tempFade-${i})`}
+                        />
+                        <Line
+                            testID={`trace-temp-${i}`}
+                            x1={mark.x} y1={mark.y}
+                            x2={mark.x + mark.width} y2={mark.y}
+                            stroke={palette.dim}
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                        />
+                    </React.Fragment>
                 ))}
                 {waterFill !== "" && (
                     <Path testID="trace-water-fill" d={waterFill} fill="url(#waterFill)"
