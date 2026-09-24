@@ -7,7 +7,9 @@ import {PixelRatio, StyleSheet} from "react-native";
 import DotMatrixText, {
     DOTO_FAMILIES,
     DOTO_MAX_FONT_SCALE,
-    DOTO_MIN_FONT_SIZE
+    DOTO_MIN_FONT_SIZE,
+    dotMatrixSvgProps,
+    drawnFontSize
 } from "@/components/DotMatrixText";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -19,6 +21,21 @@ describe("DotMatrixText", () => {
     it("renders its content", async () => {
         await renderWithProviders(<DotMatrixText>255</DotMatrixText>);
         expect(screen.getByText("255")).toBeTruthy();
+    });
+
+    describe("dotMatrixSvgProps", () => {
+        it("names a real Doto instance", () => {
+            expect(dotMatrixSvgProps().fontFamily).toBe(DOTO_FAMILIES.bold);
+        });
+
+        it("honours the floor, since SVG text has no component to clamp it", () => {
+            expect(dotMatrixSvgProps({fontSize: 6}).fontSize)
+                .toBeGreaterThanOrEqual(DOTO_MIN_FONT_SIZE);
+        });
+
+        it("reports the drawn size, because SVG text is not scaled by the OS", () => {
+            expect(dotMatrixSvgProps({fontSize: 11}).fontSize).toBe(drawnFontSize(11));
+        });
     });
 
     it("defaults to the bold Doto instance", async () => {

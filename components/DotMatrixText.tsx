@@ -89,6 +89,28 @@ export function dotMatrixTextProps(
 }
 
 /**
+ * Doto's style for the other thing that cannot be a `DotMatrixText`: text
+ * inside an `<Svg>`.
+ *
+ * `react-native-svg` renders its own text node, so a chart label could not be
+ * wrapped in this component and would otherwise name the family and the size by
+ * hand — the moment the floor stops being enforced anywhere. Ask here instead.
+ *
+ * The size returned is the **drawn** size rather than the requested one.
+ * Unlike a React Native `<Text>`, SVG text is not multiplied by the OS font
+ * scale afterwards, so the bounded scale has to be baked in here or accessibility
+ * sizing would pass the chart by.
+ */
+export function dotMatrixSvgProps(
+    {fontSize = 14, weight = "bold"}: {fontSize?: number; weight?: DotoWeight} = {}
+) {
+    return {
+        fontFamily: DOTO_FAMILIES[weight],
+        fontSize: drawnFontSize(fontSize)
+    };
+}
+
+/**
  * The size Doto is actually drawn at, after the bounded OS scale.
  *
  * Exported because a caller that clips dot-matrix text to a fixed box —
