@@ -1,16 +1,18 @@
 import React from "react";
 import {Pressable} from "react-native";
-import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop} from "react-native-svg";
+import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
+    from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
+import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
-import {temperatureBand, temperatureMarks} from "@/library/brew/tempBand";
+import {bandY, BAND_FLOOR, BAND_TOP, temperatureBand, temperatureInBand,
+        temperatureMarks} from "@/library/brew/tempBand";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -95,6 +97,29 @@ const FILL_BOTTOM = 0;
 const TEMP_FADE = 16;
 const TEMP_FADE_TOP = 0.38;
 
+/**
+ * The reading above each rule, and the band's own edge labels.
+ *
+ * Eleven is Doto's floor, which is also the smallest this reads at arm's length
+ * on a phone. The label is allowed to overhang a very short rule: the space
+ * beside it is a pause and is empty by construction, so there is nothing to
+ * collide with, and trading the degree sign for width would cost more than it
+ * saves.
+ *
+ * The edge labels are the same size, and not by choice: `DotMatrixText` will
+ * not draw Doto below eleven points however small a size a call site asks for,
+ * which is why the nine-point legend is really eleven too. Hierarchy here comes
+ * from position rather than size, and that is the right answer anyway: a bar
+ * whose scale is unstated is a lie, so the scale is not a footnote.
+ *
+ * Both are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
+ * the palette documents it as not a text colour.
+ */
+const TEMP_LABEL = 11;
+const TEMP_EDGE_LABEL = 11;
+/** Clearance between a reading's baseline and the rule it labels. */
+const TEMP_LABEL_GAP = 4;
+
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
 
@@ -103,6 +128,13 @@ const GAP_FLOOR_SECONDS = 2;
 
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
+
+function tempLabelY(ruleY: number, svgHeight: number, fontSize = TEMP_LABEL): number {
+    return Math.min(
+        Math.max(ruleY - TEMP_LABEL_GAP, drawnFontSize(fontSize)),
+        svgHeight
+    );
+}
 
 /** what was asked for, what the machine did, what landed
  * in the cup.
@@ -249,6 +281,43 @@ export default function BrewTrace({
     // chart spent on one number that is not part of its thermal shape.
     const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
     const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
+    /**
+     * The bypass's own mark, when the band can hold it.
+     *
+     * The band is never widened to admit it: bypass water is usually far cooler
+     * than brew water, and a 55 degree bypass would stretch the band enough to
+     * put the brew's rules about five pixels apart. A rule whose whole meaning
+     * is its height cannot be drawn off the scale, so when it does not fit it is
+     * not drawn and the temperature is printed in the box instead.
+     */
+    const bypassMark = tempBand === undefined || bypass === undefined
+                       || bypassBox === undefined
+                       || !temperatureInBand(bypass.temperature, tempBand)
+        ? undefined
+        : {
+            x: bypassBox.x,
+            width: bypassBox.width,
+            y: bandY(bypass.temperature, tempBand, svgHeight),
+            temperature: bypass.temperature
+          };
+    const tempDraws = [
+        ...marks.map((mark, i) => ({
+            ...mark,
+            key: `${i}`,
+            gradientId: `tempFade-${i}`,
+            fadeTestID: `trace-temp-fade-${i}`,
+            lineTestID: `trace-temp-${i}`,
+            labelTestID: `trace-temp-label-${i}`
+        })),
+        ...(bypassMark === undefined ? [] : [{
+            ...bypassMark,
+            key: "bypass",
+            gradientId: "tempFade-bypass",
+            fadeTestID: "trace-temp-fade-bypass",
+            lineTestID: "trace-temp-bypass",
+            labelTestID: "trace-temp-label-bypass"
+        }])
+    ];
 
     const chart = (
         <Svg width={width} height={svgHeight} accessibilityRole="image"
@@ -259,10 +328,10 @@ export default function BrewTrace({
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
                     {/* userSpaceOnUse encodes absolute y; a duplicated id moves the fade vertically. */}
-                    {marks.map((mark, i) => (
+                    {tempDraws.map((mark) => (
                         <LinearGradient
-                            key={`tempFade-${i}`}
-                            id={`tempFade-${i}`}
+                            key={mark.gradientId}
+                            id={mark.gradientId}
                             gradientUnits="userSpaceOnUse"
                             x1="0" y1={mark.y} x2="0" y2={mark.y + TEMP_FADE}
                         >
@@ -288,16 +357,16 @@ export default function BrewTrace({
                         strokeWidth={1}
                     />
                 ))}
-                {marks.map((mark, i) => (
-                    <React.Fragment key={`temp-${i}`}>
+                {tempDraws.map((mark) => (
+                    <React.Fragment key={`temp-${mark.key}`}>
                         <Rect
-                            testID={`trace-temp-fade-${i}`}
+                            testID={mark.fadeTestID}
                             x={mark.x} y={mark.y}
                             width={mark.width} height={TEMP_FADE}
-                            fill={`url(#tempFade-${i})`}
+                            fill={`url(#${mark.gradientId})`}
                         />
                         <Line
-                            testID={`trace-temp-${i}`}
+                            testID={mark.lineTestID}
                             x1={mark.x} y1={mark.y}
                             x2={mark.x + mark.width} y2={mark.y}
                             stroke={palette.dim}
@@ -305,8 +374,57 @@ export default function BrewTrace({
                             strokeLinecap="round"
                             fill="none"
                         />
+                        <SvgText
+                            testID={mark.labelTestID}
+                            x={mark.x + mark.width / 2}
+                            y={tempLabelY(mark.y, svgHeight)}
+                            textAnchor="middle"
+                            fill={palette.dim}
+                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                        >
+                            {`${mark.temperature}°`}
+                        </SvgText>
                     </React.Fragment>
                 ))}
+                {tempBand !== undefined && (
+                    <React.Fragment>
+                        <SvgText
+                            testID="trace-band-max"
+                            x={width - 2}
+                            y={tempLabelY(svgHeight * BAND_TOP, svgHeight, TEMP_EDGE_LABEL)}
+                            textAnchor="end"
+                            fill={palette.dim}
+                            {...dotMatrixSvgProps({fontSize: TEMP_EDGE_LABEL})}
+                        >
+                            {`${tempBand.max}`}
+                        </SvgText>
+                        <SvgText
+                            testID="trace-band-min"
+                            x={width - 2}
+                            y={Math.min(
+                                svgHeight * BAND_FLOOR + drawnFontSize(TEMP_EDGE_LABEL),
+                                svgHeight
+                            )}
+                            textAnchor="end"
+                            fill={palette.dim}
+                            {...dotMatrixSvgProps({fontSize: TEMP_EDGE_LABEL})}
+                        >
+                            {`${tempBand.min}`}
+                        </SvgText>
+                    </React.Fragment>
+                )}
+                {bypassBox && bypass && bypassMark === undefined && tempBand !== undefined && (
+                    <SvgText
+                        testID="trace-bypass-temp"
+                        x={bypassBox.x + bypassBox.width / 2}
+                        y={bypassBox.y + bypassBox.height / 2 + drawnFontSize(TEMP_LABEL) / 3}
+                        textAnchor="middle"
+                        fill={palette.dim}
+                        {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                    >
+                        {`${bypass.temperature}°`}
+                    </SvgText>
+                )}
                 {waterFill !== "" && (
                     <Path testID="trace-water-fill" d={waterFill} fill="url(#waterFill)"
                           stroke="none" />

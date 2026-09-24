@@ -1,5 +1,6 @@
 import {
     bandY,
+    temperatureInBand,
     temperatureBand,
     temperatureMarks,
     BAND_FLOOR,
@@ -86,6 +87,25 @@ describe("bandY", () => {
     it("runs downward, because screen coordinates do", () => {
         const band = {min: 85, max: 100};
         expect(bandY(90, band, 200)).toBeGreaterThan(bandY(94, band, 200));
+    });
+});
+
+describe("temperatureInBand", () => {
+    it("accepts temperatures inside the band, including both edges", () => {
+        const band = {min: 85, max: 100};
+        expect(temperatureInBand(85, band)).toBe(true);
+        expect(temperatureInBand(92, band)).toBe(true);
+        expect(temperatureInBand(100, band)).toBe(true);
+    });
+
+    it("rejects temperatures outside the band", () => {
+        const band = {min: 85, max: 100};
+        expect(temperatureInBand(84, band)).toBe(false);
+        expect(temperatureInBand(101, band)).toBe(false);
+    });
+
+    it("rejects an unset temperature", () => {
+        expect(temperatureInBand(-1, {min: 85, max: 100})).toBe(false);
     });
 });
 

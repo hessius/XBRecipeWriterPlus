@@ -112,6 +112,11 @@ export function bandY(temp: number, band: TempBand, height: number): number {
     return top + ((band.max - temp) / span) * (floor - top);
 }
 
+/** Whether a setpoint can be drawn against this band without extrapolating. */
+export function temperatureInBand(temp: number, band: TempBand): boolean {
+    return hasSetTemperature(temp) && temp >= band.min && temp <= band.max;
+}
+
 /**
  * One mark per stage, spanning that stage's **pour only**.
  *
