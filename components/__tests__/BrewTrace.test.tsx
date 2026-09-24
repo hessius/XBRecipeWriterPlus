@@ -200,8 +200,9 @@ describe("BrewTrace", () => {
         const {getByLabelText: getLabelA} = await draw({height: knownHeight, compact: false});
         const {getByLabelText: getLabelB} = await draw({height: knownHeight, compact: true});
 
-        expect(getLabelA("Brew trace").props.height).toBe(knownHeight - chrome);
-        expect(getLabelB("Brew trace").props.height).toBe(knownHeight);
+        const label = "Brew trace, Stage 01, 93 degrees; Stage 02, 92 degrees";
+        expect(getLabelA(label).props.height).toBe(knownHeight - chrome);
+        expect(getLabelB(label).props.height).toBe(knownHeight);
     });
 
     it("fuses the dashes when told to", async () => {
@@ -277,7 +278,9 @@ describe("BrewTrace", () => {
         const y = getByTestId("trace-temp-0").props.y1;
         expect(getByTestId("trace-temp-1").props.y1).toBeCloseTo(y);
 
-        const svgHeight = getByLabelText("Brew trace").props.height;
+        const svgHeight = getByLabelText(
+            "Brew trace, Stage 01, 93 degrees; Stage 02, 93 degrees"
+        ).props.height;
         expect(y).toBeGreaterThan(svgHeight * BAND_TOP);
         expect(y).toBeLessThan(svgHeight * BAND_FLOOR);
     });
@@ -541,6 +544,58 @@ describe("BrewTrace", () => {
                      startedAt: 65, state: "done"}
         });
         expect(svgTextContent(cold.getByTestId("trace-band-min"))).toBe("85");
+    });
+
+    it("says the stage temperature run out loud", async () => {
+        const {getByLabelText} = await draw({
+            pours: [
+                new Pour(1, 40, 94, 40, 0, 0, 30),
+                new Pour(2, 100, 90, 40, 0, 0, 0)
+            ],
+            plannedSeconds: 65
+        });
+        expect(getByLabelText("Brew trace, Stage 01, 94 degrees; Stage 02, 90 degrees"))
+            .toBeTruthy();
+    });
+
+    it("does not say unset stage or bypass temperatures out loud", async () => {
+        const {getByLabelText} = await draw({
+            pours: [
+                new Pour(1, 40, -1, 40, 0, 0, 30),
+                new Pour(2, 100, 90, 40, 0, 0, 0)
+            ],
+            plannedSeconds: 65,
+            bypass: {volume: 60, temperature: -1, delivered: 60,
+                     startedAt: 65, state: "done"}
+        });
+        expect(getByLabelText("Brew trace, Stage 02, 90 degrees")).toBeTruthy();
+    });
+
+    it("says the bypass temperature the same way in and out of the band", async () => {
+        const inside = await draw({
+            pours: brewing,
+            plannedSeconds: 65,
+            bypass: {volume: 60, temperature: 88, delivered: 60,
+                     startedAt: 65, state: "done"}
+        });
+        const outside = await draw({
+            pours: brewing,
+            plannedSeconds: 65,
+            bypass: {volume: 60, temperature: 55, delivered: 60,
+                     startedAt: 65, state: "done"}
+        });
+
+        expect(inside.getByLabelText(
+            "Brew trace, Stage 01, 94 degrees; Stage 02, 90 degrees; Bypass, 88 degrees"
+        )).toBeTruthy();
+        expect(outside.getByLabelText(
+            "Brew trace, Stage 01, 94 degrees; Stage 02, 90 degrees; Bypass, 55 degrees"
+        )).toBeTruthy();
+    });
+
+    it("says only what it is when there is no temperature to say", async () => {
+        const {getByLabelText} = await draw({pours: [], plannedSeconds: 0});
+        expect(getByLabelText("Brew trace")).toBeTruthy();
     });
 });
 

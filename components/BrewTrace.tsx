@@ -150,6 +150,21 @@ function bypassBoxLabelY(y: number, height: number, svgHeight: number): number {
     return Math.max(y - TEMP_LABEL_GAP, drawnFontSize(TEMP_LABEL));
 }
 
+/** One spoken description for the temperatures encoded by height in the chart. */
+function temperatureAccessibilityLabel(stages: Pour[], bypass?: BypassView): string {
+    const stageFacts = stages
+        .map((pour, index) => hasSetTemperature(pour.temperature)
+            ? `Stage ${String(index + 1).padStart(2, "0")}, ${pour.temperature} degrees`
+            : null)
+        .filter((fact): fact is string => fact !== null);
+    const bypassFact = bypass !== undefined && Math.max(bypass.volume, 0) > 0
+                       && hasSetTemperature(bypass.temperature)
+        ? [`Bypass, ${bypass.temperature} degrees`]
+        : [];
+    const facts = [...stageFacts, ...bypassFact];
+    return facts.length === 0 ? "Brew trace" : `Brew trace, ${facts.join("; ")}`;
+}
+
 /** what was asked for, what the machine did, what landed
  * in the cup.
  *
@@ -204,6 +219,11 @@ export default function BrewTrace({
     // Derived here rather than at each use so the compact render, the full render
     // and the legend cannot drift apart.
     const cupColour = cupLineFor(accent);
+    // The stages a temperature belongs to. `stages ?? pours` is the same
+    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
+    // `stages`, so reading `pours` alone would draw nothing in history.
+    const tempStages = stages ?? pours;
+    const accessibilityLabel = temperatureAccessibilityLabel(tempStages, bypass);
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
@@ -247,7 +267,7 @@ export default function BrewTrace({
     if (compact) {
         return (
             <Svg width={width} height={height} accessibilityRole="image"
-                 accessibilityLabel="Brew trace">
+                 accessibilityLabel={accessibilityLabel}>
                 {planPath !== "" && (
                     <Path
                         testID="trace-plan"
@@ -285,10 +305,6 @@ export default function BrewTrace({
         );
     }
 
-    // The stages a temperature belongs to. `stages ?? pours` is the same
-    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
-    // `stages`, so reading `pours` alone would draw nothing in history.
-    const tempStages = stages ?? pours;
     // Computed from the brew stages only. Never widened for the bypass: a 55
     // degree bypass would stretch the band far enough to put the brew's own
     // rules about five pixels apart, which is the whole readability of the
@@ -335,7 +351,7 @@ export default function BrewTrace({
 
     const chart = (
         <Svg width={width} height={svgHeight} accessibilityRole="image"
-             accessibilityLabel="Brew trace">
+             accessibilityLabel={accessibilityLabel}>
                 <Defs>
                     <LinearGradient id="waterFill" x1="0" y1="0" x2="0" y2="1">
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
@@ -509,7 +525,7 @@ export default function BrewTrace({
                 <Pressable
                     testID="trace-tap"
                     accessibilityRole="button"
-                    accessibilityLabel="Brew trace, tap a stage"
+                    accessibilityLabel={`${accessibilityLabel}. Tap a stage`}
                     onPress={(e) => {
                         const index = stageAtX(bounds, e.nativeEvent.locationX, width, box.maxT);
                         if (index !== null) onSelectStage(index);

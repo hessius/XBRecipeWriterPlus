@@ -231,8 +231,13 @@ same silent fallback `stageWater`, `stalls` and `bypass` already use.
 ## Accessibility
 
 The chart's `accessibilityLabel` gains the temperature run, so a screen reader
-gets the shape it cannot see: "Brew trace, 94, 92 and 90 degrees". The band
-labels are decorative and are not announced separately.
+gets the facts it cannot see as height: "Brew trace, Stage 01, 94 degrees;
+Stage 02, 92 degrees; Stage 03, 90 degrees". The wording mirrors the stage
+ladder, including leading-zero stage numbers. A bypass with a set temperature
+is announced as "Bypass, 88 degrees" whether it is drawn as a rule or printed
+in the bypass box, because those are two visual treatments of the same fact.
+Unset sentinel temperatures are not announced. The band labels are decorative
+and are not announced separately.
 
 ## Out of scope
 

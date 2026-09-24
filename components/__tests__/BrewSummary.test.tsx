@@ -77,13 +77,15 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>>
 describe("BrewSummary", () => {
     it("draws the trace when the brew kept a stream", async () => {
         const {getByLabelText} = await draw({hasStream: true});
-        expect(getByLabelText("Brew trace")).toBeTruthy();
+        expect(getByLabelText(
+            "Brew trace, Stage 01, 93 degrees; Stage 02, 93 degrees; Stage 03, 93 degrees"
+        )).toBeTruthy();
     });
 
     it("shows NO TRACE KEPT when there is no stream", async () => {
         const {getByText, queryByLabelText} = await draw({hasStream: false});
         expect(getByText("NO TRACE KEPT")).toBeTruthy();
-        expect(queryByLabelText("Brew trace")).toBeNull();
+        expect(queryByLabelText(/^Brew trace/)).toBeNull();
     });
 
     it("draws the ladder when stages are available", async () => {
