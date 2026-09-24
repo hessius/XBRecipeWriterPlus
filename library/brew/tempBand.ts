@@ -81,10 +81,8 @@ export function temperatureBand(temps: number[]): TempBand | undefined {
 /**
  * The vertical region the band occupies, as fractions of the plot height.
  *
- * Fixed even though the degrees it spans are not, so the marks never wander
- * into the busy lower half where the water fill and the cup line live. Callers
- * can reserve more absolute headroom for labels, because text size is not a
- * fraction of the chart height.
+ * Kept as a proportional floor for unusually tall charts. Normal app heights
+ * are governed by the absolute label headroom the caller passes to `bandY`.
  */
 export const BAND_TOP = 0.05;
 export const BAND_FLOOR = 0.45;
@@ -92,8 +90,7 @@ export const BAND_FLOOR = 0.45;
 /**
  * The narrowest a mark may be drawn.
  *
- * A 5 ml rinse on a five minute recipe is a fraction of a pixel wide. A later
- * drawing task should import this rather than keep a matching literal.
+ * A 5 ml rinse on a five minute recipe is a fraction of a pixel wide.
  */
 export const MIN_MARK_WIDTH = 2;
 
@@ -106,12 +103,11 @@ export type TempMark = {
 
 /** Where a temperature sits in the plot. Screen coordinates, so downward. */
 export function bandY(
-    temp: number, band: TempBand, height: number, reservedHeadroom = 0
+    temp: number, band: TempBand, height: number, reservedHeadroom: number
 ): number {
     const top = Math.max(height * BAND_TOP, reservedHeadroom);
     const floor = height * BAND_FLOOR;
     const span = band.max - band.min;
-    if (span <= 0) return top;
     return top + ((band.max - temp) / span) * (floor - top);
 }
 
@@ -129,7 +125,7 @@ export function temperatureInBand(temp: number, band: TempBand): boolean {
  * drawn for free.
  */
 export function temperatureMarks(
-    stages: Pour[], band: TempBand, box: Box, reservedHeadroom = 0
+    stages: Pour[], band: TempBand, box: Box, reservedHeadroom: number
 ): TempMark[] {
     if (stages.length === 0 || box.maxT <= 0) return [];
     const marks: TempMark[] = [];

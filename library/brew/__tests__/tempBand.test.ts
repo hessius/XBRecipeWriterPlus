@@ -7,6 +7,7 @@ import {
     BAND_MAX,
     BAND_MIN,
     BAND_TOP,
+    hasSetTemperature,
     MIN_MARK_WIDTH,
     MIN_SPAN
 } from "@/library/brew/tempBand";
@@ -80,13 +81,13 @@ const box: Box = {width: 400, height: 200, maxT: 65, maxV: 140};
 describe("bandY", () => {
     it("puts the band's top at the top of its region and its floor at the bottom", () => {
         const band = {min: 85, max: 100};
-        expect(bandY(100, band, 200)).toBeCloseTo(200 * BAND_TOP);
-        expect(bandY(85, band, 200)).toBeCloseTo(200 * BAND_FLOOR);
+        expect(bandY(100, band, 200, 0)).toBeCloseTo(200 * BAND_TOP);
+        expect(bandY(85, band, 200, 0)).toBeCloseTo(200 * BAND_FLOOR);
     });
 
     it("runs downward, because screen coordinates do", () => {
         const band = {min: 85, max: 100};
-        expect(bandY(90, band, 200)).toBeGreaterThan(bandY(94, band, 200));
+        expect(bandY(90, band, 200, 0)).toBeGreaterThan(bandY(94, band, 200, 0));
     });
 
     it("honours reserved headroom when the proportional top is too small", () => {
@@ -101,6 +102,11 @@ describe("bandY", () => {
 });
 
 describe("temperatureInBand", () => {
+    it("defines zero as unset, not as a temperature", () => {
+        expect(hasSetTemperature(0)).toBe(false);
+        expect(temperatureBand([0])).toBeUndefined();
+    });
+
     it("accepts temperatures inside the band, including both edges", () => {
         const band = {min: 85, max: 100};
         expect(temperatureInBand(85, band)).toBe(true);
@@ -121,11 +127,11 @@ describe("temperatureInBand", () => {
 
 describe("temperatureMarks", () => {
     it("draws one mark per stage", () => {
-        expect(temperatureMarks(stepped, {min: 85, max: 100}, box)).toHaveLength(2);
+        expect(temperatureMarks(stepped, {min: 85, max: 100}, box, 0)).toHaveLength(2);
     });
 
     it("stops each mark at the end of its pour, not the end of its stage", () => {
-        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box);
+        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box, 0);
         const spans = stageSpans(stepped);
         // The first stage pours for 10 s of its 40 s. A mark that ran to the
         // stage boundary would claim a water temperature during the pause.
@@ -139,14 +145,14 @@ describe("temperatureMarks", () => {
     });
 
     it("carries the temperature so the caller can print it", () => {
-        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box);
+        const marks = temperatureMarks(stepped, {min: 85, max: 100}, box, 0);
         expect(marks.map((m) => m.temperature)).toEqual([94, 90]);
     });
 
     it("keeps a tiny pour visible", () => {
         const rinse = [new Pour(1, 2, 94, 40, 0, 0, 300)];
         const wide: Box = {width: 400, height: 200, maxT: 300, maxV: 2};
-        expect(temperatureMarks(rinse, {min: 85, max: 100}, wide)[0].width)
+        expect(temperatureMarks(rinse, {min: 85, max: 100}, wide, 0)[0].width)
             .toBeGreaterThanOrEqual(MIN_MARK_WIDTH);
     });
 
@@ -155,19 +161,19 @@ describe("temperatureMarks", () => {
             new Pour(1, 40, -1, 40, 0, 0, 30),
             new Pour(2, 100, 90, 40, 0, 0, 0)
         ];
-        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box))
+        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box, 0))
             .toHaveLength(1);
-        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box)[0].temperature)
+        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box, 0)[0].temperature)
             .toBe(90);
     });
 
     it("draws nothing without an axis", () => {
         expect(temperatureMarks(stepped, {min: 85, max: 100},
-                                {...box, maxT: 0})).toEqual([]);
+                                {...box, maxT: 0}, 0)).toEqual([]);
     });
 
     it("draws nothing without stages", () => {
-        expect(temperatureMarks([], {min: 85, max: 100}, box)).toEqual([]);
+        expect(temperatureMarks([], {min: 85, max: 100}, box, 0)).toEqual([]);
     });
 
     it("passes reserved headroom through to each mark's y position", () => {

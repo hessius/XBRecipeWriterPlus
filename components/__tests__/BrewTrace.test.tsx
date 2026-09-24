@@ -392,7 +392,10 @@ describe("BrewTrace", () => {
             plannedSeconds: 10
         });
         const svgHeight = getByLabelText("Brew trace, 100 degrees").props.height;
-        expect(getByTestId("trace-temp-0").props.y1).toBeCloseTo(svgHeight * BAND_TOP, 1);
+        const rule = getByTestId("trace-temp-0");
+        expect(rule.props.y1).toBeCloseTo(svgHeight * BAND_TOP, 1);
+        expect(rule.props.y1 - svgScalar(getByTestId("trace-band-max").props.y))
+            .toBeCloseTo(4, 1);
     });
 
     it("centres a stage label on its own rule", async () => {
@@ -431,7 +434,7 @@ describe("BrewTrace", () => {
     it("keeps the band minimum readout inside a short plot", async () => {
         const {getByTestId, getByLabelText} = await draw({
             pours: [new Pour(1, 40, 85, 40, 0, 0, 0)],
-            height: 30,
+            height: 120,
             plannedSeconds: 10
         });
         const svgHeight = getByLabelText("Brew trace, 85 degrees").props.height;
@@ -494,7 +497,7 @@ describe("BrewTrace", () => {
     ];
 
     it("gives a bypass inside the band the same mark as a stage", async () => {
-        const {getByTestId} = await draw({
+        const {getByTestId, queryByTestId} = await draw({
             pours: brewing,
             plannedSeconds: 65,
             bypass: {volume: 60, temperature: 88, delivered: 60,
@@ -502,6 +505,7 @@ describe("BrewTrace", () => {
         });
         expect(getByTestId("trace-temp-bypass")).toBeTruthy();
         expect(svgTextContent(getByTestId("trace-temp-label-bypass"))).toBe("88°");
+        expect(queryByTestId("trace-bypass-temp")).toBeNull();
     });
 
     it("draws the bypass mark at the bypass temperature", async () => {
@@ -545,6 +549,8 @@ describe("BrewTrace", () => {
             expect(view.getByTestId("trace-temp-bypass")).toBeTruthy();
             expect(svgTextContent(label)).toBe(`${temperature}°`);
             expectTempLabelStyle(label);
+            expect(svgScalar(label.props.y)).toBeGreaterThanOrEqual(drawnFontSize(11));
+            expect(view.queryByTestId("trace-bypass-temp")).toBeNull();
         }
     });
 

@@ -133,8 +133,8 @@ function tempLabelY(ruleY: number): number {
     return ruleY - TEMP_LABEL_GAP;
 }
 
-function bandMaxLabelY(): number {
-    return drawnFontSize(TEMP_LABEL);
+function bandMaxLabelY(ruleY: number): number {
+    return tempLabelY(ruleY);
 }
 
 function bandMinLabelY(svgHeight: number): number {
@@ -304,10 +304,6 @@ export default function BrewTrace({
         );
     }
 
-    // Computed from the brew stages only. Never widened for the bypass: a 55
-    // degree bypass would stretch the band far enough to put the brew's own
-    // rules about five pixels apart, which is the whole readability of the
-    // chart spent on one number that is not part of its thermal shape.
     /**
      * The bypass's own mark, when the band can hold it.
      *
@@ -422,7 +418,9 @@ export default function BrewTrace({
                         <SvgText
                             testID="trace-band-max"
                             x={width - 2}
-                            y={bandMaxLabelY()}
+                            y={bandMaxLabelY(
+                                bandY(tempBand.max, tempBand, svgHeight, tempHeadroom)
+                            )}
                             textAnchor="end"
                             fill={palette.dim}
                             {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
