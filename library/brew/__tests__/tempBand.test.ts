@@ -44,6 +44,15 @@ describe("temperatureBand", () => {
         expect(band!.min).toBe(BAND_MIN);
     });
 
+    it("keeps the span when the hot clamp bites, by shifting", () => {
+        const band = temperatureBand([99])!;
+        expect(band).toEqual({min: 85, max: 100});
+    });
+
+    it("ignores unset temperatures", () => {
+        expect(temperatureBand([-1, 94, 92])).toEqual(temperatureBand([94, 92]));
+    });
+
     it("contains every temperature it was given", () => {
         for (const temps of [[94, 92, 90], [93], [60, 95], [39, 99], [85, 86]]) {
             const band = temperatureBand(temps)!;
@@ -94,6 +103,9 @@ describe("temperatureMarks", () => {
             .toBeCloseTo((spans[0].pourEnd / box.maxT) * box.width, 1);
         expect(marks[0].x + marks[0].width)
             .toBeLessThan((spans[0].end / box.maxT) * box.width);
+        expect(marks[1].x)
+            .toBeCloseTo((spans[1].start / box.maxT) * box.width, 1);
+        expect(marks[1].x).toBeGreaterThan(marks[0].x + marks[0].width);
     });
 
     it("carries the temperature so the caller can print it", () => {
@@ -106,6 +118,17 @@ describe("temperatureMarks", () => {
         const wide: Box = {width: 400, height: 200, maxT: 300, maxV: 2};
         expect(temperatureMarks(rinse, {min: 85, max: 100}, wide)[0].width)
             .toBeGreaterThanOrEqual(MIN_MARK_WIDTH);
+    });
+
+    it("draws no mark for an unset temperature", () => {
+        const withUnset = [
+            new Pour(1, 40, -1, 40, 0, 0, 30),
+            new Pour(2, 100, 90, 40, 0, 0, 0)
+        ];
+        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box))
+            .toHaveLength(1);
+        expect(temperatureMarks(withUnset, {min: 85, max: 100}, box)[0].temperature)
+            .toBe(90);
     });
 
     it("draws nothing without an axis", () => {

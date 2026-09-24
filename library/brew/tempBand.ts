@@ -13,7 +13,7 @@ import type Pour from "@/library/Pour";
  * nothing here varies between two brews of the same unedited recipe.
  */
 
-/** The coolest and hottest a card can carry. Mirrors `cardLimits.TEMPERATURE`. */
+/** The coolest a card can carry, and the printable top edge the band may use. */
 export const BAND_MIN = 39;
 export const BAND_MAX = 100;
 
@@ -36,6 +36,10 @@ const STEP = 5;
 
 export type TempBand = {min: number; max: number};
 
+function hasSetTemperature(temp: number): boolean {
+    return temp > 0;
+}
+
 /**
  * The band a set of stage temperatures should be drawn against.
  *
@@ -45,10 +49,14 @@ export type TempBand = {min: number; max: number};
  * recipes, which is why the caller must always print both edges.
  */
 export function temperatureBand(temps: number[]): TempBand | undefined {
-    if (temps.length === 0) return undefined;
+    // `Pour.temperature` defaults to -1, meaning unset. An unset stage is not a
+    // cool stage; it has no setpoint, so it contributes nothing to the scale
+    // rather than dragging every real temperature into a flattened band.
+    const setTemps = temps.filter(hasSetTemperature);
+    if (setTemps.length === 0) return undefined;
 
-    let min = Math.floor((Math.min(...temps) - PAD) / STEP) * STEP;
-    let max = Math.ceil((Math.max(...temps) + PAD) / STEP) * STEP;
+    let min = Math.floor((Math.min(...setTemps) - PAD) / STEP) * STEP;
+    let max = Math.ceil((Math.max(...setTemps) + PAD) / STEP) * STEP;
 
     if (max - min < MIN_SPAN) {
         const middle = (min + max) / 2;
@@ -83,8 +91,8 @@ export const BAND_FLOOR = 0.45;
 /**
  * The narrowest a mark may be drawn.
  *
- * A 5 ml rinse on a five minute recipe is a fraction of a pixel wide. Same
- * floor the bypass box already uses, for the same reason.
+ * A 5 ml rinse on a five minute recipe is a fraction of a pixel wide. A later
+ * drawing task should import this rather than keep a matching literal.
  */
 export const MIN_MARK_WIDTH = 2;
 
@@ -116,14 +124,22 @@ export function temperatureMarks(
     stages: Pour[], band: TempBand, box: Box
 ): TempMark[] {
     if (stages.length === 0 || box.maxT <= 0) return [];
-    return stageSpans(stages).map((span, i) => {
+    const marks: TempMark[] = [];
+    stageSpans(stages).forEach((span, i) => {
+        const temperature = stages[i].temperature;
+        // `Pour.temperature` defaults to -1, meaning unset. Letting that value
+        // draw would put the mark outside the band and letting it scale would
+        // flatten every set stage around it, so an unset stage contributes
+        // nothing to the temperature overlay.
+        if (!hasSetTemperature(temperature)) return;
         const x = (span.start / box.maxT) * box.width;
         const end = (span.pourEnd / box.maxT) * box.width;
-        return {
+        marks.push({
             x,
             width: Math.max(end - x, MIN_MARK_WIDTH),
-            y: bandY(stages[i].temperature, band, box.height),
-            temperature: stages[i].temperature
-        };
+            y: bandY(temperature, band, box.height),
+            temperature
+        });
     });
+    return marks;
 }
