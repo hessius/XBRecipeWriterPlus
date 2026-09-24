@@ -68,7 +68,7 @@ stage's **pour only**, with a short gradient fading below it.
 | --- | --- |
 | Rule | `palette.dim`, stroke width 2, round caps, full opacity |
 | Fade | Rect from the rule down 16px, vertical gradient `palette.dim` 0.38 to 0 |
-| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, above it when it fits and flipped below it when it would clip |
+| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, always above it |
 | Depth | Behind the water fill, the water line, the cup line and the plan line |
 
 ### Why a rule and not a filled column
@@ -107,11 +107,11 @@ beside it is a wait and is empty by construction, so there is nothing to collide
 with. The degree sign is kept; it is not worth trading legibility for a third of
 the width.
 
-Vertically, the label belongs to its own rule before it belongs to the band
-edge. Its normal baseline sits 4px above the rule. If that would clip at the top
-of the plot, the label flips below the rule with the same visual gap. The band
-itself is not moved down to make room for this edge case: that would squash the
-temperature shape for every recipe to solve one label.
+Vertically, the label's baseline sits 4px above its rule. The band reserves
+headroom for that label row by placing its top far enough below the plot's top,
+so a label never has to flip below or clamp away from the rule it names. That
+keeps vertical order consistent: higher text still means hotter water, just as
+higher rules do.
 
 ### A flat recipe repeats its label
 
@@ -231,13 +231,8 @@ same silent fallback `stageWater`, `stalls` and `bypass` already use.
 ## Accessibility
 
 The chart's `accessibilityLabel` gains the temperature run, so a screen reader
-gets the facts it cannot see as height: "Brew trace, Stage 01, 94 degrees;
-Stage 02, 92 degrees; Stage 03, 90 degrees". The wording mirrors the stage
-ladder, including leading-zero stage numbers. A bypass with a set temperature
-is announced as "Bypass, 88 degrees" whether it is drawn as a rule or printed
-in the bypass box, because those are two visual treatments of the same fact.
-Unset sentinel temperatures are not announced. The band labels are decorative
-and are not announced separately.
+gets the shape it cannot see: "Brew trace, 94 then 92 then 90 degrees". The band
+labels are decorative and are not announced separately.
 
 ## Out of scope
 

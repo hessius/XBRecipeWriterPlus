@@ -82,10 +82,11 @@ export function temperatureBand(temps: number[]): TempBand | undefined {
  * The vertical region the band occupies, as fractions of the plot height.
  *
  * Fixed even though the degrees it spans are not, so the marks never wander
- * into the busy lower half where the water fill and the cup line live, and so
- * the 16 px fades have somewhere to finish.
+ * into the busy lower half where the water fill and the cup line live. The
+ * top also reserves the chart label's row, so every rule can keep its reading
+ * above it and vertical order always means temperature.
  */
-export const BAND_TOP = 0.05;
+export const BAND_TOP = 0.13;
 export const BAND_FLOOR = 0.45;
 
 /**

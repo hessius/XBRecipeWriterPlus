@@ -1118,6 +1118,11 @@ compact keeps the spoken temperatures even though it draws none. That is
 deliberate: the thumbnail is still a chart of the same brew, and a reader that
 cannot see either version should hear the same thing.
 
+Implementation note from review: the snippet above cannot sit after the compact
+early return, because compact would return before `spoken` exists. Compute the
+brew-stage band and marks before that return, derive `spoken` from those drawn
+marks, and still leave the bypass out of the spoken temperature run.
+
 - [ ] **Step 4: Run them and watch them pass**
 
 Run: `npx jest components/__tests__/BrewTrace.test.tsx`

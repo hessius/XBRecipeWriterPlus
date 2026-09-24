@@ -106,7 +106,7 @@ const TEMP_FADE_TOP = 0.38;
  * collide with, and trading the degree sign for width would cost more than it
  * saves.
  *
- * Both are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
+ * They are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
  * the palette documents it as not a text colour.
  */
 const TEMP_LABEL = 11;
@@ -125,15 +125,11 @@ const GAP_FLOOR_SECONDS = 2;
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
 
-function tempLabelY(ruleY: number, svgHeight: number): number {
-    const above = ruleY - TEMP_LABEL_GAP;
-    if (above >= drawnFontSize(TEMP_LABEL)) return above;
-    // Top-edge labels flip below their own rule instead of sharing a clamped
-    // baseline, so the reading stays attached to the rule it describes.
-    return Math.min(ruleY + TEMP_LABEL_GAP + drawnFontSize(TEMP_LABEL), svgHeight);
+function tempLabelY(ruleY: number): number {
+    return ruleY - TEMP_LABEL_GAP;
 }
 
-function bandMaxLabelY(svgHeight: number): number {
+function bandMaxLabelY(): number {
     return drawnFontSize(TEMP_LABEL);
 }
 
@@ -150,19 +146,10 @@ function bypassBoxLabelY(y: number, height: number, svgHeight: number): number {
     return Math.max(y - TEMP_LABEL_GAP, drawnFontSize(TEMP_LABEL));
 }
 
-/** One spoken description for the temperatures encoded by height in the chart. */
-function temperatureAccessibilityLabel(stages: Pour[], bypass?: BypassView): string {
-    const stageFacts = stages
-        .map((pour, index) => hasSetTemperature(pour.temperature)
-            ? `Stage ${String(index + 1).padStart(2, "0")}, ${pour.temperature} degrees`
-            : null)
-        .filter((fact): fact is string => fact !== null);
-    const bypassFact = bypass !== undefined && Math.max(bypass.volume, 0) > 0
-                       && hasSetTemperature(bypass.temperature)
-        ? [`Bypass, ${bypass.temperature} degrees`]
-        : [];
-    const facts = [...stageFacts, ...bypassFact];
-    return facts.length === 0 ? "Brew trace" : `Brew trace, ${facts.join("; ")}`;
+/** One spoken description for the thermal shape encoded by height in the chart. */
+function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
+    if (marks.length === 0) return "Brew trace";
+    return `Brew trace, ${marks.map((mark) => mark.temperature).join(" then ")} degrees`;
 }
 
 /** what was asked for, what the machine did, what landed
@@ -223,7 +210,12 @@ export default function BrewTrace({
     // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
     // `stages`, so reading `pours` alone would draw nothing in history.
     const tempStages = stages ?? pours;
-    const accessibilityLabel = temperatureAccessibilityLabel(tempStages, bypass);
+    // Hoisted above the compact return so thumbnails say the same thermal
+    // shape as the full chart, while still deriving speech from marks that
+    // would really be drawn. The original plan's snippet sat below this return.
+    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
+    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
+    const accessibilityLabel = temperatureAccessibilityLabel(marks);
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
@@ -309,8 +301,6 @@ export default function BrewTrace({
     // degree bypass would stretch the band far enough to put the brew's own
     // rules about five pixels apart, which is the whole readability of the
     // chart spent on one number that is not part of its thermal shape.
-    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
-    const marks = tempBand === undefined ? [] : temperatureMarks(tempStages, tempBand, box);
     /**
      * The bypass's own mark, when the band can hold it.
      *
@@ -411,7 +401,7 @@ export default function BrewTrace({
                         <SvgText
                             testID={mark.labelTestID}
                             x={mark.x + mark.width / 2}
-                            y={tempLabelY(mark.y, svgHeight)}
+                            y={tempLabelY(mark.y)}
                             textAnchor="middle"
                             fill={palette.dim}
                             {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
@@ -425,7 +415,7 @@ export default function BrewTrace({
                         <SvgText
                             testID="trace-band-max"
                             x={width - 2}
-                            y={bandMaxLabelY(svgHeight)}
+                            y={bandMaxLabelY()}
                             textAnchor="end"
                             fill={palette.dim}
                             {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
