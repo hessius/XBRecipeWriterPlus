@@ -5,7 +5,7 @@ import {StyleSheet} from "react-native";
 import TagSection from "@/components/TagSection";
 import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
-import Recipe from "@/library/Recipe";
+import Recipe, {MAX_TAG_LENGTH} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("TagSection", () => {
@@ -281,6 +281,15 @@ describe("TagSection", () => {
 
         expect(StyleSheet.flatten(screen.getByLabelText("New tag").props.style))
             .toMatchObject({borderColor: palette.control});
+    });
+
+    it("caps typed tags at the model's tag length limit", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(<TagSection tags={[]} known={[]} onChange={onChange}/>);
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+
+        expect(screen.getByLabelText("New tag").props.maxLength).toBe(MAX_TAG_LENGTH);
     });
 
     it("stops offering to add once the recipe is full", async () => {

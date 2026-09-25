@@ -63,6 +63,8 @@ export default function TagSection({tags, known, onChange}: {
                         <TextInput
                             accessibilityLabel="New tag"
                             autoFocus
+                            // Recipe.setTags drops over-long tags, so the input
+                            // must stop one being typed rather than vanish it.
                             maxLength={MAX_TAG_LENGTH}
                             returnKeyType="done"
                             value={typed}
