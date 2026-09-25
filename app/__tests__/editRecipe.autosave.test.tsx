@@ -174,6 +174,18 @@ async function openAbout(): Promise<void> {
     await fireEvent.press(screen.getByLabelText("About this recipe"));
 }
 
+async function renameFromHeader(name: string): Promise<void> {
+    await fireEvent.press(screen.getByTestId("hero-rename"));
+    await waitFor(() => {
+        expect(screen.getByTestId("rename-field")).toBeTruthy();
+    });
+    await fireEvent.changeText(screen.getByTestId("rename-field"), name);
+    await waitFor(async () => {
+        await fireEvent.press(screen.getByTestId("rename-confirm"));
+        expect(stored()?.name).toBe(name);
+    }, {timeout: 5000});
+}
+
 /**
  * Nudge the grind coarser. Unlike the dose, the grind is not a term in
  * `dose x ratio = sum of stage volumes`, so changing it leaves the recipe in
@@ -259,6 +271,14 @@ describe("editRecipe autosave", () => {
 
         expect(stored()?.description).toBe("Sweet");
         expect(stored()?.dosage).toBe(18);
+    });
+
+    it("renames a saved recipe without waiting for SAVE", async () => {
+        await openSavedRecipe();
+
+        await renameFromHeader("Kenya");
+
+        expect(stored()?.name).toBe("Kenya");
     });
 
     it("asks before backing out with a changed dose", async () => {
