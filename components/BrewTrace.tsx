@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useId} from "react";
 import {Pressable} from "react-native";
 import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
     from "react-native-svg";
@@ -103,8 +103,9 @@ const TEMP_FADE_TOP = 0.38;
  * Eleven is Doto's floor, which is also the smallest this reads at arm's length
  * on a phone. The label is allowed to overhang a very short rule: the space
  * beside it is a pause and is empty by construction, so there is nothing to
- * collide with, and trading the degree sign for width would cost more than it
- * saves.
+ * collide with. At the plot edges it anchors inward instead: overhang outside
+ * the SVG would be clipped, and trading the degree sign for width would cost
+ * more than it saves.
  *
  * They are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
  * the palette documents it as not a text colour.
@@ -150,6 +151,28 @@ function bypassBoxLabelY(y: number, height: number, svgHeight: number): number {
     return Math.max(y - TEMP_LABEL_GAP, drawnFontSize(TEMP_LABEL));
 }
 
+const TEMP_LABEL_EDGE_PAD = 2;
+
+function visibleMinimumRectX(x: number, rectWidth: number, plotWidth: number): number {
+    return Math.max(0, Math.min(x, plotWidth - rectWidth));
+}
+
+function estimatedTempLabelWidth(label: string): number {
+    const tracking = label.length > 1 ? (label.length - 1) * 0.5 : 0;
+    return label.length * drawnFontSize(TEMP_LABEL) * 0.75 + tracking;
+}
+
+function tempLabelX(center: number, label: string, plotWidth: number) {
+    const labelWidth = estimatedTempLabelWidth(label);
+    if (center - labelWidth / 2 < 0) {
+        return {x: TEMP_LABEL_EDGE_PAD, textAnchor: "start" as const};
+    }
+    if (center + labelWidth / 2 > plotWidth) {
+        return {x: plotWidth - TEMP_LABEL_EDGE_PAD, textAnchor: "end" as const};
+    }
+    return {x: center, textAnchor: "middle" as const};
+}
+
 /** One spoken description for the thermal shape encoded by height in the chart. */
 function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
     if (marks.length === 0) return "Brew trace";
@@ -170,6 +193,7 @@ export default function BrewTrace({
     planDashed = true, planHeadAt = 1,
     compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
+    const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
@@ -256,12 +280,18 @@ export default function BrewTrace({
     const bypassBox = bypass === undefined || bypassMl <= 0 || box.maxT <= 0
                       || box.maxV <= 0
         ? undefined
-        : {
-            x: (bypassFrom / box.maxT) * box.width,
-            width: Math.max((bypassWide / box.maxT) * box.width, BYPASS_BOX_MIN),
-            y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
-            height: Math.max((bypassMl / box.maxV) * svgHeight, BYPASS_BOX_MIN)
-          };
+        : (() => {
+            const boxWidth = Math.min(
+                Math.max((bypassWide / box.maxT) * box.width, BYPASS_BOX_MIN),
+                box.width
+            );
+            return {
+                x: visibleMinimumRectX((bypassFrom / box.maxT) * box.width, boxWidth, box.width),
+                width: boxWidth,
+                y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
+                height: Math.max((bypassMl / box.maxV) * svgHeight, BYPASS_BOX_MIN)
+            };
+          })();
 
     if (compact) {
         return (
@@ -327,7 +357,7 @@ export default function BrewTrace({
         ...marks.map((mark, i) => ({
             ...mark,
             key: `${i}`,
-            gradientId: `tempFade-${i}`,
+            gradientId: `tempFade${id}-${i}`,
             fadeTestID: `trace-temp-fade-${i}`,
             lineTestID: `trace-temp-${i}`,
             labelTestID: `trace-temp-label-${i}`
@@ -335,7 +365,7 @@ export default function BrewTrace({
         ...(bypassMark === undefined ? [] : [{
             ...bypassMark,
             key: "bypass",
-            gradientId: "tempFade-bypass",
+            gradientId: `tempFade${id}-bypass`,
             fadeTestID: "trace-temp-fade-bypass",
             lineTestID: "trace-temp-bypass",
             labelTestID: "trace-temp-label-bypass"
@@ -384,35 +414,39 @@ export default function BrewTrace({
                         strokeWidth={1}
                     />
                 ))}
-                {tempDraws.map((mark) => (
-                    <React.Fragment key={`temp-${mark.key}`}>
-                        <Rect
-                            testID={mark.fadeTestID}
-                            x={mark.x} y={mark.y}
-                            width={mark.width} height={TEMP_FADE}
-                            fill={`url(#${mark.gradientId})`}
-                        />
-                        <Line
-                            testID={mark.lineTestID}
-                            x1={mark.x} y1={mark.y}
-                            x2={mark.x + mark.width} y2={mark.y}
-                            stroke={palette.dim}
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            fill="none"
-                        />
-                        <SvgText
-                            testID={mark.labelTestID}
-                            x={mark.x + mark.width / 2}
-                            y={tempLabelY(mark.y)}
-                            textAnchor="middle"
-                            fill={palette.dim}
-                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
-                        >
-                            {`${mark.temperature}°`}
-                        </SvgText>
-                    </React.Fragment>
-                ))}
+                {tempDraws.map((mark) => {
+                    const label = `${mark.temperature}°`;
+                    const labelPosition = tempLabelX(mark.x + mark.width / 2, label, width);
+                    return (
+                        <React.Fragment key={`temp-${mark.key}`}>
+                            <Rect
+                                testID={mark.fadeTestID}
+                                x={mark.x} y={mark.y}
+                                width={mark.width} height={TEMP_FADE}
+                                fill={`url(#${mark.gradientId})`}
+                            />
+                            <Line
+                                testID={mark.lineTestID}
+                                x1={mark.x} y1={mark.y}
+                                x2={mark.x + mark.width} y2={mark.y}
+                                stroke={palette.dim}
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                fill="none"
+                            />
+                            <SvgText
+                                testID={mark.labelTestID}
+                                x={labelPosition.x}
+                                y={tempLabelY(mark.y)}
+                                textAnchor={labelPosition.textAnchor}
+                                fill={palette.dim}
+                                {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                            >
+                                {label}
+                            </SvgText>
+                        </React.Fragment>
+                    );
+                })}
                 {tempBand !== undefined && (
                     <React.Fragment>
                         <SvgText
@@ -441,16 +475,26 @@ export default function BrewTrace({
                 )}
                 {bypassBox && bypass && bypassMark === undefined && tempBand !== undefined
                  && hasSetTemperature(bypass.temperature) && (
-                    <SvgText
-                        testID="trace-bypass-temp"
-                        x={bypassBox.x + bypassBox.width / 2}
-                        y={bypassBoxLabelY(bypassBox.y, bypassBox.height, svgHeight)}
-                        textAnchor="middle"
-                        fill={palette.dim}
-                        {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
-                    >
-                        {`${bypass.temperature}°`}
-                    </SvgText>
+                    (() => {
+                        const label = `${bypass.temperature}°`;
+                        const labelPosition = tempLabelX(
+                            bypassBox.x + bypassBox.width / 2,
+                            label,
+                            width
+                        );
+                        return (
+                            <SvgText
+                                testID="trace-bypass-temp"
+                                x={labelPosition.x}
+                                y={bypassBoxLabelY(bypassBox.y, bypassBox.height, svgHeight)}
+                                textAnchor={labelPosition.textAnchor}
+                                fill={palette.dim}
+                                {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                            >
+                                {label}
+                            </SvgText>
+                        );
+                    })()
                 )}
                 {waterFill !== "" && (
                     <Path testID="trace-water-fill" d={waterFill} fill="url(#waterFill)"

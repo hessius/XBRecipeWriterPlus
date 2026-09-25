@@ -136,11 +136,13 @@ export function temperatureMarks(
         // flatten every set stage around it, so an unset stage contributes
         // nothing to the temperature overlay.
         if (!hasSetTemperature(temperature)) return;
-        const x = (span.start / box.maxT) * box.width;
+        const rawX = (span.start / box.maxT) * box.width;
         const end = (span.pourEnd / box.maxT) * box.width;
+        const width = Math.min(Math.max(end - rawX, MIN_MARK_WIDTH), box.width);
+        const x = Math.max(0, Math.min(rawX, box.width - width));
         marks.push({
             x,
-            width: Math.max(end - x, MIN_MARK_WIDTH),
+            width,
             y: bandY(temperature, band, box.height, reservedHeadroom),
             temperature
         });

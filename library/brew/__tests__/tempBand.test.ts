@@ -156,6 +156,17 @@ describe("temperatureMarks", () => {
             .toBeGreaterThanOrEqual(MIN_MARK_WIDTH);
     });
 
+    it("keeps a tiny final pour's minimum mark inside the plot", () => {
+        const finalRinse = [
+            new Pour(1, 99, 90, 10, 0, 0, 0),
+            new Pour(2, 0.5, 94, 10, 0, 0, 0)
+        ];
+        const edge: Box = {width: 100, height: 200, maxT: 100, maxV: 99.5};
+        const mark = temperatureMarks(finalRinse, {min: 85, max: 100}, edge, 0)[1];
+        expect(mark.width).toBeGreaterThanOrEqual(MIN_MARK_WIDTH);
+        expect(mark.x + mark.width).toBeLessThanOrEqual(edge.width);
+    });
+
     it("draws no mark for an unset temperature", () => {
         const withUnset = [
             new Pour(1, 40, -1, 40, 0, 0, 30),

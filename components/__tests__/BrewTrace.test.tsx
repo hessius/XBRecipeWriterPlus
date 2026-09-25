@@ -64,6 +64,32 @@ function svgScalar(value: number | number[]): number {
     return Array.isArray(value) ? value[0] : value;
 }
 
+function svgTextAnchor(node: {props: {font?: {textAnchor?: string}; textAnchor?: string}}): string {
+    return node.props.font?.textAnchor ?? node.props.textAnchor ?? "start";
+}
+
+function estimatedTextWidth(node: {props: {children?: unknown}}): number {
+    const text = svgTextContent(node) ?? "";
+    const tracking = text.length > 1 ? (text.length - 1) * 0.5 : 0;
+    return text.length * drawnFontSize(11) * 0.75 + tracking;
+}
+
+function expectSvgTextInsidePlot(
+    node: {props: {x?: unknown; children?: unknown; font?: {textAnchor?: string}; textAnchor?: string}},
+    width: number
+) {
+    if (typeof node.props.x !== "number" && !Array.isArray(node.props.x)) {
+        throw new Error("Expected SVG text to expose a numeric x prop");
+    }
+    const x = svgScalar(node.props.x);
+    const textWidth = estimatedTextWidth(node);
+    const anchor = svgTextAnchor(node);
+    const left = anchor === "end" ? x - textWidth : anchor === "middle" ? x - textWidth / 2 : x;
+    const right = anchor === "end" ? x : anchor === "middle" ? x + textWidth / 2 : x + textWidth;
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(width);
+}
+
 function expectRuleLabelAttached(
     rule: {props: Record<string, unknown>},
     label: {props: Record<string, unknown>}
@@ -326,7 +352,7 @@ describe("BrewTrace", () => {
         const {getByTestId, toJSON} = await draw();
         const fade = getByTestId("trace-temp-fade-0");
         const gradient = renderedNodes(toJSON())
-            .find((node) => node.props.name === "tempFade-0");
+            .find((node) => node.props.name === fade.props.fill.brushRef);
 
         expect(gradient).toBeTruthy();
         expect(fade.props.fill.brushRef).toBe(gradient!.props.name);
@@ -335,6 +361,44 @@ describe("BrewTrace", () => {
         expect(gradient!.props.gradientUnits).toBe(1);
         expect(gradient!.props.y1).toBe(fade.props.y);
         expect(gradient!.props.y2).toBe(fade.props.y + fade.props.height);
+    });
+
+    it("gives each mounted trace its own temperature fade ids", async () => {
+        const first = [
+            new Pour(1, 40, 94, 40, 0, 0, 0),
+            new Pour(2, 100, 90, 40, 0, 0, 0)
+        ];
+        const second = [
+            new Pour(1, 40, 90, 40, 0, 0, 0),
+            new Pour(2, 100, 94, 40, 0, 0, 0)
+        ];
+        const {toJSON} = await renderWithProviders(
+            <React.Fragment>
+                <BrewTrace
+                    pours={first}
+                    samples={[]}
+                    accent={TEST_ACCENT}
+                    width={300}
+                    height={140}
+                    plannedSeconds={35}
+                />
+                <BrewTrace
+                    pours={second}
+                    samples={[]}
+                    accent={TEST_ACCENT}
+                    width={300}
+                    height={140}
+                    plannedSeconds={35}
+                />
+            </React.Fragment>
+        );
+        const ids = renderedNodes(toJSON())
+            .map((node) => node.props.name)
+            .filter((name): name is string =>
+                typeof name === "string" && name.includes("tempFade"));
+
+        expect(ids).toHaveLength(4);
+        expect(new Set(ids).size).toBe(ids.length);
     });
 
     it("prints every stage's temperature, repeating a flat one", async () => {
@@ -403,6 +467,32 @@ describe("BrewTrace", () => {
         const rule = getByTestId("trace-temp-0");
         const label = getByTestId("trace-temp-label-0");
         expect(svgScalar(label.props.x)).toBeCloseTo((rule.props.x1 + rule.props.x2) / 2);
+    });
+
+    it("keeps edge stage labels inside the plot at default and capped font scale", async () => {
+        for (const scale of [1, 1.4]) {
+            const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(scale);
+            const first = await draw({
+                pours: [
+                    new Pour(1, 1, 94, 40, 0, 0, 0),
+                    new Pour(2, 100, 90, 40, 0, 0, 0)
+                ],
+                width: 300,
+                plannedSeconds: 35
+            });
+            const last = await draw({
+                pours: [
+                    new Pour(1, 99, 90, 10, 0, 0, 0),
+                    new Pour(2, 0.5, 94, 10, 0, 0, 0)
+                ],
+                width: 300,
+                plannedSeconds: 100
+            });
+
+            expectSvgTextInsidePlot(first.getByTestId("trace-temp-label-0"), 300);
+            expectSvgTextInsidePlot(last.getByTestId("trace-temp-label-1"), 300);
+            scaleSpy.mockRestore();
+        }
     });
 
     it("prints both ends of the band, since heights are not comparable between recipes", async () => {
@@ -529,7 +619,7 @@ describe("BrewTrace", () => {
         });
         const fade = getByTestId("trace-temp-fade-bypass");
         const gradient = renderedNodes(toJSON())
-            .find((node) => node.props.name === "tempFade-bypass");
+            .find((node) => node.props.name === fade.props.fill.brushRef);
 
         expect(gradient).toBeTruthy();
         expect(fade.props.fill.brushRef).toBe(gradient!.props.name);
@@ -551,6 +641,21 @@ describe("BrewTrace", () => {
             expectTempLabelStyle(label);
             expect(svgScalar(label.props.y)).toBeGreaterThanOrEqual(drawnFontSize(11));
             expect(view.queryByTestId("trace-bypass-temp")).toBeNull();
+        }
+    });
+
+    it("keeps an edge bypass rule label inside the plot", async () => {
+        for (const scale of [1, 1.4]) {
+            const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(scale);
+            const view = await draw({
+                pours: brewing,
+                width: 300,
+                plannedSeconds: 65,
+                bypass: {volume: 1, temperature: 100, delivered: 1,
+                         startedAt: 65, state: "done"}
+            });
+            expectSvgTextInsidePlot(view.getByTestId("trace-temp-label-bypass"), 300);
+            scaleSpy.mockRestore();
         }
     });
 
@@ -602,6 +707,21 @@ describe("BrewTrace", () => {
         );
     });
 
+    it("keeps an edge bypass box label inside the plot", async () => {
+        for (const scale of [1, 1.4]) {
+            const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(scale);
+            const view = await draw({
+                pours: brewing,
+                width: 300,
+                plannedSeconds: 65,
+                bypass: {volume: 1, temperature: 55, delivered: 1,
+                         startedAt: 65, state: "done"}
+            });
+            expectSvgTextInsidePlot(view.getByTestId("trace-bypass-temp"), 300);
+            scaleSpy.mockRestore();
+        }
+    });
+
     it("keeps a tiny bypass box at the volume-axis minimum", async () => {
         const {getByTestId} = await draw({
             pours: brewing,
@@ -609,8 +729,10 @@ describe("BrewTrace", () => {
             bypass: {volume: 0.1, temperature: 55, delivered: 0.1,
                      startedAt: 360, state: "done"}
         });
-        expect(getByTestId("trace-bypass").props.width).toBe(2);
-        expect(getByTestId("trace-bypass").props.height).toBe(2);
+        const box = getByTestId("trace-bypass");
+        expect(box.props.width).toBe(2);
+        expect(box.props.height).toBe(2);
+        expect(box.props.x + box.props.width).toBeLessThanOrEqual(300);
     });
 
     it("never widens the band to admit a bypass", async () => {
