@@ -671,6 +671,30 @@ app-authored copy, so not edited here.
 
 ---
 
+## Unsaved changes sheet
+
+`components/LeaveEditorSheet.tsx` -- shown when the user leaves the recipe
+editor, or presses BREW, with changes the card carries that have not been
+saved. The name, the note and the tags are not in scope: those write themselves
+as they are committed, which is why the leave wording says so.
+
+Two wordings, one sheet. Brewing is worded differently because the brew runs
+either way: the question is which recipe the machine is handed, not whether
+anything happens, so "discard" there would suggest the brew could be called off.
+
+| ID | Source | Context -- when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `unsaved.title` | `components/LeaveEditorSheet.tsx:50` | Doto title of the sheet, both wordings. | `UNSAVED CHANGES` |
+| `unsaved.leave.body` | `components/LeaveEditorSheet.tsx:30` (`leave`) | Body when backing out of the editor. | `This recipe has changes that are not saved yet. The name, note and tags are already saved.` |
+| `unsaved.leave.save` | `components/LeaveEditorSheet.tsx:31` (`leave`) | Primary button, and its a11y label. | `Save changes` |
+| `unsaved.leave.discard` | `components/LeaveEditorSheet.tsx:32` (`leave`) | Second button, and its a11y label. | `Discard changes` |
+| `unsaved.brew.body` | `components/LeaveEditorSheet.tsx:35` (`brew`) | Body when pressing BREW. | `This recipe has changes that are not saved yet. The brew will run either way.` |
+| `unsaved.brew.save` | `components/LeaveEditorSheet.tsx:36` (`brew`) | Primary button, and its a11y label. | `Save and brew` |
+| `unsaved.brew.discard` | `components/LeaveEditorSheet.tsx:37` (`brew`) | Second button, and its a11y label. | `Brew without saving` |
+| `unsaved.cancel` | `components/LeaveEditorSheet.tsx:70` | Third button, both wordings. Dismissing the sheet does the same thing. | `Keep editing` |
+
+---
+
 ## Machine connection
 
 The machine card in Settings (`components/MachineSection.tsx`), the header dot
