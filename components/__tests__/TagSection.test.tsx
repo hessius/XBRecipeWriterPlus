@@ -130,6 +130,19 @@ describe("TagSection", () => {
         expect(screen.getByLabelText("Use tag café au lait")).toBeTruthy();
     });
 
+    it("matches suggestions by prefix rather than substring", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <TagSection tags={[]} known={["Washed", "Ashy"]} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "ash");
+
+        expect(screen.getByLabelText("Use tag Ashy")).toBeTruthy();
+        expect(screen.queryByLabelText("Use tag Washed")).toBeNull();
+    });
+
     it("offers a matching word from the coffee vocabulary", async () => {
         const onChange = jest.fn();
         await renderWithProviders(<TagSection tags={[]} known={[]} onChange={onChange}/>);
