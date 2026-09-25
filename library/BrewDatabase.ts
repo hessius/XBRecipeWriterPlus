@@ -8,6 +8,12 @@ import {
 } from "@/library/brew/brewPopulation";
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
+import {
+    isFermentation,
+    isProcess,
+    isRoast,
+    MAX_ORIGIN_LENGTH
+} from "./brew/beanTags";
 import type {
     BrewOutcome,
     BrewRecord,
@@ -90,6 +96,11 @@ type BrewRow = {
     grinderUsed: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
+    /** The user's own description of the coffee. `''` when they have not said. */
+    origin: string;
+    roast: string;
+    process: string;
+    fermentation: string;
     hasStream: number;
 };
 
@@ -140,6 +151,10 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 grinderRpm INTEGER NOT NULL DEFAULT 0,
                 grinderUsed INTEGER NOT NULL DEFAULT 0,
                 coffee TEXT NOT NULL DEFAULT '',
+                origin TEXT NOT NULL DEFAULT '',
+                roast TEXT NOT NULL DEFAULT '',
+                process TEXT NOT NULL DEFAULT '',
+                fermentation TEXT NOT NULL DEFAULT '',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -240,6 +255,28 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // The coffee the user said this was. `''` is "nobody has said", the same
+    // sentinel `coffee` already uses on this table.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN origin TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN roast TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN process TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN fermentation TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
     // Rows written before `bypass` existed read as "no bypass", exactly as
     // every recipe without one does; an empty string is the JSON-column
     // sentinel already used by `coffee`.
@@ -294,9 +331,10 @@ class BrewDatabase {
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
-                                grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+                                grindSize, grinderRpm, grinderUsed, coffee,
+                                origin, roast, process, fermentation, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0,
@@ -319,6 +357,10 @@ class BrewDatabase {
                 record.grinderRpm ?? 0,
                 record.grinderUsed === true ? 1 : 0,
                 record.coffee ? JSON.stringify(record.coffee) : "",
+                originForColumn(record.origin),
+                isRoast(record.roast) ? record.roast : "",
+                isProcess(record.process) ? record.process : "",
+                isFermentation(record.fermentation) ? record.fermentation : "",
                 hasStream ? 1 : 0
             ]
         );
@@ -650,8 +692,24 @@ function hydrate(row: BrewRow): StoredBrew {
         // A recorded grind size is the marker that this row knew the column.
         ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
         ...(coffee !== null ? {coffee} : {}),
+        ...(row.origin !== "" ? {origin: row.origin} : {}),
+        ...(isRoast(row.roast) ? {roast: row.roast} : {}),
+        ...(isProcess(row.process) ? {process: row.process} : {}),
+        ...(isFermentation(row.fermentation) ? {fermentation: row.fermentation} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+/**
+ * An origin fit to store: trimmed, and refused if it is not a plausible one.
+ *
+ * Refused rather than truncated. A truncated origin is a different place, and
+ * #104 would group it on its own.
+ */
+function originForColumn(value: string | undefined): string {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    return trimmed.length === 0 || trimmed.length > MAX_ORIGIN_LENGTH ? "" : trimmed;
 }
 
 function coffeeFromStoredColumn(value: string): PodCoffee | null {

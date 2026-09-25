@@ -2,6 +2,7 @@ import BrewDatabase, {ensureBrewTables} from "@/library/BrewDatabase";
 import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
+import {MAX_ORIGIN_LENGTH} from "@/library/brew/beanTags";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
@@ -722,6 +723,63 @@ describe("the recipe snapshot for export", () => {
         });
 
         expect(db.get("brew-1")?.coffee).toEqual({name: "Kenya Sakami"});
+    });
+});
+
+describe("what the coffee was", () => {
+    it("stores and reads back the preset fields", () => {
+        const db = realBrewDatabase();
+        db.insert(record({
+            id: "a", recipeUuid: "uuid-1",
+            origin: "Nyeri, Kenya", roast: "Medium",
+            process: "Washed", fermentation: "Anaerobic"
+        }), []);
+
+        expect(db.brewsFor("uuid-1")[0]).toMatchObject({
+            origin: "Nyeri, Kenya", roast: "Medium",
+            process: "Washed", fermentation: "Anaerobic"
+        });
+    });
+
+    it("leaves an unset field absent rather than empty", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1"}), []);
+
+        const [brew] = db.brewsFor("uuid-1");
+        expect(brew.origin).toBeUndefined();
+        expect(brew.roast).toBeUndefined();
+        expect(brew.process).toBeUndefined();
+        expect(brew.fermentation).toBeUndefined();
+    });
+
+    it("refuses a preset value outside its vocabulary on the way in", () => {
+        const db = realBrewDatabase();
+        db.insert(record({
+            id: "a", recipeUuid: "uuid-1",
+            roast: "Cremated" as never, process: "washed" as never
+        }), []);
+
+        const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
+        expect(raw.getAllSync<{roast: string; process: string}>(
+            "SELECT roast, process FROM brews WHERE id = ?;", ["a"]
+        )[0]).toEqual({roast: "", process: ""});
+
+        const [brew] = db.brewsFor("uuid-1");
+        expect(brew.roast).toBeUndefined();
+        expect(brew.process).toBeUndefined();
+    });
+
+    it("trims an origin and drops one that is absurdly long", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", origin: "  Huila  "}), []);
+        db.insert(record({
+            id: "b", recipeUuid: "uuid-1", origin: "x".repeat(MAX_ORIGIN_LENGTH + 1)
+        }), []);
+
+        const byId = Object.fromEntries(
+            db.brewsFor("uuid-1").map((brew) => [brew.id, brew]));
+        expect(byId.a.origin).toBe("Huila");
+        expect(byId.b.origin).toBeUndefined();
     });
 });
 
