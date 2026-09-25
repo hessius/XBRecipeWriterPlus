@@ -44,6 +44,17 @@ const ALWAYS_IGNORED = ["accentIndex"];
  */
 const ROW_WRITES_ITSELF = ["favourite", "name", "description", "tags"];
 
+/**
+ * Fields filled by the asynchronous xBloom lookup, not by the user.
+ *
+ * These are a cache fill that can arrive after the opened snapshot has already
+ * been seeded. Re-baselining when the lookup lands was rejected deliberately:
+ * if a user changed the dose while the request was in flight, the new baseline
+ * would absorb that real edit and the guard would let it be lost. Stripping
+ * only these cache fields keeps the lookup invisible without hiding user work.
+ */
+const LOOKUP_CACHE_FILL = ["xbloomName", "shareId", "offline_backup"];
+
 /** A `JSON.stringify` whose object keys are always in the same order. */
 function stable(value: unknown): string {
     if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
@@ -67,6 +78,7 @@ function stable(value: unknown): string {
 export function snapshotForSave(recipe: Recipe, metadataWritesItself: boolean): string {
     const plain = JSON.parse(JSON.stringify(recipe)) as Record<string, unknown>;
     for (const field of ALWAYS_IGNORED) delete plain[field];
+    for (const field of LOOKUP_CACHE_FILL) delete plain[field];
     if (metadataWritesItself) {
         for (const field of ROW_WRITES_ITSELF) delete plain[field];
     }

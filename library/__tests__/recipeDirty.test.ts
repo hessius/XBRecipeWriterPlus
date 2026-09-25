@@ -75,6 +75,25 @@ describe("recipeDirty", () => {
         expect(editsPendingSave(r, opened, false)).toBe(true);
     });
 
+    it.each([
+        ["xbloomName", "Fetched title"],
+        ["shareId", "share-123"],
+        ["offline_backup", "offline-cache"]
+    ])("ignores a background lookup fill for %s", (field, value) => {
+        // The XID lookup can fill these after the dirty snapshot has already
+        // been seeded. That cache fill is not user work and must not trigger
+        // the leave guard.
+        const saved = recipe();
+        const openedSaved = snapshotForSave(saved, true);
+        (saved as unknown as Record<string, unknown>)[field] = value;
+        expect(editsPendingSave(saved, openedSaved, true)).toBe(false);
+
+        const rowless = recipe();
+        const openedRowless = snapshotForSave(rowless, false);
+        (rowless as unknown as Record<string, unknown>)[field] = value;
+        expect(editsPendingSave(rowless, openedRowless, false)).toBe(false);
+    });
+
     it("counts a field nobody thought about", () => {
         // The projection is a denylist on purpose. This test is the reason:
         // it fails if someone turns it into an allowlist of known card fields,
