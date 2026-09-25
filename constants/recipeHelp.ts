@@ -71,16 +71,20 @@ const ENTRIES = {
     },
     grinder: {
         title:  "Grinder",
-        hint:   "Turning it off is experimental.",
+        hint:   "Fine for brewing here. Awkward on a card.",
         question: "Can I turn the grinder off?",
-        detail: "Turning the grinder off writes grind size 81, one past the " +
-                "maximum, and the machine will refuse a card in that state " +
-                "outright. The workaround is to load any other recipe with the " +
-                "grinder enabled first: a shortcut button, another card, or " +
-                "the xBloom app. After " +
-                "which this card will be accepted and the machine will show " +
-                "'--' for the grind size. There is no better way to disable " +
-                "the grinder from a recipe card."
+        detail: "It depends on how you brew it. Brewing straight from the app " +
+                "sends the machine its own value for a grinder that stays off, " +
+                "so pre-ground coffee works normally and there is nothing to " +
+                "watch out for. A card has no such value: turning the grinder " +
+                "off writes grind size 81, one past the maximum, and the " +
+                "machine will refuse a card in that state outright. The " +
+                "workaround is to load any " +
+                "other recipe with the grinder enabled first: a shortcut " +
+                "button, another card, or the xBloom app. After which this card " +
+                "will be accepted and the machine will show '--' for the grind " +
+                "size. There is no better way to disable the grinder from a " +
+                "recipe card."
     },
     cup: {
         title:  "Cup",
