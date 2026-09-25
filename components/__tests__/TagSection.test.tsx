@@ -220,6 +220,21 @@ describe("TagSection", () => {
         expect(screen.queryByLabelText("New tag")).toBeNull();
     });
 
+    it("clears suggestions when a typed field blurs", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <TagSection tags={["Morning"]} known={["Washed"]} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "was");
+        await fireEvent(screen.getByLabelText("New tag"), "blur");
+
+        expect(screen.queryByLabelText("New tag")).toBeNull();
+        expect(screen.getByLabelText("Add a tag")).toBeTruthy();
+        expect(screen.queryByLabelText("Use tag Washed")).toBeNull();
+    });
+
     it("gives every tag control the house minimum touch height", async () => {
         const onChange = jest.fn();
         await renderWithProviders(

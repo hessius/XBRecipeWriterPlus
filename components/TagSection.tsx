@@ -64,7 +64,10 @@ export default function TagSection({tags, known, onChange}: {
                             returnKeyType="done"
                             value={typed}
                             onChangeText={setTyped}
-                            onBlur={() => setAdding(false)}
+                            onBlur={() => {
+                                setTyped("");
+                                setAdding(false);
+                            }}
                             onSubmitEditing={(event) => commit(event.nativeEvent.text)}
                             // No placeholder by design: an empty recipe is normal,
                             // so the field must not prompt for missing metadata.
