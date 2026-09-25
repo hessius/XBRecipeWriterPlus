@@ -289,7 +289,7 @@ lines — the cited line is the property's first line.
 | `help.sheet.title` | `components/HelpSheet.tsx:39` | Title of the help sheet. | `Help` |
 | `help.dose.title` | `constants/recipeHelp.ts:45` | Dose field label. | `Dose` |
 | `help.ratio.title` | `constants/recipeHelp.ts:48` | Ratio field label. | `Ratio` |
-| `help.ratio.hint` | `constants/recipeHelp.ts:49` | Ratio field hint. | `Whole numbers only. Sets the target volume.` |
+| `help.ratio.hint` | `constants/recipeHelp.ts:49` | Ratio field hint. | `Sets target volume. Cards use whole numbers.` |
 | `help.ratio.question` | `constants/recipeHelp.ts:50` | Ratio help-sheet heading. | `What does the ratio set?` |
 | `help.ratio.detail` | `constants/recipeHelp.ts:51` | Ratio long-form help. | `The target volume is the dose multiplied by the ratio. The stage volumes have to add up to it exactly or the machine will refuse the card. Half ratios cannot be stored on a card.` |
 | `help.grindSize.title` | `constants/recipeHelp.ts:56` | Grind size field label. | `Grind size` |
@@ -299,9 +299,9 @@ lines — the cited line is the property's first line.
 | `help.grindSpeed.title` | `constants/recipeHelp.ts:69` | Grind speed field label. | `Grind speed` |
 | `help.grindSpeed.hint` | `constants/recipeHelp.ts:70` | Grind speed field hint. | `60 to 120 rpm, in tens.` |
 | `help.grinder.title` | `constants/recipeHelp.ts:73` | Grinder field label. | `Grinder` |
-| `help.grinder.hint` | `constants/recipeHelp.ts:74` | Grinder field hint. | `Turning it off is experimental.` |
+| `help.grinder.hint` | `constants/recipeHelp.ts:74` | Grinder field hint. | `Grinder off recipe cards are experimental. Read more in the help section.` |
 | `help.grinder.question` | `constants/recipeHelp.ts:75` | Grinder help-sheet heading. | `Can I turn the grinder off?` |
-| `help.grinder.detail` | `constants/recipeHelp.ts:76` | Grinder long-form help. Note: says grind size **81** disables the grinder. | `Turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.` |
+| `help.grinder.detail` | `constants/recipeHelp.ts:76` | Grinder long-form help. Note: says grind size **81** disables the grinder, and that this only applies to cards. | `It depends on how you brew it. Brewing straight from the app sends the machine its own value for a grinder that stays off, so pre-ground coffee works normally and there is nothing to watch out for. A card has no such value: turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.` |
 | `help.cup.title` | `constants/recipeHelp.ts:86` | Cup field label. | `Cup` |
 | `help.cup.hint` | `constants/recipeHelp.ts:87` | Cup field hint. | `Omni turns overflow protection off.` |
 | `help.cup.question` | `constants/recipeHelp.ts:88` | Cup help-sheet heading. | `Which cup type should I pick?` |

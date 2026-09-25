@@ -7,7 +7,13 @@ import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {palette} from "@/constants/colors";
+import {RECIPE_HELP} from "@/constants/recipeHelp";
 import {resolveAccent} from "@/library/accent";
+
+// The words themselves are inventoried in docs/copy.md. These tests assert the
+// wiring, so they read the hint rather than restating it; `String` because the
+// field is optional on `HelpEntry` and a missing hint should fail loudly.
+const RATIO_HINT = String(RECIPE_HELP.ratio.hint);
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
 // shapes rather than inventing new ones. Note the comment there about reading a
@@ -657,7 +663,7 @@ describe("the editor", () => {
         expect(screen.queryByLabelText("What is Ratio?")).toBeNull();
         expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
         // The hint is what the deck does carry.
-        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+        expect(screen.getByText(RATIO_HINT))
             .toBeTruthy();
     });
 
@@ -674,7 +680,7 @@ describe("the editor", () => {
         mockSettings = {showHints: false};
         await renderEditor();
 
-        expect(screen.queryByText("Whole numbers only. Sets the target volume."))
+        expect(screen.queryByText(RATIO_HINT))
             .toBeNull();
 
         await fireEvent.press(screen.getByLabelText("More"));
@@ -686,7 +692,7 @@ describe("the editor", () => {
         await fireEvent.press(screen.getByLabelText("Close"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+        expect(screen.getByText(RATIO_HINT))
             .toBeTruthy();
         jest.useRealTimers();
     });
