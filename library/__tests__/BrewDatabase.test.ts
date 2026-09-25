@@ -18,14 +18,17 @@ import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 type BrewRow = Record<string, string | number | null>;
 type SampleRow = {brewId: string; stream: string};
 type FrameRow = {brewId: string; frames: string};
+type TagRow = {brewId: string; tag: string; tagKey: string};
 const mockDb = {brews: [] as BrewRow[]};
 let sampleReads = 0;
+let tagRowsRead = 0;
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => {
         const brews: BrewRow[] = [];
         const samples: SampleRow[] = [];
         const frames: FrameRow[] = [];
+        const tags: TagRow[] = [];
         const countsAsBrewed = (b: BrewRow) =>
             b.outcome === "done" || b.outcome === "endedOnMachine";
         const isMeasured = (b: BrewRow) => countsAsBrewed(b) && b.watched !== 0;
@@ -41,6 +44,7 @@ jest.mock("expo-sqlite", () => ({
                 const brewSnapshot = brews.map((row) => ({...row}));
                 const sampleSnapshot = samples.map((row) => ({...row}));
                 const frameSnapshot = frames.map((row) => ({...row}));
+                const tagSnapshot = tags.map((row) => ({...row}));
                 try {
                     task();
                 } catch (error) {
@@ -50,6 +54,8 @@ jest.mock("expo-sqlite", () => ({
                     samples.push(...sampleSnapshot);
                     frames.length = 0;
                     frames.push(...frameSnapshot);
+                    tags.length = 0;
+                    tags.push(...tagSnapshot);
                     throw error;
                 }
             },
@@ -64,12 +70,27 @@ jest.mock("expo-sqlite", () => ({
                     samples.push({brewId: params[0] as string, stream: params[1] as string});
                 } else if (/^\s*INSERT INTO brew_frames/i.test(source)) {
                     frames.push({brewId: params[0] as string, frames: params[1] as string});
+                } else if (/^\s*INSERT OR IGNORE INTO brew_tags/i.test(source)) {
+                    if (!tags.some((row) =>
+                        row.brewId === params[0] && row.tagKey === params[2])) {
+                        tags.push({
+                            brewId: params[0] as string,
+                            tag: params[1] as string,
+                            tagKey: params[2] as string
+                        });
+                    }
                 } else if (/^\s*DELETE FROM brew_frames WHERE brewId/i.test(source)) {
                     for (let i = frames.length - 1; i >= 0; i -= 1) {
                         if (frames[i].brewId === params[0]) frames.splice(i, 1);
                     }
                 } else if (/^\s*DELETE FROM brew_frames\s*$/i.test(source)) {
                     frames.length = 0;
+                } else if (/^\s*DELETE FROM brew_tags WHERE brewId/i.test(source)) {
+                    for (let i = tags.length - 1; i >= 0; i -= 1) {
+                        if (tags[i].brewId === params[0]) tags.splice(i, 1);
+                    }
+                } else if (/^\s*DELETE FROM brew_tags\s*$/i.test(source)) {
+                    tags.length = 0;
                 } else if (/^\s*UPDATE brews SET/i.test(source)) {
                     // Generic because `judge` builds its SET list from the
                     // fields it was given, so there is no one literal to match:
@@ -107,6 +128,15 @@ jest.mock("expo-sqlite", () => ({
                 }
                 if (/FROM brew_frames/i.test(source)) {
                     return frames.filter((f) => f.brewId === params[0]);
+                }
+                if (/FROM brew_tags/i.test(source)) {
+                    if (/WHERE brewId = \?/i.test(source)) {
+                        return tags.filter((row) => row.brewId === params[0]);
+                    }
+                    if (/WHERE brewId IN/i.test(source)) {
+                        return tags.filter((row) => params.includes(row.brewId));
+                    }
+                    return tags;
                 }
                 const ordered = [...brews]
                     .sort((a, b) => (b.startedAt as number) - (a.startedAt as number));
@@ -171,6 +201,7 @@ jest.mock("expo-sqlite", () => ({
 
 beforeEach(() => {
     sampleReads = 0;
+    tagRowsRead = 0;
 });
 
 function corruptStoredRow(id: string, update: Partial<BrewRow>): void {
@@ -213,7 +244,9 @@ function realBrewDatabase(): BrewDatabase {
     const readAll = raw.getAllSync.bind(raw);
     raw.getAllSync = ((source: string, params?: (string | number)[]) => {
         if (/FROM brew_samples/i.test(source)) sampleReads += 1;
-        return readAll(source, params);
+        const rows = readAll(source, params);
+        if (/FROM brew_tags/i.test(source)) tagRowsRead += rows.length;
+        return rows;
     }) as typeof raw.getAllSync;
     const database = Object.create(BrewDatabase.prototype) as BrewDatabase;
     (database as unknown as {db: FakeSQLiteDatabase}).db = raw;
@@ -309,7 +342,7 @@ describe("BrewDatabase", () => {
         // Every stored brew reports a verdict, even the empty one: unrated is
         // a value the readers have to be able to see, not an absence.
         expect(db.get("brew-1")).toEqual({
-            ...record(), rating: 0, note: "", pinned: false, hasStream: false
+            ...record(), rating: 0, note: "", pinned: false, tags: [], hasStream: false
         });
     });
 
@@ -760,9 +793,10 @@ describe("what the coffee was", () => {
         }), []);
 
         const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
-        expect(raw.getAllSync<{roast: string; process: string}>(
+        const stored = raw.getAllSync(
             "SELECT roast, process FROM brews WHERE id = ?;", ["a"]
-        )[0]).toEqual({roast: "", process: ""});
+        )[0] as {roast: string; process: string};
+        expect(stored).toEqual({roast: "", process: ""});
 
         const [brew] = db.brewsFor("uuid-1");
         expect(brew.roast).toBeUndefined();
@@ -780,6 +814,51 @@ describe("what the coffee was", () => {
             db.brewsFor("uuid-1").map((brew) => [brew.id, brew]));
         expect(byId.a.origin).toBe("Huila");
         expect(byId.b.origin).toBeUndefined();
+    });
+});
+
+describe("a brew's custom tags", () => {
+    it("stores and reads them back in the order given", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya", "filter"]}), []);
+
+        expect(db.brewsFor("uuid-1")[0].tags).toEqual(["Kenya", "filter"]);
+    });
+
+    it("gives an empty list for a brew nobody tagged", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1"}), []);
+
+        expect(db.brewsFor("uuid-1")[0].tags).toEqual([]);
+    });
+
+    it("folds two spellings of one tag into one row", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya", "kenya"]}), []);
+
+        expect(db.brewsFor("uuid-1")[0].tags).toEqual(["Kenya"]);
+    });
+
+    it("keeps one brew's tags off another", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya"]}), []);
+        db.insert(record({id: "b", recipeUuid: "uuid-1", tags: ["Brazil"]}), []);
+        db.insert(record({id: "c", recipeUuid: "uuid-2", tags: ["Ghost"]}), []);
+
+        tagRowsRead = 0;
+        const byId = Object.fromEntries(
+            db.brewsFor("uuid-1").map((brew) => [brew.id, brew]));
+        expect(byId.a.tags).toEqual(["Kenya"]);
+        expect(byId.b.tags).toEqual(["Brazil"]);
+        expect(tagRowsRead).toBe(2);
+    });
+
+    it("takes a brew's tags with it when the brew is deleted", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya"]}), []);
+        db.remove("a");
+
+        expect(db.tagsFor("a")).toEqual([]);
     });
 });
 

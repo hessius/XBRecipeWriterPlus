@@ -226,6 +226,8 @@ export type BrewRecord = {
     process?: Process;
     /** What was done to the fermentation. */
     fermentation?: Fermentation;
+    /** Free-text tags. Searchable, deliberately not a dimension #104 groups on. */
+    tags?: string[];
 };
 
 /** The ceiling of the scale, decided once in the design and read from here. */

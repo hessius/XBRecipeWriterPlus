@@ -12,7 +12,8 @@ import {
     isFermentation,
     isProcess,
     isRoast,
-    MAX_ORIGIN_LENGTH
+    MAX_ORIGIN_LENGTH,
+    normaliseBeanTags
 } from "./brew/beanTags";
 import type {
     BrewOutcome,
@@ -24,6 +25,7 @@ import type {
 import type {Stall} from "./brew/stalls";
 import type {PodCoffee} from "./podCoffee";
 import {podCoffeeFromStored} from "./podCoffee";
+import {tagKey} from "./tagKey";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
@@ -165,6 +167,13 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 brewId TEXT PRIMARY KEY NOT NULL,
                 frames TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS brew_tags (
+                brewId TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                tagKey TEXT NOT NULL,
+                PRIMARY KEY (brewId, tagKey)
+            );
+            CREATE INDEX IF NOT EXISTS idx_brew_tags_key ON brew_tags(tagKey);
             CREATE INDEX IF NOT EXISTS idx_brews_recipeUuid ON brews(recipeUuid);`);
     // Rows written before `pouringAt` existed keep the 0 default, which
     // reads as "no first drop recorded" and falls back to `startedAt`.
@@ -386,13 +395,15 @@ class BrewDatabase {
                     [record.id, frames]
                 );
             }
+            this.writeTags(record.id, record.tags ?? []);
         });
     }
 
     public all(): StoredBrew[] {
-        return this.db
+        const brews = this.db
             .getAllSync<BrewRow>("SELECT * FROM brews ORDER BY startedAt DESC;")
             .map(hydrate);
+        return this.attachTags(brews);
     }
 
     /**
@@ -403,12 +414,13 @@ class BrewDatabase {
      * diary, and a stopped brew is still something the user may need to see.
      */
     public brewsFor(recipeUuid: string): StoredBrew[] {
-        return this.db
+        const brews = this.db
             .getAllSync<BrewRow>(
                 "SELECT * FROM brews WHERE recipeUuid = ? ORDER BY startedAt DESC;",
                 [recipeUuid]
             )
             .map(hydrate);
+        return this.attachTags(brews);
     }
 
     /**
@@ -568,6 +580,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             toAdd.forEach((record) => {
                 this.writeBrewRow(record, false);
+                this.writeTags(record.id, record.tags ?? []);
             });
         });
         return toAdd.length;
@@ -577,7 +590,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<BrewRow>(
             "SELECT * FROM brews WHERE id = ?;", [id]
         );
-        return rows.length > 0 ? hydrate(rows[0]) : null;
+        return rows.length > 0 ? {...hydrate(rows[0]), tags: this.tagsFor(id)} : null;
     }
 
     public samples(id: string): BrewSample[] {
@@ -606,6 +619,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brew_samples WHERE brewId = ?;", [id]);
+            this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brews WHERE id = ?;", [id]);
         });
     }
@@ -616,6 +630,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames");
             this.db.runSync("DELETE FROM brew_samples");
+            this.db.runSync("DELETE FROM brew_tags");
             this.db.runSync("DELETE FROM brews");
         });
     }
@@ -648,6 +663,60 @@ class BrewDatabase {
                 this.db.runSync("UPDATE brews SET hasStream = 0 WHERE id = ?;", [brew.id]);
             });
         });
+    }
+
+    /**
+     * Replace a brew's rows in `brew_tags`, delete then insert.
+     *
+     * Delete first so an edit cannot leave a tag the user removed, and shared
+     * by every path that writes tags so an update and a rebuild produce
+     * identical rows.
+     */
+    private writeTags(brewId: string, tags: readonly string[]): void {
+        this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [brewId]);
+        for (const tag of normaliseBeanTags(tags)) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO brew_tags (brewId, tag, tagKey) VALUES (?, ?, ?);",
+                [brewId, tag, tagKey(tag)]
+            );
+        }
+    }
+
+    /** One brew's tags, in the order they were written. */
+    public tagsFor(brewId: string): string[] {
+        return this.db
+            .getAllSync<{tag: string}>(
+                "SELECT tag FROM brew_tags WHERE brewId = ? ORDER BY rowid;",
+                [brewId]
+            )
+            .map((row) => row.tag);
+    }
+
+    /**
+     * The tags for a set of brews, in one query.
+     *
+     * One query rather than one per brew: a much-used recipe's history is
+     * hundreds of rows and this runs when the history screen opens.
+     */
+    private tagsForAll(brewIds: readonly string[]): Map<string, string[]> {
+        const byBrew = new Map<string, string[]>();
+        if (brewIds.length === 0) return byBrew;
+        const holes = brewIds.map(() => "?").join(", ");
+        const rows = this.db.getAllSync<{brewId: string; tag: string}>(
+            `SELECT brewId, tag FROM brew_tags WHERE brewId IN (${holes}) ORDER BY rowid;`,
+            [...brewIds]
+        );
+        for (const row of rows) {
+            const existing = byBrew.get(row.brewId);
+            if (existing === undefined) byBrew.set(row.brewId, [row.tag]);
+            else existing.push(row.tag);
+        }
+        return byBrew;
+    }
+
+    private attachTags(brews: StoredBrew[]): StoredBrew[] {
+        const tags = this.tagsForAll(brews.map((brew) => brew.id));
+        return brews.map((brew) => ({...brew, tags: tags.get(brew.id) ?? []}));
     }
 }
 
