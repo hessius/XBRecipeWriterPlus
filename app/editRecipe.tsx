@@ -661,6 +661,10 @@ function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: 
     );
 }
 
+function readKnownTags(database: RecipeDatabase): string[] {
+    return database.countRecipesByTag().map(({tag}) => tag);
+}
+
 function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
@@ -733,6 +737,12 @@ export default function EditRecipe(
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
     const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
+    const [recipeDatabase] = useState(() => new RecipeDatabase());
+    // Read once for the screen's lifetime. Nothing this editor does can change
+    // the database answer: tag edits stay in memory until `persistRecipe`, and
+    // by then the screen is either leaving or the tag is already on this recipe
+    // and `TagSection` filters it from its own suggestions.
+    const [knownTags] = useState(() => readKnownTags(recipeDatabase));
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<OpenRung>(null);
@@ -787,7 +797,8 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editInputComplete, setVolumeError,
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editTags,
+        editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
         autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
         setXidFocused
@@ -875,7 +886,7 @@ export default function EditRecipe(
         // create nothing and navigate back as though it had; for a saved one it
         // copied the last save and dropped every unsaved edit.
         try {
-            new RecipeDatabase().duplicateRecipe(recipe!);
+            recipeDatabase.duplicateRecipe(recipe!);
         } catch {
             // The store throwing is the only way this fails, and swallowing it
             // would navigate back as though a copy had been made.
@@ -958,7 +969,7 @@ export default function EditRecipe(
     async function deleteRecipe() {
         await flushDrafts();
         try {
-            new RecipeDatabase().deleteRecipe(recipe!.uuid);
+            recipeDatabase.deleteRecipe(recipe!.uuid);
         } catch {
             notify({tone: "error", message: "Could not delete the recipe."});
             return;
@@ -1069,6 +1080,8 @@ export default function EditRecipe(
                     <AboutDeck recipe={recipe} accent={accent}
                                showAvatar={showRecipeAvatars} brews={brewSummary}
                                onRate={rate}
+                               knownTags={knownTags}
+                               onTags={editTags}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}
