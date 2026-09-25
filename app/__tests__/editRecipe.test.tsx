@@ -143,7 +143,7 @@ let mockRecipeJSON = JSON.stringify(fixture());
 
 beforeEach(() => {
     const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
-    RecipeDatabase.prototype.countRecipesByTag.mockReturnValue([]);
+    RecipeDatabase.prototype.countRecipesByTag.mockReturnValue([{tag: "Morning", count: 3}]);
     mockRecipeJSON = JSON.stringify(fixture());
     mockSettings = {};
     mockParams = null;
@@ -337,6 +337,26 @@ describe("the editor", () => {
         expect(screen.getByTestId("about-pod")).toBeTruthy();
         expect(screen.getByTestId("about-from")).toBeTruthy();
         expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("offers known library tags on the editor tag control", async () => {
+        await renderEditor();
+
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "mor");
+
+        expect(screen.getByLabelText("Use tag Morning")).toBeTruthy();
+    });
+
+    it("does not reread known tags on unrelated editor redraws", async () => {
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        await renderEditor();
+        RecipeDatabase.prototype.countRecipesByTag.mockClear();
+
+        await fireEvent.press(screen.getByLabelText("Increase Ratio"));
+
+        expect(RecipeDatabase.prototype.countRecipesByTag).not.toHaveBeenCalled();
     });
 
     it("puts a renamed recipe back on its pod name by clearing its own", async () => {

@@ -661,6 +661,10 @@ function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: 
     );
 }
 
+function readKnownTags(database: RecipeDatabase): string[] {
+    return database.countRecipesByTag().map(({tag}) => tag);
+}
+
 function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
@@ -734,6 +738,7 @@ export default function EditRecipe(
     const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
     const [recipeDatabase] = useState(() => new RecipeDatabase());
+    const [knownTags, setKnownTags] = useState(() => readKnownTags(recipeDatabase));
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<OpenRung>(null);
@@ -828,7 +833,6 @@ export default function EditRecipe(
     );
 
     if (!recipe) return null;
-    const knownTags = recipeDatabase.countRecipesByTag().map(({tag}) => tag);
 
     // Every edit republishes the recipe: the model is mutated in place, so a key
     // bump is what repaints the steppers and the derived total. Several of the
@@ -853,6 +857,11 @@ export default function EditRecipe(
             await editInputComplete(label, value);
         }
         bumpKey();
+    }
+
+    function onTags(tags: string[]) {
+        editTags(tags);
+        setKnownTags(readKnownTags(recipeDatabase));
     }
 
     /**
@@ -1073,7 +1082,7 @@ export default function EditRecipe(
                                showAvatar={showRecipeAvatars} brews={brewSummary}
                                onRate={rate}
                                knownTags={knownTags}
-                               onTags={editTags}
+                               onTags={onTags}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}
