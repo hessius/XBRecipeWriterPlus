@@ -46,7 +46,7 @@ const ENTRIES = {
     },
     ratio: {
         title:  "Ratio",
-        hint:   "Whole numbers only. Sets the target volume.",
+        hint:   "Sets target volume. Cards use whole numbers.",
         question: "What does the ratio set?",
         detail: "The target volume is the dose multiplied by the ratio. The " +
                 "stage volumes have to add up to it exactly or the machine " +
@@ -71,7 +71,7 @@ const ENTRIES = {
     },
     grinder: {
         title:  "Grinder",
-        hint:   "Fine for brewing here. Awkward on a card.",
+        hint:   "Grinder off recipe cards are experimental. Read more in the help section.",
         question: "Can I turn the grinder off?",
         detail: "It depends on how you brew it. Brewing straight from the app " +
                 "sends the machine its own value for a grinder that stays off, " +
