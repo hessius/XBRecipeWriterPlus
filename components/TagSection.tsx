@@ -77,7 +77,7 @@ export default function TagSection({tags, known, onChange}: {
                             style={{
                                 minWidth:          TAG_FIELD_MIN_WIDTH,
                                 minHeight:         CHIP_HEIGHT,
-                                fontSize:          14,
+                                fontSize:          TAG_TEXT_FONT_SIZE,
                                 color:             palette.text,
                                 backgroundColor:   palette.raised,
                                 borderColor:       palette.control,
@@ -101,7 +101,8 @@ export default function TagSection({tags, known, onChange}: {
                                        alignItems:        "center",
                                        justifyContent:    "center"
                                    }}>
-                            <Text fontSize={14} lineHeight={16} color={palette.dim}>+ Add</Text>
+                            <Text fontSize={TAG_TEXT_FONT_SIZE} lineHeight={TAG_TEXT_LINE_HEIGHT}
+                                  color={palette.dim}>+ Add</Text>
                         </Pressable>
                     )}
                 </XStack>
@@ -124,7 +125,8 @@ export default function TagSection({tags, known, onChange}: {
                                            alignItems:        "center",
                                            justifyContent:    "center"
                                        }}>
-                                <Text fontSize={14} lineHeight={16} color={palette.dim}
+                                <Text fontSize={TAG_TEXT_FONT_SIZE} lineHeight={TAG_TEXT_LINE_HEIGHT}
+                                      color={palette.dim}
                                       flexShrink={1}>
                                     {suggestion}
                                 </Text>
@@ -151,7 +153,8 @@ function TagChip({tag, onRemove}: {
                 minHeight={CHIP_HEIGHT}
                 flexShrink={1}
                 paddingLeft={11}>
-            <Text fontSize={14} lineHeight={16} color={palette.text} flexShrink={1}>
+            <Text fontSize={TAG_TEXT_FONT_SIZE} lineHeight={TAG_TEXT_LINE_HEIGHT}
+                  color={palette.text} flexShrink={1}>
                 {tag}
             </Text>
             <Pressable accessibilityRole="button"
@@ -163,7 +166,8 @@ function TagChip({tag, onRemove}: {
                            alignItems:     "center",
                            justifyContent: "center"
                        }}>
-                <Text fontSize={13} lineHeight={16} color={palette.muted}>✕</Text>
+                <Text fontSize={TAG_REMOVE_FONT_SIZE} lineHeight={TAG_REMOVE_LINE_HEIGHT}
+                      color={palette.muted}>✕</Text>
             </Pressable>
         </XStack>
     );
@@ -205,3 +209,7 @@ const MAX_SUGGESTIONS = 6;
 
 /** Wide enough to read as a tag field rather than a tiny chip, at true phone width. */
 const TAG_FIELD_MIN_WIDTH = 118;
+const TAG_TEXT_FONT_SIZE = 14;
+const TAG_TEXT_LINE_HEIGHT = 20;
+const TAG_REMOVE_FONT_SIZE = 13;
+const TAG_REMOVE_LINE_HEIGHT = 18;
