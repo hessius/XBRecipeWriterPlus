@@ -12,6 +12,7 @@ import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
 import HelpSheet from "@/components/HelpSheet";
+import LeaveEditorSheet, {type LeaveIntent} from "@/components/LeaveEditorSheet";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
@@ -792,6 +793,20 @@ export default function EditRecipe(
     const [helpOpen, setHelpOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
+    const [leavePrompt, setLeavePrompt] = useState<LeaveIntent | null>(null);
+    /**
+     * The navigation the guard interrupted, so it can be replayed on Save or
+     * Discard. A ref rather than state: replaying it must not wait for a
+     * render, and nothing draws from it.
+     */
+    const heldExit = useRef<(() => void) | null>(null);
+    /**
+     * Set while an exit the guard has already answered is in flight, so the
+     * listener lets it through instead of asking a second time. Also set by the
+     * actions that leave on purpose with the question already settled: a delete
+     * has nothing left to save, and a duplicate has already written.
+     */
+    const leaving = useRef(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
     // without changing what the next recipe opens on.
@@ -801,7 +816,7 @@ export default function EditRecipe(
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
-        toggleFavourite, editTags, editInputComplete, setVolumeError,
+        hasPendingEdits, toggleFavourite, editTags, editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
         autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
         setXidFocused
@@ -820,6 +835,26 @@ export default function EditRecipe(
         }
         notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
+
+    useEffect(() => {
+        // `hasPendingEdits` seeds the opened snapshot lazily. Seeding here
+        // means the first exit after an edit compares against the opened
+        // recipe, not against the already-edited draft.
+        hasPendingEdits();
+        const stop = navigation.addListener("beforeRemove", (event) => {
+            if (leaving.current || !hasPendingEdits()) return;
+            // Android hardware back and the iOS swipe both arrive here, which
+            // is why this is a listener rather than a check in the back button.
+            event.preventDefault();
+            const action = event.data.action;
+            heldExit.current = () => {
+                leaving.current = true;
+                navigation.dispatch(action);
+            };
+            setLeavePrompt("leave");
+        });
+        return stop;
+    });
 
     // Computed before the header effect, not after the `recipe` guard below, so
     // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
@@ -902,20 +937,26 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not duplicate the recipe."});
             return;
         }
+        leaving.current = true;
         navigation.goBack();
     }
 
     async function onBrewPress() {
         const currentRecipe = recipe;
         if (!currentRecipe) return;
-        // The same persist-then-act shape as WRITE and Share: commit anything
-        // typed but not blurred, save the recipe so the brew screen reads a
-        // stored row rather than a half-typed one, then hand it the snapshot.
         await flushDrafts();
-        persistRecipe();
+        if (hasPendingEdits()) {
+            heldExit.current = () => brewWith(currentRecipe);
+            setLeavePrompt("brew");
+            return;
+        }
+        brewWith(currentRecipe);
+    }
+
+    function brewWith(brewing: Recipe) {
         router.push({
             pathname: "/brew",
-            params:   {recipeJSON: JSON.stringify(currentRecipe)}
+            params:   {recipeJSON: JSON.stringify(brewing)}
         });
     }
 
@@ -983,6 +1024,7 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not delete the recipe."});
             return;
         }
+        leaving.current = true;
         navigation.goBack();
     }
 
@@ -991,7 +1033,7 @@ export default function EditRecipe(
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
-        || bypassWriteOpen || renameOpen;
+        || bypassWriteOpen || renameOpen || leavePrompt !== null;
 
     return (
         <>
@@ -1177,6 +1219,21 @@ export default function EditRecipe(
                               recipe={recipe}
                               onCancel={cancelBypassWrite}
                               onConfirm={confirmBypassWrite}/>
+
+            <LeaveEditorSheet open={leavePrompt !== null} intent={leavePrompt ?? "leave"}
+                              onSave={() => {
+                                  persistRecipe();
+                                  setLeavePrompt(null);
+                                  heldExit.current?.();
+                              }}
+                              onDiscard={() => {
+                                  setLeavePrompt(null);
+                                  heldExit.current?.();
+                              }}
+                              onCancel={() => {
+                                  setLeavePrompt(null);
+                                  heldExit.current = null;
+                              }}/>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>

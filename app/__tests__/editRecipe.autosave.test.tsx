@@ -1,6 +1,6 @@
 import React from "react";
 import {Share} from "react-native";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -27,6 +27,7 @@ const mockGoBack = jest.fn();
 const mockDispatch = jest.fn();
 const mockPush = jest.fn();
 const mockBeforeRemoveListeners = new Set<(event: BeforeRemoveEvent) => void>();
+let mockScreenLeft = false;
 
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockBacking
@@ -53,6 +54,7 @@ jest.mock("expo-router", () => ({
             for (const listener of Array.from(mockBeforeRemoveListeners)) {
                 listener(event);
             }
+            if (!prevented) mockScreenLeft = true;
             return !prevented;
         },
         dispatch: (...args: unknown[]) => mockDispatch(...args),
@@ -165,6 +167,13 @@ async function typeDose(value: string): Promise<void> {
     await fireEvent(input, "submitEditing", {nativeEvent: {text: value}});
 }
 
+async function pressOnSheet(label: string, landed: () => boolean): Promise<void> {
+    await waitFor(async () => {
+        await fireEvent.press(screen.getByLabelText(label));
+        expect(landed()).toBe(true);
+    });
+}
+
 describe("editRecipe autosave", () => {
     beforeEach(() => {
         mockBacking = createTestDatabase();
@@ -175,6 +184,7 @@ describe("editRecipe autosave", () => {
         mockGoBack.mockClear();
         mockDispatch.mockClear();
         mockPush.mockClear();
+        mockScreenLeft = false;
         mockNotify.mockClear();
         mockShareState = {status: "idle"};
         mockShareRecipe.mockReset();
@@ -210,5 +220,61 @@ describe("editRecipe autosave", () => {
 
         expect(stored()?.description).toBe("Sweet");
         expect(stored()?.dosage).toBe(18);
+    });
+
+    it("asks before backing out with a changed dose", async () => {
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(screen.getByLabelText("Save changes")).toBeTruthy();
+        expect(mockScreenLeft).toBe(false);
+        expect(stored()?.dosage).toBe(18);
+    });
+
+    it("does not ask when nothing SAVE owns has changed", async () => {
+        await openSavedRecipe();
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Sweet");
+        await fireEvent(screen.getByTestId("note-field"), "endEditing",
+                        {nativeEvent: {text: "Sweet"}});
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(screen.queryByLabelText("Save changes")).toBeNull();
+        expect(mockScreenLeft).toBe(true);
+    });
+
+    it("saves and leaves when asked to", async () => {
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("Back"));
+        await pressOnSheet("Save changes", () => stored()?.dosage === 22);
+
+        expect(stored()?.dosage).toBe(22);
+    });
+
+    it("leaves the stored recipe alone when asked to discard", async () => {
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("Back"));
+        await pressOnSheet("Discard changes", () => mockDispatch.mock.calls.length > 0);
+
+        expect(stored()?.dosage).toBe(18);
+    });
+
+    it("does not ask on the way out of a delete", async () => {
+        // The recipe is gone. Offering to save it would be offering to put it back.
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("More"));
+        await pressOnSheet("Delete", () => stored() === null);
+
+        expect(screen.queryByLabelText("Save changes")).toBeNull();
+        expect(mockScreenLeft).toBe(true);
     });
 });
