@@ -93,6 +93,18 @@ describe("TagSection", () => {
         expect(screen.queryByLabelText("Use tag Morning")).toBeNull();
     });
 
+    it("offers no suggestions before anything has been typed", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <TagSection tags={[]} known={["Morning"]} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+
+        expect(screen.queryByLabelText("Use tag Morning")).toBeNull();
+        expect(screen.queryByLabelText("Use tag Light")).toBeNull();
+    });
+
     it("folds a lower-case query when matching library tags", async () => {
         const onChange = jest.fn();
         await renderWithProviders(
