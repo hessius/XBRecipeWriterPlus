@@ -22,6 +22,8 @@ Read `hooks/useRecipeEditor.ts:438-452` first. `toggleFavourite` is the pattern 
 
 The editor mutates `Recipe` in place and republishes with a key bump. Do not clone into state. See the repo instructions.
 
+`Recipe`'s constructor is `constructor(data?: number[], json?: string, hasSignature = true)`. The first argument is **card bytes**, not JSON. To build one from JSON it is `new Recipe(undefined, jsonString)`, and note that this does not round-trip byte for byte: the constructor runs its legacy migrations and assigns a fresh `uuid` and `createdAt`. Never compare a draft against a constructor round-trip of itself.
+
 Never import from `@react-navigation/*`. `useNavigation` comes from `expo-router` and the object it returns carries `addListener("beforeRemove", ...)`. This has been spiked and typechecks.
 
 ## Decisions already taken
