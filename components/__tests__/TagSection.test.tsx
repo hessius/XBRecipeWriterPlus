@@ -1,10 +1,11 @@
 import {fireEvent, screen} from "@testing-library/react-native";
-import React from "react";
+import React, {useState} from "react";
 import {StyleSheet} from "react-native";
 
 import TagSection from "@/components/TagSection";
 import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
+import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("TagSection", () => {
@@ -276,4 +277,33 @@ describe("TagSection", () => {
 
         expect(screen.queryByLabelText("Add a tag")).toBeNull();
     });
+
+    it("closes the field when adding a tag fills the recipe", async () => {
+        await renderWithProviders(<TagSectionHost initialTags={nineteenTags()}/>);
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "twenty");
+        await fireEvent(screen.getByLabelText("New tag"), "submitEditing",
+                        {nativeEvent: {text: "twenty"}});
+
+        expect(screen.getByText("twenty")).toBeTruthy();
+        expect(screen.queryByLabelText("New tag")).toBeNull();
+        expect(screen.queryByLabelText("Add a tag")).toBeNull();
+    });
 });
+
+function TagSectionHost({initialTags}: { initialTags: string[] }) {
+    const [tags, setTags] = useState(initialTags);
+
+    function onChange(nextTags: string[]) {
+        const recipe = new Recipe();
+        recipe.setTags(nextTags);
+        setTags(recipe.tags);
+    }
+
+    return <TagSection tags={tags} known={[]} onChange={onChange}/>;
+}
+
+function nineteenTags(): string[] {
+    return Array.from({length: 19}, (_, i) => `tag-${i}`);
+}

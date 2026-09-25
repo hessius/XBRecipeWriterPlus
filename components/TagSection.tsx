@@ -45,6 +45,9 @@ export default function TagSection({tags, known, onChange}: {
             return;
         }
         onChange([...tags, tag]);
+        if (tags.length + 1 >= MAX_TAGS_PER_RECIPE) {
+            setAdding(false);
+        }
     }
 
     return (
