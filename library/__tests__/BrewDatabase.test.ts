@@ -2,7 +2,11 @@ import BrewDatabase, {ensureBrewTables} from "@/library/BrewDatabase";
 import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {unobservedBrew} from "@/library/brew/BrewRecord";
-import {MAX_ORIGIN_LENGTH} from "@/library/brew/beanTags";
+import {
+    MAX_BEAN_TAG_LENGTH,
+    MAX_BEAN_TAGS,
+    MAX_ORIGIN_LENGTH
+} from "@/library/brew/beanTags";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
@@ -839,6 +843,34 @@ describe("a brew's custom tags", () => {
         expect(db.brewsFor("uuid-1")[0].tags).toEqual(["Kenya"]);
     });
 
+    it("normalises restored tags before writing tag rows", () => {
+        const db = realBrewDatabase();
+        const many = Array.from({length: MAX_BEAN_TAGS + 2}, (_, index) =>
+            `tag-${index}`);
+        const hostileTags = [
+            "  Kenya  ",
+            "",
+            "   ",
+            "x".repeat(MAX_BEAN_TAG_LENGTH + 1),
+            42,
+            ...many
+        ] as unknown as string[];
+        const expectedTags = ["Kenya", ...many.slice(0, MAX_BEAN_TAGS - 1)];
+
+        db.restore([record({id: "a", recipeUuid: "uuid-1", tags: hostileTags})]);
+
+        const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
+        const rows = raw.getAllSync(
+            "SELECT tag, tagKey FROM brew_tags WHERE brewId = ? ORDER BY rowid;",
+            ["a"]
+        );
+        expect(rows).toEqual(expectedTags.map((tag) => ({
+            tag,
+            tagKey: tag.toLowerCase()
+        })));
+        expect(db.get("a")?.tags).toEqual(expectedTags);
+    });
+
     it("keeps one brew's tags off another", () => {
         const db = realBrewDatabase();
         db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya"]}), []);
@@ -859,6 +891,18 @@ describe("a brew's custom tags", () => {
         db.remove("a");
 
         expect(db.tagsFor("a")).toEqual([]);
+    });
+
+    it("clears custom tag rows with the history", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", recipeUuid: "uuid-1", tags: ["Kenya"]}), []);
+        db.insert(record({id: "b", recipeUuid: "uuid-1", tags: ["Brazil"]}), []);
+
+        db.clear();
+
+        const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
+        expect(raw.getAllSync("SELECT brewId, tag FROM brew_tags ORDER BY rowid;"))
+            .toEqual([]);
     });
 });
 
