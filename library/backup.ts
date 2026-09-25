@@ -657,8 +657,9 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         }
     }
     if (Array.isArray(cleaned.tags)) {
+        const tags = cleaned.tags;
         if (cleaned === entry) cleaned = {...entry};
-        cleaned.tags = normaliseBeanTags(cleaned.tags);
+        cleaned.tags = normaliseBeanTags(tags);
     }
 
     // Rebuilt field by field rather than passed through, so a file carrying
