@@ -5,7 +5,9 @@ import {unobservedBrew} from "@/library/brew/BrewRecord";
 import {
     MAX_BEAN_TAG_LENGTH,
     MAX_BEAN_TAGS,
-    MAX_ORIGIN_LENGTH
+    MAX_ORIGIN_LENGTH,
+    resolvedOrigin,
+    resolvedProcess
 } from "@/library/brew/beanTags";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
@@ -818,6 +820,29 @@ describe("what the coffee was", () => {
             db.brewsFor("uuid-1").map((brew) => [brew.id, brew]));
         expect(byId.a.origin).toBe("Huila");
         expect(byId.b.origin).toBeUndefined();
+    });
+
+    it("never writes a pod's values into the columns", () => {
+        const db = realBrewDatabase();
+        db.insert(record({
+            id: "a",
+            recipeUuid: "uuid-1",
+            coffee: {name: "Pod", origin: "Huila", process: "washed"}
+        }), []);
+
+        // The pod's values resolve at read time. Writing them here would turn
+        // xBloom's description into the user's assertion, permanently.
+        const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
+        const stored = raw.getAllSync(
+            "SELECT origin, process FROM brews WHERE id = ?;", ["a"]
+        )[0] as {origin: string; process: string};
+        expect(stored).toEqual({origin: "", process: ""});
+
+        const [brew] = db.brewsFor("uuid-1");
+        expect(brew.origin).toBeUndefined();
+        expect(brew.process).toBeUndefined();
+        expect(resolvedOrigin(brew)).toBe("Huila");
+        expect(resolvedProcess(brew)).toBe("Washed");
     });
 });
 

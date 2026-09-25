@@ -1,4 +1,5 @@
 import {tagKey} from "../tagKey";
+import type {BrewRecord} from "./BrewRecord";
 
 /**
  * What a brew's coffee was.
@@ -97,4 +98,30 @@ export function normaliseBeanTags(tags: readonly unknown[]): string[] {
         if (kept.length === MAX_BEAN_TAGS) break;
     }
     return kept;
+}
+
+/**
+ * What this brew's origin is, counting the pod.
+ *
+ * User value, else the pod's, else unset. Resolved here rather than written
+ * into the row, so the database never holds a claim the user did not make:
+ * clearing their value reveals the pod's again instead of leaving a blank, and
+ * a pod brew joins #104's comparison without anyone having typed anything.
+ */
+export function resolvedOrigin(record: BrewRecord): string | undefined {
+    const own = record.origin?.trim();
+    if (own !== undefined && own !== "") return own;
+    const pod = record.coffee?.origin?.trim();
+    return pod === undefined || pod === "" ? undefined : pod;
+}
+
+/**
+ * What this brew's process is, counting the pod.
+ *
+ * The pod's side goes through `processFromPodText`, so an unmatched or
+ * ambiguous description resolves to unset rather than to a guess.
+ */
+export function resolvedProcess(record: BrewRecord): Process | undefined {
+    if (isProcess(record.process)) return record.process;
+    return processFromPodText(record.coffee?.process);
 }

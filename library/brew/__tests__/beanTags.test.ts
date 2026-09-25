@@ -1,8 +1,13 @@
 import {
     BEAN_FIELDS, ROASTS, PROCESSES, FERMENTATIONS,
     isRoast, isProcess, isFermentation, processFromPodText,
-    normaliseBeanTags, MAX_BEAN_TAGS, MAX_BEAN_TAG_LENGTH, MAX_ORIGIN_LENGTH
+    normaliseBeanTags, MAX_BEAN_TAGS, MAX_BEAN_TAG_LENGTH, MAX_ORIGIN_LENGTH,
+    resolvedOrigin, resolvedProcess
 } from "../beanTags";
+import type {BrewRecord} from "../BrewRecord";
+
+const brew = (over: Partial<BrewRecord> = {}) =>
+    ({id: "a", ...over}) as BrewRecord;
 
 describe("the vocabulary", () => {
     it("names every preset field once", () => {
@@ -94,5 +99,41 @@ describe("custom tags", () => {
 describe("origin", () => {
     it("has a ceiling so a backup cannot smuggle a document through it", () => {
         expect(MAX_ORIGIN_LENGTH).toBeGreaterThan(0);
+    });
+});
+
+describe("resolving what the coffee was", () => {
+    it("prefers what the user said", () => {
+        const record = brew({
+            origin: "Nyeri",
+            process: "Honey",
+            coffee: {name: "Pod", origin: "Huila", process: "washed"}
+        });
+        expect(resolvedOrigin(record)).toBe("Nyeri");
+        expect(resolvedProcess(record)).toBe("Honey");
+    });
+
+    it("falls back to the pod when the user has not said", () => {
+        const record = brew({coffee: {name: "Pod", origin: "Huila", process: "washed"}});
+        expect(resolvedOrigin(record)).toBe("Huila");
+        expect(resolvedProcess(record)).toBe("Washed");
+    });
+
+    it("is unset when neither has said", () => {
+        expect(resolvedOrigin(brew())).toBeUndefined();
+        expect(resolvedProcess(brew())).toBeUndefined();
+    });
+
+    it("stays unset rather than guessing at a process it cannot match", () => {
+        const record = brew({coffee: {name: "Pod", process: "experimental lot 4"}});
+        expect(resolvedProcess(record)).toBeUndefined();
+    });
+
+    it("takes only the half of a pod's wording that it understands", () => {
+        // "anaerobic natural" names both axes. Only the fruit removal term is
+        // ours to read; the fermentation stays for the user to state.
+        const record = brew({coffee: {name: "Pod", process: "anaerobic natural"}});
+        expect(resolvedProcess(record)).toBe("Natural");
+        expect(record.fermentation).toBeUndefined();
     });
 });
