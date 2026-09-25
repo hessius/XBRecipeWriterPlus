@@ -453,6 +453,23 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         setKey((prev) => prev + 1);
     }
 
+    /**
+     * Replace the recipe's tags.
+     *
+     * A named operation rather than a `dispatch` label because the dispatch
+     * signature is `(label: string, value: string)` and tags are an array.
+     * `toggleFavourite` and `setBypassEnabled` sit here for the same reason.
+     *
+     * Through `setTags`, never by assignment: it folds case, trims, drops
+     * blanks and holds `MAX_TAGS_PER_RECIPE`, and the editor is the one place
+     * a user can reach any of that.
+     */
+    const editTags = (tags: string[]) => {
+        if (!recipe) return;
+        recipe.setTags(tags);
+        setKey((prev) => prev + 1);
+    };
+
     const editInputComplete = useCallback(async (label: string, value: string, pourNumber?: number) => {
         if (!recipe) return;
         // Recipe settings
@@ -614,6 +631,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         persistRecipe,
         saveRecipe,
         toggleFavourite,
+        editTags,
         editInputComplete,
         volumeError,
         setVolumeError,
