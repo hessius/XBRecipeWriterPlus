@@ -83,6 +83,7 @@ export default function PodSection({
                 shares one epoch — cannot land two siblings on the same key. */}
             <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID"
                           initialValue={recipe.xid}
+                          placeholder="CGL12"
                           maxLength={8} autoCapitalize="characters"
                           showHint={showHint}
                           note={xidLookupFailed ? "not found" : undefined}

@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import PodSection from "@/components/PodSection";
+import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -40,6 +41,24 @@ describe("PodSection", () => {
         expect(screen.getByLabelText("Recipe ID")).toBeTruthy();
         expect(screen.getByTestId("pod-none")).toBeTruthy();
         expect(screen.queryByTestId("pod-linked")).toBeNull();
+    });
+
+    it("gives the empty ID field a visible resting affordance", async () => {
+        // RNTL cannot see the field on glass, only the rendered props that make
+        // it visible on device. Removing the raised fill or example placeholder
+        // is the production edit that should break this test.
+        await renderWithProviders(<PodSection {...props()}/>);
+
+        const input = screen.getByLabelText("Recipe ID");
+
+        expect(input.props.placeholder).toBe("CGL12");
+        expect(input.props.placeholderTextColor).toBe(palette.muted);
+        expect(input).toHaveStyle({
+            backgroundColor: palette.raised,
+            borderColor:     palette.control,
+            borderWidth:     1,
+            borderRadius:    9
+        });
     });
 
     it("shows the pod it is following, and says so", async () => {
