@@ -78,6 +78,7 @@ describe("TagSection", () => {
 
         expect(onChange).toHaveBeenCalledWith(["Morning", "Washed"]);
         expect(screen.getByLabelText("New tag")).toBeTruthy();
+        expect(screen.getByLabelText("New tag").props.value).toBe("");
     });
 
     it("offers a matching tag from elsewhere in the library", async () => {
