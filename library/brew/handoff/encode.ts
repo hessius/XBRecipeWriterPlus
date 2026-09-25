@@ -202,8 +202,15 @@ function batchFidelity(envelopes: HandoffEnvelope[]): HandoffEncodingFidelity {
     return envelopes.some((envelope) => envelope.flow !== undefined) ? "full" : "none";
 }
 
+/**
+ * `mtime: 0` is not tidiness. fflate stamps the current time into gzip's header
+ * by default, so the same unchanged brew encodes to a different URL every
+ * second, and nothing downstream can tell "the same export again" from "an
+ * export with an edit in it". Beanconqueror receives a URL, not a file, so the
+ * timestamp describes nothing a reader wants and only spoils that comparison.
+ */
 function payload(handoffPayload: HandoffEnvelope | HandoffBatch): string {
-    return base64Url(gzipSync(strToU8(JSON.stringify(handoffPayload))));
+    return base64Url(gzipSync(strToU8(JSON.stringify(handoffPayload)), {mtime: 0}));
 }
 
 function url(payload: string, urlPrefix: string): string {
