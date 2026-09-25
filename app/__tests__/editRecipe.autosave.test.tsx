@@ -374,13 +374,14 @@ describe("editRecipe autosave", () => {
         jest.spyOn(RecipeDatabase.prototype, "updateRecipe").mockImplementation(() => {
             throw new Error("disk full");
         });
-        await fireEvent.press(screen.getByLabelText("Save changes"));
+        // Through the helper, not a bare press: the sheet is in the tree a
+        // frame before it accepts touches, and a dropped press here made this
+        // test fail about one run in ten.
+        await pressOnSheet("Save changes", () => mockNotify.mock.calls.length > 0);
 
-        await waitFor(() => {
-            expect(mockNotify).toHaveBeenCalledWith({
-                tone:    "error",
-                message: "Could not save the recipe."
-            });
+        expect(mockNotify).toHaveBeenCalledWith({
+            tone:    "error",
+            message: "Could not save the recipe."
         });
         expect(screen.getByLabelText("Save changes")).toBeTruthy();
         expect(mockDispatch).not.toHaveBeenCalled();

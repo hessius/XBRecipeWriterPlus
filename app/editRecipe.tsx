@@ -842,18 +842,21 @@ export default function EditRecipe(
         // means the first exit after an edit compares against the opened
         // recipe, not against the already-edited draft.
         hasPendingEdits();
+        // Android hardware back and the iOS swipe both arrive here, which is
+        // why this is a listener rather than a check in the back button.
         const stop = navigation.addListener("beforeRemove", (event) => {
             if (leaving.current) return;
 
-            // Android hardware back and the iOS swipe both arrive here, which
-            // is why this is a listener rather than a check in the back button.
-            if (drafts.current.size > 0) {
+            // Both branches below stop the exit and stash it, so take it off
+            // the event once. It was written out twice and the two copies are
+            // a standing invitation to fix a bug in only one of them.
+            const holdExit = () => {
                 event.preventDefault();
                 const action = event.data.action;
                 heldExit.current = () => {
-                    // The bypass is only for the synchronous beforeRemove emitted
-                    // by this replay. If the dispatch does not remove the screen,
-                    // the guard must be live for the next exit attempt.
+                    // The bypass is only for the synchronous beforeRemove
+                    // emitted by this replay. If the dispatch does not remove
+                    // the screen, the guard must be live for the next attempt.
                     leaving.current = true;
                     try {
                         navigation.dispatch(action);
@@ -861,31 +864,29 @@ export default function EditRecipe(
                         leaving.current = false;
                     }
                 };
+            };
+            const ask = () =>
+                setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
+
+            // A keystroke lives in `drafts` until the field blurs, and these
+            // exits do not blur it. `hasPendingEdits` reads the committed
+            // recipe, so without flushing first it cannot see a typed note at
+            // all and would wave the exit through, losing it.
+            if (drafts.current.size > 0) {
+                holdExit();
                 void flushDrafts().then(() => {
-                    if (hasPendingEdits()) {
-                        setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
-                    } else {
-                        replayHeldExit();
-                    }
+                    // The note has autosaved itself by now. Only ask if SAVE
+                    // still owns something, so the common case of typing a
+                    // note and leaving costs no prompt.
+                    if (hasPendingEdits()) ask();
+                    else replayHeldExit();
                 });
                 return;
             }
 
             if (!hasPendingEdits()) return;
-            event.preventDefault();
-            const action = event.data.action;
-            heldExit.current = () => {
-                // The bypass is only for the synchronous beforeRemove emitted
-                // by this replay. If the dispatch does not remove the screen,
-                // the guard must be live for the next exit attempt.
-                leaving.current = true;
-                try {
-                    navigation.dispatch(action);
-                } finally {
-                    leaving.current = false;
-                }
-            };
-            setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
+            holdExit();
+            ask();
         });
         return stop;
     });

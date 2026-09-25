@@ -683,7 +683,7 @@ Three wordings, one sheet. Brewing is worded differently because the brew runs
 either way: the question is which recipe the machine is handed, not whether
 anything happens, so "discard" there would suggest the brew could be called off.
 
-| ID | Source | Context, when the user sees this | Current text |
+| ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
 | `unsaved.title` | `components/LeaveEditorSheet.tsx:60` | Doto title of the sheet, all wordings. | `UNSAVED CHANGES` |
 | `unsaved.leave.saved.body` | `components/LeaveEditorSheet.tsx:31` (`leaveSaved`) | Body when backing out of a recipe that is already in the library. | `This recipe has changes that are not saved yet. The name, note and tags are already saved.` |
