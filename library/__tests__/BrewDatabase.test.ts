@@ -197,9 +197,23 @@ function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
     };
 }
 
+/**
+ * A database on real SQLite that also counts reads of `brew_samples`.
+ *
+ * The counting has to happen here rather than on the `expo-sqlite` mock. The
+ * mock's counter only moves when the mock answers a query, so a test using this
+ * database would leave it at zero however much of the stream the code loaded:
+ * the assertion would hold because nothing could touch it, which is not the same
+ * as holding because the code behaved.
+ */
 function realBrewDatabase(): BrewDatabase {
     const raw = createTestDatabase();
     ensureBrewTables(raw as Parameters<typeof ensureBrewTables>[0]);
+    const readAll = raw.getAllSync.bind(raw);
+    raw.getAllSync = ((source: string, params?: (string | number)[]) => {
+        if (/FROM brew_samples/i.test(source)) sampleReads += 1;
+        return readAll(source, params);
+    }) as typeof raw.getAllSync;
     const database = Object.create(BrewDatabase.prototype) as BrewDatabase;
     (database as unknown as {db: FakeSQLiteDatabase}).db = raw;
     return database;
