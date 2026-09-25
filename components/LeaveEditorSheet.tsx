@@ -16,6 +16,7 @@ export type LeaveIntent = "leave" | "brew";
 type Props = {
     open: boolean;
     intent: LeaveIntent;
+    inLibrary?: boolean;
     onSave: () => void;
     onDiscard: () => void;
     onCancel: () => void;
@@ -26,10 +27,15 @@ type Props = {
 // ratio, the cup and the bypass, so naming two of them would send a user
 // looking in the wrong place for what they changed.
 const WORDS = {
-    leave: {
+    leaveSaved: {
         body:    "This recipe has changes that are not saved yet. The name, note and tags are already saved.",
         save:    "Save changes",
         discard: "Discard changes"
+    },
+    leaveNew: {
+        body:    "This recipe is not in your library yet. Save it to keep the name, note, tags and brew settings.",
+        save:    "Save to library",
+        discard: "Discard recipe"
     },
     brew: {
         body:    "This recipe has changes that are not saved yet. The brew will run either way.",
@@ -39,9 +45,13 @@ const WORDS = {
 } as const;
 
 export default function LeaveEditorSheet({
-    open, intent, onSave, onDiscard, onCancel
+    open, intent, inLibrary = true, onSave, onDiscard, onCancel
 }: Props) {
-    const words = WORDS[intent];
+    // BREW saves a rowless recipe before navigating, so the rowless wording is
+    // unreachable there; only leaving can be about discarding the whole recipe.
+    const words = intent === "brew"
+        ? WORDS.brew
+        : inLibrary ? WORDS.leaveSaved : WORDS.leaveNew;
 
     return (
         // Dismissing is cancelling, never discarding. A swipe must not be a way

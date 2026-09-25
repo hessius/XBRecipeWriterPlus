@@ -15,9 +15,12 @@
  * compares the recipe against a snapshot taken when the screen opened instead.
  *
  * The projection is a denylist. Everything counts as a card field unless it is
- * named here as one that writes itself. That direction is deliberate: a field
- * added later and not thought about produces a prompt nobody needed, which is a
- * nuisance. The other direction loses work.
+ * named here as one that writes itself. The denylist is conditional for
+ * metadata: name, note and tags write themselves only when a stored row exists.
+ * A card read or unfinished import has no row to write to, so those fields must
+ * stay in the projection and make the leave guard ask. That direction is
+ * deliberate: a field added later and not thought about produces a prompt
+ * nobody needed, which is a nuisance. The other direction loses work.
  */
 
 import type Recipe from "@/library/Recipe";
@@ -25,13 +28,18 @@ import type Recipe from "@/library/Recipe";
 /**
  * The fields that do not wait for SAVE.
  *
- * `name`, `description` and `tags` are written as they are committed.
  * `favourite` has always written on the spot (see `toggleFavourite`), and the
  * rating is not on the recipe at all -- it lives in the brew store.
  * `accentIndex` belongs to the library, not to the user: `updateRecipe`
  * reassigns it on write, so a draft and its row disagree about it routinely.
  */
-const WRITES_ITSELF = ["name", "description", "tags", "favourite", "accentIndex"];
+const ALWAYS_WRITES_ITSELF = ["favourite", "accentIndex"];
+
+/**
+ * These only write themselves when there is already a row to receive them.
+ * Otherwise they travel with SAVE and must count as pending work.
+ */
+const METADATA_WRITES_ITSELF = ["name", "description", "tags"];
 
 /** A `JSON.stringify` whose object keys are always in the same order. */
 function stable(value: unknown): string {
@@ -53,13 +61,20 @@ function stable(value: unknown): string {
  * reference into the live recipe -- which is mutated in place, and would
  * therefore compare equal to itself forever.
  */
-export function snapshotForSave(recipe: Recipe): string {
+export function snapshotForSave(recipe: Recipe, metadataWritesItself = true): string {
     const plain = JSON.parse(JSON.stringify(recipe)) as Record<string, unknown>;
-    for (const field of WRITES_ITSELF) delete plain[field];
+    for (const field of ALWAYS_WRITES_ITSELF) delete plain[field];
+    if (metadataWritesItself) {
+        for (const field of METADATA_WRITES_ITSELF) delete plain[field];
+    }
     return stable(plain);
 }
 
 /** Whether the recipe has changed since the snapshot, in a way SAVE owns. */
-export function editsPendingSave(recipe: Recipe, opened: string): boolean {
-    return snapshotForSave(recipe) !== opened;
+export function editsPendingSave(
+    recipe: Recipe,
+    opened: string,
+    metadataWritesItself = true
+): boolean {
+    return snapshotForSave(recipe, metadataWritesItself) !== opened;
 }

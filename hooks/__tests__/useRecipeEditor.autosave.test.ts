@@ -99,6 +99,23 @@ describe("useRecipeEditor autosave", () => {
         expect(new RecipeDatabase().getRecipe("never-saved")).toBeNull();
     });
 
+    it("reports a pending note for a recipe that is not in the library", async () => {
+        const fresh = new Recipe();
+        fresh.uuid = "never-saved";
+        fresh.addOpeningPour();
+        const {result} = await open(fresh);
+
+        expect(result.current.hasPendingEdits()).toBe(false);
+
+        await act(async () => {
+            await result.current.editInputComplete(RECIPE_LABELS.NOTE, "Sweet");
+            result.current.saveMetadata();
+        });
+
+        expect(new RecipeDatabase().getRecipe("never-saved")).toBeNull();
+        expect(result.current.hasPendingEdits()).toBe(true);
+    });
+
     it("reports a pending card edit, and stops reporting it after a save", async () => {
         saved();
         const {result} = await open(stored());

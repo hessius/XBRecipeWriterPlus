@@ -141,6 +141,14 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      * itself.
      */
     const openedAs = useRef<string | null>(null);
+    /**
+     * Whether the row existed when the opened snapshot was taken.
+     *
+     * The answer controls whether metadata is excluded from the dirty
+     * projection. It is a ref so the before-remove listener can ask on every
+     * render without turning that into a SQL query on every render.
+     */
+    const openedInLibrary = useRef<boolean | null>(null);
 
     /** Told by the ID field when it gains or loses focus; flushes on blur. */
     const setXidFocused = (focused: boolean) => {
@@ -428,7 +436,16 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         // The bench is now the row, so nothing is pending. Without this,
         // pressing BREW and coming back would still be offering to save what
         // was saved.
-        openedAs.current = snapshotForSave(recipe);
+        openedInLibrary.current = true;
+        openedAs.current = snapshotForSave(recipe, true);
+    }
+
+    function recipeInLibrary(): boolean {
+        if (!recipe) return false;
+        if (openedInLibrary.current === null) {
+            openedInLibrary.current = new RecipeDatabase().getRecipe(recipe.uuid) !== null;
+        }
+        return openedInLibrary.current;
     }
 
     /**
@@ -440,11 +457,12 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     function hasPendingEdits(): boolean {
         if (!recipe) return false;
+        const metadataWritesItself = recipeInLibrary();
         if (openedAs.current === null) {
-            openedAs.current = snapshotForSave(recipe);
+            openedAs.current = snapshotForSave(recipe, metadataWritesItself);
             return false;
         }
-        return editsPendingSave(recipe, openedAs.current);
+        return editsPendingSave(recipe, openedAs.current, metadataWritesItself);
     }
 
     function saveRecipe() {
@@ -482,7 +500,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     }
 
     /**
-     * Write the recipe's name, note and tags, and nothing else.
+     * Write the recipe's name, note and tags onto the existing stored row.
      *
      * The same shape as `toggleFavourite`, for the same reason: these land on
      * the row as it stands in the library, not on the draft. `persistRecipe`
@@ -500,6 +518,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         const store = new RecipeDatabase();
         const saved = store.getRecipe(recipe.uuid);
         if (!saved) return;
+        openedInLibrary.current = true;
         saved.name = recipe.name;
         saved.description = recipe.description;
         saved.setTags(recipe.tags);
@@ -687,6 +706,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         editBypass,
         persistRecipe,
         hasPendingEdits,
+        recipeInLibrary,
         saveRecipe,
         toggleFavourite,
         saveMetadata,

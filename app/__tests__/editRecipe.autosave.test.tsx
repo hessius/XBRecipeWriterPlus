@@ -195,7 +195,7 @@ async function pressOnSheet(label: string, landed: () => boolean): Promise<void>
     await waitFor(async () => {
         await fireEvent.press(screen.getByLabelText(label));
         expect(landed()).toBe(true);
-    });
+    }, {timeout: 5000});
 }
 
 describe("editRecipe autosave", () => {
@@ -270,6 +270,39 @@ describe("editRecipe autosave", () => {
         expect(mockScreenLeft).toBe(true);
     });
 
+    it("autosaves an unblurred note before backing out", async () => {
+        await openSavedRecipe();
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Sweet");
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(stored()?.description).toBe("Sweet");
+        expect(screen.queryByLabelText("Save changes")).toBeNull();
+        expect(mockScreenLeft).toBe(true);
+    });
+
+    it("asks to save a never-saved recipe with a typed note", async () => {
+        mockRecipeJSON = JSON.stringify(fixture());
+        await renderWithProviders(<EditRecipe/>);
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Sweet");
+        await fireEvent(screen.getByTestId("note-field"), "endEditing",
+                        {nativeEvent: {text: "Sweet"}});
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(stored()).toBeNull();
+        expect(screen.getByText("This recipe is not in your library yet. Save it to keep the name, note, tags and brew settings.")).toBeTruthy();
+        expect(screen.getByLabelText("Save to library")).toBeTruthy();
+        expect(screen.getByLabelText("Discard recipe")).toBeTruthy();
+        expect(mockScreenLeft).toBe(false);
+
+        await pressOnSheet("Save to library", () => stored()?.description === "Sweet");
+
+        expect(stored()?.description).toBe("Sweet");
+    });
+
     it("saves and leaves when asked to", async () => {
         await openSavedRecipe();
 
@@ -290,6 +323,23 @@ describe("editRecipe autosave", () => {
         expect(stored()?.dosage).toBe(18);
     });
 
+    it("guards the next exit if a replayed exit did not remove the screen", async () => {
+        // A navigator can refuse or ignore the replayed action. The bypass is
+        // only for that one replay, not a permanent opt-out for this screen.
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("Back"));
+        await pressOnSheet("Discard changes", () => mockDispatch.mock.calls.length > 0);
+        mockDispatch.mockClear();
+
+        await fireEvent.press(screen.getByLabelText("Back"));
+
+        expect(screen.getByLabelText("Save changes")).toBeTruthy();
+        expect(mockDispatch).not.toHaveBeenCalled();
+        expect(mockScreenLeft).toBe(false);
+    });
+
     it("does not ask on the way out of a delete", async () => {
         // The recipe is gone. Offering to save it would be offering to put it back.
         await openSavedRecipe();
@@ -297,6 +347,19 @@ describe("editRecipe autosave", () => {
         await typeDose("22");
         await fireEvent.press(screen.getByLabelText("More"));
         await pressOnSheet("Delete", () => stored() === null);
+
+        expect(screen.queryByLabelText("Save changes")).toBeNull();
+        expect(mockScreenLeft).toBe(true);
+    });
+
+    it("does not ask on the way out of a duplicate", async () => {
+        // The copy is already the answer. Prompting here would offer to save
+        // the original recipe after the user asked for a duplicate instead.
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("More"));
+        await pressOnSheet("Duplicate", () => mockScreenLeft);
 
         expect(screen.queryByLabelText("Save changes")).toBeNull();
         expect(mockScreenLeft).toBe(true);

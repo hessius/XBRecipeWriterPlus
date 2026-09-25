@@ -793,7 +793,8 @@ export default function EditRecipe(
     const [helpOpen, setHelpOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
-    const [leavePrompt, setLeavePrompt] = useState<LeaveIntent | null>(null);
+    const [leavePrompt, setLeavePrompt] =
+        useState<{intent: LeaveIntent; inLibrary: boolean} | null>(null);
     /**
      * The navigation the guard interrupted, so it can be replayed on Save or
      * Discard. A ref rather than state: replaying it must not wait for a
@@ -816,10 +817,10 @@ export default function EditRecipe(
     const {
         recipe, balance, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
-        hasPendingEdits, toggleFavourite, editTags, editInputComplete, setVolumeError,
-        setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
-        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
-        setXidFocused
+        hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
+        editInputComplete, setVolumeError, setInputError, editStage,
+        setBypassEnabled, editBypass, addPour, deletePour, autoAdjustPourVolumes,
+        coarsenGrindToMinimum, xidLookupFailed, externalEpoch, setXidFocused
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -848,10 +849,17 @@ export default function EditRecipe(
             event.preventDefault();
             const action = event.data.action;
             heldExit.current = () => {
+                // The bypass is only for the synchronous beforeRemove emitted
+                // by this replay. If the dispatch does not remove the screen,
+                // the guard must be live for the next exit attempt.
                 leaving.current = true;
-                navigation.dispatch(action);
+                try {
+                    navigation.dispatch(action);
+                } finally {
+                    leaving.current = false;
+                }
             };
-            setLeavePrompt("leave");
+            setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
         });
         return stop;
     });
@@ -923,6 +931,24 @@ export default function EditRecipe(
         bumpKey();
     }
 
+    function leaveOnce(run: () => void) {
+        // This suppresses exactly the beforeRemove emitted by the exit action
+        // below. If the navigator keeps this screen alive, resetting here keeps
+        // later backs guarded.
+        leaving.current = true;
+        try {
+            run();
+        } finally {
+            leaving.current = false;
+        }
+    }
+
+    function replayHeldExit() {
+        const exit = heldExit.current;
+        heldExit.current = null;
+        exit?.();
+    }
+
     async function duplicateRecipe() {
         await flushDrafts();
         // The recipe in hand, not its stored row. A recipe read from a card or
@@ -937,8 +963,7 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not duplicate the recipe."});
             return;
         }
-        leaving.current = true;
-        navigation.goBack();
+        leaveOnce(() => navigation.goBack());
     }
 
     async function onBrewPress() {
@@ -950,7 +975,7 @@ export default function EditRecipe(
         // `brewWith`, which saves it on the way out as BREW always has.
         if (hasPendingEdits() && recipeDatabase.getRecipe(currentRecipe.uuid)) {
             heldExit.current = () => brewWith(currentRecipe);
-            setLeavePrompt("brew");
+            setLeavePrompt({intent: "brew", inLibrary: true});
             return;
         }
         brewWith(currentRecipe);
@@ -1034,8 +1059,7 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not delete the recipe."});
             return;
         }
-        leaving.current = true;
-        navigation.goBack();
+        leaveOnce(() => navigation.goBack());
     }
 
     // Anything that sits over the screen -- the NFC ceremony or any open sheet
@@ -1230,15 +1254,17 @@ export default function EditRecipe(
                               onCancel={cancelBypassWrite}
                               onConfirm={confirmBypassWrite}/>
 
-            <LeaveEditorSheet open={leavePrompt !== null} intent={leavePrompt ?? "leave"}
+            <LeaveEditorSheet open={leavePrompt !== null}
+                              intent={leavePrompt?.intent ?? "leave"}
+                              inLibrary={leavePrompt?.inLibrary ?? true}
                               onSave={() => {
                                   persistRecipe();
                                   setLeavePrompt(null);
-                                  heldExit.current?.();
+                                  replayHeldExit();
                               }}
                               onDiscard={() => {
                                   setLeavePrompt(null);
-                                  heldExit.current?.();
+                                  replayHeldExit();
                               }}
                               onCancel={() => {
                                   setLeavePrompt(null);

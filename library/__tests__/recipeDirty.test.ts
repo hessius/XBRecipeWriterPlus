@@ -54,6 +54,18 @@ describe("recipeDirty", () => {
         expect(editsPendingSave(r, opened)).toBe(false);
     });
 
+    it("counts metadata when no row is writing it separately", () => {
+        // A card read or unfinished import has no stored row, so the metadata
+        // cannot autosave. In that case it must stay in the leave-guard
+        // projection or it can be lost silently.
+        const r = recipe();
+        const opened = snapshotForSave(r, false);
+        r.name = "Sunday";
+        r.description = "Sweet";
+        r.setTags(["morning"]);
+        expect(editsPendingSave(r, opened, false)).toBe(true);
+    });
+
     it("counts a field nobody thought about", () => {
         // The projection is a denylist on purpose. This test is the reason:
         // it fails if someone turns it into an allowlist of known card fields,

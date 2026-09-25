@@ -33,6 +33,15 @@ describe("LeaveEditorSheet", () => {
         expect(screen.getByLabelText("Keep editing")).toBeTruthy();
     });
 
+    it("says the whole recipe is at stake when leaving before it is in the library", async () => {
+        await renderWithProviders(<LeaveEditorSheet {...props({inLibrary: false})}/>);
+
+        expect(screen.getByText("This recipe is not in your library yet. Save it to keep the name, note, tags and brew settings.")).toBeTruthy();
+        expect(screen.getByLabelText("Save to library")).toBeTruthy();
+        expect(screen.getByLabelText("Discard recipe")).toBeTruthy();
+        expect(screen.getByLabelText("Keep editing")).toBeTruthy();
+    });
+
     it("says what will happen when brewing instead", async () => {
         // The brew will run something either way, so "discard" would be a lie:
         // the choice is which recipe the machine gets, not whether it brews.
