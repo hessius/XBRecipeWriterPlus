@@ -633,13 +633,30 @@ grep -rn "Washed\|Anaerobic\|Carbonic maceration\|Co-ferment" --include=*.ts --i
 
 Expected: no output. A preset spelled anywhere else is the drift the single vocabulary exists to prevent.
 
+Note that the companion grep for the *identifiers* has two legitimate answers now:
+
+```bash
+grep -rln "ROASTS\|PROCESSES\|FERMENTATIONS" --include=*.ts --include=*.tsx . \
+  | grep -v node_modules | grep -v __tests__ | grep -v docs/
+```
+
+Expected: `beanTags.ts` (the definition), `intentTags.ts` (the derived reading) and `TagSection.tsx`
+(the suggestion list, which offers the vocabulary alongside the user's own tags by decision).
+Importing the list is the opposite of drift; respelling a preset is the drift.
+
 - [ ] **Step 2: Confirm nothing writes a tag on the user's behalf**
 
 ```bash
 grep -rn "setTags\|editTags" --include=*.ts --include=*.tsx . | grep -v node_modules | grep -v __tests__
 ```
 
-Expected: `Recipe.ts` (the definition), `useRecipeLibrary.ts` (shelf filing), `useRecipeEditor.ts` (the new operation), and the wiring in `editRecipe.tsx`. Nothing in an import path, a pod path or a brew path. A recipe's intent is authored or it does not exist.
+Expected: `Recipe.ts` (the definition), `useRecipeLibrary.ts` (shelf filing), `useRecipeEditor.ts` (the new operation), the wiring in `editRecipe.tsx`, and comments in `app/index.tsx` and `TagSection.tsx`.
+
+One further site is legitimate and will show up: `library/cloud/importPlan.ts:224`, which calls
+`setTags` with the tags the *local* recipe already had, so that a cloud refresh preserves them.
+xBloom has no concept of a tag, so this writes nothing new; it stops the refresh from erasing the
+user's own work. Nothing else in an import path, a pod path or a brew path. A recipe's intent is
+authored or it does not exist.
 
 - [ ] **Step 3: Confirm nothing new reaches the card or the backup**
 
