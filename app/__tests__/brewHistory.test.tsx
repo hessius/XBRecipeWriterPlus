@@ -91,7 +91,7 @@ async function pressOnSheet(label: string, landed: () => boolean): Promise<void>
     await waitFor(async () => {
         await fireEvent.press(screen.getByLabelText(label));
         expect(landed()).toBe(true);
-    }, {timeout: 5000});
+    });
 }
 
 describe("brew history", () => {

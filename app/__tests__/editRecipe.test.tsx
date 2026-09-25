@@ -546,20 +546,12 @@ describe("the editor", () => {
         const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
         RecipeDatabase.mockClear();
 
-        try {
-            await renderEditor({xid: "CGL12"});
-            await fireEvent.press(screen.getByLabelText("More"));
-            await act(async () => { jest.advanceTimersByTime(500); });
-            const duplicated = () => RecipeDatabase.mock.instances
-                .some((store: {duplicateRecipe: jest.Mock}) =>
-                    store.duplicateRecipe.mock.calls.length > 0);
-            for (let attempt = 0; attempt < 5 && !duplicated(); attempt++) {
-                await fireEvent.press(screen.getByLabelText("Duplicate"));
-                await act(async () => { jest.advanceTimersByTime(100); });
-            }
-        } finally {
-            jest.useRealTimers();
-        }
+        await renderEditor({xid: "CGL12"});
+        await fireEvent.press(screen.getByLabelText("More"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await fireEvent.press(screen.getByLabelText("Duplicate"));
+        await act(async () => { jest.advanceTimersByTime(500); });
+        jest.useRealTimers();
 
         const store = RecipeDatabase.mock.instances
             .find((candidate: {duplicateRecipe: jest.Mock}) =>

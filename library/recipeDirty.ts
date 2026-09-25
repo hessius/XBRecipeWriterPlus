@@ -38,6 +38,10 @@ const ALWAYS_WRITES_ITSELF = ["favourite", "accentIndex"];
 /**
  * These only write themselves when there is already a row to receive them.
  * Otherwise they travel with SAVE and must count as pending work.
+ *
+ * This is why `metadataWritesItself` below has no default. Either answer is
+ * wrong for half the callers, and the wrong one in the `true` direction loses
+ * a user's name, note or tags with no prompt, so the caller has to say.
  */
 const METADATA_WRITES_ITSELF = ["name", "description", "tags"];
 
@@ -61,7 +65,7 @@ function stable(value: unknown): string {
  * reference into the live recipe -- which is mutated in place, and would
  * therefore compare equal to itself forever.
  */
-export function snapshotForSave(recipe: Recipe, metadataWritesItself = true): string {
+export function snapshotForSave(recipe: Recipe, metadataWritesItself: boolean): string {
     const plain = JSON.parse(JSON.stringify(recipe)) as Record<string, unknown>;
     for (const field of ALWAYS_WRITES_ITSELF) delete plain[field];
     if (metadataWritesItself) {
@@ -74,7 +78,7 @@ export function snapshotForSave(recipe: Recipe, metadataWritesItself = true): st
 export function editsPendingSave(
     recipe: Recipe,
     opened: string,
-    metadataWritesItself = true
+    metadataWritesItself: boolean
 ): boolean {
     return snapshotForSave(recipe, metadataWritesItself) !== opened;
 }

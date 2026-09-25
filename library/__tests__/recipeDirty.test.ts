@@ -13,21 +13,21 @@ function recipe(): Recipe {
 describe("recipeDirty", () => {
     it("sees no pending edit in an untouched recipe", () => {
         const r = recipe();
-        expect(editsPendingSave(r, snapshotForSave(r))).toBe(false);
+        expect(editsPendingSave(r, snapshotForSave(r, true), true)).toBe(false);
     });
 
     it("sees a changed dose", () => {
         const r = recipe();
-        const opened = snapshotForSave(r);
+        const opened = snapshotForSave(r, true);
         r.dosage = 19;
-        expect(editsPendingSave(r, opened)).toBe(true);
+        expect(editsPendingSave(r, opened, true)).toBe(true);
     });
 
     it("sees a changed stage volume", () => {
         const r = recipe();
-        const opened = snapshotForSave(r);
+        const opened = snapshotForSave(r, true);
         r.pours[0].volume = 120;
-        expect(editsPendingSave(r, opened)).toBe(true);
+        expect(editsPendingSave(r, opened, true)).toBe(true);
     });
 
     it("forgets an edit that was typed back to where it started", () => {
@@ -35,23 +35,23 @@ describe("recipeDirty", () => {
         // prompt the user cannot act on meaningfully, and it teaches them to
         // dismiss the one that matters.
         const r = recipe();
-        const opened = snapshotForSave(r);
+        const opened = snapshotForSave(r, true);
         r.dosage = 19;
         r.dosage = 18;
-        expect(editsPendingSave(r, opened)).toBe(false);
+        expect(editsPendingSave(r, opened, true)).toBe(false);
     });
 
     it("ignores the fields that write themselves", () => {
         // Name, note and tags autosave; favourite and the rating already did.
         // A prompt for them would offer to discard something already stored.
         const r = recipe();
-        const opened = snapshotForSave(r);
+        const opened = snapshotForSave(r, true);
         r.name = "Sunday";
         r.description = "Sweet";
         r.setTags(["morning"]);
         r.favourite = true;
         r.accentIndex = 3;
-        expect(editsPendingSave(r, opened)).toBe(false);
+        expect(editsPendingSave(r, opened, true)).toBe(false);
     });
 
     it("counts metadata when no row is writing it separately", () => {
@@ -72,9 +72,9 @@ describe("recipeDirty", () => {
         // because an unlisted field would then go unnoticed and a user's work
         // would be discarded with no prompt.
         const r = recipe();
-        const opened = snapshotForSave(r);
+        const opened = snapshotForSave(r, true);
         (r as unknown as Record<string, unknown>).somethingAddedLater = 7;
-        expect(editsPendingSave(r, opened)).toBe(true);
+        expect(editsPendingSave(r, opened, true)).toBe(true);
     });
 
     it("does not depend on the order the keys were assigned in", () => {
@@ -84,12 +84,12 @@ describe("recipeDirty", () => {
             uuid: "u1",
             dosage: 18,
             pours: [{volume: 100, temperature: 93}]
-        } as unknown as Recipe);
+        } as unknown as Recipe, true);
         const rebuilt = {
             pours: [{temperature: 93, volume: 100}],
             dosage: 18,
             uuid: "u1"
         } as unknown as Recipe;
-        expect(editsPendingSave(rebuilt, opened)).toBe(false);
+        expect(editsPendingSave(rebuilt, opened, true)).toBe(false);
     });
 });
