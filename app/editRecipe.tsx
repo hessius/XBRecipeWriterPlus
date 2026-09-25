@@ -738,7 +738,11 @@ export default function EditRecipe(
     const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
     const [recipeDatabase] = useState(() => new RecipeDatabase());
-    const [knownTags, setKnownTags] = useState(() => readKnownTags(recipeDatabase));
+    // Read once for the screen's lifetime. Nothing this editor does can change
+    // the database answer: tag edits stay in memory until `persistRecipe`, and
+    // by then the screen is either leaving or the tag is already on this recipe
+    // and `TagSection` filters it from its own suggestions.
+    const [knownTags] = useState(() => readKnownTags(recipeDatabase));
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<OpenRung>(null);
@@ -857,11 +861,6 @@ export default function EditRecipe(
             await editInputComplete(label, value);
         }
         bumpKey();
-    }
-
-    function onTags(tags: string[]) {
-        editTags(tags);
-        setKnownTags(readKnownTags(recipeDatabase));
     }
 
     /**
@@ -1082,7 +1081,7 @@ export default function EditRecipe(
                                showAvatar={showRecipeAvatars} brews={brewSummary}
                                onRate={rate}
                                knownTags={knownTags}
-                               onTags={onTags}
+                               onTags={editTags}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}

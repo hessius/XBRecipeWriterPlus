@@ -349,14 +349,19 @@ describe("the editor", () => {
         expect(screen.getByLabelText("Use tag Morning")).toBeTruthy();
     });
 
-    it("does not reread known tags on unrelated editor redraws", async () => {
+    it("reads known tags once for the screen lifetime", async () => {
         const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
-        await renderEditor();
         RecipeDatabase.prototype.countRecipesByTag.mockClear();
+        await renderEditor();
 
         await fireEvent.press(screen.getByLabelText("Increase Ratio"));
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "Fresh");
+        await fireEvent(screen.getByLabelText("New tag"), "submitEditing",
+                        {nativeEvent: {text: "Fresh"}});
 
-        expect(RecipeDatabase.prototype.countRecipesByTag).not.toHaveBeenCalled();
+        expect(RecipeDatabase.prototype.countRecipesByTag).toHaveBeenCalledTimes(1);
     });
 
     it("puts a renamed recipe back on its pod name by clearing its own", async () => {
