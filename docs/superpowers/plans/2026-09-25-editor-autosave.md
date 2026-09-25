@@ -613,12 +613,12 @@ type Props = {
 
 const WORDS = {
     leave: {
-        body:    "The dose and the stages have changed since this recipe was last saved. The name, note and tags are already saved.",
+        body:    "This recipe has changes that are not saved yet. The name, note and tags are already saved.",
         save:    "Save changes",
         discard: "Discard changes"
     },
     brew: {
-        body:    "The dose and the stages have changed since this recipe was last saved. The brew will run whichever you pick.",
+        body:    "This recipe has changes that are not saved yet. The brew will run either way.",
         save:    "Save and brew",
         discard: "Brew without saving"
     }
