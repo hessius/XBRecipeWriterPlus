@@ -8,6 +8,13 @@ import {
 } from "@/library/brew/brewPopulation";
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
+import {
+    isFermentation,
+    isProcess,
+    isRoast,
+    MAX_ORIGIN_LENGTH,
+    normaliseBeanTags
+} from "./brew/beanTags";
 import type {
     BrewOutcome,
     BrewRecord,
@@ -18,6 +25,7 @@ import type {
 import type {Stall} from "./brew/stalls";
 import type {PodCoffee} from "./podCoffee";
 import {podCoffeeFromStored} from "./podCoffee";
+import {tagKey} from "./tagKey";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
@@ -90,6 +98,11 @@ type BrewRow = {
     grinderUsed: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
+    /** The user's own description of the coffee. `''` when they have not said. */
+    origin: string;
+    roast: string;
+    process: string;
+    fermentation: string;
     hasStream: number;
 };
 
@@ -140,6 +153,10 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 grinderRpm INTEGER NOT NULL DEFAULT 0,
                 grinderUsed INTEGER NOT NULL DEFAULT 0,
                 coffee TEXT NOT NULL DEFAULT '',
+                origin TEXT NOT NULL DEFAULT '',
+                roast TEXT NOT NULL DEFAULT '',
+                process TEXT NOT NULL DEFAULT '',
+                fermentation TEXT NOT NULL DEFAULT '',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -150,6 +167,13 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 brewId TEXT PRIMARY KEY NOT NULL,
                 frames TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS brew_tags (
+                brewId TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                tagKey TEXT NOT NULL,
+                PRIMARY KEY (brewId, tagKey)
+            );
+            CREATE INDEX IF NOT EXISTS idx_brew_tags_key ON brew_tags(tagKey);
             CREATE INDEX IF NOT EXISTS idx_brews_recipeUuid ON brews(recipeUuid);`);
     // Rows written before `pouringAt` existed keep the 0 default, which
     // reads as "no first drop recorded" and falls back to `startedAt`.
@@ -240,6 +264,28 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // The coffee the user said this was. `''` is "nobody has said", the same
+    // sentinel `coffee` already uses on this table.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN origin TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN roast TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN process TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN fermentation TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
     // Rows written before `bypass` existed read as "no bypass", exactly as
     // every recipe without one does; an empty string is the JSON-column
     // sentinel already used by `coffee`.
@@ -294,9 +340,10 @@ class BrewDatabase {
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
-                                grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+                                grindSize, grinderRpm, grinderUsed, coffee,
+                                origin, roast, process, fermentation, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0,
@@ -319,6 +366,10 @@ class BrewDatabase {
                 record.grinderRpm ?? 0,
                 record.grinderUsed === true ? 1 : 0,
                 record.coffee ? JSON.stringify(record.coffee) : "",
+                originForColumn(record.origin),
+                isRoast(record.roast) ? record.roast : "",
+                isProcess(record.process) ? record.process : "",
+                isFermentation(record.fermentation) ? record.fermentation : "",
                 hasStream ? 1 : 0
             ]
         );
@@ -344,13 +395,15 @@ class BrewDatabase {
                     [record.id, frames]
                 );
             }
+            this.writeTags(record.id, record.tags ?? []);
         });
     }
 
     public all(): StoredBrew[] {
-        return this.db
+        const brews = this.db
             .getAllSync<BrewRow>("SELECT * FROM brews ORDER BY startedAt DESC;")
             .map(hydrate);
+        return this.attachTags(brews);
     }
 
     /**
@@ -361,12 +414,13 @@ class BrewDatabase {
      * diary, and a stopped brew is still something the user may need to see.
      */
     public brewsFor(recipeUuid: string): StoredBrew[] {
-        return this.db
+        const brews = this.db
             .getAllSync<BrewRow>(
                 "SELECT * FROM brews WHERE recipeUuid = ? ORDER BY startedAt DESC;",
                 [recipeUuid]
             )
             .map(hydrate);
+        return this.attachTags(brews);
     }
 
     /**
@@ -526,6 +580,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             toAdd.forEach((record) => {
                 this.writeBrewRow(record, false);
+                this.writeTags(record.id, record.tags ?? []);
             });
         });
         return toAdd.length;
@@ -535,7 +590,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<BrewRow>(
             "SELECT * FROM brews WHERE id = ?;", [id]
         );
-        return rows.length > 0 ? hydrate(rows[0]) : null;
+        return rows.length > 0 ? {...hydrate(rows[0]), tags: this.tagsFor(id)} : null;
     }
 
     public samples(id: string): BrewSample[] {
@@ -564,6 +619,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brew_samples WHERE brewId = ?;", [id]);
+            this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brews WHERE id = ?;", [id]);
         });
     }
@@ -574,6 +630,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames");
             this.db.runSync("DELETE FROM brew_samples");
+            this.db.runSync("DELETE FROM brew_tags");
             this.db.runSync("DELETE FROM brews");
         });
     }
@@ -606,6 +663,60 @@ class BrewDatabase {
                 this.db.runSync("UPDATE brews SET hasStream = 0 WHERE id = ?;", [brew.id]);
             });
         });
+    }
+
+    /**
+     * Replace a brew's rows in `brew_tags`, delete then insert.
+     *
+     * Delete first so an edit cannot leave a tag the user removed, and shared
+     * by every path that writes tags so an update and a rebuild produce
+     * identical rows.
+     */
+    private writeTags(brewId: string, tags: readonly string[]): void {
+        this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [brewId]);
+        for (const tag of normaliseBeanTags(tags)) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO brew_tags (brewId, tag, tagKey) VALUES (?, ?, ?);",
+                [brewId, tag, tagKey(tag)]
+            );
+        }
+    }
+
+    /** One brew's tags, in the order they were written. */
+    public tagsFor(brewId: string): string[] {
+        return this.db
+            .getAllSync<{tag: string}>(
+                "SELECT tag FROM brew_tags WHERE brewId = ? ORDER BY rowid;",
+                [brewId]
+            )
+            .map((row) => row.tag);
+    }
+
+    /**
+     * The tags for a set of brews, in one query.
+     *
+     * One query rather than one per brew: a much-used recipe's history is
+     * hundreds of rows and this runs when the history screen opens.
+     */
+    private tagsForAll(brewIds: readonly string[]): Map<string, string[]> {
+        const byBrew = new Map<string, string[]>();
+        if (brewIds.length === 0) return byBrew;
+        const holes = brewIds.map(() => "?").join(", ");
+        const rows = this.db.getAllSync<{brewId: string; tag: string}>(
+            `SELECT brewId, tag FROM brew_tags WHERE brewId IN (${holes}) ORDER BY rowid;`,
+            [...brewIds]
+        );
+        for (const row of rows) {
+            const existing = byBrew.get(row.brewId);
+            if (existing === undefined) byBrew.set(row.brewId, [row.tag]);
+            else existing.push(row.tag);
+        }
+        return byBrew;
+    }
+
+    private attachTags(brews: StoredBrew[]): StoredBrew[] {
+        const tags = this.tagsForAll(brews.map((brew) => brew.id));
+        return brews.map((brew) => ({...brew, tags: tags.get(brew.id) ?? []}));
     }
 }
 
@@ -650,8 +761,24 @@ function hydrate(row: BrewRow): StoredBrew {
         // A recorded grind size is the marker that this row knew the column.
         ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
         ...(coffee !== null ? {coffee} : {}),
+        ...(row.origin !== "" ? {origin: row.origin} : {}),
+        ...(isRoast(row.roast) ? {roast: row.roast} : {}),
+        ...(isProcess(row.process) ? {process: row.process} : {}),
+        ...(isFermentation(row.fermentation) ? {fermentation: row.fermentation} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+/**
+ * An origin fit to store: trimmed, and refused if it is not a plausible one.
+ *
+ * Refused rather than truncated. A truncated origin is a different place, and
+ * #104 would group it on its own.
+ */
+function originForColumn(value: string | undefined): string {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    return trimmed.length === 0 || trimmed.length > MAX_ORIGIN_LENGTH ? "" : trimmed;
 }
 
 function coffeeFromStoredColumn(value: string): PodCoffee | null {
