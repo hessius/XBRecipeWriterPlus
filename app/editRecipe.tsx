@@ -945,7 +945,10 @@ export default function EditRecipe(
         const currentRecipe = recipe;
         if (!currentRecipe) return;
         await flushDrafts();
-        if (hasPendingEdits()) {
+        // Only asked of a recipe that is already in the library. One that is
+        // not has nothing to overwrite, so there is no question to put: see
+        // `brewWith`, which saves it on the way out as BREW always has.
+        if (hasPendingEdits() && recipeDatabase.getRecipe(currentRecipe.uuid)) {
             heldExit.current = () => brewWith(currentRecipe);
             setLeavePrompt("brew");
             return;
@@ -954,6 +957,13 @@ export default function EditRecipe(
     }
 
     function brewWith(brewing: Recipe) {
+        // A brew record points back at its recipe by uuid, and the record
+        // screen draws its stage ladder from that row. So a recipe with no row
+        // is saved on the way to the machine -- a first save overwrites
+        // nothing, and BREW has always done it. What changed is only that a
+        // recipe which *does* have a row is no longer saved over without being
+        // asked.
+        if (!recipeDatabase.getRecipe(brewing.uuid)) persistRecipe();
         router.push({
             pathname: "/brew",
             params:   {recipeJSON: JSON.stringify(brewing)}

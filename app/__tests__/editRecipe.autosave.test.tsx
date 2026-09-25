@@ -145,6 +145,20 @@ function fixture(): Recipe {
     return r;
 }
 
+/**
+ * 12 g at 1:16 over one pour of 192 ml.
+ *
+ * Smaller than `fixture` on purpose: a card holds at most 240 ml in a stage,
+ * so the 288 ml one can never be written or brewed and BREW stays disabled
+ * against it. Anything pressing BREW needs this one.
+ */
+function brewableFixture(): Recipe {
+    const r = fixture();
+    r.dosage = 12;
+    r.pours[0].volume = 192;
+    return r;
+}
+
 function stored(): Recipe | null {
     return new RecipeDatabase().getRecipe("u1");
 }
@@ -158,6 +172,16 @@ async function openSavedRecipe() {
 
 async function openAbout(): Promise<void> {
     await fireEvent.press(screen.getByLabelText("About this recipe"));
+}
+
+/**
+ * Nudge the grind coarser. Unlike the dose, the grind is not a term in
+ * `dose x ratio = sum of stage volumes`, so changing it leaves the recipe in
+ * balance and BREW enabled. That matters wherever a test needs a pending edit
+ * *and* a pressable BREW.
+ */
+async function coarsenGrind(): Promise<void> {
+    await fireEvent.press(screen.getByLabelText("Increase Grind size"));
 }
 
 async function typeDose(value: string): Promise<void> {
@@ -276,5 +300,41 @@ describe("editRecipe autosave", () => {
 
         expect(screen.queryByLabelText("Save changes")).toBeNull();
         expect(mockScreenLeft).toBe(true);
+    });
+
+    it("asks before brewing with a changed dose, and still brews", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        const brewable = brewableFixture();
+        new RecipeDatabase().insertRecipe(brewable);
+        mockRecipeJSON = JSON.stringify(brewable);
+        await renderWithProviders(<EditRecipe/>);
+
+        await coarsenGrind();
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(screen.getByLabelText("Save and brew")).toBeTruthy();
+        expect(mockPush).not.toHaveBeenCalled();
+
+        await pressOnSheet("Brew without saving", () => mockPush.mock.calls.length > 0);
+
+        expect(stored()?.grindSize).toBe(60);
+    });
+
+    it("saves a recipe that is not in the library on the way to the machine", async () => {
+        // A brew record points back at its recipe by uuid, and the record
+        // screen draws its stage ladder from that row. BREW has always saved
+        // first; what changed is only that a recipe already in the library is
+        // no longer written over without being asked.
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        mockRecipeJSON = JSON.stringify(brewableFixture());
+        await renderWithProviders(<EditRecipe/>);
+
+        expect(stored()).toBeNull();
+
+        await coarsenGrind();
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(screen.queryByLabelText("Save and brew")).toBeNull();
+        expect(stored()?.grindSize).toBe(61);
     });
 });
