@@ -13,7 +13,12 @@ import {serialiseCapture, type CardCapture} from "@/library/cardDiagnostics";
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
-    useNavigation:        () => ({setOptions: mockSetOptions, goBack: mockGoBack})
+    useNavigation:        () => ({
+        setOptions: mockSetOptions,
+        goBack:     mockGoBack,
+        dispatch:   mockDispatch,
+        addListener: mockAddListener
+    })
 }));
 
 jest.mock("@/library/RecipeDatabase");
@@ -105,6 +110,8 @@ let mockSettings: Record<string, unknown> = {};
 const mockReact = React;
 const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
+const mockDispatch = jest.fn();
+const mockAddListener = jest.fn(() => jest.fn());
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -168,6 +175,8 @@ beforeEach(() => {
     mockSettings = {};
     mockParams = null;
     mockGoBack.mockClear();
+    mockDispatch.mockClear();
+    mockAddListener.mockClear();
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();

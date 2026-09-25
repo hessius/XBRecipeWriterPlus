@@ -12,6 +12,7 @@ import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
 import DotMatrixText from "@/components/DotMatrixText";
 import FieldRow from "@/components/FieldRow";
 import HelpSheet from "@/components/HelpSheet";
+import LeaveEditorSheet, {type LeaveIntent} from "@/components/LeaveEditorSheet";
 import NfcOverlay from "@/components/NfcOverlay";
 import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
@@ -44,6 +45,9 @@ import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
+
+/** The labels that go onto the stored row as soon as they are committed. */
+const AUTOSAVED_LABELS: string[] = [RECIPE_LABELS.TITLE, RECIPE_LABELS.NOTE];
 
 /**
  * The most stages the last card read could hold.
@@ -789,6 +793,21 @@ export default function EditRecipe(
     const [helpOpen, setHelpOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
+    const [leavePrompt, setLeavePrompt] =
+        useState<{intent: LeaveIntent; inLibrary: boolean} | null>(null);
+    /**
+     * The navigation the guard interrupted, so it can be replayed on Save or
+     * Discard. A ref rather than state: replaying it must not wait for a
+     * render, and nothing draws from it.
+     */
+    const heldExit = useRef<(() => void) | null>(null);
+    /**
+     * Set while an exit the guard has already answered is in flight, so the
+     * listener lets it through instead of asking a second time. Also set by the
+     * actions that leave on purpose with the question already settled: a delete
+     * has nothing left to save, and a duplicate has already written.
+     */
+    const leaving = useRef(false);
     // The setting supplies the initial value; the header toggle changes it for
     // this visit only and never writes back, so a user can fold the notes away
     // without changing what the next recipe opens on.
@@ -797,11 +816,11 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editTags,
-        editInputComplete, setVolumeError,
-        setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
-        autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
-        setXidFocused
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
+        hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
+        editInputComplete, setVolumeError, setInputError, editStage,
+        setBypassEnabled, editBypass, addPour, deletePour, autoAdjustPourVolumes,
+        coarsenGrindToMinimum, xidLookupFailed, externalEpoch, setXidFocused
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -817,6 +836,60 @@ export default function EditRecipe(
         }
         notify({tone: "error", message: SHARE_FAILURE_MESSAGE[shareState.reason]});
     }, [shareState]);
+
+    useEffect(() => {
+        // `hasPendingEdits` seeds the opened snapshot lazily. Seeding here
+        // means the first exit after an edit compares against the opened
+        // recipe, not against the already-edited draft.
+        hasPendingEdits();
+        // Android hardware back and the iOS swipe both arrive here, which is
+        // why this is a listener rather than a check in the back button.
+        const stop = navigation.addListener("beforeRemove", (event) => {
+            if (leaving.current) return;
+
+            // Both branches below stop the exit and stash it, so take it off
+            // the event once. It was written out twice and the two copies are
+            // a standing invitation to fix a bug in only one of them.
+            const holdExit = () => {
+                event.preventDefault();
+                const action = event.data.action;
+                heldExit.current = () => {
+                    // The bypass is only for the synchronous beforeRemove
+                    // emitted by this replay. If the dispatch does not remove
+                    // the screen, the guard must be live for the next attempt.
+                    leaving.current = true;
+                    try {
+                        navigation.dispatch(action);
+                    } finally {
+                        leaving.current = false;
+                    }
+                };
+            };
+            const ask = () =>
+                setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
+
+            // A keystroke lives in `drafts` until the field blurs, and these
+            // exits do not blur it. `hasPendingEdits` reads the committed
+            // recipe, so without flushing first it cannot see a typed note at
+            // all and would wave the exit through, losing it.
+            if (drafts.current.size > 0) {
+                holdExit();
+                void flushDrafts().then(() => {
+                    // The note has autosaved itself by now. Only ask if SAVE
+                    // still owns something, so the common case of typing a
+                    // note and leaving costs no prompt.
+                    if (hasPendingEdits()) ask();
+                    else replayHeldExit();
+                });
+                return;
+            }
+
+            if (!hasPendingEdits()) return;
+            holdExit();
+            ask();
+        });
+        return stop;
+    });
 
     // Computed before the header effect, not after the `recipe` guard below, so
     // the EXPLAIN caption can be drawn in the recipe's accent. Falls back to a
@@ -843,7 +916,12 @@ export default function EditRecipe(
     // hook's field updaters do not bump the key themselves, so the screen does.
     const dispatch: Dispatch = (label, value) => {
         drafts.current.delete(label);
-        void editInputComplete(label, value);
+        void editInputComplete(label, value).then(() => {
+            // The name and the note do not wait for SAVE. Chained rather than
+            // called straight after, because `editInputComplete` is async and
+            // the write has to see the value it applied.
+            if (AUTOSAVED_LABELS.includes(label)) saveMetadata();
+        });
         bumpKey();
     };
 
@@ -859,6 +937,7 @@ export default function EditRecipe(
         drafts.current.clear();
         for (const [label, value] of pending) {
             await editInputComplete(label, value);
+            if (AUTOSAVED_LABELS.includes(label)) saveMetadata();
         }
         bumpKey();
     }
@@ -879,6 +958,24 @@ export default function EditRecipe(
         bumpKey();
     }
 
+    function leaveOnce(run: () => void) {
+        // This suppresses exactly the beforeRemove emitted by the exit action
+        // below. If the navigator keeps this screen alive, resetting here keeps
+        // later backs guarded.
+        leaving.current = true;
+        try {
+            run();
+        } finally {
+            leaving.current = false;
+        }
+    }
+
+    function replayHeldExit() {
+        const exit = heldExit.current;
+        heldExit.current = null;
+        exit?.();
+    }
+
     async function duplicateRecipe() {
         await flushDrafts();
         // The recipe in hand, not its stored row. A recipe read from a card or
@@ -893,20 +990,35 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not duplicate the recipe."});
             return;
         }
-        navigation.goBack();
+        leaveOnce(() => navigation.goBack());
     }
 
     async function onBrewPress() {
         const currentRecipe = recipe;
         if (!currentRecipe) return;
-        // The same persist-then-act shape as WRITE and Share: commit anything
-        // typed but not blurred, save the recipe so the brew screen reads a
-        // stored row rather than a half-typed one, then hand it the snapshot.
         await flushDrafts();
-        persistRecipe();
+        // Only asked of a recipe that is already in the library. One that is
+        // not has nothing to overwrite, so there is no question to put: see
+        // `brewWith`, which saves it on the way out as BREW always has.
+        if (hasPendingEdits() && recipeDatabase.getRecipe(currentRecipe.uuid)) {
+            heldExit.current = () => brewWith(currentRecipe);
+            setLeavePrompt({intent: "brew", inLibrary: true});
+            return;
+        }
+        brewWith(currentRecipe);
+    }
+
+    function brewWith(brewing: Recipe) {
+        // A brew record points back at its recipe by uuid, and the record
+        // screen draws its stage ladder from that row. So a recipe with no row
+        // is saved on the way to the machine -- a first save overwrites
+        // nothing, and BREW has always done it. What changed is only that a
+        // recipe which *does* have a row is no longer saved over without being
+        // asked.
+        if (!recipeDatabase.getRecipe(brewing.uuid)) persistRecipe();
         router.push({
             pathname: "/brew",
-            params:   {recipeJSON: JSON.stringify(currentRecipe)}
+            params:   {recipeJSON: JSON.stringify(brewing)}
         });
     }
 
@@ -974,7 +1086,7 @@ export default function EditRecipe(
             notify({tone: "error", message: "Could not delete the recipe."});
             return;
         }
-        navigation.goBack();
+        leaveOnce(() => navigation.goBack());
     }
 
     // Anything that sits over the screen -- the NFC ceremony or any open sheet
@@ -982,7 +1094,7 @@ export default function EditRecipe(
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
-        || bypassWriteOpen || renameOpen;
+        || bypassWriteOpen || renameOpen || leavePrompt !== null;
 
     return (
         <>
@@ -1168,6 +1280,31 @@ export default function EditRecipe(
                               recipe={recipe}
                               onCancel={cancelBypassWrite}
                               onConfirm={confirmBypassWrite}/>
+
+            <LeaveEditorSheet open={leavePrompt !== null}
+                              intent={leavePrompt?.intent ?? "leave"}
+                              inLibrary={leavePrompt?.inLibrary ?? true}
+                              onSave={() => {
+                                  try {
+                                      persistRecipe();
+                                  } catch {
+                                      notify({
+                                          tone:    "error",
+                                          message: "Could not save the recipe."
+                                      });
+                                      return;
+                                  }
+                                  setLeavePrompt(null);
+                                  replayHeldExit();
+                              }}
+                              onDiscard={() => {
+                                  setLeavePrompt(null);
+                                  replayHeldExit();
+                              }}
+                              onCancel={() => {
+                                  setLeavePrompt(null);
+                                  heldExit.current = null;
+                              }}/>
 
             <NfcOverlay visible={showNfcOverlay} mode="write"
                         progress={writeProgress} onCancel={onNFCDialogClose}/>

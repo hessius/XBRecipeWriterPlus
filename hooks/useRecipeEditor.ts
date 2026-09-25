@@ -6,6 +6,7 @@ import {
 } from "@/library/bypassLimits";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
+import {editsPendingSave, snapshotForSave} from "@/library/recipeDirty";
 import Recipe from "@/library/Recipe";
 import Pour from "@/library/Pour";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -133,6 +134,21 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     const xidFocusedRef = useRef(false);
     const pendingLookupRef = useRef<(() => void) | null>(null);
+    /**
+     * What the recipe's SAVE-owned fields looked like when this screen opened,
+     * or when it last wrote. Text, so it cannot alias the recipe it came from,
+     * which is mutated in place and would otherwise always compare equal to
+     * itself.
+     */
+    const openedAs = useRef<string | null>(null);
+    /**
+     * Whether the row existed when the opened snapshot was taken.
+     *
+     * The answer controls whether metadata is excluded from the dirty
+     * projection. It is a ref so the before-remove listener can ask on every
+     * render without turning that into a SQL query on every render.
+     */
+    const openedInLibrary = useRef<boolean | null>(null);
 
     /** Told by the ID field when it gains or loses focus; flushes on blur. */
     const setXidFocused = (focused: boolean) => {
@@ -417,6 +433,36 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         // half-finished recipe loses work to enforce a rule that only matters
         // at the moment of writing a card.
         new RecipeDatabase().updateRecipe(recipe.uuid, recipe);
+        // The bench is now the row, so nothing is pending. Without this,
+        // pressing BREW and coming back would still be offering to save what
+        // was saved.
+        openedInLibrary.current = true;
+        openedAs.current = snapshotForSave(recipe, true);
+    }
+
+    function recipeInLibrary(): boolean {
+        if (!recipe) return false;
+        if (openedInLibrary.current === null) {
+            openedInLibrary.current = new RecipeDatabase().getRecipe(recipe.uuid) !== null;
+        }
+        return openedInLibrary.current;
+    }
+
+    /**
+     * Whether anything SAVE owns has changed since the screen opened.
+     *
+     * Seeded lazily rather than in an effect: the compiler's purity rules make
+     * seeding state from an effect an error, and the first caller is always
+     * after the recipe has arrived.
+     */
+    function hasPendingEdits(): boolean {
+        if (!recipe) return false;
+        const metadataWritesItself = recipeInLibrary();
+        if (openedAs.current === null) {
+            openedAs.current = snapshotForSave(recipe, metadataWritesItself);
+            return false;
+        }
+        return editsPendingSave(recipe, openedAs.current, metadataWritesItself);
     }
 
     function saveRecipe() {
@@ -454,6 +500,32 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     }
 
     /**
+     * Write the recipe's name, note and tags onto the existing stored row.
+     *
+     * The same shape as `toggleFavourite`, for the same reason: these land on
+     * the row as it stands in the library, not on the draft. `persistRecipe`
+     * would write the whole bench, so a user who changed the dose and then
+     * typed a note would find the dose changed too, having saved nothing.
+     *
+     * Silent when the recipe has no row. `updateRecipe` inserts in that case,
+     * so an unguarded write here would add a card read or a half-finished
+     * import to the library behind the user's back -- the thing `onSharePress`
+     * takes pains to avoid. On those recipes the metadata travels with SAVE,
+     * and the leave guard is what keeps it from being lost.
+     */
+    function saveMetadata() {
+        if (!recipe) return;
+        const store = new RecipeDatabase();
+        const saved = store.getRecipe(recipe.uuid);
+        if (!saved) return;
+        openedInLibrary.current = true;
+        saved.name = recipe.name;
+        saved.description = recipe.description;
+        saved.setTags(recipe.tags);
+        store.updateRecipe(saved.uuid, saved);
+    }
+
+    /**
      * Replace the recipe's tags.
      *
      * A named operation rather than a `dispatch` label because the dispatch
@@ -467,6 +539,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     const editTags = (tags: string[]) => {
         if (!recipe) return;
         recipe.setTags(tags);
+        // Tags are metadata, so they do not wait for SAVE. There is no commit
+        // moment for a chip the way there is for a text field: the chip is
+        // added and the user moves on.
+        saveMetadata();
         setKey((prev) => prev + 1);
     };
 
@@ -629,8 +705,11 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         setBypassEnabled,
         editBypass,
         persistRecipe,
+        hasPendingEdits,
+        recipeInLibrary,
         saveRecipe,
         toggleFavourite,
+        saveMetadata,
         editTags,
         editInputComplete,
         volumeError,

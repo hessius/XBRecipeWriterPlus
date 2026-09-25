@@ -22,7 +22,12 @@ const RATIO_HINT = String(RECIPE_HELP.ratio.hint);
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
-    useNavigation:        () => ({setOptions: mockSetOptions, goBack: mockGoBack})
+    useNavigation:        () => ({
+        setOptions: mockSetOptions,
+        goBack:     mockGoBack,
+        dispatch:   mockDispatch,
+        addListener: mockAddListener
+    })
 }));
 
 jest.mock("@/library/RecipeDatabase");
@@ -129,6 +134,8 @@ const mockReact = React;
 
 const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
+const mockDispatch = jest.fn();
+const mockAddListener = jest.fn(() => jest.fn());
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -154,6 +161,8 @@ beforeEach(() => {
     mockSettings = {};
     mockParams = null;
     mockGoBack.mockClear();
+    mockDispatch.mockClear();
+    mockAddListener.mockClear();
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
@@ -542,12 +551,14 @@ describe("the editor", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Duplicate"));
         await act(async () => { jest.advanceTimersByTime(500); });
+        jest.useRealTimers();
 
-        const store = RecipeDatabase.mock.instances.at(-1)!;
+        const store = RecipeDatabase.mock.instances
+            .find((candidate: {duplicateRecipe: jest.Mock}) =>
+                candidate.duplicateRecipe.mock.calls.length > 0)!;
         expect(store.cloneRecipe).not.toHaveBeenCalled();
         expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
-        jest.useRealTimers();
     });
 
     it("shares the flushed recipe and stays on the editor", async () => {
