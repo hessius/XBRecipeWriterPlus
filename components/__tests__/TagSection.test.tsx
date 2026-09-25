@@ -4,6 +4,7 @@ import {StyleSheet} from "react-native";
 
 import TagSection from "@/components/TagSection";
 import {CHIP_HEIGHT} from "@/components/RailChip";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("TagSection", () => {
@@ -239,6 +240,18 @@ describe("TagSection", () => {
 
         expect(StyleSheet.flatten(screen.getByLabelText("Use tag Washed").props.style))
             .toMatchObject({minHeight: CHIP_HEIGHT});
+    });
+
+    it("uses neutral control chrome for the tag field focus ring", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <TagSection tags={[]} known={[]} onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+
+        expect(StyleSheet.flatten(screen.getByLabelText("New tag").props.style))
+            .toMatchObject({borderColor: palette.control});
     });
 
     it("stops offering to add once the recipe is full", async () => {
