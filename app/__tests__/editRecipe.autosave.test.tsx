@@ -1,6 +1,6 @@
 import React from "react";
 import {Share} from "react-native";
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -198,6 +198,21 @@ async function pressOnSheet(label: string, landed: () => boolean): Promise<void>
     }, {timeout: 5000});
 }
 
+function attemptNativeExit(action = {type: "GO_BACK"}): boolean {
+    let prevented = false;
+    const event = {
+        data:           {action},
+        preventDefault: () => {
+            prevented = true;
+        }
+    };
+    for (const listener of Array.from(mockBeforeRemoveListeners)) {
+        listener(event);
+    }
+    if (!prevented) mockScreenLeft = true;
+    return !prevented;
+}
+
 describe("editRecipe autosave", () => {
     beforeEach(() => {
         mockBacking = createTestDatabase();
@@ -280,6 +295,22 @@ describe("editRecipe autosave", () => {
         expect(stored()?.description).toBe("Sweet");
         expect(screen.queryByLabelText("Save changes")).toBeNull();
         expect(mockScreenLeft).toBe(true);
+    });
+
+    it("autosaves an unblurred note before a native back exit", async () => {
+        await openSavedRecipe();
+        await openAbout();
+
+        await fireEvent.changeText(screen.getByTestId("note-field"), "Sweet");
+        await act(async () => {
+            attemptNativeExit({type: "POP"});
+        });
+
+        await waitFor(() => {
+            expect(stored()?.description).toBe("Sweet");
+            expect(mockDispatch).toHaveBeenCalledWith({type: "POP"});
+        });
+        expect(screen.queryByLabelText("Save changes")).toBeNull();
     });
 
     it("asks to save a never-saved recipe with a typed note", async () => {

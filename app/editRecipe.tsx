@@ -843,9 +843,35 @@ export default function EditRecipe(
         // recipe, not against the already-edited draft.
         hasPendingEdits();
         const stop = navigation.addListener("beforeRemove", (event) => {
-            if (leaving.current || !hasPendingEdits()) return;
+            if (leaving.current) return;
+
             // Android hardware back and the iOS swipe both arrive here, which
             // is why this is a listener rather than a check in the back button.
+            if (drafts.current.size > 0) {
+                event.preventDefault();
+                const action = event.data.action;
+                heldExit.current = () => {
+                    // The bypass is only for the synchronous beforeRemove emitted
+                    // by this replay. If the dispatch does not remove the screen,
+                    // the guard must be live for the next exit attempt.
+                    leaving.current = true;
+                    try {
+                        navigation.dispatch(action);
+                    } finally {
+                        leaving.current = false;
+                    }
+                };
+                void flushDrafts().then(() => {
+                    if (hasPendingEdits()) {
+                        setLeavePrompt({intent: "leave", inLibrary: recipeInLibrary()});
+                    } else {
+                        replayHeldExit();
+                    }
+                });
+                return;
+            }
+
+            if (!hasPendingEdits()) return;
             event.preventDefault();
             const action = event.data.action;
             heldExit.current = () => {
