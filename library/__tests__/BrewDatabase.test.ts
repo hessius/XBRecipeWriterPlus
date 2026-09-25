@@ -1344,4 +1344,71 @@ describe("today's brew", () => {
 
         expect(db.brewOn("uuid-1", noon)).toBeNull();
     });
+
+    it("does not carry the last brew's coffee onto the next one", () => {
+        const db = realBrewDatabase();
+        db.insert(record({
+            id: "first", recipeUuid: "uuid-1",
+            origin: "Nyeri", roast: "Medium", tags: ["Kenya"]
+        }), []);
+        db.insert(record({id: "second", recipeUuid: "uuid-1"}), []);
+
+        // An inherited value is an assertion the user did not make, and the
+        // day they open a new bag it becomes false with nobody touching it.
+        const byId = Object.fromEntries(
+            db.brewsFor("uuid-1").map((brew) => [brew.id, brew]));
+        expect(byId.second.origin).toBeUndefined();
+        expect(byId.second.roast).toBeUndefined();
+        expect(byId.second.tags).toEqual([]);
+    });
+
+    /*
+     * The only thing standing between a schema change and every brew already on
+     * somebody's phone. `brews` here is the table as it stood before the bean
+     * fields, so the row under test is one a real install would be holding.
+     */
+    it("keeps a brew written before the bean fields existed", () => {
+        const raw = createTestDatabase();
+        raw.execSync(`
+            CREATE TABLE brews (
+                id TEXT PRIMARY KEY NOT NULL,
+                recipeUuid TEXT NOT NULL,
+                recipeName TEXT NOT NULL,
+                accent TEXT NOT NULL,
+                startedAt INTEGER NOT NULL,
+                pouringAt INTEGER NOT NULL DEFAULT 0,
+                endedAt INTEGER NOT NULL,
+                outcome TEXT NOT NULL,
+                failure TEXT,
+                pours INTEGER NOT NULL,
+                waterTotal REAL NOT NULL,
+                cupTotal REAL NOT NULL,
+                heldSeconds INTEGER NOT NULL,
+                hasStream INTEGER NOT NULL
+            );
+        `);
+        raw.runSync(
+            `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt,
+                pouringAt, endedAt, outcome, failure, pours, waterTotal,
+                cupTotal, heldSeconds, hasStream)
+             VALUES ('old', 'uuid-1', 'Ethiopia Guji', '#C86A3B', 1000000,
+                1045000, 1240000, 'done', NULL, 2, 250, 244, 14, 0);`,
+            []
+        );
+
+        ensureBrewTables(raw as Parameters<typeof ensureBrewTables>[0]);
+        ensureBrewTables(raw as Parameters<typeof ensureBrewTables>[0]);
+
+        const database = Object.create(BrewDatabase.prototype) as BrewDatabase;
+        (database as unknown as {db: FakeSQLiteDatabase}).db = raw;
+        const [brew] = database.brewsFor("uuid-1");
+
+        expect(brew.id).toBe("old");
+        expect(brew.recipeName).toBe("Ethiopia Guji");
+        expect(brew.origin).toBeUndefined();
+        expect(brew.roast).toBeUndefined();
+        expect(brew.process).toBeUndefined();
+        expect(brew.fermentation).toBeUndefined();
+        expect(brew.tags).toEqual([]);
+    });
 });
