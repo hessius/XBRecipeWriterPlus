@@ -27,6 +27,7 @@ describe("TagSection", () => {
 
         // No empty-state copy: the visible control is enough, and the common
         // case must not read as unfinished.
+        expect(screen.queryByText(/no tags/i)).toBeNull();
         expect(screen.getByLabelText("Add a tag")).toBeTruthy();
     });
 
