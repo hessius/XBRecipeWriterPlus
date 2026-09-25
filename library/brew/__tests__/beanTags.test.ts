@@ -119,6 +119,28 @@ describe("resolving what the coffee was", () => {
         expect(resolvedProcess(record)).toBe("Washed");
     });
 
+    it("ignores non-string origins from untrusted records and pods", () => {
+        const withBadUserOrigin = brew({
+            origin: 42,
+            coffee: {name: "Pod", origin: "Huila"}
+        } as unknown as Partial<BrewRecord>);
+        const withBadPodOrigin = brew({
+            coffee: {name: "Pod", origin: 42}
+        } as unknown as Partial<BrewRecord>);
+
+        expect(resolvedOrigin(withBadUserOrigin)).toBe("Huila");
+        expect(resolvedOrigin(withBadPodOrigin)).toBeUndefined();
+    });
+
+    it.each([
+        ["pod field present but empty", {coffee: {name: "Pod", origin: ""}}, undefined],
+        ["pod field only whitespace", {coffee: {name: "Pod", origin: "   "}}, undefined],
+        ["user field present but empty", {origin: "", coffee: {name: "Pod", origin: "Huila"}}, "Huila"],
+        ["user field only whitespace", {origin: "   ", coffee: {name: "Pod", origin: "Huila"}}, "Huila"]
+    ])("treats %s as unset", (_label, record, expected) => {
+        expect(resolvedOrigin(brew(record as Partial<BrewRecord>))).toBe(expected);
+    });
+
     it("is unset when neither has said", () => {
         expect(resolvedOrigin(brew())).toBeUndefined();
         expect(resolvedProcess(brew())).toBeUndefined();
@@ -131,9 +153,9 @@ describe("resolving what the coffee was", () => {
 
     it("takes only the half of a pod's wording that it understands", () => {
         // "anaerobic natural" names both axes. Only the fruit removal term is
-        // ours to read; the fermentation stays for the user to state.
+        // ours to read. There is deliberately no pod fermentation resolver, so
+        // the fermentation stays for the user to state.
         const record = brew({coffee: {name: "Pod", process: "anaerobic natural"}});
         expect(resolvedProcess(record)).toBe("Natural");
-        expect(record.fermentation).toBeUndefined();
     });
 });

@@ -100,6 +100,12 @@ export function normaliseBeanTags(tags: readonly unknown[]): string[] {
     return kept;
 }
 
+function trimmedNonEmpty(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+}
+
 /**
  * What this brew's origin is, counting the pod.
  *
@@ -109,10 +115,12 @@ export function normaliseBeanTags(tags: readonly unknown[]): string[] {
  * a pod brew joins #104's comparison without anyone having typed anything.
  */
 export function resolvedOrigin(record: BrewRecord): string | undefined {
-    const own = record.origin?.trim();
-    if (own !== undefined && own !== "") return own;
-    const pod = record.coffee?.origin?.trim();
-    return pod === undefined || pod === "" ? undefined : pod;
+    const own = trimmedNonEmpty(record.origin);
+    if (own !== undefined) return own;
+    // This intentionally follows the stored pod blob. `podCoffeeFromStored`
+    // requires a name, so `{coffee: {origin: "Huila"}}` can resolve before a
+    // backup restore and resolve to nothing after it has been rebuilt.
+    return trimmedNonEmpty(record.coffee?.origin);
 }
 
 /**
