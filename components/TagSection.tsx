@@ -3,6 +3,7 @@ import {Pressable, TextInput} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DeckSection from "@/components/DeckSection";
+import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
 import {MAX_TAG_LENGTH, MAX_TAGS_PER_RECIPE} from "@/library/Recipe";
 import {FERMENTATIONS, PROCESSES, ROASTS} from "@/library/brew/beanTags";
@@ -39,8 +40,10 @@ export default function TagSection({tags, known, onChange}: {
     function commit(value: string) {
         const tag = value.trim();
         setTyped("");
-        setAdding(false);
-        if (tag.length === 0) return;
+        if (tag.length === 0) {
+            setAdding(false);
+            return;
+        }
         onChange([...tags, tag]);
     }
 
@@ -58,21 +61,24 @@ export default function TagSection({tags, known, onChange}: {
                             accessibilityLabel="New tag"
                             autoFocus
                             maxLength={MAX_TAG_LENGTH}
-                            placeholderTextColor={palette.muted}
                             returnKeyType="done"
                             value={typed}
                             onChangeText={setTyped}
+                            onBlur={() => setAdding(false)}
                             onSubmitEditing={(event) => commit(event.nativeEvent.text)}
+                            // No placeholder by design: an empty recipe is normal,
+                            // so the field must not prompt for missing metadata.
                             style={{
-                                minWidth:          118,
+                                minWidth:          TAG_FIELD_MIN_WIDTH,
+                                minHeight:         CHIP_HEIGHT,
                                 fontSize:          14,
                                 color:             palette.text,
                                 backgroundColor:   palette.raised,
-                                borderColor:       palette.info,
+                                borderColor:       palette.control,
                                 borderWidth:       1,
                                 borderRadius:      9,
                                 paddingHorizontal: 11,
-                                paddingVertical:   7
+                                paddingVertical:   0
                             }}/>
                     ) : !full && (
                         <Pressable accessibilityRole="button"
@@ -83,8 +89,11 @@ export default function TagSection({tags, known, onChange}: {
                                        borderWidth:       1,
                                        borderStyle:       "dashed",
                                        borderRadius:      9,
+                                       minHeight:         CHIP_HEIGHT,
                                        paddingHorizontal: 11,
-                                       paddingVertical:   7
+                                       paddingVertical:   0,
+                                       alignItems:        "center",
+                                       justifyContent:    "center"
                                    }}>
                             <Text fontSize={14} lineHeight={16} color={palette.dim}>+ Add</Text>
                         </Pressable>
@@ -102,10 +111,15 @@ export default function TagSection({tags, known, onChange}: {
                                            borderColor:       palette.line,
                                            borderWidth:       1,
                                            borderRadius:      9,
+                                           minHeight:         CHIP_HEIGHT,
+                                           flexShrink:        1,
                                            paddingHorizontal: 11,
-                                           paddingVertical:   7
+                                           paddingVertical:   0,
+                                           alignItems:        "center",
+                                           justifyContent:    "center"
                                        }}>
-                                <Text fontSize={14} lineHeight={16} color={palette.dim}>
+                                <Text fontSize={14} lineHeight={16} color={palette.dim}
+                                      flexShrink={1}>
                                     {suggestion}
                                 </Text>
                             </Pressable>
@@ -122,22 +136,30 @@ function TagChip({tag, onRemove}: {
     onRemove: () => void;
 }) {
     return (
-        <Pressable accessibilityRole="button"
-                   accessibilityLabel={`Remove tag ${tag}`}
-                   onPress={onRemove}
-                   style={{
-                       backgroundColor:   palette.raised,
-                       borderColor:       palette.line,
-                       borderWidth:       1,
-                       borderRadius:      9,
-                       paddingHorizontal: 11,
-                       paddingVertical:   7
-                   }}>
-            <XStack gap="$1.5" alignItems="center">
-                <Text fontSize={14} lineHeight={16} color={palette.text}>{tag}</Text>
-                <Text fontSize={13} lineHeight={16} color={palette.muted}>×</Text>
-            </XStack>
-        </Pressable>
+        <XStack alignItems="center"
+                testID={`tag-chip-${tagKey(tag)}`}
+                backgroundColor={palette.raised}
+                borderColor={palette.line}
+                borderWidth={1}
+                borderRadius={9}
+                minHeight={CHIP_HEIGHT}
+                flexShrink={1}
+                paddingLeft={11}>
+            <Text fontSize={14} lineHeight={16} color={palette.text} flexShrink={1}>
+                {tag}
+            </Text>
+            <Pressable accessibilityRole="button"
+                       accessibilityLabel={`Remove tag ${tag}`}
+                       onPress={onRemove}
+                       style={{
+                           width:          CHIP_HEIGHT,
+                           height:         CHIP_HEIGHT,
+                           alignItems:     "center",
+                           justifyContent: "center"
+                       }}>
+                <Text fontSize={13} lineHeight={16} color={palette.muted}>✕</Text>
+            </Pressable>
+        </XStack>
     );
 }
 
@@ -174,3 +196,6 @@ function suggestionsFor(typed: string, tags: string[], known: string[]): string[
  * while somebody is typing.
  */
 const MAX_SUGGESTIONS = 6;
+
+/** Wide enough to read as a tag field rather than a tiny chip, at true phone width. */
+const TAG_FIELD_MIN_WIDTH = 118;

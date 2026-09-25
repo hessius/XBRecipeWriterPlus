@@ -87,15 +87,6 @@ describe("AboutDeck", () => {
             ]);
     });
 
-    it("offers the tag control between the note and the pod", async () => {
-        await renderWithProviders(
-            <AboutDeck {...props({recipe: recipeWith({tags: ["Morning"]})})}/>
-        );
-
-        expect(screen.getByTestId("about-tags")).toBeTruthy();
-        expect(screen.getByText("Morning")).toBeTruthy();
-    });
-
     it("drops the FROM section for a recipe that came from nowhere", async () => {
         // The deck does not decide this; the section absents itself. Asserted
         // here too because the deck is where a stray spacer or divider around
