@@ -1284,7 +1284,15 @@ export default function EditRecipe(
                               intent={leavePrompt?.intent ?? "leave"}
                               inLibrary={leavePrompt?.inLibrary ?? true}
                               onSave={() => {
-                                  persistRecipe();
+                                  try {
+                                      persistRecipe();
+                                  } catch {
+                                      notify({
+                                          tone:    "error",
+                                          message: "Could not save the recipe."
+                                      });
+                                      return;
+                                  }
                                   setLeavePrompt(null);
                                   replayHeldExit();
                               }}

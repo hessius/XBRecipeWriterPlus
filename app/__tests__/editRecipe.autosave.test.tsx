@@ -344,6 +344,29 @@ describe("editRecipe autosave", () => {
         expect(stored()?.dosage).toBe(22);
     });
 
+    it("keeps the leave sheet open when saving from it fails", async () => {
+        await openSavedRecipe();
+
+        await typeDose("22");
+        await fireEvent.press(screen.getByLabelText("Back"));
+        expect(screen.getByLabelText("Save changes")).toBeTruthy();
+
+        jest.spyOn(RecipeDatabase.prototype, "updateRecipe").mockImplementation(() => {
+            throw new Error("disk full");
+        });
+        await fireEvent.press(screen.getByLabelText("Save changes"));
+
+        await waitFor(() => {
+            expect(mockNotify).toHaveBeenCalledWith({
+                tone:    "error",
+                message: "Could not save the recipe."
+            });
+        });
+        expect(screen.getByLabelText("Save changes")).toBeTruthy();
+        expect(mockDispatch).not.toHaveBeenCalled();
+        expect(stored()?.dosage).toBe(18);
+    });
+
     it("leaves the stored recipe alone when asked to discard", async () => {
         await openSavedRecipe();
 
