@@ -1,5 +1,7 @@
 import {isRating, type BrewRecord} from "./brew/BrewRecord";
 import {
+    BEAN_FIELDS,
+    type BeanField,
     isFermentation,
     isProcess,
     isRoast,
@@ -631,12 +633,21 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
  * wrong.
  */
 const DROPPABLE_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
-    origin:       (v) => typeof v === "string" && v.length <= MAX_ORIGIN_LENGTH,
+    origin:       (v) =>
+        typeof v === "string" && v.trim() !== "" && v.length <= MAX_ORIGIN_LENGTH,
     roast:        isRoast,
     process:      isProcess,
     fermentation: isFermentation,
     tags:         Array.isArray
 };
+
+function beanFieldsFrom(record: BrewRecord): Partial<Pick<BrewRecord, BeanField>> {
+    const entries = BEAN_FIELDS.flatMap((field) => {
+        const value = record[field];
+        return value === undefined ? [] : [[field, value] as const];
+    });
+    return Object.fromEntries(entries) as Partial<Pick<BrewRecord, BeanField>>;
+}
 
 /** A record from a backup file, or null. Never throws. */
 export function reviveBrew(entry: unknown): BrewRecord | null {
@@ -702,10 +713,7 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         grinderRpm: record.grinderRpm,
         grinderUsed: record.grinderUsed,
         coffee: record.coffee,
-        ...(record.origin !== undefined ? {origin: record.origin} : {}),
-        ...(record.roast !== undefined ? {roast: record.roast} : {}),
-        ...(record.process !== undefined ? {process: record.process} : {}),
-        ...(record.fermentation !== undefined ? {fermentation: record.fermentation} : {}),
+        ...beanFieldsFrom(record),
         ...(record.tags !== undefined ? {tags: record.tags} : {})
     };
 }

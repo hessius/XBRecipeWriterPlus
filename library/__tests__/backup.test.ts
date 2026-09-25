@@ -959,7 +959,12 @@ describe("brew history through a backup", () => {
         });
 
         it("drops a preset value outside the vocabulary but keeps the brew", () => {
-            const result = parseBackup(backupFileWithBrewFields({process: "Wet-hulled"}));
+            const result = parseBackup(backupFileWithBrewFields({
+                roast: "Charred",
+                process: "Wet-hulled",
+                fermentation: "Nitro",
+                origin: "x".repeat(500)
+            }));
 
             // The brew, its figures and its rating are worth more than one field
             // a stranger's file got wrong.
@@ -967,7 +972,24 @@ describe("brew history through a backup", () => {
             if (!result.ok) return;
             expect(result.payload.brews).toHaveLength(1);
             expect(result.payload.skippedBrews).toBe(0);
+            expect(result.payload.brews[0].origin).toBeUndefined();
+            expect(result.payload.brews[0].roast).toBeUndefined();
             expect(result.payload.brews[0].process).toBeUndefined();
+            expect(result.payload.brews[0].fermentation).toBeUndefined();
+        });
+
+        it("treats an empty origin in a backup as unset", () => {
+            const empty = reviveBrew({
+                ...JSON.parse(JSON.stringify(brewNamed("b1"))), origin: ""
+            });
+            const blank = reviveBrew({
+                ...JSON.parse(JSON.stringify(brewNamed("b1"))), origin: "   "
+            });
+
+            expect(empty).not.toBeNull();
+            expect(blank).not.toBeNull();
+            expect(empty?.origin).toBeUndefined();
+            expect(blank?.origin).toBeUndefined();
         });
 
         it("re-folds tags on the way in rather than trusting them", () => {
