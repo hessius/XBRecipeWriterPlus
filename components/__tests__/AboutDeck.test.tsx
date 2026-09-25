@@ -77,11 +77,14 @@ describe("AboutDeck", () => {
             <AboutDeck {...props({recipe: recipeWith({xid: "CGL12"})})}/>
         );
 
-        expect(screen.getByTestId("about-note")).toBeTruthy();
-        expect(screen.getByTestId("about-tags")).toBeTruthy();
-        expect(screen.getByTestId("about-pod")).toBeTruthy();
-        expect(screen.getByTestId("about-from")).toBeTruthy();
-        expect(screen.getByTestId("about-history")).toBeTruthy();
+        expect(screen.getAllByTestId(/^about-/).map((section) => section.props.testID))
+            .toEqual([
+                "about-note",
+                "about-tags",
+                "about-pod",
+                "about-from",
+                "about-history"
+            ]);
     });
 
     it("offers the tag control between the note and the pod", async () => {
