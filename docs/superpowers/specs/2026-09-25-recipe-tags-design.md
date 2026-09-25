@@ -35,6 +35,24 @@ backup handling. That is the same doctrine #95 already applies to evidence, now
 applied to the other side of the same comparison. Both halves are derived and
 both correct themselves.
 
+### Intent covers three of #100's four fields, not four
+
+#100 has four bean fields, but only roast, process and fermentation are drawn
+from closed lists. Origin is free text, so there is no way to tell a tag meaning
+"Huila" from a tag meaning "Morning": both are just words somebody typed. A tag
+cannot be read as an origin intent without the app guessing, and guessing is the
+thing `podCoffee.ts` already refused to do when it left out `roast` rather than
+invent one from a value that was `1` on every pod.
+
+So `intentTags` matches against `ROASTS`, `PROCESSES` and `FERMENTATIONS` only.
+A recipe designed for a particular origin can say so in its note, which is what
+the note is for. If #104 later wants origin intent it will need a control that
+declares it as an origin rather than a tag that happens to look like one, and
+that is #104's problem to have.
+
+Matching is on `tagKey`, so "washed" typed lower case is the same intent as
+"Washed", while the chip keeps the user's own spelling.
+
 Two consequences, both wanted:
 
 - The shelf and the intent are one query. "Recipes designed for light roast" is
