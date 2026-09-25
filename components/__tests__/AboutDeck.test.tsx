@@ -26,6 +26,8 @@ function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
         showAvatar:         false,
         brews:              summary(),
         showHint:           false,
+        knownTags:          [],
+        onTags:             jest.fn(),
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),
         onInputErrorChange: jest.fn(),
@@ -70,15 +72,25 @@ describe("AboutDeck", () => {
         expect(dispatch).toHaveBeenCalledWith("Note", "Mornings");
     });
 
-    it("carries all four sections, in the order the deck reads in", async () => {
+    it("carries all five sections, in the order the deck reads in", async () => {
         await renderWithProviders(
             <AboutDeck {...props({recipe: recipeWith({xid: "CGL12"})})}/>
         );
 
         expect(screen.getByTestId("about-note")).toBeTruthy();
+        expect(screen.getByTestId("about-tags")).toBeTruthy();
         expect(screen.getByTestId("about-pod")).toBeTruthy();
         expect(screen.getByTestId("about-from")).toBeTruthy();
         expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("offers the tag control between the note and the pod", async () => {
+        await renderWithProviders(
+            <AboutDeck {...props({recipe: recipeWith({tags: ["Morning"]})})}/>
+        );
+
+        expect(screen.getByTestId("about-tags")).toBeTruthy();
+        expect(screen.getByText("Morning")).toBeTruthy();
     });
 
     it("drops the FROM section for a recipe that came from nowhere", async () => {

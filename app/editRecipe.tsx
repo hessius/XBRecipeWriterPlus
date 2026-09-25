@@ -733,6 +733,7 @@ export default function EditRecipe(
     const [rawTemperatureUnit] = useSetting("temperatureUnit");
     const [lastCardRead] = useSetting("lastCardRead");
     const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
+    const [recipeDatabase] = useState(() => new RecipeDatabase());
 
     const [deck, setDeck] = useState<Deck>("brew");
     const [openStage, setOpenStage] = useState<OpenRung>(null);
@@ -787,7 +788,8 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editInputComplete, setVolumeError,
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editTags,
+        editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
         autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
         setXidFocused
@@ -826,6 +828,7 @@ export default function EditRecipe(
     );
 
     if (!recipe) return null;
+    const knownTags = recipeDatabase.countRecipesByTag().map(({tag}) => tag);
 
     // Every edit republishes the recipe: the model is mutated in place, so a key
     // bump is what repaints the steppers and the derived total. Several of the
@@ -875,7 +878,7 @@ export default function EditRecipe(
         // create nothing and navigate back as though it had; for a saved one it
         // copied the last save and dropped every unsaved edit.
         try {
-            new RecipeDatabase().duplicateRecipe(recipe!);
+            recipeDatabase.duplicateRecipe(recipe!);
         } catch {
             // The store throwing is the only way this fails, and swallowing it
             // would navigate back as though a copy had been made.
@@ -958,7 +961,7 @@ export default function EditRecipe(
     async function deleteRecipe() {
         await flushDrafts();
         try {
-            new RecipeDatabase().deleteRecipe(recipe!.uuid);
+            recipeDatabase.deleteRecipe(recipe!.uuid);
         } catch {
             notify({tone: "error", message: "Could not delete the recipe."});
             return;
@@ -1069,6 +1072,8 @@ export default function EditRecipe(
                     <AboutDeck recipe={recipe} accent={accent}
                                showAvatar={showRecipeAvatars} brews={brewSummary}
                                onRate={rate}
+                               knownTags={knownTags}
+                               onTags={editTags}
                                showHint={showHint} dispatch={dispatch}
                                xidLookupFailed={xidLookupFailed}
                                externalEpoch={externalEpoch}

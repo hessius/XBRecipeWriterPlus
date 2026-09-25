@@ -5,6 +5,7 @@ import FromSection from "@/components/FromSection";
 import HistorySection from "@/components/HistorySection";
 import NoteSection from "@/components/NoteSection";
 import PodSection from "@/components/PodSection";
+import TagSection from "@/components/TagSection";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
 import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
@@ -28,6 +29,10 @@ type Props = {
      * drawing a control that does nothing.
      */
     onRate?: (rating: number) => void;
+    /** Every tag used elsewhere in the library, largest shelves first. */
+    knownTags: string[];
+    /** Replaces the recipe's tags through the editor operation. */
+    onTags: (tags: string[]) => void;
     showHint: boolean;
     dispatch: Dispatch;
     /** Records an unblurred field's current text, for the screen to flush. */
@@ -70,7 +75,7 @@ type Props = {
  * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
-    recipe, accent, showAvatar, brews, onRate, showHint, dispatch, onDraft,
+    recipe, accent, showAvatar, brews, onRate, knownTags, onTags, showHint, dispatch, onDraft,
     onInputErrorChange, xidLookupFailed, externalEpoch, onXidFocusChange
 }: Props) {
     return (
@@ -82,6 +87,8 @@ export default function AboutDeck({
                          initialValue={recipe.description}
                          onDraft={(value) => onDraft(RECIPE_LABELS.NOTE, value)}
                          onCommit={(value) => dispatch(RECIPE_LABELS.NOTE, value)}/>
+
+            <TagSection tags={recipe.tags} known={knownTags} onChange={onTags}/>
 
             <PodSection recipe={recipe} showHint={showHint}
                         showAvatar={showAvatar}
