@@ -52,7 +52,8 @@ describe("PodSection", () => {
         const input = screen.getByLabelText("Recipe ID");
 
         expect(input.props.placeholder).toBe("CGL12");
-        expect(input.props.placeholderTextColor).toBe(palette.muted);
+        // `dim`, not `muted`: muted on raised is 3.55:1, under the 4.5:1 floor.
+        expect(input.props.placeholderTextColor).toBe(palette.dim);
         expect(input).toHaveStyle({
             backgroundColor: palette.raised,
             borderColor:     palette.control,

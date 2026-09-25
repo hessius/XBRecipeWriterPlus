@@ -103,10 +103,14 @@ export default function TextFieldRow({
             <FieldRow topic={topic} showHint={showHint} note={note}
                       error={invalid ? invalidReason : undefined}>
                 {/* Not keyed here: the key belongs on the row, which is what owns
-                    the `invalid` state this input feeds. */}
+                    the `invalid` state this input feeds.
+
+                    The placeholder is `dim`, not `muted`: it is the only thing
+                    naming what the field wants when the field is empty, and
+                    muted on raised is 3.55:1, under the 4.5:1 floor. */}
                 <TextInput ref={inputRef} accessibilityLabel={label}
                            defaultValue={initialValue} maxLength={maxLength}
-                           placeholder={placeholder} placeholderTextColor={palette.muted}
+                           placeholder={placeholder} placeholderTextColor={palette.dim}
                            autoCapitalize={autoCapitalize} onChangeText={onChangeText}
                            onFocus={() => onFocusChange?.(true)}
                            onBlur={() => onFocusChange?.(false)}
