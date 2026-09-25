@@ -142,6 +142,8 @@ function fixture(): Recipe {
 let mockRecipeJSON = JSON.stringify(fixture());
 
 beforeEach(() => {
+    const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+    RecipeDatabase.prototype.countRecipesByTag.mockReturnValue([]);
     mockRecipeJSON = JSON.stringify(fixture());
     mockSettings = {};
     mockParams = null;
