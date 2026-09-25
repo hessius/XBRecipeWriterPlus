@@ -33,9 +33,10 @@ export default function DeckSwitch({deck, stageCount, accent, onChange}: Props) 
     // One segment of however many there are. Named for what it is rather than
     // for how many there used to be: it was `half` when there were two, and the
     // name was the only thing standing between the switch and a third deck.
-    // Every segment is flex: 1, so adding one costs nothing but the arithmetic
-    // of the row -- at 390 pt three segments are about 119 pt each, which holds
-    // STAGES · 4 without wrapping.
+    // Width follows the text each segment has to hold rather than equal thirds.
+    // `flexBasis: 0` gives the whole row to the grow weights, so STAGES claims
+    // the extra room its count needs. `flexShrink: 1` keeps a long label
+    // narrowing at large text sizes instead of overflowing.
     function segment(value: Deck, label: string, spoken: string) {
         const active = deck === value;
         return (
@@ -45,7 +46,9 @@ export default function DeckSwitch({deck, stageCount, accent, onChange}: Props) 
                            if (!active) onChange(value);
                        }}
                        style={{
-                           flex:            1,
+                           flexBasis:       0,
+                           flexGrow:        label.length,
+                           flexShrink:      1,
                            alignItems:      "center",
                            paddingVertical: 9,
                            borderRadius:    9,

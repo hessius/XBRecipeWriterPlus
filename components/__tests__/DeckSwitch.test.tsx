@@ -15,17 +15,26 @@ describe("DeckSwitch", () => {
         expect(screen.getByLabelText("About this recipe")).toBeTruthy();
     });
 
-    it("gives every deck the same share of the row", async () => {
-        // The segments are flex: 1 rather than a measured half, which is the
-        // whole reason a third one costs nothing. RNTL runs no layout, so this
-        // is the only claim about width a test can make.
+    it("gives the widest label the most room", async () => {
+        // RNTL runs no layout, so this can only assert the style rule that
+        // drives native flex width. Changing production back to equal flexGrow
+        // values is the edit that should break this test.
         await renderWithProviders(
-            <DeckSwitch deck="brew" stageCount={3} onChange={jest.fn()}/>
+            <DeckSwitch deck="brew" stageCount={12} onChange={jest.fn()}/>
         );
 
-        for (const spoken of ["Brew settings", "Stages, 3", "About this recipe"]) {
-            expect(screen.getByLabelText(spoken)).toHaveStyle({flex: 1});
-        }
+        const brew = screen.getByLabelText("Brew settings");
+        const stages = screen.getByLabelText("Stages, 12");
+        const about = screen.getByLabelText("About this recipe");
+
+        expect(stages).toHaveStyle({flexBasis: 0, flexShrink: 1});
+        expect(new Set([
+            brew.props.style.flexGrow,
+            stages.props.style.flexGrow,
+            about.props.style.flexGrow
+        ]).size).toBeGreaterThan(1);
+        expect(stages.props.style.flexGrow).toBeGreaterThan(about.props.style.flexGrow);
+        expect(about.props.style.flexGrow).toBeGreaterThan(brew.props.style.flexGrow);
     });
 
     it("speaks each deck as a tab, so a reader knows the screen swaps", async () => {
