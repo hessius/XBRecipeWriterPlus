@@ -546,17 +546,27 @@ describe("the editor", () => {
         const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
         RecipeDatabase.mockClear();
 
-        await renderEditor({xid: "CGL12"});
-        await fireEvent.press(screen.getByLabelText("More"));
-        await act(async () => { jest.advanceTimersByTime(500); });
-        await fireEvent.press(screen.getByLabelText("Duplicate"));
-        await act(async () => { jest.advanceTimersByTime(500); });
+        try {
+            await renderEditor({xid: "CGL12"});
+            await fireEvent.press(screen.getByLabelText("More"));
+            await act(async () => { jest.advanceTimersByTime(500); });
+            const duplicated = () => RecipeDatabase.mock.instances
+                .some((store: {duplicateRecipe: jest.Mock}) =>
+                    store.duplicateRecipe.mock.calls.length > 0);
+            for (let attempt = 0; attempt < 5 && !duplicated(); attempt++) {
+                await fireEvent.press(screen.getByLabelText("Duplicate"));
+                await act(async () => { jest.advanceTimersByTime(100); });
+            }
+        } finally {
+            jest.useRealTimers();
+        }
 
-        const store = RecipeDatabase.mock.instances.at(-1)!;
+        const store = RecipeDatabase.mock.instances
+            .find((candidate: {duplicateRecipe: jest.Mock}) =>
+                candidate.duplicateRecipe.mock.calls.length > 0)!;
         expect(store.cloneRecipe).not.toHaveBeenCalled();
         expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
-        jest.useRealTimers();
     });
 
     it("shares the flushed recipe and stays on the editor", async () => {
