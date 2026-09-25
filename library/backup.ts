@@ -632,14 +632,18 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
  * brew's figures and verdict are worth more than one field a stranger got
  * wrong.
  */
-const DROPPABLE_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
+const BEAN_FIELD_VALIDATORS = {
     origin:       (v) =>
         typeof v === "string" && v.trim() !== "" && v.length <= MAX_ORIGIN_LENGTH,
     roast:        isRoast,
     process:      isProcess,
-    fermentation: isFermentation,
+    fermentation: isFermentation
+} satisfies Record<BeanField, (value: unknown) => boolean>;
+
+const DROPPABLE_BREW_FIELDS = {
+    ...BEAN_FIELD_VALIDATORS,
     tags:         Array.isArray
-};
+} satisfies Record<BeanField | "tags", (value: unknown) => boolean>;
 
 function beanFieldsFrom(record: BrewRecord): Partial<Pick<BrewRecord, BeanField>> {
     const entries = BEAN_FIELDS.flatMap((field) => {
