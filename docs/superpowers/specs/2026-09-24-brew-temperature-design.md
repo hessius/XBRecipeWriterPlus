@@ -68,7 +68,7 @@ stage's **pour only**, with a short gradient fading below it.
 | --- | --- |
 | Rule | `palette.dim`, stroke width 2, round caps, full opacity |
 | Fade | Rect from the rule down 16px, vertical gradient `palette.dim` 0.38 to 0 |
-| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, baseline 4px above it |
+| Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, always above it |
 | Depth | Behind the water fill, the water line, the cup line and the plan line |
 
 ### Why a rule and not a filled column
@@ -106,6 +106,12 @@ short pour's rule. The label is allowed to overhang its own rule. The space
 beside it is a wait and is empty by construction, so there is nothing to collide
 with. The degree sign is kept; it is not worth trading legibility for a third of
 the width.
+
+Vertically, the label's baseline sits 4px above its rule. The band top is the
+larger of its proportional top and the actual label headroom
+(`drawnFontSize(11) + 4px`), so a label never has to flip below or clamp away
+from the rule it names. That keeps vertical order consistent: higher text still
+means hotter water, just as higher rules do.
 
 ### A flat recipe repeats its label
 
@@ -225,7 +231,7 @@ same silent fallback `stageWater`, `stalls` and `bypass` already use.
 ## Accessibility
 
 The chart's `accessibilityLabel` gains the temperature run, so a screen reader
-gets the shape it cannot see: "Brew trace, 94, 92 and 90 degrees". The band
+gets the shape it cannot see: "Brew trace, 94 then 92 then 90 degrees". The band
 labels are decorative and are not announced separately.
 
 ## Out of scope
