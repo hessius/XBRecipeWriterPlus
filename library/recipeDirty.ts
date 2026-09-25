@@ -16,24 +16,23 @@
  *
  * The projection is a denylist. Everything counts as a card field unless it is
  * named here as one that writes itself. The denylist is conditional for
- * metadata: name, note and tags write themselves only when a stored row exists.
- * A card read or unfinished import has no row to write to, so those fields must
- * stay in the projection and make the leave guard ask. That direction is
- * deliberate: a field added later and not thought about produces a prompt
- * nobody needed, which is a nuisance. The other direction loses work.
+ * row-bound data: name, note, tags and favourite write themselves only when a
+ * stored row exists. A card read or unfinished import has no row to write to,
+ * so those fields must stay in the projection and make the leave guard ask.
+ * That direction is deliberate: a field added later and not thought about
+ * produces a prompt nobody needed, which is a nuisance. The other direction
+ * loses work.
  */
 
 import type Recipe from "@/library/Recipe";
 
 /**
- * The fields that do not wait for SAVE.
+ * The fields that do not wait for SAVE and are never user work.
  *
- * `favourite` has always written on the spot (see `toggleFavourite`), and the
- * rating is not on the recipe at all -- it lives in the brew store.
  * `accentIndex` belongs to the library, not to the user: `updateRecipe`
  * reassigns it on write, so a draft and its row disagree about it routinely.
  */
-const ALWAYS_WRITES_ITSELF = ["favourite", "accentIndex"];
+const ALWAYS_IGNORED = ["accentIndex"];
 
 /**
  * These only write themselves when there is already a row to receive them.
@@ -41,9 +40,9 @@ const ALWAYS_WRITES_ITSELF = ["favourite", "accentIndex"];
  *
  * This is why `metadataWritesItself` below has no default. Either answer is
  * wrong for half the callers, and the wrong one in the `true` direction loses
- * a user's name, note or tags with no prompt, so the caller has to say.
+ * a user's name, note, tags or star with no prompt, so the caller has to say.
  */
-const METADATA_WRITES_ITSELF = ["name", "description", "tags"];
+const ROW_WRITES_ITSELF = ["favourite", "name", "description", "tags"];
 
 /** A `JSON.stringify` whose object keys are always in the same order. */
 function stable(value: unknown): string {
@@ -67,9 +66,9 @@ function stable(value: unknown): string {
  */
 export function snapshotForSave(recipe: Recipe, metadataWritesItself: boolean): string {
     const plain = JSON.parse(JSON.stringify(recipe)) as Record<string, unknown>;
-    for (const field of ALWAYS_WRITES_ITSELF) delete plain[field];
+    for (const field of ALWAYS_IGNORED) delete plain[field];
     if (metadataWritesItself) {
-        for (const field of METADATA_WRITES_ITSELF) delete plain[field];
+        for (const field of ROW_WRITES_ITSELF) delete plain[field];
     }
     return stable(plain);
 }

@@ -66,6 +66,15 @@ describe("recipeDirty", () => {
         expect(editsPendingSave(r, opened, false)).toBe(true);
     });
 
+    it("counts favourite when no row is writing it separately", () => {
+        // A rowless card read or import has nowhere to store the star until
+        // SAVE writes the recipe, so backing out must ask before losing it.
+        const r = recipe();
+        const opened = snapshotForSave(r, false);
+        r.favourite = true;
+        expect(editsPendingSave(r, opened, false)).toBe(true);
+    });
+
     it("counts a field nobody thought about", () => {
         // The projection is a denylist on purpose. This test is the reason:
         // it fails if someone turns it into an allowlist of known card fields,
