@@ -45,6 +45,9 @@ import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 /** What a field's edit callback commits, given a label and the new value. */
 type Dispatch = (label: string, value: string) => void;
 
+/** The labels that go onto the stored row as soon as they are committed. */
+const AUTOSAVED_LABELS: string[] = [RECIPE_LABELS.TITLE, RECIPE_LABELS.NOTE];
+
 /**
  * The most stages the last card read could hold.
  *
@@ -797,8 +800,8 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canWrite, canSave, revertSources,
-        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, toggleFavourite, editTags,
-        editInputComplete, setVolumeError,
+        bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
+        toggleFavourite, editTags, editInputComplete, setVolumeError,
         setInputError, editStage, setBypassEnabled, editBypass, addPour, deletePour,
         autoAdjustPourVolumes, coarsenGrindToMinimum, xidLookupFailed, externalEpoch,
         setXidFocused
@@ -843,7 +846,12 @@ export default function EditRecipe(
     // hook's field updaters do not bump the key themselves, so the screen does.
     const dispatch: Dispatch = (label, value) => {
         drafts.current.delete(label);
-        void editInputComplete(label, value);
+        void editInputComplete(label, value).then(() => {
+            // The name and the note do not wait for SAVE. Chained rather than
+            // called straight after, because `editInputComplete` is async and
+            // the write has to see the value it applied.
+            if (AUTOSAVED_LABELS.includes(label)) saveMetadata();
+        });
         bumpKey();
     };
 
@@ -859,6 +867,7 @@ export default function EditRecipe(
         drafts.current.clear();
         for (const [label, value] of pending) {
             await editInputComplete(label, value);
+            if (AUTOSAVED_LABELS.includes(label)) saveMetadata();
         }
         bumpKey();
     }
