@@ -58,14 +58,22 @@ function replaceBeanFilters(current: readonly string[], nextBeans: readonly stri
 /**
  * The library rail's bean picker state.
  *
- * The vocabulary is read once, in the lazy initialiser, because it is a
- * database read and there is no event on the home screen that changes it while
- * the screen is mounted. The selected rows are derived from the applied
- * filters on every render, so reopening the sheet reports the query as it is
- * rather than the last switch position the sheet happened to hold.
+ * The vocabulary is seeded in the lazy initialiser, because the compiler's
+ * purity rules forbid reading a database while rendering and its
+ * `set-state-in-effect` rule forbids seeding it from an effect.
+ *
+ * It is re-read on `refresh`, which the home screen calls on focus beside
+ * `library.refresh()`. The home route stays mounted while the user brews,
+ * rates and deletes on other screens, so a vocabulary read once at mount is
+ * stale by the time they come back: a bean they have just brewed would be
+ * missing from the picker until the app was restarted.
+ *
+ * The selected rows are derived from the applied filters on every render, so
+ * reopening the sheet reports the query as it is rather than the last switch
+ * position the sheet happened to hold.
  */
 export function useBeanFilters({filters, applyFilters, store}: Props) {
-    const [vocabulary] = useState<BeanVocabularyEntry[]>(
+    const [vocabulary, setVocabulary] = useState<BeanVocabularyEntry[]>(
         () => (store ?? sharedBrewDatabase()).beanVocabulary()
     );
     const [emptyRatedOnly, setEmptyRatedOnly] = useState(false);
@@ -83,8 +91,14 @@ export function useBeanFilters({filters, applyFilters, store}: Props) {
         applyFilters((current) => replaceBeanFilters(current, ids));
     }
 
+    /** Re-read the vocabulary. Called on focus, not on every render. */
+    function refresh() {
+        setVocabulary((store ?? sharedBrewDatabase()).beanVocabulary());
+    }
+
     return {
         vocabulary,
+        refresh,
         selected,
         ratedOnly,
         setRatedOnly,

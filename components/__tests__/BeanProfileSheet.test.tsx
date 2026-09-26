@@ -103,7 +103,7 @@ describe("BeanProfileSheet", () => {
 
         const lines = screen.getAllByTestId("bean-profile-row");
         expect(lines[lines.length - 1]).toHaveTextContent(/NOT TAGGED/);
-        expect(screen.getByLabelText("Not tagged")).toBe(lines[lines.length - 1]);
+        expect(screen.getByLabelText(/^Not tagged/)).toBe(lines[lines.length - 1]);
     });
 
     it("renders nothing while closed", async () => {

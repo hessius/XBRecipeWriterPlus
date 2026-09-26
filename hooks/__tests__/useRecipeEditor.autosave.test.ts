@@ -13,6 +13,30 @@ jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockBacking
 }));
 
+const mockNotify = jest.fn();
+
+jest.mock("@/components/XbrwToast", () => ({
+    __esModule: true,
+    notify:     (notice: unknown) => mockNotify(notice)
+}));
+
+/**
+ * Make every write fail, the way a full or unwritable database would.
+ *
+ * Reads are left alone: `saveMetadata` has to find the row before it can fail
+ * to write it, and a test where it never got that far would pass for the
+ * wrong reason.
+ */
+function breakWrites() {
+    const real = mockBacking.runSync;
+    mockBacking.runSync = (source: string, params?: unknown[]) => {
+        if (/^\s*(INSERT|UPDATE|DELETE)/i.test(source)) {
+            throw new Error("database is locked");
+        }
+        return real(source, params);
+    };
+}
+
 function open(recipe: Recipe) {
     return renderHook(() => useRecipeEditor({
         recipeJSON:      JSON.stringify(recipe),
@@ -143,5 +167,67 @@ describe("useRecipeEditor autosave", () => {
         });
 
         expect(result.current.hasPendingEdits()).toBe(false);
+    });
+});
+
+describe("useRecipeEditor autosave when the write fails", () => {
+    beforeEach(() => {
+        mockBacking = createTestDatabase();
+        mockNotify.mockClear();
+    });
+
+    it("says so rather than throwing into a promise nobody awaits", async () => {
+        // The dispatcher calls this from a `.then` it does not await, so a
+        // throw here is an unhandled rejection and the user is told nothing.
+        saved();
+        const {result} = await open(stored());
+        breakWrites();
+
+        await act(async () => {
+            await result.current.editInputComplete(RECIPE_LABELS.NOTE, "Sweet");
+            result.current.saveMetadata();
+        });
+
+        expect(mockNotify).toHaveBeenCalledWith(
+            expect.objectContaining({tone: "error"})
+        );
+    });
+
+    it("leaves the edit pending, so the leave guard still asks", async () => {
+        // Metadata is left out of the dirty projection because it writes
+        // itself. That is only true while the write works: a failed one lives
+        // on the bench and nowhere else.
+        saved();
+        const {result} = await open(stored());
+        result.current.hasPendingEdits();
+        breakWrites();
+
+        await act(async () => {
+            await result.current.editInputComplete(RECIPE_LABELS.NOTE, "Sweet");
+            result.current.saveMetadata();
+        });
+
+        expect(result.current.hasPendingEdits()).toBe(true);
+    });
+
+    it("stops asking once a later write lands", async () => {
+        saved();
+        const {result} = await open(stored());
+        result.current.hasPendingEdits();
+        const real = mockBacking.runSync;
+        breakWrites();
+
+        await act(async () => {
+            await result.current.editInputComplete(RECIPE_LABELS.NOTE, "Sweet");
+            result.current.saveMetadata();
+        });
+
+        mockBacking.runSync = real;
+        await act(async () => {
+            result.current.saveMetadata();
+        });
+
+        expect(result.current.hasPendingEdits()).toBe(false);
+        expect(stored().description).toBe("Sweet");
     });
 });

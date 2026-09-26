@@ -226,7 +226,14 @@ export type BrewRecord = {
     process?: Process;
     /** What was done to the fermentation. */
     fermentation?: Fermentation;
-    /** Free-text tags. Searchable, deliberately not a dimension #104 groups on. */
+    /**
+     * Free-text tags.
+     *
+     * Searchable, and since #104 a dimension of their own: `beanProfileFor`
+     * groups them into `custom` ledger rows and the library can filter on
+     * them. They are folded to `tagKey` for both, so two spellings of one tag
+     * are one row.
+     */
     tags?: string[];
 };
 

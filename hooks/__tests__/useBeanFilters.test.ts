@@ -92,3 +92,44 @@ describe("useBeanFilters", () => {
         ]);
     });
 });
+
+describe("useBeanFilters refresh", () => {
+    it("re-reads the vocabulary from the store", async () => {
+        const entries = [entry("process", "Natural", 1)];
+        const database: BeanVocabularyStore = {
+            beanVocabulary: jest.fn(() => [...entries])
+        };
+        const {result} = await renderHook(() => useBeanFilters({
+            filters:      [],
+            applyFilters: jest.fn(),
+            store:        database
+        }));
+
+        expect(result.current.vocabulary).toEqual([entry("process", "Natural", 1)]);
+
+        entries.push(entry("roast", "Light", 2));
+        await act(async () => {
+            result.current.refresh();
+        });
+
+        expect(result.current.vocabulary).toEqual([
+            entry("process", "Natural", 1),
+            entry("roast", "Light", 2)
+        ]);
+    });
+
+    it("does not read it again on a plain re-render", async () => {
+        const database = store([entry("process", "Natural")]);
+        const {rerender} = await renderHook(() => useBeanFilters({
+            filters:      [],
+            applyFilters: jest.fn(),
+            store:        database
+        }));
+
+        await act(async () => {
+            rerender({});
+        });
+
+        expect(database.beanVocabulary).toHaveBeenCalledTimes(1);
+    });
+});

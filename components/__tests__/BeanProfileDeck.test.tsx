@@ -62,7 +62,7 @@ describe("BeanProfileDeck", () => {
         );
 
         expect(screen.getByText("12 OF 12 BREWS TAGGED")).toBeTruthy();
-        expect(screen.queryByLabelText("Not tagged")).toBeNull();
+        expect(screen.queryByLabelText(/^Not tagged/)).toBeNull();
     });
 
     it("renders a row's field label, value and rating figures", async () => {
@@ -188,7 +188,7 @@ describe("BeanProfileDeck", () => {
 
         const lines = screen.getAllByTestId("bean-profile-row");
         expect(lines[lines.length - 1]).toHaveTextContent(/NOT TAGGED/);
-        expect(screen.getByLabelText("Not tagged")).toBe(lines[lines.length - 1]);
+        expect(screen.getByLabelText(/^Not tagged/)).toBe(lines[lines.length - 1]);
     });
 
     it("writes a plural untagged count in the value column", async () => {
@@ -204,7 +204,7 @@ describe("BeanProfileDeck", () => {
             />
         );
 
-        expect(screen.getByLabelText("Not tagged")).toHaveTextContent(/9 brews/);
+        expect(screen.getByLabelText(/^Not tagged/)).toHaveTextContent(/9 brews/);
     });
 
     it("writes the untagged count once, not again in the figures", async () => {
@@ -224,7 +224,7 @@ describe("BeanProfileDeck", () => {
             />
         );
 
-        const untagged = screen.getByLabelText("Not tagged");
+        const untagged = screen.getByLabelText(/^Not tagged/);
         expect(untagged).toHaveTextContent(/3\.9/);
         expect(untagged).not.toHaveTextContent(/·/);
     });
@@ -242,7 +242,7 @@ describe("BeanProfileDeck", () => {
             />
         );
 
-        expect(screen.getByLabelText("Not tagged")).toHaveTextContent(/1 brew/);
+        expect(screen.getByLabelText(/^Not tagged/)).toHaveTextContent(/1 brew/);
     });
 
     it("draws the untagged row outside the cap", async () => {
@@ -262,7 +262,7 @@ describe("BeanProfileDeck", () => {
         );
 
         expect(screen.getAllByTestId("bean-profile-row")).toHaveLength(PROFILE_CAP + 1);
-        expect(screen.getByLabelText("Not tagged")).toBeTruthy();
+        expect(screen.getByLabelText(/^Not tagged/)).toBeTruthy();
     });
 
     it("shows an empty-state line when every counted brew is untagged", async () => {
@@ -279,7 +279,11 @@ describe("BeanProfileDeck", () => {
 
         expect(screen.getByText("No brews tagged yet. Tag a brew to see what this recipe does best."))
             .toBeTruthy();
-        expect(screen.getByLabelText("Not tagged")).toHaveTextContent(/4 brews/);
+        // And no NOT TAGGED row under it. A deck made only of that row, below
+        // a line of prose saying there is nothing to show, is the deck the
+        // prose exists instead of.
+        expect(screen.queryByLabelText(/^Not tagged/)).toBeNull();
+        expect(screen.queryAllByTestId("bean-profile-row")).toHaveLength(0);
     });
 
     it("calls onShowAll from the expander", async () => {
@@ -317,5 +321,60 @@ describe("BeanProfileDeck", () => {
             expect(line.props.accessibilityRole).not.toBe("button");
             expect(line.props.onPress).toBeUndefined();
         }
+    });
+});
+
+describe("BeanProfileDeck: what a screen reader hears", () => {
+    it("speaks the untagged row's count and average, not just its name", async () => {
+        // A grouped row replaces its children's spoken text with its label, so
+        // a label of "Not tagged" alone hands a screen reader the one row that
+        // is all evidence and none of the evidence.
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:     [row()],
+                    untagged: {brews: 9, rated: 3, avgRating: 3.9},
+                    counted:  18
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByLabelText("Not tagged, 9 brews, rated 3.9 from 3 rated brews"))
+            .toBeTruthy();
+    });
+
+    it("says a row is not rated rather than reading it a 0.0", async () => {
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:     [row()],
+                    untagged: {brews: 2, rated: 0, avgRating: 0},
+                    counted:  11
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByLabelText("Not tagged, 2 brews, not rated")).toBeTruthy();
+    });
+
+    it("counts a single rated brew in the singular", async () => {
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:     [row()],
+                    untagged: {brews: 1, rated: 1, avgRating: 4},
+                    counted:  10
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByLabelText("Not tagged, 1 brew, rated 4.0 from 1 rated brew"))
+            .toBeTruthy();
     });
 });

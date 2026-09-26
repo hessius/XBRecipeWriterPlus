@@ -729,6 +729,10 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     useFocusEffect(
         React.useCallback(() => {
             library.refresh();
+            // The bean picker offers what the user's own brews carry, and they
+            // have been brewing, rating and deleting on screens this one stays
+            // mounted behind.
+            beanFilters.refresh();
             // Back from the editor, so the next recipe to arrive is a new
             // journey and may open one of its own.
             lastEditorPushAt = 0;

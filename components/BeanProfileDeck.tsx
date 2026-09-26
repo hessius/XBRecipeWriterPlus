@@ -34,6 +34,11 @@ export function BeanProfileDeck({profile, onShowAll, accent = palette.info}: Pro
     const rows = rankProfileRows(profile.rows).slice(0, PROFILE_CAP);
     const showAll = profile.rows.length > PROFILE_CAP;
     const hasUntagged = profile.untagged.brews > 0;
+    // The pinned row is drawn only alongside tagged rows. On a recipe whose
+    // every brew is untagged the deck would otherwise be that one row under a
+    // line of prose saying there is nothing to show, which is the deck the
+    // prose exists instead of.
+    const pinUntagged = hasUntagged && rows.length > 0;
 
     return (
         <DeckSection title={BEAN_PROFILE_TITLE} testID="bean-profile-deck">
@@ -71,7 +76,7 @@ export function BeanProfileDeck({profile, onShowAll, accent = palette.info}: Pro
                     </XStack>
                 )}
 
-                {hasUntagged && (
+                {pinUntagged && (
                     <YStack gap="$1.5">
                         <XStack height={1} backgroundColor={palette.line}/>
                         <BeanProfileRow

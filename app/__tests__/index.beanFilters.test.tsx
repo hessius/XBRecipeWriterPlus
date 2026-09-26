@@ -106,10 +106,15 @@ let mockBeanVocabulary = [
     {field: "process" as ProfileField, value: "Natural", recipes: 1}
 ];
 
+const mockVocabularyRead = jest.fn();
+
 jest.mock("@/library/BrewDatabase", () => ({
     __esModule: true,
     default:    jest.fn().mockImplementation(() => ({
-        beanVocabulary: () => mockBeanVocabulary
+        beanVocabulary: () => {
+            mockVocabularyRead();
+            return mockBeanVocabulary;
+        }
     }))
 }));
 
@@ -340,5 +345,40 @@ describe("HomeScreen bean filters: the rated switch remembers itself", () => {
 
         expect(screen.getByLabelText("Highly rated only").props.accessibilityState)
             .toEqual(expect.objectContaining({checked: true}));
+    });
+});
+
+describe("HomeScreen bean filters: the vocabulary follows the user", () => {
+    beforeEach(() => {
+        mockPush.mockClear();
+        mockVocabularyRead.mockClear();
+        mockBeanVocabulary = [
+            {field: "process", value: "Natural", recipes: 1}
+        ];
+        mockShareIntentState = {
+            hasShareIntent:   false,
+            shareIntent:      {},
+            resetShareIntent: jest.fn()
+        };
+        jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it("re-reads it when the screen takes focus", async () => {
+        // This route stays mounted while the user brews, rates and deletes on
+        // other screens. A vocabulary read once at mount is stale by the time
+        // they come back, and the bean they just brewed is missing from the
+        // picker until the app is restarted.
+        await renderWithProviders(
+            <HomeScreen
+                db={store([named("Natural Ethiopia")])}
+                settings={new Settings(memoryStorage())}/>
+        );
+
+        await waitFor(() =>
+            expect(mockVocabularyRead.mock.calls.length).toBeGreaterThan(1));
     });
 });

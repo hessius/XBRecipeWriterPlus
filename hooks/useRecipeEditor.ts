@@ -150,6 +150,16 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     const openedInLibrary = useRef<boolean | null>(null);
 
+    /**
+     * Whether a metadata write has failed and has not since succeeded.
+     *
+     * Metadata is excluded from the dirty projection because it writes itself,
+     * and that exclusion is only true while the write works. A failed write
+     * leaves the name, note or tags on the bench and nowhere else, and without
+     * this the leave guard would wave the user out over the top of them.
+     */
+    const metadataUnsaved = useRef(false);
+
     /** Told by the ID field when it gains or loses focus; flushes on blur. */
     const setXidFocused = (focused: boolean) => {
         xidFocusedRef.current = focused;
@@ -460,9 +470,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         const metadataWritesItself = recipeInLibrary();
         if (openedAs.current === null) {
             openedAs.current = snapshotForSave(recipe, metadataWritesItself);
-            return false;
+            return metadataUnsaved.current;
         }
-        return editsPendingSave(recipe, openedAs.current, metadataWritesItself);
+        return metadataUnsaved.current
+            || editsPendingSave(recipe, openedAs.current, metadataWritesItself);
     }
 
     function saveRecipe() {
@@ -512,6 +523,12 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      * import to the library behind the user's back -- the thing `onSharePress`
      * takes pains to avoid. On those recipes the metadata travels with SAVE,
      * and the leave guard is what keeps it from being lost.
+     *
+     * A failed write is caught rather than thrown, because the only caller
+     * that can reach it is a promise continuation the dispatcher does not
+     * await, so a throw would be an unhandled rejection and the user would be
+     * told nothing. It is reported and the recipe is marked unsaved, which
+     * puts the leave guard back in front of the edit that did not land.
      */
     function saveMetadata() {
         if (!recipe) return;
@@ -522,7 +539,16 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         saved.name = recipe.name;
         saved.description = recipe.description;
         saved.setTags(recipe.tags);
-        store.updateRecipe(saved.uuid, saved);
+        try {
+            store.updateRecipe(saved.uuid, saved);
+            metadataUnsaved.current = false;
+        } catch {
+            metadataUnsaved.current = true;
+            notify({
+                tone:    "error",
+                message: "Could not save that. Use SAVE to try again."
+            });
+        }
     }
 
     /**

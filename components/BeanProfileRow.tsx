@@ -26,6 +26,20 @@ type Props = {
     accessibilityLabel?: string;
 };
 
+/**
+ * The figures as a sentence, for a row that is spoken as one thing.
+ *
+ * A grouped row replaces its children's spoken text with its label, so the
+ * count and the average have to be in the label or a screen reader will not
+ * hear them at all. `4.5 · 11` is a glance, not a sentence: the separator is
+ * silent and the two numbers arrive with nothing to tell them apart.
+ */
+function spokenFigures(rating: number, rated: number): string {
+    if (rated === 0) return "not rated";
+    const brews = rated === 1 ? "1 rated brew" : `${rated} rated brews`;
+    return `rated ${rating.toFixed(1)} from ${brews}`;
+}
+
 export function BeanProfileRow({
     field, value, brews, rating, rated, accent, accessibilityLabel
 }: Props) {
@@ -41,7 +55,9 @@ export function BeanProfileRow({
         <XStack
             testID="bean-profile-row"
             accessible={accessibilityLabel !== undefined}
-            accessibilityLabel={accessibilityLabel}
+            accessibilityLabel={accessibilityLabel === undefined
+                ? undefined
+                : `${accessibilityLabel}, ${value}, ${spokenFigures(rating, rated)}`}
             minHeight={CHIP_HEIGHT}
             alignItems="center"
             gap="$2">

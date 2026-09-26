@@ -555,10 +555,20 @@ class BrewDatabase {
      * deterministically rather than letting SQLite hand back whichever row it
      * reached first.
      *
-     * Origin is the recorded column only and deliberately does not follow
-     * `resolvedOrigin`'s fallback into the stored pod blob. The library filter
-     * compares the column, so a row derived from the blob would be a row the
-     * filter cannot reproduce, and tapping it would open an empty library.
+     * Every field is the recorded column only. Neither `resolvedOrigin` nor
+     * `resolvedProcess` is consulted, so a pod's origin or process joins the
+     * ledger only once the user has taken it onto the brew. The library filter
+     * compares the column, so a row derived from the stored pod blob would be
+     * a row the filter cannot reproduce, and tapping it would open an empty
+     * library.
+     *
+     * Consistency across all three readers is what makes that safe: this
+     * query, `beanVocabulary` and `resolveBeanFilter` all read the column, so
+     * a value is either offered, grouped and findable, or none of the three.
+     * Teaching one of them the fallback would be the bug. Teaching all three
+     * is the open question, and it is a design question rather than an
+     * oversight: the blob is rebuilt by a backup restore, so a ledger drawn
+     * through it would not survive one intact.
      */
     public beanProfileFor(recipeUuid: string): BeanProfile {
         const presets = BEAN_FIELDS.map((field) => `
