@@ -59,7 +59,7 @@ export function BeanProfileDeck({profile, onShowAll, accent = palette.info}: Pro
                     <XStack
                         accessible
                         accessibilityRole="button"
-                        accessibilityLabel="Show all brewed-with rows"
+                        accessibilityLabel="Show all brewed with rows"
                         onPress={onShowAll}
                         minHeight={32}
                         alignItems="center"

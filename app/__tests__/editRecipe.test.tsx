@@ -421,7 +421,7 @@ describe("the editor", () => {
         expect(content().props.accessibilityElementsHidden).toBe(false);
 
         await act(async () => {
-            await fireEvent.press(screen.getByLabelText("Show all brewed-with rows"));
+            await fireEvent.press(screen.getByLabelText("Show all brewed with rows"));
             jest.advanceTimersByTime(500);
         });
 

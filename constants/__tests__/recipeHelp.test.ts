@@ -113,3 +113,35 @@ describe("bypass help", () => {
         expect(RECIPE_HELP.bypass.detail).toContain("card");
     });
 });
+
+describe("brewed with help", () => {
+    it("offers a long form, so the sheet lists it", () => {
+        expect(RECIPE_HELP.brewedWith.detail).toBeDefined();
+        expect(DETAILED_TOPICS).toContain("brewedWith");
+    });
+
+    it("states the floor of 3 rated brews and the 4 star rule", () => {
+        // The floor lives here and nowhere else. The switch caption in the
+        // filter sheet states the rule the user is choosing; the floor is a
+        // guard on it, and a caption carrying both reads as a warning.
+        const detail = RECIPE_HELP.brewedWith.detail ?? "";
+        expect(detail).toMatch(/3 rated brews/);
+        expect(detail).toMatch(/4 stars/);
+    });
+
+    it("says a cancelled brew is left out", () => {
+        expect(RECIPE_HELP.brewedWith.detail).toMatch(/cancelled/);
+    });
+
+    it("writes no dashes into the copy a user reads", () => {
+        // Dashes read as AI copy, so the house rule bans them from strings the
+        // user sees. Checked across every entry rather than just the new one:
+        // a scan that only covers the copy you just wrote stops being a scan.
+        for (const topic of Object.keys(RECIPE_HELP) as HelpTopic[]) {
+            const entry = RECIPE_HELP[topic];
+            for (const text of [entry.title, entry.hint, entry.question, entry.detail]) {
+                expect(text ?? "").not.toMatch(/[—–]/);
+            }
+        }
+    });
+});

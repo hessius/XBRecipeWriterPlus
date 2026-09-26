@@ -539,6 +539,56 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 
 ---
 
+## Recipe editor — brewed with
+
+`components/BeanProfileDeck.tsx`, `components/BeanProfileRow.tsx` and
+`components/BeanProfileSheet.tsx`, on the editor's ABOUT deck. The figures are
+derived from brew rows at query time and nothing here is written onto a recipe.
+
+The deck is a ledger and never a verdict: it says what was brewed and how those
+brews went, and leaves the reading to the person who brewed them. No row is a
+control, which is why the only accessible button in the block is the expander.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `profile.title` | `components/BeanProfileDeck.tsx:16` | Doto deck title, under the brew history section. | `BREWED WITH` |
+| `profile.subtitle` | `components/BeanProfileDeck.tsx:28` | Doto sub-line. Counts tagged brews against every counted brew, so the deck cannot quietly disagree with the card's own brew count. | `15 OF 24 BREWS TAGGED` |
+| `profile.empty` | `components/BeanProfileDeck.tsx:18` | Inter line when the recipe has counted brews but none of them carry a bean tag. A deck consisting only of a NOT TAGGED row would be a strange thing to show. | `No brews tagged yet. Tag a brew to see what this recipe does best.` |
+| `profile.showAll` | `components/BeanProfileDeck.tsx:69` | Doto expander, shown only when there are more rows than the cap of five. The number is the total, not the hidden count. | `SHOW ALL 8 ›` |
+| `profile.showAll.a11y` | `components/BeanProfileDeck.tsx:62` (a11y) | (a11y) The expander's label. | `Show all brewed with rows` |
+| `profile.untagged` | `components/BeanProfileDeck.tsx:19` | Doto field column of the pinned row below the rule. Outside the cap. | `NOT TAGGED` |
+| `profile.untagged.a11y` | `components/BeanProfileDeck.tsx:84` (a11y) | (a11y) The pinned row's label. Not a button: there is no filter for the absence of a tag. | `Not tagged` |
+| `profile.untagged.count` | `components/BeanProfileDeck.tsx` | The untagged row's count, in the value column, because that row has no field of its own. Singular below two. | `9 brews` / `1 brew` |
+| `profile.field.*` | `library/beanProfile.ts` | Doto field column. FERMENT rather than FERMENTATION because the column is a fixed width beside a value that is often long. TAG for a custom tag, because that is what the user called it when they typed it. | `ORIGIN` `ROAST` `PROCESS` `FERMENT` `TAG` |
+
+## Home / recipe library — bean filters
+
+`components/BeanFilterSheet.tsx` and the `BEANS` chip in `app/index.tsx`.
+
+The sheet offers only values the user's own history contains. There is no text
+field: typing a value again would reintroduce the splitting the ledger
+tolerates, and would let someone filter on a value no brew carries and get an
+empty library with nothing to explain it.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `beans.chip` | `app/index.tsx:403` | Doto rail chip with a trailing caret. Opens the sheet rather than applying a filter, following the same interception the SELECTED chip uses. | `BEANS` |
+| `beans.sheet.title` | `components/BeanFilterSheet.tsx:118` | Doto sheet title. | `BEANS` |
+| `beans.switch` | `components/BeanFilterSheet.tsx:124` | Inter label on the one switch, which applies to the whole selection. | `Highly rated only` |
+| `beans.switch.caption` | `components/BeanFilterSheet.tsx:126` | Inter caption. States the rule the user is choosing. The floor of three rated brews is a guard on that rule and lives in the help sheet, because a caption carrying both reads as a warning. | `Average 4★ or better.` |
+| `beans.empty` | `components/BeanFilterSheet.tsx:143` | Inter line when no counted brew carries any bean value. Drawn instead of the field headings, so nobody meets an empty Ferment heading. | `No tagged brew history yet. Tag a brew to filter by beans.` |
+| `beans.chip.active` | `library/beanFilters.ts` | Doto chip for an applied filter, tappable to remove. A preset is raised to caps because those are the app's words; an origin and a custom tag keep the spelling they were given. | `NATURAL` / `Ethiopia Guji` |
+| `beans.chip.rated` | `library/beanFilters.ts` | The same chip when the highly rated switch is on. | `NATURAL · 4★+` |
+
+## Recipe editor — brewed with help
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `help.brewedWith.title` | `constants/recipeHelp.ts` | Help sheet topic title. | `Brewed with` |
+| `help.brewedWith.hint` | `constants/recipeHelp.ts` | Short note. | `What your brews of this recipe carried, and how they went.` |
+| `help.brewedWith.question` | `constants/recipeHelp.ts` | How the help sheet heads the long form. | `Where do the brewed with figures come from?` |
+| `help.brewedWith.detail` | `constants/recipeHelp.ts` | The long form. The only place the floor of three rated brews is stated, and the place that explains why a good looking row can be missing from the filter. | See `constants/recipeHelp.ts` |
+
 ## Brew history
 
 `app/brewHistory.tsx` and `components/BrewHistoryRow.tsx`.

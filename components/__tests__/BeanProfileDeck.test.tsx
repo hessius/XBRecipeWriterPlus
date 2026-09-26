@@ -295,7 +295,7 @@ describe("BeanProfileDeck", () => {
             />
         );
 
-        await fireEvent.press(screen.getByLabelText("Show all brewed-with rows"));
+        await fireEvent.press(screen.getByLabelText("Show all brewed with rows"));
 
         expect(onShowAll).toHaveBeenCalledTimes(1);
     });

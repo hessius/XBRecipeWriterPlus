@@ -197,6 +197,20 @@ const ENTRIES = {
     },
     bypassTemperature: {
         title: "Temperature"
+    },
+    brewedWith: {
+        title: "Brewed with",
+        hint:  "What your brews of this recipe carried, and how they went.",
+        question: "Where do the brewed with figures come from?",
+        detail: "Every figure is read from your own brews, not from anything " +
+                "saved on the recipe, so rating a brew changes them straight " +
+                "away. Only finished brews count. A brew you cancelled is " +
+                "left out entirely. A row shows how many brews carried that " +
+                "value and the average of the ones you rated, so a row can " +
+                "have brews behind it and no average yet. In the library, a " +
+                "highly rated filter asks for an average of 4 stars or " +
+                "better over at least 3 rated brews, which is why a good " +
+                "looking row can still be missing from it."
     }
 } as const satisfies Record<string, HelpEntry>;
 
