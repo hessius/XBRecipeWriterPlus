@@ -106,6 +106,33 @@ describe("useRecipeEditor bypass", () => {
         expect(result.current.recipe?.bypassVolume).toBe(500);
     });
 
+    it("clamps the temperature to the bypass range", async () => {
+        // `Machine.brew` clamps again before it builds the frame, but a value
+        // stored out of range is wrong long before it is sent: it is drawn in
+        // the bypass box, carried in a share link, and read back on load.
+        const {result} = await editorFor(recipeWithBypass());
+
+        await act(async () => { result.current.editBypass("temperature", -5); });
+        expect(result.current.recipe?.bypassTemp).toBe(39);
+
+        await act(async () => { result.current.editBypass("temperature", 500); });
+        expect(result.current.recipe?.bypassTemp).toBe(99);
+    });
+
+    it("seeds the default when the last stage has no temperature set", async () => {
+        // `Pour.temperature` is -1 until someone sets it, and the last stage
+        // exists, so `?.` succeeds and a nullish guard never fires. An unset
+        // stage has no temperature to copy, which is the case the constant is
+        // there for.
+        const recipe = recipeEndingAt(88);
+        recipe.pours.forEach((pour) => { pour.temperature = -1; });
+        const {result} = await editorFor(recipe);
+
+        await act(async () => { result.current.setBypassEnabled(true); });
+
+        expect(result.current.recipe?.bypassTemp).toBe(85);
+    });
+
     it("never lets bypass water enter the pour-sum invariant", async () => {
         // The machine refuses a recipe whose stages do not add up to
         // dose x ratio. Bypass is dispensed outside that sum, so turning it on

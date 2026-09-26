@@ -3,6 +3,7 @@ import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
 import {podCoffeeFromStored, type PodCoffee} from "./podCoffee";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
+import {BYPASS_DEFAULT_TEMPERATURE, isUsableBypassTemp} from "./bypassLimits";
 import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
 
@@ -207,7 +208,7 @@ class Recipe {
      */
     public bypassEnabled: boolean = false;
     public bypassVolume: number = 0;   // millilitres
-    public bypassTemp: number = 85;    // degrees Celsius
+    public bypassTemp: number = BYPASS_DEFAULT_TEMPERATURE;   // degrees Celsius
     /**
      * The canonical payload that produced `shareUrl`.
      *
@@ -365,7 +366,15 @@ class Recipe {
             // old records.
             this.bypassEnabled = jsonRecipe.bypassEnabled ?? false;
             this.bypassVolume  = jsonRecipe.bypassVolume  ?? 0;
-            this.bypassTemp    = jsonRecipe.bypassTemp    ?? 85;
+            // Not `??`: a record can carry a temperature the kettle cannot do,
+            // either 0 from an old write or the -1 the editor could once copy
+            // from a stage whose temperature was never set. `Machine.brew`
+            // clamps too, but only for the brew it is building; a stored
+            // sentinel that survived here would still be drawn in the bypass
+            // box, shared in a link, and handed to every other reader.
+            this.bypassTemp    = isUsableBypassTemp(jsonRecipe.bypassTemp)
+                ? jsonRecipe.bypassTemp!
+                : BYPASS_DEFAULT_TEMPERATURE;
         }
 
     }

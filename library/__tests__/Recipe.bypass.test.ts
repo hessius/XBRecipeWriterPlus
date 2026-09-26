@@ -82,6 +82,28 @@ describe('bypass water persistence', () => {
         expect(duplicate.bypassVolume).toBe(30);
         expect(duplicate.bypassTemp).toBe(80);
     });
+
+    it('falls back to the default for a stored temperature the kettle cannot do', () => {
+        // `??` only catches null and undefined, so a record carrying 0, or the
+        // -1 the editor could once seed from an unset stage, kept its value and
+        // went on to the hardware. Out of range is out of range whatever wrote
+        // it; the default is the only honest answer left.
+        for (const stored of [0, -1, 120, 38]) {
+            const recipe = new Recipe(undefined, legacyJson({
+                bypassEnabled: true,
+                bypassVolume:  30,
+                bypassTemp:    stored,
+            }));
+            expect(recipe.bypassTemp).toBe(85);
+        }
+    });
+
+    it('keeps a stored temperature that is in range', () => {
+        for (const stored of [39, 70, 99]) {
+            const recipe = new Recipe(undefined, legacyJson({bypassTemp: stored}));
+            expect(recipe.bypassTemp).toBe(stored);
+        }
+    });
 });
 
 describe('bypass and card bytes', () => {
