@@ -17,6 +17,7 @@ jest.mock("expo-sqlite", () => ({
 /* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
 import Recipe from "@/library/Recipe";
+import {resolveLibraryFilter} from "@/library/libraryFilters";
 import type {LibraryQuery} from "@/library/libraryQuery";
 /* eslint-enable import/first */
 
@@ -142,6 +143,43 @@ describe("a blob that parses but cannot be used", () => {
         insertRawBlob("broken-uuid", brokenBlob());
 
         expect(() => db.retrieveAllRecipes()).toThrow();
+    });
+
+    /**
+     * The shelf grid's read, which was the one read path still hydrating past
+     * the guard (#155).
+     *
+     * `MINE` is the shelf that finds such a row: an unindexed blob has a NULL
+     * `sharedByKey`, which is exactly what the clause asks for, and a NULL
+     * `sortName` puts it first under the shelf's own `ORDER BY`. `MINE` is
+     * always in `shelfIdsOf`, so this ran on every library render.
+     *
+     * The mark is read from the members, so the assertion is on using them
+     * rather than on the call returning. Hydrating and then throwing at the
+     * first `displayName()` is the failure this is about.
+     */
+    it("is skipped by the shelf grid rather than crashing it", () => {
+        const db = new RecipeDatabase();
+        db.insertRecipe(recipeNamed("Alpha"));
+        insertRawBlob("broken-uuid", brokenBlob());
+
+        const members = db.shelfMembers(["mine"], resolveLibraryFilter);
+
+        expect(members.mine.map((recipe) => recipe.displayName())).toEqual(["Alpha"]);
+    });
+
+    it("does not spend a shelf's member cap on a row it cannot draw", () => {
+        // The cap is applied in SQL, so an unreadable row taken by the LIMIT
+        // and dropped afterwards costs the tile one of its three pictures. It
+        // sorts first, on a NULL `sortName`, so it is always the one taken.
+        const db = new RecipeDatabase();
+        ["Alpha", "Bravo"].forEach((name) => db.insertRecipe(recipeNamed(name)));
+        insertRawBlob("broken-uuid", brokenBlob());
+
+        const members = db.shelfMembers(["mine"], resolveLibraryFilter, 2);
+
+        expect(members.mine.map((recipe) => recipe.displayName()))
+            .toEqual(["Alpha", "Bravo"]);
     });
 });
 

@@ -49,6 +49,17 @@ function hydrateRow(uuid: string, recipeJSON: string): Recipe | null {
     }
 }
 
+/**
+ * How many extra rows a shelf reads so the guarded hydrate can drop some.
+ *
+ * An unreadable row sorts first, on a NULL `sortName`, so without slack it is
+ * always the one the cap spends. Three, the same as the member cap: a shelf
+ * whose first six rows include four the app cannot read has a problem a
+ * picture will not fix, and the library already says so through
+ * `countUnreadableRecipes` and offers the sweep.
+ */
+const UNREADABLE_ALLOWANCE = 3;
+
 class RecipeDatabase {
     private db: SQLite.SQLiteDatabase;
     private inTransaction = false;
@@ -707,6 +718,20 @@ class RecipeDatabase {
      * An unknown id is skipped rather than thrown on, unlike `countRecipesByFilter`:
      * a count that silently answered zero would misreport the library, whereas a
      * missing mark only costs a tile its picture.
+     *
+     * Hydrated through the same guard every other read path uses. `Recipe`
+     * preserves some wrong field types rather than coercing them, so a blob
+     * carrying `"name": 5` constructs without complaint and throws at the first
+     * `displayName()`, which the mark calls on every member it draws. This
+     * read was the one that still hydrated past the guard, and MINE is the
+     * shelf that finds such a row: an unindexed blob has a NULL `sharedByKey`,
+     * which is what that clause asks for, and a NULL `sortName` puts it first.
+     *
+     * The cap stays in SQL, widened by `UNREADABLE_ALLOWANCE` rather than
+     * dropped. Reading the whole shelf and taking three would cost a library of
+     * two hundred a full read per shelf on the drawing thread, nineteen times
+     * over; reading a few extra rows costs nothing and is what lets the guard
+     * skip a bad one without the tile losing a picture it could have drawn.
      */
     public shelfMembers(
         ids: readonly string[],
@@ -718,11 +743,17 @@ class RecipeDatabase {
             const clause = resolveFilter(id);
             if (clause === null) continue;
             const rows = this.db.getAllSync(
-                `SELECT recipeJSON FROM recipes WHERE (${clause.where})
+                `SELECT uuid, recipeJSON FROM recipes WHERE (${clause.where})
                  ORDER BY sortName ASC LIMIT ?;`,
-                [...(clause.params ?? []), perShelf]
-            ) as {recipeJSON: string}[];
-            members[id] = rows.map((row) => new Recipe(undefined, row.recipeJSON));
+                [...(clause.params ?? []), perShelf + UNREADABLE_ALLOWANCE]
+            ) as {uuid: string; recipeJSON: string}[];
+            const drawable: Recipe[] = [];
+            for (const row of rows) {
+                if (drawable.length >= perShelf) break;
+                const recipe = hydrateRow(row.uuid, row.recipeJSON);
+                if (recipe !== null) drawable.push(recipe);
+            }
+            members[id] = drawable;
         }
         return members;
     }
