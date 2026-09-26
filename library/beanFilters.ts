@@ -64,6 +64,14 @@ export type BeanFilter = {
  * A literal map, and the reason no input can reach the statement's text. The
  * names happen to match their fields today; writing them out is what stops that
  * being read as a rule.
+ *
+ * No test can tell this map from `b.${field}`, and that is worth saying out
+ * loud rather than leaving somebody to discover it: replacing it with the field
+ * name kills nothing in the suite, because the four names coincide and the
+ * field has already been narrowed to a closed list of five by the time it is
+ * read. So this is a guard against a future field whose column is named
+ * differently, not something the tests enforce. Deleting it would not fail CI.
+ * It would simply move the boundary somewhere less obvious.
  */
 const COLUMN: Record<BeanField, string> = {
     origin: "origin",
