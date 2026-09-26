@@ -2,7 +2,8 @@ import {useCallback, useEffect, useRef, useState} from "react";
 
 import {notify} from "@/components/XbrwToast";
 import {
-    BYPASS_DEFAULT_TEMPERATURE, BYPASS_DEFAULT_VOLUME, clampBypassVolume
+    BYPASS_DEFAULT_TEMPERATURE, BYPASS_DEFAULT_VOLUME, clampBypassVolume,
+    clampBypassTemp, isUsableBypassTemp
 } from "@/library/bypassLimits";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
@@ -782,11 +783,13 @@ function applyBypassEnabled(recipe: Recipe, on: boolean) {
         // The temperature the brew ended on, rather than a constant that has
         // nothing to do with this recipe. Bypass water goes into the cup at the
         // end, straight after the last stage, so that is the number already in
-        // mind -- and someone brewing a cool finish does not want the dilution
+        // mind, and someone brewing a cool finish does not want the dilution
         // arriving hotter than the coffee. The constant is the fallback for a
-        // recipe with no stages, which has no last temperature to copy.
-        recipe.bypassTemp   = recipe.pours.at(-1)?.temperature
-            ?? BYPASS_DEFAULT_TEMPERATURE;
+        // recipe with no stages, and for one whose last stage has no
+        // temperature set: `Pour.temperature` is -1 until someone sets it, and
+        // a nullish guard would have copied that sentinel through.
+        const last = recipe.pours.at(-1)?.temperature;
+        recipe.bypassTemp = isUsableBypassTemp(last) ? last! : BYPASS_DEFAULT_TEMPERATURE;
     }
     recipe.bypassEnabled = on;
 }
@@ -799,7 +802,7 @@ function applyFavouriteToggle(recipe: Recipe) {
 /** Write one bypass value. Module scope, as above. */
 function applyBypassField(recipe: Recipe, field: BypassField, value: number) {
     if (field === "volume") recipe.bypassVolume = clampBypassVolume(value);
-    else recipe.bypassTemp = Math.round(value);
+    else recipe.bypassTemp = clampBypassTemp(value);
 }
 
 /** Whether a recipe has the material a given revert source needs. */
