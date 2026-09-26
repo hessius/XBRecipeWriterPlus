@@ -3,6 +3,7 @@ import {useState} from "react";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {isRating, unobservedBrew} from "@/library/brew/BrewRecord";
 import BrewDatabase, {type BrewSummary, type StoredBrew} from "@/library/BrewDatabase";
+import type {BeanProfile} from "@/library/beanProfile";
 
 /** The part of `BrewDatabase` history reads. Injected, so tests need no SQLite. */
 export type HistoryStore = {
@@ -26,6 +27,7 @@ export function sharedBrewDatabase(): BrewDatabase {
 
 /** The one method the recipe screen's summary needs. Injected by its tests. */
 export type BrewSummaryStore = {summaryFor: (recipeUuid: string) => BrewSummary};
+export type BeanProfileStore = {beanProfileFor: (recipeUuid: string) => BeanProfile};
 
 /**
  * What rating a recipe needs of the database. Injected by tests.
@@ -86,6 +88,49 @@ export function useRecipeRating(
     }
 
     return {summary, rate};
+}
+
+/**
+ * A recipe's bean profile, and a way to ask for it again.
+ *
+ * Same shape as `useRecipeRating` above, and for the same two reasons: reading
+ * SQLite during render is impure, and seeding state from an effect is what
+ * `react-hooks/set-state-in-effect` exists to stop. So the first read happens
+ * in a lazy initialiser, and every later one in the handler of the event that
+ * could have changed the answer.
+ *
+ * The only such event is a rating. Tagging a brew happens on the brew record
+ * screen, and coming back from it remounts this.
+ *
+ * The changed-uuid branch is the exception, and it is worth being straight
+ * about: it does read the database while rendering, and it does call a setter
+ * while rendering. That is React's own "adjusting state when a prop changes",
+ * and it is the only door left open here. An effect is forbidden outright, and
+ * returning last recipe's profile for one frame would put another recipe's
+ * figures on this recipe's card. The read costs one query and only happens on
+ * the render where the uuid actually changed, which in this app means the
+ * editor being pointed at a different recipe without unmounting.
+ */
+export function useBeanProfile(
+    recipeUuid: string,
+    store: BeanProfileStore = sharedBrewDatabase()
+): {profile: BeanProfile; refresh: () => void} {
+    const [reading, setReading] = useState<{uuid: string; profile: BeanProfile}>(
+        () => ({uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)})
+    );
+
+    const current = reading.uuid === recipeUuid
+        ? reading
+        : {uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)};
+    if (current !== reading) {
+        setReading(current);
+    }
+
+    function refresh(): void {
+        setReading({uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)});
+    }
+
+    return {profile: current.profile, refresh};
 }
 
 /** The two writes a judgement makes. Injected by tests. */

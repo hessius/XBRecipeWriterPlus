@@ -3,8 +3,14 @@ import {Text} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import FieldRow from "@/components/FieldRow";
+import {RECIPE_HELP} from "@/constants/recipeHelp";
 import SegmentedRow from "@/components/SegmentedRow";
 import {renderWithProviders} from "@/test-utils/render";
+
+// The words themselves are inventoried in docs/copy.md. These tests assert the
+// wiring, so they read the hint rather than restating it; `String` because the
+// field is optional on `HelpEntry` and a missing hint should fail loudly.
+const RATIO_HINT = String(RECIPE_HELP.ratio.hint);
 
 describe("FieldRow", () => {
     it("draws the label and the value", async () => {
@@ -23,7 +29,7 @@ describe("FieldRow", () => {
 
         // Nine of these turned the deck into prose on a phone and pushed the
         // values off the bottom, so the hint is off unless the setting is on.
-        expect(screen.queryByText("Whole numbers only. Sets the target volume."))
+        expect(screen.queryByText(RATIO_HINT))
             .toBeNull();
     });
 
@@ -32,7 +38,7 @@ describe("FieldRow", () => {
             <FieldRow topic="ratio" showHint><Text>16</Text></FieldRow>
         );
 
-        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+        expect(screen.getByText(RATIO_HINT))
             .toBeTruthy();
     });
 

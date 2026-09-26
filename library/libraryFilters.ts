@@ -1,4 +1,5 @@
 import type {FilterClause} from "./libraryQuery";
+import {beanFilterLabel, parseBeanFilterId, resolveBeanFilter} from "./beanFilters";
 import {CUP_TYPE} from "./Recipe";
 import {tagKey} from "./tagKey";
 
@@ -329,7 +330,8 @@ export function authorFromFilterId(id: string): string | null {
 }
 
 /**
- * The resolver for every filter the library can apply: a stock id, or a tag.
+ * The resolver for every filter the library can apply: a stock id, a tag, an
+ * author or the brew-derived bean namespace.
  *
  * A tag becomes an EXISTS over `recipe_tags` matched on `tagKey`, the folded
  * form, so the shelf holds the same recipes the tag search finds and two
@@ -338,6 +340,14 @@ export function authorFromFilterId(id: string): string | null {
  * the text: it is the one value here a person authored.
  */
 export function resolveLibraryFilter(id: string): FilterClause | null {
+    // Bean filters first, and they own their own refusals: a value outside the
+    // closed vocabulary returns null from here rather than falling through to
+    // the author and tag branches, which would read `bean:process:washed` as
+    // neither and hand it to the stock lookup to refuse for the wrong reason.
+    const bean = resolveBeanFilter(id);
+    if (bean !== null) return bean;
+    if (parseBeanFilterId(id) !== null) return null;
+
     const author = authorFromFilterId(id);
     if (author !== null) {
         // Matched on the folded column rather than on `sharedBy COLLATE
@@ -381,11 +391,19 @@ export function resolveLibraryFilter(id: string): FilterClause | null {
  * whose only recipe was, resolves to a clause matching nothing: an empty shelf
  * the user can see and close, not a crash and not a chip that vanishes without
  * explaining itself.
+ *
+ * A bean id is the exception, and is asked to resolve rather than to parse.
+ * Every other namespace here resolves whatever it can parse, so shape is the
+ * whole test; `resolveBeanFilter` also refuses a preset outside its closed
+ * vocabulary, and a parseable id it refuses would pass this gate and reach
+ * `buildLibraryQuery`'s throw, which is reserved for the vocabulary and the
+ * resolver genuinely disagreeing.
  */
 export function asLibraryFilters(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter((id) => typeof id === "string"
         && (isStockFilter(id)
+            || resolveBeanFilter(id) !== null
             || tagFromFilterId(id) !== null
             || authorFromFilterId(id) !== null));
 }
@@ -399,6 +417,8 @@ export function asLibraryFilters(value: unknown): string[] {
  * are the app's words and this one is theirs.
  */
 export function filterLabel(id: string): string {
+    const bean = beanFilterLabel(id);
+    if (bean !== null) return bean;
     const author = authorFromFilterId(id);
     // "FROM" is the app's word and the name is the sharer's, so only the first
     // half is raised to Doto caps. The design's shelf table spells it this way.

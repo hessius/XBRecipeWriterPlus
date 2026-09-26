@@ -108,8 +108,18 @@ function batchEnvelope(index: number, flowSamples = 800): HandoffEnvelope {
     });
 }
 
+/**
+ * Deliberately built from scratch rather than from the encoder, so that
+ * "byte-for-byte stable" means something. Changing the wire format means
+ * changing this too, consciously.
+ *
+ * `mtime: 0` is part of that format now. It used to be absent from both sides,
+ * which read as agreement but was really two clocks that usually agreed: both
+ * stamped the current second, so the comparison held until a second boundary
+ * fell between them.
+ */
 function legacySingleUrl(envelope: HandoffEnvelope): string {
-    const encoded = Buffer.from(gzipSync(strToU8(JSON.stringify(envelope))))
+    const encoded = Buffer.from(gzipSync(strToU8(JSON.stringify(envelope)), {mtime: 0}))
         .toString("base64")
         .replace(/\+/g, "-")
         .replace(/\//g, "_")
@@ -242,6 +252,26 @@ describe("encodeHandoff", () => {
         expect(encoded.fidelity).toBe("none");
         expect(encoded.urlChars).toBeLessThanOrEqual(MAX_URL_CHARS);
         expect(decode(encoded.url)).toStrictEqual(original);
+    });
+
+    /**
+     * Encoded either side of a second boundary, because that is the only moment
+     * the defect showed: fflate stamps the wall clock into gzip's header, so the
+     * same brew produced a different URL depending on when it was asked. That
+     * turned a fixture comparison in `useBrewHandoff.test.ts` into a coin flip,
+     * and it would have made "has this brew already been sent" unanswerable by
+     * comparing exports.
+     */
+    it("encodes the same brew to the same URL whatever the clock says", () => {
+        const original = payload();
+
+        jest.useFakeTimers().setSystemTime(new Date("2026-09-20T10:00:00.000Z"));
+        const first = encodeHandoff(original);
+        jest.setSystemTime(new Date("2027-03-14T15:09:26.000Z"));
+        const second = encodeHandoff(original);
+        jest.useRealTimers();
+
+        expect(first.url).toBe(second.url);
     });
 });
 

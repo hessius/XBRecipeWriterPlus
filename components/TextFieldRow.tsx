@@ -1,6 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, TextInput} from "react-native";
-import {Input} from "tamagui";
 
 import FieldRow from "@/components/FieldRow";
 import {palette} from "@/constants/colors";
@@ -11,6 +10,7 @@ export type TextFieldRowProps = {
     label: string;
     initialValue: string;
     maxLength?: number;
+    placeholder?: string;
     autoCapitalize?: "none" | "characters";
     showHint: boolean;
     onCommit: (value: string) => void;
@@ -62,14 +62,14 @@ export type TextFieldRowProps = {
  * of the screen, which would remount it and drop the text mid-entry.
  */
 export default function TextFieldRow({
-    topic, label, initialValue, maxLength, autoCapitalize,
+    topic, label, initialValue, maxLength, placeholder, autoCapitalize,
     showHint, onCommit, onDraft,
     validate, invalidReason, onInvalidChange, onFocusChange, note
 }: TextFieldRowProps) {
     const [invalid, setInvalid] = useState(() => validate ? !validate(initialValue) : false);
     // The whole row focuses this, so a short or empty value no longer leaves a
     // wide strip of the row looking tappable while only the input responds.
-    const inputRef = useRef<React.ElementRef<typeof Input>>(null);
+    const inputRef = useRef<TextInput>(null);
 
     // Reports validity on mount. The row is keyed on the external-replacement
     // epoch by its call site, so a revert remounts the whole row and both the
@@ -99,19 +99,34 @@ export default function TextFieldRow({
         // or segmented row shares `FieldRow`, and a row-wide press there would
         // swallow the taps meant for the stepper's - and + controls.
         <Pressable accessible={false} testID={`field-row-${label}`}
-                   onPress={() => (inputRef.current as TextInput | null)?.focus()}>
+                   onPress={() => inputRef.current?.focus()}>
             <FieldRow topic={topic} showHint={showHint} note={note}
                       error={invalid ? invalidReason : undefined}>
                 {/* Not keyed here: the key belongs on the row, which is what owns
-                    the `invalid` state this input feeds. */}
-                <Input ref={inputRef} unstyled accessibilityLabel={label}
-                       defaultValue={initialValue} maxLength={maxLength}
-                       autoCapitalize={autoCapitalize} onChangeText={onChangeText}
-                       onFocus={() => onFocusChange?.(true)}
-                       onBlur={() => onFocusChange?.(false)}
-                       onEndEditing={(event) => onCommit(event.nativeEvent.text)}
-                       textAlign="right" minWidth={110} fontSize={16}
-                       color={invalid ? palette.danger : palette.text}/>
+                    the `invalid` state this input feeds.
+
+                    The placeholder is `dim`, not `muted`: it is the only thing
+                    naming what the field wants when the field is empty, and
+                    muted on raised is 3.55:1, under the 4.5:1 floor. */}
+                <TextInput ref={inputRef} accessibilityLabel={label}
+                           defaultValue={initialValue} maxLength={maxLength}
+                           placeholder={placeholder} placeholderTextColor={palette.dim}
+                           autoCapitalize={autoCapitalize} onChangeText={onChangeText}
+                           onFocus={() => onFocusChange?.(true)}
+                           onBlur={() => onFocusChange?.(false)}
+                           onEndEditing={(event) => onCommit(event.nativeEvent.text)}
+                           style={{
+                               minWidth:          110,
+                               textAlign:         "right",
+                               fontSize:          16,
+                               color:             invalid ? palette.danger : palette.text,
+                               backgroundColor:   palette.raised,
+                               borderColor:       palette.control,
+                               borderWidth:       1,
+                               borderRadius:      9,
+                               paddingHorizontal: 11,
+                               paddingVertical:   7
+                           }}/>
             </FieldRow>
         </Pressable>
     );

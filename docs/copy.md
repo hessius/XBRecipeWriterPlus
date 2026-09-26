@@ -289,7 +289,7 @@ lines — the cited line is the property's first line.
 | `help.sheet.title` | `components/HelpSheet.tsx:39` | Title of the help sheet. | `Help` |
 | `help.dose.title` | `constants/recipeHelp.ts:45` | Dose field label. | `Dose` |
 | `help.ratio.title` | `constants/recipeHelp.ts:48` | Ratio field label. | `Ratio` |
-| `help.ratio.hint` | `constants/recipeHelp.ts:49` | Ratio field hint. | `Whole numbers only. Sets the target volume.` |
+| `help.ratio.hint` | `constants/recipeHelp.ts:49` | Ratio field hint. | `Sets target volume. Cards use whole numbers.` |
 | `help.ratio.question` | `constants/recipeHelp.ts:50` | Ratio help-sheet heading. | `What does the ratio set?` |
 | `help.ratio.detail` | `constants/recipeHelp.ts:51` | Ratio long-form help. | `The target volume is the dose multiplied by the ratio. The stage volumes have to add up to it exactly or the machine will refuse the card. Half ratios cannot be stored on a card.` |
 | `help.grindSize.title` | `constants/recipeHelp.ts:56` | Grind size field label. | `Grind size` |
@@ -299,9 +299,9 @@ lines — the cited line is the property's first line.
 | `help.grindSpeed.title` | `constants/recipeHelp.ts:69` | Grind speed field label. | `Grind speed` |
 | `help.grindSpeed.hint` | `constants/recipeHelp.ts:70` | Grind speed field hint. | `60 to 120 rpm, in tens.` |
 | `help.grinder.title` | `constants/recipeHelp.ts:73` | Grinder field label. | `Grinder` |
-| `help.grinder.hint` | `constants/recipeHelp.ts:74` | Grinder field hint. | `Turning it off is experimental.` |
+| `help.grinder.hint` | `constants/recipeHelp.ts:74` | Grinder field hint. | `Grinder off recipe cards are experimental. Read more in the help section.` |
 | `help.grinder.question` | `constants/recipeHelp.ts:75` | Grinder help-sheet heading. | `Can I turn the grinder off?` |
-| `help.grinder.detail` | `constants/recipeHelp.ts:76` | Grinder long-form help. Note: says grind size **81** disables the grinder. | `Turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.` |
+| `help.grinder.detail` | `constants/recipeHelp.ts:76` | Grinder long-form help. Note: says grind size **81** disables the grinder, and that this only applies to cards. | `It depends on how you brew it. Brewing straight from the app sends the machine its own value for a grinder that stays off, so pre-ground coffee works normally and there is nothing to watch out for. A card has no such value: turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.` |
 | `help.cup.title` | `constants/recipeHelp.ts:86` | Cup field label. | `Cup` |
 | `help.cup.hint` | `constants/recipeHelp.ts:87` | Cup field hint. | `Omni turns overflow protection off.` |
 | `help.cup.question` | `constants/recipeHelp.ts:88` | Cup help-sheet heading. | `Which cup type should I pick?` |
@@ -539,6 +539,56 @@ pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
 
 ---
 
+## Recipe editor — brewed with
+
+`components/BeanProfileDeck.tsx`, `components/BeanProfileRow.tsx` and
+`components/BeanProfileSheet.tsx`, on the editor's ABOUT deck. The figures are
+derived from brew rows at query time and nothing here is written onto a recipe.
+
+The deck is a ledger and never a verdict: it says what was brewed and how those
+brews went, and leaves the reading to the person who brewed them. No row is a
+control, which is why the only accessible button in the block is the expander.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `profile.title` | `components/BeanProfileDeck.tsx:16` | Doto deck title, under the brew history section. | `BREWED WITH` |
+| `profile.subtitle` | `components/BeanProfileDeck.tsx:28` | Doto sub-line. Counts tagged brews against every counted brew, so the deck cannot quietly disagree with the card's own brew count. | `15 OF 24 BREWS TAGGED` |
+| `profile.empty` | `components/BeanProfileDeck.tsx:18` | Inter line when the recipe has counted brews but none of them carry a bean tag. A deck consisting only of a NOT TAGGED row would be a strange thing to show. | `No brews tagged yet. Tag a brew to see what this recipe does best.` |
+| `profile.showAll` | `components/BeanProfileDeck.tsx:69` | Doto expander, shown only when there are more rows than the cap of five. The number is the total, not the hidden count. | `SHOW ALL 8 ›` |
+| `profile.showAll.a11y` | `components/BeanProfileDeck.tsx:62` (a11y) | (a11y) The expander's label. | `Show all brewed with rows` |
+| `profile.untagged` | `components/BeanProfileDeck.tsx:19` | Doto field column of the pinned row below the rule. Outside the cap, and drawn only alongside tagged rows: a deck made of this row alone is the deck the empty line exists instead of. | `NOT TAGGED` |
+| `profile.untagged.a11y` | `components/BeanProfileRow.tsx` (a11y) | (a11y) The pinned row's spoken label. Not a button: there is no filter for the absence of a tag. Grouping the row replaces its children's spoken text, so the figures have to be in the label or a screen reader never hears them, and `3.9 · 9` is a glance rather than a sentence. | `Not tagged, 9 brews, rated 3.9 from 3 rated brews` |
+| `profile.untagged.count` | `components/BeanProfileDeck.tsx` | The untagged row's count, in the value column, because that row has no field of its own. Singular below two. | `9 brews` / `1 brew` |
+| `profile.field.*` | `library/beanProfile.ts` | Doto field column. FERMENT rather than FERMENTATION because the column is a fixed width beside a value that is often long. TAG for a custom tag, because that is what the user called it when they typed it. | `ORIGIN` `ROAST` `PROCESS` `FERMENT` `TAG` |
+
+## Home / recipe library — bean filters
+
+`components/BeanFilterSheet.tsx` and the `BEANS` chip in `app/index.tsx`.
+
+The sheet offers only values the user's own history contains. There is no text
+field: typing a value again would reintroduce the splitting the ledger
+tolerates, and would let someone filter on a value no brew carries and get an
+empty library with nothing to explain it.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `beans.chip` | `app/index.tsx:403` | Doto rail chip with a trailing caret. Opens the sheet rather than applying a filter, following the same interception the SELECTED chip uses. | `BEANS` |
+| `beans.sheet.title` | `components/BeanFilterSheet.tsx:118` | Doto sheet title. | `BEANS` |
+| `beans.switch` | `components/BeanFilterSheet.tsx:124` | Inter label on the one switch, which applies to the whole selection. | `Highly rated only` |
+| `beans.switch.caption` | `components/BeanFilterSheet.tsx:126` | Inter caption. States the rule the user is choosing. The floor of three rated brews is a guard on that rule and lives in the help sheet, because a caption carrying both reads as a warning. | `Average 4★ or better.` |
+| `beans.empty` | `components/BeanFilterSheet.tsx:143` | Inter line when no counted brew carries any bean value. Drawn instead of the field headings, so nobody meets an empty Ferment heading. | `No tagged brew history yet. Tag a brew to filter by beans.` |
+| `beans.chip.active` | `library/beanFilters.ts` | Doto chip for an applied filter, tappable to remove. A preset is raised to caps because those are the app's words; an origin and a custom tag keep the spelling they were given. | `NATURAL` / `Ethiopia Guji` |
+| `beans.chip.rated` | `library/beanFilters.ts` | The same chip when the highly rated switch is on. | `NATURAL · 4★+` |
+
+## Recipe editor — brewed with help
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `help.brewedWith.title` | `constants/recipeHelp.ts` | Help sheet topic title. | `Brewed with` |
+| `help.brewedWith.hint` | `constants/recipeHelp.ts` | Short note. | `What your brews of this recipe carried, and how they went.` |
+| `help.brewedWith.question` | `constants/recipeHelp.ts` | How the help sheet heads the long form. | `Where do the brewed with figures come from?` |
+| `help.brewedWith.detail` | `constants/recipeHelp.ts` | The long form. The only place the floor of three rated brews is stated, and the place that explains why a good looking row can be missing from the filter. | See `constants/recipeHelp.ts` |
+
 ## Brew history
 
 `app/brewHistory.tsx` and `components/BrewHistoryRow.tsx`.
@@ -668,6 +718,34 @@ The card overlay (`components/NfcOverlay.tsx`), the write path
 Note: `components/RevertSheet.tsx:91` shows a raw error via
 `notify({message: String(error)})` — a developer-facing fallback, not
 app-authored copy, so not edited here.
+
+---
+
+## Unsaved changes sheet
+
+`components/LeaveEditorSheet.tsx` -- shown when the user leaves the recipe
+editor, or presses BREW, with changes the card carries that have not been
+saved. The name, the note and the tags are outside the saved-row wording:
+those write themselves as they are committed. A recipe that is not in the
+library yet cannot write them separately, so it gets its own wording.
+
+Three wordings, one sheet. Brewing is worded differently because the brew runs
+either way: the question is which recipe the machine is handed, not whether
+anything happens, so "discard" there would suggest the brew could be called off.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `unsaved.title` | `components/LeaveEditorSheet.tsx:60` | Doto title of the sheet, all wordings. | `UNSAVED CHANGES` |
+| `unsaved.leave.saved.body` | `components/LeaveEditorSheet.tsx:31` (`leaveSaved`) | Body when backing out of a recipe that is already in the library. | `This recipe has changes that are not saved yet. The name, note and tags are already saved.` |
+| `unsaved.leave.saved.save` | `components/LeaveEditorSheet.tsx:32` (`leaveSaved`) | Primary button, and its a11y label. | `Save changes` |
+| `unsaved.leave.saved.discard` | `components/LeaveEditorSheet.tsx:33` (`leaveSaved`) | Second button, and its a11y label. | `Discard changes` |
+| `unsaved.leave.new.body` | `components/LeaveEditorSheet.tsx:36` (`leaveNew`) | Body when backing out of a recipe that is not yet in the library. | `This recipe is not in your library yet. Save it to keep the name, note, tags and brew settings.` |
+| `unsaved.leave.new.save` | `components/LeaveEditorSheet.tsx:37` (`leaveNew`) | Primary button, and its a11y label. | `Save to library` |
+| `unsaved.leave.new.discard` | `components/LeaveEditorSheet.tsx:38` (`leaveNew`) | Second button, and its a11y label. | `Discard recipe` |
+| `unsaved.brew.body` | `components/LeaveEditorSheet.tsx:41` (`brew`) | Body when pressing BREW. | `This recipe has changes that are not saved yet. The brew will run either way.` |
+| `unsaved.brew.save` | `components/LeaveEditorSheet.tsx:42` (`brew`) | Primary button, and its a11y label. | `Save and brew` |
+| `unsaved.brew.discard` | `components/LeaveEditorSheet.tsx:43` (`brew`) | Second button, and its a11y label. | `Brew without saving` |
+| `unsaved.cancel` | `components/LeaveEditorSheet.tsx:80` | Third button, all wordings. Dismissing the sheet does the same thing. | `Keep editing` |
 
 ---
 

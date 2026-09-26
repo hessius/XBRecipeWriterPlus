@@ -1,7 +1,26 @@
 import * as SQLite from "expo-sqlite";
 
+import {
+    COUNTED_SQL,
+    MEASURED_SQL,
+    RATED_SQL,
+    TIMED_SQL
+} from "@/library/brew/brewPopulation";
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
+import {
+    BEAN_FIELDS,
+    isFermentation,
+    isProcess,
+    isRoast,
+    MAX_ORIGIN_LENGTH,
+    normaliseBeanTags
+} from "./brew/beanTags";
+import type {
+    BeanProfile,
+    BeanProfileRow,
+    ProfileField
+} from "@/library/beanProfile";
 import type {
     BrewOutcome,
     BrewRecord,
@@ -12,25 +31,44 @@ import type {
 import type {Stall} from "./brew/stalls";
 import type {PodCoffee} from "./podCoffee";
 import {podCoffeeFromStored} from "./podCoffee";
+import {tagKey} from "./tagKey";
 
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
-/** How a recipe has gone: how many brews, and when the last of them was. */
+/** How a recipe has gone: how many cups, and what the evidence says. */
 export type BrewSummary = {
+    /** Counted brews only: cups the user could drink. */
     times: number;
+    /** The latest counted brew, or 0 when there is no such cup. */
     lastAt: number;
     /**
-     * The average of the ratings actually given, or 0 where none were.
+     * The average over rated brews only, or 0 where none were.
      *
-     * 0 is "nobody has said", not a verdict of nothing, which is why the
-     * average is taken over `NULLIF(rating, 0)`: counting silence as a nought
-     * would rank a much-brewed recipe below a once-disliked one for no reason
-     * but that it was brewed more often without comment.
+     * Rated means counted and `rating > 0`: a verdict on a cancelled brew does
+     * not move the average printed beside a count it did not join.
      */
     avgRating: number;
-    /** How many of those brews carry a rating. */
+    /** How many rated brews entered `avgRating`. */
     rated: number;
+    /** How many timed brews entered `meanBrewSeconds`; when 0, the mean is meaningless. */
+    timed: number;
+    /** Mean seconds over timed brews: counted, watched, and with a first drop. */
+    meanBrewSeconds: number;
+    /** How many measured brews entered `meanCupMl`; when 0, the mean is meaningless. */
+    measured: number;
+    /** Mean cup volume over measured brews: counted and watched. */
+    meanCupMl: number;
+    /** Rows for this recipe that did not count as cups. */
+    abandoned: number;
+};
+
+/** One value the library's brews carry, and how many recipes carry it. */
+export type BeanVocabularyEntry = {
+    field: ProfileField;
+    /** Exactly the value the filter will bind: raw for presets, folded for custom. */
+    value: string;
+    recipes: number;
 };
 
 type BrewRow = {
@@ -74,6 +112,11 @@ type BrewRow = {
     grinderUsed: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
+    /** The user's own description of the coffee. `''` when they have not said. */
+    origin: string;
+    roast: string;
+    process: string;
+    fermentation: string;
     hasStream: number;
 };
 
@@ -124,6 +167,10 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 grinderRpm INTEGER NOT NULL DEFAULT 0,
                 grinderUsed INTEGER NOT NULL DEFAULT 0,
                 coffee TEXT NOT NULL DEFAULT '',
+                origin TEXT NOT NULL DEFAULT '',
+                roast TEXT NOT NULL DEFAULT '',
+                process TEXT NOT NULL DEFAULT '',
+                fermentation TEXT NOT NULL DEFAULT '',
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -133,7 +180,15 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
             CREATE TABLE IF NOT EXISTS brew_frames (
                 brewId TEXT PRIMARY KEY NOT NULL,
                 frames TEXT NOT NULL
-            );`);
+            );
+            CREATE TABLE IF NOT EXISTS brew_tags (
+                brewId TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                tagKey TEXT NOT NULL,
+                PRIMARY KEY (brewId, tagKey)
+            );
+            CREATE INDEX IF NOT EXISTS idx_brew_tags_key ON brew_tags(tagKey);
+            CREATE INDEX IF NOT EXISTS idx_brews_recipeUuid ON brews(recipeUuid);`);
     // Rows written before `pouringAt` existed keep the 0 default, which
     // reads as "no first drop recorded" and falls back to `startedAt`.
     // `IF NOT EXISTS` on ADD COLUMN is not portable across the SQLite
@@ -223,6 +278,28 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // The coffee the user said this was. `''` is "nobody has said", the same
+    // sentinel `coffee` already uses on this table.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN origin TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN roast TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN process TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN fermentation TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
     // Rows written before `bypass` existed read as "no bypass", exactly as
     // every recipe without one does; an empty string is the JSON-column
     // sentinel already used by `coffee`.
@@ -232,6 +309,48 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
         // Already there.
     }
 }
+
+/**
+ * The column each preset field lives in.
+ *
+ * A literal map this module owns, not a name taken from anything a caller
+ * passed. The four happen to match their field names today, and writing them
+ * out is what keeps that a coincidence rather than a rule a later reader could
+ * extend to a fifth field whose name came from somewhere else.
+ */
+const PROFILE_COLUMN: Record<typeof BEAN_FIELDS[number], string> = {
+    origin: "origin",
+    roast: "roast",
+    process: "process",
+    fermentation: "fermentation"
+};
+
+/**
+ * A brew whose recipe is still in the library.
+ *
+ * Deleting a recipe leaves its brews behind on purpose, so history survives.
+ * The bean filter matches through `recipes`, so a value carried only by
+ * orphaned brews would be offered in the picker and could never be found.
+ *
+ * `recipes` belongs to `RecipeDatabase`, which is the same file and not this
+ * class's schema. The coupling already runs the other way and harder: a bean
+ * filter clause reads `brews` from inside a `RecipeDatabase` query. Both hold
+ * because the two classes open `xbrecipewriter.db` and the library screen
+ * constructs both before it can ask either of these questions.
+ */
+const LIVE_RECIPE_SQL =
+    "EXISTS (SELECT 1 FROM recipes r WHERE r.uuid = brews.recipeUuid)";
+
+/**
+ * A counted brew carrying nothing about its coffee.
+ *
+ * All four columns empty *and* no custom tag. The `NOT EXISTS` is the half that
+ * is easy to forget, and forgetting it would file every custom-tagged brew
+ * under NOT TAGGED, which is the one row the design leans on being right.
+ */
+const UNTAGGED_SQL = `(b.origin = '' AND b.roast = '' AND b.process = ''
+    AND b.fermentation = ''
+    AND NOT EXISTS (SELECT 1 FROM brew_tags t WHERE t.brewId = b.id))`;
 
 /**
  * Brew history, in two tables because they have two lifetimes.
@@ -277,9 +396,10 @@ class BrewDatabase {
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
-                                grindSize, grinderRpm, grinderUsed, coffee, hasStream)
+                                grindSize, grinderRpm, grinderUsed, coffee,
+                                origin, roast, process, fermentation, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0,
@@ -302,6 +422,10 @@ class BrewDatabase {
                 record.grinderRpm ?? 0,
                 record.grinderUsed === true ? 1 : 0,
                 record.coffee ? JSON.stringify(record.coffee) : "",
+                originForColumn(record.origin),
+                isRoast(record.roast) ? record.roast : "",
+                isProcess(record.process) ? record.process : "",
+                isFermentation(record.fermentation) ? record.fermentation : "",
                 hasStream ? 1 : 0
             ]
         );
@@ -327,20 +451,39 @@ class BrewDatabase {
                     [record.id, frames]
                 );
             }
+            this.writeTags(record.id, record.tags ?? []);
         });
     }
 
     public all(): StoredBrew[] {
-        return this.db
+        const brews = this.db
             .getAllSync<BrewRow>("SELECT * FROM brews ORDER BY startedAt DESC;")
             .map(hydrate);
+        return this.attachTags(brews);
     }
 
     /**
-     * How a recipe has gone, in the two figures the ABOUT deck asks for.
+     * The rows for one recipe, newest first.
+     *
+     * Unlike `summaryFor`, this deliberately returns cancelled, failed and
+     * lost-contact rows too. Aggregates answer "how many cups"; history is a
+     * diary, and a stopped brew is still something the user may need to see.
+     */
+    public brewsFor(recipeUuid: string): StoredBrew[] {
+        const brews = this.db
+            .getAllSync<BrewRow>(
+                "SELECT * FROM brews WHERE recipeUuid = ? ORDER BY startedAt DESC;",
+                [recipeUuid]
+            )
+            .map(hydrate);
+        return this.attachTags(brews);
+    }
+
+    /**
+     * How a recipe has gone, in the figures the ABOUT deck asks for.
      *
      * Counted in SQL rather than by reading the rows, because the editor asks
-     * this on open and the answer is two numbers: pulling every brew of a
+     * this on open and the answer is a few numbers: pulling every brew of a
      * much-used recipe across to count them would be work done to throw away.
      *
      * `lastAt` is 0 for a recipe never brewed, matching the sentinel the rest
@@ -350,21 +493,209 @@ class BrewDatabase {
         const rows = this.db.getAllSync<{
             times: number; lastAt: number | null;
             avgRating: number | null; rated: number;
+            timed: number; measured: number;
+            meanBrewSeconds: number | null; meanCupMl: number | null;
+            abandoned: number;
         }>(
-            `SELECT COUNT(*) AS times, MAX(startedAt) AS lastAt,
-                    AVG(NULLIF(rating, 0)) AS avgRating,
-                    COUNT(NULLIF(rating, 0)) AS rated
+            `SELECT
+                    COALESCE(SUM(CASE WHEN ${COUNTED_SQL} THEN 1 ELSE 0 END), 0) AS times,
+                    MAX(CASE WHEN ${COUNTED_SQL} THEN startedAt END) AS lastAt,
+                    AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating,
+                    COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                    COUNT(CASE WHEN ${TIMED_SQL} THEN 1 END) AS timed,
+                    AVG(CASE WHEN ${TIMED_SQL} THEN (endedAt - pouringAt) / 1000.0 END)
+                        AS meanBrewSeconds,
+                    COUNT(CASE WHEN ${MEASURED_SQL} THEN 1 END) AS measured,
+                    AVG(CASE WHEN ${MEASURED_SQL} THEN cupTotal END) AS meanCupMl,
+                    COALESCE(SUM(CASE WHEN NOT (${COUNTED_SQL}) THEN 1 ELSE 0 END), 0)
+                        AS abandoned
              FROM brews WHERE recipeUuid = ?;`,
             [recipeUuid]
         );
         const row = rows[0];
-        if (row === undefined) return {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+        if (row === undefined) {
+            return {
+                times: 0, lastAt: 0, avgRating: 0, rated: 0,
+                timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0,
+                abandoned: 0
+            };
+        }
+        // SQL means over empty populations are NULL. The app's summary
+        // sentinel is 0 here too: it means "nothing to average", not zero ml
+        // in the cup or a zero-second brew.
         return {
             times: row.times,
             lastAt: row.lastAt ?? 0,
             avgRating: row.avgRating ?? 0,
-            rated: row.rated
+            rated: row.rated,
+            timed: row.timed,
+            meanBrewSeconds: row.meanBrewSeconds ?? 0,
+            measured: row.measured,
+            meanCupMl: row.meanCupMl ?? 0,
+            abandoned: row.abandoned
         };
+    }
+
+    /**
+     * What this recipe has been brewed with, and how those brews went.
+     *
+     * The one place that knows how a profile is derived, for the reason #98
+     * gives about answering "what has this recipe done?" once rather than four
+     * times in four screens. Derived at query time and written nowhere: re-rating
+     * a brew changes the answer with no migration and no repair step.
+     *
+     * Five sources in one union -- the four preset columns and `brew_tags` --
+     * every one of them scoped by `COUNTED_SQL` and rated by `RATED_SQL` spliced
+     * from `brewPopulation.ts` rather than restated here. A cancelled brew
+     * cannot inflate a row exactly as it cannot inflate the card's evidence
+     * line, and it cannot come to differ from it either.
+     *
+     * The custom rows group on `tagKey`, the folded form, so two spellings of
+     * one tag are one row; `MIN(t.tag)` picks the displayed spelling
+     * deterministically rather than letting SQLite hand back whichever row it
+     * reached first.
+     *
+     * Every field is the recorded column only. Neither `resolvedOrigin` nor
+     * `resolvedProcess` is consulted, so a pod's origin or process joins the
+     * ledger only once the user has taken it onto the brew. The library filter
+     * compares the column, so a row derived from the stored pod blob would be
+     * a row the filter cannot reproduce, and tapping it would open an empty
+     * library.
+     *
+     * Consistency across all three readers is what makes that safe: this
+     * query, `beanVocabulary` and `resolveBeanFilter` all read the column, so
+     * a value is either offered, grouped and findable, or none of the three.
+     * Teaching one of them the fallback would be the bug. Teaching all three
+     * is the open question, and it is a design question rather than an
+     * oversight: the blob is rebuilt by a backup restore, so a ledger drawn
+     * through it would not survive one intact.
+     */
+    public beanProfileFor(recipeUuid: string): BeanProfile {
+        const presets = BEAN_FIELDS.map((field) => `
+            SELECT '${field}' AS field, ${PROFILE_COLUMN[field]} AS value,
+                   COUNT(*) AS brews,
+                   COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                   AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+            FROM brews
+            WHERE recipeUuid = ? AND ${COUNTED_SQL}
+              AND ${PROFILE_COLUMN[field]} <> ''
+            GROUP BY ${PROFILE_COLUMN[field]}`);
+
+        const custom = `
+            SELECT 'custom' AS field, MIN(t.tag) AS value,
+                   COUNT(*) AS brews,
+                   COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                   AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+            FROM brews b JOIN brew_tags t ON t.brewId = b.id
+            WHERE b.recipeUuid = ? AND ${COUNTED_SQL}
+            GROUP BY t.tagKey`;
+
+        const rows = this.db.getAllSync<{
+            field: string; value: string; brews: number;
+            rated: number; avgRating: number | null;
+        }>(
+            `${[...presets, custom].join("\nUNION ALL\n")};`,
+            [...BEAN_FIELDS.map(() => recipeUuid), recipeUuid]
+        ).map((row): BeanProfileRow => ({
+            field: row.field as ProfileField,
+            value: row.value,
+            brews: row.brews,
+            rated: row.rated,
+            // SQL's AVG over an empty population is NULL. 0 is the app's
+            // sentinel for "nothing to average" throughout, and the ledger
+            // prints the figure only when it is above 0.
+            avgRating: row.avgRating ?? 0
+        }));
+
+        const totals = this.db.getFirstSync<{
+            counted: number; untaggedBrews: number;
+            untaggedRated: number; untaggedAvg: number | null;
+        }>(
+            `SELECT COUNT(*) AS counted,
+                    COUNT(CASE WHEN ${UNTAGGED_SQL} THEN 1 END) AS untaggedBrews,
+                    COUNT(CASE WHEN ${UNTAGGED_SQL} AND ${RATED_SQL} THEN 1 END)
+                        AS untaggedRated,
+                    AVG(CASE WHEN ${UNTAGGED_SQL} AND ${RATED_SQL} THEN rating END)
+                        AS untaggedAvg
+             FROM brews b
+             WHERE b.recipeUuid = ? AND ${COUNTED_SQL};`,
+            [recipeUuid]
+        );
+
+        return {
+            rows,
+            untagged: {
+                brews: totals?.untaggedBrews ?? 0,
+                rated: totals?.untaggedRated ?? 0,
+                avgRating: totals?.untaggedAvg ?? 0
+            },
+            counted: totals?.counted ?? 0
+        };
+    }
+
+    /**
+     * Every value any counted brew carries, with how many recipes carry it.
+     *
+     * What the picker offers. There is no text field in that sheet, and this is
+     * why there does not need to be: origin and custom tags are free text, so
+     * typing them again would reintroduce the splitting the ledger already
+     * tolerates and would let a user filter on a value no brew carries and get
+     * an empty library with nothing explaining it.
+     *
+     * The values handed back are exactly the ones `beanFilters` will bind: the
+     * raw column text for the presets and origin, and the folded `tagKey` for a
+     * custom tag. Handing back a display spelling for a custom tag would offer
+     * the user a chip that matches nothing.
+     *
+     * Scoped to counted brews for the same reason: the filter clauses are, so a
+     * value only a cancelled brew carries would build a filter that can never
+     * match.
+     *
+     * Recipes rather than brews, because the number answers "how much of the
+     * library would this show me" and a recipe brewed nine times is one recipe.
+     *
+     * Scoped to recipes that still exist, because deleting a recipe keeps its
+     * brews as history while the filter clause matches through `recipes`. An
+     * orphaned brew's values would otherwise stay in the picker and offer the
+     * empty library this method exists to prevent.
+     *
+     * Ordering is done here in TypeScript rather than in SQL: the field order is
+     * `BEAN_FIELDS`, which is a TypeScript constant, and a CASE expression
+     * restating it in the statement would be a second copy of that order.
+     */
+    public beanVocabulary(): BeanVocabularyEntry[] {
+        const presets = BEAN_FIELDS.map((field) => `
+            SELECT '${field}' AS field, ${PROFILE_COLUMN[field]} AS value,
+                   recipeUuid
+            FROM brews
+            WHERE ${COUNTED_SQL} AND ${PROFILE_COLUMN[field]} <> ''
+              AND ${LIVE_RECIPE_SQL}`);
+
+        const custom = `
+            SELECT 'custom' AS field, t.tagKey AS value, b.recipeUuid AS recipeUuid
+            FROM brews b JOIN brew_tags t ON t.brewId = b.id
+            WHERE ${COUNTED_SQL} AND EXISTS (
+                SELECT 1 FROM recipes r WHERE r.uuid = b.recipeUuid)`;
+
+        const rows = this.db.getAllSync<{
+            field: string; value: string; recipes: number;
+        }>(
+            `SELECT field, value, COUNT(DISTINCT recipeUuid) AS recipes
+             FROM (${[...presets, custom].join("\nUNION ALL\n")})
+             GROUP BY field, value;`
+        );
+
+        const order: ProfileField[] = [...BEAN_FIELDS, "custom"];
+        return rows
+            .map((row): BeanVocabularyEntry => ({
+                field: row.field as ProfileField,
+                value: row.value,
+                recipes: row.recipes
+            }))
+            .sort((a, b) =>
+                order.indexOf(a.field) - order.indexOf(b.field)
+                || b.recipes - a.recipes
+                || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
     }
 
     /**
@@ -372,8 +703,11 @@ class BrewDatabase {
      *
      * The recipe screen's star has one gesture and two outcomes: it rates
      * today's brew where there is one, and writes a hand-logged brew where
-     * there is not. This is the question that chooses between them, and it is
-     * asked in local days rather than in hours because "today" is what the user
+     * there is not. This is the question that chooses between them, and the
+     * brew it returns must be one a rating can mean something on: judging a
+     * cancelled brew would be a verdict the recipe's average rightly ignores.
+     *
+     * Asked in local days rather than in hours because "today" is what the user
      * means -- a cup at breakfast is still today's at supper, and a cup at
      * 23:50 is not still today's at 00:10.
      */
@@ -385,6 +719,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<{id: string}>(
             `SELECT id FROM brews
              WHERE recipeUuid = ? AND startedAt >= ? AND startedAt < ?
+             AND ${COUNTED_SQL}
              ORDER BY startedAt DESC LIMIT 1;`,
             [recipeUuid, start.getTime(), end.getTime()]
         );
@@ -463,6 +798,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             toAdd.forEach((record) => {
                 this.writeBrewRow(record, false);
+                this.writeTags(record.id, record.tags ?? []);
             });
         });
         return toAdd.length;
@@ -472,7 +808,7 @@ class BrewDatabase {
         const rows = this.db.getAllSync<BrewRow>(
             "SELECT * FROM brews WHERE id = ?;", [id]
         );
-        return rows.length > 0 ? hydrate(rows[0]) : null;
+        return rows.length > 0 ? {...hydrate(rows[0]), tags: this.tagsFor(id)} : null;
     }
 
     public samples(id: string): BrewSample[] {
@@ -501,6 +837,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brew_samples WHERE brewId = ?;", [id]);
+            this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [id]);
             this.db.runSync("DELETE FROM brews WHERE id = ?;", [id]);
         });
     }
@@ -511,6 +848,7 @@ class BrewDatabase {
         this.db.withTransactionSync(() => {
             this.db.runSync("DELETE FROM brew_frames");
             this.db.runSync("DELETE FROM brew_samples");
+            this.db.runSync("DELETE FROM brew_tags");
             this.db.runSync("DELETE FROM brews");
         });
     }
@@ -543,6 +881,60 @@ class BrewDatabase {
                 this.db.runSync("UPDATE brews SET hasStream = 0 WHERE id = ?;", [brew.id]);
             });
         });
+    }
+
+    /**
+     * Replace a brew's rows in `brew_tags`, delete then insert.
+     *
+     * Delete first so an edit cannot leave a tag the user removed, and shared
+     * by every path that writes tags so an update and a rebuild produce
+     * identical rows.
+     */
+    private writeTags(brewId: string, tags: readonly string[]): void {
+        this.db.runSync("DELETE FROM brew_tags WHERE brewId = ?;", [brewId]);
+        for (const tag of normaliseBeanTags(tags)) {
+            this.db.runSync(
+                "INSERT OR IGNORE INTO brew_tags (brewId, tag, tagKey) VALUES (?, ?, ?);",
+                [brewId, tag, tagKey(tag)]
+            );
+        }
+    }
+
+    /** One brew's tags, in the order they were written. */
+    public tagsFor(brewId: string): string[] {
+        return this.db
+            .getAllSync<{tag: string}>(
+                "SELECT tag FROM brew_tags WHERE brewId = ? ORDER BY rowid;",
+                [brewId]
+            )
+            .map((row) => row.tag);
+    }
+
+    /**
+     * The tags for a set of brews, in one query.
+     *
+     * One query rather than one per brew: a much-used recipe's history is
+     * hundreds of rows and this runs when the history screen opens.
+     */
+    private tagsForAll(brewIds: readonly string[]): Map<string, string[]> {
+        const byBrew = new Map<string, string[]>();
+        if (brewIds.length === 0) return byBrew;
+        const holes = brewIds.map(() => "?").join(", ");
+        const rows = this.db.getAllSync<{brewId: string; tag: string}>(
+            `SELECT brewId, tag FROM brew_tags WHERE brewId IN (${holes}) ORDER BY rowid;`,
+            [...brewIds]
+        );
+        for (const row of rows) {
+            const existing = byBrew.get(row.brewId);
+            if (existing === undefined) byBrew.set(row.brewId, [row.tag]);
+            else existing.push(row.tag);
+        }
+        return byBrew;
+    }
+
+    private attachTags(brews: StoredBrew[]): StoredBrew[] {
+        const tags = this.tagsForAll(brews.map((brew) => brew.id));
+        return brews.map((brew) => ({...brew, tags: tags.get(brew.id) ?? []}));
     }
 }
 
@@ -587,8 +979,24 @@ function hydrate(row: BrewRow): StoredBrew {
         // A recorded grind size is the marker that this row knew the column.
         ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
         ...(coffee !== null ? {coffee} : {}),
+        ...(row.origin !== "" ? {origin: row.origin} : {}),
+        ...(isRoast(row.roast) ? {roast: row.roast} : {}),
+        ...(isProcess(row.process) ? {process: row.process} : {}),
+        ...(isFermentation(row.fermentation) ? {fermentation: row.fermentation} : {}),
         hasStream: row.hasStream === 1
     };
+}
+
+/**
+ * An origin fit to store: trimmed, and refused if it is not a plausible one.
+ *
+ * Refused rather than truncated. A truncated origin is a different place, and
+ * #104 would group it on its own.
+ */
+function originForColumn(value: string | undefined): string {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    return trimmed.length === 0 || trimmed.length > MAX_ORIGIN_LENGTH ? "" : trimmed;
 }
 
 function coffeeFromStoredColumn(value: string): PodCoffee | null {

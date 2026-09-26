@@ -3,6 +3,8 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutDeck from "@/components/AboutDeck";
 import {palette} from "@/constants/colors";
+import type {BeanProfile} from "@/library/beanProfile";
+import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -10,13 +12,31 @@ function recipeWith(over: Partial<Recipe> = {}): Recipe {
     return Object.assign(new Recipe(), over);
 }
 
+function summary(overrides: Partial<BrewSummary> = {}): BrewSummary {
+    return {
+        times: 0, lastAt: 0, avgRating: 0, rated: 0,
+        timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0,
+        ...overrides
+    };
+}
+
+const ZERO_PROFILE: BeanProfile = {
+    rows: [],
+    untagged: {brews: 0, rated: 0, avgRating: 0},
+    counted: 0
+};
+
 function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
     return {
         recipe:             recipeWith(),
         accent:             palette.info,
         showAvatar:         false,
-        brews:              {times: 0, lastAt: 0, avgRating: 0, rated: 0},
+        brews:              summary(),
+        beanProfile:        ZERO_PROFILE,
+        onShowBeanProfile:  jest.fn(),
         showHint:           false,
+        knownTags:          [],
+        onTags:             jest.fn(),
         dispatch:           jest.fn(),
         onDraft:            jest.fn(),
         onInputErrorChange: jest.fn(),
@@ -61,15 +81,19 @@ describe("AboutDeck", () => {
         expect(dispatch).toHaveBeenCalledWith("Note", "Mornings");
     });
 
-    it("carries all four sections, in the order the deck reads in", async () => {
+    it("carries all five sections, in the order the deck reads in", async () => {
         await renderWithProviders(
             <AboutDeck {...props({recipe: recipeWith({xid: "CGL12"})})}/>
         );
 
-        expect(screen.getByTestId("about-note")).toBeTruthy();
-        expect(screen.getByTestId("about-pod")).toBeTruthy();
-        expect(screen.getByTestId("about-from")).toBeTruthy();
-        expect(screen.getByTestId("about-history")).toBeTruthy();
+        expect(screen.getAllByTestId(/^about-/).map((section) => section.props.testID))
+            .toEqual([
+                "about-note",
+                "about-tags",
+                "about-pod",
+                "about-from",
+                "about-history"
+            ]);
     });
 
     it("drops the FROM section for a recipe that came from nowhere", async () => {
@@ -84,7 +108,7 @@ describe("AboutDeck", () => {
 
     it("passes the brew count through to the history line", async () => {
         await renderWithProviders(
-            <AboutDeck {...props({brews: {times: 2, lastAt: 0, avgRating: 0, rated: 0}})}/>
+            <AboutDeck {...props({brews: summary({times: 2})})}/>
         );
 
         expect(screen.getByTestId("history-summary"))

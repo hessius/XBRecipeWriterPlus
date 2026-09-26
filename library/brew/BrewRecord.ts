@@ -3,6 +3,7 @@ import type {PodCoffee} from "@/library/podCoffee";
 import Pour from "@/library/Pour";
 import {grindBand} from "@/library/grindBands";
 
+import type {Fermentation, Process, Roast} from "./beanTags";
 import {stageWaterFrom, stallsInStage, type Stall} from "./stalls";
 
 /**
@@ -207,6 +208,33 @@ export type BrewRecord = {
     grinderUsed?: boolean;
     /** The pod's coffee, when the recipe came from an xPod import (spec §2.1.1). */
     coffee?: PodCoffee;
+    // What the coffee was, as the user described it.
+    //
+    // All optional, and absent means nobody has said. Not the same as a
+    // default: #104 groups on these, and an unset field bundled into a bucket
+    // would be a group of brews that share nothing.
+    //
+    // `origin` and `process` also exist inside `coffee` for a pod-imported
+    // recipe. These four hold only what the user asserted; the pod's values
+    // are resolved at read time and never written here (spec, "What the pod
+    // already knows").
+    /** Free text. Where the coffee is from, in whatever detail the bag gives. */
+    origin?: string;
+    /** How dark it was roasted. */
+    roast?: Roast;
+    /** How the fruit came off the seed. */
+    process?: Process;
+    /** What was done to the fermentation. */
+    fermentation?: Fermentation;
+    /**
+     * Free-text tags.
+     *
+     * Searchable, and since #104 a dimension of their own: `beanProfileFor`
+     * groups them into `custom` ledger rows and the library can filter on
+     * them. They are folded to `tagKey` for both, so two spellings of one tag
+     * are one row.
+     */
+    tags?: string[];
 };
 
 /** The ceiling of the scale, decided once in the design and read from here. */

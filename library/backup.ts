@@ -1,4 +1,13 @@
 import {isRating, type BrewRecord} from "./brew/BrewRecord";
+import {
+    BEAN_FIELDS,
+    type BeanField,
+    isFermentation,
+    isProcess,
+    isRoast,
+    MAX_ORIGIN_LENGTH,
+    normaliseBeanTags
+} from "./brew/beanTags";
 import {DOSE} from "./cardLimits";
 import Recipe, {MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
@@ -614,6 +623,36 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     coffee:      isPlainObject
 };
 
+/**
+ * Bean fields a malformed value costs, rather than costing the whole brew.
+ *
+ * These validators derive from `beanTags`, not from a restated list, so adding
+ * a process cannot leave backup refusing it. A bad value here is treated like
+ * unset because an untrusted file must not introduce a ninth process, but a
+ * brew's figures and verdict are worth more than one field a stranger got
+ * wrong.
+ */
+const BEAN_FIELD_VALIDATORS = {
+    origin:       (v) =>
+        typeof v === "string" && v.trim() !== "" && v.length <= MAX_ORIGIN_LENGTH,
+    roast:        isRoast,
+    process:      isProcess,
+    fermentation: isFermentation
+} satisfies Record<BeanField, (value: unknown) => boolean>;
+
+const DROPPABLE_BREW_FIELDS = {
+    ...BEAN_FIELD_VALIDATORS,
+    tags:         Array.isArray
+} satisfies Record<BeanField | "tags", (value: unknown) => boolean>;
+
+function beanFieldsFrom(record: BrewRecord): Partial<Pick<BrewRecord, BeanField>> {
+    const entries = BEAN_FIELDS.flatMap((field) => {
+        const value = record[field];
+        return value === undefined ? [] : [[field, value] as const];
+    });
+    return Object.fromEntries(entries) as Partial<Pick<BrewRecord, BeanField>>;
+}
+
 /** A record from a backup file, or null. Never throws. */
 export function reviveBrew(entry: unknown): BrewRecord | null {
     if (!isPlainObject(entry)) return null;
@@ -625,11 +664,24 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         if (entry[field] !== undefined && !ok(entry[field])) return null;
     }
 
+    let cleaned = entry;
+    for (const [field, ok] of Object.entries(DROPPABLE_BREW_FIELDS)) {
+        if (cleaned[field] !== undefined && !ok(cleaned[field])) {
+            if (cleaned === entry) cleaned = {...entry};
+            delete cleaned[field];
+        }
+    }
+    if (Array.isArray(cleaned.tags)) {
+        const tags = cleaned.tags;
+        if (cleaned === entry) cleaned = {...entry};
+        cleaned.tags = normaliseBeanTags(tags);
+    }
+
     // Rebuilt field by field rather than passed through, so a file carrying
     // extra keys cannot put them in the table: the insert names its columns,
     // but the record is also handed to the screens, and a backup should not be
     // able to decide what a brew record contains.
-    const record = entry as unknown as BrewRecord;
+    const record = cleaned as unknown as BrewRecord;
     return {
         id: record.id,
         recipeUuid: record.recipeUuid,
@@ -664,7 +716,9 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         grindSize: record.grindSize,
         grinderRpm: record.grinderRpm,
         grinderUsed: record.grinderUsed,
-        coffee: record.coffee
+        coffee: record.coffee,
+        ...beanFieldsFrom(record),
+        ...(record.tags !== undefined ? {tags: record.tags} : {})
     };
 }
 

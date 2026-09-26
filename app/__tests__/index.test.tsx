@@ -282,6 +282,7 @@ function store(recipes: Recipe[]) {
             }
             return [...counts].map(([tag, count]) => ({tag, count}));
         }),
+        beanVocabulary:       jest.fn(() => []),
         deleteRecipe: jest.fn(),
         cloneRecipe:  jest.fn(),
         updateRecipe: jest.fn()
