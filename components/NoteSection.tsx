@@ -40,7 +40,7 @@ export default function NoteSection({initialValue, onDraft, onCommit}: {
                 defaultValue={initialValue}
                 maxLength={MAX_DESCRIPTION}
                 placeholder="Sweet and light, good for mornings"
-                placeholderTextColor={palette.muted}
+                placeholderTextColor={palette.dim}
                 returnKeyType="done"
                 onChangeText={(value) => {
                     setLength(value.length);

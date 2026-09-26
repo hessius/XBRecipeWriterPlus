@@ -1,15 +1,18 @@
-import React from "react";
+import React, {useId} from "react";
 import {Pressable} from "react-native";
-import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop} from "react-native-svg";
+import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
+    from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
+import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {cupLineFor, palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
+import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
+        temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -80,14 +83,101 @@ function rowHeight(fontSize: number): number {
 const FILL_TOP = 0.28;
 const FILL_BOTTOM = 0;
 
+/**
+ * The fade beneath a temperature rule, and its opacity at the rule.
+ *
+ * A bare rule reads as a boundary; a rule with a little weight under it reads
+ * as a body of water at a temperature. Short enough never to reach the water
+ * fill, so the grey and the accent never mix.
+ *
+ * Not a filled column: a column encodes temperature twice, as a height and as
+ * an area, and area is the louder of the two while meaning nothing at all. A
+ * hot stage is not a bigger stage.
+ */
+const TEMP_FADE = 16;
+const TEMP_FADE_TOP = 0.38;
+
+/**
+ * The reading above each rule, and the band's own edge labels.
+ *
+ * Eleven is Doto's floor, which is also the smallest this reads at arm's length
+ * on a phone. The label is allowed to overhang a very short rule: the space
+ * beside it is a pause and is empty by construction, so there is nothing to
+ * collide with. At the plot edges it anchors inward instead: overhang outside
+ * the SVG would be clipped, and trading the degree sign for width would cost
+ * more than it saves.
+ *
+ * They are `palette.dim`. `palette.muted` is 4.12:1 on `base`, under AA, and
+ * the palette documents it as not a text colour.
+ */
+const TEMP_LABEL = 11;
+/** Clearance between a reading's baseline and the rule it labels. */
+const TEMP_LABEL_GAP = 4;
+
+function tempLabelHeadroom(): number {
+    return drawnFontSize(TEMP_LABEL) + TEMP_LABEL_GAP;
+}
+
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
+
+/** Minimum rendered bypass box size on the volume axis, unrelated to temperature mark width. */
+const BYPASS_BOX_MIN = 2;
 
 /** Below this an overrun is rounding, not a hold worth naming. */
 const GAP_FLOOR_SECONDS = 2;
 
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
+
+function tempLabelY(ruleY: number): number {
+    return ruleY - TEMP_LABEL_GAP;
+}
+
+function bandMaxLabelY(ruleY: number): number {
+    return tempLabelY(ruleY);
+}
+
+function bandMinLabelY(svgHeight: number): number {
+    return Math.min(svgHeight * BAND_FLOOR + drawnFontSize(TEMP_LABEL), svgHeight);
+}
+
+function bypassBoxLabelY(y: number, height: number, svgHeight: number): number {
+    const centred = y + height / 2 + drawnFontSize(TEMP_LABEL) / 3;
+    if (centred >= drawnFontSize(TEMP_LABEL) && centred <= svgHeight) return centred;
+    if (centred < drawnFontSize(TEMP_LABEL)) {
+        return Math.min(y + height + TEMP_LABEL_GAP + drawnFontSize(TEMP_LABEL), svgHeight);
+    }
+    return Math.max(y - TEMP_LABEL_GAP, drawnFontSize(TEMP_LABEL));
+}
+
+const TEMP_LABEL_EDGE_PAD = 2;
+
+function visibleMinimumRectX(x: number, rectWidth: number, plotWidth: number): number {
+    return Math.max(0, Math.min(x, plotWidth - rectWidth));
+}
+
+function estimatedTempLabelWidth(label: string): number {
+    const tracking = label.length > 1 ? (label.length - 1) * 0.5 : 0;
+    return label.length * drawnFontSize(TEMP_LABEL) * 0.75 + tracking;
+}
+
+function tempLabelX(center: number, label: string, plotWidth: number) {
+    const labelWidth = estimatedTempLabelWidth(label);
+    if (center - labelWidth / 2 < 0) {
+        return {x: TEMP_LABEL_EDGE_PAD, textAnchor: "start" as const};
+    }
+    if (center + labelWidth / 2 > plotWidth) {
+        return {x: plotWidth - TEMP_LABEL_EDGE_PAD, textAnchor: "end" as const};
+    }
+    return {x: center, textAnchor: "middle" as const};
+}
+
+/** One spoken description for the thermal shape encoded by height in the chart. */
+function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
+    if (marks.length === 0) return "Brew trace";
+    return `Brew trace, ${marks.map((mark) => mark.temperature).join(" then ")} degrees`;
+}
 
 /** what was asked for, what the machine did, what landed
  * in the cup.
@@ -103,6 +193,7 @@ export default function BrewTrace({
     planDashed = true, planHeadAt = 1,
     compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
+    const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
@@ -143,6 +234,19 @@ export default function BrewTrace({
     // Derived here rather than at each use so the compact render, the full render
     // and the legend cannot drift apart.
     const cupColour = cupLineFor(accent);
+    // The stages a temperature belongs to. `stages ?? pours` is the same
+    // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
+    // `stages`, so reading `pours` alone would draw nothing in history.
+    const tempStages = stages ?? pours;
+    // Hoisted above the compact return so thumbnails say the same thermal
+    // shape as the full chart, while still deriving speech from marks that
+    // would really be drawn. The original plan's snippet sat below this return.
+    const tempBand = temperatureBand(tempStages.map((pour) => pour.temperature));
+    const tempHeadroom = tempLabelHeadroom();
+    const marks = tempBand === undefined
+        ? []
+        : temperatureMarks(tempStages, tempBand, box, tempHeadroom);
+    const accessibilityLabel = temperatureAccessibilityLabel(marks);
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
@@ -163,7 +267,7 @@ export default function BrewTrace({
     // them in as a prop would let the shading drift off the chart it shades.
     const bounds = stageBounds(samples, stages ?? pours);
     const selected = selectedIndex !== null ? bounds[selectedIndex] : undefined;
-    const band = selected && box.maxT > 0 ? {
+    const selectionBand = selected && box.maxT > 0 ? {
         x: (selected.start / box.maxT) * box.width,
         width: Math.max(((selected.end - selected.start) / box.maxT) * box.width, 1)
     } : undefined;
@@ -176,17 +280,23 @@ export default function BrewTrace({
     const bypassBox = bypass === undefined || bypassMl <= 0 || box.maxT <= 0
                       || box.maxV <= 0
         ? undefined
-        : {
-            x: (bypassFrom / box.maxT) * box.width,
-            width: Math.max((bypassWide / box.maxT) * box.width, 2),
-            y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
-            height: Math.max((bypassMl / box.maxV) * svgHeight, 2)
-          };
+        : (() => {
+            const boxWidth = Math.min(
+                Math.max((bypassWide / box.maxT) * box.width, BYPASS_BOX_MIN),
+                box.width
+            );
+            return {
+                x: visibleMinimumRectX((bypassFrom / box.maxT) * box.width, boxWidth, box.width),
+                width: boxWidth,
+                y: svgHeight - ((planTop + bypassMl) / box.maxV) * svgHeight,
+                height: Math.max((bypassMl / box.maxV) * svgHeight, BYPASS_BOX_MIN)
+            };
+          })();
 
     if (compact) {
         return (
             <Svg width={width} height={height} accessibilityRole="image"
-                 accessibilityLabel="Brew trace">
+                 accessibilityLabel={accessibilityLabel}>
                 {planPath !== "" && (
                     <Path
                         testID="trace-plan"
@@ -224,19 +334,74 @@ export default function BrewTrace({
         );
     }
 
+    /**
+     * The bypass's own mark, when the band can hold it.
+     *
+     * The band is never widened to admit it: bypass water is usually far cooler
+     * than brew water, and a 55 degree bypass would stretch the band enough to
+     * put the brew's rules about five pixels apart. A rule whose whole meaning
+     * is its height cannot be drawn off the scale, so when it does not fit it is
+     * not drawn and the temperature is printed in the box instead.
+     */
+    const bypassMark = tempBand === undefined || bypass === undefined
+                       || bypassBox === undefined
+                       || !temperatureInBand(bypass.temperature, tempBand)
+        ? undefined
+        : {
+            x: bypassBox.x,
+            width: bypassBox.width,
+            y: bandY(bypass.temperature, tempBand, svgHeight, tempHeadroom),
+            temperature: bypass.temperature
+          };
+    const tempDraws = [
+        ...marks.map((mark, i) => ({
+            ...mark,
+            key: `${i}`,
+            gradientId: `tempFade${id}-${i}`,
+            fadeTestID: `trace-temp-fade-${i}`,
+            lineTestID: `trace-temp-${i}`,
+            labelTestID: `trace-temp-label-${i}`
+        })),
+        ...(bypassMark === undefined ? [] : [{
+            ...bypassMark,
+            key: "bypass",
+            gradientId: `tempFade${id}-bypass`,
+            fadeTestID: "trace-temp-fade-bypass",
+            lineTestID: "trace-temp-bypass",
+            labelTestID: "trace-temp-label-bypass"
+        }])
+    ];
+
     const chart = (
         <Svg width={width} height={svgHeight} accessibilityRole="image"
-             accessibilityLabel="Brew trace">
+             accessibilityLabel={accessibilityLabel}>
                 <Defs>
                     <LinearGradient id="waterFill" x1="0" y1="0" x2="0" y2="1">
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
+                    {/*
+                      userSpaceOnUse encodes absolute y and SVG ids are
+                      module-global; a duplicated id in a second chart would
+                      move the fade vertically, not only recolour it.
+                    */}
+                    {tempDraws.map((mark) => (
+                        <LinearGradient
+                            key={mark.gradientId}
+                            id={mark.gradientId}
+                            gradientUnits="userSpaceOnUse"
+                            x1="0" y1={mark.y} x2="0" y2={mark.y + TEMP_FADE}
+                        >
+                            <Stop offset="0" stopColor={palette.dim}
+                                  stopOpacity={TEMP_FADE_TOP} />
+                            <Stop offset="1" stopColor={palette.dim} stopOpacity={0} />
+                        </LinearGradient>
+                    ))}
                 </Defs>
-                {band && (
+                {selectionBand && (
                     <Rect
                         testID="trace-band"
-                        x={band.x} y={0} width={band.width} height={svgHeight}
+                        x={selectionBand.x} y={0} width={selectionBand.width} height={svgHeight}
                         fill={palette.raised}
                     />
                 )}
@@ -249,6 +414,88 @@ export default function BrewTrace({
                         strokeWidth={1}
                     />
                 ))}
+                {tempDraws.map((mark) => {
+                    const label = `${mark.temperature}°`;
+                    const labelPosition = tempLabelX(mark.x + mark.width / 2, label, width);
+                    return (
+                        <React.Fragment key={`temp-${mark.key}`}>
+                            <Rect
+                                testID={mark.fadeTestID}
+                                x={mark.x} y={mark.y}
+                                width={mark.width} height={TEMP_FADE}
+                                fill={`url(#${mark.gradientId})`}
+                            />
+                            <Line
+                                testID={mark.lineTestID}
+                                x1={mark.x} y1={mark.y}
+                                x2={mark.x + mark.width} y2={mark.y}
+                                stroke={palette.dim}
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                fill="none"
+                            />
+                            <SvgText
+                                testID={mark.labelTestID}
+                                x={labelPosition.x}
+                                y={tempLabelY(mark.y)}
+                                textAnchor={labelPosition.textAnchor}
+                                fill={palette.dim}
+                                {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                            >
+                                {label}
+                            </SvgText>
+                        </React.Fragment>
+                    );
+                })}
+                {tempBand !== undefined && (
+                    <React.Fragment>
+                        <SvgText
+                            testID="trace-band-max"
+                            x={width - 2}
+                            y={bandMaxLabelY(
+                                bandY(tempBand.max, tempBand, svgHeight, tempHeadroom)
+                            )}
+                            textAnchor="end"
+                            fill={palette.dim}
+                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                        >
+                            {`${tempBand.max}`}
+                        </SvgText>
+                        <SvgText
+                            testID="trace-band-min"
+                            x={width - 2}
+                            y={bandMinLabelY(svgHeight)}
+                            textAnchor="end"
+                            fill={palette.dim}
+                            {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                        >
+                            {`${tempBand.min}`}
+                        </SvgText>
+                    </React.Fragment>
+                )}
+                {bypassBox && bypass && bypassMark === undefined && tempBand !== undefined
+                 && hasSetTemperature(bypass.temperature) && (
+                    (() => {
+                        const label = `${bypass.temperature}°`;
+                        const labelPosition = tempLabelX(
+                            bypassBox.x + bypassBox.width / 2,
+                            label,
+                            width
+                        );
+                        return (
+                            <SvgText
+                                testID="trace-bypass-temp"
+                                x={labelPosition.x}
+                                y={bypassBoxLabelY(bypassBox.y, bypassBox.height, svgHeight)}
+                                textAnchor={labelPosition.textAnchor}
+                                fill={palette.dim}
+                                {...dotMatrixSvgProps({fontSize: TEMP_LABEL})}
+                            >
+                                {label}
+                            </SvgText>
+                        );
+                    })()
+                )}
                 {waterFill !== "" && (
                     <Path testID="trace-water-fill" d={waterFill} fill="url(#waterFill)"
                           stroke="none" />
@@ -317,7 +564,7 @@ export default function BrewTrace({
                 <Pressable
                     testID="trace-tap"
                     accessibilityRole="button"
-                    accessibilityLabel="Brew trace, tap a stage"
+                    accessibilityLabel={`${accessibilityLabel}. Tap a stage`}
                     onPress={(e) => {
                         const index = stageAtX(bounds, e.nativeEvent.locationX, width, box.maxT);
                         if (index !== null) onSelectStage(index);

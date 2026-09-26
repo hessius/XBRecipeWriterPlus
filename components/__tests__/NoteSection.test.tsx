@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import NoteSection from "@/components/NoteSection";
+import {palette} from "@/constants/colors";
 import {MAX_DESCRIPTION} from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -22,6 +23,15 @@ describe("NoteSection", () => {
 
         expect(screen.getByTestId("note-field").props.maxLength)
             .toBe(MAX_DESCRIPTION);
+    });
+
+    it("draws the placeholder at a readable contrast", async () => {
+        // `muted` on `raised` is 3.55:1, under the 4.5:1 floor, and the
+        // placeholder is the only thing saying what belongs in an empty field.
+        await renderWithProviders(<NoteSection {...props()}/>);
+
+        expect(screen.getByTestId("note-field").props.placeholderTextColor)
+            .toBe(palette.dim);
     });
 
     it("counts what is left while it is being typed", async () => {

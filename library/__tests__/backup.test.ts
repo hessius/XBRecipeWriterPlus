@@ -934,6 +934,105 @@ describe("brew history through a backup", () => {
         expect(brew?.coffee).toBeUndefined();
     });
 
+    describe("bean fields", () => {
+        it("carries the preset fields and tags through a round trip", () => {
+            const brew = brewNamed("b1", {
+                origin: "Nyeri",
+                roast: "Medium",
+                process: "Washed",
+                fermentation: "Anaerobic",
+                tags: ["Kenya"]
+            });
+            const result = parseBackup(buildBackup(
+                [recipeNamed("A", "u1")], {}, "2.6.0", [brew]
+            ));
+
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.payload.brews[0]).toMatchObject({
+                origin: "Nyeri",
+                roast: "Medium",
+                process: "Washed",
+                fermentation: "Anaerobic",
+                tags: ["Kenya"]
+            });
+        });
+
+        it("drops a preset value outside the vocabulary but keeps the brew", () => {
+            const result = parseBackup(backupFileWithBrewFields({
+                roast: "Charred",
+                process: "Wet-hulled",
+                fermentation: "Nitro",
+                origin: "x".repeat(500)
+            }));
+
+            // The brew, its figures and its rating are worth more than one field
+            // a stranger's file got wrong.
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.payload.brews).toHaveLength(1);
+            expect(result.payload.skippedBrews).toBe(0);
+            expect(result.payload.brews[0].origin).toBeUndefined();
+            expect(result.payload.brews[0].roast).toBeUndefined();
+            expect(result.payload.brews[0].process).toBeUndefined();
+            expect(result.payload.brews[0].fermentation).toBeUndefined();
+        });
+
+        it("treats an empty origin in a backup as unset", () => {
+            const empty = reviveBrew({
+                ...JSON.parse(JSON.stringify(brewNamed("b1"))), origin: ""
+            });
+            const blank = reviveBrew({
+                ...JSON.parse(JSON.stringify(brewNamed("b1"))), origin: "   "
+            });
+
+            expect(empty).not.toBeNull();
+            expect(blank).not.toBeNull();
+            expect(empty?.origin).toBeUndefined();
+            expect(blank?.origin).toBeUndefined();
+        });
+
+        it("re-folds tags on the way in rather than trusting them", () => {
+            const result = parseBackup(backupFileWithBrewFields({
+                tags: ["Kenya", "kenya", "  ", 7, "x".repeat(200)]
+            }));
+
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.payload.brews[0].tags).toEqual(["Kenya"]);
+        });
+
+        it("cannot be made to introduce a ninth process", () => {
+            const result = parseBackup(backupFileWithBrewFields({process: "Washed "}));
+
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.payload.brews[0].process).toBeUndefined();
+        });
+
+        it("reads a file written before these fields existed", () => {
+            const envelope = JSON.parse(buildBackup(
+                [recipeNamed("A", "u1")], {}, "2.6.0", [brewNamed("b1", {
+                    origin: "Nyeri",
+                    roast: "Medium",
+                    process: "Washed",
+                    fermentation: "Anaerobic",
+                    tags: ["Kenya"]
+                })]
+            ));
+            for (const key of ["origin", "roast", "process", "fermentation", "tags"]) {
+                delete envelope.brews[0][key];
+            }
+
+            const result = parseBackup(JSON.stringify(envelope));
+
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.payload.brews).toHaveLength(1);
+            expect(result.payload.brews[0].tags).toBeUndefined();
+        });
+    });
+
     it("refuses a record whose dose is not a number", () => {
         expect(reviveBrew({
             ...JSON.parse(JSON.stringify(brewNamed("b1"))), dose: "eighteen"

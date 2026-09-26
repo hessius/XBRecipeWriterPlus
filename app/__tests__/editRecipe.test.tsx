@@ -7,7 +7,14 @@ import {renderWithProviders} from "@/test-utils/render";
 
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {palette} from "@/constants/colors";
+import {RECIPE_HELP} from "@/constants/recipeHelp";
 import {resolveAccent} from "@/library/accent";
+import type {BeanProfile} from "@/library/beanProfile";
+
+// The words themselves are inventoried in docs/copy.md. These tests assert the
+// wiring, so they read the hint rather than restating it; `String` because the
+// field is optional on `HelpEntry` and a missing hint should fail loudly.
+const RATIO_HINT = String(RECIPE_HELP.ratio.hint);
 
 // The mocks mirror app/__tests__/index.test.tsx — read that file and reuse its
 // shapes rather than inventing new ones. Note the comment there about reading a
@@ -16,7 +23,12 @@ import {resolveAccent} from "@/library/accent";
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
-    useNavigation:        () => ({setOptions: mockSetOptions, goBack: mockGoBack})
+    useNavigation:        () => ({
+        setOptions: mockSetOptions,
+        goBack:     mockGoBack,
+        dispatch:   mockDispatch,
+        addListener: mockAddListener
+    })
 }));
 
 jest.mock("@/library/RecipeDatabase");
@@ -26,11 +38,21 @@ jest.mock("@/library/RecipeDatabase");
 // than the store behind it, because the store is reached through the module's
 // own binding and a mocked export would not be seen from inside it. What the
 // hook reads is covered by its own test.
-let mockBrewSummary = {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+let mockBrewSummary = {
+    times: 0, lastAt: 0, avgRating: 0, rated: 0,
+    timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+};
 const mockRate = jest.fn();
+const mockRefreshBeanProfile = jest.fn();
+let mockBeanProfile: BeanProfile = {
+    rows: [],
+    untagged: {brews: 0, rated: 0, avgRating: 0},
+    counted: 0
+};
 jest.mock("@/hooks/useBrewHistory", () => ({
     ...jest.requireActual("@/hooks/useBrewHistory"),
-    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate})
+    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate}),
+    useBeanProfile: () => ({profile: mockBeanProfile, refresh: mockRefreshBeanProfile})
 }));
 
 
@@ -120,6 +142,8 @@ const mockReact = React;
 
 const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
+const mockDispatch = jest.fn();
+const mockAddListener = jest.fn(() => jest.fn());
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -139,11 +163,21 @@ function fixture(): Recipe {
 let mockRecipeJSON = JSON.stringify(fixture());
 
 beforeEach(() => {
+    const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+    RecipeDatabase.prototype.countRecipesByTag.mockReturnValue([{tag: "Morning", count: 3}]);
     mockRecipeJSON = JSON.stringify(fixture());
     mockSettings = {};
     mockParams = null;
     mockGoBack.mockClear();
+    mockDispatch.mockClear();
+    mockAddListener.mockClear();
     mockNotify.mockClear();
+    mockRefreshBeanProfile.mockClear();
+    mockBeanProfile = {
+        rows: [],
+        untagged: {brews: 0, rated: 0, avgRating: 0},
+        counted: 0
+    };
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
     mockWriteCard.mockReset();
@@ -334,6 +368,98 @@ describe("the editor", () => {
         expect(screen.getByTestId("about-history")).toBeTruthy();
     });
 
+    it("shows the brewed-with deck after history on the about deck", async () => {
+        mockBeanProfile = {
+            rows: [{field: "process", value: "Natural", brews: 3, rated: 3,
+                    avgRating: 4.3}],
+            untagged: {brews: 0, rated: 0, avgRating: 0},
+            counted: 3
+        };
+
+        await renderEditor();
+        await openAbout();
+
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+        expect(screen.getByTestId("bean-profile-deck")).toBeTruthy();
+        expect(screen.getByText("Natural")).toBeTruthy();
+    });
+
+    it("refreshes the bean profile after rating the recipe", async () => {
+        mockBrewSummary = {
+            times: 1, lastAt: 1, avgRating: 0, rated: 0,
+            timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+        };
+
+        await renderEditor();
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+
+        expect(mockRate).toHaveBeenCalledWith(4);
+        expect(mockRefreshBeanProfile).toHaveBeenCalledTimes(1);
+    });
+
+    it("takes the editor away from the reader while the brewed-with sheet covers it", async () => {
+        jest.useFakeTimers();
+        mockBeanProfile = {
+            rows: [
+                {field: "process", value: "Natural", brews: 3, rated: 3, avgRating: 4.8},
+                {field: "process", value: "Washed", brews: 3, rated: 3, avgRating: 4.7},
+                {field: "roast", value: "Light", brews: 3, rated: 3, avgRating: 4.6},
+                {field: "origin", value: "Ethiopia", brews: 3, rated: 3, avgRating: 4.5},
+                {field: "custom", value: "Mornings", brews: 3, rated: 3, avgRating: 4.4},
+                {field: "fermentation", value: "Co-ferment", brews: 3, rated: 3,
+                 avgRating: 4.3}
+            ],
+            untagged: {brews: 0, rated: 0, avgRating: 0},
+            counted: 18
+        };
+        const content = () =>
+            screen.getByTestId("editor-content", {includeHiddenElements: true});
+
+        await renderEditor();
+        await openAbout();
+        expect(content().props.accessibilityElementsHidden).toBe(false);
+
+        await act(async () => {
+            await fireEvent.press(screen.getByLabelText("Show all brewed with rows"));
+            jest.advanceTimersByTime(500);
+        });
+
+        expect(content().props.accessibilityElementsHidden).toBe(true);
+        expect(content().props.importantForAccessibility).toBe("no-hide-descendants");
+        await act(async () => {
+            await fireEvent.press(screen.getByLabelText("Close"));
+            jest.advanceTimersByTime(500);
+            jest.runOnlyPendingTimers();
+        });
+        jest.useRealTimers();
+    });
+
+    it("offers known library tags on the editor tag control", async () => {
+        await renderEditor();
+
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "mor");
+
+        expect(screen.getByLabelText("Use tag Morning")).toBeTruthy();
+    });
+
+    it("reads known tags once for the screen lifetime", async () => {
+        const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+        RecipeDatabase.prototype.countRecipesByTag.mockClear();
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("Increase Ratio"));
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Add a tag"));
+        await fireEvent.changeText(screen.getByLabelText("New tag"), "Fresh");
+        await fireEvent(screen.getByLabelText("New tag"), "submitEditing",
+                        {nativeEvent: {text: "Fresh"}});
+
+        expect(RecipeDatabase.prototype.countRecipesByTag).toHaveBeenCalledTimes(1);
+    });
+
     it("puts a renamed recipe back on its pod name by clearing its own", async () => {
         // The title follows the pod again rather than freezing a copy of it,
         // so a pod name that later changes carries the recipe with it. The
@@ -506,12 +632,14 @@ describe("the editor", () => {
         await act(async () => { jest.advanceTimersByTime(500); });
         await fireEvent.press(screen.getByLabelText("Duplicate"));
         await act(async () => { jest.advanceTimersByTime(500); });
+        jest.useRealTimers();
 
-        const store = RecipeDatabase.mock.instances.at(-1)!;
+        const store = RecipeDatabase.mock.instances
+            .find((candidate: {duplicateRecipe: jest.Mock}) =>
+                candidate.duplicateRecipe.mock.calls.length > 0)!;
         expect(store.cloneRecipe).not.toHaveBeenCalled();
         expect(store.duplicateRecipe).toHaveBeenCalledTimes(1);
         expect(store.duplicateRecipe.mock.calls[0][0].xid).toBe("CGL12");
-        jest.useRealTimers();
     });
 
     it("shares the flushed recipe and stays on the editor", async () => {
@@ -627,7 +755,7 @@ describe("the editor", () => {
         expect(screen.queryByLabelText("What is Ratio?")).toBeNull();
         expect(screen.queryByText(/Half ratios cannot be stored/)).toBeNull();
         // The hint is what the deck does carry.
-        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+        expect(screen.getByText(RATIO_HINT))
             .toBeTruthy();
     });
 
@@ -644,7 +772,7 @@ describe("the editor", () => {
         mockSettings = {showHints: false};
         await renderEditor();
 
-        expect(screen.queryByText("Whole numbers only. Sets the target volume."))
+        expect(screen.queryByText(RATIO_HINT))
             .toBeNull();
 
         await fireEvent.press(screen.getByLabelText("More"));
@@ -656,7 +784,7 @@ describe("the editor", () => {
         await fireEvent.press(screen.getByLabelText("Close"));
         await act(async () => { jest.advanceTimersByTime(500); });
 
-        expect(screen.getByText("Whole numbers only. Sets the target volume."))
+        expect(screen.getByText(RATIO_HINT))
             .toBeTruthy();
         jest.useRealTimers();
     });

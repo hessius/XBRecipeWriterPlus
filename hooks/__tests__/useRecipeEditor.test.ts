@@ -165,6 +165,34 @@ describe("the two gates", () => {
     });
 });
 
+describe("recipe tags", () => {
+    it("writes tags through setTags rather than assigning them", async () => {
+        const {result} = await renderEditor();
+
+        await act(async () => {
+            result.current.editTags(["Light", "light", "  Washed  ", ""]);
+        });
+
+        // setTags folds case-insensitively keeping the first spelling, trims,
+        // and drops blanks. Getting these for free is the whole reason the
+        // control does not do its own validation.
+        expect(result.current.recipe?.tags).toEqual(["Light", "Washed"]);
+    });
+
+    it("republishes the recipe so the deck repaints", async () => {
+        const {result} = await renderEditor();
+        const before = result.current.key;
+
+        await act(async () => {
+            result.current.editTags(["Morning"]);
+        });
+
+        // The recipe is mutated in place, so a key bump is the only signal a
+        // change happened. Without it the chip row draws the old tags.
+        expect(result.current.key).toBeGreaterThan(before);
+    });
+});
+
 describe("what a revert keeps", () => {
     it("keeps the account identity, which a restore does not replace", async () => {
         // A revert replaces the brew parameters, not the recipe's identity.

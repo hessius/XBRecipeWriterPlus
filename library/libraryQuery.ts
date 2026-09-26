@@ -1,3 +1,4 @@
+import {brewEvidenceAggregates} from "./brew/brewPopulation";
 import {orderByFragment, type SortAxis, type SortDirection} from "./librarySort";
 import {foldSortKey, type IndexValue} from "./recipeIndex";
 import {tagKey} from "./tagKey";
@@ -124,10 +125,9 @@ function searchClause(
  * What a recipe's brews add up to, as the card reports them.
  *
  * Three figures and no recipe: the card already has the recipe. A recipe with
- * no brews has no entry at all rather than an entry of zeroes, because there is
- * nothing here that a zero would be the true answer to -- an unrated brew
- * leaves the average alone entirely, and a recipe never brewed has no last
- * brew to date.
+ * no brew rows has no entry at all. A recipe with only stopped rows can have an
+ * entry whose brew count is 0, which the card reads the same way: nothing to
+ * show, because no row is evidence of a cup.
  */
 export type RecipeEvidence = {
     /** The average of the ratings given, or 0 where none were. */
@@ -204,13 +204,12 @@ export function buildLibraryQuery(
     const sql = `SELECT recipes.uuid AS uuid, recipes.recipeJSON AS recipeJSON
 FROM recipes
 LEFT JOIN (
-    SELECT recipeUuid, MAX(startedAt) AS lastBrewedAt, COUNT(*) AS brewCount,
-           -- NULLIF, because 0 is the app's word for "not rated", not a
-           -- verdict of nothing. Averaged as a zero it would drag a recipe
-           -- below one the user actually disliked, so an unrated brew has to
-           -- leave the average alone entirely. A recipe with no rated brews
-           -- ends up NULL here, which is the never-rated-last guard's hook.
-           AVG(NULLIF(rating, 0)) AS avgRating
+    SELECT recipeUuid,
+           ${brewEvidenceAggregates({
+               count: "brewCount",
+               lastBrewedAt: "lastBrewedAt",
+               avgRating: "avgRating"
+           })}
     FROM brews
     GROUP BY recipeUuid
 ) AS brewStats ON brewStats.recipeUuid = recipes.uuid${where}

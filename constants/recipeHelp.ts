@@ -46,7 +46,7 @@ const ENTRIES = {
     },
     ratio: {
         title:  "Ratio",
-        hint:   "Whole numbers only. Sets the target volume.",
+        hint:   "Sets target volume. Cards use whole numbers.",
         question: "What does the ratio set?",
         detail: "The target volume is the dose multiplied by the ratio. The " +
                 "stage volumes have to add up to it exactly or the machine " +
@@ -71,16 +71,20 @@ const ENTRIES = {
     },
     grinder: {
         title:  "Grinder",
-        hint:   "Turning it off is experimental.",
+        hint:   "Grinder off recipe cards are experimental. Read more in the help section.",
         question: "Can I turn the grinder off?",
-        detail: "Turning the grinder off writes grind size 81, one past the " +
-                "maximum, and the machine will refuse a card in that state " +
-                "outright. The workaround is to load any other recipe with the " +
-                "grinder enabled first: a shortcut button, another card, or " +
-                "the xBloom app. After " +
-                "which this card will be accepted and the machine will show " +
-                "'--' for the grind size. There is no better way to disable " +
-                "the grinder from a recipe card."
+        detail: "It depends on how you brew it. Brewing straight from the app " +
+                "sends the machine its own value for a grinder that stays off, " +
+                "so pre-ground coffee works normally and there is nothing to " +
+                "watch out for. A card has no such value: turning the grinder " +
+                "off writes grind size 81, one past the maximum, and the " +
+                "machine will refuse a card in that state outright. The " +
+                "workaround is to load any " +
+                "other recipe with the grinder enabled first: a shortcut " +
+                "button, another card, or the xBloom app. After which this card " +
+                "will be accepted and the machine will show '--' for the grind " +
+                "size. There is no better way to disable the grinder from a " +
+                "recipe card."
     },
     cup: {
         title:  "Cup",
@@ -193,6 +197,20 @@ const ENTRIES = {
     },
     bypassTemperature: {
         title: "Temperature"
+    },
+    brewedWith: {
+        title: "Brewed with",
+        hint:  "What your brews of this recipe carried, and how they went.",
+        question: "Where do the brewed with figures come from?",
+        detail: "Every figure is read from your own brews, not from anything " +
+                "saved on the recipe, so rating a brew changes them straight " +
+                "away. Only finished brews count. A brew you cancelled is " +
+                "left out entirely. A row shows how many brews carried that " +
+                "value and the average of the ones you rated, so a row can " +
+                "have brews behind it and no average yet. In the library, a " +
+                "highly rated filter asks for an average of 4 stars or " +
+                "better over at least 3 rated brews, which is why a good " +
+                "looking row can still be missing from it."
     }
 } as const satisfies Record<string, HelpEntry>;
 

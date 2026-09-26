@@ -45,7 +45,8 @@ function withTieBreaks(term: string): string {
  * last" by accident of SQLite's ordering. LONGEST AGO must not open with the
  * recipes nobody has ever brewed, so the CASE forces them to the end first and
  * the real dates order among themselves after. `lastBrewedAt` is NULL when the
- * brews join found nothing, so the same guard covers RECENT and LONGEST AGO.
+ * brews join found no rows, and when it found rows but none that counted as
+ * cups, so the same guard covers RECENT and LONGEST AGO.
  */
 function brewedOrder(direction: SortDirection): string {
     const term = direction === "asc" ? "lastBrewedAt ASC" : "lastBrewedAt DESC";
@@ -77,9 +78,10 @@ function countOrder(direction: SortDirection): string {
  * about coffee somebody drank and judged, and a list of recipes with no verdict
  * at all is not an answer to it.
  *
- * `avgRating` is NULL for a recipe with no brews and NULL again for a recipe
- * whose brews are all unrated, because the join averages `NULLIF(rating, 0)`.
- * One guard therefore covers both, and a recipe that has been brewed nine times
+ * `avgRating` is NULL for a recipe with no brews, for a recipe with brews that
+ * did not count as cups, and for a recipe whose counted brews are all unrated.
+ * The aggregate averages only rated rows in the counted population, so one
+ * guard covers every absence of a verdict and a recipe brewed nine times
  * without comment sits with the never-brewed rather than at the bottom of the
  * scale it was never put on.
  */

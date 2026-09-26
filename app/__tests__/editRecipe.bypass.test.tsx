@@ -13,7 +13,12 @@ import {serialiseCapture, type CardCapture} from "@/library/cardDiagnostics";
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
-    useNavigation:        () => ({setOptions: mockSetOptions, goBack: mockGoBack})
+    useNavigation:        () => ({
+        setOptions: mockSetOptions,
+        goBack:     mockGoBack,
+        dispatch:   mockDispatch,
+        addListener: mockAddListener
+    })
 }));
 
 jest.mock("@/library/RecipeDatabase");
@@ -23,11 +28,19 @@ jest.mock("@/library/RecipeDatabase");
 // than the store behind it, because the store is reached through the module's
 // own binding and a mocked export would not be seen from inside it. What the
 // hook reads is covered by its own test.
-let mockBrewSummary = {times: 0, lastAt: 0, avgRating: 0, rated: 0};
+let mockBrewSummary = {
+    times: 0, lastAt: 0, avgRating: 0, rated: 0,
+    timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+};
 const mockRate = jest.fn();
+const mockRefreshBeanProfile = jest.fn();
 jest.mock("@/hooks/useBrewHistory", () => ({
     ...jest.requireActual("@/hooks/useBrewHistory"),
-    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate})
+    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate}),
+    useBeanProfile: () => ({
+        profile: {rows: [], untagged: {brews: 0, rated: 0, avgRating: 0}, counted: 0},
+        refresh: mockRefreshBeanProfile
+    })
 }));
 
 
@@ -102,6 +115,8 @@ let mockSettings: Record<string, unknown> = {};
 const mockReact = React;
 const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
+const mockDispatch = jest.fn();
+const mockAddListener = jest.fn(() => jest.fn());
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -159,10 +174,14 @@ function captureWithBlocks(blockCount: number, blockSize: number): CardCapture {
 let mockRecipeJSON = JSON.stringify(fixture());
 
 beforeEach(() => {
+    const RecipeDatabase = jest.requireMock("@/library/RecipeDatabase").default;
+    RecipeDatabase.prototype.countRecipesByTag.mockReturnValue([{tag: "Morning", count: 3}]);
     mockRecipeJSON = JSON.stringify(fixture());
     mockSettings = {};
     mockParams = null;
     mockGoBack.mockClear();
+    mockDispatch.mockClear();
+    mockAddListener.mockClear();
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();

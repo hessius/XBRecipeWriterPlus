@@ -1,6 +1,6 @@
 import RecipeDatabase from "@/library/RecipeDatabase";
 import BrewDatabase from "@/library/BrewDatabase";
-import {unobservedBrew} from "@/library/brew/BrewRecord";
+import type {BrewOutcome, BrewRecord} from "@/library/brew/BrewRecord";
 import {createTestDatabase as mockCreateTestDatabase} from "@/test-utils/sqlite";
 
 // `brewEvidence` reads the brews table from the recipe database's own handle,
@@ -14,14 +14,29 @@ jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockShared
 }));
 
-function brewFor(uuid: string, rating: number, at: number): void {
-    new BrewDatabase().insert(
-        unobservedBrew({
-            recipeUuid: uuid, recipeName: uuid, accent: "amber",
-            rating, at
-        }),
-        []
-    );
+function brewFor(
+    uuid: string,
+    rating: number,
+    at: number,
+    outcome: BrewOutcome = "done"
+): void {
+    const record: BrewRecord = {
+        id: `${uuid}-${at}-${outcome}`,
+        recipeUuid: uuid,
+        recipeName: uuid,
+        accent: "amber",
+        startedAt: at,
+        pouringAt: at,
+        endedAt: at + 60_000,
+        outcome,
+        failure: null,
+        pours: 1,
+        waterTotal: 120,
+        cupTotal: 110,
+        heldSeconds: 0,
+        rating
+    };
+    new BrewDatabase().insert(record, []);
 }
 
 describe("RecipeDatabase.brewEvidence", () => {
@@ -54,6 +69,13 @@ describe("RecipeDatabase.brewEvidence", () => {
         expect(new RecipeDatabase().brewEvidence()["a"].lastBrewedAt).toBe(5_000);
     });
 
+    it("reports the most recent counted brew, not a later cancelled one", () => {
+        brewFor("a", 4, 5_000);
+        brewFor("a", 5, 9_000, "cancelled");
+
+        expect(new RecipeDatabase().brewEvidence()["a"].lastBrewedAt).toBe(5_000);
+    });
+
     it("averages only the brews somebody rated", () => {
         // 0 is the app's word for unrated. Averaging it in would report a
         // verdict nobody gave.
@@ -64,6 +86,16 @@ describe("RecipeDatabase.brewEvidence", () => {
 
         expect(evidence["a"].avgRating).toBe(4);
         expect(evidence["a"].brews).toBe(2);
+    });
+
+    it("averages only ratings on brews that counted as cups", () => {
+        brewFor("a", 2, 1_000);
+        brewFor("a", 5, 2_000, "cancelled");
+
+        const evidence = new RecipeDatabase().brewEvidence();
+
+        expect(evidence["a"].avgRating).toBe(2);
+        expect(evidence["a"].brews).toBe(1);
     });
 
     it("reports no rating when every brew of a recipe is unrated", () => {

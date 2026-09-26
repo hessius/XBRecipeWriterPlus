@@ -2,6 +2,7 @@ import {act, renderHook} from "@testing-library/react-native";
 
 import {sweepOnLaunch, useBrewHistory, useRecipeRating} from "@/hooks/useBrewHistory";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
+import {countsAsBrewed, isRated} from "@/library/brew/brewPopulation";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 function record(id: string): StoredBrew {
@@ -80,21 +81,28 @@ function ratingStore(seed: BrewRecord[] = []) {
         rows,
         summaryFor: (uuid: string) => {
             const mine = rows.filter((r) => r.recipeUuid === uuid);
-            const rated = mine.filter((r) => (r.rating ?? 0) > 0);
+            const counted = mine.filter(countsAsBrewed);
+            const rated = mine.filter(isRated);
             return {
-                times: mine.length,
-                lastAt: mine.reduce((max, r) => Math.max(max, r.startedAt), 0),
+                times: counted.length,
+                lastAt: counted.reduce((max, r) => Math.max(max, r.startedAt), 0),
                 avgRating: rated.length === 0
                     ? 0
                     : rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length,
-                rated: rated.length
+                rated: rated.length,
+                timed: 0,
+                meanBrewSeconds: 0,
+                measured: 0,
+                meanCupMl: 0,
+                abandoned: mine.filter((r) => !countsAsBrewed(r)).length
             };
         },
         brewOn: (uuid: string, at: number) => {
             const day = new Date(at);
             day.setHours(0, 0, 0, 0);
             const mine = rows.filter((r) => r.recipeUuid === uuid
-                && r.startedAt >= day.getTime());
+                && r.startedAt >= day.getTime()
+                && countsAsBrewed(r));
             return mine.length === 0 ? null : mine[mine.length - 1].id;
         },
         judge: (id: string, judgement: {rating?: number}) => {
@@ -134,6 +142,23 @@ describe("useRecipeRating", () => {
 
         expect(store.rows).toHaveLength(1);
         expect(store.rows[0].rating).toBe(5);
+    });
+
+    it("logs a counted brew when today's only brew was cancelled", async () => {
+        const store = ratingStore([{
+            id: "cancelled", recipeUuid: "uuid-1", recipeName: "Ethiopia",
+            accent: "#C86A3B", startedAt: Date.now(), endedAt: Date.now(),
+            outcome: "cancelled", failure: null, pours: 2, waterTotal: 20,
+            cupTotal: 10, heldSeconds: 0
+        }]);
+        const {result} = await renderHook(() => useRecipeRating(recipe, store));
+
+        await act(async () => { result.current.rate(4); });
+
+        expect(result.current.summary.avgRating).toBeGreaterThan(0);
+        expect(result.current.summary.times).toBe(1);
+        expect(store.rows).toHaveLength(2);
+        expect(store.rows[1].watched).toBe(false);
     });
 
     it("reports the average back without a re-read of the screen", async () => {

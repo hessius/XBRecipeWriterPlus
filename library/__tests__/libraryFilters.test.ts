@@ -464,3 +464,25 @@ describe("per-author shelves", () => {
         expect(filterLabel("sharedBy:BrewMind")).toBe("FROM BrewMind");
     });
 });
+
+describe("asLibraryFilters and unresolvable bean ids", () => {
+    it("drops a parseable bean id the resolver refuses", () => {
+        // buildLibraryQuery throws on an id it cannot resolve, and that throw
+        // is reserved for the vocabulary and the resolver disagreeing. A gate
+        // testing shape alone would let this one through to it.
+        expect(resolveLibraryFilter("bean:roast:Medium-Dark")).toBeNull();
+        expect(asLibraryFilters(["bean:roast:Medium-Dark", "tea"])).toEqual(["tea"]);
+    });
+
+    it("drops a custom bean id whose value folds away to nothing", () => {
+        expect(resolveLibraryFilter("bean:custom:   ")).toBeNull();
+        expect(asLibraryFilters(["bean:custom:   "])).toEqual([]);
+    });
+
+    it("keeps every bean id the resolver accepts", () => {
+        const ids = ["bean:process:Natural", "bean:rated:roast:Light",
+                     "bean:custom:mornings", "bean:origin:Ethiopia"];
+        for (const id of ids) expect(resolveLibraryFilter(id)).not.toBeNull();
+        expect(asLibraryFilters(ids)).toEqual(ids);
+    });
+});

@@ -311,7 +311,7 @@ describe("brew record", () => {
         mockOpened = {record: {...record, hasStream: false}, samples: []};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByText(/no trace was kept/i)).toBeTruthy();
-        expect(screen.queryByLabelText("Brew trace")).toBeNull();
+        expect(screen.queryByLabelText(/^Brew trace/)).toBeNull();
     });
 
     it("says so when the record is gone", async () => {
@@ -779,7 +779,7 @@ describe("a brew the app did not watch", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
 
         expect(screen.getByText("NOT WATCHED")).toBeTruthy();
-        expect(screen.queryByLabelText("Brew trace")).toBeNull();
+        expect(screen.queryByLabelText(/^Brew trace/)).toBeNull();
     });
 
     it("does not reconstruct stages from the recipe as it stands now", async () => {

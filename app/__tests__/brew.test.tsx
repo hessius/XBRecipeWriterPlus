@@ -244,7 +244,7 @@ describe("brew route", () => {
 
     it("draws the trace, the figures and the ladder", async () => {
         const {getByLabelText, getAllByText, getByTestId} = await renderWithProviders(<Brew />);
-        expect(getByLabelText("Brew trace")).toBeTruthy();
+        expect(getByLabelText("Brew trace, 93 degrees")).toBeTruthy();
         // Two of them now: the figures row above and the trace's own legend
         // below it. Pinned at two rather than "at least one", which would also
         // hold if the figures row vanished entirely.

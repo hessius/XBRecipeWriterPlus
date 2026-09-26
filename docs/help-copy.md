@@ -37,7 +37,7 @@ away a fact.
 
 **Title:** Ratio
 
-**Hint:** Whole numbers only. Sets the target volume.
+**Hint:** Sets target volume. Cards use whole numbers.
 
 **Question:** What does the ratio set?
 
@@ -67,11 +67,11 @@ away a fact.
 
 **Title:** Grinder
 
-**Hint:** Turning it off is experimental.
+**Hint:** Grinder off recipe cards are experimental. Read more in the help section.
 
 **Question:** Can I turn the grinder off?
 
-**Answer:** Turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first — a shortcut button, another card, or the xBloom app — after which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.
+**Answer:** It depends on how you brew it. Brewing straight from the app sends the machine its own value for a grinder that stays off, so pre-ground coffee works normally and there is nothing to watch out for. A card has no such value: turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.
 
 ## cup
 

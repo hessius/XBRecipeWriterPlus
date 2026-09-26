@@ -66,7 +66,7 @@ export default function PodSection({
     const podImage = showAvatar ? recipe.imageURL ?? "" : "";
 
     return (
-        <DeckSection title="XBLOOM POD" testID="about-pod">
+        <DeckSection title="XPOD" testID="about-pod">
             {/* Keyed on the external-replacement epoch, not on the value it
                 mirrors. The counter bumps only when the whole recipe is swapped
                 out — a revert — so that one case still remounts the row and
@@ -83,6 +83,7 @@ export default function PodSection({
                 shares one epoch — cannot land two siblings on the same key. */}
             <TextFieldRow key={`xid-${externalEpoch}`} topic="xid" label="Recipe ID"
                           initialValue={recipe.xid}
+                          placeholder="CGL12"
                           maxLength={8} autoCapitalize="characters"
                           showHint={showHint}
                           note={xidLookupFailed ? "not found" : undefined}
