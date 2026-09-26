@@ -9,12 +9,18 @@ import {
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
 import {
+    BEAN_FIELDS,
     isFermentation,
     isProcess,
     isRoast,
     MAX_ORIGIN_LENGTH,
     normaliseBeanTags
 } from "./brew/beanTags";
+import type {
+    BeanProfile,
+    BeanProfileRow,
+    ProfileField
+} from "@/library/beanProfile";
 import type {
     BrewOutcome,
     BrewRecord,
@@ -297,6 +303,32 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
 }
 
 /**
+ * The column each preset field lives in.
+ *
+ * A literal map this module owns, not a name taken from anything a caller
+ * passed. The four happen to match their field names today, and writing them
+ * out is what keeps that a coincidence rather than a rule a later reader could
+ * extend to a fifth field whose name came from somewhere else.
+ */
+const PROFILE_COLUMN: Record<typeof BEAN_FIELDS[number], string> = {
+    origin: "origin",
+    roast: "roast",
+    process: "process",
+    fermentation: "fermentation"
+};
+
+/**
+ * A counted brew carrying nothing about its coffee.
+ *
+ * All four columns empty *and* no custom tag. The `NOT EXISTS` is the half that
+ * is easy to forget, and forgetting it would file every custom-tagged brew
+ * under NOT TAGGED, which is the one row the design leans on being right.
+ */
+const UNTAGGED_SQL = `(b.origin = '' AND b.roast = '' AND b.process = ''
+    AND b.fermentation = ''
+    AND NOT EXISTS (SELECT 1 FROM brew_tags t WHERE t.brewId = b.id))`;
+
+/**
  * Brew history, in two tables because they have two lifetimes.
  *
  * `brews` is one short row per brew and is kept until the user deletes it.
@@ -477,6 +509,93 @@ class BrewDatabase {
             measured: row.measured,
             meanCupMl: row.meanCupMl ?? 0,
             abandoned: row.abandoned
+        };
+    }
+
+    /**
+     * What this recipe has been brewed with, and how those brews went.
+     *
+     * The one place that knows how a profile is derived, for the reason #98
+     * gives about answering "what has this recipe done?" once rather than four
+     * times in four screens. Derived at query time and written nowhere: re-rating
+     * a brew changes the answer with no migration and no repair step.
+     *
+     * Five sources in one union -- the four preset columns and `brew_tags` --
+     * every one of them scoped by `COUNTED_SQL` and rated by `RATED_SQL` spliced
+     * from `brewPopulation.ts` rather than restated here. A cancelled brew
+     * cannot inflate a row exactly as it cannot inflate the card's evidence
+     * line, and it cannot come to differ from it either.
+     *
+     * The custom rows group on `tagKey`, the folded form, so two spellings of
+     * one tag are one row; `MIN(t.tag)` picks the displayed spelling
+     * deterministically rather than letting SQLite hand back whichever row it
+     * reached first.
+     *
+     * Origin is the recorded column only and deliberately does not follow
+     * `resolvedOrigin`'s fallback into the stored pod blob. The library filter
+     * compares the column, so a row derived from the blob would be a row the
+     * filter cannot reproduce, and tapping it would open an empty library.
+     */
+    public beanProfileFor(recipeUuid: string): BeanProfile {
+        const presets = BEAN_FIELDS.map((field) => `
+            SELECT '${field}' AS field, ${PROFILE_COLUMN[field]} AS value,
+                   COUNT(*) AS brews,
+                   COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                   AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+            FROM brews
+            WHERE recipeUuid = ? AND ${COUNTED_SQL}
+              AND ${PROFILE_COLUMN[field]} <> ''
+            GROUP BY ${PROFILE_COLUMN[field]}`);
+
+        const custom = `
+            SELECT 'custom' AS field, MIN(t.tag) AS value,
+                   COUNT(*) AS brews,
+                   COUNT(CASE WHEN ${RATED_SQL} THEN 1 END) AS rated,
+                   AVG(CASE WHEN ${RATED_SQL} THEN rating END) AS avgRating
+            FROM brews b JOIN brew_tags t ON t.brewId = b.id
+            WHERE b.recipeUuid = ? AND ${COUNTED_SQL}
+            GROUP BY t.tagKey`;
+
+        const rows = this.db.getAllSync<{
+            field: string; value: string; brews: number;
+            rated: number; avgRating: number | null;
+        }>(
+            `${[...presets, custom].join("\nUNION ALL\n")};`,
+            [...BEAN_FIELDS.map(() => recipeUuid), recipeUuid]
+        ).map((row): BeanProfileRow => ({
+            field: row.field as ProfileField,
+            value: row.value,
+            brews: row.brews,
+            rated: row.rated,
+            // SQL's AVG over an empty population is NULL. 0 is the app's
+            // sentinel for "nothing to average" throughout, and the ledger
+            // prints the figure only when it is above 0.
+            avgRating: row.avgRating ?? 0
+        }));
+
+        const totals = this.db.getFirstSync<{
+            counted: number; untaggedBrews: number;
+            untaggedRated: number; untaggedAvg: number | null;
+        }>(
+            `SELECT COUNT(*) AS counted,
+                    COUNT(CASE WHEN ${UNTAGGED_SQL} THEN 1 END) AS untaggedBrews,
+                    COUNT(CASE WHEN ${UNTAGGED_SQL} AND ${RATED_SQL} THEN 1 END)
+                        AS untaggedRated,
+                    AVG(CASE WHEN ${UNTAGGED_SQL} AND ${RATED_SQL} THEN rating END)
+                        AS untaggedAvg
+             FROM brews b
+             WHERE b.recipeUuid = ? AND ${COUNTED_SQL};`,
+            [recipeUuid]
+        );
+
+        return {
+            rows,
+            untagged: {
+                brews: totals?.untaggedBrews ?? 0,
+                rated: totals?.untaggedRated ?? 0,
+                avgRating: totals?.untaggedAvg ?? 0
+            },
+            counted: totals?.counted ?? 0
         };
     }
 
