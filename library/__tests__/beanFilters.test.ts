@@ -138,3 +138,68 @@ describe("labels", () => {
         expect(beanFilterLabel("tea")).toBeNull();
     });
 });
+
+/* eslint-disable import/first */
+import {
+    asLibraryFilters,
+    filterLabel,
+    resolveLibraryFilter,
+    STOCK_FILTERS
+} from "@/library/libraryFilters";
+/* eslint-enable import/first */
+
+describe("the library's own resolver", () => {
+    it("resolves a bean id", () => {
+        expect(resolveLibraryFilter("bean:process:Natural")?.params)
+            .toEqual(["Natural"]);
+    });
+
+    it("still resolves a stock id, a tag and an author", () => {
+        expect(resolveLibraryFilter("tea")).not.toBeNull();
+        expect(resolveLibraryFilter("tag:mornings")).not.toBeNull();
+        expect(resolveLibraryFilter("sharedBy:Ann")).not.toBeNull();
+    });
+
+    it("refuses a bean id whose value is outside the vocabulary", () => {
+        expect(resolveLibraryFilter("bean:process:washed")).toBeNull();
+    });
+
+    it("does not let stock lookup claim a refused bean id", () => {
+        // The parse guard is not about today's stock list, which also refuses
+        // this id. It keeps the namespace boundary ahead of the mutable
+        // exported table: a polluted stock map still cannot turn a refused
+        // bean value into a clause.
+        const id = "bean:process:washed";
+        const stock = STOCK_FILTERS as unknown as Record<
+            string,
+            {label: string; clause: () => {where: string}}
+        >;
+        stock[id] = {label: "BAD", clause: () => ({where: "1 = 1"})};
+        try {
+            expect(resolveLibraryFilter(id)).toBeNull();
+        } finally {
+            delete stock[id];
+        }
+    });
+
+    it("keeps a bean id through the narrowing reader", () => {
+        // Without this the reader drops every bean filter the moment one is
+        // applied, leaving the library narrowed with no chip to undo it.
+        expect(asLibraryFilters(["bean:process:Natural", "tea", "nonsense"]))
+            .toEqual(["bean:process:Natural", "tea"]);
+    });
+
+    it("drops a bean id that cannot be parsed", () => {
+        expect(asLibraryFilters(["bean:varietal:Gesha"])).toEqual([]);
+    });
+
+    it("names a bean filter on its chip", () => {
+        expect(filterLabel("bean:process:Natural")).toBe("NATURAL");
+        expect(filterLabel("bean:rated:custom:mornings")).toBe("mornings · 4★+");
+    });
+
+    it("still names a stock filter and a tag", () => {
+        expect(filterLabel("tea")).toBe("TEA");
+        expect(filterLabel("tag:Mornings")).toBe("Mornings");
+    });
+});
