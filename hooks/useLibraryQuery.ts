@@ -23,6 +23,16 @@ export type LibraryController = {
     onSearchChange: (term: string) => void;
     /** Turn a filter on if it is off, off if it is on. */
     toggleFilter: (id: string) => void;
+    /**
+     * Replace the whole applied set in one write.
+     *
+     * `toggleFilter` cannot express the bean sheet's rated switch, which
+     * rewrites every bean id at once: a loop of toggles would pass through
+     * states where half the ids are rated and re-query the library at each one.
+     * The updater receives the current set so a caller can preserve the filters
+     * it does not own, which every caller must.
+     */
+    applyFilters: (update: (current: readonly string[]) => string[]) => void;
     /** Whether a given filter is currently applied, so a chip can read as on. */
     isFilterActive: (id: string) => boolean;
     /** How many filters are applied, for the filter button's count and fill. */
@@ -194,6 +204,13 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         );
     }
 
+    function applyFilters(update: (current: readonly string[]) => string[]) {
+        setFilters((current) => update(current));
+        // A filter applied away from a visible rail must still explain itself
+        // on screen. Reset to derived intent so a non-empty result auto-opens.
+        setFilterRailIntent(null);
+    }
+
     function isFilterActive(id: string): boolean {
         return filters.includes(id);
     }
@@ -274,6 +291,7 @@ export function useLibraryQuery(settings?: Settings): LibraryController {
         query,
         onSearchChange,
         toggleFilter,
+        applyFilters,
         isFilterActive,
         activeFilterCount,
         filterRailOpen,

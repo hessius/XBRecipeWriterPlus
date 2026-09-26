@@ -39,6 +39,8 @@ export type RailFilter = {
     /** The chip's word, in Doto caps. */
     label: string;
     active: boolean;
+    /** Whether this filter chip discloses an open picker sheet. */
+    caretOpen?: boolean;
 };
 
 type Props = {
@@ -195,6 +197,7 @@ function FilterRail({
                 {filters.map((filter) => (
                     <RailChip key={filter.id} testID={`rail-filter-${filter.id}`}
                               active={filter.active} label={filter.label}
+                              caretOpen={filter.caretOpen}
                               accessibilityLabel={filterAccessibilityLabel(filter)}
                               onPress={() => onFilterPress(filter.id)}/>
                 ))}

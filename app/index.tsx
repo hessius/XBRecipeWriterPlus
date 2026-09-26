@@ -9,6 +9,7 @@ import {useShareIntentContext} from "expo-share-intent";
 import {Button, Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
+import BeanFilterSheet from "@/components/BeanFilterSheet";
 import CtaTile from "@/components/CtaTile";
 import DotMatrixText from "@/components/DotMatrixText";
 import EmptyLibrary from "@/components/EmptyLibrary";
@@ -29,6 +30,7 @@ import {onAccent, palette, type AccentGroup} from "@/constants/colors";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useShelfPicker} from "@/hooks/useShelfPicker";
 import {useCardWriter} from "@/hooks/useCardWriter";
+import {useBeanFilters, type BeanVocabularyStore} from "@/hooks/useBeanFilters";
 import {useMachine} from "@/hooks/useMachine";
 import {useLibraryQuery} from "@/hooks/useLibraryQuery";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
@@ -72,6 +74,8 @@ import {type Settings} from "@/library/Settings";
 type Props = {
     /** Injected by tests. The route renders against the real database. */
     db?: RecipeStore;
+    /** Injected by tests that render the route without a native brew database. */
+    beanStore?: BeanVocabularyStore;
     /** Injected by tests. */
     settings?: Settings;
 };
@@ -185,7 +189,7 @@ function EmptySelection() {
     );
 }
 
-export default function HomeScreen({db, settings}: Props) {
+export default function HomeScreen({db, beanStore, settings}: Props) {
     const insets = useSafeAreaInsets();
     const router = useSteadyRouter();
     const navigation = useNavigation();
@@ -237,6 +241,16 @@ export default function HomeScreen({db, settings}: Props) {
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [popoverNow, setPopoverNow] = useState(0);
     const [sortOpen, setSortOpen] = useState(false);
+    const [beanFilterOpen, setBeanFilterOpen] = useState(false);
+    const injectedBeanStore = beanStore
+        ?? (db !== undefined && "beanVocabulary" in db
+            ? db as unknown as BeanVocabularyStore
+            : undefined);
+    const beanFilters = useBeanFilters({
+        filters:      libraryQuery.query.filters,
+        applyFilters: libraryQuery.applyFilters,
+        store:        injectedBeanStore
+    });
 
     // The recipe whose actions sheet is open, or null when it is closed. This is
     // the library's own door onto `RecipeOverflowSheet`: a tile in a shelf room
@@ -355,6 +369,8 @@ export default function HomeScreen({db, settings}: Props) {
     const wholeLibraryEmpty = library.librarySize === 0;
     /** The chip's own id, which is not a filter and never reaches a query. */
     const SELECTED_CHIP = "picker:selected";
+    /** The bean picker chip is a door into a sheet, not a filter id. */
+    const BEANS_CHIP = "picker:beans";
     const offeredFilterIds = asStockFilters(availableFilters(
         library.filterCounts,
         library.librarySize,
@@ -382,6 +398,12 @@ export default function HomeScreen({db, settings}: Props) {
             label:  `SELECTED (${picker.count})`,
             active: onlySelected
         }] : []),
+        {
+            id:        BEANS_CHIP,
+            label:     "BEANS",
+            active:    beanFilters.active,
+            caretOpen: beanFilterOpen
+        },
         ...appliedNonStock.map((id) => ({
             id,
             label:  filterLabel(id),
@@ -977,7 +999,7 @@ export default function HomeScreen({db, settings}: Props) {
     // library reachable underneath it.
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
         || namingShelf || renamingShelf !== null || shelfActions !== null
-        || deletingShelf !== null
+        || deletingShelf !== null || beanFilterOpen
         || removingShelf !== null || overflowRecipe !== null;
 
     // The sheet's own row, reachable without the long press that opens it. A
@@ -1129,6 +1151,7 @@ export default function HomeScreen({db, settings}: Props) {
                         filters={railFilters}
                         onFilterPress={(id) => {
                             if (id === SELECTED_CHIP) setOnlySelected((on) => !on);
+                            else if (id === BEANS_CHIP) setBeanFilterOpen(true);
                             else libraryQuery.toggleFilter(id);
                         }}
                         activeFilterCount={libraryQuery.activeFilterCount}
@@ -1376,6 +1399,19 @@ export default function HomeScreen({db, settings}: Props) {
                 favouritesFirst={libraryQuery.favouritesFirst}
                 onSortChange={libraryQuery.onSortChange}
                 onFavouritesFirstChange={libraryQuery.onFavouritesFirstChange}/>
+
+            <BeanFilterSheet
+                open={beanFilterOpen}
+                onOpenChange={setBeanFilterOpen}
+                vocabulary={beanFilters.vocabulary}
+                selected={beanFilters.selected}
+                ratedOnly={beanFilters.ratedOnly}
+                onRatedOnlyChange={(value) => {
+                    if (beanFilters.selected.length === 0) {
+                        beanFilters.setRatedOnly(value);
+                    }
+                }}
+                onChange={beanFilters.setValues}/>
 
             {/* The library's one door onto the recipe-actions sheet, opened by a
                 long press on a shelf-room tile or a list row. One sheet for the
