@@ -213,3 +213,81 @@ describe("beanProfileFor", () => {
         expect(database.beanProfileFor(RECIPE).counted).toBe(1);
     });
 });
+
+describe("beanVocabulary", () => {
+    it("is empty when there are no brews", () => {
+        expect(seed([]).beanVocabulary()).toEqual([]);
+    });
+
+    it("offers a value from any recipe, not just one", () => {
+        const database = seed([
+            {id: "a", process: "Natural"},
+            {id: "b", recipeUuid: "another", process: "Washed"}
+        ]);
+        expect(database.beanVocabulary().map((e) => e.value).sort())
+            .toEqual(["Natural", "Washed"]);
+    });
+
+    it("counts recipes, not brews", () => {
+        // The vocabulary answers "how much of the library would this show",
+        // and a recipe brewed nine times is one recipe.
+        const database = seed([
+            {id: "a", process: "Natural"},
+            {id: "b", process: "Natural"},
+            {id: "c", recipeUuid: "another", process: "Natural"}
+        ]);
+        expect(database.beanVocabulary()[0].recipes).toBe(2);
+    });
+
+    it("leaves out a preset value only a cancelled brew carries", () => {
+        // The filter clause is scoped to counted brews, so a value offered
+        // here that only a cancelled brew carries would build a filter that
+        // can never match anything.
+        const database = seed([
+            {id: "a", process: "Natural"},
+            {id: "b", process: "Honey", outcome: "cancelled"}
+        ]);
+        expect(database.beanVocabulary().map((e) => e.value)).toEqual(["Natural"]);
+    });
+
+    it("leaves out a custom value only a cancelled brew carries", () => {
+        // The custom tag path is a separate select, so proving the counted
+        // guard on the four preset columns says nothing about this one.
+        const database = seed([
+            {id: "a", tags: ["mornings"]},
+            {id: "b", tags: ["cancelled only"], outcome: "cancelled"}
+        ]);
+        expect(database.beanVocabulary().map((e) => e.value)).toEqual(["mornings"]);
+    });
+
+    it("offers custom tags in their folded form", () => {
+        // The filter binds tagKey, so the vocabulary has to hand back the
+        // value that binding will match.
+        const database = seed([
+            {id: "a", tags: ["Mornings"]},
+            {id: "b", tags: ["mornings"]}
+        ]);
+        const custom = database.beanVocabulary().filter((e) => e.field === "custom");
+        expect(custom).toEqual([{field: "custom", value: "mornings", recipes: 1}]);
+    });
+
+    it("groups the fields in BEAN_FIELDS order with custom last", () => {
+        const database = seed([{
+            id: "a", origin: "Guji", roast: "Light", process: "Natural",
+            fermentation: "Lactic", tags: ["dad's bag"]
+        }]);
+        expect(database.beanVocabulary().map((e) => e.field))
+            .toEqual(["origin", "roast", "process", "fermentation", "custom"]);
+    });
+
+    it("orders a field's values by recipe count, then by value", () => {
+        const database = seed([
+            {id: "a", process: "Washed"},
+            {id: "b", recipeUuid: "r2", process: "Washed"},
+            {id: "c", recipeUuid: "r3", process: "Natural"},
+            {id: "d", recipeUuid: "r4", process: "Honey"}
+        ]);
+        expect(database.beanVocabulary().map((e) => e.value))
+            .toEqual(["Washed", "Honey", "Natural"]);
+    });
+});

@@ -63,6 +63,14 @@ export type BrewSummary = {
     abandoned: number;
 };
 
+/** One value the library's brews carry, and how many recipes carry it. */
+export type BeanVocabularyEntry = {
+    field: ProfileField;
+    /** Exactly the value the filter will bind: raw for presets, folded for custom. */
+    value: string;
+    recipes: number;
+};
+
 type BrewRow = {
     id: string;
     recipeUuid: string;
@@ -597,6 +605,64 @@ class BrewDatabase {
             },
             counted: totals?.counted ?? 0
         };
+    }
+
+    /**
+     * Every value any counted brew carries, with how many recipes carry it.
+     *
+     * What the picker offers. There is no text field in that sheet, and this is
+     * why there does not need to be: origin and custom tags are free text, so
+     * typing them again would reintroduce the splitting the ledger already
+     * tolerates and would let a user filter on a value no brew carries and get
+     * an empty library with nothing explaining it.
+     *
+     * The values handed back are exactly the ones `beanFilters` will bind: the
+     * raw column text for the presets and origin, and the folded `tagKey` for a
+     * custom tag. Handing back a display spelling for a custom tag would offer
+     * the user a chip that matches nothing.
+     *
+     * Scoped to counted brews for the same reason: the filter clauses are, so a
+     * value only a cancelled brew carries would build a filter that can never
+     * match.
+     *
+     * Recipes rather than brews, because the number answers "how much of the
+     * library would this show me" and a recipe brewed nine times is one recipe.
+     *
+     * Ordering is done here in TypeScript rather than in SQL: the field order is
+     * `BEAN_FIELDS`, which is a TypeScript constant, and a CASE expression
+     * restating it in the statement would be a second copy of that order.
+     */
+    public beanVocabulary(): BeanVocabularyEntry[] {
+        const presets = BEAN_FIELDS.map((field) => `
+            SELECT '${field}' AS field, ${PROFILE_COLUMN[field]} AS value,
+                   recipeUuid
+            FROM brews
+            WHERE ${COUNTED_SQL} AND ${PROFILE_COLUMN[field]} <> ''`);
+
+        const custom = `
+            SELECT 'custom' AS field, t.tagKey AS value, b.recipeUuid AS recipeUuid
+            FROM brews b JOIN brew_tags t ON t.brewId = b.id
+            WHERE ${COUNTED_SQL}`;
+
+        const rows = this.db.getAllSync<{
+            field: string; value: string; recipes: number;
+        }>(
+            `SELECT field, value, COUNT(DISTINCT recipeUuid) AS recipes
+             FROM (${[...presets, custom].join("\nUNION ALL\n")})
+             GROUP BY field, value;`
+        );
+
+        const order: ProfileField[] = [...BEAN_FIELDS, "custom"];
+        return rows
+            .map((row): BeanVocabularyEntry => ({
+                field: row.field as ProfileField,
+                value: row.value,
+                recipes: row.recipes
+            }))
+            .sort((a, b) =>
+                order.indexOf(a.field) - order.indexOf(b.field)
+                || b.recipes - a.recipes
+                || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
     }
 
     /**
