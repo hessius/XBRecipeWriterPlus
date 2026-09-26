@@ -3,6 +3,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 
 import AboutDeck from "@/components/AboutDeck";
 import {palette} from "@/constants/colors";
+import type {BeanProfile} from "@/library/beanProfile";
 import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -19,12 +20,20 @@ function summary(overrides: Partial<BrewSummary> = {}): BrewSummary {
     };
 }
 
+const ZERO_PROFILE: BeanProfile = {
+    rows: [],
+    untagged: {brews: 0, rated: 0, avgRating: 0},
+    counted: 0
+};
+
 function props(over: Partial<React.ComponentProps<typeof AboutDeck>> = {}) {
     return {
         recipe:             recipeWith(),
         accent:             palette.info,
         showAvatar:         false,
         brews:              summary(),
+        beanProfile:        ZERO_PROFILE,
+        onShowBeanProfile:  jest.fn(),
         showHint:           false,
         knownTags:          [],
         onTags:             jest.fn(),

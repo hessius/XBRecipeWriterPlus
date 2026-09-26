@@ -9,6 +9,7 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {palette} from "@/constants/colors";
 import {RECIPE_HELP} from "@/constants/recipeHelp";
 import {resolveAccent} from "@/library/accent";
+import type {BeanProfile} from "@/library/beanProfile";
 
 // The words themselves are inventoried in docs/copy.md. These tests assert the
 // wiring, so they read the hint rather than restating it; `String` because the
@@ -42,9 +43,16 @@ let mockBrewSummary = {
     timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
 };
 const mockRate = jest.fn();
+const mockRefreshBeanProfile = jest.fn();
+let mockBeanProfile: BeanProfile = {
+    rows: [],
+    untagged: {brews: 0, rated: 0, avgRating: 0},
+    counted: 0
+};
 jest.mock("@/hooks/useBrewHistory", () => ({
     ...jest.requireActual("@/hooks/useBrewHistory"),
-    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate})
+    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate}),
+    useBeanProfile: () => ({profile: mockBeanProfile, refresh: mockRefreshBeanProfile})
 }));
 
 
@@ -164,6 +172,12 @@ beforeEach(() => {
     mockDispatch.mockClear();
     mockAddListener.mockClear();
     mockNotify.mockClear();
+    mockRefreshBeanProfile.mockClear();
+    mockBeanProfile = {
+        rows: [],
+        untagged: {brews: 0, rated: 0, avgRating: 0},
+        counted: 0
+    };
     mockShareState = {status: "idle"};
     mockShareRecipe.mockReset();
     mockWriteCard.mockReset();
@@ -352,6 +366,73 @@ describe("the editor", () => {
         expect(screen.getByTestId("about-pod")).toBeTruthy();
         expect(screen.getByTestId("about-from")).toBeTruthy();
         expect(screen.getByTestId("about-history")).toBeTruthy();
+    });
+
+    it("shows the brewed-with deck after history on the about deck", async () => {
+        mockBeanProfile = {
+            rows: [{field: "process", value: "Natural", brews: 3, rated: 3,
+                    avgRating: 4.3}],
+            untagged: {brews: 0, rated: 0, avgRating: 0},
+            counted: 3
+        };
+
+        await renderEditor();
+        await openAbout();
+
+        expect(screen.getByTestId("about-history")).toBeTruthy();
+        expect(screen.getByTestId("bean-profile-deck")).toBeTruthy();
+        expect(screen.getByText("Natural")).toBeTruthy();
+    });
+
+    it("refreshes the bean profile after rating the recipe", async () => {
+        mockBrewSummary = {
+            times: 1, lastAt: 1, avgRating: 0, rated: 0,
+            timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+        };
+
+        await renderEditor();
+        await openAbout();
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+
+        expect(mockRate).toHaveBeenCalledWith(4);
+        expect(mockRefreshBeanProfile).toHaveBeenCalledTimes(1);
+    });
+
+    it("takes the editor away from the reader while the brewed-with sheet covers it", async () => {
+        jest.useFakeTimers();
+        mockBeanProfile = {
+            rows: [
+                {field: "process", value: "Natural", brews: 3, rated: 3, avgRating: 4.8},
+                {field: "process", value: "Washed", brews: 3, rated: 3, avgRating: 4.7},
+                {field: "roast", value: "Light", brews: 3, rated: 3, avgRating: 4.6},
+                {field: "origin", value: "Ethiopia", brews: 3, rated: 3, avgRating: 4.5},
+                {field: "custom", value: "Mornings", brews: 3, rated: 3, avgRating: 4.4},
+                {field: "fermentation", value: "Co-ferment", brews: 3, rated: 3,
+                 avgRating: 4.3}
+            ],
+            untagged: {brews: 0, rated: 0, avgRating: 0},
+            counted: 18
+        };
+        const content = () =>
+            screen.getByTestId("editor-content", {includeHiddenElements: true});
+
+        await renderEditor();
+        await openAbout();
+        expect(content().props.accessibilityElementsHidden).toBe(false);
+
+        await act(async () => {
+            await fireEvent.press(screen.getByLabelText("Show all brewed-with rows"));
+            jest.advanceTimersByTime(500);
+        });
+
+        expect(content().props.accessibilityElementsHidden).toBe(true);
+        expect(content().props.importantForAccessibility).toBe("no-hide-descendants");
+        await act(async () => {
+            await fireEvent.press(screen.getByLabelText("Close"));
+            jest.advanceTimersByTime(500);
+            jest.runOnlyPendingTimers();
+        });
+        jest.useRealTimers();
     });
 
     it("offers known library tags on the editor tag control", async () => {

@@ -73,9 +73,14 @@ let mockBrewSummary = {
     timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
 };
 const mockRate = jest.fn();
+const mockRefreshBeanProfile = jest.fn();
 jest.mock("@/hooks/useBrewHistory", () => ({
     ...jest.requireActual("@/hooks/useBrewHistory"),
-    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate})
+    useRecipeRating: () => ({summary: mockBrewSummary, rate: mockRate}),
+    useBeanProfile: () => ({
+        profile: {rows: [], untagged: {brews: 0, rated: 0, avgRating: 0}, counted: 0},
+        refresh: mockRefreshBeanProfile
+    })
 }));
 
 const mockNotify = jest.fn();

@@ -1,12 +1,14 @@
 import React from "react";
 import {YStack} from "tamagui";
 
+import {BeanProfileDeck} from "@/components/BeanProfileDeck";
 import FromSection from "@/components/FromSection";
 import HistorySection from "@/components/HistorySection";
 import NoteSection from "@/components/NoteSection";
 import PodSection from "@/components/PodSection";
 import TagSection from "@/components/TagSection";
 import {RECIPE_LABELS} from "@/hooks/useRecipeEditor";
+import type {BeanProfile} from "@/library/beanProfile";
 import type {BrewSummary} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 
@@ -21,6 +23,8 @@ type Props = {
     showAvatar: boolean;
     /** How many times this recipe has been brewed, when last, and how it fared. */
     brews: BrewSummary;
+    /** What the recipe has actually been brewed with. */
+    beanProfile: BeanProfile;
     /**
      * The verdict the user just gave this recipe.
      *
@@ -29,6 +33,8 @@ type Props = {
      * drawing a control that does nothing.
      */
     onRate?: (rating: number) => void;
+    /** Opens the full brewed-with ledger. */
+    onShowBeanProfile: () => void;
     /** Every tag used elsewhere in the library, largest shelves first. */
     knownTags: string[];
     /** Replaces the recipe's tags through the editor operation. */
@@ -75,8 +81,9 @@ type Props = {
  * the comments that say why went with it into the pod section.
  */
 export default function AboutDeck({
-    recipe, accent, showAvatar, brews, onRate, knownTags, onTags, showHint, dispatch, onDraft,
-    onInputErrorChange, xidLookupFailed, externalEpoch, onXidFocusChange
+    recipe, accent, showAvatar, brews, beanProfile, onRate, onShowBeanProfile, knownTags,
+    onTags, showHint, dispatch, onDraft, onInputErrorChange, xidLookupFailed, externalEpoch,
+    onXidFocusChange
 }: Props) {
     return (
         <YStack gap="$2" marginTop="$3">
@@ -103,6 +110,9 @@ export default function AboutDeck({
             <FromSection recipe={recipe} accent={accent} showAvatar={showAvatar}/>
 
             <HistorySection summary={brews} onRate={onRate}/>
+
+            <BeanProfileDeck profile={beanProfile} accent={accent}
+                             onShowAll={onShowBeanProfile}/>
         </YStack>
     );
 }

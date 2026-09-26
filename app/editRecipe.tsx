@@ -6,6 +6,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Text, XStack, YStack} from "tamagui";
 
 import AboutDeck from "@/components/AboutDeck";
+import {BeanProfileSheet} from "@/components/BeanProfileSheet";
 import BypassRung from "@/components/BypassRung";
 import BypassWriteSheet from "@/components/BypassWriteSheet";
 import DeckSwitch, {type Deck} from "@/components/DeckSwitch";
@@ -31,7 +32,12 @@ import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
-import {useRecipeRating, type RecipeRatingStore} from "@/hooks/useBrewHistory";
+import {
+    useBeanProfile,
+    useRecipeRating,
+    type BeanProfileStore,
+    type RecipeRatingStore
+} from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {resolveAccent} from "@/library/accent";
 import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
@@ -720,7 +726,7 @@ export default function EditRecipe(
      * export store. The router passes nothing, so the default is the shared
      * database.
      */
-    {historyStore}: {historyStore?: RecipeRatingStore} = {}
+    {historyStore}: {historyStore?: RecipeRatingStore & BeanProfileStore} = {}
 ) {
     "use no memo";
 
@@ -792,6 +798,7 @@ export default function EditRecipe(
     const [revertOpen, setRevertOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
+    const [beanProfileOpen, setBeanProfileOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     const [leavePrompt, setLeavePrompt] =
         useState<{intent: LeaveIntent; inLibrary: boolean} | null>(null);
@@ -906,6 +913,10 @@ export default function EditRecipe(
             name: recipe?.displayName() ?? "",
             accent
         },
+        historyStore
+    );
+    const {profile: beanProfile, refresh: refreshBeanProfile} = useBeanProfile(
+        recipe?.uuid ?? "",
         historyStore
     );
 
@@ -1094,7 +1105,7 @@ export default function EditRecipe(
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
-        || bypassWriteOpen || renameOpen || leavePrompt !== null;
+        || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null;
 
     return (
         <>
@@ -1104,7 +1115,7 @@ export default function EditRecipe(
                 screen reader, so TalkBack cannot reach and fire the controls
                 behind it — the Android half of what `accessibilityViewIsModal`
                 does on iOS. */}
-            <YStack flex={1} backgroundColor={palette.base}
+            <YStack testID="editor-content" flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
             {/* Outside the scroll view, so it is the screen's header rather
@@ -1191,7 +1202,12 @@ export default function EditRecipe(
                 ) : deck === "about" ? (
                     <AboutDeck recipe={recipe} accent={accent}
                                showAvatar={showRecipeAvatars} brews={brewSummary}
-                               onRate={rate}
+                               beanProfile={beanProfile}
+                               onRate={(rating) => {
+                                   rate(rating);
+                                   refreshBeanProfile();
+                               }}
+                               onShowBeanProfile={() => setBeanProfileOpen(true)}
                                knownTags={knownTags}
                                onTags={editTags}
                                showHint={showHint} dispatch={dispatch}
@@ -1265,6 +1281,11 @@ export default function EditRecipe(
                          onOpenChange={setRevertOpen} onReverted={onRecipeReplaced}/>
 
             <HelpSheet open={helpOpen} onOpenChange={setHelpOpen}/>
+
+            <BeanProfileSheet open={beanProfileOpen}
+                              onOpenChange={setBeanProfileOpen}
+                              profile={beanProfile}
+                              accent={accent}/>
 
             {/* The recipe's own name, not its displayName(): a recipe following
                 its pod has an empty name and a borrowed title, and seeding the

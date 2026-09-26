@@ -3,6 +3,7 @@ import {useState} from "react";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {isRating, unobservedBrew} from "@/library/brew/BrewRecord";
 import BrewDatabase, {type BrewSummary, type StoredBrew} from "@/library/BrewDatabase";
+import type {BeanProfile} from "@/library/beanProfile";
 
 /** The part of `BrewDatabase` history reads. Injected, so tests need no SQLite. */
 export type HistoryStore = {
@@ -26,6 +27,7 @@ export function sharedBrewDatabase(): BrewDatabase {
 
 /** The one method the recipe screen's summary needs. Injected by its tests. */
 export type BrewSummaryStore = {summaryFor: (recipeUuid: string) => BrewSummary};
+export type BeanProfileStore = {beanProfileFor: (recipeUuid: string) => BeanProfile};
 
 /**
  * What rating a recipe needs of the database. Injected by tests.
@@ -86,6 +88,40 @@ export function useRecipeRating(
     }
 
     return {summary, rate};
+}
+
+/**
+ * A recipe's bean profile, and a way to ask for it again.
+ *
+ * Same shape as `useRecipeRating` above, and for the same two reasons: reading
+ * SQLite during render is impure, and seeding state from an effect is what
+ * `react-hooks/set-state-in-effect` exists to stop. So the first read happens
+ * in a lazy initialiser, and every later one in the handler of the event that
+ * could have changed the answer.
+ *
+ * The only such event is a rating. Tagging a brew happens on the brew record
+ * screen, and coming back from it remounts this.
+ */
+export function useBeanProfile(
+    recipeUuid: string,
+    store: BeanProfileStore = sharedBrewDatabase()
+): {profile: BeanProfile; refresh: () => void} {
+    const [reading, setReading] = useState<{uuid: string; profile: BeanProfile}>(
+        () => ({uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)})
+    );
+
+    const current = reading.uuid === recipeUuid
+        ? reading
+        : {uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)};
+    if (current !== reading) {
+        setReading(current);
+    }
+
+    function refresh(): void {
+        setReading({uuid: recipeUuid, profile: store.beanProfileFor(recipeUuid)});
+    }
+
+    return {profile: current.profile, refresh};
 }
 
 /** The two writes a judgement makes. Injected by tests. */
