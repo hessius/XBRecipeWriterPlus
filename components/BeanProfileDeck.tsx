@@ -77,7 +77,7 @@ export function BeanProfileDeck({profile, onShowAll, accent = palette.info}: Pro
                         <BeanProfileRow
                             field={NOT_TAGGED_LABEL}
                             value={brewCount(profile.untagged.brews)}
-                            brews={profile.untagged.brews}
+                            brews={null}
                             rating={profile.untagged.avgRating}
                             rated={profile.untagged.rated}
                             accent={accent}

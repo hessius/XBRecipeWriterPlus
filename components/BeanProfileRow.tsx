@@ -11,7 +11,15 @@ const FIGURES_WIDTH = 72;
 type Props = {
     field: string;
     value: string;
-    brews: number;
+    /**
+     * Counted brews, or null when the count is already in the value column.
+     *
+     * The untagged row is the only caller that passes null. It has no field of
+     * its own, so its count sits where a value would and printing it again in
+     * the figures would give the one row the design leans on being right the
+     * shape `NOT TAGGED | 9 brews | 3.9 · 9`.
+     */
+    brews: number | null;
     rating: number;
     rated: number;
     accent: string;
@@ -21,7 +29,13 @@ type Props = {
 export function BeanProfileRow({
     field, value, brews, rating, rated, accent, accessibilityLabel
 }: Props) {
-    const figures = rated === 0 ? `${brews}` : `${rating.toFixed(1)} · ${brews}`;
+    // No rated brews means no average: 0.0 would claim a measurement nobody
+    // took. What is left is the count, and where the count has already been
+    // shown there is nothing left to print at all.
+    const average = rated === 0 ? "" : rating.toFixed(1);
+    const figures = brews === null
+        ? average
+        : average === "" ? `${brews}` : `${average} · ${brews}`;
 
     return (
         <XStack

@@ -207,6 +207,28 @@ describe("BeanProfileDeck", () => {
         expect(screen.getByLabelText("Not tagged")).toHaveTextContent(/9 brews/);
     });
 
+    it("writes the untagged count once, not again in the figures", async () => {
+        // The untagged row has no field of its own, so its count sits where a
+        // value would. Printing it again beside the average gives the one row
+        // the design leans on being right the shape
+        // `NOT TAGGED | 9 brews | 3.9 · 9`, which is how it first shipped.
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:     [row()],
+                    untagged: {brews: 9, rated: 2, avgRating: 3.9},
+                    counted:  18
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        const untagged = screen.getByLabelText("Not tagged");
+        expect(untagged).toHaveTextContent(/3\.9/);
+        expect(untagged).not.toHaveTextContent(/·/);
+    });
+
     it("writes a singular untagged count in the value column", async () => {
         await renderWithProviders(
             <BeanProfileDeck
