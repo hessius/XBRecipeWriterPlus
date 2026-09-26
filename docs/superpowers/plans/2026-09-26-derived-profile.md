@@ -1570,7 +1570,7 @@ Then:
 - [ ] `bean:rated:process:Natural` selects only `Guji`. `Yirg` averages 5 but has two rated brews, one short of the floor, and this is the test that proves a cancelled brew does not make up the number.
 - [ ] a fourth done Natural brew rated 5 added to `Yirg` makes `bean:rated:process:Natural` select both.
 - [ ] `bean:rated:process:Washed` selects nothing: `Guji`'s single Washed brew is below the floor.
-- [ ] a recipe with four done Natural brews rated 5, 5, 5, 1 does not match `bean:rated:process:Natural`: the average is 4.0 exactly, so also assert 5, 5, 5, 2 **does** match at exactly 4.25 and 5, 4, 4, 3 matches at exactly 4.0. `HIGHLY_RATED` is `>=`, so 4.0 matches. State that as a test, because the spec chose it.
+- [ ] exactly 4.0 is highly rated, because `HIGHLY_RATED` is compared with `>=` and the spec chose that. Assert both sides of the boundary: 5, 4, 4, 3 averages exactly 4.0 and **matches**, while 5, 5, 5, 1 averages 4.0 and also matches, so the failing case has to be built deliberately, for instance 5, 4, 4, 2 at 3.75.
 - [ ] a done but **unrated** Natural brew does not drag the average down: three brews rated 5, 4, 4 plus one rated 0 still averages 4.33, not 3.25.
 - [ ] `bean:custom:mornings` selects a recipe whose brew carries the tag `Mornings`, proving the fold works through SQLite's ASCII-only `LIKE` being sidestepped.
 - [ ] a custom tag differing only by case and a Turkish dotless ı fold together through `tagKey`, not through SQLite collation.
