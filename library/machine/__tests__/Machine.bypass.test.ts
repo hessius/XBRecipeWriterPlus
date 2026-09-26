@@ -84,8 +84,7 @@ describe("Machine bypass", () => {
         expect(argsOf(transport.written, 8102)).toEqual([45, 600, 18]);
     });
 
-    it("honours the plain reading when it is selected", async () => {
-        const {machine, transport} = await readyMachine();
+    it("honours the plain reading when it is selected", async () => {        const {machine, transport} = await readyMachine();
         const recipe = coffeeRecipe();
         recipe.dosage = 18;
         recipe.bypassEnabled = true;
@@ -96,6 +95,25 @@ describe("Machine bypass", () => {
         await machine.brew(recipe);
 
         expect(argsOf(transport.written, 8102)).toEqual([45, 60, 18]);
+    });
+
+    it("clamps a bypass temperature the kettle cannot do", async () => {
+        // The editor and the `Recipe` constructor both stop a sentinel now, so
+        // this is the belt on top of the braces. It is worth having because
+        // this is the last place the number is still a number: the next thing
+        // that happens to it is a float32 in an 8102 frame, and a machine
+        // asked for -1 C has no way to say so.
+        const {machine, transport} = await readyMachine();
+        const recipe = coffeeRecipe();
+        recipe.dosage = 18;
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume  = 45;
+        recipe.bypassTemp    = -1;
+        machine.setBypassTempEncoding("plain");
+
+        await machine.brew(recipe);
+
+        expect(argsOf(transport.written, 8102)).toEqual([45, 39, 18]);
     });
 
     it("sends no bypass for tea", async () => {

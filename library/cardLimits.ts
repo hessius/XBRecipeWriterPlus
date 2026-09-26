@@ -1,6 +1,6 @@
 import {MACHINE_CARD_MAX_STAGES} from "./cardWriteErrors";
 import {AGITATION, POUR_PATTERN} from "./Pour";
-import Recipe from "./Recipe";
+import type Recipe from "./Recipe";
 import {displayRange, toDisplay, type TemperatureUnit} from "./units";
 import {grindTooFine} from "@/constants/copy";
 

@@ -4,6 +4,7 @@ import {
     SETTLE_CEILING_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {brewProblems} from "@/library/cardLimits";
+import {clampBypassTemp} from "@/library/bypassLimits";
 import type Recipe from "@/library/Recipe";
 
 import {RadioUnavailableError} from "./errors";
@@ -916,7 +917,16 @@ export default class Machine {
                     ? buildBypassDose(0, 0, recipe.dosage)
                     : buildBypassDose(
                         Math.round(recipe.bypassVolume),
-                        bypassTempValue(recipe.bypassTemp, this.bypassEncoding),
+                        // Clamped here rather than inside `bypassTempValue`,
+                        // which is in the wire layer and imports nothing from
+                        // the app. This is the last place the number is still a
+                        // number: `buildBypassDose` writes it as a float32 and
+                        // the machine has no idea what it was asked for. A
+                        // stage's unset temperature is -1, and that sentinel has
+                        // reached a recipe's `bypassTemp` before now.
+                        bypassTempValue(
+                            clampBypassTemp(recipe.bypassTemp), this.bypassEncoding
+                        ),
                         recipe.dosage
                     ),
                 ...(tea ? [
