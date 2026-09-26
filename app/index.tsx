@@ -1406,11 +1406,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 vocabulary={beanFilters.vocabulary}
                 selected={beanFilters.selected}
                 ratedOnly={beanFilters.ratedOnly}
-                onRatedOnlyChange={(value) => {
-                    if (beanFilters.selected.length === 0) {
-                        beanFilters.setRatedOnly(value);
-                    }
-                }}
+                onRatedOnlyChange={beanFilters.setRatedOnly}
                 onChange={beanFilters.setValues}/>
 
             {/* The library's one door onto the recipe-actions sheet, opened by a

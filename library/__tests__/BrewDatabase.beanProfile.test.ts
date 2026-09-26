@@ -35,8 +35,21 @@ type Seed = {
  * that has to build a whole valid `BrewRecord` to say "a cancelled brew with a
  * rating" buries the one fact it is about.
  */
-function seed(rows: Seed[]): BrewDatabase {
+function seed(rows: Seed[], deleted: string[] = []): BrewDatabase {
     const database = new BrewDatabase();
+    // `recipes` is RecipeDatabase's table, created here because this suite
+    // constructs only BrewDatabase. `beanVocabulary` reads it to keep a
+    // deleted recipe's values out of the picker, so a seed without it would
+    // hand back an empty vocabulary for the wrong reason.
+    mockBacking.runSync(
+        "CREATE TABLE IF NOT EXISTS recipes (uuid TEXT PRIMARY KEY NOT NULL, recipeJSON TEXT);"
+    );
+    const live = new Set(rows.map((row) => row.recipeUuid ?? RECIPE));
+    for (const uuid of live) {
+        if (deleted.includes(uuid)) continue;
+        mockBacking.runSync("INSERT INTO recipes (uuid, recipeJSON) VALUES (?, ?);",
+                            [uuid, "{}"]);
+    }
     rows.forEach((row, index) => {
         mockBacking.runSync(
             `INSERT INTO brews (
@@ -289,5 +302,36 @@ describe("beanVocabulary", () => {
         ]);
         expect(database.beanVocabulary().map((e) => e.value))
             .toEqual(["Washed", "Honey", "Natural"]);
+    });
+});
+
+describe("beanVocabulary and deleted recipes", () => {
+    it("drops a value only a deleted recipe's brews carry", () => {
+        // Deleting a recipe keeps its brews. The filter matches through
+        // `recipes`, so offering this value would open an empty library.
+        const database = seed([
+            {id: "a", recipeUuid: "gone", process: "Natural"},
+            {id: "b", recipeUuid: "here", process: "Washed"}
+        ], ["gone"]);
+
+        expect(database.beanVocabulary().map((e) => e.value)).toEqual(["Washed"]);
+    });
+
+    it("drops a custom tag only a deleted recipe's brews carry", () => {
+        const database = seed([
+            {id: "a", recipeUuid: "gone", tags: ["mornings"]},
+            {id: "b", recipeUuid: "here", tags: ["evenings"]}
+        ], ["gone"]);
+
+        expect(database.beanVocabulary().map((e) => e.value)).toEqual(["evenings"]);
+    });
+
+    it("does not count a deleted recipe towards a surviving value", () => {
+        const database = seed([
+            {id: "a", recipeUuid: "gone", roast: "Medium"},
+            {id: "b", recipeUuid: "here", roast: "Medium"}
+        ], ["gone"]);
+
+        expect(database.beanVocabulary()[0].recipes).toBe(1);
     });
 });

@@ -292,3 +292,53 @@ describe("HomeScreen bean filters", () => {
         expect(screen.queryByTestId(`rail-filter-${id("process", "Natural")}`)).toBeNull();
     });
 });
+
+describe("HomeScreen bean filters: the rated switch remembers itself", () => {
+    beforeEach(() => {
+        mockPush.mockClear();
+        mockBeanVocabulary = [
+            {field: "process", value: "Natural", recipes: 1}
+        ];
+        mockShareIntentState = {
+            hasShareIntent:   false,
+            shareIntent:      {},
+            resetShareIntent: jest.fn()
+        };
+        jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(false);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it("stays on after the last value is removed", async () => {
+        // The switch position is derived from the applied ids while any are
+        // applied, and remembered only for the empty selection. Flipping it
+        // with a selection has to record it all the same, or emptying the
+        // selection drops back to a stale position and the switch turns
+        // itself off with nobody having touched it.
+        await openBeanSheet();
+
+        const natural = () => screen.getByTestId(
+            `rail-filter-${id("process", "Natural")}`,
+            {includeHiddenElements: true}
+        );
+        const rated = () => screen.getByTestId(
+            `rail-filter-${id("process", "Natural", true)}`,
+            {includeHiddenElements: true}
+        );
+
+        await pressOnSheet("Natural, 1 recipe", () => natural() !== null);
+        await pressOnSheet("Highly rated only", () => rated() !== null);
+
+        expect(screen.getByLabelText("Highly rated only").props.accessibilityState)
+            .toEqual(expect.objectContaining({checked: true}));
+
+        await pressOnSheet("Natural, 1 recipe", () =>
+            screen.queryByTestId(`rail-filter-${id("process", "Natural", true)}`,
+                                 {includeHiddenElements: true}) === null);
+
+        expect(screen.getByLabelText("Highly rated only").props.accessibilityState)
+            .toEqual(expect.objectContaining({checked: true}));
+    });
+});

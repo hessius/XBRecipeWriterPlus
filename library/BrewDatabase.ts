@@ -326,6 +326,22 @@ const PROFILE_COLUMN: Record<typeof BEAN_FIELDS[number], string> = {
 };
 
 /**
+ * A brew whose recipe is still in the library.
+ *
+ * Deleting a recipe leaves its brews behind on purpose, so history survives.
+ * The bean filter matches through `recipes`, so a value carried only by
+ * orphaned brews would be offered in the picker and could never be found.
+ *
+ * `recipes` belongs to `RecipeDatabase`, which is the same file and not this
+ * class's schema. The coupling already runs the other way and harder: a bean
+ * filter clause reads `brews` from inside a `RecipeDatabase` query. Both hold
+ * because the two classes open `xbrecipewriter.db` and the library screen
+ * constructs both before it can ask either of these questions.
+ */
+const LIVE_RECIPE_SQL =
+    "EXISTS (SELECT 1 FROM recipes r WHERE r.uuid = brews.recipeUuid)";
+
+/**
  * A counted brew carrying nothing about its coffee.
  *
  * All four columns empty *and* no custom tag. The `NOT EXISTS` is the half that
@@ -628,6 +644,11 @@ class BrewDatabase {
      * Recipes rather than brews, because the number answers "how much of the
      * library would this show me" and a recipe brewed nine times is one recipe.
      *
+     * Scoped to recipes that still exist, because deleting a recipe keeps its
+     * brews as history while the filter clause matches through `recipes`. An
+     * orphaned brew's values would otherwise stay in the picker and offer the
+     * empty library this method exists to prevent.
+     *
      * Ordering is done here in TypeScript rather than in SQL: the field order is
      * `BEAN_FIELDS`, which is a TypeScript constant, and a CASE expression
      * restating it in the statement would be a second copy of that order.
@@ -637,12 +658,14 @@ class BrewDatabase {
             SELECT '${field}' AS field, ${PROFILE_COLUMN[field]} AS value,
                    recipeUuid
             FROM brews
-            WHERE ${COUNTED_SQL} AND ${PROFILE_COLUMN[field]} <> ''`);
+            WHERE ${COUNTED_SQL} AND ${PROFILE_COLUMN[field]} <> ''
+              AND ${LIVE_RECIPE_SQL}`);
 
         const custom = `
             SELECT 'custom' AS field, t.tagKey AS value, b.recipeUuid AS recipeUuid
             FROM brews b JOIN brew_tags t ON t.brewId = b.id
-            WHERE ${COUNTED_SQL}`;
+            WHERE ${COUNTED_SQL} AND EXISTS (
+                SELECT 1 FROM recipes r WHERE r.uuid = b.recipeUuid)`;
 
         const rows = this.db.getAllSync<{
             field: string; value: string; recipes: number;

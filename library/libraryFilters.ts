@@ -391,12 +391,19 @@ export function resolveLibraryFilter(id: string): FilterClause | null {
  * whose only recipe was, resolves to a clause matching nothing: an empty shelf
  * the user can see and close, not a crash and not a chip that vanishes without
  * explaining itself.
+ *
+ * A bean id is the exception, and is asked to resolve rather than to parse.
+ * Every other namespace here resolves whatever it can parse, so shape is the
+ * whole test; `resolveBeanFilter` also refuses a preset outside its closed
+ * vocabulary, and a parseable id it refuses would pass this gate and reach
+ * `buildLibraryQuery`'s throw, which is reserved for the vocabulary and the
+ * resolver genuinely disagreeing.
  */
 export function asLibraryFilters(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter((id) => typeof id === "string"
         && (isStockFilter(id)
-            || parseBeanFilterId(id) !== null
+            || resolveBeanFilter(id) !== null
             || tagFromFilterId(id) !== null
             || authorFromFilterId(id) !== null));
 }
