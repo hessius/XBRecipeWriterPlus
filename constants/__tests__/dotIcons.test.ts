@@ -13,12 +13,15 @@ describe("DOT_ICONS", () => {
              // now, and the file's own rule is to keep the set small.
              "link-gone", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
              "refresh", "revert", "scan", "search", "settings", "share",
-             // The seventeen shelf marks: one per stock auto shelf, plus the
-             // one every per-author shelf shares. A closed set, drawn once:
-             // see the comment on them in `dotIcons.ts`.
+             // The nineteen shelf marks: one per stock auto shelf, plus the
+             // one every per-author shelf shares, minus FAVOURITES, which
+             // reuses the `favourite` star rather than drawing a second one.
+             // A closed set, drawn once: see the comment on them in
+             // `dotIcons.ts`.
              "shelfAuthor",
              "shelfFewStages", "shelfGrinderOff", "shelfHot", "shelfLongRatio",
-             "shelfManyStages", "shelfMine", "shelfOtherBrewer",
+             "shelfManyStages", "shelfMine", "shelfMostBrewed",
+             "shelfNeverBrewed", "shelfOtherBrewer",
              "shelfOverflowOff", "shelfPods", "shelfQuickBrew", "shelfRecent",
              "shelfShortRatio", "shelfSinglePour", "shelfSlowBrew", "shelfTea",
              "shelfXbloom",

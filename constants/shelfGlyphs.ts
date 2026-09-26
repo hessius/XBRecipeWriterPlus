@@ -17,6 +17,11 @@ import {authorFromFilterId, isStockFilter} from "@/library/libraryFilters";
  * mosaic of its members instead.
  */
 export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
+    // The star `favourite` already draws on a card, not a second one. The mark
+    // means "a recipe the user picked out" wherever it appears, and a shelf of
+    // them is the same mark at a different size; drawing a `shelfFavourites`
+    // beside it would be two stars free to drift apart.
+    favourites:    "favourite",
     tea:           "shelfTea",
     pods:          "shelfPods",
     overflowOff:   "shelfOverflowOff",
@@ -32,6 +37,8 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     slowBrew:      "shelfSlowBrew",
     hot:           "shelfHot",
     mine:          "shelfMine",
+    mostBrewed:    "shelfMostBrewed",
+    neverBrewed:   "shelfNeverBrewed",
     recentlyAdded: "shelfRecent"
 };
 

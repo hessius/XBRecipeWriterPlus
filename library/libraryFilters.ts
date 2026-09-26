@@ -1,12 +1,27 @@
 import type {FilterClause} from "./libraryQuery";
 import {beanFilterLabel, parseBeanFilterId, resolveBeanFilter} from "./beanFilters";
+import {COUNTED_SQL} from "./brew/brewPopulation";
 import {CUP_TYPE} from "./Recipe";
 import {tagKey} from "./tagKey";
 
 /**
  * The stock filter vocabulary: the auto shelves the rail's chips are drawn
- * from, each an index query with an id, a Doto caps label and a WHERE fragment
- * over the index columns.
+ * from, each an index query with an id, a Doto caps label and a WHERE fragment.
+ *
+ * Most fragments are over the index columns on `recipes`. Three are not, and
+ * the exception is deliberate: NEVER BREWED and MOST BREWED ask about `brews`,
+ * which is not an index column but a table `BrewDatabase` owns in the same
+ * `xbrecipewriter.db` file. They are written as *correlated subqueries* rather
+ * than as references to `buildLibraryQuery`'s `brewStats` join, because a
+ * clause is used in three places and only one of them has that join:
+ * `buildLibraryQuery` joins it, while `countRecipesByFilter` and
+ * `shelfMembers` both run a bare `FROM recipes`. A clause naming `brewCount`
+ * would work in the list and throw `no such column` in the count that decides
+ * whether to draw the shelf's tile and in the art on it. A correlated subquery
+ * needs no join and is true in any query that has a `recipes` row, so the same
+ * fragment is right in all three. `RecipeDatabase` calls `ensureBrewTables` in
+ * its own constructor, which is what makes `brews` safe to name from here on a
+ * fresh install.
  *
  * One table, read from everywhere, exactly as `librarySort.ts` is for the sort
  * axes. The chip row, the count query that decides which chips to offer, and
@@ -40,11 +55,19 @@ export type FilterId =
     | "recentlyAdded"
     | "mine"
     | "quickBrew"
-    | "slowBrew";
+    | "slowBrew"
+    | "favourites"
+    | "neverBrewed"
+    | "mostBrewed";
 
 type StockFilter = {
     /** The chip label, in Doto caps, taken from the design's shelf names. */
     label: string;
+    /**
+     * Whether the shelf holds a mark the user made rather than an answer the
+     * app worked out, which exempts it from suppression. See `isOffered`.
+     */
+    authored?: true;
     /**
      * The clause is a function, not a value, so the one time-relative filter
      * (`recentlyAdded`) computes its cutoff when the query is built rather than
@@ -72,6 +95,46 @@ const RECENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
  */
 const QUICK_BREW_SECONDS = 150;
 const SLOW_BREW_SECONDS = 240;
+
+/**
+ * How many brews a recipe needs before it is one of the most brewed.
+ *
+ * "Most" is a superlative and a WHERE clause is a threshold, so the shelf has
+ * to name a number. Five is the smallest one that cannot be an accident: one
+ * brew is a try, two or three is a recipe being dialled in, and five is a
+ * recipe somebody keeps going back to.
+ *
+ * A fixed figure leaves the shelf empty for a new library and crowded for an
+ * old one, and both ends are already handled: `isOffered`'s floor of three
+ * recipes declines to draw the shelf until it says something, and its 80%
+ * ceiling declines once it is the whole library wearing a name. A relative
+ * definition -- the top tenth, say -- would always have members and rarely
+ * useful ones, and could not be written as a clause `countRecipesByFilter` and
+ * `shelfMembers` can run.
+ */
+const MOST_BREWED_BREWS = 5;
+
+/**
+ * A recipe's brews that were cups, as a correlated subquery.
+ *
+ * `COUNTED_SQL` rather than every row, and that word is the whole point. A
+ * cancelled brew is a row worth keeping in history and is not a cup, which is
+ * how `brewCount`, `brewEvidence`, the card's evidence line and
+ * `librarySort`'s never-brewed-last guard all read it. A shelf counting bare
+ * rows would take a recipe whose only brews were cancelled off NEVER BREWED
+ * while its own card said nothing had been brewed and BREW COUNT sorted it
+ * with the never-brewed: one word, two meanings, disagreeing on screen in two
+ * places at once.
+ *
+ * `brews.recipeUuid` and `recipes.uuid` are both qualified because the outer
+ * query may itself select from `brews` -- `buildLibraryQuery`'s `brewStats`
+ * does -- and an unqualified name would be resolved by whichever scope
+ * happened to be nearest.
+ */
+function countedBrews(body: string): string {
+    return `SELECT ${body} FROM brews`
+        + ` WHERE brews.recipeUuid = recipes.uuid AND ${COUNTED_SQL}`;
+}
 
 export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     tea: {label: "TEA", clause: () => ({where: "isTea = 1"})},
@@ -136,14 +199,47 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     slowBrew: {
         label: "SLOW BREW",
         clause: () => ({where: "brewSeconds >= ?", params: [SLOW_BREW_SECONDS]})
+    },
+    // The one shelf here the user built themselves, one tap at a time. It is
+    // `authored` for that reason: a library with two favourites in it has two
+    // recipes somebody deliberately marked, which is a set worth opening, not
+    // a shelf the app guessed at and should keep quiet about.
+    favourites: {
+        label: "FAVOURITES",
+        authored: true,
+        clause: () => ({where: "favourite = 1"})
+    },
+    // NOT EXISTS rather than a count compared to zero: the question is whether
+    // there is a single counted row, and NOT EXISTS stops at the first one
+    // instead of tallying a recipe's whole history to find out it is not empty.
+    neverBrewed: {
+        label: "NEVER BREWED",
+        clause: () => ({where: `NOT EXISTS (${countedBrews("1")})`})
+    },
+    // NEVER BREWED and MOST BREWED cannot both hold a recipe, since the
+    // threshold is above zero. That falls out of the two clauses and is not
+    // guarded anywhere, on purpose: a guard would be a third place the
+    // relationship was stated and the first to go stale.
+    mostBrewed: {
+        label: "MOST BREWED",
+        clause: () => ({
+            where: `(${countedBrews("COUNT(*)")}) >= ?`,
+            params: [MOST_BREWED_BREWS]
+        })
     }
 };
 
 /** The stock filters in the order the rail lists their chips. */
 export const STOCK_FILTER_ORDER: readonly FilterId[] = [
+    // FAVOURITES leads: it is the user's own mark on their recipes and belongs
+    // ahead of every question the app asks about them. The two brew shelves sit
+    // after MINE, where the vocabulary stops asking about the recipe and starts
+    // asking what has become of it, and RECENTLY ADDED closes as it always has.
+    "favourites",
     "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "fewStages",
     "manyStages", "grinderOff", "xbloom", "shortRatio", "longRatio",
-    "quickBrew", "slowBrew", "hot", "mine", "recentlyAdded"
+    "quickBrew", "slowBrew", "hot", "mine",
+    "mostBrewed", "neverBrewed", "recentlyAdded"
 ];
 
 /**
@@ -208,9 +304,19 @@ export const MIN_COUNT = 3;
  * 80% is a whole number; the integer form makes the boundary "80% is offered,
  * 81% is not" hold exactly at every size. An empty library offers nothing, so a
  * zero size is refused before it can divide.
+ *
+ * An `authored` shelf passes both gates on holding anything at all. It is the
+ * same exemption a manual tag shelf gets by never being routed through here:
+ * suppression exists to keep the app from inventing a shelf that says nothing,
+ * and FAVOURITES did not invent itself. Every recipe on it was put there by
+ * hand, so two of them are a decision and not noise, and a library where nearly
+ * everything is favourited is a statement its owner made and can unmake. Read
+ * off the vocabulary rather than tested by id, so the rule lives beside the
+ * shelf it applies to instead of a second list of ids living in here.
  */
-function isOffered(count: number, librarySize: number): boolean {
+function isOffered(id: string, count: number, librarySize: number): boolean {
     if (librarySize <= 0) return false;
+    if (isStockFilter(id) && STOCK_FILTERS[id].authored) return count > 0;
     return count >= MIN_COUNT && count * 5 <= librarySize * 4;
 }
 
@@ -222,11 +328,16 @@ function isOffered(count: number, librarySize: number): boolean {
  * shelves exist -- a later reader tempted to inline "3 and 80%" into one of them
  * must not, or the grid and the chips would drift.
  *
- * Only derived shelves are passed in. Nothing a person authored -- a favourited
- * recipe, a manual tag shelf -- is ever routed through here, because a shelf of
- * two a user built is a decision, not noise; suppression is for shelves the app
- * invented. Keys are preserved in `counts`' own order, so the caller controls
- * chip order by how it builds the map.
+ * Only derived shelves are passed in, with one exception the vocabulary
+ * declares for itself. Nothing a person authored -- a manual tag shelf -- is
+ * ever routed through here, because a shelf of two a user built is a decision,
+ * not noise; suppression is for shelves the app invented. FAVOURITES is the
+ * exception because it is a stock id and so arrives in the same count map as
+ * the rest, and it carries `authored` so `isOffered` waives both gates for it.
+ * Routing it through rather than around keeps one gate for the chips and the
+ * grid, which is the whole reason this function exists. Keys are preserved in
+ * `counts`' own order, so the caller controls chip order by how it builds the
+ * map.
  *
  * An applied filter is always offered, whatever its count. Suppression decides
  * what to *propose*, never what to hide after the fact: a filter that crosses a
@@ -244,7 +355,7 @@ export function availableFilters(
     applied: readonly string[] = []
 ): string[] {
     const offered = Object.keys(counts)
-        .filter((id) => isOffered(counts[id], librarySize) || applied.includes(id));
+        .filter((id) => isOffered(id, counts[id], librarySize) || applied.includes(id));
     return collapseStageShelves(offered, counts, applied);
 }
 

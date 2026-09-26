@@ -195,6 +195,7 @@ type Spec = {
     flowRate?: number;
     pauseTime?: number;
     sharedBy?: string;
+    favourite?: boolean;
 };
 
 function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, string> {
@@ -205,6 +206,7 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
         recipe.cupType = spec.cupType ?? CUP_TYPE.OTHER;
         recipe.grinder = spec.grinder ?? true;
         recipe.ratio = spec.ratio ?? 15;
+        recipe.favourite = spec.favourite ?? false;
         if (spec.xid !== undefined) recipe.xid = spec.xid;
         if (spec.sharedBy !== undefined) recipe.sharedBy = spec.sharedBy;
         const count = spec.pourCount ?? 1;
@@ -411,6 +413,181 @@ describe("each stock fragment against a real database", () => {
             stale: {createdAt: now - 60 * 24 * 60 * 60 * 1000}
         });
         expect(labelsMatching(db, "recentlyAdded", uuids)).toEqual(["fresh"]);
+    });
+
+    it("selects favourites by the mark and nothing else", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            picked: {createdAt: 1, favourite: true},
+            plain: {createdAt: 2}
+        });
+        expect(labelsMatching(db, "favourites", uuids)).toEqual(["picked"]);
+    });
+});
+
+/**
+ * The three call sites a clause has to survive, and the one word that decides
+ * what the brew shelves mean.
+ *
+ * `buildLibraryQuery` joins `brewStats` and the other two do not, so a clause
+ * written against `brewCount` would fill the list correctly and throw
+ * `no such column` in the count that decides whether to draw the shelf and in
+ * the art on its tile. Every assertion below is made through all three.
+ */
+describe("the brew shelves", () => {
+    /**
+     * Brew rows written straight into the shared file.
+     *
+     * `RecipeDatabase`'s own constructor calls `ensureBrewTables`, which is
+     * what lets a filter clause name `brews` at all, so nothing here has to
+     * create the table. Columns are named rather than positional because the
+     * defaults are what make the row minimal.
+     */
+    function brew(recipeUuid: string, outcome: string, id: string): void {
+        mockBacking.runSync(
+            `INSERT INTO brews (
+                id, recipeUuid, recipeName, accent, startedAt, endedAt,
+                outcome, pours, waterTotal, cupTotal, heldSeconds, hasStream
+            ) VALUES (?, ?, 'Fixture', '#000000', 1, 2, ?, 1, 200, 200, 0, 0);`,
+            [id, recipeUuid, outcome]
+        );
+    }
+
+    function brewed(recipeUuid: string, times: number, outcome = "done"): void {
+        for (let n = 0; n < times; n += 1) {
+            brew(recipeUuid, outcome, `${recipeUuid}-${outcome}-${n}`);
+        }
+    }
+
+    /** The shelf's members read the way the tile's art reads them. */
+    function artFor(db: RecipeDatabase, id: FilterId): number {
+        return db.shelfMembers([id], resolveStockFilter)[id].length;
+    }
+
+    it("puts a recipe with no brews on NEVER BREWED and not on MOST BREWED", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {fresh: {createdAt: 1}});
+
+        expect(labelsMatching(db, "neverBrewed", uuids)).toEqual(["fresh"]);
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual([]);
+        expect(db.countRecipesByFilter(
+            ["neverBrewed", "mostBrewed"], resolveStockFilter
+        )).toEqual({neverBrewed: 1, mostBrewed: 0});
+        expect(artFor(db, "neverBrewed")).toBe(1);
+        expect(artFor(db, "mostBrewed")).toBe(0);
+    });
+
+    it("takes a recipe off NEVER BREWED after a single cup", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {once: {createdAt: 1}, never: {createdAt: 2}});
+        brewed(uuids.once, 1);
+
+        expect(labelsMatching(db, "neverBrewed", uuids)).toEqual(["never"]);
+        expect(db.countRecipesByFilter(["neverBrewed"], resolveStockFilter))
+            .toEqual({neverBrewed: 1});
+        expect(artFor(db, "neverBrewed")).toBe(1);
+    });
+
+    it("puts a recipe on MOST BREWED at five cups and not at four", () => {
+        // The threshold pinned at its edge in both directions, because an
+        // off-by-one changes which recipes the shelf claims are the ones the
+        // user keeps going back to.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {four: {createdAt: 1}, five: {createdAt: 2}});
+        brewed(uuids.four, 4);
+        brewed(uuids.five, 5);
+
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual(["five"]);
+        expect(db.countRecipesByFilter(["mostBrewed"], resolveStockFilter))
+            .toEqual({mostBrewed: 1});
+        expect(artFor(db, "mostBrewed")).toBe(1);
+    });
+
+    it("counts a machine-ended brew as a cup, the way the card does", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {mixed: {createdAt: 1}});
+        brewed(uuids.mixed, 3, "done");
+        brewed(uuids.mixed, 2, "endedOnMachine");
+
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual(["mixed"]);
+    });
+
+    it("does not let cancelled brews take a recipe off NEVER BREWED", () => {
+        // The one word the issue's proposed clause was missing. `brewCount`,
+        // `brewEvidence` and `librarySort`'s never-brewed-last guard are all
+        // the counted population, so a shelf counting bare rows would take
+        // this recipe off NEVER BREWED while its own card still said nothing
+        // had been brewed and BREW COUNT sorted it with the never-brewed.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {abandoned: {createdAt: 1}});
+        for (const outcome of ["cancelled", "lostContact", "failed"]) {
+            brewed(uuids.abandoned, 3, outcome);
+        }
+
+        expect(labelsMatching(db, "neverBrewed", uuids)).toEqual(["abandoned"]);
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual([]);
+        expect(db.countRecipesByFilter(
+            ["neverBrewed", "mostBrewed"], resolveStockFilter
+        )).toEqual({neverBrewed: 1, mostBrewed: 0});
+    });
+
+    it("counts only the recipe's own brews, not the library's", () => {
+        // The correlation itself. A subquery that lost its `WHERE
+        // brews.recipeUuid = recipes.uuid` would put every recipe on MOST
+        // BREWED the moment any one of them reached five, and empty NEVER
+        // BREWED entirely.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {popular: {createdAt: 1}, ignored: {createdAt: 2}});
+        brewed(uuids.popular, 6);
+
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual(["popular"]);
+        expect(labelsMatching(db, "neverBrewed", uuids)).toEqual(["ignored"]);
+    });
+
+    it("keeps the two shelves disjoint without a guard for it", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            never: {createdAt: 1}, once: {createdAt: 2}, often: {createdAt: 3}
+        });
+        brewed(uuids.once, 1);
+        brewed(uuids.often, 5);
+
+        const never = labelsMatching(db, "neverBrewed", uuids);
+        const most = labelsMatching(db, "mostBrewed", uuids);
+        expect(never).toEqual(["never"]);
+        expect(most).toEqual(["often"]);
+        expect(never.filter((label) => most.includes(label))).toEqual([]);
+    });
+});
+
+describe("FAVOURITES is not suppressed", () => {
+    // A favourite is a tap somebody made, so the shelf is exempt from both
+    // gates the way a manual tag shelf is. It still goes through
+    // `availableFilters`, because that is the one gate the chips and the grid
+    // share, which is what the `authored` flag on the filter is for.
+    it("offers a shelf of one where an invented shelf of two is refused", () => {
+        expect(availableFilters({favourites: 1}, 100)).toEqual(["favourites"]);
+        expect(availableFilters({hot: 2}, 100)).toEqual([]);
+    });
+
+    it("offers it above the 80% ceiling that silences an invented shelf", () => {
+        expect(availableFilters({favourites: 100}, 100)).toEqual(["favourites"]);
+        expect(availableFilters({hot: 100}, 100)).toEqual([]);
+    });
+
+    it("does not offer it when nothing is favourited", () => {
+        // The one thing the exemption must not do. An empty shelf is a tile
+        // that opens onto nothing, and a library nobody has favourited in has
+        // no favourites shelf at all.
+        expect(availableFilters({favourites: 0}, 100)).toEqual([]);
+    });
+
+    it("exempts nothing else", () => {
+        // Read off the vocabulary rather than hard-coded, so a second
+        // `authored` shelf added later is a deliberate act and not a typo that
+        // quietly opts a shelf out of suppression.
+        const authored = STOCK_FILTER_ORDER.filter((id) => STOCK_FILTERS[id].authored);
+        expect(authored).toEqual(["favourites"]);
     });
 });
 

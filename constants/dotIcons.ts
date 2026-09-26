@@ -583,7 +583,7 @@ export const DOT_ICONS = {
     /**
      * The shelf marks, one per auto shelf.
      *
-     * Sixteen glyphs is a lot to add to a set whose own rule is "keep it small",
+     * Eighteen glyphs is a lot to add to a set whose own rule is "keep it small",
      * and the rule still holds: these are one closed set, drawn once, for one
      * job. The auto shelves ship with the app and never change, so every glyph
      * is authored at design time and no user ever picks one -- which is exactly
@@ -817,6 +817,44 @@ export const DOT_ICONS = {
         "#...#...#",
         "#.......#",
         "#########"
+    ],
+    /**
+     * One cup, empty, and three of the same cup stacked.
+     *
+     * Not the filled-and-emptied frame the ratio and duration pairs use, and
+     * deliberately not: those two pairs already put a full rectangle beside an
+     * empty one in this grid, and a third pair drawn the same way would leave
+     * the shelves reading as two blobs and two boxes. These shelves are about
+     * how many times, not how much, so the count is drawn as a count. The small
+     * cup is the big one's taper kept and its middle dropped, which is what
+     * holds the two together as one pair.
+     *
+     * `shelfMostBrewed` is three rows like `list`, and stays distinct from it
+     * on the taper: `list` is a bullet and a full-width bar, this is a rim over
+     * a narrower body. The two never appear together anyway, since `list` is a
+     * control and this only ever sits in the shelf grid.
+     */
+    shelfNeverBrewed: [
+        ".........",
+        ".#######.",
+        ".#.....#.",
+        ".#.....#.",
+        ".#.....#.",
+        "..#...#..",
+        "...###...",
+        ".........",
+        "........."
+    ],
+    shelfMostBrewed: [
+        ".#######.",
+        "..#####..",
+        ".........",
+        ".#######.",
+        "..#####..",
+        ".........",
+        ".#######.",
+        "..#####..",
+        "........."
     ]
 } as const satisfies Record<string, readonly string[]>;
 

@@ -84,6 +84,65 @@ describe("building the shelves", () => {
             filterCounts: {}, tagCounts: NO_TAGS, librarySize: 0
         })).toEqual([]);
     });
+
+    it("draws a favourites tile of one, where an invented shelf needs three", () => {
+        // FAVOURITES carries `authored`, so the grid offers it on a single
+        // marked recipe. The tile beside it is the control: the same count
+        // from a shelf the app invented is suppressed.
+        const shelves = buildShelves({
+            filterCounts: {favourites: 1, hot: 1},
+            tagCounts: NO_TAGS,
+            librarySize: 20
+        });
+
+        expect(shelves.map((s) => s.id)).toEqual(["favourites"]);
+        expect(shelves[0].count).toBe(1);
+    });
+
+    it("draws NEVER BREWED and not MOST BREWED for a barely brewed library", () => {
+        // The issue's acceptance case, with the ceiling left in place. Fifteen
+        // of twenty unbrewed is 75%, so the shelf is offered and MOST BREWED,
+        // holding nothing, is not.
+        const shelves = buildShelves({
+            filterCounts: {mostBrewed: 0, neverBrewed: 15},
+            tagCounts: NO_TAGS,
+            librarySize: 20
+        });
+
+        expect(shelves.map((s) => s.id)).toEqual(["neverBrewed"]);
+    });
+
+    it("silences NEVER BREWED when it is the whole library", () => {
+        // The issue asks that a library with no brews at all offer NEVER
+        // BREWED. It does not, and should not: a shelf holding every recipe is
+        // the 80% ceiling's own case, the library wearing a category's name.
+        // A brand new user would be shown one tile that opens onto everything
+        // they own. The clause is still right and is pinned in
+        // `libraryFilters.test.ts`; what is refused here is the offer.
+        const shelves = buildShelves({
+            filterCounts: {mostBrewed: 0, neverBrewed: 6},
+            tagCounts: NO_TAGS,
+            librarySize: 6
+        });
+
+        expect(shelves.map((s) => s.id)).toEqual([]);
+    });
+
+    it("puts favourites before the app's questions and the brew shelves last", () => {
+        const shelves = buildShelves({
+            // Reversed again, so the grid's order cannot come from the map.
+            filterCounts: {
+                recentlyAdded: 5, neverBrewed: 5, mostBrewed: 5,
+                tea: 5, favourites: 5
+            },
+            tagCounts: NO_TAGS,
+            librarySize: 20
+        });
+
+        expect(shelves.map((s) => s.id)).toEqual([
+            "favourites", "tea", "mostBrewed", "neverBrewed", "recentlyAdded"
+        ]);
+    });
 });
 
 describe("per-author shelves", () => {
