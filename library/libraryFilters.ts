@@ -8,8 +8,8 @@ import {tagKey} from "./tagKey";
  * The stock filter vocabulary: the auto shelves the rail's chips are drawn
  * from, each an index query with an id, a Doto caps label and a WHERE fragment.
  *
- * Most fragments are over the index columns on `recipes`. Three are not, and
- * the exception is deliberate: NEVER BREWED and MOST BREWED ask about `brews`,
+ * Most fragments are over the index columns on `recipes`. Two are not, and the
+ * exception is deliberate: NEVER BREWED and MOST BREWED ask about `brews`,
  * which is not an index column but a table `BrewDatabase` owns in the same
  * `xbrecipewriter.db` file. They are written as *correlated subqueries* rather
  * than as references to `buildLibraryQuery`'s `brewStats` join, because a

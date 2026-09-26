@@ -5,10 +5,19 @@ it left open.
 
 ## What is being added
 
-Three entries in `STOCK_FILTERS`, three places in `STOCK_FILTER_ORDER`, and
-nothing else. `app/index.tsx`, `shelves.ts` and `useRecipeLibrary.ts` all
-derive from those two exports already, so the chips, the grid, the counts and
-the shelf art pick the shelves up without a line changing in any of them.
+Three entries in `STOCK_FILTERS` and three places in `STOCK_FILTER_ORDER`.
+`app/index.tsx`, `shelves.ts` and `useRecipeLibrary.ts` all derive from those
+two exports already, so the chips, the grid, the counts and the shelf art pick
+the shelves up without a line changing in any of them.
+
+Three supporting changes come with them, each covered by a decision below:
+
+- `StockFilter` gains an optional `authored` flag, and `isOffered` honours it,
+  which is what exempts FAVOURITES from suppression.
+- `libraryFilters.ts` imports `COUNTED_SQL` from `brew/brewPopulation.ts`, so
+  the brew shelves count the same population everything else does.
+- `SHELF_GLYPHS` gains three entries and `DOT_ICONS` two drawings. FAVOURITES
+  reuses the existing `favourite` star rather than a third new one.
 
 | id | label | clause |
 |----|-------|--------|
@@ -58,6 +67,18 @@ FAVOURITES first: it is the user's own mark and belongs before the app's
 questions about their recipes. MOST BREWED and NEVER BREWED go after MINE and
 before RECENTLY ADDED, where the shelves stop asking about the recipe and start
 asking about the library's history.
+
+## Decision 5: a wholly unbrewed library gets no NEVER BREWED tile
+
+The issue's "done when" asks that a library with no brews at all offer NEVER
+BREWED. It should not, and the issue is amended rather than the code: a shelf
+holding every recipe is exactly the case the 80% ceiling exists for, and a
+brand new user would be shown one tile that opens onto everything they own.
+
+The issue's other constraint is that suppression go through
+`availableFilters`, and these two cannot both hold. The clause is still right
+and is pinned in `libraryFilters.test.ts`; what is refused is the offer, and
+`shelves.test.ts` pins both sides of that with the reason on the refusing one.
 
 ## Tasks
 
