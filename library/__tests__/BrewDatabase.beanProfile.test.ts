@@ -106,12 +106,21 @@ describe("beanProfileFor", () => {
     });
 
     it("leaves a cancelled brew out of every figure", () => {
+        // "Every figure" means the custom rows too. The four presets and the
+        // brew_tags join are five separate selects in one union, so a guard
+        // proved on one of them is not proved on the others: dropping
+        // COUNTED_SQL from the custom select alone killed no test until this
+        // one carried a tag.
         const database = seed([
-            {id: "kept", process: "Natural", rating: 4},
-            {id: "gone", process: "Natural", rating: 1, outcome: "cancelled"}
+            {id: "kept", process: "Natural", rating: 4, tags: ["mornings"]},
+            {id: "gone", process: "Natural", rating: 1, outcome: "cancelled",
+             tags: ["mornings"]}
         ]);
         expect(find(database, "process", "Natural"))
             .toEqual({field: "process", value: "Natural", brews: 1, rated: 1,
+                      avgRating: 4});
+        expect(find(database, "custom", "mornings"))
+            .toEqual({field: "custom", value: "mornings", brews: 1, rated: 1,
                       avgRating: 4});
         expect(database.beanProfileFor(RECIPE).counted).toBe(1);
     });
@@ -191,11 +200,16 @@ describe("beanProfileFor", () => {
     });
 
     it("ignores another recipe's brews entirely", () => {
+        // Tagged on both sides for the same reason the cancelled-brew test is:
+        // the custom select is its own statement with its own scope, and a
+        // scope proved on the preset selects says nothing about it.
         const database = seed([
-            {id: "mine", process: "Natural"},
-            {id: "theirs", recipeUuid: "someone-else", process: "Natural"}
+            {id: "mine", process: "Natural", tags: ["mornings"]},
+            {id: "theirs", recipeUuid: "someone-else", process: "Natural",
+             tags: ["mornings"]}
         ]);
         expect(find(database, "process", "Natural")?.brews).toBe(1);
+        expect(find(database, "custom", "mornings")?.brews).toBe(1);
         expect(database.beanProfileFor(RECIPE).counted).toBe(1);
     });
 });
