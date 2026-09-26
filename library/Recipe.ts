@@ -368,9 +368,10 @@ class Recipe {
             this.bypassVolume  = jsonRecipe.bypassVolume  ?? 0;
             // Not `??`: a record can carry a temperature the kettle cannot do,
             // either 0 from an old write or the -1 the editor could once copy
-            // from a stage whose temperature was never set. Nothing between
-            // here and the BLE frame checks the range, so this is where a
-            // stored sentinel has to stop.
+            // from a stage whose temperature was never set. `Machine.brew`
+            // clamps too, but only for the brew it is building; a stored
+            // sentinel that survived here would still be drawn in the bypass
+            // box, shared in a link, and handed to every other reader.
             this.bypassTemp    = isUsableBypassTemp(jsonRecipe.bypassTemp)
                 ? jsonRecipe.bypassTemp!
                 : BYPASS_DEFAULT_TEMPERATURE;

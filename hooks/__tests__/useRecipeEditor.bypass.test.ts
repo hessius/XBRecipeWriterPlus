@@ -107,9 +107,9 @@ describe("useRecipeEditor bypass", () => {
     });
 
     it("clamps the temperature to the bypass range", async () => {
-        // The value reaches the kettle as a float32 in command 8102 with
-        // nothing between here and the frame that checks it, so a negative
-        // must not survive the editor.
+        // `Machine.brew` clamps again before it builds the frame, but a value
+        // stored out of range is wrong long before it is sent: it is drawn in
+        // the bypass box, carried in a share link, and read back on load.
         const {result} = await editorFor(recipeWithBypass());
 
         await act(async () => { result.current.editBypass("temperature", -5); });

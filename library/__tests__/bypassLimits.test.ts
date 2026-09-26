@@ -33,7 +33,8 @@ describe("bypass limits", () => {
         expect(clampBypassTemp(70.4)).toBe(70);
     });
 
-    it("clamps the unset sentinel up to the coolest the kettle does", () => {        // `Pour.temperature` is -1 when unset. Clamping is the last line: the
+    it("clamps the unset sentinel up to the coolest the kettle does", () => {
+        // `Pour.temperature` is -1 when unset. Clamping is the last line: the
         // callers that know a value is unset should be reaching for the
         // default instead, and a -1 arriving here is already a bug elsewhere.
         expect(clampBypassTemp(-1)).toBe(39);

@@ -84,7 +84,8 @@ describe("Machine bypass", () => {
         expect(argsOf(transport.written, 8102)).toEqual([45, 600, 18]);
     });
 
-    it("honours the plain reading when it is selected", async () => {        const {machine, transport} = await readyMachine();
+    it("honours the plain reading when it is selected", async () => {
+        const {machine, transport} = await readyMachine();
         const recipe = coffeeRecipe();
         recipe.dosage = 18;
         recipe.bypassEnabled = true;
