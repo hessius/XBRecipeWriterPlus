@@ -7,10 +7,28 @@ import {BYPASS_DEFAULT_TEMPERATURE, isUsableBypassTemp} from "./bypassLimits";
 import {tagKey} from "./tagKey";
 import uuid from 'react-native-uuid';
 
+/**
+ * The cup type byte, and which of them brews without overflow protection.
+ *
+ * `OTHER` is the one. Omni is xBloom's own dripper, a vessel the machine knows
+ * the shape of, so it can stop the water before it comes over the rim;
+ * `docs/machine-integration/cloud-api.md` names the cloud value
+ * `2 = Omni/Dripper`. A third-party brewer is one the machine has never been
+ * told the shape of, so it does not try.
+ *
+ * Only a card carries the distinction. Cup type is not in the BLE recipe blob,
+ * and `library/machine/` does not encode it, so a brew started over Bluetooth
+ * sends the same cup frame whatever the recipe says. `setCupFrame` choosing
+ * one width for every brew is not in conflict with any of this.
+ *
+ * This comment said the opposite until #151, which proposed swapping the two
+ * bytes to match it. The bytes were always right; `Recipe.card.test.ts` holds
+ * all four and carries the argument.
+ */
 export const CUP_TYPE = {
     XPOD:  0x00,
-    OTHER: 0x01,
-    OMNI:  0x02, // no overflow protection
+    OTHER: 0x01, // no overflow protection
+    OMNI:  0x02,
     TEA:   0x03  // high bits may contain the default number of cups to brew
 }
 
