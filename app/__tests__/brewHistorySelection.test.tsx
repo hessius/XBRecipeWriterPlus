@@ -323,21 +323,21 @@ describe("brew history batch selection", () => {
         expect(screen.getByLabelText("Compare the selected brews")).toBeDisabled();
     });
 
-    it("opens the comparison with the older brew on the left", async () => {
+    it("opens the comparison with the newer brew leading", async () => {
         mockBrews = sameRecipe();
         await renderWithProviders(<BrewHistory />);
 
         await fireEvent.press(screen.getByLabelText("Select brews"));
         const rows = screen.getAllByLabelText(/^Ethiopia Guji,/);
-        // Ticked newest first, so this pins that the push is sorted rather
-        // than merely taking the selection in the order it was made.
-        await fireEvent.press(rows[0]);
+        // Ticked oldest first, against a push that must come out newest
+        // first, so this pins the sort rather than the order of ticking.
         await fireEvent.press(rows[1]);
+        await fireEvent.press(rows[0]);
         await fireEvent.press(screen.getByLabelText("Compare the selected brews"));
 
         expect(mockPush).toHaveBeenCalledWith({
             pathname: "/brewCompare",
-            params: {a: "older", b: "newer"}
+            params: {a: "newer", b: "older"}
         });
     });
 

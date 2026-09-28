@@ -1954,7 +1954,7 @@ Append inside the existing `describe("brew history batch selection", ...)` block
         expect(screen.getByLabelText("Compare the selected brews")).toBeDisabled();
     });
 
-    it("opens the comparison with the older brew on the left", async () => {
+    it("opens the comparison with the newer brew leading", async () => {
         mockBrews = sameRecipe();
         await renderWithProviders(<BrewHistory />);
 
@@ -1968,7 +1968,7 @@ Append inside the existing `describe("brew history batch selection", ...)` block
 
         expect(mockPush).toHaveBeenCalledWith({
             pathname: "/brewCompare",
-            params: {a: "older", b: "newer"}
+            params: {a: "newer", b: "older"}
         });
     });
 
@@ -2034,7 +2034,7 @@ In `app/brewHistory.tsx`:
             .sort((one, two) => one.startedAt - two.startedAt);
         setSelecting(false);
         setSelectedIds([]);
-        router.push({pathname: "/brewCompare", params: {a: older.id, b: newer.id}});
+        router.push({pathname: "/brewCompare", params: {a: newer.id, b: older.id}});
     }
 ```
 

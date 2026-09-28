@@ -401,10 +401,15 @@ export default function BrewHistory() {
         if (!comparable) return;
         // Exactly two. Quietly taking the first two out of three would answer a
         // different question than the one the user selected.
+        //
+        // The newer brew leads. Somebody comparing two brews is nearly always
+        // asking what their last one did differently, so the accent goes on
+        // the one they just made and the older brew is the grey it is held
+        // against. SWAP is there for the other reading.
         const [older, newer] = [...selectedBrews]
             .sort((one, two) => one.startedAt - two.startedAt);
         handleSelectCancel();
-        router.push({pathname: "/brewCompare", params: {a: older.id, b: newer.id}});
+        router.push({pathname: "/brewCompare", params: {a: newer.id, b: older.id}});
     }
 
     function handleSelectionDelete() {
