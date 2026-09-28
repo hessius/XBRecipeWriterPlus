@@ -12,27 +12,67 @@ const rows = (n: number, from = 0) =>
     Array.from({length: n}, (_, i) => ({tableId: from + i, theName: `R${from + i}`}));
 
 describe("fetchCloudRecipes", () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => jest.resetAllMocks());
 
-    it("returns a single short page without asking for another", async () => {
+    it("reads both partitions, because a link minted before a correction still exists", async () => {
+        // The same recipe is a different row on each machine, and this answers
+        // "what has this account minted", not "what can this phone brew".
+        const asked: number[] = [];
+        mockPost.mockImplementation(async (_path, body) => {
+            const adaptedModel = (body as {adaptedModel: number}).adaptedModel;
+            asked.push(adaptedModel);
+            return {result: "success", list: [{tableId: adaptedModel}]};
+        });
+
+        const out = await fetchCloudRecipes(session);
+
+        expect(new Set(asked)).toEqual(new Set([1, 2]));
+        expect(out).toHaveLength(2);
+    });
+
+    it("lets the second partition be empty without calling it a broken walk", async () => {
+        // The regression this task is most likely to introduce. Nearly every
+        // user has rows under 1 and none under 2; if the two partitions share
+        // an accumulator, the emptiness check reads the first partition's rows
+        // and reports a healthy account as a server that stopped mid-list.
+        const asked: number[] = [];
+        mockPost.mockImplementation(async (_path, body) => {
+            const adaptedModel = (body as {adaptedModel: number}).adaptedModel;
+            asked.push(adaptedModel);
+            if (adaptedModel === 1) {
+                return {result: "success", list: rows(3)};
+            }
+            return {result: "success"};
+        });
+
+        const out = await fetchCloudRecipes(session);
+
+        expect(asked).toEqual([1, 2]);
+        expect(out).toHaveLength(3);
+    });
+
+    it("returns a single short page per partition without asking for another", async () => {
         mockPost.mockResolvedValue({result: "success", list: rows(3)});
 
         const out = await fetchCloudRecipes(session);
 
-        expect(out).toHaveLength(3);
-        expect(mockPost).toHaveBeenCalledTimes(1);
+        expect(out).toHaveLength(6);
+        expect(mockPost).toHaveBeenCalledTimes(2);
+        expect(mockPost.mock.calls.map(call => (call[1] as {pageNumber: number}).pageNumber))
+            .toEqual([1, 1]);
     });
 
     it("walks every page until one comes back short", async () => {
         mockPost
             .mockResolvedValueOnce({result: "success", list: rows(100, 0)})
             .mockResolvedValueOnce({result: "success", list: rows(100, 100)})
-            .mockResolvedValueOnce({result: "success", list: rows(4, 200)});
+            .mockResolvedValueOnce({result: "success", list: rows(4, 200)})
+            .mockResolvedValueOnce({result: "success", list: []});
 
         const out = await fetchCloudRecipes(session);
 
         expect(out).toHaveLength(204);
-        expect(mockPost).toHaveBeenCalledTimes(3);
+        expect(mockPost).toHaveBeenCalledTimes(4);
         expect(
             (mockPost.mock.calls[2][1] as {pageNumber: number}).pageNumber
         ).toBe(3);
@@ -44,12 +84,13 @@ describe("fetchCloudRecipes", () => {
         // until the page cap and makes a request for nothing every time.
         mockPost
             .mockResolvedValueOnce({result: "success", list: rows(100, 0)})
+            .mockResolvedValueOnce({result: "success", list: []})
             .mockResolvedValueOnce({result: "success", list: []});
 
         const out = await fetchCloudRecipes(session);
 
         expect(out).toHaveLength(100);
-        expect(mockPost).toHaveBeenCalledTimes(2);
+        expect(mockPost).toHaveBeenCalledTimes(3);
     });
 
     it("refuses to page forever if the server keeps returning full pages", async () => {
@@ -108,6 +149,19 @@ describe("fetchCloudRecipes", () => {
             true,
             undefined
         );
+        expect(mockPost).toHaveBeenCalledWith(
+            "tuMyTeaRecipeCreated.tuhtml",
+            expect.objectContaining({
+                memberId: 7,
+                token: "tok",
+                skey: "testskey",
+                pageNumber: 1,
+                countPerPage: 100,
+                adaptedModel: 2,
+            }),
+            true,
+            undefined
+        );
     });
 
     it("treats a missing list as an empty page rather than throwing", async () => {
@@ -116,10 +170,12 @@ describe("fetchCloudRecipes", () => {
     });
 
     it("drops rows that are not objects", async () => {
-        mockPost.mockResolvedValue({
-            result: "success",
-            list: [{tableId: 1}, null, "nonsense", {tableId: 2}],
-        });
+        mockPost
+            .mockResolvedValueOnce({
+                result: "success",
+                list: [{tableId: 1}, null, "nonsense", {tableId: 2}],
+            })
+            .mockResolvedValueOnce({result: "success", list: []});
 
         const out = await fetchCloudRecipes(session);
         expect(out).toHaveLength(2);

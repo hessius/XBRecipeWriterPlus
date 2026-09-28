@@ -1,4 +1,5 @@
 import type {Session} from "./session";
+import {ADAPTED_MODEL} from "@/library/machine/machineModel";
 import {CloudError, authFields, post} from "./transport";
 
 /**
@@ -30,6 +31,32 @@ export async function fetchCloudRecipes(
     signal?: AbortSignal
 ): Promise<CloudRow[]> {
     const out: CloudRow[] = [];
+    // Both partitions, not the user's current one. This answers "what has this
+    // account minted", and that does not change when somebody corrects which
+    // machine they own. Reading only the current partition would hide every
+    // earlier link from the fingerprint check, which would then mint a
+    // duplicate row on every share. See the design spec, section 4.4.
+    for (const adaptedModel of Object.values(ADAPTED_MODEL)) {
+        out.push(...await fetchPartition(session, adaptedModel, signal));
+    }
+    return out;
+}
+
+/**
+ * One partition's rows, walked to the end.
+ *
+ * Its own accumulator on purpose. The mid-list check below asks "have we
+ * already collected rows in *this* walk", which is how an empty account is
+ * told from a server that stopped part way through one. Sharing an accumulator
+ * across partitions would make a user with rows under 1 and none under 2 —
+ * which is nearly all of them — look like a broken walk.
+ */
+async function fetchPartition(
+    session: Session,
+    adaptedModel: number,
+    signal?: AbortSignal
+): Promise<CloudRow[]> {
+    const out: CloudRow[] = [];
 
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
         const response = await post(
@@ -38,7 +65,7 @@ export async function fetchCloudRecipes(
                 ...authFields(session.memberId, session.token),
                 pageNumber,
                 countPerPage: PAGE_SIZE,
-                adaptedModel: 1,
+                adaptedModel,
             },
             true,
             signal
