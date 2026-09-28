@@ -3296,3 +3296,27 @@ Requirements, each needing a test:
   coming back does not refetch. A second call while one is in flight joins it
   rather than starting a second, exactly as `loadHubCriteria` does.
 - `__resetHubCatalogue()` for tests.
+
+### Measured after building it, against the live API
+
+Run in plain Node against the real endpoint, because jest-expo's `fetch` is a
+stub and cannot reach the network from a test:
+
+```
+ORIGINAL: 1323 rows, 14 progress calls, first page at 100 rows, 2.9s
+top origins:   Colombia 306, Ethiopia 189, Brazil 49, Panama 49, Kenya 48
+top processes: Washed 429, Natural 237, Honey 35, Anaerobic 24, 水洗 21
+filter Colombia -> 306 rows, which is exactly what the chip's count promised
+keyword colombia -> 351 rows
+```
+
+The server's own `originIds` for Colombia on this machine returns **0**, and
+its `keyword` returns **4**. Locally the same question finds 306 and 351. The
+whole partition arrives in under three seconds, with the first hundred rows on
+screen almost immediately.
+
+**Note for anyone testing the network path:** `jest-expo`'s environment stubs
+`fetch`, and `response.text()` resolves to `undefined`. Nothing in these tests
+can reach the live catalogue, which is correct, but it also means an
+integration check has to run outside Jest.
+
