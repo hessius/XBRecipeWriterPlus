@@ -1,5 +1,5 @@
 import {
-    isHidden, parseHidden, serialiseHidden, toggleHidden
+    canonicalShelfId, isHidden, parseHidden, serialiseHidden, toggleHidden
 } from "@/library/hiddenShelves";
 
 describe("parseHidden", () => {
@@ -156,5 +156,23 @@ describe("an author who is spelled two ways", () => {
 
     it("leaves stock ids alone", () => {
         expect(parseHidden(serialiseHidden(["tea"]))).toEqual(["tea"]);
+    });
+});
+
+describe("tag ids fold like author ids", () => {
+    it("stores a tag id in its folded form", () => {
+        expect(canonicalShelfId("tag:Mornings")).toBe("tag:mornings");
+    });
+
+    it("keeps a shelf put away when its spelling changes", () => {
+        // `tagKey` folds case, so "Mornings" and "mornings" are one shelf
+        // everywhere downstream. If this list disagreed, renaming the shelf
+        // would quietly bring back a tile the user had put away.
+        const stored = serialiseHidden(["tag:Mornings"]);
+        expect(isHidden(stored, "tag:mornings")).toBe(true);
+    });
+
+    it("leaves a stock id alone", () => {
+        expect(canonicalShelfId("tea")).toBe("tea");
     });
 });

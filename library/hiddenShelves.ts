@@ -1,4 +1,9 @@
-import {AUTHOR_FILTER_PREFIX, authorFromFilterId} from "@/library/libraryFilters";
+import {
+    AUTHOR_FILTER_PREFIX,
+    TAG_FILTER_PREFIX,
+    authorFromFilterId,
+    tagFromFilterId,
+} from "@/library/libraryFilters";
 import {tagKey} from "@/library/tagKey";
 
 /**
@@ -31,14 +36,19 @@ import {tagKey} from "@/library/tagKey";
 /**
  * The form of a shelf id this list stores and compares.
  *
- * Stock ids are their own canonical form. An author id is folded, so the two
- * spellings of one person are one answer.
+ * Stock ids are their own canonical form. Author and tag ids are folded, so
+ * the two spellings of one person or shelf are one answer.
  */
 export function canonicalShelfId(id: string): string {
-    const author = authorFromFilterId(id.trim());
-    return author === null
-        ? id.trim()
-        : `${AUTHOR_FILTER_PREFIX}${tagKey(author)}`;
+    const trimmed = id.trim();
+    const author = authorFromFilterId(trimmed);
+    if (author !== null) return `${AUTHOR_FILTER_PREFIX}${tagKey(author)}`;
+    // Tags fold for the reason authors do, and it matters more here: a tag is
+    // renamed by hand, so the two spellings of one shelf are a thing a person
+    // produces on purpose rather than a collision between two strangers.
+    const tag = tagFromFilterId(trimmed);
+    if (tag !== null) return `${TAG_FILTER_PREFIX}${tagKey(tag)}`;
+    return trimmed;
 }
 
 function clean(ids: readonly unknown[]): string[] {
