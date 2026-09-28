@@ -1228,14 +1228,72 @@ git commit -m "Ask the machine what it is, and accept that it may not say"
 ## Task 10: Store the readings, and act only on a certain one
 
 **Files:**
-- Modify: `hooks/useMachine.ts` (the `LinkStore` type, both of its implementations, and `attemptLink`)
-- Test: `hooks/__tests__/useMachine.test.ts`
+- Modify: `hooks/useMachine.ts` (the `LinkStore` type, both of its implementations, `attemptLink`, and the hook's return)
+- Modify: `hooks/__tests__/useMachine.test.ts` (including replacing its forked settings mock)
 
-**Where this goes, and why not in the hook body.** `useMachine` does not receive a settings store it can be handed in a test. It reaches for `sharedSettings()` through a small injected seam called `LinkStore`, whose comment says "Injected, so the algorithm is testable". That is the seam to extend. Writing settings directly from the hook body instead would be both untestable and a lint error: `react-hooks/set-state-in-effect` is an error in this repo.
+**Where this goes, and why not in the hook body.** `useMachine` reaches the settings store through a small injected seam called `LinkStore`, whose comment says "Injected, so the algorithm is testable". That is the seam to extend. Writing settings directly from the hook body instead would be both untestable and a lint error: `react-hooks/set-state-in-effect` is an error in this repo.
 
 The write belongs in `attemptLink`, after the connect has succeeded, and **outside** the existing `if (id !== remembered)` block. That block only fires when the remembered id changed; the readings should be refreshed on every successful connect, because firmware can change under a machine whose id did not.
 
-- [ ] **Step 1: Write the failing test**
+### Read this before you write anything
+
+An earlier draft of this task was written against a hook that does not quite exist. Four things it got wrong, all of which will bite in the first ten minutes:
+
+1. **`useMachine` does take an injectable store.** Its signature is `useMachine(injected?: Machine, options: MachineOptions = {})`, and `MachineOptions = RetryOptions & {settings?: Settings}`. Every `useSetting` call in the hook already passes `options.settings`. Anything you add must too, or the settings screen's injected store is bypassed. Reach for `options.settings ?? sharedSettings()` where you need a whole `Settings`.
+
+2. **`hooks/__tests__/useMachine.test.ts` has its own forked settings mock** — a per-hook `React.useState(key in mockSeed ? mockSeed[key] : DEFAULTS[key])` that provides no `sharedSettings` at all. A hook that writes through `sharedSettings()` while the test reads through that `useSetting` has **two stores**, so the correction this task implements would be invisible to every assertion. Step 0 replaces it.
+
+3. **`applyMachineReading` has to be exported** for the Step 5 tests to call it directly. Module-private is not enough.
+
+4. **`SettingValue<"machineModel">` widens the stored union back to `string`.** `useSetting("machineModel", ...)` therefore hands back a `string`, not a `MachineModel`, so Step 7 needs `asMachineModel` from `@/library/machine/machineModel`. This is the same trap Task 5 hit.
+
+- [ ] **Step 0: Put the test file on the shared settings mock**
+
+Replace the forked mock and the `mockSeed` object at the top of `hooks/__tests__/useMachine.test.ts` with the house one-liner. `app/__tests__/machine.test.tsx` did this already and its comment says why:
+
+```ts
+// `useSetting` reaches for the shared SQLite-backed store, which cannot open
+// under Jest. This file now needs `sharedSettings` as well, because the link
+// records what the machine said through it -- and a per-hook stand-in would
+// give the writer and the reader two different stores, so a correction would
+// be invisible to every assertion here.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+```
+
+Import `sharedSettings` from `@/hooks/useSetting` and convert the four `mockSeed.<key> = value` lines to `sharedSettings().set("<key>", value)`.
+
+The shared store lives for the whole file rather than per test, so `beforeEach` has to put back what a test changed. Extend the existing one:
+
+```ts
+    beforeEach(() => {
+        __resetSharedMachine();
+        // The mock's store outlives each test, unlike the seed object it
+        // replaced, so every key a test writes has to be put back by hand.
+        for (const key of ["machineDeviceId", "machineModel",
+                           "machineModelString", "machineName"] as const) {
+            sharedSettings().set(key, DEFAULTS[key]);
+        }
+    });
+```
+
+Import `DEFAULTS` from `@/library/Settings`.
+
+**Expect some existing tests in this file to need attention.** They previously got a fresh per-hook value; they now share one store, which is what production does. Run them before you change anything else so you can tell a failure you caused from one you inherited. If a failure needs a judgment call rather than a reset, stop and report it rather than guessing.
+
+- [ ] **Step 1: Run the existing tests to confirm the swap is clean**
+
+Run: `npx jest hooks/__tests__/useMachine.test.ts`
+Expected: PASS, unchanged count. This is a refactor with no behaviour in it; do not go on until it is green.
+
+Commit this on its own, so the behaviour change that follows has a clean diff:
+
+```bash
+git add hooks/__tests__/useMachine.test.ts
+git commit -m "Put the machine link tests on the shared settings mock"
+```
+
+- [ ] **Step 2: Write the failing tests**
 
 Add to `hooks/__tests__/useMachine.test.ts`, inside the existing `describe`:
 
@@ -1244,11 +1302,11 @@ it("records what the machine said, without touching the setting", async () => {
     const transport = new FakeTransport();
     transport.modelNumber = "XB-MYSTERY-9";
     transport.advertisedName = "XBLOOM-77";
-    const recorded: {model: string; name: string}[] = [];
+    const recorded: MachineReading[] = [];
     const store = {
         rememberedId: () => "AA:BB",
         rememberId: () => {},
-        recordMachine: (reading: {model: string; name: string}) => { recorded.push(reading); }
+        recordMachine: (reading: MachineReading) => { recorded.push(reading); }
     };
 
     await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
@@ -1261,24 +1319,20 @@ it("records the reading even when the machine was already remembered", async () 
     // must not ride along on the "new machine" branch.
     const transport = new FakeTransport();
     transport.modelNumber = "XB-2";
-    const recorded: unknown[] = [];
+    const recorded: MachineReading[] = [];
     const store = {
         rememberedId: () => "AA:BB",
         rememberId: () => { throw new Error("should not re-remember a known machine"); },
-        recordMachine: (reading: unknown) => { recorded.push(reading); }
+        recordMachine: (reading: MachineReading) => { recorded.push(reading); }
     };
 
     await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
 
     expect(recorded).toHaveLength(1);
 });
-```
 
-Then a test for the guarded correction, which reads the settings seam the hook actually uses:
-
-```ts
 it("leaves the setting alone for a machine it does not recognise", async () => {
-    mockSeed.machineModel = "original";
+    sharedSettings().set("machineModel", "original");
     const transport = new FakeTransport();
     transport.modelNumber = "XB-MYSTERY-9";
 
@@ -1287,10 +1341,12 @@ it("leaves the setting alone for a machine it does not recognise", async () => {
 
     // Unrecognised is not evidence of anything. The user's answer stands.
     expect(result.current.machineModel).toBe("original");
+    // But it is still written down, which is the whole point of collecting it.
+    expect(sharedSettings().get("machineModelString")).toBe("XB-MYSTERY-9");
 });
 
 it("corrects the setting when the machine is certainly a Studio", async () => {
-    mockSeed.machineModel = "original";
+    sharedSettings().set("machineModel", "original");
     const transport = new FakeTransport();
     transport.modelNumber = STUDIO_MODEL_STRINGS[0] ?? "nothing matches an empty list";
 
@@ -1304,24 +1360,55 @@ it("corrects the setting when the machine is certainly a Studio", async () => {
 });
 ```
 
-Add the import:
+And the two that pin the blank-reading rule, which call the function directly because it is the rule itself rather than the plumbing:
+
+```ts
+it("keeps what an earlier connect learned when this one learns nothing", async () => {
+    // The returning user's case: no scan, so no advertised name, and firmware
+    // that does not carry the Device Information Service says nothing either.
+    const settings = sharedSettings();
+    settings.set("machineModelString", "X15");
+    settings.set("machineName", "XBLOOM-77");
+
+    applyMachineReading(settings, {model: "", name: ""});
+
+    expect(settings.get("machineModelString")).toBe("X15");
+    expect(settings.get("machineName")).toBe("XBLOOM-77");
+});
+
+it("takes each half of a reading on its own", async () => {
+    // A returning user learns a model and no name, because the scan was
+    // skipped. Half a reading must not be thrown away with the other half.
+    const settings = sharedSettings();
+    settings.set("machineName", "XBLOOM-77");
+
+    applyMachineReading(settings, {model: "X15", name: ""});
+
+    expect(settings.get("machineModelString")).toBe("X15");
+    expect(settings.get("machineName")).toBe("XBLOOM-77");
+});
+```
+
+Add the imports:
 
 ```ts
 import {STUDIO_MODEL_STRINGS} from "@/constants/machine";
+import {DEFAULTS} from "@/library/Settings";
+import {sharedSettings} from "@/hooks/useSetting";
 ```
 
-`mockSeed` is the existing per-test settings seed at the top of the file, and `beforeEach` already clears it. `FakeTransport` is `@/library/machine/__tests__/FakeTransport`. Both are already imported.
+and extend the existing import from `@/hooks/useMachine` with `applyMachineReading` and the `MachineReading` type.
 
 Remember `renderHook` is async in RNTL v14, and an `unmount()` must be wrapped in `await act(...)`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `npx jest hooks/__tests__/useMachine.test.ts`
-Expected: FAIL, `recordMachine` is not part of `LinkStore` and nothing calls it.
+Expected: FAIL. `applyMachineReading` and `MachineReading` do not exist, `recordMachine` is not part of `LinkStore`, and `machineModel` is not on the link.
 
-- [ ] **Step 3: Widen `LinkStore`**
+- [ ] **Step 4: Widen `LinkStore`**
 
-In `hooks/useMachine.ts`, extend the type at roughly line 42:
+In `hooks/useMachine.ts`, beside the existing `LinkStore` type:
 
 ```ts
 /** What the radio heard about the machine itself, as opposed to the link. */
@@ -1342,9 +1429,50 @@ export type LinkStore = {
 };
 ```
 
-- [ ] **Step 4: Implement it in both stores**
+- [ ] **Step 5: Write the rule in one place**
 
-In `settingsStore()` at roughly line 35:
+Add to `hooks/useMachine.ts`, above `settingsStore`:
+
+```ts
+/**
+ * Store what the machine said, and change the setting only when it is certain.
+ *
+ * Exported for its own tests: this is the rule, and the rest of this file is
+ * the plumbing that carries a reading to it.
+ *
+ * The reading is kept always. It is allowed to overrule the user only on a
+ * positive match against a string read off real hardware, because a string we
+ * have never seen is not evidence of an original xBloom: we own none to read
+ * one from, and a firmware revision would produce an unfamiliar string too.
+ * `STUDIO_MODEL_STRINGS` is empty until somebody fills it in, and an empty list
+ * matches nothing, so detection is inert rather than wrong.
+ *
+ * A blank reading is "did not learn", never "learned it is blank", so it is
+ * dropped rather than written, and each half is judged on its own. Both halves
+ * go blank in ordinary use and neither is a discovery: the Device Information
+ * Service is optional, and `advertisedName` is only ever filled in by a scan,
+ * which `attemptLink` skips for a returning user. Writing a blank through would
+ * erase what an earlier connect found out, on the reconnect after it, for
+ * almost everybody, and these two keys exist to be trustworthy about what a
+ * real machine said.
+ */
+export function applyMachineReading(settings: Settings, reading: MachineReading): void {
+    if (reading.model !== "") settings.set("machineModelString", reading.model);
+    if (reading.name !== "") settings.set("machineName", reading.name);
+    // Inside the emptiness guard on purpose. `[].includes("")` is already
+    // false, but a later edit that put "" on the list by accident would
+    // otherwise promote every machine that stayed silent to a Studio.
+    if (reading.model !== "" && STUDIO_MODEL_STRINGS.includes(reading.model)) {
+        settings.set("machineModel", "studio");
+    }
+}
+```
+
+Add the import for `STUDIO_MODEL_STRINGS` from `@/constants/machine`. `Settings` is already imported as a type in this file; check before adding it again.
+
+- [ ] **Step 6: Implement it in both stores**
+
+`settingsStore()` runs outside React, so it takes the shared store:
 
 ```ts
 function settingsStore(): LinkStore {
@@ -1356,65 +1484,14 @@ function settingsStore(): LinkStore {
 }
 ```
 
-And in the hook's own store at roughly line 390, beside `rememberId: setRemembered`:
+The hook's own store must honour the injected one, exactly as its `useSetting` calls already do. In `connect`, beside `rememberId: setRemembered`:
 
 ```ts
-                recordMachine: (reading) => applyMachineReading(sharedSettings(), reading),
+                recordMachine: (reading) =>
+                    applyMachineReading(options.settings ?? sharedSettings(), reading),
 ```
 
-- [ ] **Step 5: Write the rule in one place**
-
-Add to `hooks/useMachine.ts`, above `settingsStore`:
-
-```ts
-/**
- * Store what the machine said, and change the setting only when it is certain.
- *
- * The reading is kept always. It is allowed to overrule the user only on a
- * positive match against a string read off real hardware, because a string we
- * have never seen is not evidence of an original xBloom: we own none to read
- * one from, and a firmware revision would produce an unfamiliar string too.
- * `STUDIO_MODEL_STRINGS` is empty until somebody fills it in, and an empty list
- * matches nothing, so detection is inert rather than wrong.
- *
- * A blank reading is "did not learn", never "learned it is blank", so it is
- * dropped rather than written. Both readings go blank in ordinary use and
- * neither is a discovery: the Device Information Service is optional, and
- * `advertisedName` is only ever filled in by a scan, which `attemptLink` skips
- * for a returning user. Writing the blank through would erase what an earlier
- * connect found out, on the reconnect after it, for almost everybody — and
- * these two keys exist to be trustworthy about what a real machine said.
- */
-function applyMachineReading(settings: Settings, reading: MachineReading): void {
-    if (reading.model !== "") settings.set("machineModelString", reading.model);
-    if (reading.name !== "") settings.set("machineName", reading.name);
-    if (STUDIO_MODEL_STRINGS.includes(reading.model)) {
-        settings.set("machineModel", "studio");
-    }
-}
-```
-
-Note the match is deliberately outside the emptiness guard above it, so that an empty `STUDIO_MODEL_STRINGS` cannot be made to match an empty reading. `[].includes("")` is already `false`, but a later edit that adds `""` to the list by accident would otherwise promote every silent machine to a Studio.
-
-Two of the tests in Step 1 have to cover this directly, or the guards are untested:
-
-```ts
-it("keeps what an earlier connect learned when this one learns nothing", async () => {
-    // The returning user's case: no scan, so no advertised name, and firmware
-    // that does not carry the Device Information Service says nothing either.
-    settings.set("machineModelString", "X15");
-    settings.set("machineName", "XBLOOM-77");
-
-    applyMachineReading(settings, {model: "", name: ""});
-
-    expect(settings.get("machineModelString")).toBe("X15");
-    expect(settings.get("machineName")).toBe("XBLOOM-77");
-});
-```
-
-Add the import for `STUDIO_MODEL_STRINGS` from `@/constants/machine`, and for the `Settings` type from `@/library/Settings` if it is not already imported.
-
-- [ ] **Step 6: Call it on every successful connect**
+- [ ] **Step 7: Call it on every successful connect**
 
 In `attemptLink`, after the `try`/`catch` around `machine.connect(id)` and **before** the existing `if (id !== remembered)` block:
 
@@ -1425,9 +1502,9 @@ In `attemptLink`, after the `try`/`catch` around `machine.connect(id)` and **bef
     if (id !== remembered) {
 ```
 
-- [ ] **Step 7: Expose the setting on the link**
+- [ ] **Step 8: Expose the setting on the link**
 
-So the hook's consumers and the tests above can read it, add to the `MachineLink` type and to the object the hook returns:
+So the hook's consumers and the tests above can read it, add to the `MachineLink` type:
 
 ```ts
     /** Which machine the user says this is. The setting, not a reading. */
@@ -1437,20 +1514,32 @@ So the hook's consumers and the tests above can read it, add to the `MachineLink
 In the hook body, beside the other `useSetting` reads:
 
 ```ts
-    const [machineModel] = useSetting("machineModel");
+    const [machineModelSetting] = useSetting("machineModel", options.settings);
 ```
 
-Import the type from `@/library/machine/machineModel`.
+and in the returned object:
 
-- [ ] **Step 8: Run the tests to verify they pass**
+```ts
+    return {
+        machine, status, error, remembered, connect, forget,
+        // `SettingValue` widens the stored union back to `string`, so this has
+        // to be narrowed rather than asserted. Coerced rather than refused,
+        // because there is a correct answer to fall back on.
+        machineModel: asMachineModel(machineModelSetting)
+    };
+```
 
-Run: `npx jest hooks/__tests__/useMachine.test.ts && npm run typecheck`
-Expected: PASS, and no type errors. The typecheck proves you updated every `LinkStore` literal; there are two in this file and there may be more in tests.
+Import `asMachineModel` and the `MachineModel` type from `@/library/machine/machineModel`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Run the tests to verify they pass**
+
+Run: `npx jest hooks/__tests__/useMachine.test.ts && npx jest && npm run typecheck && npm run lint`
+Expected: PASS throughout, and no type errors. The typecheck is what proves you updated every `LinkStore` literal; there are two in the hook file and more in the tests.
+
+- [ ] **Step 10: Commit**
 
 ```bash
-git add hooks/useMachine.ts hooks/__tests__/useMachine.test.ts
+git add -A
 git commit -m "Remember what the machine said, and believe it only when it is sure"
 ```
 
