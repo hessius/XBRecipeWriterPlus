@@ -34,7 +34,7 @@ jest.mock("expo-clipboard", () => ({
 
 let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
 
-// The sheet pushes the account route directly, so `router` is mocked rather
+// The sheet pushes its two routes directly, so `router` is mocked rather
 // than `useRouter` -- see app/__tests__/settings.test.tsx for the spread that
 // keeps the typed-route helpers real.
 jest.mock("expo-router", () => ({
@@ -569,3 +569,69 @@ it("draws the account door", async () => {
     expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
     expect(screen.getByTestId("import-account-rule")).toBeTruthy();
 });
+
+/**
+ * The second door, beside the first rather than instead of it.
+ *
+ * The account brings in the recipes you made. The catalogue brings in the ones
+ * other people shared. They are different questions, so the sheet asks both,
+ * and one rule separates the field from the pair rather than one per row.
+ */
+const CATALOGUE = /BROWSE THE CATALOGUE/i;
+
+it("offers the catalogue as a way in, without taking the account away", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByRole("button", {name: CATALOGUE})).toBeTruthy();
+    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByTestId("import-catalogue-label"))
+        .toHaveTextContent("BROWSE THE CATALOGUE");
+    expect(screen.getByText("Find recipes shared by other xBloom users.")).toBeTruthy();
+});
+
+it("draws one rule for both doors, not one each", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
+    expect(screen.queryByTestId("import-catalogue-rule")).toBeNull();
+});
+
+it("closes itself on the way to the catalogue", async () => {
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
+    );
+
+    await fireEvent.press(screen.getByRole("button", {name: CATALOGUE}));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onOpenChange.mock.invocationCallOrder[0])
+        .toBeLessThan((router.push as jest.Mock).mock.invocationCallOrder[0]);
+});
+
+it("pushes the catalogue route", async () => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
+    );
+
+    await fireEvent.press(screen.getByRole("button", {name: CATALOGUE}));
+
+    expect(router.push).toHaveBeenCalledWith("/hub");
+});
+
+it.each([
+    ["a lookup is in flight", {status: "resolving"} as const],
+    ["a recipe has been found", undefined]
+])("does not offer the catalogue door while %s", async (_name, state) => {
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={() => {}}
+                     importer={stubImport({state: state ?? foundState()})}/>
+    );
+
+    expect(screen.queryByRole("button", {name: CATALOGUE})).toBeNull();
+});
+

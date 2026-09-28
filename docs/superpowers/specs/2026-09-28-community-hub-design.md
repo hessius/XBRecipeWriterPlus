@@ -222,6 +222,28 @@ changes the setting, which is precisely the group the setting exists for.
 
 ## 5. Phase 2: the hub
 
+> **Built.** Branch `community-hub-browse`, on top of Phase 1's #168.
+>
+> **Three things in this section turned out to be wrong, and the code follows
+> the measurement rather than the section:**
+>
+> 1. **§5.1's server-side filtering does not work.** Measured against the live
+>    API: `originIds`, `varietalIds`, `processIds` and `flavorIds` return zero
+>    rows for every recipe on the Original, and on the Studio the best origin
+>    filter finds 12 of the 106 rows that name Colombia. The criteria endpoint
+>    is global and ignores `machineList`, so it cannot even be asked which of
+>    its values are worth offering. The machine's whole partition is fetched
+>    progressively instead and every question is answered locally, where
+>    Colombia finds 306. The full measurement is in the plan under
+>    "Amendment: the server's filters do not work".
+> 2. **§5.2's `SelectableRecipeRow` reuse is impossible.** It takes a `Recipe`,
+>    and a hub row is not one. `components/HubRow.tsx` copies its contract, the
+>    26 pt tick and `accessibilityRole="checkbox"`, rather than its code.
+> 3. **§5.3's `EmptyLibrary` call to action was dropped.** That file carries a
+>    deliberate comment saying it has no button because the three CTA tiles sit
+>    above it. The catalogue door went into `ImportSheet` only, beside the
+>    account door rather than instead of it.
+
 ### 5.1 `library/hub/`
 
 Pure TypeScript, no React, mirroring the split `library/brew/` already uses.
