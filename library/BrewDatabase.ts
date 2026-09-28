@@ -727,6 +727,26 @@ class BrewDatabase {
     }
 
     /**
+     * The most recent brew the app watched all the way to a cup.
+     *
+     * Deliberately not filtered by rating, by age or by whether its question
+     * was dismissed. Those are the rating prompt's rules and they live in
+     * `library/brew/ratingPrompt.ts`, where a test can drive every one of them
+     * without SQLite. This answers only "which brew is the current one?", and
+     * the answer being already rated is how the prompt learns there is nothing
+     * to ask.
+     */
+    public lastWatchedBrew(): StoredBrew | null {
+        const rows = this.db.getAllSync<BrewRow>(
+            `SELECT * FROM brews
+             WHERE ${COUNTED_SQL} AND watched = 1
+             ORDER BY endedAt DESC LIMIT 1;`
+        );
+        const row = rows[0];
+        return row === undefined ? null : hydrate(row);
+    }
+
+    /**
      * The user's verdict on a brew, and the pin that comes with it.
      *
      * One statement, so the pin cannot lag the judgement it is there to
