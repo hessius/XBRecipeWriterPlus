@@ -23,6 +23,20 @@ export const SHELF_OVERFLOW_HEIGHT = 48;
 export const TAG_OVERFLOW_HEIGHT = 22;
 
 /**
+ * What one more row costs, as a share of the screen.
+ *
+ * The move rows come and go with the shelf's place in the grid -- the first
+ * shelf cannot move up, the last cannot move down, an only shelf does neither
+ * -- so a fixed height would be right for one shelf and leave a third of the
+ * sheet empty under another.
+ */
+const ROW_HEIGHT = 8;
+
+export function shelfOverflowHeight(mine: boolean, moves: number): number {
+    return mine ? SHELF_OVERFLOW_HEIGHT + moves * ROW_HEIGHT : TAG_OVERFLOW_HEIGHT;
+}
+
+/**
  * What can be done to a shelf, or to a tag that is ready to become one.
  *
  * Two doors, one sheet, the same arrangement the recipe menu uses. A long press
@@ -36,8 +50,8 @@ export const TAG_OVERFLOW_HEIGHT = 22;
  * means editing the recipes it describes.
  */
 export default function ShelfOverflowSheet({
-    open, shelf, count, mine, onOpenChange, onEdit, onRename, onDuplicate,
-    onDelete, onPromote, onDemote
+    open, shelf, count, mine, onOpenChange, onEdit, onMoveUp, onMoveDown,
+    onRename, onDuplicate, onDelete, onPromote, onDemote
 }: {
     open: boolean;
     /** The shelf's name, as the user spelled it. */
@@ -52,6 +66,17 @@ export default function ShelfOverflowSheet({
      * already inside the edit this row would start.
      */
     onEdit?: () => void;
+    /**
+     * Move the shelf one place earlier in the grid, or one place later.
+     *
+     * Absent at either end of the arrangement, so the rows say what can be
+     * done rather than offering a press that does nothing. They are also the
+     * single-pointer way to do what dragging a tile does, which WCAG 2.5.7
+     * requires of any drag, so they are not a convenience that can be dropped
+     * once the gesture works.
+     */
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
     onRename: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
@@ -89,10 +114,11 @@ export default function ShelfOverflowSheet({
     );
 
     const recipes = count === 1 ? "1 recipe" : `${count} recipes`;
+    const moves = (onMoveUp ? 1 : 0) + (onMoveDown ? 1 : 0);
 
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title={shelf}
-                   heightPercent={mine ? SHELF_OVERFLOW_HEIGHT : TAG_OVERFLOW_HEIGHT}>
+                   heightPercent={shelfOverflowHeight(mine, moves)}>
             <YStack gap="$2" paddingBottom="$4">
                 {/* A tag shelf is recipe metadata that happened to clear the
                     shelf threshold. Rename, duplicate, delete and member edits
@@ -102,6 +128,14 @@ export default function ShelfOverflowSheet({
                 {mine && onEdit && row("Choose what is on this shelf", "edit", onEdit, {
                     caption: "Edit members",
                     testID:  "shelf-overflow-edit"
+                })}
+                {mine && onMoveUp && row("Move this shelf up", "chevron-up", onMoveUp, {
+                    caption: "Move up",
+                    testID:  "shelf-overflow-up"
+                })}
+                {mine && onMoveDown && row("Move this shelf down", "chevron-down", onMoveDown, {
+                    caption: "Move down",
+                    testID:  "shelf-overflow-down"
                 })}
                 {mine && row("Rename this shelf", "write", onRename, {
                     caption: "Rename",

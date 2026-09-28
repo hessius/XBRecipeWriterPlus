@@ -376,6 +376,25 @@ export const DOT_ICONS = {
         ".........",
         "........."
     ],
+    /**
+     * `chevron-down` flipped top to bottom, dot for dot.
+     *
+     * Drawn by reflection for the reason `chevron-down` was drawn by rotation:
+     * the two sit one above the other in the shelf menu, and a chevron redrawn
+     * by hand would read as a slightly different mark in the one place the
+     * pair is seen together.
+     */
+    "chevron-up": [
+        ".........",
+        ".........",
+        "....#....",
+        "...###...",
+        "..##.##..",
+        ".##...##.",
+        ".#.....#.",
+        ".........",
+        "........."
+    ],
     /** An X mark: close or dismiss. */
     close: [
         ".........",
