@@ -68,11 +68,16 @@ describe("brewToRate", () => {
         expect(brewToRate({brew: candidate, ...ASK})).toBeNull();
     });
 
+    it("stops asking at exactly the window, not a moment after", () => {
+        const candidate = brew({endedAt: NOW - RATING_PROMPT_WINDOW_MS});
+        expect(brewToRate({brew: candidate, ...ASK})).toBeNull();
+    });
+
     it("ignores a brew that claims to have ended in the future", () => {
         expect(brewToRate({brew: brew({endedAt: NOW + 60_000}), ...ASK})).toBeNull();
     });
 
     it("counts sixteen hours as the window", () => {
-        expect(RATING_PROMPT_WINDOW_MS).toBe(16 * 60 * 60 * 1000);
+        expect(RATING_PROMPT_WINDOW_MS).toBe(57_600_000);
     });
 });

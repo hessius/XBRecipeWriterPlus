@@ -727,7 +727,7 @@ class BrewDatabase {
     }
 
     /**
-     * The most recent brew the app watched all the way to a cup.
+     * The most recent measured brew.
      *
      * Deliberately not filtered by rating, by age or by whether its question
      * was dismissed. Those are the rating prompt's rules and they live in
@@ -736,14 +736,14 @@ class BrewDatabase {
      * the answer being already rated is how the prompt learns there is nothing
      * to ask.
      */
-    public lastWatchedBrew(): StoredBrew | null {
+    public lastMeasuredBrew(): StoredBrew | null {
         const rows = this.db.getAllSync<BrewRow>(
             `SELECT * FROM brews
-             WHERE ${COUNTED_SQL} AND watched = 1
+             WHERE ${MEASURED_SQL}
              ORDER BY endedAt DESC LIMIT 1;`
         );
         const row = rows[0];
-        return row === undefined ? null : hydrate(row);
+        return row === undefined ? null : {...hydrate(row), tags: this.tagsFor(row.id)};
     }
 
     /**

@@ -34,17 +34,17 @@ function record(over: Partial<BrewRecord> = {}): BrewRecord {
     } as BrewRecord;
 }
 
-describe("BrewDatabase.lastWatchedBrew", () => {
+describe("BrewDatabase.lastMeasuredBrew", () => {
     it("has nothing to offer on an empty history", () => {
         const database = new BrewDatabase();
-        expect(database.lastWatchedBrew()).toBeNull();
+        expect(database.lastMeasuredBrew()).toBeNull();
     });
 
     it("returns the most recently ended brew", () => {
         const database = new BrewDatabase();
         database.insert(record({id: "old", endedAt: 1_000}), []);
         database.insert(record({id: "new", endedAt: 9_000}), []);
-        expect(database.lastWatchedBrew()?.id).toBe("new");
+        expect(database.lastMeasuredBrew()?.id).toBe("new");
     });
 
     it("skips a brew that never made a cup", () => {
@@ -53,7 +53,7 @@ describe("BrewDatabase.lastWatchedBrew", () => {
         database.insert(
             record({id: "stopped", endedAt: 9_000, outcome: "cancelled"}), []
         );
-        expect(database.lastWatchedBrew()?.id).toBe("cup");
+        expect(database.lastMeasuredBrew()?.id).toBe("cup");
     });
 
     it("skips a brew logged by hand", () => {
@@ -62,13 +62,19 @@ describe("BrewDatabase.lastWatchedBrew", () => {
         database.insert(
             record({id: "logged", endedAt: 9_000, watched: false, rating: 4}), []
         );
-        expect(database.lastWatchedBrew()?.id).toBe("seen");
+        expect(database.lastMeasuredBrew()?.id).toBe("seen");
     });
 
     it("returns a brew that is already rated, so the rule can end the matter", () => {
         const database = new BrewDatabase();
         database.insert(record({id: "unrated", endedAt: 1_000}), []);
         database.insert(record({id: "rated", endedAt: 9_000, rating: 5}), []);
-        expect(database.lastWatchedBrew()?.id).toBe("rated");
+        expect(database.lastMeasuredBrew()?.id).toBe("rated");
+    });
+
+    it("returns the brew's tags", () => {
+        const database = new BrewDatabase();
+        database.insert(record({id: "tagged", tags: ["Kenya", "Filter"]}), []);
+        expect(database.lastMeasuredBrew()?.tags).toEqual(["Kenya", "Filter"]);
     });
 });
