@@ -27,6 +27,19 @@ describe("BrewNoteSheet", () => {
         expect(onNote).toHaveBeenCalledWith("Sweet");
     });
 
+    it("does not clear a rating by tapping the lit star", async () => {
+        const onRate = jest.fn();
+        await renderWithProviders(
+            <BrewNoteSheet open={true} onOpenChange={() => {}}
+                           figures="14:32 · 244 G" recipeName="Morning Bloem"
+                           rating={4} note="" onRate={onRate} onNote={() => {}}/>
+        );
+
+        await fireEvent.press(await screen.findByLabelText("Rate 4 stars"));
+
+        expect(onRate).toHaveBeenCalledWith(4);
+    });
+
     it("closes when done is pressed", async () => {
         const onOpenChange = jest.fn();
         await renderWithProviders(

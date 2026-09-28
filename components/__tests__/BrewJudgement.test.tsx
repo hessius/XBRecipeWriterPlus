@@ -60,6 +60,7 @@ describe("BrewJudgement", () => {
     it("can leave the heading to its parent", async () => {
         await draw({showHeading: false});
         expect(screen.queryByText("HOW WAS IT")).toBeNull();
+        expect(screen.getByTestId("judgement-heading-space")).toBeTruthy();
     });
 
     it("says nothing about waiting unless asked to", async () => {

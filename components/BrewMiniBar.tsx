@@ -11,6 +11,7 @@ import {MINI_FAILURE_WHY, OVER} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {DURATION} from "@/constants/motion";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import {formatBrewClock} from "@/library/brew/brewFormat";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type Pour from "@/library/Pour";
@@ -40,12 +41,6 @@ const TRACE_HEIGHT = 34;
  * value, stated so the four sides stay equal above the inset.
  */
 const BAR_PADDING = 10;
-
-/** `1:42`, floored — matches the brew screen clock. */
-function clock(seconds: number): string {
-    const whole = Math.floor(Math.max(0, seconds));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
 /** The two lines of words, and the colour the live line takes. */
 function say(props: Props): {title: string; detail: string; line: string} {
@@ -81,7 +76,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
         const cup = Math.round(samples[samples.length - 1]?.cup ?? 0);
         return {
             title: "Ready",
-            detail: `${cup} G · ${clock(elapsed)} · TAP TO SEE IT`,
+            detail: `${cup} G · ${formatBrewClock(elapsed)} · TAP TO SEE IT`,
             line: palette.success
         };
     }
@@ -97,7 +92,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
     if (phase.name === "pouring") {
         return {
             title: recipeName,
-            detail: `POUR ${phase.pour} OF ${phase.pours} · ${clock(elapsed)}`,
+            detail: `POUR ${phase.pour} OF ${phase.pours} · ${formatBrewClock(elapsed)}`,
             line: props.accent
         };
     }
@@ -108,7 +103,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
     if (phase.name === "bypass") {
         return {
             title: "Bypass",
-            detail: `ADDING WATER · ${clock(elapsed)}`,
+            detail: `ADDING WATER · ${formatBrewClock(elapsed)}`,
             line: props.accent
         };
     }
@@ -121,7 +116,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
         const cup = Math.round(samples[samples.length - 1]?.cup ?? 0);
         return {
             title: "Drawdown",
-            detail: `${cup} G · ${clock(elapsed)} · ALMOST THERE`,
+            detail: `${cup} G · ${formatBrewClock(elapsed)} · ALMOST THERE`,
             line: props.accent
         };
     }

@@ -1,4 +1,5 @@
 import React from "react";
+import {Keyboard} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
@@ -23,7 +24,7 @@ import {onAccent, palette} from "@/constants/colors";
  * which cup is being asked about.
  */
 export default function BrewNoteSheet({
-    open, onOpenChange, figures, recipeName, rating, note, onRate, onNote
+    open, onOpenChange, figures, recipeName, rating, note, onRate, onNote, onNoteDraft
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -34,7 +35,13 @@ export default function BrewNoteSheet({
     note: string;
     onRate: (rating: number) => void;
     onNote: (note: string) => void;
+    onNoteDraft?: (note: string) => void;
 }) {
+    function close(): void {
+        Keyboard.dismiss();
+        onOpenChange(false);
+    }
+
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange}
                    title={RATING_SHEET_TITLE} heightPercent={44}>
@@ -50,13 +57,14 @@ export default function BrewNoteSheet({
                 </YStack>
 
                 <BrewJudgement rating={rating} note={note}
-                               onRate={onRate} onNote={onNote} showHeading={false}/>
+                               onRate={onRate} onNote={onNote} onNoteDraft={onNoteDraft}
+                               showHeading={false} clearable={false}/>
 
                 <XStack
                     accessibilityRole="button"
                     accessibilityLabel={RATING_SHEET_DONE}
                     testID="brew-note-done"
-                    onPress={() => onOpenChange(false)}
+                    onPress={close}
                     height={48} alignItems="center" justifyContent="center"
                     borderRadius="$4"
                     backgroundColor={palette.text}>

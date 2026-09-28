@@ -1,9 +1,11 @@
 import React, {useEffect, useRef, useState} from "react";
+import {Keyboard} from "react-native";
 import {usePathname} from "expo-router";
 
 import BrewMiniBar from "@/components/BrewMiniBar";
 import BrewNoteSheet from "@/components/BrewNoteSheet";
 import BrewRatingBar from "@/components/BrewRatingBar";
+import {EXIT_GRACE} from "@/components/XbrwSheet";
 import {useSteadyRouter} from "@/hooks/steadyRouter";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {useRatingPrompt} from "@/hooks/useRatingPrompt";
@@ -43,6 +45,9 @@ export default function LiveBrewBar() {
     // brew the prompt offers -- so a sheet drawn from `prompt.brew` would be
     // unmounted by the very gesture that opened it.
     const [noting, setNoting] = useState<StoredBrew | null>(null);
+    const [noteOpen, setNoteOpen] = useState(false);
+    const [noteDraft, setNoteDraft] = useState("");
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const silent = SILENT.has(pathname);
@@ -52,9 +57,36 @@ export default function LiveBrewBar() {
         wasSilent.current = silent;
     }, [pathname, prompt]);
 
-    if (SILENT.has(pathname)) return null;
+    function clearNoting(): void {
+        if (noting !== null) setNoting(null);
+        if (noteOpen) setNoteOpen(false);
+        if (noteDraft !== "") setNoteDraft("");
+    }
+
+    function closeNoteSheet(): void {
+        Keyboard.dismiss();
+        if (noting !== null && noteDraft !== (noting.note ?? "") &&
+            prompt.annotate(noting.id, noteDraft)) {
+            setNoting((was) => was === null ? was : {...was, note: noteDraft});
+        }
+        setNoteOpen(false);
+        const closing = noting?.id;
+        if (closeTimer.current !== null) {
+            clearTimeout(closeTimer.current);
+        }
+        closeTimer.current = setTimeout(() => {
+            closeTimer.current = null;
+            setNoting((was) => was?.id === closing ? null : was);
+        }, EXIT_GRACE);
+    }
+
+    if (SILENT.has(pathname)) {
+        clearNoting();
+        return null;
+    }
 
     if (run !== null) {
+        clearNoting();
         return (
             <BrewMiniBar
                 recipeName={run.recipe.displayName()}
@@ -84,30 +116,46 @@ export default function LiveBrewBar() {
                     recipeName={asking.recipeName}
                     figures={brewFigures(asking)}
                     pours={poursFromPlan(asking.plan)}
-                    samples={[]}
                     accent={asking.accent}
                     onOpen={() => router.push(`/brewRecord?id=${asking.id}`)}
                     onRate={(rating) => {
                         // Written first, so dismissing the sheet loses nothing.
-                        prompt.rate(asking.id, rating);
+                        if (!prompt.rate(asking.id, rating)) return;
+                        if (closeTimer.current !== null) {
+                            clearTimeout(closeTimer.current);
+                            closeTimer.current = null;
+                        }
                         setNoting({...asking, rating});
+                        setNoteDraft(asking.note ?? "");
+                        setNoteOpen(true);
                     }}
                     onDismiss={() => prompt.dismiss(asking.id)}
                 />
             )}
             {noting !== null && (
                 <BrewNoteSheet
-                    open={true}
-                    onOpenChange={() => setNoting(null)}
+                    open={noteOpen}
+                    onOpenChange={(open) => {
+                        if (open) {
+                            setNoteOpen(true);
+                        } else {
+                            closeNoteSheet();
+                        }
+                    }}
                     figures={brewFigures(noting)}
                     recipeName={noting.recipeName}
                     rating={noting.rating ?? 0}
                     note={noting.note ?? ""}
                     onRate={(rating) => {
-                        prompt.rate(noting.id, rating);
+                        if (!prompt.rate(noting.id, rating)) return;
                         setNoting((was) => was === null ? was : {...was, rating});
                     }}
-                    onNote={(note) => prompt.annotate(noting.id, note)}
+                    onNote={(note) => {
+                        if (!prompt.annotate(noting.id, note)) return;
+                        setNoteDraft(note);
+                        setNoting((was) => was === null ? was : {...was, note});
+                    }}
+                    onNoteDraft={setNoteDraft}
                 />
             )}
         </>

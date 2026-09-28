@@ -749,7 +749,7 @@ describe("Beanconqueror handoff on the finished brew", () => {
     });
 
     const store = (brew: StoredBrew = record) => ({
-        all: () => [brew], samples: () => []
+        all: () => [brew], samples: () => [], markSent: jest.fn()
     });
 
     it("offers the handoff when the gate is on", async () => {

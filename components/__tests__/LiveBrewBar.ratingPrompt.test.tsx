@@ -83,6 +83,23 @@ describe("LiveBrewBar rating prompt refresh", () => {
         expect(mockStore.lastMeasuredBrew).toHaveBeenCalledTimes(2);
     });
 
+    it("does not raise a prompt for a brew that appears while leaving the brew screen", async () => {
+        mockPathname = "/brew";
+        mockStore.next = null;
+        const view = await renderWithProviders(<LiveBrewBar />);
+        expect(screen.queryByTestId("rating-bar")).toBeNull();
+        expect(mockStore.lastMeasuredBrew).toHaveBeenCalledTimes(1);
+
+        mockStore.next = BREW;
+        mockPathname = "/";
+        await act(async () => {
+            view.rerender(<LiveBrewBar />);
+        });
+
+        await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
+        expect(mockStore.lastMeasuredBrew).toHaveBeenCalledTimes(2);
+    });
+
     it("saves a note from the sheet after the rating removes the prompt", async () => {
         mockPathname = "/";
         await renderWithProviders(<LiveBrewBar />);
@@ -95,5 +112,37 @@ describe("LiveBrewBar rating prompt refresh", () => {
 
         expect(mockStore.judge).toHaveBeenCalledWith("b1", {rating: 4});
         expect(mockStore.judge).toHaveBeenCalledWith("b1", {note: "Sweet and round."});
+    });
+
+    it("does not redraw the sheet when a rating write is refused", async () => {
+        mockPathname = "/";
+        await renderWithProviders(<LiveBrewBar />);
+
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+        await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
+
+        (mockStore.judge as jest.Mock).mockClear();
+        const litStar = await screen.findByLabelText("Rate 4 stars");
+        await fireEvent.press(litStar);
+
+        expect(mockStore.judge).toHaveBeenCalledWith("b1", {rating: 4});
+        expect(screen.queryByLabelText("Clear the rating, currently 4 stars")).toBeNull();
+    });
+
+    it("saves typed note text when DONE is pressed without an end-editing event", async () => {
+        mockPathname = "/";
+        await renderWithProviders(<LiveBrewBar />);
+
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+        await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
+
+        const field = await screen.findByTestId("judgement-note");
+        await fireEvent.changeText(field, "Sweet and round.");
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("brew-note-done"));
+            expect(mockStore.judge).toHaveBeenCalledWith("b1", {
+                note: "Sweet and round."
+            });
+        });
     });
 });

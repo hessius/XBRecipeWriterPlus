@@ -1,8 +1,4 @@
-/** `14:32`, floored, to match the clock the brew screen draws. */
-function clock(seconds: number): string {
-    const whole = Math.floor(Math.max(0, seconds));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
+import {formatBrewClock} from "@/library/brew/brewFormat";
 
 /**
  * How long it took and what landed in the cup, as one line.
@@ -26,5 +22,5 @@ export function brewFigures(brew: {
         && brew.pouringAt > 0
         ? brew.pouringAt
         : brew.startedAt;
-    return `${clock((brew.endedAt - from) / 1000)} · ${Math.round(brew.cupTotal)} G`;
+    return `${formatBrewClock((brew.endedAt - from) / 1000)} · ${Math.round(brew.cupTotal)} G`;
 }

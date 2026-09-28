@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {AppState} from "react-native";
 
 import {useSetting} from "@/hooks/useSetting";
@@ -44,8 +44,8 @@ export function useRatingPrompt(
     settings?: Settings
 ): {
     brew: StoredBrew | null;
-    rate: (id: string, rating: number) => void;
-    annotate: (id: string, note: string) => void;
+    rate: (id: string, rating: number) => boolean;
+    annotate: (id: string, note: string) => boolean;
     dismiss: (id: string) => void;
     refresh: () => void;
 } {
@@ -56,6 +56,8 @@ export function useRatingPrompt(
         brew: database().lastMeasuredBrew(),
         now: Date.now()
     }));
+    const offeredIds = useRef(new Set<string>());
+    const offeredNotes = useRef(new Map<string, string>());
 
     useEffect(() => {
         const subscription = AppState.addEventListener("change", (next) => {
@@ -72,7 +74,15 @@ export function useRatingPrompt(
     }, []);
 
     function refresh(): void {
-        setCandidate({brew: database().lastMeasuredBrew(), now: Date.now()});
+        const next = database().lastMeasuredBrew();
+        setCandidate((was) => (
+            // Navigation refresh only retires an existing prompt. It must not
+            // promote a brew first seen while leaving /brew, because that is
+            // the just-declined end-of-brew question in a new slot.
+            next?.id === was.brew?.id || next === null
+                ? {brew: next, now: Date.now()}
+                : was
+        ));
     }
 
     const brew = brewToRate({
@@ -84,6 +94,8 @@ export function useRatingPrompt(
 
     useEffect(() => {
         if (brew === null) return;
+        offeredIds.current.add(brew.id);
+        offeredNotes.current.set(brew.id, brew.note ?? "");
         const expiresAt = brew.endedAt + RATING_PROMPT_WINDOW_MS;
         const timer = setTimeout(() => {
             setCandidate((was) => was.brew?.id === brew.id
@@ -93,40 +105,39 @@ export function useRatingPrompt(
         return () => clearTimeout(timer);
     }, [brew]);
 
-    function offeredBrew(id: string): StoredBrew | null {
-        return candidate.brew?.id === id ? candidate.brew : null;
+    function offeredBrewId(id: string): string | null {
+        return offeredIds.current.has(id) ? id : null;
     }
 
-    // The caller names the brew being written rather than asking this hook to
-    // remember "the last one it offered". LiveBrewBar already owns that state
-    // for the note sheet; duplicating it here would make the hook hold a stale
-    // historical prompt alongside the current candidate.
-    function rate(id: string, rating: number): void {
-        const target = offeredBrew(id);
-        if (target === null) return;
-        if (!isRating(rating) || rating < 1) return;
-        database().judge(target.id, {rating});
+    function rate(id: string, rating: number): boolean {
+        const target = offeredBrewId(id);
+        if (target === null) return false;
+        if (!isRating(rating) || rating < 1) return false;
+        database().judge(target, {rating});
         // Written through and held locally so the bar leaves on this same
         // render pass, not on the next foreground read.
-        setCandidate((was) => was.brew?.id === target.id
+        setCandidate((was) => was.brew?.id === target
             ? {...was, brew: {...was.brew, rating}}
             : was);
+        return true;
     }
 
-    function annotate(id: string, note: string): void {
-        const target = offeredBrew(id);
-        if (target === null) return;
-        if (note === (target.note ?? "")) return;
-        database().judge(target.id, {note});
+    function annotate(id: string, note: string): boolean {
+        const target = offeredBrewId(id);
+        if (target === null) return false;
+        if (note === (offeredNotes.current.get(target) ?? "")) return false;
+        database().judge(target, {note});
+        offeredNotes.current.set(target, note);
         // Same local echo as `rate`: the screen should agree with the user's
         // action immediately rather than waiting for the next app visit.
-        setCandidate((was) => was.brew?.id === target.id
+        setCandidate((was) => was.brew?.id === target
             ? {...was, brew: {...was.brew, note}}
             : was);
+        return true;
     }
 
     function dismiss(id: string): void {
-        if (offeredBrew(id) === null) return;
+        if (offeredBrewId(id) === null) return;
         setDismissedId(id);
     }
 

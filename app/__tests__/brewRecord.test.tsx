@@ -49,7 +49,8 @@ let mockBrews: StoredBrew[] = [];
 const mockJudgementStore = {
     judge: jest.fn(),
     setPinned: jest.fn(),
-    brewsFor: jest.fn()
+    brewsFor: jest.fn(),
+    markSent: jest.fn()
 };
 
 jest.mock("expo-router", () => {
@@ -613,6 +614,7 @@ describe("a verdict on a record", () => {
         mockParams = {id: "brew-1"};
         mockJudgementStore.judge.mockReset();
         mockJudgementStore.setPinned.mockReset();
+        mockJudgementStore.markSent.mockReset();
         mockOpened = {record, samples: []};
     });
 

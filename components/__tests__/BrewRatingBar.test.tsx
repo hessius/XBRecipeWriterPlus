@@ -11,7 +11,6 @@ function props(over = {}) {
         recipeName: "Morning Bloem",
         figures: "14:32 · 244 G",
         pours: [new Pour(1), new Pour(2)],
-        samples: [],
         accent: accents.coffee[1],
         onOpen: jest.fn(),
         onRate: jest.fn(),

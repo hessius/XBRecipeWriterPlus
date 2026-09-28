@@ -35,26 +35,34 @@ import {palette} from "@/constants/colors";
  * where the user has deliberately come back to give it.
  */
 export default function BrewJudgement({
-    rating, note, onRate, onNote, testID, showHeading = true, hint
+    rating, note, onRate, onNote, onNoteDraft, testID, showHeading = true, hint,
+    clearable = true
 }: {
     rating: number;
     note: string;
     onRate: (rating: number) => void;
     onNote: (note: string) => void;
+    onNoteDraft?: (note: string) => void;
     testID?: string;
     showHeading?: boolean;
     hint?: string;
+    clearable?: boolean;
 }) {
     return (
         <YStack gap="$2" testID={testID ?? "brew-judgement"}>
-            <XStack alignItems="center" justifyContent="space-between">
-                {showHeading && (
+            <XStack testID="judgement-stars-row"
+                    alignItems="center"
+                    justifyContent="space-between">
+                {showHeading ? (
                     <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}
                                    color={palette.dim}>
                         HOW WAS IT
                     </DotMatrixText>
+                ) : (
+                    <XStack flex={1} testID="judgement-heading-space" />
                 )}
-                <BrewStars rating={rating} onRate={onRate} testID="judgement-stars"/>
+                <BrewStars rating={rating} onRate={onRate} clearable={clearable}
+                           testID="judgement-stars"/>
             </XStack>
 
             {hint !== undefined && (
@@ -71,6 +79,7 @@ export default function BrewJudgement({
                 multiline={true}
                 returnKeyType="done"
                 submitBehavior="blurAndSubmit"
+                onChangeText={onNoteDraft}
                 onEndEditing={(event) => onNote(event.nativeEvent.text)}
                 style={{
                     fontSize:          15,

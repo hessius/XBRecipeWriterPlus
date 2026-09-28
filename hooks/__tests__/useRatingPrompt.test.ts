@@ -154,13 +154,37 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.rate("b1", 0);
-            result.current.rate("b1", 6);
-            result.current.rate("b1", 2.5);
+            expect(result.current.rate("b1", 0)).toBe(false);
+            expect(result.current.rate("b1", 6)).toBe(false);
+            expect(result.current.rate("b1", 2.5)).toBe(false);
         });
 
         expect(store.judge).not.toHaveBeenCalled();
         expect(result.current.brew?.id).toBe("b1");
+    });
+
+    it("rejects a rating for a brew this session never offered", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            expect(result.current.rate("stranger", 4)).toBe(false);
+        });
+
+        expect(store.judge).not.toHaveBeenCalled();
+    });
+
+    it("rejects a note for a brew this session never offered", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            expect(result.current.annotate("stranger", "Sweet.")).toBe(false);
+        });
+
+        expect(store.judge).not.toHaveBeenCalled();
     });
 
     it("dismisses by storing the brew id and removes the prompt immediately", async () => {
@@ -174,6 +198,19 @@ describe("useRatingPrompt", () => {
 
         expect(settings.get("ratingPromptDismissed")).toBe("b1");
         expect(result.current.brew).toBeNull();
+    });
+
+    it("rejects dismissal for a brew this session never offered", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            result.current.dismiss("stranger");
+        });
+
+        expect(settings.get("ratingPromptDismissed")).toBe("");
+        expect(result.current.brew?.id).toBe("b1");
     });
 
     it("retires an offered brew when its rating window expires without re-reading", async () => {
@@ -289,13 +326,28 @@ describe("useRatingPrompt", () => {
         expect(result.current.brew?.id).toBe("b2");
     });
 
-    it("refreshes from the same source as the foreground path", async () => {
+    it("refreshes only to retire the brew it is already offering", async () => {
         const store = fakeStore(measuredBrew("b1"));
         const settings = new Settings(memoryStorage());
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
         expect(result.current.brew?.id).toBe("b1");
 
         store.next = measuredBrew("b1", {rating: 4});
+        await act(async () => {
+            result.current.refresh();
+        });
+
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(2);
+        expect(result.current.brew).toBeNull();
+    });
+
+    it("does not promote a new brew during a navigation refresh", async () => {
+        const store = fakeStore(null);
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew).toBeNull();
+
+        store.next = measuredBrew("just-finished");
         await act(async () => {
             result.current.refresh();
         });

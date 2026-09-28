@@ -70,7 +70,8 @@ beforeEach(() => {
     mockPathname = "/";
     mockPush.mockClear();
     mockPrompt.brew = null;
-    mockPrompt.rate.mockClear();
+    mockPrompt.rate.mockReset();
+    mockPrompt.rate.mockReturnValue(true);
     mockPrompt.annotate.mockClear();
     mockPrompt.dismiss.mockClear();
     mockPrompt.refresh.mockClear();
@@ -144,6 +145,17 @@ describe("LiveBrewBar", () => {
         await renderWithProviders(<LiveBrewBar />);
         await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
         expect(await screen.findByTestId("brew-note-done")).toBeTruthy();
+    });
+
+    it("does not open the note sheet when a rating write is refused", async () => {
+        mockRun = null;
+        mockPrompt.brew = BREW;
+        mockPrompt.rate.mockReturnValue(false);
+        await renderWithProviders(<LiveBrewBar />);
+
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+
+        expect(screen.queryByTestId("brew-note-done")).toBeNull();
     });
 
     it("opens the brew once when the bar is tapped twice", async () => {

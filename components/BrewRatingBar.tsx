@@ -15,7 +15,6 @@ import {
 } from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {DURATION} from "@/constants/motion";
-import type {BrewSample} from "@/library/brew/BrewRecord";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import type Pour from "@/library/Pour";
 
@@ -42,14 +41,13 @@ const BAR_PADDING = 10;
  * label.
  */
 export default function BrewRatingBar({
-    recipeName, figures, pours, samples, accent, onOpen, onRate, onDismiss
+    recipeName, figures, pours, accent, onOpen, onRate, onDismiss
 }: {
     recipeName: string;
     /** `14:32 · 244 G`, already formatted by the caller. */
     figures: string;
     pours: Pour[];
-    /** The stored stream, or empty where the retention sweep has taken it. */
-    samples: BrewSample[];
+    /** Draws the planned silhouette: this bar identifies a brew, it is not a chart. */
     accent: string;
     onOpen: () => void;
     onRate: (rating: number) => void;
@@ -80,7 +78,7 @@ export default function BrewRatingBar({
                 >
                     <BrewTrace
                         pours={pours}
-                        samples={samples}
+                        samples={[]}
                         accent={accent}
                         width={TRACE_WIDTH}
                         height={TRACE_HEIGHT}
