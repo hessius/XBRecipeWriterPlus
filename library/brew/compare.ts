@@ -1,5 +1,6 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
+import type {PlanStage} from "./BrewRecord";
 import {countsAsBrewed} from "./brewPopulation";
 
 /**
@@ -100,4 +101,46 @@ export function pourVerdict(
         verdict: "same",
         why: "Both brews poured the same water on the same schedule."
     };
+}
+
+export type PlanDrift = "none" | "detail" | "shape";
+
+/**
+ * The plan fields that move the drawn staircase.
+ *
+ * Exactly the fields `planPoints` in `brewShape.ts` reads: `volume` sets each
+ * step's rise, `flowRate` its run through `pourSeconds`, and `pauseTime` the
+ * plateau after it. A difference in one of these makes two plans genuinely
+ * incomparable on one line.
+ *
+ * ADDING A FIELD TO `PlanStage`? Decide which list it belongs in. A field in
+ * neither is silently ignored by the drift grade, which is how a real
+ * difference comes to be presented as none.
+ */
+const SHAPE_FIELDS = ["volume", "flowRate", "pauseTime"] as const;
+
+/** Changes the coffee without moving the line. */
+const DETAIL_FIELDS = ["temperature", "pourPattern", "agitation"] as const;
+
+export function planDrift(
+    subject: PlanStage[] | undefined, reference: PlanStage[] | undefined
+): {grade: PlanDrift; fields: string[]} {
+    if (subject === undefined || reference === undefined) {
+        return {grade: "none", fields: []};
+    }
+    if (subject.length !== reference.length) {
+        return {grade: "shape", fields: ["stages"]};
+    }
+
+    const fields: string[] = [];
+    for (const field of [...SHAPE_FIELDS, ...DETAIL_FIELDS]) {
+        const differs = subject.some((stage, i) => stage[field] !== reference[i][field]);
+        if (differs) fields.push(field);
+    }
+
+    const shape = fields.some(
+        (field) => (SHAPE_FIELDS as readonly string[]).includes(field)
+    );
+    const grade: PlanDrift = shape ? "shape" : fields.length > 0 ? "detail" : "none";
+    return {grade, fields};
 }

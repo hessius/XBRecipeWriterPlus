@@ -1,7 +1,9 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
+import type {PlanStage} from "@/library/brew/BrewRecord";
 import {
     COMPARE_TIME_TOLERANCE_SECONDS,
     COMPARE_WATER_TOLERANCE_ML,
+    planDrift,
     pourVerdict
 } from "@/library/brew/compare";
 
@@ -72,5 +74,60 @@ describe("pourVerdict", () => {
     it("falls back to startedAt on a row written before pouringAt existed", () => {
         const a = brew({pouringAt: undefined, startedAt: 10_000, endedAt: 150_000});
         expect(pourVerdict(a, brew({id: "b"})).verdict).toBe("same");
+    });
+});
+
+function stage(over: Partial<PlanStage> = {}): PlanStage {
+    return {
+        pourNumber: 1, volume: 40, temperature: 93, flowRate: 40,
+        agitation: 0, pourPattern: 0, pauseTime: 20, ...over
+    };
+}
+
+describe("planDrift", () => {
+    it("grades two identical plans as no drift", () => {
+        expect(planDrift([stage()], [stage()])).toEqual({grade: "none", fields: []});
+    });
+
+    it.each([
+        ["volume", {volume: 60}],
+        ["flowRate", {flowRate: 32}],
+        ["pauseTime", {pauseTime: 5}]
+    ] as [string, Partial<PlanStage>][])(
+        "grades a change of %s as shape drift, because it moves the line",
+        (field, over) => {
+            const drift = planDrift([stage()], [stage(over)]);
+            expect(drift.grade).toBe("shape");
+            expect(drift.fields).toContain(field);
+        }
+    );
+
+    it.each([
+        ["temperature", {temperature: 88}],
+        ["pourPattern", {pourPattern: 1}],
+        ["agitation", {agitation: 3}]
+    ] as [string, Partial<PlanStage>][])(
+        "grades a change of %s as detail drift, because the line is unmoved",
+        (field, over) => {
+            const drift = planDrift([stage()], [stage(over)]);
+            expect(drift.grade).toBe("detail");
+            expect(drift.fields).toContain(field);
+        }
+    );
+
+    it("grades a different stage count as shape drift", () => {
+        const drift = planDrift([stage()], [stage(), stage({pourNumber: 2})]);
+        expect(drift.grade).toBe("shape");
+        expect(drift.fields).toContain("stages");
+    });
+
+    it("lets shape outrank detail when both changed", () => {
+        expect(planDrift([stage()], [stage({volume: 60, temperature: 88})]).grade)
+            .toBe("shape");
+    });
+
+    it("reports no drift when a brew carries no plan at all", () => {
+        expect(planDrift(undefined, [stage()])).toEqual({grade: "none", fields: []});
+        expect(planDrift([stage()], undefined)).toEqual({grade: "none", fields: []});
     });
 });
