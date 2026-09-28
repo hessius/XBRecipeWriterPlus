@@ -9,6 +9,33 @@ import {renderWithProviders} from "@/test-utils/render";
 let mockPathname = "/";
 const mockPush = jest.fn();
 let mockRun: object | null = null;
+const mockPrompt = {
+    brew: null as unknown,
+    rate: jest.fn(),
+    annotate: jest.fn(),
+    dismiss: jest.fn()
+};
+
+const BREW = {
+    id: "b1",
+    recipeUuid: "r1",
+    recipeName: "Morning Bloem",
+    accent: "#ff8800",
+    startedAt: 0,
+    pouringAt: 1_000,
+    endedAt: 873_000,
+    outcome: "done",
+    failure: null,
+    pours: 2,
+    waterTotal: 260,
+    cupTotal: 244,
+    heldSeconds: 0,
+    rating: 0,
+    note: "",
+    pinned: false,
+    hasStream: false,
+    plan: []
+};
 
 // `router` as well as `useRouter`, because the bar's router now comes from
 // `steadyRouter`, which wraps both so that whichever door a screen came
@@ -23,6 +50,12 @@ jest.mock("@/hooks/useLiveBrew", () => ({
     useLiveBrew: () => ({run: mockRun, dismiss: jest.fn()})
 }));
 
+jest.mock("@/hooks/useRatingPrompt", () => ({
+    useRatingPrompt: () => mockPrompt,
+    __esModule: true,
+    default: () => mockPrompt
+}));
+
 function recipe(): Recipe {
     const r = new Recipe();
     r.name = "Ethiopia Guji";
@@ -34,6 +67,10 @@ function recipe(): Recipe {
 beforeEach(() => {
     mockPathname = "/";
     mockPush.mockClear();
+    mockPrompt.brew = null;
+    mockPrompt.rate.mockClear();
+    mockPrompt.annotate.mockClear();
+    mockPrompt.dismiss.mockClear();
     mockRun = {
         recipe: recipe(),
         samples: [],
@@ -72,6 +109,38 @@ describe("LiveBrewBar", () => {
         mockRun = null;
         const {queryByText} = await renderWithProviders(<LiveBrewBar />);
         expect(queryByText(/ETHIOPIA GUJI/i)).toBeNull();
+        expect(screen.queryByTestId("mini-bar")).toBeNull();
+        expect(screen.queryByTestId("rating-bar")).toBeNull();
+    });
+
+    it("asks how the last brew was when nothing is running", async () => {
+        mockRun = null;
+        mockPrompt.brew = BREW;
+        await renderWithProviders(<LiveBrewBar />);
+        expect(screen.getByTestId("rating-bar")).toBeTruthy();
+    });
+
+    it("says nothing about an old brew on the brew screens", async () => {
+        mockRun = null;
+        mockPrompt.brew = BREW;
+        mockPathname = "/brewHistory";
+        await renderWithProviders(<LiveBrewBar />);
+        expect(screen.queryByTestId("rating-bar")).toBeNull();
+    });
+
+    it("lets a live run beat a pending question", async () => {
+        mockPrompt.brew = BREW;
+        await renderWithProviders(<LiveBrewBar />);
+        expect(screen.getByTestId("mini-bar")).toBeTruthy();
+        expect(screen.queryByTestId("rating-bar")).toBeNull();
+    });
+
+    it("keeps the note sheet up after the rating that opened it", async () => {
+        mockRun = null;
+        mockPrompt.brew = BREW;
+        await renderWithProviders(<LiveBrewBar />);
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+        expect(await screen.findByTestId("brew-note-done")).toBeTruthy();
     });
 
     it("opens the brew once when the bar is tapped twice", async () => {
