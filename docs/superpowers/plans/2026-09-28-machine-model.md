@@ -207,7 +207,7 @@ git commit -m "Trim the machine model to what its consumers actually need"
 
 **There are three keys, and they are not alike.** `machineModel` is the user's answer and belongs in backups. `machineModelString` and `machineName` are readings taken off a physical machine; restoring them onto a phone that never took the reading would turn evidence into fiction, so they are excluded.
 
-- [ ] **Step 1: Add the three keys to `Settings.ts`**
+- [x] **Step 1: Add the three keys to `Settings.ts`**
 
 First the import, beside the two existing `import type` lines at the top of the file (note this file uses **single** quotes for imports):
 
@@ -264,12 +264,12 @@ Add to the `NOT_IN_BACKUP` doc comment, after the `labsUnlocked` paragraph:
  * about what a real machine said.
 ```
 
-- [ ] **Step 2: Run the typecheck to watch the safety net fire**
+- [x] **Step 2: Run the typecheck to watch the safety net fire**
 
 Run: `npm run typecheck`
 Expected: **FAIL**, with an error on `settingsSnapshot`'s return type saying `machineModel` is missing. This is the compile error doing its job; if it does not fire, you have put `machineModel` in the wrong list and the rest of this task is unsafe.
 
-- [ ] **Step 3: Read the setting in the screen**
+- [x] **Step 3: Read the setting in the screen**
 
 In `app/settings.tsx`, beside the other machine reads at roughly line 129-133:
 
@@ -279,7 +279,7 @@ In `app/settings.tsx`, beside the other machine reads at roughly line 129-133:
 
 `machineAutoStart` directly above it carries a comment explaining that it is read here although it is shown elsewhere. The same is true of `machineModel`: Task 8 draws its row inside `MachineSection`. Extend that existing comment to cover both rather than writing a second one.
 
-- [ ] **Step 4: Put it in the snapshot**
+- [x] **Step 4: Put it in the snapshot**
 
 Add `machineModel` to the object literal inside `settingsSnapshot()`, in shorthand, on the line with the other machine keys:
 
@@ -290,7 +290,7 @@ Add `machineModel` to the object literal inside `settingsSnapshot()`, in shortha
 
 Run `npm run typecheck` again. It should now be clean. That is the whole of the export half of the contract.
 
-- [ ] **Step 5: Write the failing restore test**
+- [x] **Step 5: Write the failing restore test**
 
 The import half needs a real test. The existing "restores every setting a backup carries" test builds its fixture with `typeof value === "boolean" ? !value : value`, so for a **string** setting it round-trips the default against the default and would pass even if restore were never wired. It cannot catch this key.
 
@@ -322,12 +322,12 @@ it("restores which machine you own, not just the default", async () => {
 
 Match the surrounding tests for the exact helper names and the button labels; `memoryStorage`, `backupOf`, `recipeNamed` and `settleSheet` are all already in that file. Copy the interaction sequence from "restores every setting a backup carries" rather than the one written above if the two disagree.
 
-- [ ] **Step 6: Run the test to verify it fails**
+- [x] **Step 6: Run the test to verify it fails**
 
 Run: `npx jest app/__tests__/settings.test.tsx -t "restores which machine you own"`
 Expected: FAIL, the setting is still `"studio"`.
 
-- [ ] **Step 7: Handle it on the way back in**
+- [x] **Step 7: Handle it on the way back in**
 
 In `applySettings`, beside the other validated reads at roughly line 274:
 
@@ -348,14 +348,14 @@ import {isMachineModel} from "@/library/machine/machineModel";
 
 Note `app/settings.tsx` uses **double** quotes for imports, unlike `library/Settings.ts`. The neighbouring restores use `isSortAxis`, `isLibraryView` and `asTemperatureUnit` in the same shape, so follow those.
 
-- [ ] **Step 8: Run everything**
+- [x] **Step 8: Run everything**
 
 Run: `npx jest app/__tests__/settings.test.tsx library/__tests__/backup.test.ts && npm run typecheck && npm run lint`
 Expected: PASS throughout, no type errors, no new lint errors.
 
 **Do not add a global mock to `jest.setup.js`.** If a test needs a native module stubbed, the house pattern is a per-file `jest.mock` with a comment saying why, as `hooks/__tests__/useMachine.test.ts` does for `react-native-ble-manager`. A global stub changes the behaviour of every suite in the repo, including the ones whose job is to exercise that module. If you find yourself needing one, stop and report it instead.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add library/Settings.ts app/settings.tsx app/__tests__/settings.test.tsx
@@ -374,7 +374,7 @@ git commit -m "Store which machine this phone drives, and what it said it was"
 
 **`api/` restates the pair on purpose. Do not import `machineModel.ts` here.** Vercel deploys this directory alone, with `installCommand: "echo skipping install: the mint function has no dependencies"`, and every file under `api/` imports nothing but node builtins. Reaching into `library/` would make the function's bundle depend on the app tree. So `1 | 2` is written out here, with a comment naming `library/machine/machineModel.ts` as the other copy, and the two must be changed together. This is the one deliberate duplication in the machine-model work.
 
-- [ ] **Step 1: Replace the existing test**
+- [x] **Step 1: Replace the existing test**
 
 In `api/__tests__/payload.test.ts`, replace the test currently reading `"rejects any adaptedModel except the partition used for lookup"`:
 
@@ -403,12 +403,12 @@ In `api/__tests__/payload.test.ts`, replace the test currently reading `"rejects
 
 If `parseSharePayload` is not yet imported in that file, add it to the existing import from `../_lib/payload`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest api/__tests__/payload.test.ts`
 Expected: FAIL. The first says `"adaptedModel must be 1"` where `null` was expected; the third returns `1`.
 
-- [ ] **Step 3: Widen the type**
+- [x] **Step 3: Widen the type**
 
 In `api/_lib/payload.ts`, in the `SharePayload` type:
 
@@ -416,7 +416,7 @@ In `api/_lib/payload.ts`, in the `SharePayload` type:
     adaptedModel: 1 | 2;
 ```
 
-- [ ] **Step 4: Widen the check**
+- [x] **Step 4: Widen the check**
 
 Replace the check at roughly line 162:
 
@@ -426,7 +426,7 @@ Replace the check at roughly line 162:
     }
 ```
 
-- [ ] **Step 5: Echo rather than hardcode**
+- [x] **Step 5: Echo rather than hardcode**
 
 In the returned payload at roughly line 235:
 
@@ -434,12 +434,12 @@ In the returned payload at roughly line 235:
             adaptedModel:        p.adaptedModel as 1 | 2,
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx jest api/__tests__/payload.test.ts`
 Expected: PASS, the whole file.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add api/_lib/payload.ts api/__tests__/payload.test.ts
@@ -455,7 +455,7 @@ git commit -m "Let a share payload name either machine"
 
 **Why:** minting creates a row and then finds it again to read the server's share link off it. Those two calls must name the same partition or the lookup sees nothing and the mint fails. It is currently `1` in both places by coincidence of being hardcoded twice; after Task 3 it has to follow the payload.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `api/__tests__/xbloom.test.ts` (create the file if it does not exist, following the fetch-mocking pattern already used in `api/__tests__/`):
 
@@ -495,12 +495,12 @@ describe("minting a share link", () => {
 
 Adjust the `mintShareLink` call to the function's real signature, which you can read at the top of `api/_lib/xbloom.ts`. The assertion is the point: both bodies carry the same `adaptedModel`, and it is the one that was passed in.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest api/__tests__/xbloom.test.ts`
 Expected: FAIL, both bodies carry `1`.
 
-- [ ] **Step 3: Echo the model in `recipeFields`**
+- [x] **Step 3: Echo the model in `recipeFields`**
 
 In `api/_lib/xbloom.ts`, in `recipeFields`:
 
@@ -508,7 +508,7 @@ In `api/_lib/xbloom.ts`, in `recipeFields`:
         adaptedModel:        payload.adaptedModel,
 ```
 
-- [ ] **Step 4: Use the same model in the lookup**
+- [x] **Step 4: Use the same model in the lookup**
 
 In the mint's list walk at roughly line 169:
 
@@ -527,12 +527,12 @@ Update the comment above `authFields` at roughly line 79, which currently says `
  * Both now read it from the payload, so they cannot drift apart.
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest api/__tests__/`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/_lib/xbloom.ts api/__tests__/xbloom.test.ts
@@ -550,7 +550,7 @@ git commit -m "Look a minted row up where it was minted"
 
 **Note on the fingerprint:** `canonicalSnapshot` hashes the payload, which includes `adaptedModel`. So changing the setting changes the fingerprint and causes a fresh mint. That is correct and deliberate, not a bug to design around: a recipe for an Original genuinely is a different row from the same recipe for a Studio.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `library/__tests__/shareLink.test.ts`:
 
@@ -572,12 +572,12 @@ it("gives the two machines different fingerprints", () => {
 
 Use whatever helper the existing tests in that file use to build a sharable recipe; `aSharableRecipe()` above is a stand-in for it.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/shareLink.test.ts`
 Expected: FAIL, `buildSharePayload` takes one argument.
 
-- [ ] **Step 3: Add the parameter**
+- [x] **Step 3: Add the parameter**
 
 In `library/shareLink.ts`, add the import:
 
@@ -601,7 +601,7 @@ And replace the hardcoded value at roughly line 138, keeping the existing commen
         adaptedModel:        adaptedModelFor(model),
 ```
 
-- [ ] **Step 4: Update the one caller**
+- [x] **Step 4: Update the one caller**
 
 In `hooks/useShareRecipe.ts`, read the setting and pass it. Add:
 
@@ -623,12 +623,12 @@ And at the `buildSharePayload` call site:
 
 If there is more than one call in that file, update every one. Do not reach for `sharedSettings()` here: this is a hook and `useSetting` is how hooks read settings.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest library/__tests__/shareLink.test.ts hooks/__tests__/useShareRecipe.test.ts && npm run typecheck`
 Expected: PASS, and no type errors. The typecheck is what proves you found every caller.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add library/shareLink.ts hooks/useShareRecipe.ts library/__tests__/shareLink.test.ts
@@ -664,7 +664,7 @@ if (!Array.isArray(response.list)) {
 
 The other two exits are page-level and stay inside the extracted function: the short-page `break` ends that partition's walk, and the `MAX_PAGES` throw must stay a throw — reaching the cap is still a failure to find an ending, and it must abort the whole call rather than quietly returning one partition.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `library/cloud/__tests__/cloudLibrary.test.ts`. Match the file's existing way of injecting or mocking `post` — if the module imports `post` directly rather than receiving it, mock the module the way the neighbouring tests already do, and read them for the exact shape before writing.
 
@@ -703,12 +703,12 @@ it("still refuses a walk that stops part way through one partition", async () =>
 
 `aSession()` is a stand-in; use whatever the file already uses. Fill in the response scripting to match the file's existing mocking style. The third test may already exist in some form — if it does, leave it alone and make sure it still passes rather than writing a second copy.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/cloud/__tests__/cloudLibrary.test.ts`
 Expected: FAIL. The first because only partition `1` was asked for.
 
-- [ ] **Step 3: Extract the page walk**
+- [x] **Step 3: Extract the page walk**
 
 Move the existing loop body into a function that takes the partition and returns the rows it found, owning its own `out`. Keep every comment attached to the logic it explains — they describe failures that actually happened and are worth more than the diff noise of moving them.
 
@@ -729,7 +729,7 @@ async function fetchPartition(
 ): Promise<CloudRow[]> {
 ```
 
-- [ ] **Step 4: Walk both**
+- [x] **Step 4: Walk both**
 
 Add the import:
 
@@ -754,12 +754,12 @@ And replace the body of `fetchCloudRecipes`:
 
 Sequential rather than `Promise.all`, to keep the existing behaviour under an `AbortSignal` and to avoid doubling the load this puts on xBloom's endpoint in one burst.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx jest library/cloud/ && npm run typecheck && npm run lint`
 Expected: PASS, including every pre-existing test about partial page walks. Those tests are the point: this task must not change what a broken walk means, only how many walks there are.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add library/cloud/cloudLibrary.ts library/cloud/__tests__/cloudLibrary.test.ts
@@ -808,7 +808,7 @@ Give the constructor a second parameter with **no default**. A default would mak
 
 `library/` must not import from `hooks/`, so `XBloomRecipe` does not read the setting itself. It is told.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `library/__tests__/XBloomRecipe.endpoint.test.ts`, following that file's existing fetch-mocking pattern (read it first; do not invent a new one):
 
@@ -832,12 +832,12 @@ it("still asks for the Studio when that is the machine", async () => {
 
 `bodyOfLastRequest()` is a stand-in: read how the existing tests reach the request body and use that. Both cases are needed — one alone cannot tell "reads the argument" from "hardcoded to the value the test happens to pass".
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/XBloomRecipe.endpoint.test.ts`
 Expected: FAIL. The first test fails because the body carries `1`; both may also fail to compile on the second argument, which is equally good evidence.
 
-- [ ] **Step 3: Take the model on the constructor**
+- [x] **Step 3: Take the model on the constructor**
 
 In `library/XBloomRecipe.ts`, add the import:
 
@@ -878,7 +878,7 @@ And in the `byXid` body, replace the hardcoded `1`:
             adaptedModel:      adaptedModelFor(this.model),
 ```
 
-- [ ] **Step 4: Pass the setting from all four call sites**
+- [x] **Step 4: Pass the setting from all four call sites**
 
 Both hooks reach the setting through `sharedSettings()` rather than `useSetting`, because the value is read once at fetch time and a `useSetting` subscription would re-render the editor whenever any machine setting changed. `hooks/useMachine.ts:34` is the existing example of this choice.
 
@@ -905,7 +905,7 @@ Do all four. Verify none is left with:
 grep -rn "new XBloomRecipe" --include=*.ts --include=*.tsx . | grep -v node_modules
 ```
 
-- [ ] **Step 5: Update the other constructions in tests**
+- [x] **Step 5: Update the other constructions in tests**
 
 `shareLink.test.ts:260`, `xbloomPodCoffee.test.ts:135`, `XBloomRecipe.bypass.test.ts:40` and the remaining ones in `XBloomRecipe.endpoint.test.ts` all need the second argument. Pass `"studio"` — none of them is about the machine, and changing what they ask for would change what they test.
 
@@ -918,12 +918,12 @@ jest.mock("@/hooks/useSetting", () =>
 
 Do **not** add a global mock to `jest.setup.js`.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx jest library/ hooks/ && npm run typecheck && npm run lint`
 Expected: PASS, no type errors, no new lint errors. Then run the full `npx jest` — this touches the editor and the importer, so the blast radius is wider than the two directories.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -950,7 +950,7 @@ Two more things the draft missed:
 - `MachineSection` takes an optional `settings` prop and **passes it to every `useSetting`** — it is the injection seam the settings screen's tests drive. `useSetting("machineModel")` without it would read the shared SQLite store instead, which cannot open under Jest.
 - `SettingsChoiceRow` already sits in the import list. Do not add it twice.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `components/__tests__/MachineSection.test.tsx`, matching the style of the row tests already there:
 
@@ -980,12 +980,12 @@ The second test's last assertion is a **stand-in**: read how `SegmentedControl` 
 
 Note that this file's `useSetting` mock is per-hook `React.useState(DEFAULTS[key])`, so the value does round-trip within a render tree.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest components/__tests__/MachineSection.test.tsx -t "xBloom you own"`
 Expected: FAIL, unable to find text "Your xBloom".
 
-- [ ] **Step 3: Add the row**
+- [x] **Step 3: Add the row**
 
 In `components/MachineSection.tsx`, add the import:
 
@@ -1028,12 +1028,12 @@ And put the row at the very top of the returned tree, above the status line, bec
 
 Copy note: no dashes anywhere in the description. They read as machine-written, and this is the app talking.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest components/__tests__/MachineSection.test.tsx && npx jest app/__tests__/settings.test.tsx`
 Expected: PASS. The settings screen renders this section, so its own tests are the check that the new row did not disturb the screen around it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1055,7 +1055,7 @@ git commit -m "Ask which xBloom this is"
 
 **`MachineTransport` is an interface, not just a class.** `Machine` is driven by a scripted fake in every test above this layer, which is the entire reason the interface exists. Adding a field to `BleTransport` alone would not compile, and would not be reachable from `useMachine`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `library/machine/__tests__/Transport.test.ts`:
 
@@ -1084,12 +1084,12 @@ Add the imports for `DEVICE_INFO_SERVICE` and `MODEL_NUMBER_CHARACTERISTIC` from
 
 The existing `jest.mock("react-native-ble-manager", ...)` factory has no `read`. Add `read: jest.fn().mockResolvedValue([])` to it beside the others rather than assigning `BleManager.read = ...` inside a test, which would leak the stub into every test after it. Drive each case with `(BleManager.read as jest.Mock).mockResolvedValueOnce(...)` / `.mockRejectedValueOnce(...)`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/machine/__tests__/Transport.test.ts`
 Expected: FAIL, `Cannot find name 'DEVICE_INFO_SERVICE'`.
 
-- [ ] **Step 3: Add the UUIDs and the known strings**
+- [x] **Step 3: Add the UUIDs and the known strings**
 
 Append to `constants/machine.ts`:
 
@@ -1118,7 +1118,7 @@ export const MODEL_NUMBER_CHARACTERISTIC = "00002A24-0000-1000-8000-00805F9B34FB
 export const STUDIO_MODEL_STRINGS: readonly string[] = [];
 ```
 
-- [ ] **Step 4: Read it on connect**
+- [x] **Step 4: Read it on connect**
 
 In `library/machine/Transport.ts`, add to the imports from `@/constants/machine`:
 
@@ -1181,7 +1181,7 @@ And the method itself, beside `negotiateMtu`:
 
 The trailing-NUL strip is not defensive padding: a fixed-width GATT string characteristic is conventionally NUL-padded, and an unstripped one would never match a string constant.
 
-- [ ] **Step 5: Widen the interface and the fake**
+- [x] **Step 5: Widen the interface and the fake**
 
 In `library/machine/Transport.ts`, add to the `MachineTransport` interface, below `scan`:
 
@@ -1199,7 +1199,7 @@ In `library/machine/__tests__/FakeTransport.ts`, add the two fields beside the o
     public advertisedName = "XBLOOM TEST";
 ```
 
-- [ ] **Step 6: Pass them through `Machine`**
+- [x] **Step 6: Pass them through `Machine`**
 
 `useMachine` holds a `Machine`, not a transport, so the readings have to be reachable from there. In `library/machine/Machine.ts`, beside the other delegating members:
 
@@ -1210,12 +1210,12 @@ In `library/machine/__tests__/FakeTransport.ts`, add the two fields beside the o
     get advertisedName(): string { return this.transport.advertisedName; }
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `npx jest library/machine/ && npm run typecheck`
 Expected: PASS, including the pre-existing connect tests, and no type errors. The typecheck is what proves the fake satisfies the widened interface.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add constants/machine.ts library/machine/Transport.ts library/machine/Machine.ts \
@@ -1247,7 +1247,7 @@ An earlier draft of this task was written against a hook that does not quite exi
 
 4. **`SettingValue<"machineModel">` widens the stored union back to `string`.** `useSetting("machineModel", ...)` therefore hands back a `string`, not a `MachineModel`, so Step 7 needs `asMachineModel` from `@/library/machine/machineModel`. This is the same trap Task 5 hit.
 
-- [ ] **Step 0: Put the test file on the shared settings mock**
+- [x] **Step 0: Put the test file on the shared settings mock**
 
 Replace the forked mock and the `mockSeed` object at the top of `hooks/__tests__/useMachine.test.ts` with the house one-liner. `app/__tests__/machine.test.tsx` did this already and its comment says why:
 
@@ -1281,7 +1281,7 @@ Import `DEFAULTS` from `@/library/Settings`.
 
 **Expect some existing tests in this file to need attention.** They previously got a fresh per-hook value; they now share one store, which is what production does. Run them before you change anything else so you can tell a failure you caused from one you inherited. If a failure needs a judgment call rather than a reset, stop and report it rather than guessing.
 
-- [ ] **Step 1: Run the existing tests to confirm the swap is clean**
+- [x] **Step 1: Run the existing tests to confirm the swap is clean**
 
 Run: `npx jest hooks/__tests__/useMachine.test.ts`
 Expected: PASS, unchanged count. This is a refactor with no behaviour in it; do not go on until it is green.
@@ -1293,7 +1293,7 @@ git add hooks/__tests__/useMachine.test.ts
 git commit -m "Put the machine link tests on the shared settings mock"
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Add to `hooks/__tests__/useMachine.test.ts`, inside the existing `describe`:
 
@@ -1401,12 +1401,12 @@ and extend the existing import from `@/hooks/useMachine` with `applyMachineReadi
 
 Remember `renderHook` is async in RNTL v14, and an `unmount()` must be wrapped in `await act(...)`.
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `npx jest hooks/__tests__/useMachine.test.ts`
 Expected: FAIL. `applyMachineReading` and `MachineReading` do not exist, `recordMachine` is not part of `LinkStore`, and `machineModel` is not on the link.
 
-- [ ] **Step 4: Widen `LinkStore`**
+- [x] **Step 4: Widen `LinkStore`**
 
 In `hooks/useMachine.ts`, beside the existing `LinkStore` type:
 
@@ -1429,7 +1429,7 @@ export type LinkStore = {
 };
 ```
 
-- [ ] **Step 5: Write the rule in one place**
+- [x] **Step 5: Write the rule in one place**
 
 Add to `hooks/useMachine.ts`, above `settingsStore`:
 
@@ -1470,7 +1470,7 @@ export function applyMachineReading(settings: Settings, reading: MachineReading)
 
 Add the import for `STUDIO_MODEL_STRINGS` from `@/constants/machine`. `Settings` is already imported as a type in this file; check before adding it again.
 
-- [ ] **Step 6: Implement it in both stores**
+- [x] **Step 6: Implement it in both stores**
 
 `settingsStore()` runs outside React, so it takes the shared store:
 
@@ -1491,7 +1491,7 @@ The hook's own store must honour the injected one, exactly as its `useSetting` c
                     applyMachineReading(options.settings ?? sharedSettings(), reading),
 ```
 
-- [ ] **Step 7: Call it on every successful connect**
+- [x] **Step 7: Call it on every successful connect**
 
 In `attemptLink`, after the `try`/`catch` around `machine.connect(id)` and **before** the existing `if (id !== remembered)` block:
 
@@ -1502,7 +1502,7 @@ In `attemptLink`, after the `try`/`catch` around `machine.connect(id)` and **bef
     if (id !== remembered) {
 ```
 
-- [ ] **Step 8: Expose the setting on the link**
+- [x] **Step 8: Expose the setting on the link**
 
 So the hook's consumers and the tests above can read it, add to the `MachineLink` type:
 
@@ -1531,12 +1531,12 @@ and in the returned object:
 
 Import `asMachineModel` and the `MachineModel` type from `@/library/machine/machineModel`.
 
-- [ ] **Step 9: Run the tests to verify they pass**
+- [x] **Step 9: Run the tests to verify they pass**
 
 Run: `npx jest hooks/__tests__/useMachine.test.ts && npx jest && npm run typecheck && npm run lint`
 Expected: PASS throughout, and no type errors. The typecheck is what proves you updated every `LinkStore` literal; there are two in the hook file and more in the tests.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -1596,11 +1596,11 @@ git commit -m "Record what a real Studio calls itself"
 
 **Carried over from the Task 8 review, decide before opening the PR:** an Original owner now reads `"Your xBloom Studio has to be switched on and nearby."` on the connect row (`components/MachineSection.tsx`), directly under the row where they just said they do not own a Studio. It was correctly left alone in Task 8, because making that copy conditional is only worth doing once Tasks 9 and 10 have established whether the BLE link works on an Original at all. By this point that is known, so either soften the copy or write the open question into the PR body.
 
-- [ ] **Step 1: Update the cloud API notes**
+- [x] **Step 1: Update the cloud API notes**
 
 `api/_lib/xbloom.ts:80` points at `docs/machine-integration/cloud-api.md` for the `adaptedModel` reasoning. Update that document: the single-partition choice recorded there has been replaced. Say that minting follows the user's machine, that the mint's lookup follows the payload, and that the library walk reads both partitions and why.
 
-- [ ] **Step 2: Update the architecture contract**
+- [x] **Step 2: Update the architecture contract**
 
 `.github/copilot-instructions.md` does not yet mention the machine model. Add a line to the `library/` section:
 
@@ -1608,7 +1608,7 @@ git commit -m "Record what a real Studio calls itself"
   - `machine/machineModel.ts` — which xBloom this phone drives, and its `adaptedModel` wire value. The two machines grind on different scales and the scales **do not convert** (918 paired hub recipes, R^2 = 0.444); anywhere both are needed, both are fetched. `adaptedModel` also partitions the service account's rows, which is why `cloudLibrary` reads both and only minting follows the setting.
 ```
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 ```bash
 npm run typecheck && npm run lint && npm test && npx expo-doctor
@@ -1616,7 +1616,7 @@ npm run typecheck && npm run lint && npm test && npx expo-doctor
 
 Expected: all four green. CI runs exactly these and expo-doctor is a hard failure.
 
-- [ ] **Step 4: Commit and open the PR**
+- [x] **Step 4: Commit and open the PR**
 
 ```bash
 git add docs/machine-integration/cloud-api.md .github/copilot-instructions.md
