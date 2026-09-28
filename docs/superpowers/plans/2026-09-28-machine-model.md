@@ -223,11 +223,13 @@ In `DEFAULTS`, immediately after the `machineDeviceId` entry:
     /**
      * Which xBloom this phone is driving.
      *
-     * The setting is the truth and detection may only ever refine it. Reading
-     * the model over Bluetooth only works for a machine we successfully
-     * connect to, and `MACHINE_SERVICE` is the Studio's service: if an original
-     * xBloom does not advertise it, its owner never connects, detection never
-     * runs, and they would sit on a wrong default forever. Detection would help
+     * The setting is the truth and detection may only ever refine it. A scan
+     * would find an original: `Transport.scan` is unfiltered and matches the
+     * name prefix as well as the service UUID. But everything after discovery
+     * is the Studio's: `MACHINE_SERVICE` and its characteristics are what a
+     * connection resolves, and the model is read over that connection. A
+     * machine we cannot finish connecting to therefore never yields a reading,
+     * so its owner would sit on a wrong default forever. Detection would help
      * everyone except the people it exists for.
      *
      * The default is Studio because that is what every user was served before

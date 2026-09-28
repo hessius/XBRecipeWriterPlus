@@ -141,11 +141,13 @@ snapshot's return type makes omitting it a compile error.
 
 A settings row offers Studio and Original. It is never silently overridden.
 
-Detection was considered as the primary mechanism and rejected. Detection only
-fires for a machine we successfully connect to, and `MACHINE_SERVICE` is
-documented in `constants/machine.ts` as the Studio's service. If an Original
-does not advertise it, an Original owner never connects, detection never runs,
-and they sit on a default that is wrong for them indefinitely. Detection would
+Detection was considered as the primary mechanism and rejected. A scan would
+find an Original: `Transport.scan` is deliberately unfiltered and matches the
+`XBLOOM` name prefix as well as the service UUID, with a comment saying why.
+Everything after discovery is the Studio's, though. `MACHINE_SERVICE` and its
+characteristics are what `connect` resolves, and the model is read over that
+connection, so a machine we cannot finish connecting to never yields a reading.
+Its owner sits on a default that is wrong for them indefinitely. Detection would
 help everyone except the people it exists for.
 
 ### 4.2 Detection may only refine

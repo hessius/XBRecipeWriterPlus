@@ -705,7 +705,8 @@ describe("SettingsScreen", () => {
         // good value is applied; a malformed one is ignored rather than trusted.
         const storage = memoryStorage();
         mockPickBackup.mockResolvedValue(
-            backupOf([recipeNamed("A", "u1")], {temperatureUnit: "K", dotMatrixProfile: true})
+            backupOf([recipeNamed("A", "u1")],
+                     {temperatureUnit: "K", dotMatrixProfile: true, machineModel: "toaster"})
         );
         mockApplyRestore.mockReturnValue({status: "restored", added: 1});
         await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
@@ -720,6 +721,9 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("temperatureUnit")).toBe("C");
         expect(restored.get("dotMatrixProfile")).toBe(true);
+        // A machine that does not exist would be stored and then read back as
+        // one, which is what `isMachineModel` is there to stop.
+        expect(restored.get("machineModel")).toBe("studio");
     });
 
     it("presents its sheets outside the screen's flex container", async () => {
