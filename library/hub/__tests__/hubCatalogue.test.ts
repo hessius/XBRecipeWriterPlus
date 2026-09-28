@@ -88,6 +88,24 @@ function deferred<T>(): Deferred<T> {
     return {promise, resolve};
 }
 
+/**
+ * A fetch that honours the signal it is handed, the way the real one does.
+ *
+ * Without this the mock ignores `signal` entirely, and a test cannot tell a
+ * loader that cancels the shared fetch from one that only detaches a listener.
+ */
+function heldPage(hold: Deferred<HubPage>) {
+    return (_request: HubPageRequest, signal?: AbortSignal): Promise<HubPage> =>
+        Promise.race([
+            hold.promise,
+            new Promise<never>((_resolve, reject) => {
+                signal?.addEventListener("abort", () => {
+                    reject(new DOMException("cancelled", "AbortError"));
+                });
+            })
+        ]);
+}
+
 /** Let every already-queued microtask run, so a late page cannot slip past. */
 async function settle(): Promise<void> {
     await Promise.resolve();
@@ -205,7 +223,7 @@ describe("handling failed loads", () => {
 describe("a caller leaving", () => {
     it("rejects the leaver with AbortError and stops its progress", async () => {
         const hold = deferred<HubPage>();
-        mockFetchPage.mockReturnValueOnce(hold.promise)
+        mockFetchPage.mockImplementationOnce(heldPage(hold))
             .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
         const progress = jest.fn();
         const controller = new AbortController();
@@ -222,7 +240,7 @@ describe("a caller leaving", () => {
 
     it("lets the load finish and cache, so the next visit pays nothing", async () => {
         const hold = deferred<HubPage>();
-        mockFetchPage.mockReturnValueOnce(hold.promise)
+        mockFetchPage.mockImplementationOnce(heldPage(hold))
             .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
         const controller = new AbortController();
 
@@ -241,7 +259,7 @@ describe("a caller leaving", () => {
 
     it("still answers a second caller that joined the same load", async () => {
         const hold = deferred<HubPage>();
-        mockFetchPage.mockReturnValueOnce(hold.promise)
+        mockFetchPage.mockImplementationOnce(heldPage(hold))
             .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
         const first = new AbortController();
         const second = new AbortController();
