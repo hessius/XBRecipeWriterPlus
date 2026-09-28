@@ -50,14 +50,16 @@ export default function ShelfTile({
     inverted?: boolean;
     onPress: () => void;
     /**
-     * Open what can be done to this shelf. Manual shelves only: a tag or auto
-     * shelf is a rule the app wrote, with no name of the user's to change and
-     * nothing of theirs to delete.
+     * Open what can be done to this shelf. Manual shelves get their full
+     * member/name/delete menu; tag shelves get the one verb that belongs to a
+     * tag here, promotion into the user's own shelves. Auto shelves do not use
+     * this menu: they are a rule the app wrote, with no name of the user's to
+     * change and nothing of theirs to delete.
      *
      * Reached three ways, and deliberately so. A glyph inside the tile, because
      * a long press is not discoverable and editing is the only way a recipe
-     * ever comes off a shelf -- a shelf with no drawn way out is a tag the user
-     * can never undo. A long press on the tile itself, for the hand that
+     * ever comes off a manual shelf -- a shelf with no drawn way out is a tag
+     * the user can never undo. A long press on the tile itself, for the hand that
      * already knows. And an accessibility action, because the glyph is nested
      * inside this one element and a screen reader cannot reach it.
      */

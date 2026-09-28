@@ -47,7 +47,7 @@ describe("ShelfGrid", () => {
             .toBeTruthy();
     });
 
-    it("does not give typed tags the manual shelf actions", async () => {
+    it("opens promotion actions for typed tags", async () => {
         const onShelfActions = jest.fn();
         await renderWithProviders(
             <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
@@ -58,9 +58,11 @@ describe("ShelfGrid", () => {
         );
 
         const tile = screen.getByRole("button", {name: "espresso, tag shelf, 3 recipes"});
-        expect(tile.props.accessibilityActions).toBeUndefined();
+        expect(tile.props.accessibilityActions).toEqual(
+            [{name: "edit", label: "Actions for the espresso shelf"}]
+        );
         await fireEvent(tile, "longPress");
-        expect(onShelfActions).not.toHaveBeenCalled();
+        expect(onShelfActions).toHaveBeenCalledWith("espresso");
     });
 
     it("explains what a shelf is rather than drawing an empty grid", async () => {

@@ -63,10 +63,16 @@ import {
     chipFilters,
     filterLabel,
     isStockFilter,
+    tagFilterId,
     STOCK_FILTERS
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
-import {parseHidden, toggleHidden} from "@/library/hiddenShelves";
+import {
+    canonicalShelfId,
+    parseHidden,
+    serialiseHidden,
+    toggleHidden
+} from "@/library/hiddenShelves";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
@@ -221,6 +227,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [invertAutoShelves] = useSetting("invertAutoShelves", settings);
     const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
+    const [myShelves, setMyShelves] = useSetting("myShelves", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -426,7 +433,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         tagCounts:    library.tagCounts,
         authorCounts: library.authorCounts,
         librarySize:  library.librarySize,
-        applied:      libraryQuery.query.filters
+        applied:      libraryQuery.query.filters,
+        myShelves:    parseHidden(myShelves)
     });
     // The rows the picker draws are the rows the list draws, so a filter, a
     // search and a sort narrow the picker exactly as they narrow the library.
@@ -527,6 +535,10 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             return false;
         }
         reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
+        // Made through NEW SHELF, so it is the user's own from birth. This is
+        // the one place a shelf is created, so it is the one place that has to
+        // say so.
+        setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(name)]));
         setNamingShelf(false);
         stopPicking();
         return true;
@@ -566,6 +578,16 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // between two writes the shelf does not exist, and a refused second
         // write left its members with neither name.
         reportShelfWrite(library.renameShelf(renamingShelf, name, picker.chosen()));
+        // The marker follows the name. Folded ids mean a rename that only
+        // changes case is already the same entry, so this is a no-op there and
+        // a move when the word itself changes.
+        const was = canonicalShelfId(tagFilterId(renamingShelf));
+        const stored = parseHidden(myShelves);
+        if (stored.includes(was)) {
+            setMyShelves(serialiseHidden(
+                [...stored.filter((id) => id !== was), tagFilterId(name)]
+            ));
+        }
         setRenamingShelf(null);
         setRenameStartedEdit(false);
         stopPicking();
@@ -597,15 +619,43 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     function duplicateShelf(tag: string) {
         beginEditingShelf(tag);
         // Creating, not editing: the original keeps its tag and its members,
-        // and the name sheet writes a second shelf beside it.
+        // and the name sheet writes a second shelf beside it. The copy is
+        // therefore marked by `nameShelf`, because it is born through the same
+        // deliberate creation path as NEW SHELF.
         setNamingShelf(true);
     }
 
     /** Take a shelf away, keeping every recipe that was on it. */
     function deleteShelf(tag: string) {
         reportShelfWrite(library.setShelfMembers(tag, []));
+        // The shelf is gone, so the claim that the user made it is about
+        // nothing. Left behind, it would silently promote a tag of the same
+        // name typed months later.
+        const id = canonicalShelfId(tagFilterId(tag));
+        setMyShelves(serialiseHidden(
+            parseHidden(myShelves).filter((stored) => stored !== id)
+        ));
         setDeletingShelf(null);
         stopPicking();
+    }
+
+    /**
+     * Mark a tag as a shelf the user made, or unmark it.
+     *
+     * Folded through the same list helpers the hidden list uses, so a promotion
+     * survives a rename that only re-spells the name.
+     */
+    function promoteShelf(tag: string) {
+        setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(tag)]));
+        setShelfActions(null);
+    }
+
+    function demoteShelf(tag: string) {
+        const id = canonicalShelfId(tagFilterId(tag));
+        setMyShelves(serialiseHidden(
+            parseHidden(myShelves).filter((stored) => stored !== id)
+        ));
+        setShelfActions(null);
     }
 
     const listItems: RecipeListItem[] = drawSections
@@ -1347,6 +1397,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 open={shelfActions !== null}
                 shelf={shelfActions ?? ""}
                 count={shelfActions === null ? 0 : shelfSize(shelfActions)}
+                mine={shelfActions !== null
+                    && parseHidden(myShelves)
+                        .includes(canonicalShelfId(tagFilterId(shelfActions)))}
                 onOpenChange={(next) => {
                     if (!next) setShelfActions(null);
                 }}
@@ -1369,7 +1422,13 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 onDuplicate={() => {
                     if (shelfActions !== null) duplicateShelf(shelfActions);
                 }}
-                onDelete={() => setDeletingShelf(shelfActions)}/>
+                onDelete={() => setDeletingShelf(shelfActions)}
+                onPromote={() => {
+                    if (shelfActions !== null) promoteShelf(shelfActions);
+                }}
+                onDemote={() => {
+                    if (shelfActions !== null) demoteShelf(shelfActions);
+                }}/>
 
             <RemoveShelfSheet open={deletingShelf !== null}
                               tag={deletingShelf ?? ""}

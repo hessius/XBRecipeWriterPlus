@@ -167,7 +167,7 @@ export default function ShelfGrid({
     onOpen: (id: string) => void;
     /** Start choosing members for a new shelf. */
     onNewShelf: () => void;
-    /** Open the menu of what can be done to a manual shelf, by its tag. */
+    /** Open the menu of what can be done to a shelf or promoted tag, by its tag. */
     onShelfActions: (tag: string) => void;
     /** Put an auto shelf away, or bring it back. The same act both ways. */
     onHideShelf?: (id: string) => void;
@@ -234,8 +234,16 @@ export default function ShelfGrid({
             </YStack>
             {tagged.length > 0 && (
                 <YStack gap="$2">
+                    {/*
+                      * The nursery. A tag appears here exactly when it has grown
+                      * enough to be worth a shelf, which makes the section the
+                      * promotion hint as well as the place the tag lives: its
+                      * tile offers MAKE THIS A SHELF, and taking it moves the
+                      * tag up to YOUR SHELVES for good.
+                      */}
                     <Heading label="FROM TAGS"/>
-                    <Rows shelves={tagged} marks={marks} onOpen={onOpen}/>
+                    <Rows shelves={tagged} marks={marks}
+                          onOpen={onOpen} onActions={onShelfActions}/>
                 </YStack>
             )}
             {(auto.length > 0 || putAway.length > 0) && (

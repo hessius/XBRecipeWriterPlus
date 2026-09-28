@@ -8,7 +8,8 @@ import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
-import {resolveLibraryFilter, tagFromFilterId} from "@/library/libraryFilters";
+import {resolveLibraryFilter, tagFilterId, tagFromFilterId} from "@/library/libraryFilters";
+import {serialiseHidden} from "@/library/hiddenShelves";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
@@ -198,6 +199,12 @@ function memoryStorage(raw: Record<string, unknown> = {}): SettingsStorage {
             values.set(key, value);
         }
     };
+}
+
+function shelfSettings(...tags: string[]): Settings {
+    return new Settings(memoryStorage({
+        myShelves: serialiseHidden(tags.map(tagFilterId))
+    }));
 }
 
 function named(name: string): Recipe {
@@ -1745,8 +1752,11 @@ describe("the shelf grid", () => {
         return [...teas, tagged, named("Kenya"), named("Colombia")];
     }
 
-    async function openGrid(recipes: Recipe[] = shelfLibrary()) {
-        await renderHome({recipes});
+    async function openGrid(
+        recipes: Recipe[] = shelfLibrary(),
+        settings: Settings = shelfSettings("morning")
+    ) {
+        await renderHome({recipes, settings});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
     }
 
@@ -1775,6 +1785,26 @@ describe("the shelf grid", () => {
         await openGrid();
 
         expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
+        expect(screen.getByLabelText("morning, your shelf, 1 recipe")).toBeTruthy();
+    });
+
+    it("promotes a tag from its tile into the user's shelves", async () => {
+        const tagged = ["Ethiopia", "Kenya", "Colombia"].map((name) => {
+            const recipe = named(name);
+            recipe.tags = ["morning"];
+            return recipe;
+        });
+        await openGrid([...tagged, named("Brazil")], new Settings(memoryStorage()));
+
+        expect(screen.getByLabelText("morning, tag shelf, 3 recipes")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await pressOnSheet("shelf-overflow-promote");
+
+        await waitFor(() =>
+            expect(screen.getByLabelText("morning, your shelf, 3 recipes")).toBeTruthy()
+        );
+        expect(screen.queryByLabelText("morning, tag shelf, 3 recipes")).toBeNull();
     });
 
     // Reversed in phase 4b. These two tests encoded the old behaviour, where a
@@ -1833,7 +1863,7 @@ describe("the shelf room", () => {
     }
 
     async function openRoom(recipes: Recipe[] = morningLibrary()) {
-        await renderHome({recipes});
+        await renderHome({recipes, settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
         await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
     }
@@ -1928,7 +1958,7 @@ describe("the shelf room", () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
 
-        await renderHome({recipes: [tagged]});
+        await renderHome({recipes: [tagged], settings: shelfSettings("morning")});
 
         // Door one: the list row.
         await fireEvent(screen.getByTestId("recipe-card"), "longPress");
@@ -1999,6 +2029,12 @@ async function settleSheet(): Promise<void> {
     await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
     });
+}
+
+async function pressOnSheet(testID: string): Promise<void> {
+    await settleSheet();
+    await waitFor(() => expect(screen.getByTestId(testID)).toBeTruthy());
+    await fireEvent.press(screen.getByTestId(testID));
 }
 
 describe("picking a shelf's members", () => {
@@ -2228,12 +2264,17 @@ describe("picking a shelf's members", () => {
         // The id carries the tag as it was typed. Folding happens where the
         // query is built, so the tile can still show the user their own word.
         expect(screen.getByTestId("shelf-tag:Mornings")).toBeTruthy();
+        expect(screen.getByLabelText("Mornings, your shelf, 1 recipe")).toBeTruthy();
+        expect(screen.queryByLabelText("Mornings, tag shelf, 1 recipe")).toBeNull();
     });
 
     it("empties a shelf by unticking everyone on it", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya"), named("Colombia")]});
+        await renderHome({
+            recipes:  [tagged, named("Kenya"), named("Colombia")],
+            settings: shelfSettings("morning")
+        });
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await shelfAction("morning", "edit");
@@ -2264,7 +2305,7 @@ describe("picking a shelf's members", () => {
     it("duplicates a shelf, leaving the original where it was", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await shelfAction("morning", "duplicate");
@@ -2273,6 +2314,10 @@ describe("picking a shelf's members", () => {
 
         expect(screen.getByTestId("shelf-tag:morning")).toBeTruthy();
         expect(screen.getByTestId("shelf-tag:Evening")).toBeTruthy();
+        // The copy is named through the same creation path as NEW SHELF: it is
+        // a deliberate shelf the user asked to make, not an incidental tag, so
+        // it belongs with their shelves from birth.
+        expect(screen.getByLabelText("Evening, your shelf, 1 recipe")).toBeTruthy();
 
         // The copy holds the same recipe. A shelf is a tag, and a recipe can
         // carry both, so duplicating does not move anybody.
@@ -2280,10 +2325,45 @@ describe("picking a shelf's members", () => {
         expect(screen.getByText("Ethiopia")).toBeTruthy();
     });
 
+    it("deleting a promoted shelf does not promote a later tag of the same name",
+        async () => {
+            const tagged = ["Ethiopia", "Kenya", "Colombia"].map((name) => {
+                const recipe = named(name);
+                recipe.tags = ["morning"];
+                return recipe;
+            });
+            const db = store([...tagged, named("Brazil")]);
+            const settings = new Settings(memoryStorage());
+            const {rerender} = await renderWithProviders(
+                <HomeScreen db={db} settings={settings}/>
+            );
+            await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await pressOnSheet("shelf-overflow-promote");
+            await waitFor(() =>
+                expect(screen.getByLabelText("morning, your shelf, 3 recipes")).toBeTruthy()
+            );
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await pressOnSheet("shelf-overflow-delete");
+            await pressOnSheet("remove-shelf-confirm");
+
+            for (const recipe of tagged) {
+                recipe.tags = ["morning"];
+            }
+            await act(async () => {
+                mockFocusEpoch++;
+                rerender(<HomeScreen db={db} settings={settings}/>);
+            });
+
+            expect(screen.getByLabelText("morning, tag shelf, 3 recipes")).toBeTruthy();
+            expect(screen.queryByLabelText("morning, your shelf, 3 recipes")).toBeNull();
+        });
+
     it("deletes a shelf outright, keeping the recipes that were on it", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await shelfAction("morning", "delete");
@@ -2299,7 +2379,7 @@ describe("picking a shelf's members", () => {
     it("keeps the shelf when the delete is declined", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await shelfAction("morning", "delete");
@@ -2315,7 +2395,7 @@ describe("picking a shelf's members", () => {
         // in the edit that row would start.
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
@@ -2336,7 +2416,7 @@ describe("picking a shelf's members", () => {
     it("returns to the grid when a rename from the grid is dismissed", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
@@ -2359,7 +2439,7 @@ describe("picking a shelf's members", () => {
     it("stays in the edit when a rename from the picker is dismissed", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
 
         await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
@@ -2410,7 +2490,7 @@ describe("picking a shelf's members", () => {
     it("renames a shelf, keeping everyone on it", async () => {
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
         await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Evening");
@@ -2430,7 +2510,7 @@ describe("picking a shelf's members", () => {
         morning.tags = ["morning"];
         const evening = named("Kenya");
         evening.tags = ["evening"];
-        await renderHome({recipes: [morning, evening]});
+        await renderHome({recipes: [morning, evening], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
         await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "evening");
@@ -2449,7 +2529,7 @@ describe("picking a shelf's members", () => {
         // this is not a collision, it is the rename the user asked for.
         const tagged = named("Ethiopia");
         tagged.tags = ["morning"];
-        await renderHome({recipes: [tagged, named("Kenya")]});
+        await renderHome({recipes: [tagged, named("Kenya")], settings: shelfSettings("morning")});
         await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
         await shelfAction("morning", "rename");
         await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Morning");
