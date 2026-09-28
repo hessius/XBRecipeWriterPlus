@@ -24,7 +24,7 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     favourites:    "favourite",
     tea:           "shelfTea",
     pods:          "shelfPods",
-    overflowOff:   "shelfOverflowOff",
+    omniDripper:   "shelfOmniDripper",
     otherBrewer:   "shelfOtherBrewer",
     singlePour:    "shelfSinglePour",
     fewStages:     "shelfFewStages",

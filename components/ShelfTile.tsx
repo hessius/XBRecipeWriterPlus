@@ -32,7 +32,7 @@ export const TILE_HEIGHT = 120;
  */
 export default function ShelfTile({
     shelf, members, inverted = false, onPress, onActions,
-    onHide
+    onHide, onLongPress, accessibilityHint
 }: {
     shelf: Shelf;
     /** What this shelf's art is drawn from. Absent for an empty shelf. */
@@ -74,6 +74,18 @@ export default function ShelfTile({
      * lost by a long press the user did not mean to make.
      */
     onHide?: () => void;
+    /**
+     * What a long press on the tile itself does.
+     *
+     * Three states, because the tile has two callers with different answers.
+     * Left off, a long press opens the actions, which is the shortcut the grid
+     * has always had. `null` takes the shortcut away, which the arrangeable
+     * section does because there the gesture lifts the tile instead; the
+     * actions keep their drawn door, the more glyph in the corner.
+     */
+    onLongPress?: (() => void) | null;
+    /** Spoken after the label. Screen readers only. */
+    accessibilityHint?: string;
 }) {
     const manual = shelf.kind === "manual";
     const namedByUser = shelf.kind !== "auto";
@@ -97,6 +109,7 @@ export default function ShelfTile({
     return (
         <Pressable accessibilityRole="button"
                    accessibilityLabel={`${shelf.label}, ${kind}, ${recipes}`}
+                   accessibilityHint={accessibilityHint}
                    testID={`shelf-${shelf.id}`}
                    // The edit button below is nested inside this element, which
                    // is one accessibility element, so VoiceOver cannot reach it
@@ -114,7 +127,8 @@ export default function ShelfTile({
                        if (event.nativeEvent.actionName === "edit") onActions?.();
                        else if (event.nativeEvent.actionName === "hide") onHide?.();
                    }}
-                   onPress={onPress} onLongPress={onActions ?? onHide}
+                   onPress={onPress}
+                   onLongPress={onLongPress === undefined ? onActions ?? onHide : onLongPress}
                    style={{flex: 1}}>
             <YStack height={TILE_HEIGHT} justifyContent="space-between"
                     padding="$3" borderRadius="$4"

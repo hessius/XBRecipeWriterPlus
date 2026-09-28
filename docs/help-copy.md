@@ -77,11 +77,11 @@ away a fact.
 
 **Title:** Cup
 
-**Hint:** Omni turns overflow protection off.
+**Hint:** Other turns overflow protection off.
 
 **Question:** Which cup type should I pick?
 
-**Answer:** Omni disables overflow protection. Other is for third-party brewers.
+**Answer:** Omni is xBloom's own dripper, so the machine knows when your cup is full and stops. Other is for third-party brewers it cannot measure, so nothing stops it.
 
 ## xid
 

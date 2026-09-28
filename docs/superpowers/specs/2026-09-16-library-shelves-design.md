@@ -297,8 +297,14 @@ Two consequences, both of which improve the flow:
 - **Removing the last member removes the shelf**, with a confirmation that says
   so before it happens.
 
-Shelf ordering is deliberately absent. See #111, which records the three options
-and what would justify paying for one.
+Shelf ordering was deliberately absent, and #111 settled it after the fact. The
+three options that issue records all assumed the order had nowhere to live;
+`myShelves`, added later for shelf provenance, is already an ordered list of
+canonical shelf ids and already travels in backup, so a user's arrangement is
+that list's order and cost no new storage. A shelf the user made can be dragged
+in the grid or moved from its own menu. Nothing else can: the auto shelves are
+the app's vocabulary in a fixed order and FROM TAGS is a nursery the app fills.
+See `library/shelfOrder.ts` and `library/shelfDrag.ts`.
 
 ### Stock auto shelves
 
@@ -308,7 +314,7 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 |---|---|
 | Tea | `isTea = 1` |
 | xBloom pods | `cupType = XPOD` |
-| Overflow protection off | `cupType = OMNI` |
+| Omni dripper | `cupType = OMNI` |
 | Other brewer | `cupType = OTHER` |
 | Single pour | `pourCount = 1` |
 | Few stages | `pourCount <= 2` |
@@ -362,8 +368,9 @@ else, so it stays hidden until enough of the library came from other people for
 the distinction to mean something -- which is the point at which somebody would
 want it.
 
-`cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`,
-`OMNI 0x02` (which the UI calls "overflow protection off"), `TEA 0x03`.
+`cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`
+(the one the UI calls "overflow protection off", corrected in #151), `OMNI
+0x02`, `TEA 0x03`.
 
 ### Suppression applies to derived shelves only
 
@@ -426,8 +433,9 @@ The rail is drawn per view, and each view is asked what it actually needs:
 
 - **List view** carries the view toggle, search, sort, and the filter button.
 - **Shelf view** carries the view toggle and nothing else. It has no sort,
-  because shelf ordering is deferred and out of scope, so the control would
-  offer an axis that does not exist. It has no filter button, because a filter
+  because the only shelves with an order are the user's own and that order is
+  theirs rather than an axis: a sort control would offer to overwrite the
+  arrangement they made by hand. It has no filter button, because a filter
   and a shelf narrow the same library by the same means and a filtered shelf
   grid is two instruments pointed at one target. It has no search, because the
   thing worth finding in a grid of eight named squares is already on screen.
@@ -1044,7 +1052,8 @@ block a release. The `ShelfMark` variants rode along with 7 the same way.
 
 ## Out of scope
 
-- **Shelf ordering.** Deferred, with the options recorded in #111.
+- **Shelf ordering.** Was deferred here, and shipped later under #111 once
+  `myShelves` gave the order somewhere to live.
 - **Rating capture UI on the brew screen and brew record.** #99 owns it, and
   has now shipped it; see
   [`2026-09-18-brew-judgement-design.md`](2026-09-18-brew-judgement-design.md).
