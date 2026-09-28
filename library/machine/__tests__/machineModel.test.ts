@@ -2,8 +2,7 @@ import {
     ADAPTED_MODEL,
     adaptedModelFor,
     isMachineModel,
-    MACHINE_MODELS,
-    modelFromAdapted
+    MACHINE_MODELS
 } from "@/library/machine/machineModel";
 
 describe("the machine model", () => {
@@ -19,7 +18,7 @@ describe("the machine model", () => {
         // 0 and 3 come back empty from every endpoint. A third model here
         // would be a partition with nothing in it.
         expect([...MACHINE_MODELS]).toEqual(["studio", "original"]);
-        expect(Object.values(ADAPTED_MODEL).sort()).toEqual([1, 2]);
+        expect(Object.values(ADAPTED_MODEL).sort((a, b) => a - b)).toEqual([1, 2]);
     });
 
     it("reads a stored value back, and refuses one it did not write", () => {
@@ -30,16 +29,10 @@ describe("the machine model", () => {
         expect(isMachineModel(undefined)).toBe(false);
     });
 
-    it("turns a wire value back into a model", () => {
-        expect(modelFromAdapted(1)).toBe("studio");
-        expect(modelFromAdapted(2)).toBe("original");
-    });
-
-    it("treats an unknown wire value as the Studio", () => {
-        // The default has to be the common machine: a wrong guess of Studio
-        // is what every user got before this existed, and a wrong guess of
-        // Original would be a regression for almost everybody.
-        expect(modelFromAdapted(0)).toBe("studio");
-        expect(modelFromAdapted(7)).toBe("studio");
+    it("gives every model a distinct wire value", () => {
+        // The Record forces an entry per model, but not a *different* one. Two
+        // models sharing a partition would read as one machine to every endpoint.
+        const values = MACHINE_MODELS.map(adaptedModelFor);
+        expect(new Set(values).size).toBe(MACHINE_MODELS.length);
     });
 });

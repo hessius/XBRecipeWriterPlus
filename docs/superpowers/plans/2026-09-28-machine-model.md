@@ -80,7 +80,7 @@ npm run lint
 - Create: `library/machine/machineModel.ts`
 - Test: `library/machine/__tests__/machineModel.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `library/machine/__tests__/machineModel.test.ts`:
 
@@ -89,8 +89,7 @@ import {
     ADAPTED_MODEL,
     adaptedModelFor,
     isMachineModel,
-    MACHINE_MODELS,
-    modelFromAdapted
+    MACHINE_MODELS
 } from "@/library/machine/machineModel";
 
 describe("the machine model", () => {
@@ -106,7 +105,7 @@ describe("the machine model", () => {
         // 0 and 3 come back empty from every endpoint. A third model here
         // would be a partition with nothing in it.
         expect([...MACHINE_MODELS]).toEqual(["studio", "original"]);
-        expect(Object.values(ADAPTED_MODEL).sort()).toEqual([1, 2]);
+        expect(Object.values(ADAPTED_MODEL).sort((a, b) => a - b)).toEqual([1, 2]);
     });
 
     it("reads a stored value back, and refuses one it did not write", () => {
@@ -117,27 +116,21 @@ describe("the machine model", () => {
         expect(isMachineModel(undefined)).toBe(false);
     });
 
-    it("turns a wire value back into a model", () => {
-        expect(modelFromAdapted(1)).toBe("studio");
-        expect(modelFromAdapted(2)).toBe("original");
-    });
-
-    it("treats an unknown wire value as the Studio", () => {
-        // The default has to be the common machine: a wrong guess of Studio
-        // is what every user got before this existed, and a wrong guess of
-        // Original would be a regression for almost everybody.
-        expect(modelFromAdapted(0)).toBe("studio");
-        expect(modelFromAdapted(7)).toBe("studio");
+    it("gives every model a distinct wire value", () => {
+        // The Record forces an entry per model, but not a *different* one. Two
+        // models sharing a partition would read as one machine to every endpoint.
+        const values = MACHINE_MODELS.map(adaptedModelFor);
+        expect(new Set(values).size).toBe(MACHINE_MODELS.length);
     });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/machine/__tests__/machineModel.test.ts`
 Expected: FAIL, `Cannot find module '@/library/machine/machineModel'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `library/machine/machineModel.ts`:
 
@@ -153,6 +146,10 @@ Create `library/machine/machineModel.ts`:
  * hub give a best linear fit of R^2 = 0.444, landing within two grind steps on
  * 20% of pairs, so nothing here or anywhere else may translate one into the
  * other. Where both are needed, both are fetched.
+ *
+ * Filed under `machine/` because it is about which machine this is, not about
+ * talking to one: nothing here touches the radio, and its consumers are the
+ * settings store and the xBloom HTTP clients.
  */
 export const MACHINE_MODELS = ["studio", "original"] as const;
 
@@ -164,7 +161,16 @@ export const ADAPTED_MODEL: Record<MachineModel, 1 | 2> = {
     original: 2
 };
 
-export function adaptedModelFor(model: MachineModel): 1 | 2 {
+/**
+ * xBloom's wire value, named so the request builders and the payload validator
+ * can import it rather than each restating the pair.
+ *
+ * Derived from `ADAPTED_MODEL` rather than written out, so it cannot drift from
+ * the mapping the way a hand-maintained union would.
+ */
+export type AdaptedModel = typeof ADAPTED_MODEL[MachineModel];
+
+export function adaptedModelFor(model: MachineModel): AdaptedModel {
     return ADAPTED_MODEL[model];
 }
 
@@ -172,30 +178,18 @@ export function isMachineModel(value: unknown): value is MachineModel {
     return typeof value === "string" &&
         (MACHINE_MODELS as readonly string[]).includes(value);
 }
-
-/**
- * The model a wire value names, falling back to the Studio.
- *
- * A fallback rather than a refusal because this reads values that came from
- * storage and from a third party, and the Studio is what every user was served
- * before the setting existed: guessing it wrongly restores the old behaviour,
- * where guessing Original wrongly would be a new fault for almost everybody.
- */
-export function modelFromAdapted(value: number): MachineModel {
-    return value === ADAPTED_MODEL.original ? "original" : "studio";
-}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest library/machine/__tests__/machineModel.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add library/machine/machineModel.ts library/machine/__tests__/machineModel.test.ts
-git commit -m "Name the two machines, and refuse to convert between them"
+git add library/machine/machineModel.ts library/machine/__tests__/machineModel.test.ts docs/superpowers/plans/2026-09-28-machine-model.md
+git commit -m "Trim the machine model to what its consumers actually need"
 ```
 
 ---
