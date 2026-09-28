@@ -10,6 +10,7 @@ import SettingsToggleRow from "@/components/SettingsToggleRow";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import {RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import type {Settings} from "@/library/Settings";
 
 /** How many taps on the firmware row open the console. */
@@ -50,9 +51,14 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const {machine, status, error, remembered, connect, forget} = useMachine();
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
+    const ratingPromptHours = Math.round(RATING_PROMPT_WINDOW_MS / (60 * 60 * 1000));
+    const ratingPromptDescription =
+        `On, the last brew XBRW++ watched can ask how it was along the bottom for up to ${ratingPromptHours} hours. `
+        + "Off, ratings are only given on the brew itself.";
 
     /** What the section says when there is no live link. */
     const idleStatus = status === "connecting" ? "Connecting…"
@@ -132,6 +138,11 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                 description="When off, each phase change holds its end state immediately. The system Reduced Motion switch also disables animation independently."
                 value={animateBrewChart}
                 onChange={setAnimateBrewChart}/>
+
+            <SettingsToggleRow
+                label="Ask how a brew was"
+                description={ratingPromptDescription}
+                value={askForRatings} onChange={setAskForRatings}/>
 
             <SettingsChoiceRow
                 label="Keep raw brew traces"

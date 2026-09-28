@@ -7,6 +7,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {LICENCES, LICENCE_TEXTS, type Licence} from "@/constants/licences";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 
 /**
  * The full third-party licence list, on its own route.
@@ -37,20 +38,26 @@ export default function LicencesScreen({
     texts?: Readonly<Record<string, string>>;
 }) {
     const [reading, setReading] = useState<Licence | null>(null);
+    const {ratingNoteOpen} = useLiveBrew();
     const body = reading?.text !== undefined ? texts[reading.text] : undefined;
+    const screenCovered = reading !== null || ratingNoteOpen;
 
     return (
-        <YStack flex={1} backgroundColor={palette.base}>
-            <ScreenHeader title="Licences" onBack={() => router.back()}/>
-            <FlatList data={entries}
-                      keyExtractor={(entry) => entry.name}
-                      renderItem={({item}: ListRenderItemInfo<Licence>) => (
-                          <LicenceRow entry={item}
-                                      onPress={item.text !== undefined && texts[item.text] !== undefined
-                                          ? () => setReading(item)
-                                          : undefined}/>
-                      )}
-                      contentContainerStyle={{padding: 16, paddingBottom: 48}}/>
+        <>
+            <YStack flex={1} backgroundColor={palette.base}
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
+                <ScreenHeader title="Licences" onBack={() => router.back()}/>
+                <FlatList data={entries}
+                          keyExtractor={(entry) => entry.name}
+                          renderItem={({item}: ListRenderItemInfo<Licence>) => (
+                              <LicenceRow entry={item}
+                                          onPress={item.text !== undefined && texts[item.text] !== undefined
+                                              ? () => setReading(item)
+                                              : undefined}/>
+                          )}
+                          contentContainerStyle={{padding: 16, paddingBottom: 48}}/>
+            </YStack>
             <XbrwSheet open={reading !== null} onOpenChange={(open) => {if (!open) setReading(null);}}
                        title={reading?.name ?? ""} heightPercent={80}>
                 <ScrollView>
@@ -71,7 +78,7 @@ export default function LicencesScreen({
                     </YStack>
                 </ScrollView>
             </XbrwSheet>
-        </YStack>
+        </>
     );
 }
 

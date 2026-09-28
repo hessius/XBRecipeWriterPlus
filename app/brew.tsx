@@ -20,14 +20,14 @@ import MachineDot from "@/components/MachineDot";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
         FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PHASE_COPY,
-        PRO_MODE_PROMPT} from "@/constants/brewCopy";
+        PRO_MODE_PROMPT, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
 import {sharedBrewDatabase, useBrewJudgement, type HistoryStore, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
-import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import {useBrewHandoff, type HandoffStore} from "@/hooks/useBrewHandoff";
 import BeanNameSheet from "@/components/BeanNameSheet";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -46,7 +46,9 @@ const WORKING = new Set(["idle", "waking", "sending"]);
 export const BREW_BAND_GAP = 13;
 
 /** Where an export sources its record: the freshest brew in the store. */
-type ExportStore = Pick<HistoryStore, "all" | "samples"> & Partial<JudgementStore>;
+type ExportStore = Pick<HistoryStore, "all" | "samples">
+    & Partial<JudgementStore>
+    & Partial<HandoffStore>;
 
 /** The just-finished brew, read from the store on press (not on render). */
 function latestExport(store: ExportStore): BrewExportSource | null {
@@ -83,7 +85,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
-           error, watch} = useLiveBrew();
+           error, watch, ratingNoteOpen} = useLiveBrew();
 
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
@@ -203,8 +205,12 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // Its own busy flag, like the record screen's: a share sheet that is open
     // should not grey out a handoff that could still run.
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const handoffStore = historyStore?.markSent === undefined
+        ? undefined
+        : {markSent: historyStore.markSent};
     const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(
-        () => latestExport(historyStore ?? sharedBrewDatabase())
+        () => latestExport(historyStore ?? sharedBrewDatabase()),
+        handoffStore
     );
     // The machine knows what a pod was and never what a hopper held, so the
     // coffee is only ever a question for a brew that came from beans.
@@ -260,8 +266,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
             not a modal, so on Android `accessibilityViewIsModal` on the sheet
             does not take the screen behind it out of the reader's path. */}
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3"
-                accessibilityElementsHidden={namingBean}
-                importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
+                accessibilityElementsHidden={namingBean || ratingNoteOpen}
+                importantForAccessibility={namingBean || ratingNoteOpen
+                    ? "no-hide-descendants"
+                    : "auto"}>
             {running && <BrewWakeLock />}
             {/* The nav row the mockup drew. `brew` is declared in the navigator
                 with `headerShown: false`, so this is the only bar. */}
@@ -456,7 +464,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // a rating nobody gives.
                         <BrewJudgement rating={judgement.rating} note={judgement.note}
                                        onRate={judgement.rate}
-                                       onNote={judgement.annotate}/>
+                                       onNote={judgement.annotate}
+                                       hint={RATING_CAN_WAIT}/>
                     )}
                     {phase.name === "done" && (
                         // In place, on the screen you are already on. This used

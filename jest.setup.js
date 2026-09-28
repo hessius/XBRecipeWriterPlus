@@ -4,6 +4,33 @@ global.console.log = jest.fn();
 global.console.info = jest.fn();
 global.console.debug = jest.fn();
 
+// `library/machine/Transport` builds a BleManager singleton at module load.
+// Most tests never touch the radio, but screens that read the live-brew context
+// import that path statically. Keep the native module inert under Jest; tests
+// that exercise the transport replace this with a fuller mock.
+jest.mock("react-native-ble-manager", () => ({
+    __esModule: true,
+    BleState: {
+        Unknown: "unknown", Resetting: "resetting", Unsupported: "unsupported",
+        Unauthorized: "unauthorized", On: "on", Off: "off",
+        TurningOn: "turning_on", TurningOff: "turning_off"
+    },
+    default: {
+        start: jest.fn(),
+        connect: jest.fn(),
+        retrieveServices: jest.fn(),
+        startNotification: jest.fn(),
+        requestMTU: jest.fn(),
+        writeWithoutResponse: jest.fn(),
+        disconnect: jest.fn(),
+        onDidUpdateValueForCharacteristic: jest.fn(() => ({remove: jest.fn()})),
+        onDisconnectPeripheral: jest.fn(() => ({remove: jest.fn()})),
+        onDiscoverPeripheral: jest.fn(() => ({remove: jest.fn()})),
+        checkState: jest.fn(),
+        onDidUpdateState: jest.fn(() => ({remove: jest.fn()}))
+    }
+}));
+
 /**
  * `expo-clipboard` is a native module, so Jest sees nothing without this.
  *

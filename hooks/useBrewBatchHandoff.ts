@@ -8,6 +8,8 @@ import {batchFits, encodeHandoffBatch} from "@/library/brew/handoff/encode";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
+import type {HandoffStore} from "@/hooks/useBrewHandoff";
 
 export const BATCH_HANDOFF_OPEN_FAILED =
     "Could not open Beanconqueror. Make sure it is installed and try again.";
@@ -17,6 +19,7 @@ export const BATCH_HANDOFF_EMPTY =
     "No selected brews could be sent. They may have been deleted.";
 
 type BatchSource = {record: StoredBrew; samples: BrewSample[]};
+type SendableEnvelope = {id: string; envelope: HandoffEnvelope};
 
 /**
  * Hands several finished brews to Beanconqueror over one deep link.
@@ -25,7 +28,10 @@ type BatchSource = {record: StoredBrew; samples: BrewSample[]};
  * record was deleted underneath it. Missing records are skipped; an entirely
  * stale selection is the only empty case surfaced to the user.
  */
-export function useBrewBatchHandoff(load: (id: string) => BatchSource | null) {
+export function useBrewBatchHandoff(
+    load: (id: string) => BatchSource | null,
+    store?: HandoffStore
+) {
     const isSendingRef = useRef(false);
     const [busy, setBusy] = useState(false);
     // Envelopes already built during this selection, keyed by brew id.
@@ -60,11 +66,11 @@ export function useBrewBatchHandoff(load: (id: string) => BatchSource | null) {
         return buildEnvelope(backfill.record, opened.samples, backfill.filled);
     }
 
-    function envelopes(ids: string[]): HandoffEnvelope[] {
-        const built: HandoffEnvelope[] = [];
+    function sendableEnvelopes(ids: string[]): SendableEnvelope[] {
+        const built: SendableEnvelope[] = [];
         ids.forEach((id) => {
             const envelope = build(id);
-            if (envelope !== null) built.push(envelope);
+            if (envelope !== null) built.push({id, envelope});
         });
         return built;
     }
@@ -94,23 +100,23 @@ export function useBrewBatchHandoff(load: (id: string) => BatchSource | null) {
         builtRef.current = new Map();
     }
 
-    async function send(ids: string[]): Promise<void> {
-        if (isSendingRef.current) return;
+    async function send(ids: string[]): Promise<number | null> {
+        if (isSendingRef.current) return null;
         isSendingRef.current = true;
         setBusy(true);
         try {
-            const built = envelopes(ids);
+            const built = sendableEnvelopes(ids);
             if (built.length === 0) {
                 notify({tone: "error", message: BATCH_HANDOFF_EMPTY});
-                return;
+                return null;
             }
 
             let url: string;
             try {
-                ({url} = encodeHandoffBatch(built));
+                ({url} = encodeHandoffBatch(built.map(({envelope}) => envelope)));
             } catch {
                 notify({tone: "error", message: BATCH_HANDOFF_TOO_LARGE});
-                return;
+                return null;
             }
 
             // No canOpenURL preflight, for the reason useBrewHandoff gives: on
@@ -120,7 +126,14 @@ export function useBrewBatchHandoff(load: (id: string) => BatchSource | null) {
                 await Linking.openURL(url);
             } catch {
                 notify({tone: "error", message: BATCH_HANDOFF_OPEN_FAILED});
+                return null;
             }
+            const sentAt = Date.now();
+            const database = store ?? sharedBrewDatabase();
+            built.forEach(({id}) => {
+                database.markSent(id, sentAt);
+            });
+            return sentAt;
         } finally {
             isSendingRef.current = false;
             setBusy(false);

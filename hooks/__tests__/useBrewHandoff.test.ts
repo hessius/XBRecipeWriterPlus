@@ -14,6 +14,9 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 jest.mock("@/library/RecipeDatabase", () => jest.fn());
+jest.mock("@/hooks/useBrewHistory", () => ({
+    sharedBrewDatabase: () => ({markSent: jest.fn()})
+}));
 
 const notifyMock = notify as jest.MockedFunction<typeof notify>;
 const RecipeDatabaseMock = RecipeDatabase as jest.MockedClass<typeof RecipeDatabase>;
@@ -85,14 +88,27 @@ describe("useBrewHandoff", () => {
         ));
     });
 
+    it("records that the brew went over", async () => {
+        const markSent = jest.fn();
+        const record = brew({id: "b1"});
+        const {result} = await renderHook(() =>
+            useBrewHandoff(() => ({record, samples}), {markSent}));
+
+        await act(async () => {
+            await result.current.send();
+        });
+
+        expect(markSent).toHaveBeenCalledWith("b1", expect.any(Number));
+    });
+
     it("ignores a second press while the first handoff is still in flight", async () => {
         let release!: () => void;
         openURL.mockImplementationOnce(
             () => new Promise<void>((resolve) => { release = resolve; })
         );
         const {result} = await renderHook(() => useBrewHandoff(source));
-        let first!: Promise<void>;
-        let second!: Promise<void>;
+        let first!: Promise<number | null>;
+        let second!: Promise<number | null>;
 
         await act(async () => {
             first = result.current.send();

@@ -29,6 +29,7 @@ import {palette} from "@/constants/colors";
 import {grindTooFine} from "@/constants/copy";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {RECIPE_LABELS, useRecipeEditor} from "@/hooks/useRecipeEditor";
 import type {BypassField} from "@/hooks/useRecipeEditor";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
@@ -802,6 +803,7 @@ export default function EditRecipe(
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
     const [leavePrompt, setLeavePrompt] =
         useState<{intent: LeaveIntent; inLibrary: boolean} | null>(null);
+    const {ratingNoteOpen} = useLiveBrew();
     /**
      * The navigation the guard interrupted, so it can be replayed on Save or
      * Discard. A ref rather than state: replaying it must not wait for a
@@ -1105,7 +1107,8 @@ export default function EditRecipe(
     // positioned overlay only covers visually. This is the Android half of what
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
-        || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null;
+        || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null
+        || ratingNoteOpen;
 
     return (
         <>

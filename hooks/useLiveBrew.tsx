@@ -32,6 +32,10 @@ export type LiveBrewSnapshot = {
 type LiveBrew = {
     /** The current run, or null when nothing is brewing. */
     run: LiveBrewSnapshot | null;
+    /** A live rating note sheet is covering the current route. */
+    ratingNoteOpen: boolean;
+    /** Called by the slot host that owns the live rating note sheet. */
+    setRatingNoteOpen: (open: boolean) => void;
     /**
      * Register a recipe as the one to brew.  Idempotent: once a RunOwner is
      * mounted this becomes a no-op so re-mounting the brew screen cannot start
@@ -86,6 +90,8 @@ const noop = async () => {};
 
 const defaultValue: LiveBrew = {
     run: null,
+    ratingNoteOpen: false,
+    setRatingNoteOpen: () => {},
     start: () => {},
     startInPro: () => {},
     dismiss: () => {},
@@ -121,6 +127,7 @@ export function LiveBrewProvider({children, store}: {
     const [current, setCurrent] = useState<
         {recipe: Recipe | null; runId: number; pro: boolean}
     >({recipe: null, runId: 0, pro: false});
+    const [ratingNoteOpen, setRatingNoteOpen] = useState(false);
 
     function begin(recipe: Recipe, pro: boolean = false): void {
         setCurrent((was) => ({recipe, runId: was.runId + 1, pro}));
@@ -139,6 +146,8 @@ export function LiveBrewProvider({children, store}: {
             store={store}
             onStart={begin}
             onDismiss={() => setCurrent((was) => ({...was, recipe: null}))}
+            ratingNoteOpen={ratingNoteOpen}
+            setRatingNoteOpen={setRatingNoteOpen}
         >
             {children}
         </RunOwner>
@@ -151,13 +160,18 @@ export function LiveBrewProvider({children, store}: {
  * Always mounted, with a null recipe until something is asked for, so the
  * shape of the tree never depends on whether a brew is running.
  */
-function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
+function RunOwner({
+    recipe, runId, pro, store, onStart, onDismiss, ratingNoteOpen,
+    setRatingNoteOpen, children
+}: {
     recipe: Recipe | null;
     runId: number;
     pro: boolean;
     store?: BrewStore;
     onStart: (recipe: Recipe, pro?: boolean) => void;
     onDismiss: () => void;
+    ratingNoteOpen: boolean;
+    setRatingNoteOpen: (open: boolean) => void;
     children: React.ReactNode;
 }) {
     const result = useBrewRun(recipe, store, runId);
@@ -205,6 +219,8 @@ function RunOwner({recipe, runId, pro, store, onStart, onDismiss, children}: {
     return (
         <Context.Provider value={{
             run: snapshot,
+            ratingNoteOpen,
+            setRatingNoteOpen,
             // While the machine is still working, a second start is refused:
             // there is one machine and it is busy. Once the run is over the
             // bar is only a record, so anything asked for next replaces it.

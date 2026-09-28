@@ -308,7 +308,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         return () => sub.remove();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inShelfRoom]);
-    const {run: liveRun} = useLiveBrew();
+    const {run: liveRun, ratingNoteOpen} = useLiveBrew();
     /** When the brew screen was last pushed, so a second press in that window is refused. */
     const lastBrewPushRef = useRef(0);
 
@@ -1083,7 +1083,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
         || namingShelf || renamingShelf !== null || shelfActions !== null
         || deletingShelf !== null || beanFilterOpen
-        || removingShelf !== null || overflowRecipe !== null;
+        || removingShelf !== null || overflowRecipe !== null || ratingNoteOpen;
 
     // The sheet's own row, reachable without the long press that opens it. A
     // reader cannot make that gesture, so every verb the sheet offers is also an
@@ -1133,7 +1133,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 — the Android half of what `accessibilityViewIsModal` does on
                 iOS. The sheets are rendered outside this guarded subtree, so
                 they never hide themselves. */}
-            <YStack flex={1} backgroundColor={palette.base}
+            <YStack testID="home-content" flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 {picker.active ? (
