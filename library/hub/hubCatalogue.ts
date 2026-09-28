@@ -7,8 +7,7 @@
 import type {MachineModel} from "@/library/machine/machineModel";
 
 import {fetchHubPage} from "./hubApi";
-import type {HubCriteria} from "./hubApi";
-import {heldHubCriteria, vocabularyNames} from "./hubCriteria";
+import {criteriaVocabulary, heldHubCriteria} from "./hubCriteria";
 import {buildHubRequest} from "./hubQuery";
 import {normaliseHubRow} from "./hubRow";
 import type {HubRecipe} from "./hubRow";
@@ -37,15 +36,6 @@ type InFlightCatalogue = CachedCatalogue & {
 
 const cached = new Map<MachineModel, CachedCatalogue>();
 const inFlight = new Map<MachineModel, InFlightCatalogue>();
-
-function criteriaVocabulary(criteria: HubCriteria | null): Parameters<typeof normaliseHubRow>[1] {
-    if (criteria === null) return {};
-    return {
-        origin: vocabularyNames(criteria.originList),
-        process: vocabularyNames(criteria.processingList),
-        coffeeType: vocabularyNames(criteria.coffeeTypeList)
-    };
-}
 
 function snapshot(state: CachedCatalogue): HubCatalogueProgress {
     return {

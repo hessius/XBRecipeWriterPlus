@@ -71,3 +71,24 @@ export function roastLabel(roast: number | null, criteria: HubCriteria | null): 
 export function vocabularyNames(items: readonly {name: string}[] | undefined): string[] {
     return (items ?? []).map((item) => item.name);
 }
+
+/**
+ * The vocabulary `normaliseHubRow` should split a row's free text against.
+ *
+ * Shared rather than rebuilt per caller, because a row normalised without it
+ * splits differently: the list and the detail screen would then disagree about
+ * the same recipe's origin, and the difference would look like a bug in the
+ * data rather than in us.
+ */
+export function criteriaVocabulary(criteria: HubCriteria | null): {
+    origin?: string[];
+    process?: string[];
+    coffeeType?: string[];
+} {
+    if (criteria === null) return {};
+    return {
+        origin: vocabularyNames(criteria.originList),
+        process: vocabularyNames(criteria.processingList),
+        coffeeType: vocabularyNames(criteria.coffeeTypeList)
+    };
+}
