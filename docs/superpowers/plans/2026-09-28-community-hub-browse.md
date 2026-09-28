@@ -527,10 +527,21 @@ describe("normalising a row", () => {
         expect(normaliseHubRow(row({shareRecipeLink: link})).shareLink).toBe(link);
     });
 
-    it("reads the volume whether it came as a string or a number", () => {
+    it("reads the volume, which arrives as a string on every row", () => {
         expect(normaliseHubRow(row({volume: "240"})).volume).toBe(240);
-        expect(normaliseHubRow(row({volume: 240})).volume).toBe(240);
-        expect(normaliseHubRow(row({volume: null})).volume).toBeNull();
+    });
+
+    it("survives a volume the wire type says cannot happen", () => {
+        // Checked across all 2,966 coffee rows: `volume` is always a non-empty
+        // string, which is why `HubListRow` types it that way. This file is
+        // the quarantine, though, so the defence stays and the cast is the
+        // honest way to say these were never seen rather than pretending the
+        // wire is looser than it is.
+        const off = (volume: unknown) => row({volume} as Partial<HubListRow>);
+        expect(normaliseHubRow(off(240)).volume).toBe(240);
+        expect(normaliseHubRow(off(null)).volume).toBeNull();
+        expect(normaliseHubRow(off("")).volume).toBeNull();
+        expect(normaliseHubRow(off("not a number")).volume).toBeNull();
     });
 
     it("says whether a row is xBloom's own", () => {
@@ -716,7 +727,9 @@ export function normaliseHubRow(
         grind: raw.grinderSize,
         rpm: raw.rpm,
         pourCount: raw.pourCount,
-        ratio: raw.grandWater,
+        // `grandWater` is the ratio, not a water figure, despite the name:
+    // a live row reads dose 15, grandWater 16, volume "240", and 15 x 16 = 240.
+    ratio: raw.grandWater,
         volume: volume === null || Number.isNaN(volume) ? null : volume,
         shareLink: raw.shareRecipeLink
     };
