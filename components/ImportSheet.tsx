@@ -15,6 +15,8 @@ import type {RecipeImport} from "@/hooks/useRecipeImport";
 
 const FIELD_LABEL = "Share link or pod code";
 const FORMAT_HINT = "Paste an xBloom share link, or a pod code like ETH120.";
+const ACCOUNT_LABEL = "YOUR XBLOOM ACCOUNT";
+const ACCOUNT_CAPTION = "Bring in the recipes you've made";
 const CATALOGUE_LABEL = "BROWSE THE CATALOGUE";
 const CATALOGUE_CAPTION = "Find recipes shared by other xBloom users.";
 
@@ -245,6 +247,52 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                     has already answered the question the row asks. */}
                 {state.status === "idle" && (
                     <Pressable accessibilityRole="button"
+                               accessibilityLabel={`${ACCOUNT_LABEL}, ${ACCOUNT_CAPTION}`}
+                               onPress={() => {
+                                   // Closed first, then pushed: a sheet left open
+                                   // behind the pushed screen would still be
+                                   // there, over it, when the user came back.
+                                   onOpenChange(false);
+                                   router.push("/importCloud");
+                               }}
+                               // The same answer to a finger every primary tap in
+                               // the app gives -- CtaTile's, by way of
+                               // SettingsActionRow.
+                               style={({pressed}) => ({
+                                   opacity:   pressed ? 0.7 : 1,
+                                   transform: [{scale: pressed ? 0.98 : 1}]
+                               })}>
+                        <YStack testID="import-account-rule" height={1}
+                                backgroundColor={palette.line} marginBottom="$3"/>
+                        {/* 44pt is iOS's minimum touch target; two short lines
+                            would otherwise fall just short of it. */}
+                        <XStack alignItems="center" justifyContent="space-between"
+                                gap="$4" minHeight={44}>
+                            <YStack flex={1} gap="$1">
+                                <DotMatrixText testID="import-account-label" fontSize={11}
+                                               weight="bold" letterSpacing={1.6}
+                                               color={palette.text}>
+                                    {ACCOUNT_LABEL}
+                                </DotMatrixText>
+                                <Text testID="import-account-caption" fontSize={13}
+                                      color={palette.dim}>
+                                    {ACCOUNT_CAPTION}
+                                </Text>
+                            </YStack>
+                            {/* Decorative: the row is already a labelled button,
+                                so the glyph must not become a second
+                                accessibility element. The chevron is the `back`
+                                glyph rotated, as SettingsActionRow builds its
+                                own. */}
+                            <XStack style={{transform: [{rotate: "180deg"}]}}>
+                                <DotIcon name="back" size={14} color={palette.muted}/>
+                            </XStack>
+                        </XStack>
+                    </Pressable>
+                )}
+
+                {state.status === "idle" && (
+                    <Pressable accessibilityRole="button"
                                accessibilityLabel={`${CATALOGUE_LABEL}, ${CATALOGUE_CAPTION}`}
                                onPress={() => {
                                    // Closed first, then pushed: a sheet left open
@@ -260,8 +308,6 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                                    opacity:   pressed ? 0.7 : 1,
                                    transform: [{scale: pressed ? 0.98 : 1}]
                                })}>
-                        <YStack testID="import-catalogue-rule" height={1}
-                                backgroundColor={palette.line} marginBottom="$3"/>
                         {/* 44pt is iOS's minimum touch target; two short lines
                             would otherwise fall just short of it. */}
                         <XStack alignItems="center" justifyContent="space-between"
