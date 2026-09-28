@@ -1,8 +1,10 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 import type {BrewSample, PlanStage} from "./BrewRecord";
-import {countsAsBrewed} from "./brewPopulation";
+import {formatBrewDuration} from "./brewFormat";
+import {countsAsBrewed, isMeasured} from "./brewPopulation";
 import {livePoints, type Point} from "./brewShape";
+import {NOISE_FLOOR_ML} from "./stalls";
 
 /**
  * Two brews of one recipe, held against each other.
@@ -19,31 +21,43 @@ import {livePoints, type Point} from "./brewShape";
 /**
  * How far two brews' water may differ and still count as the same pour.
  *
- * Six times the scale's 0.5 ml noise floor. Whether it is the right number is
- * a hardware question rather than an arithmetic one, exactly as
- * `TARGET_TOLERANCE_ML` in `stalls.ts` says of its own figure. It wants
+ * Six times the scale's noise floor, which is why it is written as a multiple
+ * of it rather than as a 3 somebody has to take on trust. Whether six is the
+ * right multiple is a hardware question rather than an arithmetic one, exactly
+ * as `TARGET_TOLERANCE_ML` in `stalls.ts` says of its own figure. It wants
  * checking against two real brews of one recipe.
  */
-export const COMPARE_WATER_TOLERANCE_ML = 3;
-
-/** The same disclaimer, for the clock. */
-export const COMPARE_TIME_TOLERANCE_SECONDS = 5;
-
-export type PourVerdict = "same" | "stalled" | "differed" | "incomplete";
+export const COMPARE_WATER_TOLERANCE_ML = NOISE_FLOOR_ML * 6;
 
 /**
- * How long the pour took.
+ * The same disclaimer, for the clock.
  *
- * From the first drop, not from waking: grinding is not pouring, and a brew
- * that ground for a minute longer poured no differently. The same fallback the
- * record screen uses, for rows written before `pouringAt` existed.
+ * Chosen rather than derived: there is no clock equivalent of the scale's
+ * noise floor to build it out of. Five seconds is about the difference two
+ * brews of one recipe drift by without anything having gone wrong, and it too
+ * wants checking against real brews.
  */
-export function pourDurationSeconds(record: StoredBrew): number {
+export const COMPARE_TIME_TOLERANCE_SECONDS = 5;
+
+export type PourVerdict = "same" | "stalled" | "differed" | "incomplete" | "unwatched";
+
+/**
+ * When the pour started.
+ *
+ * The first drop, not waking: grinding is not pouring, and a brew that ground
+ * for a minute longer poured no differently. `pouringAt` is missing or 0 on
+ * rows written before the column existed, and also on a brew that never got as
+ * far as pouring; both fall back to `startedAt`, which is the only instant
+ * such a row has. Exported so the screens read the same instant this does.
+ */
+export function pourStartMs(record: StoredBrew): number {
     const pouringAt = record.pouringAt;
-    const pouredFrom = typeof pouringAt === "number" && pouringAt > 0
-        ? pouringAt
-        : record.startedAt;
-    return Math.max(0, (record.endedAt - pouredFrom) / 1000);
+    return typeof pouringAt === "number" && pouringAt > 0 ? pouringAt : record.startedAt;
+}
+
+/** How long the pour took, in seconds. */
+export function pourDurationSeconds(record: StoredBrew): number {
+    return Math.max(0, (record.endedAt - pourStartMs(record)) / 1000);
 }
 
 function stalled(record: StoredBrew): boolean {
@@ -55,8 +69,11 @@ function stalled(record: StoredBrew): boolean {
  *
  * The order of the tests is the point. A brew that stopped is not a brew that
  * differed, and saying "these differed by 90 ml" about a cancelled brew is
- * true and useless. A stall is likewise its own answer rather than a cause of
- * a difference in the totals.
+ * true and useless. A brew nobody watched is the same trap one step further
+ * in: `unobservedBrew` writes outcome `done` with zeroes for water, cup and
+ * time, so it passes `countsAsBrewed` and would be reported as having poured
+ * 250 ml less than the brew beside it. A stall is likewise its own answer
+ * rather than a cause of a difference in the totals.
  */
 export function pourVerdict(
     subject: StoredBrew, reference: StoredBrew
@@ -68,6 +85,16 @@ export function pourVerdict(
             why: unfinished.length === 2
                 ? "Neither brew finished, so there is no pour to compare."
                 : "One brew did not finish, so the pours cannot be compared."
+        };
+    }
+
+    const unwatched = [subject, reference].filter((r) => !isMeasured(r));
+    if (unwatched.length > 0) {
+        return {
+            verdict: "unwatched",
+            why: unwatched.length === 2
+                ? "Neither brew was watched, so there are no figures to compare."
+                : "One brew was logged by hand, so there is nothing to compare the pour with."
         };
     }
 
@@ -95,7 +122,7 @@ export function pourVerdict(
     if (seconds > COMPARE_TIME_TOLERANCE_SECONDS) {
         return {
             verdict: "differed",
-            why: `One brew poured for ${Math.round(seconds)} seconds longer.`
+            why: `The brews poured ${Math.round(seconds)} seconds apart.`
         };
     }
 
@@ -124,14 +151,26 @@ const SHAPE_FIELDS = ["volume", "flowRate", "pauseTime"] as const;
 /** Changes the coffee without moving the line. */
 const DETAIL_FIELDS = ["temperature", "pourPattern", "agitation"] as const;
 
+/**
+ * The field name used where the plans have different numbers of stages.
+ *
+ * Every other entry in `fields` is a key of `PlanStage`. This one is not, and
+ * a consumer wording the fields has to say something else about it: no single
+ * stage differs, the plans are shaped differently.
+ */
+export const PLAN_STAGE_COUNT_FIELD = "stages";
+
 export function planDrift(
     subject: PlanStage[] | undefined, reference: PlanStage[] | undefined
 ): {grade: PlanDrift; fields: string[]} {
+    // A row written before `plan` existed has nothing to disagree with. An
+    // absence is not a difference, and grading it as one would banner every
+    // old brew in the history with a drift it cannot show.
     if (subject === undefined || reference === undefined) {
         return {grade: "none", fields: []};
     }
     if (subject.length !== reference.length) {
-        return {grade: "shape", fields: ["stages"]};
+        return {grade: "shape", fields: [PLAN_STAGE_COUNT_FIELD]};
     }
 
     const fields: string[] = [];
@@ -164,7 +203,14 @@ export type Comparison = {
 /** What a row says where a brew never recorded the figure. */
 export const NOT_RECORDED = "not recorded";
 
-/** The value of a curve at a whole second, linearly between its samples. */
+/**
+ * The value of a curve at a whole second, linearly between its samples.
+ *
+ * Assumes `t` ascends. `livePoints` declines to sort or de-duplicate, on the
+ * grounds that the recorder appends in order, and this inherits that: a stream
+ * that went backwards would be interpolated against the wrong segment rather
+ * than rejected.
+ */
 function valueAt(points: Point[], t: number): number | null {
     if (points.length === 0) return null;
     if (t < points[0].t || t > points[points.length - 1].t) return null;
@@ -187,6 +233,11 @@ function valueAt(points: Point[], t: number): number | null {
  * there is no alignment to invent, only a common grid to interpolate onto,
  * because two brews do not sample at the same instants.
  *
+ * The grid starts at 0 whatever the streams do, so a stream whose first sample
+ * arrives late yields a gap that begins at the second it begins, not at 0. The
+ * seconds before it are missing rather than zero, which is the truth: nobody
+ * knows what the difference was before one of the brews was being watched.
+ *
  * It stops where the shorter stream stops. Extrapolating past the end of a
  * brew would draw a gap that grew after one of the brews was over.
  */
@@ -205,13 +256,36 @@ export function cupGap(subject: BrewSample[], reference: BrewSample[]): Point[] 
     return gap;
 }
 
-/** `2:06`. Floored, as everywhere else: 2:07 at 2:06.6 is wrong. */
-function clock(seconds: number): string {
-    const whole = Math.floor(Math.max(0, seconds));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
+/**
+ * What each outcome is called in front of a user.
+ *
+ * `BrewOutcome` is camelCase because it is a stored value, and a ledger is not
+ * the place to show somebody the word `endedOnMachine`. The words live here
+ * rather than in `constants/brewCopy.ts` because that module reaches into
+ * `library/machine/Machine`, and this one must stay importable by a plain node
+ * test. Four words is a cheap price for that.
+ */
+const OUTCOME_WORD: Record<string, string> = {
+    done: "finished",
+    endedOnMachine: "ended on the machine",
+    cancelled: "cancelled",
+    lostContact: "lost contact",
+    failed: "failed"
+};
 
 type Field = {label: string; read: (record: StoredBrew) => string | null};
+
+/**
+ * A figure only a watched brew has.
+ *
+ * `unobservedBrew` stores zeroes for water, cup and time because there is
+ * nowhere else to put "unknown" in a numeric column. Printing those zeroes in
+ * a table headed by the user's two brews would state as a fact that a brew
+ * they logged by hand delivered no water at all.
+ */
+function measured(read: (record: StoredBrew) => string | null): Field["read"] {
+    return (record) => isMeasured(record) ? read(record) : null;
+}
 
 /**
  * The ledger, in the order it is read.
@@ -220,15 +294,24 @@ type Field = {label: string; read: (record: StoredBrew) => string | null};
  * thought of it. A row neither brew recorded is dropped; a row one of them
  * recorded is kept, because "this one has a grind and that one does not" is
  * itself a difference worth seeing.
+ *
+ * POUR rather than TIME, and measured from the first drop, because the history
+ * row a user ticks this brew in shows waking to end. Two different numbers
+ * under one word would read as a bug; under two words they read as two facts.
  */
 const FIELDS: Field[] = [
-    {label: "OUTCOME", read: (r) => r.outcome},
-    {label: "TIME", read: (r) => clock(pourDurationSeconds(r))},
-    {label: "WATER", read: (r) => `${Math.round(r.waterTotal)} ml`},
-    {label: "CUP", read: (r) => `${Math.round(r.cupTotal)} ml`},
+    {label: "OUTCOME", read: (r) => OUTCOME_WORD[r.outcome] ?? r.outcome},
+    {
+        label: "POUR",
+        read: measured((r) => formatBrewDuration(pourStartMs(r), r.endedAt))
+    },
+    {label: "WATER", read: measured((r) => `${Math.round(r.waterTotal)} ml`)},
+    {label: "CUP", read: measured((r) => `${Math.round(r.cupTotal)} ml`)},
     {
         label: "BYPASS",
-        read: (r) => r.bypass === undefined ? null : `${Math.round(r.bypass.delivered)} ml`
+        read: measured(
+            (r) => r.bypass === undefined ? null : `${Math.round(r.bypass.delivered)} ml`
+        )
     },
     {label: "DOSE", read: (r) => r.dose === undefined ? null : `${r.dose} g`},
     {label: "RATIO", read: (r) => r.ratio === undefined ? null : `1:${r.ratio}`},

@@ -1009,8 +1009,8 @@ type Field = {label: string; read: (record: StoredBrew) => string | null};
  * itself a difference worth seeing.
  */
 const FIELDS: Field[] = [
-    {label: "OUTCOME", read: (r) => r.outcome},
-    {label: "TIME",    read: (r) => clock(pourDurationSeconds(r))},
+    {label: "OUTCOME", read: (r) => OUTCOME_WORD[r.outcome] ?? r.outcome},
+    {label: "POUR",    read: measured((r) => formatBrewDuration(pourStartMs(r), r.endedAt))},
     {label: "WATER",   read: (r) => `${Math.round(r.waterTotal)} ml`},
     {label: "CUP",     read: (r) => `${Math.round(r.cupTotal)} ml`},
     {label: "BYPASS",  read: (r) => r.bypass === undefined
@@ -1094,7 +1094,8 @@ import {COMPARE_COPY, COMPARE_DEGRADED} from "@/constants/brewCopy";
 import type {PourVerdict} from "@/library/brew/compare";
 
 describe("compare copy", () => {
-    const verdicts: PourVerdict[] = ["same", "stalled", "differed", "incomplete"];
+    const verdicts: PourVerdict[] =
+        ["same", "stalled", "differed", "incomplete", "unwatched"];
 
     it("has a reading for every verdict", () => {
         for (const verdict of verdicts) {
@@ -1143,13 +1144,14 @@ Append to `constants/brewCopy.ts`:
  * somebody looking for a problem that is not there.
  */
 export const COMPARE_COPY: Record<
-    "same" | "stalled" | "differed" | "incomplete",
+    PourVerdict,
     {chip: string; tone: "success" | "warn"}
 > = {
     same:       {chip: "POURED THE SAME", tone: "success"},
     stalled:    {chip: "ONE STALLED",     tone: "warn"},
     differed:   {chip: "THEY DIFFERED",   tone: "warn"},
-    incomplete: {chip: "ONE DID NOT FINISH", tone: "warn"}
+    incomplete: {chip: "ONE DID NOT FINISH", tone: "warn"},
+    unwatched:  {chip: "ONE WAS LOGGED BY HAND", tone: "warn"}
 };
 
 /** What the screen says when it cannot draw one or both traces. */
