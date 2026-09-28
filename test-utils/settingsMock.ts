@@ -14,6 +14,11 @@
  * jest.mock("@/hooks/useSetting", () =>
  *     require("@/test-utils/settingsMock").settingsMock());
  * ```
+ *
+ * One caution: `sharedSettings()` always answers from this module's store, so
+ * a test that injects its own `Settings` has two stores where production has
+ * one. A value written to the injected store is invisible to anything reading
+ * through `sharedSettings()`, and the other way about.
  */
 export function settingsMock() {
     const React = require("react");
