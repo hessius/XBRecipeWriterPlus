@@ -4,6 +4,8 @@ import {
     connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine, __resetSharedMachine
 } from "@/hooks/useMachine";
 import {CONNECT_DELAYS_MS} from "@/constants/machine";
+import {sharedSettings} from "@/hooks/useSetting";
+import {DEFAULTS} from "@/library/Settings";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
 
@@ -14,24 +16,22 @@ import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Mach
 jest.mock("react-native-ble-manager", () => ({__esModule: true, default: {}}));
 
 // `useSetting` reaches for the shared SQLite-backed store, which cannot open
-// under Jest. The settings tests avoid this by injecting an in-memory `Settings`,
-// but `useMachine` takes no store to inject, so the store is mocked here instead
-// with a per-hook in-memory value that starts at the real default. Same spirit
-// as the `jest.mock("@/library/RecipeDatabase")` the other hook tests use.
-const mockSeed: Record<string, unknown> = {};
-
-jest.mock("@/hooks/useSetting", () => {
-    const React = require("react");
-    const {DEFAULTS} = require("@/library/Settings");
-    const useSetting = (key: string) =>
-        React.useState(key in mockSeed ? mockSeed[key] : DEFAULTS[key]);
-    return {__esModule: true, default: useSetting, useSetting};
-});
+// under Jest. This file now needs `sharedSettings` as well, because the link
+// records what the machine said through it -- and a per-hook stand-in would
+// give the writer and the reader two different stores, so a correction would
+// be invisible to every assertion here.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 
 describe("the machine link", () => {
     beforeEach(() => {
         __resetSharedMachine();
-        for (const key of Object.keys(mockSeed)) delete mockSeed[key];
+        // The mock's store outlives each test, unlike the seed object it
+        // replaced, so every key a test writes has to be put back by hand.
+        for (const key of ["machineDeviceId", "machineModel",
+                           "machineModelString", "machineName"] as const) {
+            sharedSettings().set(key, DEFAULTS[key]);
+        }
     });
 
     it("does not touch the radio until something asks it to", async () => {
@@ -151,7 +151,7 @@ describe("the machine link", () => {
         transport.refuseIds = ["OLD:ID"];
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        mockSeed.machineDeviceId = "OLD:ID";
+        sharedSettings().set("machineDeviceId", "OLD:ID");
         const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         await act(async () => { await result.current.connect(); });
