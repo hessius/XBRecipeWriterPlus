@@ -1886,6 +1886,32 @@ service account or the app's traffic throttled, and there is nobody to ask.
 **Partial failure is reported by name.** A batch that resolves to one boolean
 tells somebody who saved forty rows nothing about which three did not land.
 
+**Verified live before this task was dispatched, and all three are worth a test:**
+
+1. **Every row has a share link.** All 100 rows of a sampled page carry
+   `shareRecipeLink`, so there is no rowless case to design for. Still guard
+   it: this is an undocumented endpoint and the type says it can be absent.
+
+2. **The share link's id is percent-encoded, and the share endpoint rejects it
+   that way.** A live link reads
+   `https://share-h5.xbloom.com/?id=Nh1muSi2bE%2F0Ttj0jn4eKQ%3D%3D`. Posted with
+   the `%2F` and `%3D` intact, `RecipeDetail.html` answers
+   `{"info":"The selected recipe does not exist","result":"fail"}`. Posted
+   decoded, it answers with the recipe.
+
+   **This already works**, because `parseImportInput` reads the id through
+   `url.searchParams.get("id")`, which decodes, and its comment says so. But it
+   works by a detail of another module that nothing currently pins from this
+   side. **Write a test with a real percent-encoded hub link** asserting the id
+   handed to `XBloomRecipe` is the decoded one. Without it, a future change to
+   that parser breaks every hub save and no test says why.
+
+3. **`XBloomRecipe`'s constructor takes two arguments**: `(source: ImportSource,
+   model: MachineModel)`. The model comes from `useSetting("machineModel")`.
+   It only changes the request for a pod code, not for a share link, but pass
+   it correctly anyway. `getRecipe()` returns `Recipe | null`, so the null is
+   a case, not an impossibility.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `hooks/__tests__/useHubSave.test.ts`:
