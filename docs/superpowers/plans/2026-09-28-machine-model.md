@@ -324,6 +324,8 @@ git commit -m "Store which machine this phone drives, and what it said it was"
 
 **Why:** this is the server-side validator for the share-minting API. It currently hard-rejects anything but `1`. It is a genuine trust boundary and stays one: `0` and `3` return nothing upstream and must still be refused.
 
+**`api/` restates the pair on purpose. Do not import `machineModel.ts` here.** Vercel deploys this directory alone, with `installCommand: "echo skipping install: the mint function has no dependencies"`, and every file under `api/` imports nothing but node builtins. Reaching into `library/` would make the function's bundle depend on the app tree. So `1 | 2` is written out here, with a comment naming `library/machine/machineModel.ts` as the other copy, and the two must be changed together. This is the one deliberate duplication in the machine-model work.
+
 - [ ] **Step 1: Replace the existing test**
 
 In `api/__tests__/payload.test.ts`, replace the test currently reading `"rejects any adaptedModel except the partition used for lookup"`:
