@@ -11,7 +11,7 @@ import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type {Settings} from "@/library/Settings";
-import {isMachineModel} from "@/library/machine/machineModel";
+import {MACHINE_MODELS, isMachineModel, type MachineModel} from "@/library/machine/machineModel";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;
@@ -23,10 +23,23 @@ const RETENTION_OPTIONS = [
     {value: "0",   label: "Don't keep traces"}
 ] as const;
 
-const MACHINE_MODEL_OPTIONS = [
-    {value: "studio",   label: "Studio"},
-    {value: "original", label: "Original"}
-] as const;
+/**
+ * What each model is called on screen.
+ *
+ * A `Record` rather than a hand-written option list, so adding a third machine
+ * is a compile error here rather than a button that quietly never appears.
+ * `SegmentOption.value` is a bare `string`, so restating the values would have
+ * had no link to `MACHINE_MODELS` at all: a typo would compile, the guard below
+ * would reject it, and the segment would simply do nothing.
+ */
+const MACHINE_MODEL_LABELS: Record<MachineModel, string> = {
+    studio:   "Studio",
+    original: "Original"
+};
+
+const MACHINE_MODEL_OPTIONS = MACHINE_MODELS.map(
+    (value) => ({value, label: MACHINE_MODEL_LABELS[value]})
+);
 
 /** One label-and-value line of the machine's own vitals. */
 function Vital({label, value}: {label: string; value: string}) {
@@ -87,10 +100,13 @@ export default function MachineSection({settings}: {settings?: Settings}) {
         <SettingsSection title="Machine">
             <SettingsChoiceRow
                 label="Your xBloom"
-                description="The two machines grind on different scales, so a recipe written for one is wrong on the other. Pick yours and the app asks xBloom for the right version."
+                description="The two machines grind on different scales, so a recipe written for one is wrong on the other. Pick yours and the app asks xBloom for the right version. Recipes already saved keep the numbers they were written with."
                 value={machineModel}
                 options={MACHINE_MODEL_OPTIONS}
                 onChange={(value) => {
+                    // Only the options above can arrive here, so a value that is
+                    // not a model is a bug in this file rather than a stale
+                    // preference to coerce. Hence the guard and not a fallback.
                     if (isMachineModel(value)) setMachineModel(value);
                 }}/>
 

@@ -1468,6 +1468,8 @@ git commit -m "Record what a real Studio calls itself"
 - Modify: `docs/machine-integration/cloud-api.md`
 - Modify: `.github/copilot-instructions.md`
 
+**Carried over from the Task 8 review, decide before opening the PR:** an Original owner now reads `"Your xBloom Studio has to be switched on and nearby."` on the connect row (`components/MachineSection.tsx`), directly under the row where they just said they do not own a Studio. It was correctly left alone in Task 8, because making that copy conditional is only worth doing once Tasks 9 and 10 have established whether the BLE link works on an Original at all. By this point that is known, so either soften the copy or write the open question into the PR body.
+
 - [ ] **Step 1: Update the cloud API notes**
 
 `api/_lib/xbloom.ts:80` points at `docs/machine-integration/cloud-api.md` for the `adaptedModel` reasoning. Update that document: the single-partition choice recorded there has been replaced. Say that minting follows the user's machine, that the mint's lookup follows the payload, and that the library walk reads both partitions and why.

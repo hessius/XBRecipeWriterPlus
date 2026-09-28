@@ -205,6 +205,11 @@ describe("the machine section", () => {
     it("remembers the original xBloom when that is what you picked", async () => {
         await renderWithProviders(<MachineSection/>);
 
+        // The Studio is the default, so this also pins that a fresh install
+        // starts somewhere rather than with nothing chosen.
+        expect(screen.getByLabelText("Studio").props.accessibilityState?.checked)
+            .toBe(true);
+
         await fireEvent.press(screen.getByLabelText("Original"));
 
         // The control is driven by the setting, so the value coming back is the
