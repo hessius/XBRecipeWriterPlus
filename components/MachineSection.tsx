@@ -11,6 +11,7 @@ import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type {Settings} from "@/library/Settings";
+import {isMachineModel} from "@/library/machine/machineModel";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;
@@ -20,6 +21,11 @@ const RETENTION_OPTIONS = [
     {value: "50",  label: "50"},
     {value: "200", label: "200"},
     {value: "0",   label: "Don't keep traces"}
+] as const;
+
+const MACHINE_MODEL_OPTIONS = [
+    {value: "studio",   label: "Studio"},
+    {value: "original", label: "Original"}
 ] as const;
 
 /** One label-and-value line of the machine's own vitals. */
@@ -51,6 +57,7 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);
+    const [machineModel, setMachineModel] = useSetting("machineModel", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
 
@@ -78,6 +85,15 @@ export default function MachineSection({settings}: {settings?: Settings}) {
 
     return (
         <SettingsSection title="Machine">
+            <SettingsChoiceRow
+                label="Your xBloom"
+                description="The two machines grind on different scales, so a recipe written for one is wrong on the other. Pick yours and the app asks xBloom for the right version."
+                value={machineModel}
+                options={MACHINE_MODEL_OPTIONS}
+                onChange={(value) => {
+                    if (isMachineModel(value)) setMachineModel(value);
+                }}/>
+
             {status !== "connected" && (
                 <Pressable accessibilityRole="text"
                            accessibilityLabel={idleStatus}

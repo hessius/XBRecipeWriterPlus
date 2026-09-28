@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import MachineSection from "@/components/MachineSection";
 import {renderWithProviders} from "@/test-utils/render";
@@ -192,5 +192,25 @@ describe("the machine section", () => {
         const toggle = screen.getByLabelText(/start brewing automatically/i);
         expect(toggle).toBeTruthy();
         expect(toggle.props.accessibilityState?.checked ?? toggle.props.value).toBe(false);
+    });
+
+    it("asks which xBloom you own, because the two grind on different scales", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        expect(screen.getByText("Your xBloom")).toBeTruthy();
+        expect(screen.getByText("Studio")).toBeTruthy();
+        expect(screen.getByText("Original")).toBeTruthy();
+    });
+
+    it("remembers the original xBloom when that is what you picked", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        await fireEvent.press(screen.getByLabelText("Original"));
+
+        // The control is driven by the setting, so the value coming back is the
+        // evidence it was stored rather than merely pressed.
+        await waitFor(() =>
+            expect(screen.getByLabelText("Original").props.accessibilityState?.checked)
+                .toBe(true));
     });
 });
