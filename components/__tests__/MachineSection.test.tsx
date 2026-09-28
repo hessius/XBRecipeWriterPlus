@@ -218,4 +218,19 @@ describe("the machine section", () => {
             expect(screen.getByLabelText("Original").props.accessibilityState?.checked)
                 .toBe(true));
     });
+
+    it("stops naming the Studio to somebody who said they own the other one", async () => {
+        // The connect row sat directly under the question, so an original owner
+        // read the app telling them to switch on a machine they had just said
+        // they do not have. It is also the one place worth admitting the link
+        // has only ever been tried against a Studio.
+        await renderWithProviders(<MachineSection/>);
+        expect(screen.getByText(/Your xBloom Studio has to be switched on/)).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Original"));
+
+        await waitFor(() =>
+            expect(screen.getByText(/Only the Studio has been tested/)).toBeTruthy());
+        expect(screen.queryByText(/Your xBloom Studio has to be switched on/)).toBeNull();
+    });
 });

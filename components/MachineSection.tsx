@@ -133,7 +133,15 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                 label={status === "connected" ? "Connected" : "Connect to my machine"}
                 detail={status === "connected"
                     ? "The link is held while XBRW++ is open."
-                    : "Your xBloom Studio has to be switched on and nearby."}
+                    // Naming the Studio to somebody who just said they own an
+                    // original reads as if the app forgot. It is also the one
+                    // place worth admitting that a scan will find their machine
+                    // and the connection after it probably will not finish: the
+                    // Bluetooth protocol here is the Studio's throughout, and
+                    // nobody has had an original in front of them to check.
+                    : machineModel === "original"
+                        ? "Your xBloom has to be switched on and nearby. Only the Studio has been tested."
+                        : "Your xBloom Studio has to be switched on and nearby."}
                 onPress={() => {
                     // The throw is for the brew path, which needs the reason.
                     // Here the reason is already on screen, in `error`.
