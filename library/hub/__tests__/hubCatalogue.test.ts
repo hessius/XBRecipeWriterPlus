@@ -78,6 +78,23 @@ function ids(progress: HubCatalogueProgress): number[] {
     return progress.rows.map((row) => row.id);
 }
 
+type Deferred<T> = {promise: Promise<T>; resolve: (value: T) => void};
+
+function deferred<T>(): Deferred<T> {
+    let resolve: (value: T) => void = () => undefined;
+    const promise = new Promise<T>((settleWith) => {
+        resolve = settleWith;
+    });
+    return {promise, resolve};
+}
+
+/** Let every already-queued microtask run, so a late page cannot slip past. */
+async function settle(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+}
+
 beforeEach(() => {
     __resetHubCatalogue();
     __resetHubCriteria();
@@ -163,7 +180,7 @@ describe("handling failed loads", () => {
         ]);
     });
 
-    it("propagates AbortError untouched and fires no further progress", async () => {
+    it("propagates a fetch's own AbortError untouched", async () => {
         const abort = new DOMException("cancelled", "AbortError");
         mockFetchPage
             .mockResolvedValueOnce(page(1, 3, [rawRow(1)]))
@@ -174,6 +191,84 @@ describe("handling failed loads", () => {
 
         expect(progress).toHaveBeenCalledTimes(1);
         expect(ids(progress.mock.calls[0][0] as HubCatalogueProgress)).toEqual([1]);
+    });
+});
+
+/**
+ * A caller's signal detaches that caller and nothing else.
+ *
+ * It used to abort the fetch, which wedged the browse screen: leaving and
+ * coming straight back joined an in-flight load whose pages the departed
+ * screen had just cancelled, so the second screen waited on a load that was
+ * never going to finish, drew no rows, and offered no way to try again.
+ */
+describe("a caller leaving", () => {
+    it("rejects the leaver with AbortError and stops its progress", async () => {
+        const hold = deferred<HubPage>();
+        mockFetchPage.mockReturnValueOnce(hold.promise)
+            .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
+        const progress = jest.fn();
+        const controller = new AbortController();
+
+        const leaving = loadHubCatalogue("studio", progress, controller.signal);
+        const caught = leaving.catch((error: Error) => error.name);
+        controller.abort();
+        hold.resolve(page(1, 2, [rawRow(1)]));
+
+        await expect(caught).resolves.toBe("AbortError");
+        await settle();
+        expect(progress).not.toHaveBeenCalled();
+    });
+
+    it("lets the load finish and cache, so the next visit pays nothing", async () => {
+        const hold = deferred<HubPage>();
+        mockFetchPage.mockReturnValueOnce(hold.promise)
+            .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
+        const controller = new AbortController();
+
+        const leaving = loadHubCatalogue("studio", jest.fn(), controller.signal);
+        const swallowed = leaving.catch(() => undefined);
+        controller.abort();
+        hold.resolve(page(1, 2, [rawRow(1)]));
+        await swallowed;
+        await settle();
+
+        const returning = jest.fn();
+        expect(await loadHubCatalogue("studio", returning)).toHaveLength(2);
+        expect(mockFetchPage).toHaveBeenCalledTimes(2);
+        expect(ids(returning.mock.calls[0][0] as HubCatalogueProgress)).toEqual([1, 2]);
+    });
+
+    it("still answers a second caller that joined the same load", async () => {
+        const hold = deferred<HubPage>();
+        mockFetchPage.mockReturnValueOnce(hold.promise)
+            .mockResolvedValueOnce(page(2, 2, [rawRow(2)]));
+        const first = new AbortController();
+        const second = new AbortController();
+        const staying = jest.fn();
+
+        const leaving = loadHubCatalogue("studio", jest.fn(), first.signal);
+        const swallowed = leaving.catch(() => undefined);
+        first.abort();
+        const stayed = loadHubCatalogue("studio", staying, second.signal);
+        hold.resolve(page(1, 2, [rawRow(1)]));
+
+        await swallowed;
+        expect((await stayed).map((row) => row.id)).toEqual([1, 2]);
+        expect(mockFetchPage).toHaveBeenCalledTimes(2);
+        expect(staying).toHaveBeenCalled();
+    });
+
+    it("rejects a caller whose signal was already aborted", async () => {
+        mockFetchPage.mockResolvedValue(page(1, 1, [rawRow(1)]));
+        const controller = new AbortController();
+        controller.abort();
+        const progress = jest.fn();
+
+        await expect(loadHubCatalogue("studio", progress, controller.signal))
+            .rejects.toMatchObject({name: "AbortError"});
+        await settle();
+        expect(progress).not.toHaveBeenCalled();
     });
 });
 

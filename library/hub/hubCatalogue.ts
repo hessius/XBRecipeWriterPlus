@@ -68,13 +68,58 @@ function isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === "AbortError";
 }
 
+/**
+ * Hand one caller the load's progress, and let it stop listening.
+ *
+ * The signal detaches this caller; it deliberately does not abort the load.
+ * The load belongs to the session rather than to whoever happened to ask for
+ * it first, and one screen going away must not cancel a partition another
+ * screen is still waiting on, nor throw away the pages already paid for.
+ */
+function attach(state: InFlightCatalogue,
+                onProgress: ProgressListener,
+                signal?: AbortSignal): Promise<HubRecipe[]> {
+    state.listeners.add(onProgress);
+
+    if (signal === undefined) {
+        return state.promise.then((rows) => [...rows]);
+    }
+
+    return new Promise<HubRecipe[]>((resolve, reject) => {
+        const detach = (): void => {
+            state.listeners.delete(onProgress);
+            signal.removeEventListener("abort", onAbort);
+        };
+        function onAbort(): void {
+            detach();
+            const aborted = new Error("Aborted");
+            aborted.name = "AbortError";
+            reject(aborted);
+        }
+        if (signal.aborted) {
+            onAbort();
+            return;
+        }
+        signal.addEventListener("abort", onAbort);
+        state.promise.then(
+            (rows) => {
+                detach();
+                resolve([...rows]);
+            },
+            (error: unknown) => {
+                detach();
+                reject(error);
+            }
+        );
+    });
+}
+
 async function load(model: MachineModel,
-                    state: InFlightCatalogue,
-                    signal?: AbortSignal): Promise<HubRecipe[]> {
+                    state: InFlightCatalogue): Promise<HubRecipe[]> {
     let pageIndex = 1;
     try {
         while (true) {
-            const page = await fetchHubPage(buildHubRequest(model, pageIndex), signal);
+            const page = await fetchHubPage(buildHubRequest(model, pageIndex));
             const vocabulary = criteriaVocabulary(heldHubCriteria());
             state.rows.push(...page.list.map((row) => normaliseHubRow(row, vocabulary)));
             state.page = pageIndex;
@@ -114,6 +159,10 @@ async function load(model: MachineModel,
  * `onProgress` is called after every page with the rows so far, so a screen can
  * draw immediately and keep drawing. Sequential on purpose: the endpoint is
  * undocumented and its rate limits are unknown.
+ *
+ * `signal` stops this caller listening. It does not abort the load: a second
+ * screen may be waiting on the same partition, and the pages already fetched
+ * are worth keeping either way. The load runs to the end and caches.
  */
 export function loadHubCatalogue(
     model: MachineModel,
@@ -128,9 +177,8 @@ export function loadHubCatalogue(
 
     const loading = inFlight.get(model);
     if (loading) {
-        loading.listeners.add(onProgress);
         if (loading.page > 0) onProgress(snapshot(loading));
-        return loading.promise.then((rows) => [...rows]);
+        return attach(loading, onProgress, signal);
     }
 
     const state: InFlightCatalogue = {
@@ -138,12 +186,15 @@ export function loadHubCatalogue(
         page: 0,
         totalPage: 0,
         total: 0,
-        listeners: new Set([onProgress]),
+        listeners: new Set(),
         promise: Promise.resolve([])
     };
-    state.promise = load(model, state, signal);
     inFlight.set(model, state);
-    return state.promise.then((rows) => [...rows]);
+    state.promise = load(model, state);
+    state.promise.catch(() => {
+        // The joiners own the failure. This only keeps it from going unhandled.
+    });
+    return attach(state, onProgress, signal);
 }
 
 /** Tests only. Production has one session and never needs to forget. */
