@@ -5,6 +5,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
+import TraceLegend, {LEGEND_SIZE} from "@/components/TraceLegend";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
@@ -24,6 +25,16 @@ type Props = {
     /** Total rendered height of the component. In non-compact mode this includes the legend and overrun rows. */
     height: number;
     plannedSeconds: number;
+    /**
+     * An axis imposed from outside, overriding the self-sizing below.
+     *
+     * Only the comparison screen sets it. Two lanes stacked one above the
+     * other are not a comparison unless they share a scale: the same 30 second
+     * mark has to be at the same x in both, and the same 200 ml at the same y.
+     * Absent, the box is sized to the longer of the plan and the run, which is
+     * what every other caller wants.
+     */
+    axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
     holding?: boolean;
     /** Driven by the screen's phase animations; plain numbers keep this testable. */
@@ -59,10 +70,8 @@ type Props = {
      */
     bypass?: BypassView;
 };
-
-/** Point size of the overrun label, and of the legend's labels. */
+/** Point size of the overrun label. */
 const OVERRUN_SIZE = 12;
-const LEGEND_SIZE = 9;
 
 /**
  * The height a row of dot-matrix text needs.
@@ -190,6 +199,7 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
  */
 export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
+    axis,
     holding = false, planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
     compact = false, stages, selectedIndex = null, onSelectStage, bypass
@@ -219,8 +229,8 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
-        maxV: Math.max(
+        maxT: axis?.maxT ?? Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
+        maxV: axis?.maxV ?? Math.max(
             planTop,
             water.length > 0 ? water[water.length - 1].v : 0,
             planTop + bypassMl
@@ -565,10 +575,10 @@ export default function BrewTrace({
             ) : chart}
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3">
-                <LegendItem colour={waterStyle.stroke} label="WATER" />
-                <LegendItem colour={cupStyle.stroke} label="CUP" dotted />
+                <TraceLegend colour={waterStyle.stroke} label="WATER" />
+                <TraceLegend colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
-                    <LegendItem colour={planStyle.stroke} label="PLAN" dashed />
+                    <TraceLegend colour={planStyle.stroke} label="PLAN" dashed />
                 )}
             </XStack>
             <XStack testID="trace-overrun-row" justifyContent="flex-end"
@@ -587,33 +597,4 @@ export default function BrewTrace({
 /** One decimal, as in `toPath`. Long SVG paths are mostly noise. */
 function round(n: number): number {
     return Math.round(n * 10) / 10;
-}
-
-/**
- * One entry in the legend.
- *
- * Beneath the graph rather than over it. Top-left is clear at the end of a
- * brew but sits on the plan dashes at the start, so overlaying it trades one
- * legibility problem for another; a dedicated row costs 14 pt and never
- * collides with anything.
- */
-function LegendItem({colour, label, dashed = false, dotted = false}: {
-    colour: string; label: string; dashed?: boolean; dotted?: boolean;
-}) {
-    return (
-        <XStack alignItems="center" gap="$1.5">
-            <Svg width={14} height={6}>
-                <Line
-                    x1={0} y1={3} x2={14} y2={3}
-                    stroke={colour}
-                    strokeWidth={2}
-                    strokeDasharray={dashed ? "3 3" : dotted ? "1 3" : undefined}
-                />
-            </Svg>
-            <DotMatrixText fontSize={LEGEND_SIZE} weight="bold" letterSpacing={1.2}
-                           color={palette.dim}>
-                {label}
-            </DotMatrixText>
-        </XStack>
-    );
 }
