@@ -415,7 +415,9 @@ export default function HubScreen() {
     const failed = browse.failed === null ? null : browse.failed;
     const screenCovered = openFacet !== null || sortOpen || roastOpen;
     const activeFacetCopy = openFacet === null ? null : FACET_COPY[openFacet];
-    const roastSheetOptions = criteria === null ? [] : roastOptions(criteria, browse.all);
+    const roastSheetOptions = criteria === null
+        ? []
+        : roastOptions(criteria, browse.without("roasts"));
     const roastSheetSelected = criteria === null
         ? []
         : selectedRoastNames(criteria, browse.query.roasts);

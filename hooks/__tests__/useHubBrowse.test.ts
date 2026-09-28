@@ -176,6 +176,31 @@ describe("useHubBrowse", () => {
         }
     });
 
+    it("counts one facet's chips against the rest of the query", async () => {
+        const all = [
+            row(1, {origin: ["Ethiopia"], process: ["Washed"]}),
+            row(2, {origin: ["Kenya"], process: ["Natural"]})
+        ];
+        const load = mockProgressiveLoad(all);
+        const {result} = await renderHook(() => useHubBrowse());
+        await act(async () => {
+            load.resolve(all);
+            await load.promise;
+        });
+
+        await act(async () => result.current.setFacet("origins", ["Ethiopia"]));
+
+        // Natural belongs to the Kenyan row, which Ethiopia has already ruled
+        // out. Offering it would promise a match and then answer NO MATCHES.
+        expect(result.current.chips("processes")).toEqual([{value: "Washed", count: 1}]);
+
+        // A facet still never narrows itself: a second origin widens.
+        expect(result.current.chips("origins")).toEqual([
+            {value: "Ethiopia", count: 1},
+            {value: "Kenya", count: 1}
+        ]);
+    });
+
     it("keeps a failed load distinct from a successful empty answer", async () => {
         const error = new Error("offline");
         mockLoad.mockImplementation(() => Promise.reject(error));

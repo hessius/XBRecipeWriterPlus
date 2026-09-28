@@ -48,6 +48,8 @@ export type HubBrowse = {
     clearQuery(): void;
     /** Commonest first, counted over `all`. Never offers a value finding zero. */
     chips(facet: HubFacet): {value: string; count: number}[];
+    /** The rows every part of the query except this one agrees with. */
+    without(facet: HubFacet | "roasts"): HubRecipe[];
     /** Try the load again after a failure. */
     retry(): void;
 };
@@ -165,8 +167,26 @@ export function useHubBrowse(): HubBrowse {
         setQuery(EMPTY_HUB_QUERY);
     }
 
+    /**
+     * The rows every question except this one already agrees with.
+     *
+     * A sheet must count over these rather than over the whole catalogue, or
+     * it breaks its own promise that a chip can never offer a value that finds
+     * nothing: with ORIGIN Ethiopia chosen, a PROCESS list counted over
+     * everything would still offer a process only a Kenyan row carries, and
+     * tapping it would answer NO MATCHES. A facet never narrows itself,
+     * because choosing a second origin widens the answer rather than narrowing
+     * it.
+     */
+    function without(facet: HubFacet | "roasts"): HubRecipe[] {
+        const relaxed: HubQuery = facet === "roasts"
+            ? {...query, roasts: []}
+            : {...query, [facet]: []};
+        return all.filter((row) => matchesHubQuery(row, relaxed));
+    }
+
     function chips(facet: HubFacet): {value: string; count: number}[] {
-        return hubFacetCounts(all, facet);
+        return hubFacetCounts(without(facet), facet);
     }
 
     function retry(): void {
@@ -197,6 +217,7 @@ export function useHubBrowse(): HubBrowse {
         setRoasts,
         clearQuery,
         chips,
+        without,
         retry
     };
 }
