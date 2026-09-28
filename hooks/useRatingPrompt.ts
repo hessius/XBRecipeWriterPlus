@@ -1,0 +1,103 @@
+import {useEffect, useState} from "react";
+import {AppState} from "react-native";
+
+import {useSetting} from "@/hooks/useSetting";
+import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
+import {brewToRate} from "@/library/brew/ratingPrompt";
+import type {StoredBrew} from "@/library/BrewDatabase";
+import type {Settings} from "@/library/Settings";
+
+/** The two things the prompt needs of the database. Injected by tests. */
+export type RatingPromptStore = {
+    lastMeasuredBrew: () => StoredBrew | null;
+    judge: (id: string, judgement: {rating?: number; note?: string}) => void;
+};
+
+type Candidate = {
+    brew: StoredBrew | null;
+    now: number;
+};
+
+/**
+ * The next-visit rating question for the bottom bar.
+ *
+ * The candidate is read on mount and when the app returns to the foreground,
+ * and deliberately nowhere else. Dismissing the live brew bar at the end of a
+ * brew must not hand the same bottom-bar slot straight to a rating question,
+ * because that reads as the bar refusing to go away. Waiting until the next
+ * visit is the feature: the user has had a chance to taste the cup, and the
+ * prompt appears because they came back rather than because the brew screen
+ * finished.
+ *
+ * The first database read happens in a lazy state initialiser, not during
+ * render, and every later read happens inside an app-state subscription
+ * callback. That keeps SQLite out of render while still letting tests inject a
+ * tiny store instead of opening the native database.
+ *
+ * Nothing here writes rating columns by hand. `BrewDatabase.judge` is the one
+ * verdict write path, and it pins the brew in the same statement, so a verdict
+ * whose trace the next retention sweep would have taken is protected for free.
+ */
+export function useRatingPrompt(
+    store?: RatingPromptStore,
+    settings?: Settings
+): {
+    brew: StoredBrew | null;
+    rate: (rating: number) => void;
+    annotate: (note: string) => void;
+    dismiss: () => void;
+} {
+    const [enabled] = useSetting("askForRatings", settings);
+    const [dismissedId, setDismissedId] = useSetting("ratingPromptDismissed", settings);
+    const database = () => store ?? sharedBrewDatabase();
+    const [candidate, setCandidate] = useState<Candidate>(() => ({
+        brew: database().lastMeasuredBrew(),
+        now: Date.now()
+    }));
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", (next) => {
+            if (next === "active") {
+                setCandidate({brew: database().lastMeasuredBrew(), now: Date.now()});
+            }
+        });
+        return () => subscription.remove();
+        // The subscription is intentionally one per mount. `database` is a
+        // render-local resolver so production can avoid opening SQLite during
+        // render; adding it here would turn unrelated renders into app-state
+        // resubscriptions without making the foreground read more correct.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const brew = brewToRate({
+        brew: candidate.brew,
+        now: candidate.now,
+        dismissedId,
+        enabled
+    });
+
+    function rate(rating: number): void {
+        if (brew === null) return;
+        database().judge(brew.id, {rating});
+        // Written through and held locally so the bar leaves on this same
+        // render pass, not on the next foreground read.
+        setCandidate((was) => ({...was, brew: {...brew, rating}}));
+    }
+
+    function annotate(note: string): void {
+        if (brew === null) return;
+        database().judge(brew.id, {note});
+        // Same local echo as `rate`: the screen should agree with the user's
+        // action immediately rather than waiting for the next app visit.
+        setCandidate((was) => ({...was, brew: {...brew, note}}));
+    }
+
+    function dismiss(): void {
+        if (brew === null) return;
+        setDismissedId(brew.id);
+    }
+
+    return {brew, rate, annotate, dismiss};
+}
+
+export default useRatingPrompt;
