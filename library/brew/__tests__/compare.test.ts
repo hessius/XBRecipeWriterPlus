@@ -166,6 +166,15 @@ describe("planDrift", () => {
         expect(planDrift(undefined, [stage()])).toEqual({grade: "none", fields: []});
         expect(planDrift([stage()], undefined)).toEqual({grade: "none", fields: []});
     });
+
+    it("grades legacy zero-default plan fields the same way the line is drawn", () => {
+        const legacy = {
+            ...stage(), flowRate: undefined, pauseTime: undefined
+        } as unknown as PlanStage;
+        const current = stage({flowRate: 0, pauseTime: 0});
+
+        expect(planDrift([legacy], [current])).toEqual({grade: "none", fields: []});
+    });
 });
 
 function stream(...rows: [number, number][]): BrewSample[] {
@@ -344,6 +353,49 @@ describe("compareBrews", () => {
         );
         expect(c.rows.find((row) => row.label === "FERMENT"))
             .toEqual({label: "FERMENT", a: "Anaerobic", b: "Lactic", shared: false});
+    });
+
+    it("resolves pod origin and process when the brew has no user bean values", () => {
+        const c = compareBrews(
+            {
+                record: brew({
+                    coffee: {
+                        name: "House pod",
+                        origin: "Huila",
+                        process: "Washed"
+                    }
+                }),
+                samples: []
+            },
+            {
+                record: brew({
+                    id: "b",
+                    coffee: {
+                        name: "House pod",
+                        origin: "Huila",
+                        process: "Washed"
+                    }
+                }),
+                samples: []
+            }
+        );
+
+        expect(c.rows.find((row) => row.label === "ORIGIN"))
+            .toEqual({label: "ORIGIN", a: "Huila", b: "Huila", shared: true});
+        expect(c.rows.find((row) => row.label === "PROCESS"))
+            .toEqual({label: "PROCESS", a: "Washed", b: "Washed", shared: true});
+    });
+
+    it("does not split matching drawn plans over legacy zero-default fields", () => {
+        const legacy = {
+            ...stage(), flowRate: undefined, pauseTime: undefined
+        } as unknown as PlanStage;
+        const c = compareBrews(
+            {record: brew({plan: [legacy]}), samples: []},
+            {record: brew({id: "b", plan: [stage({flowRate: 0, pauseTime: 0})]}), samples: []}
+        );
+
+        expect(c.drift).toEqual({grade: "none", fields: []});
     });
 
     it("words the outcome, rather than showing the stored value", () => {

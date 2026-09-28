@@ -1,6 +1,7 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
-import {poursFromPlan, type BrewSample, type PlanStage} from "./BrewRecord";
+import {numeric, poursFromPlan, type BrewSample, type PlanStage} from "./BrewRecord";
+import {resolvedOrigin, resolvedProcess} from "./beanTags";
 import {formatBrewDuration} from "./brewFormat";
 import {countsAsBrewed, isMeasured} from "./brewPopulation";
 import {
@@ -169,6 +170,20 @@ export const PLAN_STAGE_COUNT_FIELD = "stages";
 
 export type PlanStageField = keyof PlanStage | typeof PLAN_STAGE_COUNT_FIELD;
 
+function planStageValue(stage: PlanStage, field: keyof PlanStage, index: number): number {
+    switch (field) {
+        case "flowRate":
+        case "pauseTime":
+            // Mirrors `poursFromPlan`, so drift grading agrees with the plan
+            // line old rows draw after hydration.
+            return numeric(stage[field]) ? stage[field] : 0;
+        case "pourNumber":
+            return numeric(stage.pourNumber) ? stage.pourNumber : index + 1;
+        default:
+            return stage[field];
+    }
+}
+
 export function planDrift(
     subject: PlanStage[] | undefined, reference: PlanStage[] | undefined
 ): {grade: PlanDrift; fields: PlanStageField[]} {
@@ -184,7 +199,10 @@ export function planDrift(
 
     const fields: PlanStageField[] = [];
     for (const field of [...SHAPE_FIELDS, ...DETAIL_FIELDS]) {
-        const differs = subject.some((stage, i) => stage[field] !== reference[i][field]);
+        const differs = subject.some(
+            (stage, i) => planStageValue(stage, field, i)
+                !== planStageValue(reference[i], field, i)
+        );
         if (differs) fields.push(field);
     }
 
@@ -434,9 +452,9 @@ const FIELDS: Field[] = [
     {label: "GRIND", read: (r) => r.grindSize === undefined ? null : String(r.grindSize)},
     {label: "RPM", read: (r) => r.grinderRpm === undefined ? null : String(r.grinderRpm)},
     {label: "RATING", read: (r) => !r.rating ? null : `${r.rating} of 5`},
-    {label: "ORIGIN", read: (r) => r.origin ?? null},
+    {label: "ORIGIN", read: (r) => resolvedOrigin(r) ?? null},
     {label: "ROAST", read: (r) => r.roast ?? null},
-    {label: "PROCESS", read: (r) => r.process ?? null},
+    {label: "PROCESS", read: (r) => resolvedProcess(r) ?? null},
     {label: "FERMENT", read: (r) => r.fermentation ?? null},
     {
         label: "TAGS",
