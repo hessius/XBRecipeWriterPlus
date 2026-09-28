@@ -132,6 +132,7 @@ export default function SettingsScreen({settings}: Props) {
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
     // Owned by the library rail, not shown as rows here. Read anyway, because a
@@ -187,7 +188,7 @@ export default function SettingsScreen({settings}: Props) {
             temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, animateBrewChart, brewTraceRetention,
+            machineAutoStart, animateBrewChart, askForRatings, brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
             libraryView, invertAutoShelves, hiddenShelves, myShelves
         };
@@ -282,6 +283,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.animateBrewChart === "boolean") {
             setAnimateBrewChart(incoming.animateBrewChart);
+        }
+        if (typeof incoming.askForRatings === "boolean") {
+            setAskForRatings(incoming.askForRatings);
         }
         if (typeof incoming.brewTraceRetention === "number") {
             setBrewTraceRetention(incoming.brewTraceRetention);

@@ -50,6 +50,7 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     const {machine, status, error, remembered, connect, forget} = useMachine();
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
@@ -132,6 +133,11 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                 description="When off, each phase change holds its end state immediately. The system Reduced Motion switch also disables animation independently."
                 value={animateBrewChart}
                 onChange={setAnimateBrewChart}/>
+
+            <SettingsToggleRow
+                label="Ask how a brew was"
+                description="Shows the last brew's stars along the bottom next time you open the app, for up to 16 hours."
+                value={askForRatings} onChange={setAskForRatings}/>
 
             <SettingsChoiceRow
                 label="Keep raw brew traces"
