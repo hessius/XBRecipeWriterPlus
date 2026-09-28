@@ -152,7 +152,22 @@ exists to make visible.
   recipe with `cupType = OTHER` must not appear on `omniDripper`. The bug this
   spec fixes is exactly the two being confused, so the test says so directly.
 
-No hardware confirmation is required. #151 asked for one because it was
-proposing to change a byte; this changes no byte, and the naming it corrects is
-already attested by the report, the cloud API's own label, and the recorded cup
-weight ranges.
+No hardware confirmation is required **for the bytes**, and none is claimed
+**for the behaviour**. The two are worth separating, because #151 conflated
+them and so does a reading of this document that stops at the heading.
+
+The byte values need no device check: this branch changes none of them, so no
+card it writes differs by a single bit from one `main` writes today. That is
+checkable from the diff rather than from a machine.
+
+The behaviour claim, that OTHER is the cup type the machine brews without
+overflow protection, does not follow from the bytes and is not derived from
+them. It rests on the owner's report, corroborated by the cloud API naming
+value 2 the dripper. The cloud API does not document overflow protection and is
+not offered as though it did; it establishes which cup has which *name*, and
+the report supplies the behaviour. A device check would upgrade that, and is
+welcome, but it gates nothing here for one reason: **picking Other wrote `0x01`
+before this branch and writes `0x01` after.** The machine does exactly what it
+did. The only thing that changes is whether the app warns the user first, and
+the copy being replaced warned them the wrong way round, which is the surprise
+#151 was reported about.

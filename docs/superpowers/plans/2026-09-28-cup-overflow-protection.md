@@ -102,16 +102,20 @@ with:
 /**
  * The cup type byte, and which of them brews without overflow protection.
  *
- * `OTHER` is the one. Omni is xBloom's own dripper, so the machine knows the
- * shape of the vessel and can stop the water before it comes over the rim:
- * `docs/machine-integration/cloud-api.md` calls the cloud value
- * `2 = Omni/Dripper`, and `docs/machine-integration/ble-protocol.md` records a
- * cup weight range of 90-110 g for it against 80-200 g for "other". A 200 g
- * ceiling is not protection. A third-party brewer is one the machine cannot
- * measure, so it does not try.
+ * `OTHER` is the one. Omni is xBloom's own dripper, a vessel the machine knows
+ * the shape of, so it can stop the water before it comes over the rim;
+ * `docs/machine-integration/cloud-api.md` names the cloud value
+ * `2 = Omni/Dripper`. A third-party brewer is one the machine has never been
+ * told the shape of, so it does not try.
  *
- * This said the opposite until #151. Only the comment was wrong; the bytes
- * were always right, and `Recipe.card.test.ts` now holds them.
+ * Only a card carries the distinction. Cup type is not in the BLE recipe blob,
+ * so a brew started over Bluetooth sends the same cup frame whichever of the
+ * three coffee cups the recipe names, and a tea brew sends no cup frame at
+ * all. `setCupFrame` choosing one width is not in conflict with any of this.
+ *
+ * This comment said the opposite until #151, which proposed swapping the two
+ * bytes to match it. The bytes were always right; `Recipe.card.test.ts` holds
+ * all four and carries the argument.
  */
 export const CUP_TYPE = {
     XPOD:  0x00,
@@ -718,7 +722,7 @@ Expand the body from the spec at `docs/superpowers/specs/2026-09-28-cup-overflow
 
 ## Notes for the implementer
 
-**No hardware test is needed.** #151 asked for one because it proposed changing a byte written to a genuine card. This branch changes no byte. The naming it corrects is attested two ways: the report itself, and xBloom's own cloud label `2 = Omni/Dripper`. The cup weight ranges in `docs/machine-integration/ble-protocol.md` are **not** a third attestation, and must not be cited as one: that section is headed a corroborated conflict, only one of the three sources splits its values by cup type, and our own `setCupFrame()` sends the same widest range for every coffee brew. See the spec for the full reasoning.
+**No hardware test gates this, but be precise about why.** The *bytes* need none: this branch changes none of them, so no card it writes differs by a bit from one `main` writes, which the diff shows without a machine. The *behaviour* claim, that OTHER brews without protection, does not follow from the bytes and is not derived from them; it rests on the owner's report, corroborated by xBloom's own cloud label `2 = Omni/Dripper` naming which cup is the dripper. What makes it safe to ship ahead of a device check is that picking Other wrote `0x01` before and writes `0x01` after, so the machine's behaviour is untouched and only the warning changes. The cup weight ranges in `docs/machine-integration/ble-protocol.md` are **not** a further attestation and must not be cited as one: that section is headed a corroborated conflict, only one of its three sources splits values by cup type, and our own `setCupFrame()` sends the same widest range for every coffee brew. See the spec for the full reasoning.
 
 **Leave the legacy migration alone.** `library/Recipe.ts:280` reads `else if (this.cupType === 0x04) { this.cupType = 0x01; // 0x01 is for Other }`. #151 raised it as a question that could not be settled from the comment, because a swap would have made the byte and the name disagree. With no swap both readings give the same answer, so it is correct exactly as written. Do not touch it, and do not add a migration anywhere else: no stored recipe's cup type changes.
 
