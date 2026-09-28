@@ -6,7 +6,7 @@
  * `Recipe` only at save, through the share-link importer, which is also the
  * only thing that knows how to fill in everything this drawing does not need.
  */
-import Pour, {POUR_PATTERN} from "@/library/Pour";
+import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 import type {HubPour} from "./hubApi";
 
@@ -29,10 +29,18 @@ function patternOf(wire: number): number {
 /**
  * Build the pours.
  *
- * Flow rate and agitation are deliberately left at `Pour`'s defaults. The
- * catalogue does not carry either, `pourSeconds` already falls back to the
- * default flow for a pour that has no rate, and a number written in here would
- * be drawn as though the recipe had asked for it.
+ * Flow rate is deliberately left at `Pour`'s default. The catalogue does not
+ * carry one, `pourSeconds` already falls back to the default flow for a pour
+ * that has no rate, and a number written in here would be drawn as though the
+ * recipe had asked for it.
+ *
+ * Agitation is set to ALL_OFF rather than left alone, and that difference
+ * matters. `Pour.agitation` defaults to -1, and every bit of -1 is set, so
+ * `getAgitationBefore` and `getAgitationAfter` both answer true on a pour
+ * nobody set. `BrewStageRung` reads exactly those two, so an unset stage would
+ * draw a shake before and a shake after on every catalogue recipe in the list.
+ * The detail endpoint sends no vibration flags at all, so off is the only
+ * honest reading, and it is what the share-link importer writes too.
  */
 export function hubPours(plan: readonly HubPour[] | null | undefined): Pour[] {
     if (!plan) return [];
@@ -41,7 +49,7 @@ export function hubPours(plan: readonly HubPour[] | null | undefined): Pour[] {
         stage.volume,
         stage.temperature,
         undefined,
-        undefined,
+        AGITATION.ALL_OFF,
         patternOf(stage.pattern),
         stage.pausing
     ));

@@ -6,7 +6,7 @@
  */
 import type {HubPour} from "@/library/hub/hubApi";
 import {hubPours} from "@/library/hub/hubStages";
-import {POUR_PATTERN} from "@/library/Pour";
+import {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 function stage(over: Partial<HubPour> = {}): HubPour {
     return {theName: "Bloom", volume: 60, temperature: 95, pausing: 40, pattern: 3, ...over};
@@ -45,16 +45,26 @@ describe("reading a catalogue stage plan", () => {
         expect(hubPours([stage()])[0].flowRate).toBeLessThanOrEqual(0);
     });
 
-    it("leaves agitation alone, because the catalogue does not say", () => {
-        // `Pour.agitation` starts at -1, and every bit of -1 is set, so
-        // reading `agitationBefore` off an unset pour returns true. The ladder
-        // does not read it; nothing here should set it either way.
-        expect(hubPours([stage()])[0].agitation).toBe(-1);
-    });
-
     it("survives a plan the server did not send", () => {
         expect(hubPours(null)).toEqual([]);
         expect(hubPours(undefined)).toEqual([]);
         expect(hubPours([])).toEqual([]);
     });
 });
+
+/**
+ * The one that would have shipped. `Pour.agitation` starts at -1, every bit of
+ * -1 is set, and `BrewStageRung` asks the two boolean getters, so a stage
+ * nobody set draws a shake at both ends. The catalogue sends no vibration
+ * flags, so both must read false.
+ */
+it("does not claim an agitation the catalogue never sent", () => {
+    const pours = hubPours([
+        {theName: "Bloom", volume: 60, temperature: 95, pausing: 40, pattern: 3}
+    ]);
+
+    expect(pours[0].getAgitation()).toBe(AGITATION.ALL_OFF);
+    expect(pours[0].getAgitationBefore()).toBe(false);
+    expect(pours[0].getAgitationAfter()).toBe(false);
+});
+
