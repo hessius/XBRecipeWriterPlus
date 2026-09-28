@@ -50,7 +50,15 @@ export class FakeTransport implements MachineTransport {
     public connectedTo: string | null = null;
     public devices: FoundMachine[] = [{id: "AA:BB", name: "XBLOOM TEST"}];
     public modelNumber = "";
-    public advertisedName = "XBLOOM TEST";
+    /**
+     * Empty until a scan, exactly as the real transport is.
+     *
+     * Seeded with a name here would make Task 10's central case pass for the
+     * wrong reason: a returning user reconnects without scanning, so an empty
+     * name is the normal state and the rule under test is that it must not
+     * overwrite what an earlier scan learned.
+     */
+    public advertisedName = "";
     /** Set to make `connect` reject, for the taken-link case. */
     public refuseConnection = false;
     /**
@@ -107,6 +115,9 @@ export class FakeTransport implements MachineTransport {
     }
 
     async scan(): Promise<FoundMachine[]> {
+        // As the real transport does: a name is only ever learned by a scan,
+        // and it is the machine `attemptLink` will take, which is the first.
+        if (this.devices.length > 0) this.advertisedName = this.devices[0].name;
         return this.devices;
     }
 

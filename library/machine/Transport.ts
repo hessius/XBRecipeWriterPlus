@@ -259,7 +259,12 @@ export class BleTransport implements MachineTransport {
                     (uuid) => uuid.toUpperCase() === MACHINE_SERVICE.toUpperCase()
                 );
                 if (matchesService || name.toUpperCase().startsWith(MACHINE_NAME_PREFIX)) {
-                    this.advertisedName = name;
+                    // The first match only. `stop()` merely resolves a promise,
+                    // so the subscription is still live for a microtask or two
+                    // and a second machine in range can still be delivered --
+                    // and `attemptLink` takes `found[0]`, so last-match-wins
+                    // would record the name of the machine it did not connect to.
+                    if (found.size === 0) this.advertisedName = name;
                     found.set(peripheral.id, {id: peripheral.id, name});
                     stop();
                 }
@@ -351,6 +356,14 @@ export class BleTransport implements MachineTransport {
      *
      * A refusal leaves the field empty rather than throwing, and empty means
      * "this link did not learn", not "the machine has no model number".
+     * Neither reading is cleared on disconnect, so between links both still
+     * describe the machine they were taken from, which is what makes them
+     * evidence rather than state.
+     *
+     * The decode is Latin-1 by construction: `fromCharCode` is applied per
+     * byte, and DIS strings are UTF-8. No model number is likely to need more,
+     * but it does mean `STUDIO_MODEL_STRINGS` must be filled from a value this
+     * code produced rather than transcribed off a datasheet or a label.
      */
     private async readModelNumber(id: string): Promise<void> {
         try {

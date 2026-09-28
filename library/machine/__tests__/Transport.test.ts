@@ -173,7 +173,10 @@ describe("connecting", () => {
     beforeEach(() => jest.clearAllMocks());
 
     it("reads what the machine calls itself", async () => {
-        (BleManager.read as jest.Mock).mockResolvedValueOnce([0x58, 0x31, 0x35]);
+        // NUL-padded, because a fixed-width GATT string characteristic is
+        // padded to its declared length. Unstripped, this would never compare
+        // equal to a string constant and detection would silently never fire.
+        (BleManager.read as jest.Mock).mockResolvedValueOnce([0x58, 0x31, 0x35, 0x00, 0x00]);
         const transport = new BleTransport();
 
         await transport.connect("device-1");
@@ -192,6 +195,10 @@ describe("connecting", () => {
 
         await expect(transport.connect("device-1")).resolves.toBeUndefined();
         expect(transport.modelNumber).toBe("");
+        // Resolving is not the claim. The claim is that it still brews, which
+        // means the link is usable -- so write a frame down it.
+        await expect(transport.write(buildType1Bytes(8001, new Uint8Array(4)))).resolves
+            .toBeUndefined();
     });
 
     it("clears a link the system is still holding and tries once more", async () => {
