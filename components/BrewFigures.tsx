@@ -18,6 +18,17 @@ type Props = {
      * 245 ml of brew water, which it did not.
      */
     bypass?: number;
+    /**
+     * Seconds the bed took to finish after the last water, or null when the
+     * brew has no drawdown to report.
+     *
+     * Its own line under the three rather than a fourth column, for the same
+     * reason the bypass is a badge: at 28 pt a fourth column is too tight to
+     * read on a narrow phone. A line also lets it carry the word, which it
+     * needs -- a second clock beside TIME with no label says nothing about
+     * which of the two it is.
+     */
+    drawdown?: number | null;
 };
 
 /** `2:06`. Floored, not rounded: a clock that shows 2:07 at 2:06.6 is wrong. */
@@ -51,7 +62,9 @@ function Figure({label, value, color, badge}: {
  * Rounded to whole units because the scale reports tenths and they flicker;
  * a figure this size that changes every 100 ms cannot be read at all.
  */
-export default function BrewFigures({water, cup, seconds, accent, bypass}: Props) {
+export default function BrewFigures(
+    {water, cup, seconds, accent, bypass, drawdown = null}: Props
+) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
         <XStack testID="figures-bypass"
                 paddingHorizontal={4} paddingVertical={1}
@@ -64,11 +77,23 @@ export default function BrewFigures({water, cup, seconds, accent, bypass}: Props
     );
 
     return (
-        <XStack gap="$3">
-            <Figure label="WATER" value={String(Math.round(water))} color={accent}
-                    badge={badge} />
-            <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
-            <Figure label="TIME" value={clock(seconds)} color={palette.text} />
-        </XStack>
+        <YStack gap="$1.5">
+            <XStack gap="$3">
+                <Figure label="WATER" value={String(Math.round(water))} color={accent}
+                        badge={badge} />
+                <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
+                <Figure label="TIME" value={clock(seconds)} color={palette.text} />
+            </XStack>
+            {/* Absent, not zero, when it was not measured. A brew that was
+                cancelled never drew down and a record written before the
+                boundary was kept cannot say, and printing 0:00 for either
+                would invent a figure somebody might dial a grind against. */}
+            {drawdown !== null && (
+                <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
+                               letterSpacing={1.6} color={palette.dim}>
+                    {`DRAWDOWN ${clock(drawdown)}`}
+                </DotMatrixText>
+            )}
+        </YStack>
     );
 }

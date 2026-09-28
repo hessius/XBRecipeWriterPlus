@@ -7,8 +7,8 @@ import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_CEILING_MS, SETTLE_FLAT_MS}
 import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import type {BrewRecord, BrewSample} from "./BrewRecord";
-import {finalOutcome, newBrewId, planFromPours, stageWaterFromSamples,
-        stallsFromSamples, summarise} from "./BrewRecord";
+import {drawdownFrom, finalOutcome, newBrewId, planFromPours,
+        stageWaterFromSamples, stallsFromSamples, summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
 import {NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
 
@@ -361,6 +361,11 @@ export default class BrewRecorder {
             accent: resolveAccent(recipe),
             startedAt: this.startedAt,
             pouringAt: this.pouringAt,
+            // Where the last stage stopped pouring, on the sample clock. Read
+            // from the stream rather than stamped when `settling` opened: the
+            // machine announces that on BREWER_STOP, a minute after the bed
+            // actually began to finish on a recipe with a bypass.
+            drawdownAt: drawdownFrom(this.collected, stages),
             endedAt: this.clock(),
             outcome: finalOutcome(phase.name, figures.waterTotal - (bypass?.delivered ?? 0), plannedWater),
             failure,

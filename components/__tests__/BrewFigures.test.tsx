@@ -50,6 +50,26 @@ describe("BrewFigures", () => {
         expect(screen.getByText("+5")).toBeTruthy();
     });
 
+    it("gives the drawdown its own labelled line", async () => {
+        // On its own line rather than as a fourth column, and carrying the
+        // word: a second clock beside TIME with no label says nothing about
+        // which of the two it is.
+        await renderWithProviders(
+            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
+                         drawdown={22} />
+        );
+        expect(screen.getByText("DRAWDOWN 0:22")).toBeTruthy();
+    });
+
+    it("says nothing about a drawdown it has not been given", async () => {
+        // A cancelled brew never drew down and an old record cannot say. 0:00
+        // for either would invent a figure somebody might dial a grind by.
+        await renderWithProviders(
+            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
+        );
+        expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+
     it("shows no badge without a bypass", async () => {
         await renderWithProviders(
             <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
