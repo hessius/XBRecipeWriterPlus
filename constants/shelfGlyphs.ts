@@ -12,11 +12,16 @@ import {authorFromFilterId, isStockFilter} from "@/library/libraryFilters";
  * stock filter -- an auto shelf with no mark would be a blank square in a grid
  * of drawings, which reads as a bug rather than as a shelf.
  *
- * Only auto shelves appear here. A manual shelf is a tag somebody typed, so
- * there is no glyph to have drawn for it and none is invented; it takes the
- * mosaic of its members instead.
+ * Only auto shelves appear here. A manual or tag shelf is a tag somebody
+ * typed, so there is no glyph to have drawn for it and none is invented; it
+ * takes the mosaic of its members instead.
  */
 export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
+    // The star `favourite` already draws on a card, not a second one. The mark
+    // means "a recipe the user picked out" wherever it appears, and a shelf of
+    // them is the same mark at a different size; drawing a `shelfFavourites`
+    // beside it would be two stars free to drift apart.
+    favourites:    "favourite",
     tea:           "shelfTea",
     pods:          "shelfPods",
     overflowOff:   "shelfOverflowOff",
@@ -32,7 +37,10 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     slowBrew:      "shelfSlowBrew",
     hot:           "shelfHot",
     mine:          "shelfMine",
-    recentlyAdded: "shelfRecent"
+    mostBrewed:    "shelfMostBrewed",
+    neverBrewed:   "shelfNeverBrewed",
+    recentlyAdded: "shelfRecent",
+    allRecipes:    "shelfAllRecipes"
 };
 
 /**
@@ -49,8 +57,8 @@ export const AUTHOR_SHELF_GLYPH: DotIconName = "shelfAuthor";
  * The glyph for a shelf id, or null for anything that is not an auto shelf.
  *
  * Every auto shelf has one, including the per-author shelves, because auto is
- * the kind of shelf that carries a glyph. A null here means a manual shelf,
- * and a manual shelf takes the mosaic instead.
+ * the kind of shelf that carries a glyph. A null here means a non-auto shelf,
+ * and a non-auto shelf takes the mosaic instead.
  */
 export function shelfGlyph(id: string): DotIconName | null {
     if (isStockFilter(id)) return SHELF_GLYPHS[id];

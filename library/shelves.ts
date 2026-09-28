@@ -1,7 +1,8 @@
 import {
     authorFilterId, availableFilters, filterLabel, STOCK_FILTERS, STOCK_FILTER_ORDER,
     tagFilterId, type FilterId
-} from "./libraryFilters";
+} from "@/library/libraryFilters";
+import {canonicalShelfId} from "@/library/hiddenShelves";
 
 /**
  * A shelf is a query, and both kinds of query already exist.
@@ -33,23 +34,36 @@ export type Shelf = {
      * no sign anything had happened.
      */
     id: string;
-    /** Doto caps for an auto shelf; the user's own spelling for a manual one. */
+    /** Doto caps for a stock shelf; the user's own spelling for an authored one. */
     label: string;
-    kind: "auto" | "manual";
+    /**
+     * Which of the grid's three sections it belongs to.
+     *
+     * `manual` is a shelf the user made through NEW SHELF, named in the
+     * `myShelves` setting. `tag` is every other tag: a word typed onto a recipe
+     * in the editor, which nobody assembled into anything. `auto` is a question
+     * the app asks of the library.
+     *
+     * The line between `manual` and `tag` cannot be drawn from the data, which
+     * is the whole reason `myShelves` exists: both write the same row in
+     * `recipe_tags`.
+     */
+    kind: "manual" | "tag" | "auto";
     count: number;
 };
 
 /**
- * The shelves worth drawing, manual first, then auto.
+ * The shelves worth drawing, user-made first, then tags, then auto.
  *
- * Suppression is applied to the auto half only, through `availableFilters`,
- * which is the single gate the rail's chips also call. The two cannot drift
- * about which auto shelves exist because neither restates the rule.
+ * Suppression is applied to shelves the app invented, through
+ * `availableFilters`, which is the single gate the rail's chips also call. The
+ * two cannot drift about which invented shelves exist because neither restates
+ * the rule.
  *
- * Nothing suppresses a manual shelf. A shelf of two that a person built is a
- * decision; suppression is for shelves the app invented, and a manual shelf of
- * one is the case the design most wants to keep, because it is the shelf
- * someone has only just started.
+ * Nothing suppresses a shelf the user made through NEW SHELF. A shelf of two
+ * that a person built is a decision; suppression is for shelves the app
+ * invented, and a manual shelf of one is the case the design most wants to
+ * keep, because it is the shelf someone has only just started.
  *
  * `applied` is passed through so a shelf the user is currently standing in is
  * always drawn, whatever its count. Deleting recipes can push a filter over the
@@ -64,12 +78,38 @@ export function buildShelves(input: {
     authorCounts?: readonly {author: string; count: number}[];
     librarySize: number;
     applied?: readonly string[];
+    /** Parsed from the `myShelves` setting. */
+    myShelves?: readonly string[];
 }): Shelf[] {
-    const {filterCounts, tagCounts, authorCounts = [], librarySize, applied = []} = input;
+    const {
+        filterCounts, tagCounts, authorCounts = [], librarySize, applied = [], myShelves = []
+    } = input;
 
-    const manual: Shelf[] = tagCounts.map(({tag, count}) => ({
-        id: tagFilterId(tag), label: tag, kind: "manual", count
-    }));
+    const mine = new Set(myShelves.map(canonicalShelfId));
+
+    const manual: Shelf[] = [];
+    const tagged: Record<string, number> = {};
+    for (const {tag, count} of tagCounts) {
+        const id = tagFilterId(tag);
+        // Folded before comparing, because the stored list is canonical and
+        // this id carries whichever spelling the tag was written in.
+        if (mine.has(canonicalShelfId(id))) {
+            manual.push({id, label: tag, kind: "manual", count});
+        } else {
+            tagged[id] = count;
+        }
+    }
+
+    // A tag nobody made into a shelf is a shelf the app invented, exactly like
+    // an author shelf, so it goes through the same gate: the floor, the
+    // ceiling, and the passthrough that keeps an applied shelf on screen.
+    const byTag: Shelf[] = availableFilters(tagged, librarySize, applied)
+        .map((id) => ({
+            id,
+            label: filterLabel(id),
+            kind: "tag" as const,
+            count: tagged[id] ?? 0
+        }));
 
     // Ordered by STOCK_FILTER_ORDER rather than by the count map's own key
     // order, so the grid lists auto shelves in the same order the chips do. A
@@ -107,5 +147,12 @@ export function buildShelves(input: {
             count: authorTotals[id] ?? 0
         }));
 
-    return [...manual, ...auto, ...byAuthor];
+    // ALL RECIPES is pulled out of the stock run and put last, after the author
+    // shelves, because it is the way out of every category rather than one more
+    // of them. Its position is the only thing about it that is special; its
+    // count, its clause and its art all come through the ordinary path.
+    const escape = auto.filter((shelf) => shelf.id === "allRecipes");
+    const stock = auto.filter((shelf) => shelf.id !== "allRecipes");
+
+    return [...manual, ...byTag, ...stock, ...byAuthor, ...escape];
 }

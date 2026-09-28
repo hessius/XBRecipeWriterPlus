@@ -43,20 +43,23 @@ export default function ShelfTile({
      * mark's square goes quiet. A preference.
      *
      * Only the grid sets this, and only on the auto section. A manual shelf's
-     * mark is made of its members' own colours, so there is no single accent to
-     * lift out of it and nothing left in the square if one were.
+     * or tag shelf's mark is made of its members' own colours, so there is no
+     * single accent to lift out of it and nothing left in the square if one
+     * were.
      */
     inverted?: boolean;
     onPress: () => void;
     /**
-     * Open what can be done to this shelf. Manual shelves only: an auto shelf
-     * is a rule the app wrote, with no name of the user's to change and nothing
-     * of theirs to delete.
+     * Open what can be done to this shelf. Manual shelves get their full
+     * member/name/delete menu; tag shelves get the one verb that belongs to a
+     * tag here, promotion into the user's own shelves. Auto shelves do not use
+     * this menu: they are a rule the app wrote, with no name of the user's to
+     * change and nothing of theirs to delete.
      *
      * Reached three ways, and deliberately so. A glyph inside the tile, because
      * a long press is not discoverable and editing is the only way a recipe
-     * ever comes off a shelf -- a shelf with no drawn way out is a tag the user
-     * can never undo. A long press on the tile itself, for the hand that
+     * ever comes off a manual shelf -- a shelf with no drawn way out is a tag
+     * the user can never undo. A long press on the tile itself, for the hand that
      * already knows. And an accessibility action, because the glyph is nested
      * inside this one element and a screen reader cannot reach it.
      */
@@ -73,8 +76,11 @@ export default function ShelfTile({
     onHide?: () => void;
 }) {
     const manual = shelf.kind === "manual";
+    const namedByUser = shelf.kind !== "auto";
     const recipes = shelf.count === 1 ? "1 recipe" : `${shelf.count} recipes`;
-    const kind = manual ? "your shelf" : "auto shelf";
+    let kind = "auto shelf";
+    if (manual) kind = "your shelf";
+    else if (shelf.kind === "tag") kind = "tag shelf";
     // The accent the mark would have filled its square with. Inverting moves it
     // out here, so the two have to read it from the same place or the tile and
     // its square would disagree about which colour this shelf is.
@@ -139,7 +145,7 @@ export default function ShelfTile({
                       * the matrix face would recase it into something they did
                       * not type.
                       */}
-                    {manual ? (
+                    {namedByUser ? (
                         <Text fontSize={14} fontWeight="600" color={palette.text}
                               numberOfLines={1}>
                             {shelf.label}

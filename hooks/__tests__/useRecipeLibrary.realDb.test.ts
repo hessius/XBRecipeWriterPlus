@@ -226,7 +226,7 @@ describe("setShelfMembers against a real database", () => {
             outcome = result.current.setShelfMembers("Mornings", [uuid]);
         });
 
-        expect(outcome).toEqual({full: 1, failed: 0});
+        expect(outcome).toEqual({full: 1, failed: 0, members: 0, oldMembers: 0});
         expect(result.current.tagCounts.map((entry) => entry.tag))
             .not.toContain("Mornings");
     });
@@ -245,7 +245,7 @@ describe("setShelfMembers against a real database", () => {
             outcome = result.current.setShelfMembers("Mornings", [uuid]);
         });
 
-        expect(outcome).toEqual({full: 0, failed: 1});
+        expect(outcome).toEqual({full: 0, failed: 1, members: 0, oldMembers: 0});
     });
 
     it("reports nothing when it wrote everything it was asked to", async () => {
@@ -259,7 +259,7 @@ describe("setShelfMembers against a real database", () => {
             outcome = result.current.setShelfMembers("Mornings", [uuid]);
         });
 
-        expect(outcome).toEqual({full: 0, failed: 0});
+        expect(outcome).toEqual({full: 0, failed: 0, members: 1, oldMembers: 0});
     });
 });
 
@@ -332,10 +332,36 @@ describe("renaming a shelf against a real database", () => {
                                                  all.map((r) => r.uuid));
         });
 
-        expect(outcome).toEqual({full: 1, failed: 0});
+        // Ethiopia took the new name, so the shelf exists; Guji never carried
+        // the old one, so nothing is left behind under it.
+        expect(outcome).toEqual({full: 1, failed: 0, members: 1, oldMembers: 0});
         expect(tagsOf(db, "Ethiopia")).toEqual(["Before work"]);
         expect(tagsOf(db, "Guji")).toHaveLength(20);
         expect(tagsOf(db, "Guji")).not.toContain("Before work");
+    });
+
+    it("reports the old shelf still standing when a member was refused", async () => {
+        // The case provenance turns on. A refused row is put back under the old
+        // name, so a partly refused rename leaves two shelves, and the screen
+        // cannot tell which of them to call the user's own without being told.
+        const db = new RecipeDatabase();
+        db.insertRecipe(tagged("Ethiopia", ["Mornings"]));
+        db.insertRecipe(tagged("Kenya", ["Mornings"]));
+        const all = db.retrieveAllRecipes() ?? [];
+        const refused = all.find((r) => r.name === "Kenya")?.uuid;
+        db.updateRecipe = ((original) => (uuid: string, recipe: Recipe) => {
+            if (uuid === refused) throw new Error("disk full");
+            return original(uuid, recipe);
+        })(db.updateRecipe.bind(db));
+
+        const {result} = await renderHook(() => useRecipeLibrary(db));
+        let outcome;
+        await act(async () => {
+            outcome = result.current.renameShelf("Mornings", "Before work",
+                                                 all.map((r) => r.uuid));
+        });
+
+        expect(outcome).toEqual({full: 0, failed: 1, members: 1, oldMembers: 1});
     });
 
     it("leaves a recipe that was never on the shelf alone", async () => {

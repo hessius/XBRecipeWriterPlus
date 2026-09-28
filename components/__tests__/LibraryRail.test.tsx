@@ -482,6 +482,18 @@ describe("the edit control", () => {
         expect(screen.getByTestId("rail-edit")).toBeTruthy();
     });
 
+    it("leaves the filter toggle out while members are being picked", async () => {
+        // The rail is held open while picking, so the caret pointed up at a
+        // surface that could not be closed and the tap behind it changed
+        // nothing anyone could see. The filters themselves stay.
+        await renderWithProviders(
+            <LibraryRail {...railProps({view: "list", picking: true})}/>
+        );
+
+        expect(screen.queryByTestId("rail-filter-toggle")).toBeNull();
+        expect(screen.getByRole("button", {name: "Tea filter"})).toBeTruthy();
+    });
+
     it("leaves edit out while members are being picked", async () => {
         // Ticking members is already a selection mode. A second one over the
         // top of it would be two ways to choose at once.

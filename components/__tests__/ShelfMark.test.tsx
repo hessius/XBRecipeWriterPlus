@@ -9,7 +9,7 @@ const THREE = ["#AAAAAA", "#BBBBBB", "#CCCCCC"];
 describe("ShelfMark", () => {
     // The size is the whole contract. Both marks draw inside this square, so
     // one of them changing it would reflow the grid around the other.
-    it.each(["auto", "manual"] as const)(
+    it.each(["auto", "manual", "tag"] as const)(
         "draws a 44 point square for a %s shelf",
         async (kind) => {
             await renderWithProviders(
@@ -27,13 +27,17 @@ describe("ShelfMark", () => {
 
     describe("which art a shelf takes", () => {
         // The settled rule, and the whole claim the art makes: a glyph means
-        // the app found this shelf, a mosaic means you built it.
+        // the app owns the shelf's vocabulary, a mosaic means it does not.
         it("gives an auto shelf a glyph", () => {
             expect(markFor("auto")).toBe("glyph");
         });
 
         it("gives a manual shelf a mosaic of its members", () => {
             expect(markFor("manual")).toBe("mosaic");
+        });
+
+        it("gives a tag shelf a mosaic of its members", () => {
+            expect(markFor("tag")).toBe("mosaic");
         });
     });
 
@@ -49,6 +53,14 @@ describe("ShelfMark", () => {
         it("draws a manual shelf's mosaic", async () => {
             await renderWithProviders(
                 <ShelfMark kind="manual" accents={THREE}/>
+            );
+            expect(screen.getByTestId("shelf-mark-mosaic")).toBeTruthy();
+            expect(screen.queryByTestId("shelf-mark-glyph")).toBeNull();
+        });
+
+        it("draws a tag shelf's mosaic", async () => {
+            await renderWithProviders(
+                <ShelfMark kind="tag" accents={THREE}/>
             );
             expect(screen.getByTestId("shelf-mark-mosaic")).toBeTruthy();
             expect(screen.queryByTestId("shelf-mark-glyph")).toBeNull();

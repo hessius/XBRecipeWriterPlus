@@ -131,12 +131,12 @@ export default function SortSheet({
                 <XStack alignItems="center" justifyContent="space-between" gap="$4"
                         minHeight={44} paddingHorizontal="$3">
                     <YStack flex={1} gap="$1">
-                        <Text fontSize={16} color={palette.text}>Favourites first</Text>
+                        <Text fontSize={16} color={palette.text}>Starred first</Text>
                         <Text fontSize={13} color={palette.dim}>
                             Keep starred recipes at the top, in the same order
                         </Text>
                     </YStack>
-                    <Switch accessibilityLabel="Favourites first" accessibilityRole="switch"
+                    <Switch accessibilityLabel="Starred first" accessibilityRole="switch"
                             accessibilityState={{checked: favouritesFirst}}
                             checked={favouritesFirst}
                             onCheckedChange={onFavouritesFirstChange} size="$3"

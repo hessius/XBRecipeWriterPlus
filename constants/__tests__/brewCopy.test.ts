@@ -47,7 +47,9 @@ describe("brew copy", () => {
     it("has a non-terminal line for the drawdown after the pour", () => {
         // Settling sits between the last pour and "Enjoy.", so it must read as
         // still in progress rather than finished.
-        expect(PHASE_COPY.settling).toBe("Letting the last of the coffee drain…");
+        // Named drawdown, which is what it is: part of the brew rather than
+        // the brew emptying out, and a figure a recipe is dialled in by.
+        expect(PHASE_COPY.settling).toBe("Drawdown…");
         expect(PHASE_COPY.settling).not.toBe(PHASE_COPY.done);
     });
 

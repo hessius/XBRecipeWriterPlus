@@ -34,7 +34,12 @@ export const PHASE_COPY: Record<string, string> = {
     // Water is done, but coffee is still dripping from the brewer onto the
     // scale. The brew is not over until that drawdown stops, so this is a
     // distinct, non-terminal status between the last pour and "Enjoy."
-    settling:    "Letting the last of the coffee drain…",
+    //
+    // Named for what it is. "Draining" was a plumbing word for a thing that
+    // has a coffee name and a purpose: drawdown is not the brew running down,
+    // it is part of the brew, and how long it takes is one of the figures a
+    // person dials a recipe in by.
+    settling:    "Drawdown…",
     done:        "Enjoy.",
     // Every other ending here is a sentence saying what happened --
     // "The machine ran out of water.", "Lost contact. …". This one said
@@ -230,8 +235,8 @@ export const AGITATION_SENTENCE: Record<number, string> = {
  *
  * The headline sits beside the measured band region, so a phase whose copy
  * wraps to a second line takes that height out of the ladder and every rung
- * changes thickness in the middle of a brew — which is what "Letting the last
- * of the coffee drain…" did at the end of every recipe. `app/brew.tsx`
+ * changes thickness in the middle of a brew, which is what the drawdown line
+ * did at the end of every recipe when it was a full sentence. `app/brew.tsx`
  * reserves this while a brew is live.
  *
  * Derived from the phase table and the machine's own list of active phases, so

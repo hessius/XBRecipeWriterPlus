@@ -336,8 +336,15 @@ export default function LibraryRail({
         ] : [])
     ];
 
-    if (asksOfTheList && hasFilters) {
+    if (asksOfTheList && hasFilters && !picking) {
         cluster.push(
+            // Absent while picking, for the reason the edit chip below is. The
+            // rail is held open there, so the caret pointed up at a surface
+            // that could not be closed and the chip was a control that did
+            // nothing: a tap toggled a state with no visible effect until the
+            // picking ended. The filters themselves are all on screen with
+            // their own fills, so the count it carried is not lost.
+            //
             // The count shows at all times, including "0": a hidden filter is
             // worse than a visible one, so the button never falls back to a bare
             // glyph. The fill reports whether anything is filtered -- the one

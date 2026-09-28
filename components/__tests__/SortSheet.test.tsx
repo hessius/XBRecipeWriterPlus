@@ -86,7 +86,7 @@ describe("SortSheet", () => {
                        {...NOOP}/>
         );
 
-        await fireEvent.press(screen.getByLabelText("Favourites first"));
+        await fireEvent.press(screen.getByLabelText("Starred first"));
 
         expect(NOOP.onFavouritesFirstChange).toHaveBeenCalledWith(true);
         expect(NOOP.onSortChange).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe("SortSheet", () => {
                        {...NOOP}/>
         );
 
-        expect(screen.getByLabelText("Favourites first").props.accessibilityState)
+        expect(screen.getByLabelText("Starred first").props.accessibilityState)
             .toEqual(expect.objectContaining({checked: true}));
     });
 });

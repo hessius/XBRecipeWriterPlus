@@ -178,11 +178,12 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
                             // colour call sites are plain RN/SVG props that
                             // cannot take a `$token`; the cast reconciles that
                             // with Tamagui typing this prop as `ColorTokens`.
-                            // `dim`, not `muted`: the placeholder is the field's
-                            // only visible label, so it must clear AA, and
-                            // Tamagui sets no default, leaving the unreadable
-                            // platform placeholder colour on this dark surface.
-                            placeholderTextColor={palette.dim as ColorTokens}
+                            // The shared `placeholder` grey rather than a
+                            // local choice: it is the field's only visible
+                            // label here, so it must clear AA, and Tamagui
+                            // sets no default, leaving the unreadable platform
+                            // placeholder colour on this dark surface.
+                            placeholderTextColor={palette.placeholder as ColorTokens}
                             value={value}
                             onChangeText={onChangeText}
                             onSelectionChange={onSelectionChange}
