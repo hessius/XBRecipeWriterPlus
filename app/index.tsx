@@ -57,7 +57,8 @@ import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import {resolveOnOpen} from "@/library/duplicates";
-import {BREWMIND_SOURCE, parseBrewMindLink} from "@/library/brewmindLink";
+import {BREWMIND_SOURCE, parseBrewMindLink, type BrewMindLink} from "@/library/brewmindLink";
+import {useBrewMindCreate} from "@/hooks/useBrewMindCreate";
 import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
@@ -929,6 +930,29 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveShareUrl, resetShareIntent]);
 
+    /**
+     * Act on an import link, wherever it came from.
+     *
+     * A link returned by the BrewMind session and a link the app was woken
+     * with are the same thing and must not be handled twice over, or the two
+     * paths would drift the first time one of them changed.
+     */
+    function openImportLink(link: BrewMindLink) {
+        const source = parseImportInput(link.share);
+        if (!source) return false;
+        setImportOpen(true);
+        importer.resolveNow(source, "shared", {
+            coffee: link.coffee,
+            // Only a stated `brewmind` source earns the provenance. Anything
+            // else still imports and reads as an ordinary import, because the
+            // link is useful to anyone who can mint one.
+            source: link.source === BREWMIND_SOURCE ? "brewmind" : "import"
+        });
+        return true;
+    }
+
+    const brewMind = useBrewMindCreate(openImportLink);
+
     useEffect(() => {
         // The fourth door. A coffee app hands over a recipe and the coffee it
         // was brewed with in one link, rather than the user pasting a share
@@ -941,27 +965,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         const link = parseBrewMindLink(importUrl);
         if (link === null) return;
 
-        // The screen does not know what an xBloom link looks like; the same
-        // module the field uses does.
-        const source = parseImportInput(link.share);
-        if (!source) return;
-        handledImportUrl.current = importUrl;
-
         // "shared", not a new intent. The value came from outside the field,
         // so the field is hidden while the lookup runs, and a failure restores
         // it without raising the keyboard on somebody whose attention is still
         // in the app they came from. That is the same situation, so it gets
-        // the same answer.
-        //
-        // Only a stated `brewmind` source earns the provenance. Anything else
-        // still imports and reads as an ordinary import, because the link is
-        // useful to anyone who can mint one.
+        // the same answer. The link is acted on by the same handler the
+        // BrewMind session uses.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setImportOpen(true);
-        importer.resolveNow(source, "shared", {
-            coffee: link.coffee,
-            source: link.source === BREWMIND_SOURCE ? "brewmind" : "import"
-        });
+        if (openImportLink(link)) handledImportUrl.current = importUrl;
         // `importer` is rebuilt every render; depending on it would re-run this
         // on every render instead of on every link.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1640,6 +1651,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
+                onCreate={brewMind.open}
+                creating={brewMind.busy}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {
