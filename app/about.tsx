@@ -9,6 +9,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import LinkText from "@/components/LinkText";
 import LivingMark from "@/components/LivingMark";
 import ScreenHeader from "@/components/ScreenHeader";
+import {SUPPORT_URL} from "@/components/SupportTile";
 import Wordmark from "@/components/Wordmark";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
@@ -238,6 +239,7 @@ export default function AboutScreen({settings}: Props = {}) {
                     <LinkText label="XBRecipeWriterPlus, by Serge Baranov" url={FORK_URL}/>
                     <LinkText label="Source code" url={REPO_URL}/>
                     <LinkText label="Report an issue" url={ISSUES_URL}/>
+                    <LinkText label="Buy me a coffee" url={SUPPORT_URL}/>
                 </AboutSection>
 
                 <AboutSection title="Third-party licences">
