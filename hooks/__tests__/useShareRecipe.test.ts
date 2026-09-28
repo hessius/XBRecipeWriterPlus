@@ -4,6 +4,10 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {useShareRecipe} from "@/hooks/useShareRecipe";
 
+jest.mock("@/hooks/useSetting", () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/test-utils/settingsMock").settingsMock());
+
 function drip(): Recipe {
     const r = new Recipe(undefined, undefined);
     r.name = "Ethiopia Guji";

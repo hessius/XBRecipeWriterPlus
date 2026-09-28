@@ -1,6 +1,8 @@
 import {useRef, useState} from "react";
 
 import {SHARE_API_URL, SHARE_TIMEOUT_MS} from "@/constants/share";
+import {useSetting} from "@/hooks/useSetting";
+import {isMachineModel} from "@/library/machine/machineModel";
 import type Recipe from "@/library/Recipe";
 import {buildSharePayload, canonicalSnapshot, shareBlockReason} from "@/library/shareLink";
 
@@ -66,6 +68,7 @@ export type ShareState =
  */
 export function useShareRecipe() {
     const [state, setState] = useState<ShareState>({status: "idle"});
+    const [machineModelSetting] = useSetting("machineModel");
     // A ref, not state: it guards against a double tap within one render pass,
     // which a state flag would not see in time.
     const inFlight = useRef(false);
@@ -84,7 +87,12 @@ export function useShareRecipe() {
             return null;
         }
 
-        const payload = buildSharePayload(recipe);
+        if (!isMachineModel(machineModelSetting)) {
+            setState({status: "failed", reason: "unavailable"});
+            return null;
+        }
+
+        const payload = buildSharePayload(recipe, machineModelSetting);
         const snapshot = canonicalSnapshot(payload);
         if (recipe.shareUrl && recipe.shareSnapshot === snapshot) {
             setState({status: "idle"});
