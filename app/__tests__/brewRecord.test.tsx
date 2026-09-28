@@ -357,6 +357,26 @@ describe("brew record", () => {
         });
     });
 
+    // The record is the newer of the two here, which is the case the sorted
+    // ordering used to get wrong: it turned the brew the user was looking at
+    // grey because the one they picked was older.
+    it("keeps the brew you came from leading, even when it is the newer", async () => {
+        const older = {...record, id: "brew-0", startedAt: 0};
+        const current = {...record, startedAt: 900_000};
+        mockBrews = [current, older];
+        mockJudgementStore.brewsFor.mockReturnValue([current, older]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("compare-candidate-brew-0"));
+            expect(mockPush).toHaveBeenCalledWith({
+                pathname: "/brewCompare",
+                params: {a: "brew-1", b: "brew-0"}
+            });
+        });
+    });
+
     it("takes the record away from the reader while the compare sheet covers it", async () => {
         const other = {...record, id: "brew-2", startedAt: 900_000};
         mockBrews = [other, record];

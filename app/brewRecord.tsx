@@ -248,11 +248,14 @@ export default function BrewRecord({recipeLookup}: Props) {
     function compareWith(candidateId: string): void {
         const other = comparisonCandidates.find((candidate) => candidate.id === candidateId);
         if (other === undefined) return;
-        const [older, newer] = [record, other]
-            .sort((one, two) => one.startedAt - two.startedAt);
         setPickingComparison(false);
         setComparisonCandidates([]);
-        router.push({pathname: "/brewCompare", params: {a: older.id, b: newer.id}});
+        // The brew you came from leads, whether it is the older of the two or
+        // not. Arriving here you were already looking at one brew, and having
+        // it turn grey because the one you picked happened to be newer would
+        // answer a question you did not ask. The history door sorts instead,
+        // because arriving from a list you came from neither.
+        router.push({pathname: "/brewCompare", params: {a: record.id, b: other.id}});
     }
 
     function closeComparisonPicker(): void {
