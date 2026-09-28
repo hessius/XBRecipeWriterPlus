@@ -236,6 +236,10 @@ export function normaliseHubRow(
  * onto it, and a hub row is not owned by anybody. Keyed on the catalogue id so
  * the browse row and the detail screen agree about a recipe's colour, and so
  * the same recipe looks the same on the way back to it.
+ *
+ * Always the coffee half of the palette, because `buildHubRequest` asks for
+ * `recipeType: 1` and the partition holds no tea. If the catalogue ever gets a
+ * tea door, this needs the same split `accentGroupFor` makes.
  */
 export function hubAccent(id: number): string {
     return accents.coffee[Math.abs(id) % accents.coffee.length];
