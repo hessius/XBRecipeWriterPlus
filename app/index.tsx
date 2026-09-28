@@ -6,6 +6,7 @@ import {FlatList} from "react-native-gesture-handler";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useNavigation} from "expo-router";
 import {useShareIntentContext} from "expo-share-intent";
+import {useURL} from "expo-linking";
 import {Button, Text, XStack, YStack} from "tamagui";
 
 import Collapsible from "@/components/Collapsible";
@@ -56,6 +57,7 @@ import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import {resolveOnOpen} from "@/library/duplicates";
+import {BREWMIND_SOURCE, parseBrewMindLink} from "@/library/brewmindLink";
 import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
@@ -352,6 +354,11 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     }
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
+
+    // The URL the app was opened or woken with. An import link (issue #159)
+    // arrives here rather than through the router, because `+native-intent`
+    // refuses to treat one as a destination.
+    const importUrl = useURL();
     // Held for the screen's lifetime, not rebuilt per render. Starting a scan
     // shows the overlay, which re-renders — so a per-render transport meant the
     // Cancel the user could actually press closed a different `NFC` than the one
@@ -776,6 +783,16 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // reads as a fresh delivery.
     const lastSeenShareUrl = useRef<string | null>(null);
 
+    /**
+     * The import link already acted on (issue #159).
+     *
+     * `useURL` keeps handing back the URL the app was opened with for as long
+     * as the app lives, so without this the import would re-fire on every
+     * render and again on every foreground. Unlike the share intent there is
+     * nothing to reset, so the URL itself is the guard.
+     */
+    const handledImportUrl = useRef<string | null>(null);
+
     // True from the moment a push to the editor is issued until a library screen
     // is focused again. Everything upstream of this guards one particular way a
     // recipe can arrive twice -- a redelivered share intent, a double tap, a
@@ -913,6 +930,44 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     }, [liveShareUrl, resetShareIntent]);
 
     useEffect(() => {
+        // The fourth door. A coffee app hands over a recipe and the coffee it
+        // was brewed with in one link, rather than the user pasting a share
+        // URL and retyping the bean by hand.
+        //
+        // `+native-intent` returns null for one of these, so the router stays
+        // put and the link arrives here instead of resolving to a route that
+        // does not exist.
+        if (!importUrl || handledImportUrl.current === importUrl) return;
+        const link = parseBrewMindLink(importUrl);
+        if (link === null) return;
+
+        // The screen does not know what an xBloom link looks like; the same
+        // module the field uses does.
+        const source = parseImportInput(link.share);
+        if (!source) return;
+        handledImportUrl.current = importUrl;
+
+        // "shared", not a new intent. The value came from outside the field,
+        // so the field is hidden while the lookup runs, and a failure restores
+        // it without raising the keyboard on somebody whose attention is still
+        // in the app they came from. That is the same situation, so it gets
+        // the same answer.
+        //
+        // Only a stated `brewmind` source earns the provenance. Anything else
+        // still imports and reads as an ordinary import, because the link is
+        // useful to anyone who can mint one.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setImportOpen(true);
+        importer.resolveNow(source, "shared", {
+            coffee: link.coffee,
+            source: link.source === BREWMIND_SOURCE ? "brewmind" : "import"
+        });
+        // `importer` is rebuilt every render; depending on it would re-run this
+        // on every render instead of on every link.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [importUrl]);
+
+    useEffect(() => {
         // A shared link that failed (network down, not found) leaves its guard
         // set while its intent is already consumed, so re-sharing the same link
         // to retry would be dropped until the user navigated away and back. An
@@ -922,6 +977,10 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // its own.
         if (importStatus === "error") {
             handledShareUrl.current = null;
+            // Same reasoning for an import link, which needs it more: `useURL`
+            // goes on returning the URL the app was opened with, so without
+            // this a failed link could never be retried by opening it again.
+            handledImportUrl.current = null;
         }
     }, [importStatus]);
 
