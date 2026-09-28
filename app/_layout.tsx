@@ -146,6 +146,8 @@ export default function RootLayout() {
                                                           options={{headerShown: false}}/>
                                             <Stack.Screen name="brewRecord"
                                                           options={{headerShown: false}}/>
+                                            <Stack.Screen name="brewCompare"
+                                                          options={{headerShown: false}}/>
                                             {/* The brew screen is the mini bar
                                                 expanded: it rises from the
                                                 bottom and a chevron-down puts
