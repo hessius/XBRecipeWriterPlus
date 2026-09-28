@@ -935,106 +935,108 @@ git commit -m "Ask a pod for this machine's recipe, not the Studio's"
 ## Task 8: The settings row
 
 **Files:**
-- Create: `constants/machineCopy.ts`
 - Modify: `components/MachineSection.tsx`
-- Test: `app/__tests__/settings.test.tsx`
+- Test: `components/__tests__/MachineSection.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+### Read this before you write anything
 
-Add to `app/__tests__/settings.test.tsx`:
+An earlier draft of this task said to create `constants/machineCopy.ts` and to put the test in `app/__tests__/settings.test.tsx`. Both were wrong:
 
-```ts
-it("lets you say which xBloom you own", async () => {
-    await renderWithProviders(<SettingsScreen/>);
-    expect(await screen.findByText(MACHINE_MODEL_LABEL)).toBeTruthy();
+- **No copy module.** All three sibling rows in `MachineSection.tsx` (`Start brewing automatically`, `Animate the brew chart`, `Keep raw brew traces`) write their label and description inline. A `constants/` module holding the strings for one row would be inconsistent with the file it serves, and `constants/brewCopy.ts` exists because brew copy is shared across several screens. This is not. Inline it like its neighbours.
+- **The test belongs beside the component.** `components/__tests__/MachineSection.test.tsx` already exists and already covers the other rows (see `offers auto-start, off, because committing is what starts a grinder`). Follow it.
+
+Two more things the draft missed:
+
+- `MachineSection` takes an optional `settings` prop and **passes it to every `useSetting`** — it is the injection seam the settings screen's tests drive. `useSetting("machineModel")` without it would read the shared SQLite store instead, which cannot open under Jest.
+- `SettingsChoiceRow` already sits in the import list. Do not add it twice.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `components/__tests__/MachineSection.test.tsx`, matching the style of the row tests already there:
+
+```tsx
+it("asks which xBloom you own, because the two grind on different scales", async () => {
+    await renderWithProviders(<MachineSection/>);
+
+    expect(screen.getByText("Your xBloom")).toBeTruthy();
     expect(screen.getByText("Studio")).toBeTruthy();
     expect(screen.getByText("Original")).toBeTruthy();
 });
+
+it("remembers the original xBloom when that is what you picked", async () => {
+    await renderWithProviders(<MachineSection/>);
+
+    await fireEvent.press(screen.getByText("Original"));
+
+    // The control is driven by the setting, so the value coming back is the
+    // evidence it was stored rather than merely pressed.
+    expect(screen.getByLabelText("Your xBloom")).toBeTruthy();
+    await waitFor(() =>
+        expect(screen.getByText("Original").props.accessibilityState?.selected).toBe(true));
+});
 ```
 
-Add the import:
+The second test's last assertion is a **stand-in**: read how `SegmentedControl` marks the chosen option (`components/SegmentedControl.tsx`) and assert on whatever it actually renders. RNTL v14 has removed `UNSAFE_getAllByType` and `root.findAllByType`, so assert on text, test IDs or accessible state — never on a child component's props. If the selected state is not observable, drive the assertion through the file's `useSetting` mock instead.
+
+Note that this file's `useSetting` mock is per-hook `React.useState(DEFAULTS[key])`, so the value does round-trip within a render tree.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `npx jest components/__tests__/MachineSection.test.tsx -t "xBloom you own"`
+Expected: FAIL, unable to find text "Your xBloom".
+
+- [ ] **Step 3: Add the row**
+
+In `components/MachineSection.tsx`, add the import:
 
 ```ts
-import {MACHINE_MODEL_LABEL} from "@/constants/machineCopy";
+import {isMachineModel} from "@/library/machine/machineModel";
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `npx jest app/__tests__/settings.test.tsx -t "which xBloom you own"`
-Expected: FAIL, `Cannot find module '@/constants/machineCopy'`.
-
-- [ ] **Step 3: Write the copy**
-
-Create `constants/machineCopy.ts`:
+Add the options constant beside `RETENTION_OPTIONS`:
 
 ```ts
-/**
- * What the machine settings say.
- *
- * Copy lives apart from layout here the way `constants/brewCopy.ts` already
- * does, so a wording change is one edit and not a hunt through a screen.
- *
- * No dashes: they read as machine-written, and this is the app talking.
- */
-export const MACHINE_MODEL_LABEL = "Your xBloom";
-
-export const MACHINE_MODEL_DESCRIPTION =
-    "The two machines grind on different scales, so a recipe written for one " +
-    "is wrong on the other. Pick yours and the app will ask xBloom for the " +
-    "right version.";
-
-export const MACHINE_MODEL_OPTIONS = [
+const MACHINE_MODEL_OPTIONS = [
     {value: "studio",   label: "Studio"},
     {value: "original", label: "Original"}
 ] as const;
 ```
 
-- [ ] **Step 4: Add the row**
-
-In `components/MachineSection.tsx`, add the imports:
+Read the setting alongside the other three, **passing `settings`**:
 
 ```ts
-import SettingsChoiceRow from "@/components/SettingsChoiceRow";
-import {
-    MACHINE_MODEL_DESCRIPTION,
-    MACHINE_MODEL_LABEL,
-    MACHINE_MODEL_OPTIONS
-} from "@/constants/machineCopy";
-import {isMachineModel} from "@/library/machine/machineModel";
-import {useSetting} from "@/hooks/useSetting";
+    const [machineModel, setMachineModel] = useSetting("machineModel", settings);
 ```
 
-Inside the component:
-
-```ts
-    const [machineModel, setMachineModel] = useSetting("machineModel");
-```
-
-And in the returned tree, above the pairing controls, because which machine you own is prior to which one you are connected to:
+And put the row at the very top of the returned tree, above the status line, because which machine you own is prior to which one you happen to be connected to:
 
 ```tsx
+        <SettingsSection title="Machine">
             <SettingsChoiceRow
-                label={MACHINE_MODEL_LABEL}
-                description={MACHINE_MODEL_DESCRIPTION}
+                label="Your xBloom"
+                description="The two machines grind on different scales, so a recipe written for one is wrong on the other. Pick yours and the app asks xBloom for the right version."
                 value={machineModel}
                 options={MACHINE_MODEL_OPTIONS}
                 onChange={(value) => {
                     if (isMachineModel(value)) setMachineModel(value);
-                }}
-            />
+                }}/>
+
+            {status !== "connected" && (
 ```
 
-The guard is not ceremony: `SettingsChoiceRow`'s `onChange` is typed `(value: string) => void`, so without it the setting's union type is lost.
+`isMachineModel` rather than a cast: `SettingsChoiceRow`'s `onChange` is typed `(value: string) => void`, so the setting's union is lost on the way through and has to be recovered. The guard form is right here rather than `asMachineModel`, because this value came from the control's own option list — anything else is a bug, not a stale preference to coerce.
 
-- [ ] **Step 5: Run the test to verify it passes**
+Copy note: no dashes anywhere in the description. They read as machine-written, and this is the app talking.
 
-Run: `npx jest app/__tests__/settings.test.tsx`
-Expected: PASS.
+- [ ] **Step 4: Run the tests to verify they pass**
 
-- [ ] **Step 6: Commit**
+Run: `npx jest components/__tests__/MachineSection.test.tsx && npx jest app/__tests__/settings.test.tsx`
+Expected: PASS. The settings screen renders this section, so its own tests are the check that the new row did not disturb the screen around it.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add constants/machineCopy.ts components/MachineSection.tsx app/__tests__/settings.test.tsx
+git add -A
 git commit -m "Ask which xBloom this is"
 ```
 
