@@ -252,7 +252,49 @@ describe("BrewRecorder", () => {
         time.advance(4_100);
         fake.cup(190);
         expect(records[0].record.drawdownAt).toBe(20_000);
-        expect(drawdownSeconds(records[0].record)).toBe(69);
+        // Unrounded, so the floor in `BrewFigures.clock` still has a fraction
+        // to floor. Rounded to 69 here it would already have crossed 69.
+        expect(drawdownSeconds(records[0].record)).toBeCloseTo(69.1);
+    });
+
+    it("does not call an interrupted brew's tail a drawdown", () => {
+        // The bed was part way through finishing when somebody stopped the
+        // machine, so the 30 s after the last water is how long it took them
+        // to reach it. It has the shape of a drawdown without being one, and
+        // reporting it would put a figure on the record that a person could
+        // dial a grind against, taken from a brew that never got there.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);
+        time.advance(30_000);
+        fake.phase({name: "cancelled"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record.drawdownAt).toBe(0);
+        expect(drawdownSeconds(records[0].record)).toBeNull();
+    });
+
+    it("keeps the drawdown of a brew the machine ended short", () => {
+        // `endedOnMachine` is a brew the machine ran to the end that merely
+        // delivered less water than the plan asked for -- somebody changed the
+        // ratio on the machine, or the beans ran out. The bed still finished,
+        // so the figure is real and must survive the guard above.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.water(100);                   // well short of the plan's 200
+        time.advance(10_000);
+        fake.cup(95);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(5_000);
+        fake.cup(95);
+        expect(records[0].record.outcome).toBe("endedOnMachine");
+        expect(records[0].record.drawdownAt).toBe(20_000);
+        expect(drawdownSeconds(records[0].record)).toBe(15);
     });
 
     it("ends settling when the cup line has been flat long enough", () => {

@@ -130,10 +130,17 @@ export type BrewRecord = {
      * pause and a drawdown look identical in the stream, and only "was there
      * any more water after this" tells them apart.
      *
-     * 0 rather than absent, matching `pouringAt`: a brew that was cancelled
-     * before it poured has no drawdown, and a row written before this existed
-     * cannot have one either. Neither is a drawdown of zero seconds, and
-     * `drawdownSeconds` returns null for both.
+     * Only a brew the machine ran to the end has one at all. A brew that was
+     * cancelled, failed, or lost contact stops with the bed part way through
+     * finishing, and the tail after the last water is an interruption rather
+     * than a drawdown -- reporting it would put a figure beside the water that
+     * a person could dial a grind against, derived from a brew that never got
+     * there.
+     *
+     * 0 rather than absent, matching `pouringAt`: an interrupted brew has no
+     * drawdown, and a row written before this existed cannot have one either.
+     * Neither is a drawdown of zero seconds, and `drawdownSeconds` returns
+     * null for both.
      */
     drawdownAt?: number;
     endedAt: number;
@@ -288,13 +295,18 @@ export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeco
  * failed never drew down, and a row written before the boundary was recorded
  * cannot say. A drawdown of zero seconds is a different claim and not one this
  * app is ever in a position to make.
+ *
+ * Returned unrounded, exactly as the record screen passes its own duration to
+ * the TIME figure. Rounding here would round *up* through the floor that
+ * `BrewFigures.clock` applies on the way out, and show 0:23 for a drawdown of
+ * 22.6 seconds -- the same bug that floor exists to prevent.
  */
 export function drawdownSeconds(record: BrewRecord): number | null {
     const opened = record.drawdownAt ?? 0;
     if (opened <= 0) return null;
     const zero = (record.pouringAt ?? 0) > 0 ? record.pouringAt! : record.startedAt;
     const ended = record.endedAt - zero;
-    return Math.max(0, Math.round((ended - opened) / 1000));
+    return Math.max(0, (ended - opened) / 1000);
 }
 
 /**

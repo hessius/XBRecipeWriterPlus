@@ -61,6 +61,17 @@ describe("BrewFigures", () => {
         expect(screen.getByText("DRAWDOWN 0:22")).toBeTruthy();
     });
 
+    it("floors the drawdown rather than rounding it up", async () => {
+        // A clock that shows 0:23 at 22.6 s is wrong for the same reason TIME
+        // is floored. The figure arrives unrounded so that the floor here is
+        // the only rounding it meets.
+        await renderWithProviders(
+            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
+                         drawdown={22.6} />
+        );
+        expect(screen.getByText("DRAWDOWN 0:22")).toBeTruthy();
+    });
+
     it("says nothing about a drawdown it has not been given", async () => {
         // A cancelled brew never drew down and an old record cannot say. 0:00
         // for either would invent a figure somebody might dial a grind by.
