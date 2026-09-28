@@ -65,6 +65,22 @@ here; do not "fix" them back.
   library picks it up on the way back. Do not add a callback or a param to the
   library route.
 
+### Corrections found during Task 2, counted across all 2,966 live rows
+
+- **There are five separators, not three.** Middle dot 1,666, comma 456,
+  bullet 119, katakana middle dot 76, semicolon 6. Split on all of them at
+  once, not on the first one found: four rows mix two
+  (`Ginger flower · Ripe plum · Hints of cocoa, Tangerine zest`).
+- **`&` and `/` are not separators.** `Herbs & Spices` is one flavour,
+  `Geisha/Gesha` is one varietal, `N/A` is not two of anything.
+- **The plain space is the dangerous one and the vocabulary gate is right.**
+  Real live values include `Washed Thermal Shock`, `Anaerobic Slow Dry (ASD)
+  Natural` and `72h Anaerobic Mosto & Panela Honey Fermentation + Thermal
+  Shock Natural`. A blind split would shred far more than it rescued.
+- **38 values are somebody declining to answer**: `N/A` 21, `NONE` 8, `-` 8,
+  `none` 1. Dropped, or they become a filter chip offering to find coffees
+  whose flavour is "N/A".
+
 ### Corrections found during Task 1, verified live
 
 - **`fetchHubDetail` takes the *community* id.** A list row carries both
@@ -586,7 +602,7 @@ Create `library/hub/hubRow.ts`:
 import type {HubListRow} from "./hubApi";
 
 /** The separators official rows use to pre-join a facet array into one element. */
-const JOINERS = ["\u00b7", "\u2022"];
+const JOINERS = /[\u00b7\u2022\u30fb\uff65,;]/;
 
 /**
  * Mojibake seen in real recipe names.

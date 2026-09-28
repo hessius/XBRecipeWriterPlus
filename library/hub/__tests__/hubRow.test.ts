@@ -143,3 +143,41 @@ describe("normalising a row", () => {
         expect("likes" in normaliseHubRow(row())).toBe(false);
     });
 });
+
+describe("the separators the catalogue actually uses", () => {
+    // Counted across all 2,966 live coffee rows rather than guessed: middle
+    // dot 1,666, comma 456, bullet 119, katakana middle dot 76, semicolon 6.
+    it.each([
+        ["\u00b7", "Strawberry \u00b7 Floral Honey \u00b7 Stone Fruit"],
+        [",", "Milk Chocolate, Orange Blossom, Vanilla"],
+        ["\u2022", "Peach \u2022 Apple Cider \u2022 Butterscotch"],
+        ["\u30fb", "Grapes\u30fbtamarind\u30fbcola"],
+        [";", "Strawberry co-ferment; Dynamic Cherry"]
+    ])("splits on %s", (_separator, joined) => {
+        expect(splitFacet([joined])).toHaveLength(3 - Number(joined.includes(";")));
+    });
+
+    it("splits a row that mixes two separators", () => {
+        // Four live rows do this, all of them flavour lists. Splitting on only
+        // the first separator found would leave "cocoa, Tangerine zest" as one
+        // flavour nobody has.
+        expect(splitFacet(["Ginger flower \u00b7 Ripe plum \u00b7 Hints of cocoa, Tangerine zest"]))
+            .toEqual(["Ginger flower", "Ripe plum", "Hints of cocoa", "Tangerine zest"]);
+    });
+
+    it("leaves an ampersand and a slash alone", () => {
+        // "Herbs & Spices" is one flavour and "Geisha/Gesha" is one varietal.
+        // Treating either as a separator invents values nobody wrote.
+        expect(splitFacet(["Herbs & Spices"])).toEqual(["Herbs & Spices"]);
+        expect(splitFacet(["Geisha/Gesha"])).toEqual(["Geisha/Gesha"]);
+    });
+
+    it("drops a value that is somebody declining to answer", () => {
+        // 38 live rows between them. Kept, they become a filter chip offering
+        // to find coffees whose flavour is "N/A".
+        expect(splitFacet(["N/A"])).toEqual([]);
+        expect(splitFacet(["NONE"])).toEqual([]);
+        expect(splitFacet(["-"])).toEqual([]);
+        expect(splitFacet(["Peach \u00b7 N/A \u00b7 Cocoa"])).toEqual(["Peach", "Cocoa"]);
+    });
+});

@@ -11,8 +11,19 @@
  */
 import type {HubListRow} from "./hubApi";
 
-/** The separators official rows use to pre-join a facet array into one element. */
-const JOINERS = ["\u00b7", "\u2022"];
+/**
+ * The separators rows use to pre-join a facet array into one element.
+ *
+ * Counted across all 2,966 live coffee rows: middle dot 1,666, comma 456,
+ * bullet 119, katakana middle dot 76, semicolon 6. Split on all of them at
+ * once rather than on the first one found, because four rows mix two
+ * (`Ginger flower · Ripe plum · Hints of cocoa, Tangerine zest`).
+ *
+ * `&` and `/` are deliberately absent. `Herbs & Spices` is one flavour,
+ * `Geisha/Gesha` is one varietal and `N/A` is not two of anything, so treating
+ * either as a separator invents values that nobody wrote.
+ */
+const JOINERS = /[\u00b7\u2022\u30fb\uff65,;]/;
 
 /**
  * Mojibake seen in real recipe names.
@@ -26,6 +37,9 @@ const MISDECODED: [string, string][] = [
     ["\u00e2\u0080\u00a2", "\u2022"],
     ["\u00e2\u0080\u0099", "\u2019"]
 ];
+
+/** Values that mean "not stated" rather than naming anything. */
+const PLACEHOLDERS = new Set(["n/a", "na", "none", "null", "unknown", "-", "--"]);
 
 export type HubRecipe = {
     id: number;
@@ -74,6 +88,7 @@ export function splitFacet(
     vocabulary: readonly string[] = []
 ): string[] {
     if (!values) return [];
+    const known = new Set(vocabulary.map((v) => v.toLowerCase()));
     const out: string[] = [];
 
     for (const raw of values) {
@@ -94,14 +109,12 @@ export function splitFacet(
             }
         }
 
-        const joiner = JOINERS.find((j) => text.includes(j));
-        if (joiner !== undefined) {
-            out.push(...text.split(joiner));
+        if (JOINERS.test(text)) {
+            out.push(...text.split(JOINERS));
             continue;
         }
 
         const pieces = text.split(/\s+/);
-        const known = new Set(vocabulary.map((v) => v.toLowerCase()));
         if (pieces.length > 1 && pieces.every((p) => known.has(p.toLowerCase()))) {
             out.push(...pieces);
             continue;
@@ -114,7 +127,12 @@ export function splitFacet(
     return out
         .map((value) => value.trim())
         .filter((value) => {
-            if (value === "" || seen.has(value)) return false;
+            // `N/A`, `NONE` and a bare dash appear 38 times between them and
+            // are somebody declining to answer, not a value. Left in, they
+            // would become a filter chip offering to find coffees with no
+            // flavour.
+            if (value === "" || PLACEHOLDERS.has(value.toLowerCase())) return false;
+            if (seen.has(value)) return false;
             seen.add(value);
             return true;
         });
@@ -153,9 +171,9 @@ export function normaliseHubRow(
         grind: raw.grinderSize,
         rpm: raw.rpm,
         pourCount: raw.pourCount,
-        // `grandWater` is the ratio, not a water figure, despite the name:
-    // a live row reads dose 15, grandWater 16, volume "240", and 15 x 16 = 240.
-    ratio: raw.grandWater,
+        // `grandWater` is the ratio, not a water figure, despite the name: a
+        // live row reads dose 15, grandWater 16, volume "240", and 15 x 16 = 240.
+        ratio: raw.grandWater,
         volume: volume === null || Number.isNaN(volume) ? null : volume,
         shareLink: raw.shareRecipeLink
     };
