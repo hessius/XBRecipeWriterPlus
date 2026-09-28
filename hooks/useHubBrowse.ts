@@ -125,14 +125,14 @@ export function useHubBrowse(): HubBrowse {
             })
             .catch((error: HubApiError | Error) => {
                 if (!alive || error.name === "AbortError") return;
-                setReading({
+                setReading((was) => ({
                     model,
-                    rows: [],
-                    page: 0,
-                    totalPage: 0,
+                    rows: was !== null && was.model === model ? was.rows : [],
+                    page: was !== null && was.model === model ? was.page : 0,
+                    totalPage: was !== null && was.model === model ? was.totalPage : 0,
                     failed: error,
                     done: true
-                });
+                }));
             });
         return () => {
             alive = false;
