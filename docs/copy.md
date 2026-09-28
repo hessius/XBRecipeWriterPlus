@@ -377,6 +377,100 @@ dynamic text fetched from xBloom (`hooks/useRecipeImport.ts:348`,
 
 ---
 
+## Community catalogue
+
+These rows cover the community catalogue reached from Import and the recipe
+detail it opens. The catalogue uses Doto for machine labels and short status
+copy, with prose reserved for errors, empty states and toasts.
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `hub.title` | `app/hub.tsx:478` | Screen header title. | `CATALOGUE` |
+| `hub.search.collapsed.a11y` | `components/RailSearch.tsx:36` (a11y) | (a11y) Search chip while the field is closed. `${state}` is `no search term` or `term ${term} active`. | `Search recipes, collapsed, ${state}` |
+| `hub.search.expanded.a11y` | `components/RailSearch.tsx:108` (a11y) | (a11y) Search field while it is open. `${state}` is `no search term` or `term ${term} active`. | `Search recipes, expanded, ${state}` |
+| `hub.search.placeholder` | `components/RailSearch.tsx:111` | Doto placeholder inside the open search field. | `SEARCH` |
+| `hub.search.clear.a11y` | `components/RailSearch.tsx:130` (a11y) | (a11y) Button that clears the search term. | `Clear search` |
+| `hub.sort.chip.a11y` | `app/hub.tsx:153` (a11y) | (a11y) Sort rail chip. | `Sort catalogue` |
+| `hub.sort.sheet.title` | `app/hub.tsx:237` | Sort sheet title. | `SORT` |
+| `hub.sort.sheet.a11y` | `app/hub.tsx:239` (a11y) | (a11y) Sort radio group. | `Sort catalogue` |
+| `hub.sort.newest` | `library/hub/hubQuery.ts:17` (`HUB_SORTS.newest.label`) | Doto sort option and active sort chip. | `NEWEST` |
+| `hub.sort.name` | `library/hub/hubQuery.ts:18` (`HUB_SORTS.name.label`) | Doto sort option and active sort chip. | `A TO Z` |
+| `hub.sort.ratio` | `library/hub/hubQuery.ts:19` (`HUB_SORTS.ratio.label`) | Doto sort option and active sort chip. | `STRONGEST` |
+| `hub.filter.origin.label` | `app/hub.tsx:29` (`FACET_COPY.origins.label`) | Doto filter chip. | `ORIGIN` |
+| `hub.filter.process.label` | `app/hub.tsx:30` (`FACET_COPY.processes.label`) | Doto filter chip. | `PROCESS` |
+| `hub.filter.varietal.label` | `app/hub.tsx:31` (`FACET_COPY.varietals.label`) | Doto filter chip. | `VARIETAL` |
+| `hub.filter.flavour.label` | `app/hub.tsx:32` (`FACET_COPY.flavours.label`) | Doto filter chip. | `FLAVOUR` |
+| `hub.filter.chip.a11y` | `app/hub.tsx:165` (a11y) | (a11y) Facet filter chip. `${copy.spoken}` is Origin, Process, Varietal or Flavour. | `${copy.spoken} filter` |
+| `hub.filter.roast.label` | `app/hub.tsx:174` | Doto roast filter chip. | `ROAST` |
+| `hub.filter.roast.a11y` | `app/hub.tsx:175` (a11y) | (a11y) Roast filter chip. | `Roast filter` |
+| `hub.filter.roast.title` | `app/hub.tsx:518` | Roast filter sheet title. | `Roast` |
+| `hub.loading.title` | `app/hub.tsx:429` | Doto empty list state while the first catalogue page loads. | `LOADING CATALOGUE` |
+| `hub.loading.body` | `app/hub.tsx:430` | Empty list state while the first catalogue page loads. | `Loading the catalogue.` |
+| `hub.footer.progress` | `app/hub.tsx:303` | Footer progress while more catalogue pages load. `${page}` and `${totalPage}` are page counts. | `Page ${page} of ${totalPage}.` |
+| `hub.footer.loading` | `app/hub.tsx:309` | Doto footer status while more catalogue pages load. | `LOADING CATALOGUE` |
+| `hub.footer.error` | `app/hub.tsx:323` | Footer state when a later catalogue page fails to load. | `Could not load the catalogue.` |
+| `hub.footer.retry.a11y` | `app/hub.tsx:326` (a11y) | (a11y) Footer retry button after a later catalogue page fails to load. | `Try again` |
+| `hub.footer.retry` | `app/hub.tsx:331` | Footer retry button after a later catalogue page fails to load. | `Try again` |
+| `hub.error.title` | `app/hub.tsx:434` | Doto empty list state when loading the catalogue fails. | `CONNECTION LOST` |
+| `hub.error.body` | `app/hub.tsx:435` | Empty list state or footer state when loading the catalogue fails. | `Could not load the catalogue.` |
+| `hub.error.retry` | `app/hub.tsx:436` | Retry button after the catalogue fails to load. | `Try again` |
+| `hub.matches.empty.title` | `app/hub.tsx:441` | Doto empty state when no row matches the search and filters. | `NO MATCHES` |
+| `hub.matches.empty.body` | `app/hub.tsx:442` | Empty state when no row matches the search and filters. | `No recipes match this search or filters.` |
+| `hub.matches.empty.clear` | `app/hub.tsx:443` | Button that clears a search and all filters. | `Clear search and filters` |
+| `hub.toast.saveFailed.some` | `app/hub.tsx:89` (`failureMessage`) | Error toast after a multi save partly succeeds. `${saved}` is the number saved and `${failed}` is the displayed failed names. | `Saved ${saved}. Could not save: ${failed}.` |
+| `hub.toast.saveFailed.all` | `app/hub.tsx:90` (`failureMessage`) | Error toast after every selected recipe fails to save. `${failed}` is the displayed failed names. | `Could not save: ${failed}.` |
+| `hub.toast.saveFailed.more` | `app/hub.tsx:86` (`failureMessage`) | Error toast name list when more than three selected recipes fail. `${rest}` is the hidden failure count. | `${shown.join(", ")} and ${rest} more` |
+| `hub.toast.saved.withExisting` | `app/hub.tsx:95` (`successMessage`) | Success toast after saving recipes when some were already in the library. `${saved}` and `${alreadyHeld}` are counts. | `Saved ${saved}. ${alreadyHeld} already in your library.` |
+| `hub.toast.saved.one` | `app/hub.tsx:98` (`successMessage`) | Success toast after one selected recipe is saved. | `Saved 1 recipe.` |
+| `hub.toast.saved.many` | `app/hub.tsx:98` (`successMessage`) | Success toast after multiple selected recipes are saved. `${saved}` is the count. | `Saved ${saved} recipes.` |
+| `hub.toast.existing.one` | `app/hub.tsx:102` (`successMessage`) | Success toast after the selected recipe was already in the library. | `That recipe is already in your library.` |
+| `hub.toast.existing.many` | `app/hub.tsx:103` (`successMessage`) | Success toast after selected recipes were already in the library. `${alreadyHeld}` is the count. | `${alreadyHeld} recipes are already in your library.` |
+| `hub.toast.nothingSaved` | `app/hub.tsx:105` (`successMessage`) | Toast fallback when a multi save adds nothing. | `Nothing new was saved.` |
+| `hubFilter.note` | `components/HubFilterSheet.tsx:135` | Helper copy at the top of a filter sheet. | `Options are counted from recipes already loaded.` |
+| `hubFilter.row.count.one` | `components/HubFilterSheet.tsx:40` (`countLabel`) | Count beside a filter option when one recipe has that value. | `1 recipe` |
+| `hubFilter.row.count.many` | `components/HubFilterSheet.tsx:40` (`countLabel`) | Count beside a filter option when several recipes have that value. `${count}` is the count. | `${count} recipes` |
+| `hubFilter.row.a11y` | `components/HubFilterSheet.tsx:70` (a11y) | (a11y) Filter option row. `${option.value}` is the option name and `${recipes}` is the count label. | `${option.value}, ${recipes}` |
+| `hubFilter.clear.a11y` | `components/HubFilterSheet.tsx:139` (a11y) | (a11y) Button that clears the current filter sheet. `${title}` is the sheet title. | `Clear ${title} filters` |
+| `hubFilter.clear` | `components/HubFilterSheet.tsx:148` | Doto button that clears the current filter sheet. | `CLEAR` |
+| `hubFilter.search.a11y` | `components/HubFilterSheet.tsx:154` (a11y) | (a11y) Search field inside a long filter sheet. `${title}` is the sheet title. | `Search ${title.toLowerCase()}` |
+| `hubFilter.search.placeholder` | `components/HubFilterSheet.tsx:155` | Placeholder inside a long filter sheet. `${options.length}` is the option count and `${emptyLabel(title)}` is the plural filter name. | `Search ${options.length} ${emptyLabel(title)}` |
+| `hubFilter.empty` | `components/HubFilterSheet.tsx:170` | Empty filter sheet when no options have been loaded. `${emptyLabel(title)}` is the plural filter name. | `No ${emptyLabel(title)} found yet. Keep loading the catalogue.` |
+| `hubFilter.noMatches` | `components/HubFilterSheet.tsx:178` | Empty filter search result. | `Nothing here matches that.` |
+| `hubFilter.more` | `components/HubFilterSheet.tsx:192` | Note below the shown filter options. `${rest}` is the count of hidden options. | `${rest} more. Search to reach them.` |
+| `hubSave.progress` | `components/HubSaveBar.tsx:24` | Doto save bar progress while selected recipes save. `${progress.done}` and `${progress.total}` are counts. | `${progress.done} OF ${progress.total}` |
+| `hubSave.save` | `components/HubSaveBar.tsx:24` | Doto save bar button before saving. `${count}` is the selected recipe count. | `SAVE ${count}` |
+| `hubSave.progress.a11y` | `components/HubSaveBar.tsx:26` (a11y) | (a11y) Save bar progress while selected recipes save. `${progress.done}` and `${progress.total}` are counts. | `Saving ${progress.done} of ${progress.total}` |
+| `hubSave.save.one.a11y` | `components/HubSaveBar.tsx:28` (a11y) | (a11y) Save button when one recipe is selected. | `Save 1 recipe` |
+| `hubSave.save.many.a11y` | `components/HubSaveBar.tsx:29` (a11y) | (a11y) Save button when several recipes are selected. `${count}` is the selected recipe count. | `Save ${count} recipes` |
+| `hubSave.cancel.a11y` | `components/HubSaveBar.tsx:40` (a11y) | (a11y) Button that closes selection mode. | `Cancel` |
+| `hubSave.cancel` | `components/HubSaveBar.tsx:46` | Doto button that closes selection mode. | `CANCEL` |
+| `hubRecipe.title.fallback` | `app/hubRecipe.tsx:318` | Screen header title before the recipe detail has loaded. | `Recipe` |
+| `hubRecipe.loading.title` | `app/hubRecipe.tsx:124` | Doto detail state while the recipe loads. | `LOADING RECIPE` |
+| `hubRecipe.loading.body` | `app/hubRecipe.tsx:127` | Detail state while the recipe loads. | `Loading the recipe.` |
+| `hubRecipe.error.broken.title` | `app/hubRecipe.tsx:62` | Doto detail error for a malformed hub link. | `BROKEN LINK` |
+| `hubRecipe.error.broken.body` | `app/hubRecipe.tsx:63` | Detail error for a malformed hub link. | `That link does not point at a hub recipe.` |
+| `hubRecipe.error.gone.title` | `app/hubRecipe.tsx:69` | Doto detail error when a recipe is no longer shared. | `NO LONGER SHARED` |
+| `hubRecipe.error.gone.body` | `app/hubRecipe.tsx:70` | Detail error when a recipe is no longer shared. | `This recipe is no longer shared.` |
+| `hubRecipe.error.connection.title` | `app/hubRecipe.tsx:75` | Doto detail error when the hub cannot be reached. | `CONNECTION LOST` |
+| `hubRecipe.error.connection.body` | `app/hubRecipe.tsx:76` | Detail error when the hub cannot be reached. | `The hub is having trouble. Please try again.` |
+| `hubRecipe.error.retry.a11y` | `app/hubRecipe.tsx:102` (a11y) | (a11y) Retry button after a retryable detail error. | `Try again` |
+| `hubRecipe.error.retry` | `app/hubRecipe.tsx:109` | Doto retry button after a retryable detail error. | `TRY AGAIN` |
+| `hubRecipe.figure.dose` | `app/hubRecipe.tsx:235` | Doto recipe figure label. | `DOSE` |
+| `hubRecipe.figure.ratio` | `app/hubRecipe.tsx:236` | Doto recipe figure label. | `RATIO` |
+| `hubRecipe.figure.grind` | `app/hubRecipe.tsx:237` | Doto recipe figure label. | `GRIND` |
+| `hubRecipe.figure.water` | `app/hubRecipe.tsx:238` | Doto recipe figure label. | `WATER` |
+| `hubRecipe.stages` | `app/hubRecipe.tsx:245` | Doto heading above the stage ladder. | `STAGES` |
+| `hubRecipe.save.a11y` | `app/hubRecipe.tsx:262` (a11y) | (a11y) Save button on the detail screen. | `Save recipe` |
+| `hubRecipe.saving.a11y` | `app/hubRecipe.tsx:262` (a11y) | (a11y) Disabled save button while saving. | `Saving recipe` |
+| `hubRecipe.save` | `app/hubRecipe.tsx:270` | Doto save button on the detail screen. | `SAVE` |
+| `hubRecipe.saving` | `app/hubRecipe.tsx:270` | Doto disabled save button while saving. | `SAVING` |
+| `hubRecipe.toast.saved` | `app/hubRecipe.tsx:31` (`saveMessage`) | Success toast after saving the detail recipe. | `Saved to your library.` |
+| `hubRecipe.toast.existing` | `app/hubRecipe.tsx:32` (`saveMessage`) | Success toast when the detail recipe was already saved. | `Already in your library.` |
+| `hubRecipe.toast.nothingSaved` | `app/hubRecipe.tsx:33` (`saveMessage`) | Toast fallback when the detail save adds nothing. | `Nothing new was saved.` |
+| `hubRecipe.toast.saveFailed` | `app/hubRecipe.tsx:38` (`saveFailureMessage`) | Error toast when the detail recipe cannot be saved. `${name}` is the failed recipe name. | `Could not save ${name}.` |
+
+---
+
 ## Brewing — phases
 
 The brew screen (`app/brew.tsx`) and the phase copy it draws from
