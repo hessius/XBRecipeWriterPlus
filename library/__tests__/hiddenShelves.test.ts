@@ -187,6 +187,14 @@ describe("tag ids fold like author ids", () => {
      */
     it("folds the renamed overflow-off shelf onto its new id", () => {
         expect(canonicalShelfId("overflowOff")).toBe("omniDripper");
-        expect(isHidden(serialiseHidden(["overflowOff"]), "omniDripper")).toBe(true);
+        // The literal string an older build wrote, rather than one this build
+        // serialises: `serialiseHidden` folds on the way in, so going through
+        // it would prove a round trip rather than the upgrade this is about.
+        expect(isHidden('["overflowOff"]', "omniDripper")).toBe(true);
+        // The fold has to leave the new id alone as well. `isHidden` puts an
+        // already-canonical list through `canonicalShelfId` a second time, so
+        // a fold written as a two-way swap would pass the line above and
+        // quietly unhide the shelf for everybody who never saw the old name.
+        expect(canonicalShelfId("omniDripper")).toBe("omniDripper");
     });
 });
