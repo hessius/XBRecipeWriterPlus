@@ -31,8 +31,8 @@ type Props = {
      * Only the comparison screen sets it. Two lanes stacked one above the
      * other are not a comparison unless they share a scale: the same 30 second
      * mark has to be at the same x in both, and the same 200 ml at the same y.
-     * Absent, the box is sized to the longer of the plan and the run, which is
-     * what every other caller wants.
+     * Absent, the box is sized to whichever of the plan, the run and the
+     * bypass box reaches furthest, which is what every other caller wants.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */

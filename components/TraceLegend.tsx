@@ -30,7 +30,10 @@ export default function TraceLegend({colour, label, dashed = false, dotted = fal
                     stroke={colour}
                     strokeWidth={2}
                     // Not `channelStyle`: a 14 pt swatch needs its own dash
-                    // tuning, and matching the plan's "4 4" reads as a solid stub.
+                    // tuning. The plan's "4 4" would fit about 1.75 dashes
+                    // across the swatch and read as a solid stub, so the
+                    // patterns here are deliberately independent of the line
+                    // patterns even where, as with dotted, they coincide.
                     strokeDasharray={dashed ? "3 3" : dotted ? "1 3" : undefined}
                 />
             </Svg>
