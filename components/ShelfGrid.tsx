@@ -27,7 +27,7 @@ function Heading({label}: {label: string}) {
  *
  * A plain wrapping row rather than a second FlatList. The grid is somewhere the
  * user passes through on the way to a list, and the whole shelf vocabulary is
- * bounded by the twelve stock filters plus however many tags a person typed;
+ * bounded by the stock filters plus however many tags a person typed;
  * nothing here needs recycling, and a nested virtualised list inside a scroll
  * view is the warning React Native gives for exactly this shape.
  *
@@ -132,10 +132,11 @@ function HiddenShelves({shelves, onShow}: {
 /**
  * The shelf grid: the library's other front door.
  *
- * Two sections, `YOUR SHELVES` then `AUTO SHELVES`, matching the Doto caps of
- * `NO RECIPES YET`. A section with nothing in it is not drawn at all, heading
- * included: a heading over an empty section is a promise the app cannot keep,
- * and `AUTO SHELVES` over nothing would be the first thing a new user saw.
+ * Three sections: `YOUR SHELVES`, `FROM TAGS`, then `AUTO SHELVES`, matching
+ * the Doto caps of `NO RECIPES YET`. A section with nothing in it is not drawn
+ * at all, heading included: a heading over an empty section is a promise the
+ * app cannot keep, and `AUTO SHELVES` over nothing would be the first thing a
+ * new user saw.
  *
  * Tapping a tile opens that shelf into its own room, which is this same view
  * with the shelf's recipes on the squares instead of the shelves. It used to
@@ -175,6 +176,7 @@ export default function ShelfGrid({
     paddingBottom?: number;
 }) {
     const manual = shelves.filter((shelf) => shelf.kind === "manual");
+    const tagged = shelves.filter((shelf) => shelf.kind === "tag");
     const allAuto = shelves.filter((shelf) => shelf.kind === "auto");
     // Canonically, not by exact id: an author shelf's id carries whichever
     // spelling the representative recipe used, and the grouping behind it is
@@ -230,6 +232,12 @@ export default function ShelfGrid({
                   */}
                 <NewShelfButton onPress={onNewShelf}/>
             </YStack>
+            {tagged.length > 0 && (
+                <YStack gap="$2">
+                    <Heading label="FROM TAGS"/>
+                    <Rows shelves={tagged} marks={marks} onOpen={onOpen}/>
+                </YStack>
+            )}
             {(auto.length > 0 || putAway.length > 0) && (
                 <YStack gap="$2">
                     <Heading label="AUTO SHELVES"/>

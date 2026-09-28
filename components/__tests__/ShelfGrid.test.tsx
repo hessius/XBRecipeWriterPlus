@@ -35,6 +35,34 @@ describe("ShelfGrid", () => {
         expect(screen.getByText("AUTO SHELVES")).toBeTruthy();
     });
 
+    it("puts typed tags in their own section", async () => {
+        await renderWithProviders(
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()} shelves={[
+                shelf({id: "tag:espresso", label: "espresso", kind: "tag", count: 3})
+            ]}/>
+        );
+
+        expect(screen.getByText("FROM TAGS")).toBeTruthy();
+        expect(screen.getByRole("button", {name: "espresso, tag shelf, 3 recipes"}))
+            .toBeTruthy();
+    });
+
+    it("does not give typed tags the manual shelf actions", async () => {
+        const onShelfActions = jest.fn();
+        await renderWithProviders(
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                       onShelfActions={onShelfActions}
+                       shelves={[
+                           shelf({id: "tag:espresso", label: "espresso", kind: "tag", count: 3})
+                       ]}/>
+        );
+
+        const tile = screen.getByRole("button", {name: "espresso, tag shelf, 3 recipes"});
+        expect(tile.props.accessibilityActions).toBeUndefined();
+        await fireEvent(tile, "longPress");
+        expect(onShelfActions).not.toHaveBeenCalled();
+    });
+
     it("explains what a shelf is rather than drawing an empty grid", async () => {
         await renderWithProviders(<ShelfGrid shelves={[]} onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>);
 
@@ -146,6 +174,16 @@ describe("ShelfGrid", () => {
             await renderWithProviders(
                 <ShelfGrid shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual"})]}
                            marks={{"tag:morning": {accents: ["#A"]}}}
+                           onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
+            );
+
+            expect(screen.getByTestId("shelf-mark-mosaic")).toBeTruthy();
+        });
+
+        it("gives a tag shelf a mosaic of its members", async () => {
+            await renderWithProviders(
+                <ShelfGrid shelves={[shelf({id: "tag:espresso", label: "espresso", kind: "tag"})]}
+                           marks={{"tag:espresso": {accents: ["#A"]}}}
                            onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={jest.fn()}/>
             );
 

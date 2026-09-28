@@ -8,7 +8,8 @@ describe("building the shelves", () => {
         const shelves = buildShelves({
             filterCounts: {tea: 4},
             tagCounts: [{tag: "morning", count: 2}],
-            librarySize: 20
+            librarySize: 20,
+            myShelves: ["tag:morning"]
         });
 
         expect(shelves.map((s) => s.kind)).toEqual(["manual", "auto"]);
@@ -49,7 +50,8 @@ describe("building the shelves", () => {
         const shelves = buildShelves({
             filterCounts: {},
             tagCounts: [{tag: "new", count: 1}],
-            librarySize: 200
+            librarySize: 200,
+            myShelves: ["tag:new"]
         });
 
         expect(shelves.map((s) => s.id)).toEqual(["tag:new"]);
@@ -201,10 +203,104 @@ describe("per-author shelves", () => {
         const shelves = buildShelves({
             filterCounts: {tea: 5}, tagCounts: [{tag: "morning", count: 2}],
             librarySize: 20,
-            authorCounts: [{author: "BrewMind", count: 5}]
+            authorCounts: [{author: "BrewMind", count: 5}],
+            myShelves: ["tag:morning"]
         });
 
         expect(shelves.map((s) => s.id))
             .toEqual(["tag:morning", "tea", "sharedBy:BrewMind"]);
+    });
+});
+
+describe("a shelf the user made and a tag they typed", () => {
+    it("files a marked tag under YOUR SHELVES at any size", () => {
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "Mornings", count: 1}],
+            librarySize: 10,
+            myShelves: ["tag:mornings"]
+        });
+
+        expect(shelves).toEqual([
+            {id: "tag:Mornings", label: "Mornings", kind: "manual", count: 1}
+        ]);
+    });
+
+    it("matches a marked tag on its folded form", () => {
+        // The list stores canonical ids; the shelf carries the spelling the
+        // recipe used. Comparing the two raw would demote a shelf on a rename.
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "MORNINGS", count: 1}],
+            librarySize: 10,
+            myShelves: ["tag:mornings"]
+        });
+
+        expect(shelves[0].kind).toBe("manual");
+    });
+
+    it("drops an unmarked tag that is below the floor", () => {
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "espresso", count: 1}],
+            librarySize: 10,
+            myShelves: []
+        });
+
+        expect(shelves).toEqual([]);
+    });
+
+    it("files an unmarked tag that clears the floor under FROM TAGS", () => {
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "espresso", count: 3}],
+            librarySize: 10,
+            myShelves: []
+        });
+
+        expect(shelves).toEqual([
+            {id: "tag:espresso", label: "espresso", kind: "tag", count: 3}
+        ]);
+    });
+
+    it("keeps an unmarked tag the user is standing in, whatever its size", () => {
+        // The applied passthrough. Withdrawing the tile of the shelf someone
+        // just opened would leave the library narrowed with nothing naming it.
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "espresso", count: 1}],
+            librarySize: 10,
+            myShelves: [],
+            applied: ["tag:espresso"]
+        });
+
+        expect(shelves[0].kind).toBe("tag");
+    });
+
+    it("suppresses an unmarked tag that holds most of the library", () => {
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts: [{tag: "espresso", count: 9}],
+            librarySize: 10,
+            myShelves: []
+        });
+
+        expect(shelves).toEqual([]);
+    });
+});
+
+describe("ALL RECIPES is the last auto shelf", () => {
+    it("sits after the author shelves", () => {
+        const shelves = buildShelves({
+            filterCounts: {tea: 4, allRecipes: 10},
+            tagCounts: [],
+            authorCounts: [{author: "Anna", count: 4}],
+            librarySize: 10,
+            myShelves: []
+        });
+
+        expect(shelves.map((shelf) => shelf.id)).toEqual([
+            "tea", "sharedBy:Anna", "allRecipes"
+        ]);
     });
 });

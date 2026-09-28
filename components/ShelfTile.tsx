@@ -43,15 +43,16 @@ export default function ShelfTile({
      * mark's square goes quiet. A preference.
      *
      * Only the grid sets this, and only on the auto section. A manual shelf's
-     * mark is made of its members' own colours, so there is no single accent to
-     * lift out of it and nothing left in the square if one were.
+     * or tag shelf's mark is made of its members' own colours, so there is no
+     * single accent to lift out of it and nothing left in the square if one
+     * were.
      */
     inverted?: boolean;
     onPress: () => void;
     /**
-     * Open what can be done to this shelf. Manual shelves only: an auto shelf
-     * is a rule the app wrote, with no name of the user's to change and nothing
-     * of theirs to delete.
+     * Open what can be done to this shelf. Manual shelves only: a tag or auto
+     * shelf is a rule the app wrote, with no name of the user's to change and
+     * nothing of theirs to delete.
      *
      * Reached three ways, and deliberately so. A glyph inside the tile, because
      * a long press is not discoverable and editing is the only way a recipe
@@ -73,8 +74,11 @@ export default function ShelfTile({
     onHide?: () => void;
 }) {
     const manual = shelf.kind === "manual";
+    const namedByUser = shelf.kind !== "auto";
     const recipes = shelf.count === 1 ? "1 recipe" : `${shelf.count} recipes`;
-    const kind = manual ? "your shelf" : "auto shelf";
+    let kind = "auto shelf";
+    if (manual) kind = "your shelf";
+    else if (shelf.kind === "tag") kind = "tag shelf";
     // The accent the mark would have filled its square with. Inverting moves it
     // out here, so the two have to read it from the same place or the tile and
     // its square would disagree about which colour this shelf is.
@@ -139,7 +143,7 @@ export default function ShelfTile({
                       * the matrix face would recase it into something they did
                       * not type.
                       */}
-                    {manual ? (
+                    {namedByUser ? (
                         <Text fontSize={14} fontWeight="600" color={palette.text}
                               numberOfLines={1}>
                             {shelf.label}
