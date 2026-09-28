@@ -5,7 +5,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
-import {cupLineFor, palette} from "@/constants/colors";
+import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
@@ -13,6 +13,7 @@ import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
         temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
+import {channelStyle} from "@/library/brew/traceStyle";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -231,9 +232,15 @@ export default function BrewTrace({
     const planLength = pathLength(plan, box);
     const waterPath = toPath(water, box);
     const cupPath = toPath(cup, box);
-    // Derived here rather than at each use so the compact render, the full render
-    // and the legend cannot drift apart.
-    const cupColour = cupLineFor(accent);
+    // Derived here rather than at each use so the compact render, the full
+    // render and the legend cannot drift apart. From `traceStyle` rather than
+    // inline so that `CompareTrace` cannot drift from either.
+    const waterStyle = channelStyle("water", {accent, holding});
+    const cupStyle = channelStyle("cup", {accent});
+    const planStyle = channelStyle("plan", {
+        accent, dashed: planDashed, planColour: planColor
+    });
+    const cupColour = cupStyle.stroke;
     // The stages a temperature belongs to. `stages ?? pours` is the same
     // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
     // `stages`, so reading `pours` alone would draw nothing in history.
@@ -301,33 +308,25 @@ export default function BrewTrace({
                     <Path
                         testID="trace-plan"
                         d={planPath}
-                        stroke={planColor}
                         strokeOpacity={planOpacity}
-                        strokeWidth={1.5}
-                        strokeDasharray={planDashed ? "4 4" : undefined}
                         fill="none"
+                        {...planStyle}
                     />
                 )}
                 {cupPath !== "" && (
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={cupColour}
-                        strokeWidth={2}
-                        strokeDasharray="1 3"
-                        strokeLinecap="round"
                         fill="none"
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
                     <Path
                         testID="trace-water"
                         d={waterPath}
-                        stroke={holding ? palette.warn : accent}
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
                         fill="none"
+                        {...waterStyle}
                     />
                 )}
             </Svg>
@@ -504,11 +503,9 @@ export default function BrewTrace({
                     <Path
                         testID="trace-plan"
                         d={planPath}
-                        stroke={planColor}
                         strokeOpacity={planOpacity}
-                        strokeWidth={1.5}
-                        strokeDasharray={planDashed ? "4 4" : undefined}
                         fill="none"
+                        {...planStyle}
                     />
                 )}
                 {planPath !== "" && planHeadAt < 1 && (
@@ -526,22 +523,16 @@ export default function BrewTrace({
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={cupColour}
-                        strokeWidth={2}
-                        strokeDasharray="1 3"
-                        strokeLinecap="round"
                         fill="none"
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
                     <Path
                         testID="trace-water"
                         d={waterPath}
-                        stroke={holding ? palette.warn : accent}
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
                         fill="none"
+                        {...waterStyle}
                     />
                 )}
                 {bypassBox && (
@@ -575,10 +566,10 @@ export default function BrewTrace({
             ) : chart}
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3">
-                <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
+                <LegendItem colour={waterStyle.stroke} label="WATER" />
                 <LegendItem colour={cupColour} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
-                    <LegendItem colour={planColor} label="PLAN" dashed />
+                    <LegendItem colour={planStyle.stroke} label="PLAN" dashed />
                 )}
             </XStack>
             <XStack testID="trace-overrun-row" justifyContent="flex-end"
