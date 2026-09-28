@@ -49,7 +49,7 @@ third-party brewer it does not, so it does not try.
 for "other", which points the same way, but it is not offered as evidence here:
 that section is headed a `corroborated conflict`, only one of its three sources
 splits the values by cup type at all, and our own `setCupFrame` sends the wider
-range for every brew. The naming does not need it.
+range for every coffee brew. The naming does not need it.
 
 ## What changes
 

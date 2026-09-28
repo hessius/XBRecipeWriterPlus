@@ -17,9 +17,9 @@ import uuid from 'react-native-uuid';
  * told the shape of, so it does not try.
  *
  * Only a card carries the distinction. Cup type is not in the BLE recipe blob,
- * and `library/machine/` does not encode it, so a brew started over Bluetooth
- * sends the same cup frame whatever the recipe says. `setCupFrame` choosing
- * one width for every brew is not in conflict with any of this.
+ * so a brew started over Bluetooth sends the same cup frame whichever of the
+ * three coffee cups the recipe names, and a tea brew sends no cup frame at
+ * all. `setCupFrame` choosing one width is not in conflict with any of this.
  *
  * This comment said the opposite until #151, which proposed swapping the two
  * bytes to match it. The bytes were always right; `Recipe.card.test.ts` holds
