@@ -137,6 +137,18 @@ describe("parseBrewMindLink", () => {
         expect(parseBrewMindLink(valid({"bean.name": "X"}))?.coffee?.decaf).toBeUndefined();
     });
 
+    it("refuses a roast date that is not one", () => {
+        // #159 states the type, so it is enforced at the door rather than
+        // handed on for Beanconqueror to fail on.
+        const roastDate = (value: string) =>
+            parseBrewMindLink(valid({"bean.name": "X", "bean.roastDate": value}))
+                ?.coffee?.roastDate;
+        expect(roastDate("2026-09-01")).toBe("2026-09-01");
+        expect(roastDate("not-a-date")).toBeUndefined();
+        expect(roastDate("01/09/2026")).toBeUndefined();
+        expect(roastDate("2026-02-31")).toBeUndefined();
+    });
+
     it("refuses a measurement that cannot be real", () => {
         const parsed = parseBrewMindLink(valid({
             "bean.name": "X",

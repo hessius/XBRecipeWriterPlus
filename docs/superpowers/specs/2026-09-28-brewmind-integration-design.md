@@ -14,8 +14,11 @@ Two independent halves, both built here.
    auth session, which returns when BrewMind fires the link above, so the round
    trip never leaves the app.
 
-No API on either side, and no native module. `xbrw` is already a registered
-scheme (`app.json`), so the link works with no config change.
+No API on either side, and no custom native code. `xbrw` is already a
+registered scheme (`app.json`), so the link itself works with no config
+change. The one new dependency, `expo-web-browser`, does carry Apple and
+Android native modules of its own, which is why this is still a
+native-affecting change (see §3).
 
 ## The contract, and the one place it is ambiguous
 
@@ -110,7 +113,7 @@ the caps live in the URL parser where the untrusted value arrives:
 | Short text (`name`, `roaster`, `roastLevel`, `country`, `region`, `farm`, `farmer`, `variety`, `beanMix`, `process`, `fermentation`) | 120 |
 | `aromatics` | 500 |
 | `note` | 2000 |
-| `roastDate` | ISO 8601 date, parsed |
+| `roastDate` | ISO 8601 date, parsed, calendar checked |
 | `elevation` | integer 1..10000 |
 | `cuppingScore` | number above 0, up to 100 |
 | `url`, `image` | https only, 2000 |
@@ -222,8 +225,14 @@ link. If BrewMind does not, the session is an ordinary in-app browser and the
 user falls back to sharing the link, which already works. Both outcomes are
 useful, so this does not depend on BrewMind shipping anything.
 
-Adds `expo-web-browser`, installed with `npx expo install` so it stays pinned to
-SDK 57.
+Adds `expo-web-browser`, pinned to `~57.0.3` so it stays on SDK 57. It was
+written into `package.json` by hand: `npx expo install` fails with
+`EALLOWSCRIPTS` under npm 12, which is the fallback the repo notes already
+describe.
+
+The package ships Apple and Android native modules, so this is a
+native-affecting change and `expo.version` is bumped with it, as
+`runtimeVersion.policy` is `appVersion`.
 
 ### The silent-failure problem, unresolved
 

@@ -1,4 +1,4 @@
-import {podCoffeeFromPodsVo, podCoffeeFromStored, podImageUrl} from "@/library/podCoffee";
+import {isoDate, podCoffeeFromPodsVo, podCoffeeFromStored, podImageUrl} from "@/library/podCoffee";
 
 describe("podImageUrl", () => {
     it("accepts only an https URL carried by pod artwork", () => {
@@ -174,5 +174,31 @@ describe("podCoffeeFromStored, the #159 fields", () => {
         // block that xBloom did not send.
         expect(podCoffeeFromPodsVo({theName: "Pod", roastDate: "2026-09-01"}))
             .toEqual({name: "Pod", roastDate: "2026-09-01"});
+    });
+});
+
+describe("isoDate", () => {
+    it("keeps a real date exactly as written", () => {
+        expect(isoDate("2026-09-01")).toBe("2026-09-01");
+        expect(isoDate("2024-02-29")).toBe("2024-02-29");
+        // A timestamp is still an ISO 8601 date, and is not trimmed: deciding
+        // it meant only the date would be this app editing the value.
+        expect(isoDate("2026-09-01T07:41:03Z")).toBe("2026-09-01T07:41:03Z");
+    });
+
+    it("refuses anything that is not one", () => {
+        expect(isoDate("not-a-date")).toBeUndefined();
+        expect(isoDate("01/09/2026")).toBeUndefined();
+        expect(isoDate("2026-9-1")).toBeUndefined();
+        expect(isoDate("")).toBeUndefined();
+        expect(isoDate(20260901)).toBeUndefined();
+    });
+
+    it("refuses a day the calendar does not have", () => {
+        // `Date` rolls these into the next month rather than refusing them, so
+        // a shape check alone would store a different day than was written.
+        expect(isoDate("2026-02-31")).toBeUndefined();
+        expect(isoDate("2026-13-01")).toBeUndefined();
+        expect(isoDate("2025-02-29")).toBeUndefined();
     });
 });

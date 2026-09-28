@@ -31,8 +31,13 @@ export const BREWMIND_RETURN_URL = "xbrw://import";
  *
  * A link that comes back is read by the same parser a cold deep link goes
  * through. There is one grammar and one reader.
+ *
+ * The raw URL is handed on with it. On Android this API is built on a
+ * `Linking` listener, so the redirect that ends the session is *also*
+ * delivered as a URL event: the caller needs the string to recognise the two
+ * as one arrival rather than importing twice.
  */
-export function useBrewMindCreate(onLink: (link: BrewMindLink) => void) {
+export function useBrewMindCreate(onLink: (link: BrewMindLink, url: string) => void) {
     const [busy, setBusy] = useState(false);
 
     async function open() {
@@ -49,7 +54,7 @@ export function useBrewMindCreate(onLink: (link: BrewMindLink) => void) {
             setBusy(false);
             if (result.type !== "success") return;
             const link = parseBrewMindLink(result.url);
-            if (link !== null) onLink(link);
+            if (link !== null) onLink(link, result.url);
         } catch {
             // Nothing is said. The user either never left, or came back with
             // nothing, and in both cases the sheet they started from is still

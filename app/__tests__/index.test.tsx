@@ -54,12 +54,23 @@ jest.mock("expo-share-intent", () => ({
 jest.mock("@/hooks/useSetting", () =>
     require("@/test-utils/settingsMock").settingsMock());
 
-// The URL the app was opened with, which is how an import deep link arrives
-// (issue #159). Null for every test that is not about one.
+// An import link is delivered as an event, not read as a value (issue #159):
+// the launch URL, then each one that arrives while the app runs. Both are
+// driven here -- `mockImportUrl` is what the app was launched with, and
+// `mockDeliverUrl` fires a later delivery.
 let mockImportUrl: string | null = null;
+let mockUrlListener: ((event: {url: string}) => void) | undefined;
+
+const mockDeliverUrl = (url: string) => mockUrlListener?.({url});
 
 jest.mock("expo-linking", () => ({
-    useURL: () => mockImportUrl
+    getInitialURL:    () => Promise.resolve(mockImportUrl),
+    addEventListener: (_type: string, listener: (event: {url: string}) => void) => {
+        mockUrlListener = listener;
+        return {remove: () => {
+            mockUrlListener = undefined;
+        }};
+    }
 }));
 
 jest.mock("@/library/RecipeDatabase");
@@ -335,6 +346,7 @@ beforeEach(() => {
         resetShareIntent: jest.fn()
     };
     mockImportUrl = null;
+    mockUrlListener = undefined;
 });
 
 afterEach(() => {
@@ -2904,7 +2916,7 @@ describe("the import deep link", () => {
 
         await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
         expect(XBloomRecipe).toHaveBeenCalledWith(
-            expect.objectContaining({id: "abc123"})
+            expect.objectContaining({id: "abc123"}), expect.anything()
         );
     });
 
@@ -2934,9 +2946,6 @@ describe("the import deep link", () => {
     });
 
     it("imports once, however many times the screen renders", async () => {
-        // `useURL` hands the opening URL back for as long as the app lives, so
-        // without a guard this would re-fire on every render and again on
-        // every foreground.
         mockFetchRecipeDetail = () => new Promise<void>(() => {});
         mockImportUrl = link();
         const db = store([]);
@@ -2952,6 +2961,72 @@ describe("the import deep link", () => {
         });
 
         expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports a link that arrives while the app is running", async () => {
+        // The warm case. Nothing was delivered at launch, so an import that
+        // only read the launch URL would never hear this at all.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {});
+        expect(XBloomRecipe).not.toHaveBeenCalled();
+
+        await act(async () => {
+            mockDeliverUrl(link());
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("imports once when one redirect is delivered twice", async () => {
+        // On Android `openAuthSessionAsync` is built on a Linking listener, so
+        // returning from BrewMind resolves the session *and* fires a URL
+        // event. The second delivery would abort the first lookup and run it
+        // again.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const url = link();
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports the same link again when it is opened again later", async () => {
+        // The retry. A failed import is exactly when somebody opens the link a
+        // second time, so a permanent guard on the URL would refuse the one
+        // attempt that matters.
+        jest.useFakeTimers();
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const url = link();
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        await act(async () => {
+            jest.advanceTimersByTime(10_000);
+            mockDeliverUrl(url);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(2);
+        jest.useRealTimers();
     });
 
     it("ignores a link it was not built to read", async () => {

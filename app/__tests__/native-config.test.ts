@@ -4,7 +4,7 @@ type PluginEntry = string | [string, Record<string, unknown>];
 
 describe("native release configuration", () => {
     /**
-     * 2.0.0.
+     * 2.1.0.
      *
      * The ladder in issue #76 put M5 at 1.7.0 and reserved the major for the
      * account import, the release in which credentials leave the device for the
@@ -20,9 +20,13 @@ describe("native release configuration", () => {
      * `runtimeVersion` names a mechanism that is not in the build. If OTA
      * updates are ever adopted, that second sentence stops being true and the
      * first one carries the whole weight.
+     *
+     * The minor came with the BrewMind import (#159), which added
+     * `expo-web-browser`. That package ships Apple and Android native modules,
+     * so the binary changed and the version had to move with it.
      */
-    it("ships as 2.0.0, on the appVersion runtime policy", () => {
-        expect(appConfig.expo.version).toBe("2.0.0");
+    it("ships as 2.1.0, on the appVersion runtime policy", () => {
+        expect(appConfig.expo.version).toBe("2.1.0");
         expect(appConfig.expo.runtimeVersion.policy).toBe("appVersion");
     });
 

@@ -38,11 +38,17 @@ describe("useBrewMindCreate", () => {
             await result.current.open();
         });
 
-        expect(onLink).toHaveBeenCalledWith(expect.objectContaining({
-            share:  "https://share-h5.xbloom.com/r?id=abc123",
-            source: "brewmind",
-            coffee: {name: "Finca"}
-        }));
+        expect(onLink).toHaveBeenCalledWith(
+            expect.objectContaining({
+                share:  "https://share-h5.xbloom.com/r?id=abc123",
+                source: "brewmind",
+                coffee: {name: "Finca"}
+            }),
+            // The raw URL goes with it: on Android this same redirect is also
+            // delivered as a Linking event, and the caller can only recognise
+            // the two as one arrival by the string.
+            LINK
+        );
     });
 
     it("says nothing when the user simply comes back", async () => {

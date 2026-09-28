@@ -58,6 +58,45 @@ function text(value: unknown): string | undefined {
 }
 
 /**
+ * An ISO 8601 date, kept exactly as it was given.
+ *
+ * #159 states the type, so it is enforced rather than assumed: without this a
+ * roast date of "sometime last week" is stored, handed to Beanconqueror and
+ * parsed by whatever reads it there, and the failure surfaces in the other
+ * codebase rather than at the door it came through.
+ *
+ * The calendar is checked too, not just the shape. `2026-02-31` matches any
+ * reasonable pattern and is not a day, and `Date` would quietly roll it into
+ * March rather than refusing it.
+ *
+ * A time is allowed after the date because an ISO 8601 timestamp is still an
+ * ISO 8601 date, and a roaster's system may well send one. The string is
+ * returned untouched: trimming it to a date would be this app deciding what
+ * the value meant.
+ */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+export function isoDate(value: unknown): string | undefined {
+    const raw = text(value);
+    if (raw === undefined) return undefined;
+    const match = ISO_DATE.exec(raw);
+    if (match === null) return undefined;
+
+    const [, year, month, day] = match;
+    const parsed = new Date(`${year}-${month}-${day}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    // A rolled-over date is a different day from the one written down.
+    if (
+        parsed.getUTCFullYear() !== Number(year) ||
+        parsed.getUTCMonth() + 1 !== Number(month) ||
+        parsed.getUTCDate() !== Number(day)
+    ) {
+        return undefined;
+    }
+    return raw;
+}
+
+/**
  * A URL we are willing to keep and hand onwards.
  *
  * Checked here rather than at the far end because this is where a third-party
@@ -179,7 +218,7 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
     // the list is now long enough that fourteen near-identical lines is where
     // a copy-paste slip puts `region` into `farm` without anything noticing.
     const textFields: readonly Exclude<TextField, "name">[] = [
-        "roaster", "roastDate", "roastLevel", "origin", "country", "region",
+        "roaster", "roastLevel", "origin", "country", "region",
         "farm", "farmer", "process", "fermentation", "variety", "beanMix",
         "aromatics", "note"
     ];
@@ -192,6 +231,8 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
     if (imageUrl !== undefined) coffee.imageUrl = imageUrl;
     const url = httpsUrl(record[fields.url]);
     if (url !== undefined) coffee.url = url;
+    const roastDate = isoDate(record[fields.roastDate]);
+    if (roastDate !== undefined) coffee.roastDate = roastDate;
     return coffee;
 }
 
