@@ -9,13 +9,15 @@ import BleManager, {
 
 import {
     ATT_HEADER_BYTES,
-    RADIO_READY_MS,
     DEFAULT_MTU,
+    DEVICE_INFO_SERVICE,
     MACHINE_MTU,
     MACHINE_NAME_PREFIX,
     MACHINE_NOTIFY_CHARACTERISTIC,
     MACHINE_SERVICE,
     MACHINE_WRITE_CHARACTERISTIC,
+    MODEL_NUMBER_CHARACTERISTIC,
+    RADIO_READY_MS,
     SCAN_SECONDS
 } from "@/constants/machine";
 
@@ -31,6 +33,10 @@ export type FoundMachine = {id: string; name: string};
  */
 export interface MachineTransport {
     scan(seconds?: number): Promise<FoundMachine[]>;
+    /** What the connected machine says it is, or empty when it will not say. */
+    readonly modelNumber: string;
+    /** The name the machine advertised when it was found. */
+    readonly advertisedName: string;
     connect(id: string): Promise<void>;
     disconnect(): Promise<void>;
     /** Raw frame, already built. */
@@ -125,6 +131,19 @@ function propertyNames(properties: unknown): string[] {
  */
 export class BleTransport implements MachineTransport {
     private deviceId: string | null = null;
+    /** What the machine last said it was, or empty when it would not say. */
+    public modelNumber = "";
+    /**
+     * The name the machine advertised when it was found.
+     *
+     * Only ever set by a scan, and `attemptLink` skips the scan whenever an
+     * identifier is remembered — so for a returning user this stays empty for
+     * the whole life of the link. Empty therefore means "did not learn", never
+     * "the machine is nameless", and the layer that stores it has to treat the
+     * two differently or a normal reconnect would erase what an earlier scan
+     * found out.
+     */
+    public advertisedName = "";
     private started = false;
     private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
     private disconnectListeners = new Set<() => void>();
@@ -240,6 +259,7 @@ export class BleTransport implements MachineTransport {
                     (uuid) => uuid.toUpperCase() === MACHINE_SERVICE.toUpperCase()
                 );
                 if (matchesService || name.toUpperCase().startsWith(MACHINE_NAME_PREFIX)) {
+                    this.advertisedName = name;
                     found.set(peripheral.id, {id: peripheral.id, name});
                     stop();
                 }
@@ -285,6 +305,12 @@ export class BleTransport implements MachineTransport {
         // a refusal looked exactly like a grant, and the only symptom would
         // have been long frames quietly not arriving.
         await this.negotiateMtu(id);
+        // Best effort, like the MTU above. The Device Information Service is
+        // optional and older firmware need not carry it, so a machine that
+        // will not say what it is still connects and still brews. Recorded
+        // rather than acted on here: what to do with the answer is a decision
+        // for the layer that owns the setting.
+        await this.readModelNumber(id);
         this.deviceId = id;
     }
 
@@ -312,6 +338,17 @@ export class BleTransport implements MachineTransport {
             this.channels.push(
                 `MTU refused (${(e as Error).message}) — ${this.frameBudget} bytes a frame`
             );
+        }
+    }
+
+    private async readModelNumber(id: string): Promise<void> {
+        try {
+            const bytes = await BleManager.read(
+                id, DEVICE_INFO_SERVICE, MODEL_NUMBER_CHARACTERISTIC
+            );
+            this.modelNumber = String.fromCharCode(...bytes).replace(/\0+$/, "").trim();
+        } catch {
+            this.modelNumber = "";
         }
     }
 

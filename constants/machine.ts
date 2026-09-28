@@ -250,3 +250,26 @@ export const FRAME_HISTORY_LIMIT = 256;
  */
 export const ECHO_FRAMES =
     typeof __DEV__ !== "undefined" && __DEV__ && process.env.NODE_ENV !== "test";
+
+/**
+ * The standard Bluetooth Device Information Service, and the characteristic
+ * that carries the model number.
+ *
+ * Not xBloom's own service: these are assigned numbers every compliant device
+ * may implement, and many do not. Every read of them is best effort.
+ */
+export const DEVICE_INFO_SERVICE = "0000180A-0000-1000-8000-00805F9B34FB";
+export const MODEL_NUMBER_CHARACTERISTIC = "00002A24-0000-1000-8000-00805F9B34FB";
+
+/**
+ * Model strings that are certainly an xBloom Studio.
+ *
+ * Deliberately empty until somebody reads one off real hardware and adds it.
+ * An empty list means detection never fires, which is the correct behaviour
+ * for a guess we cannot check: the setting simply stays where the user left it.
+ *
+ * Only ever matched positively. A string that is not on this list is **not**
+ * evidence of an original xBloom, because we own none to read, and treating it
+ * as such would also misfire on a firmware revision. See issue #138.
+ */
+export const STUDIO_MODEL_STRINGS: readonly string[] = [];

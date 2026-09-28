@@ -49,6 +49,8 @@ export class FakeTransport implements MachineTransport {
     public written: Uint8Array[] = [];
     public connectedTo: string | null = null;
     public devices: FoundMachine[] = [{id: "AA:BB", name: "XBLOOM TEST"}];
+    public modelNumber = "";
+    public advertisedName = "XBLOOM TEST";
     /** Set to make `connect` reject, for the taken-link case. */
     public refuseConnection = false;
     /**
