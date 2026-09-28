@@ -80,8 +80,13 @@ export const DEFAULTS = {
     /**
      * Which xBloom this phone is driving.
      *
-     * The setting is the truth and detection may only ever refine it. A scan
-     * would find an original: `Transport.scan` is unfiltered and matches the
+     * The setting is what the app acts on, and detection may only ever
+     * overrule it on a certainty: a model string somebody has read off real
+     * hardware. There is no "refining" a wrong guess into a right one, so the
+     * one correction that can fire replaces the answer outright and says so in
+     * the machine console.
+     *
+     * A scan would find an original: `Transport.scan` is unfiltered and matches the
      * name prefix as well as the service UUID. But everything after discovery
      * is the Studio's: `MACHINE_SERVICE` and its characteristics are what a
      * connection resolves, and the model is read over that connection. A

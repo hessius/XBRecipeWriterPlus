@@ -66,7 +66,11 @@ function Vital({label, value}: {label: string; value: string}) {
  * not rendered when there is no connection to report the firmware of.
  */
 export default function MachineSection({settings}: {settings?: Settings}) {
-    const {machine, status, error, remembered, connect, forget} = useMachine();
+    // The injected store matters: the link writes `machineModel` through it
+    // when it recognises a Studio, and a test that injected a store while the
+    // hook wrote to the shared one would watch the correction land somewhere
+    // this row cannot see.
+    const {machine, status, error, remembered, connect, forget} = useMachine(undefined, {settings});
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);

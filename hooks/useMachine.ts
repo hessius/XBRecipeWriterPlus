@@ -53,8 +53,10 @@ export type LinkStore = {
      * Separate from `rememberId` because it answers a different question. The
      * id is how to find this machine again; this is what the machine is, and
      * it is kept as evidence rather than as configuration. See issue #138.
+     *
+     * Returns whether it overruled the user's machine setting.
      */
-    recordMachine: (reading: MachineReading) => void;
+    recordMachine: (reading: MachineReading) => boolean;
 };
 
 /** How a caller overrides the retrying, which is only ever a test. */
@@ -93,16 +95,34 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * erase what an earlier connect found out, on the reconnect after it, for
  * almost everybody, and these two keys exist to be trustworthy about what a
  * real machine said.
+ *
+ * Returns whether it overruled the user, so the caller can say so in the
+ * console. A setting that changes itself and mentions it to nobody is the
+ * hardest kind of bug to hear about from the field.
  */
-export function applyMachineReading(settings: Settings, reading: MachineReading): void {
+export function applyMachineReading(settings: Settings, reading: MachineReading): boolean {
     if (reading.model !== "") settings.set("machineModelString", reading.model);
     if (reading.name !== "") settings.set("machineName", reading.name);
-    // Inside the emptiness guard on purpose. `[].includes("")` is already
+    // The emptiness half of this is not redundant. `[].includes("")` is already
     // false, but a later edit that put "" on the list by accident would
     // otherwise promote every machine that stayed silent to a Studio.
-    if (reading.model !== "" && STUDIO_MODEL_STRINGS.includes(reading.model)) {
-        settings.set("machineModel", "studio");
-    }
+    const certain = reading.model !== "" && STUDIO_MODEL_STRINGS.includes(reading.model);
+    if (!certain || settings.get("machineModel") === "studio") return false;
+    settings.set("machineModel", "studio");
+    return true;
+}
+
+/**
+ * Throw away what the machine said, for a user pairing a different one.
+ *
+ * The opposite of the rule above, and not a contradiction of it. A blank
+ * reading on reconnect means "did not learn"; unpairing means "this is no
+ * longer the machine I was describing". Left behind, `machineModelString`
+ * would go on standing as evidence about whatever gets paired next.
+ */
+export function forgetMachineReadings(settings: Settings): void {
+    settings.set("machineModelString", "");
+    settings.set("machineName", "");
 }
 
 type LinkLifecycleMachine = {
@@ -356,7 +376,18 @@ async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
     }
     // Every successful connect, not only a new machine: firmware can change
     // under an identifier that did not.
-    store.recordMachine({model: machine.modelNumber, name: machine.advertisedName});
+    try {
+        const corrected = store.recordMachine({
+            model: machine.modelNumber, name: machine.advertisedName
+        });
+        if (corrected) machine.note(`recognised a Studio — machine setting corrected`);
+    } catch (error) {
+        // Best effort, like every other self-description step in this path.
+        // The link is already open and usable; throwing here would skip
+        // remembering a newly scanned id and report a failure over a machine
+        // that is in fact connected.
+        machine.note(`could not write down what the machine is — ${(error as Error).message}`);
+    }
     if (id !== remembered) {
         store.rememberId(id);
         // Written to the history because the consequence of it not happening is
@@ -383,7 +414,14 @@ export type MachineLink = {
      */
     connect: () => Promise<void>;
     forget: () => Promise<void>;
-    /** Which machine the user says this is. The setting, not a reading. */
+    /**
+     * Which machine the user says this is. The setting, not a reading.
+     *
+     * Narrowed here so a consumer does not have to. Nothing in the app reads
+     * it yet: the settings row owns both halves of the setting and goes
+     * through `useSetting` directly. It is the seam this file's own tests use
+     * to see a correction land, and the one a brew screen would use.
+     */
     machineModel: MachineModel;
 };
 
@@ -454,6 +492,7 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     async function forget(): Promise<void> {
         await machine.disconnect();
         setRemembered("");
+        forgetMachineReadings(options.settings ?? sharedSettings());
         setError(null);
         setStatus("idle");
     }

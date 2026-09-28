@@ -25,7 +25,7 @@ jest.mock("@/hooks/useSetting", () =>
 function store() {
     const {sharedSettings} = require("@/hooks/useSetting");
     const settings = sharedSettings();
-    for (const key of ["machineModel", "machineModelString"] as const) {
+    for (const key of ["machineModel", "machineModelString", "machineName"] as const) {
         settings.set(key, DEFAULTS[key]);
     }
     return settings;
@@ -36,7 +36,17 @@ describe("believing the machine over the user", () => {
         const settings = store();
         settings.set("machineModel", "original");
 
-        applyMachineReading(settings, {model: "XB-STUDIO-1", name: ""});
+        expect(applyMachineReading(settings, {model: "XB-STUDIO-1", name: ""})).toBe(true);
+
+        expect(settings.get("machineModel")).toBe("studio");
+    });
+
+    it("does not report a correction it did not have to make", () => {
+        // Every connect passes through here, and the console line exists to be
+        // worth reading. Saying "corrected" on each one would make it noise.
+        const settings = store();
+
+        expect(applyMachineReading(settings, {model: "XB-STUDIO-1", name: ""})).toBe(false);
 
         expect(settings.get("machineModel")).toBe("studio");
     });

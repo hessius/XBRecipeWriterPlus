@@ -170,7 +170,7 @@ describe("the machine link", () => {
         const store = {
             rememberedId: () => "AA:BB",
             rememberId: () => {},
-            recordMachine: (reading: MachineReading) => { recorded.push(reading); }
+            recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
         };
 
         await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
@@ -187,12 +187,46 @@ describe("the machine link", () => {
         const store = {
             rememberedId: () => "AA:BB",
             rememberId: () => { throw new Error("should not re-remember a known machine"); },
-            recordMachine: (reading: MachineReading) => { recorded.push(reading); }
+            recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
         };
 
         await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
 
         expect(recorded).toHaveLength(1);
+    });
+
+    it("keeps a working link when it cannot write down what the machine is", async () => {
+        // Writing the reading is a synchronous SQLite write and it can fail.
+        // The link is open by then, so a throw here would report a failure over
+        // a machine that is genuinely connected, and skip remembering it.
+        const transport = new FakeTransport();
+        const remembered: string[] = [];
+        const store = {
+            rememberedId: () => "",
+            rememberId: (id: string) => { remembered.push(id); },
+            recordMachine: () => { throw new Error("disk full"); }
+        };
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(openLink(machine, store, async () => true)).resolves.toBeUndefined();
+
+        expect(transport.connectedTo).not.toBeNull();
+        expect(remembered).toHaveLength(1);
+        expect(machine.linkHistory.some((event) => event.text.includes("disk full"))).toBe(true);
+    });
+
+    it("throws the readings away when the user unpairs", async () => {
+        // The one place discarding is right: the stored string described the
+        // machine being unpaired, not whatever gets paired next.
+        sharedSettings().set("machineModelString", "X15");
+        sharedSettings().set("machineName", "XBLOOM-77");
+        const transport = new FakeTransport();
+
+        const {result} = await renderHook(() => useMachine(new Machine(transport, {frameGapMs: 0})));
+        await act(async () => { await result.current.forget(); });
+
+        expect(sharedSettings().get("machineModelString")).toBe("");
+        expect(sharedSettings().get("machineName")).toBe("");
     });
 
     it("leaves the setting alone for a machine it does not recognise", async () => {
@@ -538,7 +572,7 @@ describe("connecting to a machine that is already paired", () => {
         const store = {
             rememberedId: () => "AA:BB",
             rememberId: jest.fn(),
-            recordMachine: () => {}
+            recordMachine: () => false
         };
 
         await connectRememberedMachine(machine, store, async () => true);
@@ -556,7 +590,7 @@ describe("connecting to a machine that is already paired", () => {
         const store = {
             rememberedId: () => "",
             rememberId: jest.fn(),
-            recordMachine: () => {}
+            recordMachine: () => false
         };
 
         await connectRememberedMachine(machine, store, permission);
@@ -574,7 +608,7 @@ describe("connecting to a machine that is already paired", () => {
         const store = {
             rememberedId: () => "AA:BB",
             rememberId: jest.fn(),
-            recordMachine: () => {}
+            recordMachine: () => false
         };
 
         await expect(connectRememberedMachine(
@@ -589,7 +623,7 @@ describe("opening a link that does not want to open", () => {
     const store = () => ({
         rememberedId: () => "AA:BB",
         rememberId: jest.fn(),
-        recordMachine: () => {}
+        recordMachine: () => false
     });
 
     it("keeps trying, rather than making the user press Connect again", async () => {
@@ -661,7 +695,7 @@ describe("opening a link that does not want to open", () => {
         const store = {
             rememberedId: () => id,
             rememberId: jest.fn(),
-            recordMachine: () => {}
+            recordMachine: () => false
         };
 
         const opening = openLink(machine0(transport), store, async () => true, {
