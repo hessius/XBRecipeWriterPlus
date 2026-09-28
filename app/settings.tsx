@@ -146,6 +146,10 @@ export default function SettingsScreen({settings}: Props) {
     // Read here only so the backup can carry it. The list itself belongs to the
     // grid's footer, which is where a shelf is put away and brought back.
     const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
+    // Same reason, and the same list format. Not a row on this screen either: a
+    // shelf is promoted from its own tile in the grid, which is where the user
+    // is standing when they decide it is one.
+    const [myShelves, setMyShelves] = useSetting("myShelves", settings);
 
     // Deliberately given no query: this screen's questions are all about the
     // whole library, never about a view of it. That is what lets the restore
@@ -184,7 +188,7 @@ export default function SettingsScreen({settings}: Props) {
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineAutoStart, animateBrewChart, brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
-            libraryView, invertAutoShelves, hiddenShelves
+            libraryView, invertAutoShelves, hiddenShelves, myShelves
         };
     }
 
@@ -308,6 +312,12 @@ export default function SettingsScreen({settings}: Props) {
         // place it matters, which is the grid.
         if (typeof incoming.hiddenShelves === "string") {
             setHiddenShelves(incoming.hiddenShelves);
+        }
+        // Taken as written for the same reason. A promotion is a decision the
+        // user made about a tag, and a backup that carried it out but did not
+        // put it back would quietly demote every shelf they had made.
+        if (typeof incoming.myShelves === "string") {
+            setMyShelves(incoming.myShelves);
         }
     }
 
