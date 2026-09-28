@@ -2,6 +2,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 import React from "react";
 
 import BrewJudgement from "@/components/BrewJudgement";
+import {RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("BrewJudgement", () => {
@@ -59,5 +60,15 @@ describe("BrewJudgement", () => {
     it("can leave the heading to its parent", async () => {
         await draw({showHeading: false});
         expect(screen.queryByText("HOW WAS IT")).toBeNull();
+    });
+
+    it("says nothing about waiting unless asked to", async () => {
+        await draw();
+        expect(screen.queryByText(RATING_CAN_WAIT)).toBeNull();
+    });
+
+    it("draws the hint it is given", async () => {
+        await draw({hint: RATING_CAN_WAIT});
+        expect(screen.getByText(RATING_CAN_WAIT)).toBeTruthy();
     });
 });

@@ -6,7 +6,7 @@ import {Linking} from "react-native";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {LONGEST_ACTIVE_HEADLINE} from "@/constants/brewCopy";
+import {LONGEST_ACTIVE_HEADLINE, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -401,6 +401,13 @@ describe("brew route", () => {
         // A finished brew is not a failed one — retry would invite a second brew
         // into a full cup, and there is nothing left to cancel.
         expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("tells the drinker the finished brew rating can wait", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText(RATING_CAN_WAIT)).toBeTruthy();
     });
 
     it("puts the finished summary in a scroller, so a long ladder can be read", async () => {

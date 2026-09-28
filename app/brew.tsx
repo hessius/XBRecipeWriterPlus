@@ -20,7 +20,7 @@ import MachineDot from "@/components/MachineDot";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
         FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PHASE_COPY,
-        PRO_MODE_PROMPT} from "@/constants/brewCopy";
+        PRO_MODE_PROMPT, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
 import {sharedBrewDatabase, useBrewJudgement, type HistoryStore, type JudgementStore}
@@ -456,7 +456,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // a rating nobody gives.
                         <BrewJudgement rating={judgement.rating} note={judgement.note}
                                        onRate={judgement.rate}
-                                       onNote={judgement.annotate}/>
+                                       onNote={judgement.annotate}
+                                       hint={RATING_CAN_WAIT}/>
                     )}
                     {phase.name === "done" && (
                         // In place, on the screen you are already on. This used

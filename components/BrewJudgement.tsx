@@ -1,6 +1,6 @@
 import React from "react";
 import {TextInput} from "react-native";
-import {XStack, YStack} from "tamagui";
+import {Text, XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -29,14 +29,21 @@ import {palette} from "@/constants/colors";
  * text field in the app dismisses on return, and a brew note is a sentence or
  * two rather than a paragraph, so it does the same. The wrapping is what
  * `multiline` is still here for.
+ *
+ * The hint is passed in rather than built in: it is true on the finished brew
+ * screen, where walking away is a real choice, and untrue on the record screen,
+ * where the user has deliberately come back to give it.
  */
-export default function BrewJudgement({rating, note, onRate, onNote, testID, showHeading = true}: {
+export default function BrewJudgement({
+    rating, note, onRate, onNote, testID, showHeading = true, hint
+}: {
     rating: number;
     note: string;
     onRate: (rating: number) => void;
     onNote: (note: string) => void;
     testID?: string;
     showHeading?: boolean;
+    hint?: string;
 }) {
     return (
         <YStack gap="$2" testID={testID ?? "brew-judgement"}>
@@ -49,6 +56,10 @@ export default function BrewJudgement({rating, note, onRate, onNote, testID, sho
                 )}
                 <BrewStars rating={rating} onRate={onRate} testID="judgement-stars"/>
             </XStack>
+
+            {hint !== undefined && (
+                <Text fontSize={12} color={palette.dim}>{hint}</Text>
+            )}
 
             <TextInput
                 testID="judgement-note"
