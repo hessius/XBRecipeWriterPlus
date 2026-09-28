@@ -118,6 +118,8 @@ type BrewRow = {
     roast: string;
     process: string;
     fermentation: string;
+    /** 0 on a brew never handed over, and on rows written before the column. */
+    sentAt: number | null;
     hasStream: number;
 };
 
@@ -173,6 +175,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 roast TEXT NOT NULL DEFAULT '',
                 process TEXT NOT NULL DEFAULT '',
                 fermentation TEXT NOT NULL DEFAULT '',
+                sentAt INTEGER NOT NULL DEFAULT 0,
                 hasStream INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS brew_samples (
@@ -309,6 +312,14 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // 0 on every row written before the app could tell you it had handed a
+    // brew over, which reads as "not sent", the same thing those rows would
+    // have said if asked.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN sentAt INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
     // Rows written before `bypass` existed read as "no bypass", exactly as
     // every recipe without one does; an empty string is the JSON-column
     // sentinel already used by `coffee`.
@@ -407,9 +418,9 @@ class BrewDatabase {
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
                                 grindSize, grinderRpm, grinderUsed, coffee,
-                                origin, roast, process, fermentation, hasStream)
+                                origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
@@ -436,6 +447,7 @@ class BrewDatabase {
                 isRoast(record.roast) ? record.roast : "",
                 isProcess(record.process) ? record.process : "",
                 isFermentation(record.fermentation) ? record.fermentation : "",
+                record.sentAt ?? 0,
                 hasStream ? 1 : 0
             ]
         );
@@ -737,6 +749,26 @@ class BrewDatabase {
     }
 
     /**
+     * The most recent measured brew.
+     *
+     * Deliberately not filtered by rating, by age or by whether its question
+     * was dismissed. Those are the rating prompt's rules and they live in
+     * `library/brew/ratingPrompt.ts`, where a test can drive every one of them
+     * without SQLite. This answers only "which brew is the current one?", and
+     * the answer being already rated is how the prompt learns there is nothing
+     * to ask.
+     */
+    public lastMeasuredBrew(): StoredBrew | null {
+        const rows = this.db.getAllSync<BrewRow>(
+            `SELECT * FROM brews
+             WHERE ${MEASURED_SQL}
+             ORDER BY endedAt DESC LIMIT 1;`
+        );
+        const row = rows[0];
+        return row === undefined ? null : {...hydrate(row), tags: this.tagsFor(row.id)};
+    }
+
+    /**
      * The user's verdict on a brew, and the pin that comes with it.
      *
      * One statement, so the pin cannot lag the judgement it is there to
@@ -779,6 +811,20 @@ class BrewDatabase {
         this.db.runSync(
             "UPDATE brews SET pinned = ? WHERE id = ?;", [pinned ? 1 : 0, id]
         );
+    }
+
+    /**
+     * Record that this brew was handed to another app, and when.
+     *
+     * A timestamp rather than a count: what the copy needs to say is that this
+     * has been over there before, and the last time is the more useful of the
+     * two facts. It means "we opened the link", never "they received it":
+     * opening a deep link proves nothing about whether the other app was
+     * installed, understood the envelope, or was cancelled out of. Every piece
+     * of copy built on this is phrased as what this app did.
+     */
+    public markSent(id: string, at: number): void {
+        this.db.runSync("UPDATE brews SET sentAt = ? WHERE id = ?;", [at, id]);
     }
 
     /**
@@ -981,6 +1027,10 @@ function hydrate(row: BrewRow): StoredBrew {
         // what it was before this column existed and the round trip stays
         // honest about "absent means the app saw it".
         ...(row.watched === 0 ? {watched: false} : {}),
+        // Emitted only when set, matching the optional-column convention above:
+        // a brew never handed over serialises exactly like one written before
+        // this existed, while a backup can carry the user-facing note along.
+        ...(row.sentAt !== null && row.sentAt > 0 ? {sentAt: row.sentAt} : {}),
         ...(bypass !== null ? {bypass} : {}),
         ...(row.dose > 0 ? {dose: row.dose} : {}),
         ...(row.ratio > 0 ? {ratio: row.ratio} : {}),

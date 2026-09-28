@@ -6,7 +6,7 @@ import {Linking} from "react-native";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {LONGEST_ACTIVE_HEADLINE} from "@/constants/brewCopy";
+import {LONGEST_ACTIVE_HEADLINE, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -403,6 +403,13 @@ describe("brew route", () => {
         expect(queryByLabelText("Try again")).toBeNull();
     });
 
+    it("tells the drinker the finished brew rating can wait", async () => {
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText(RATING_CAN_WAIT)).toBeTruthy();
+    });
+
     it("puts the finished summary in a scroller, so a long ladder can be read", async () => {
         // The summary is drawn at a fixed rung size, so its height grows with
         // the stage count. Unscrolled it simply ran off the bottom of the
@@ -742,7 +749,7 @@ describe("Beanconqueror handoff on the finished brew", () => {
     });
 
     const store = (brew: StoredBrew = record) => ({
-        all: () => [brew], samples: () => []
+        all: () => [brew], samples: () => [], markSent: jest.fn()
     });
 
     it("offers the handoff when the gate is on", async () => {

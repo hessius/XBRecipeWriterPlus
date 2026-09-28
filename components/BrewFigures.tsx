@@ -3,6 +3,7 @@ import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
+import {formatBrewClock} from "@/library/brew/brewFormat";
 
 type Props = {
     water: number;
@@ -30,12 +31,6 @@ type Props = {
      */
     drawdown?: number | null;
 };
-
-/** `2:06`. Floored, not rounded: a clock that shows 2:07 at 2:06.6 is wrong. */
-function clock(seconds: number): string {
-    const whole = Math.floor(Math.max(0, seconds));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
 function Figure({label, value, color, badge}: {
     label: string; value: string; color: string; badge?: React.ReactNode;
@@ -77,23 +72,22 @@ export default function BrewFigures(
     );
 
     return (
-        <YStack gap="$1.5">
+<YStack gap="$1.5">
             <XStack gap="$3">
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
                         badge={badge} />
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
-                <Figure label="TIME" value={clock(seconds)} color={palette.text} />
+                <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
             </XStack>
             {/* Absent, not zero, when it was not measured. A brew that was
-                cancelled never drew down and a record written before the
+                interrupted never drew down and a record written before the
                 boundary was kept cannot say, and printing 0:00 for either
                 would invent a figure somebody might dial a grind against. */}
             {drawdown !== null && (
                 <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
                                letterSpacing={1.6} color={palette.dim}>
-                    {`DRAWDOWN ${clock(drawdown)}`}
+                    {`DRAWDOWN ${formatBrewClock(drawdown)}`}
                 </DotMatrixText>
             )}
-        </YStack>
-    );
+        </YStack>    );
 }

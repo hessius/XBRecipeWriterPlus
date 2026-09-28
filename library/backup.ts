@@ -607,6 +607,9 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     rating:     (v) => isRating(v),
     note:       (v) => typeof v === "string",
     pinned:     (v) => typeof v === "boolean",
+    // A note to the user, not proof another app received it. It still travels
+    // with backups so a restored phone can warn before creating another copy.
+    sentAt:     isNumber,
     // A brew somebody logged by hand is the only record that carries this, and
     // it is the only thing that record holds beyond its rating. Dropping it in
     // transit would turn a typed verdict into a brew the app claims to have
@@ -705,6 +708,7 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         rating: record.rating ?? 0,
         note: (record.note ?? "").slice(0, MAX_BACKUP_NOTE),
         pinned: record.pinned ?? false,
+        sentAt: record.sentAt,
         // Undefined stays undefined: absent means the app watched it, and
         // writing `true` here would put a field on every record in the file to
         // say what its absence already says.

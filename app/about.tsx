@@ -14,6 +14,7 @@ import Wordmark from "@/components/Wordmark";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {LICENCES} from "@/constants/licences";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {useSetting} from "@/hooks/useSetting";
 import type {Settings} from "@/library/Settings";
 
@@ -97,6 +98,7 @@ const BUILD = Application.nativeBuildVersion ?? "unknown";
 export default function AboutScreen({settings}: Props = {}) {
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
     const [taps, setTaps] = useState(0);
+    const {ratingNoteOpen} = useLiveBrew();
 
     /**
      * The way into LABS, and deliberately the only one.
@@ -132,7 +134,9 @@ export default function AboutScreen({settings}: Props = {}) {
     }
 
     return (
-        <YStack flex={1} backgroundColor={palette.base}>
+        <YStack flex={1} backgroundColor={palette.base}
+                accessibilityElementsHidden={ratingNoteOpen}
+                importantForAccessibility={ratingNoteOpen ? "no-hide-descendants" : "auto"}>
             <ScreenHeader title="About" onBack={() => router.back()}/>
             <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 48}}>
                 {/* The mark, the wordmark and the ticker read as one object, so

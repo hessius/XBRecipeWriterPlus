@@ -21,9 +21,24 @@ export function formatBrewTime(ms: number): string {
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-/** `4:23`. */
+/**
+ * `4:23`, rounded to the nearest second.
+ *
+ * History and comparison rows are summaries, so a brew that lasted 4:22.6 is
+ * closer to 4:23 than 4:22. Live clocks use `formatBrewClock`, because a clock
+ * that shows the next second before it has happened looks fast.
+ */
 export function formatBrewDuration(startMs: number, endMs: number): string {
     const totalSeconds = Math.round((endMs - startMs) / 1000);
+    return formatClock(totalSeconds);
+}
+
+/** `2:06`, floored, for live clocks and silhouettes that must not run fast. */
+export function formatBrewClock(seconds: number): string {
+    return formatClock(Math.floor(Math.max(0, seconds)));
+}
+
+function formatClock(totalSeconds: number): string {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${String(secs).padStart(2, "0")}`;

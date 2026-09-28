@@ -15,18 +15,19 @@ import * as Clipboard from "expo-clipboard";
 import ExportButton from "@/components/ExportButton";
 import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
-import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
-import {useBrewHandoff} from "@/hooks/useBrewHandoff";
+import {useBrewRecordHandoff} from "@/hooks/useBrewRecordHandoff";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import BeanNameSheet from "@/components/BeanNameSheet";
+import BrewNoteSheet from "@/components/BrewNoteSheet";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
-import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
     from "@/hooks/useBrewHistory";
 import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
+import {brewFigures} from "@/library/brew/brewFigures";
 import {drawdownSeconds, poursFromPlan} from "@/library/brew/BrewRecord";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
@@ -35,6 +36,7 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
@@ -115,6 +117,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // and the "brew not found" return below is earlier.
     const [consoleFound] = useSetting("machineConsoleAcknowledged");
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const {ratingNoteOpen} = useLiveBrew();
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
@@ -129,15 +132,10 @@ export default function BrewRecord({recipeLookup}: Props) {
             scroller.current?.scrollTo({y: 0, animated: false});
         }
     );
-    // Handoff opens Beanconqueror directly and keeps its own in-flight guard.
-    // The share exports are separate actions with separate state, so one busy
-    // export should not disable a different handoff path that can still run.
-    const {send: sendHandoff, busy: handoffBusy} = useBrewHandoff(() => opened);
     // The machine knows what a pod was and never what a hopper held, so the
     // coffee is only ever a question for a brew that came from beans. Asked
     // here and not in the batch path: once is a courtesy, once per brew across
     // a selection is a questionnaire.
-    const [namingBean, setNamingBean] = useState(false);
     const [pickingComparison, setPickingComparison] = useState(false);
     const [comparisonCandidates, setComparisonCandidates] = useState<StoredBrew[]>([]);
 
@@ -160,6 +158,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         },
         judgementStore
     );
+    const handoff = useBrewRecordHandoff(opened, recipe, judgement);
 
     // No "All brews" control. The list is the only way in here, so it sat
     // beside a back chevron that already went to exactly the same screen —
@@ -236,6 +235,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const hasComparisonCandidate = brews.some(
         (brew) => brew.recipeUuid === record.recipeUuid && brew.id !== record.id
     );
+    const figures = brewFigures(record);
 
     function openComparisonPicker(): void {
         const candidates = sharedBrewDatabase()
@@ -263,7 +263,8 @@ export default function BrewRecord({recipeLookup}: Props) {
         setComparisonCandidates([]);
     }
 
-    const screenCovered = namingBean || pickingComparison;
+    const screenCovered = handoff.namingBean || handoff.ratingBeforeSend || pickingComparison
+        || ratingNoteOpen;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -372,8 +373,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                 inside it would be in every PNG anybody shares. */}
             <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
                 <BrewJudgement rating={judgement.rating} note={judgement.note}
-                               onRate={judgement.rate}
-                               onNote={judgement.annotate}/>
+                               onRate={handoff.rateBrew}
+                               onNote={handoff.annotateBrew}
+                               onNoteDraft={handoff.setNoteDraft}/>
                 {judgement.pinned && (
                     // The pin as a state rather than a question. It is set by
                     // judging, so the user is told what happened and offered
@@ -421,15 +423,16 @@ export default function BrewRecord({recipeLookup}: Props) {
                         // with the two exports; a full row gives it width.
                         <XStack>
                             <ExportButton label={handoffTarget.buttonLabel}
-                                          busy={handoffBusy}
-                                          onPress={() => {
-                                              if (handoffCoffee(record, recipe) === undefined) {
-                                                  setNamingBean(true);
-                                                  return;
-                                              }
-                                              void sendHandoff();
-                                          }} />
+                                          busy={handoff.busy}
+                                          onPress={handoff.requestSend} />
                         </XStack>
+                    )}
+                    {handoff.sentAt > 0 && (
+                        <Text fontSize={12} color={palette.dim}>
+                            {HANDOFF_ALREADY_SENT(
+                                new Date(handoff.sentAt).toLocaleDateString()
+                            )}
+                        </Text>
                     )}
                 </YStack>
             )}
@@ -450,9 +453,32 @@ export default function BrewRecord({recipeLookup}: Props) {
             </ScrollView>
             </YStack>
 
-            <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
+            <BeanNameSheet open={handoff.namingBean} onOpenChange={handoff.setNamingBean}
                            suggestion={beanNameFromRecipe(record.recipeName) ?? ""}
-                           onConfirm={(name) => void sendHandoff(name)} />
+                           onConfirm={(name) => void handoff.sendNow(name)} />
+            <BrewNoteSheet
+                open={handoff.ratingBeforeSend}
+                onOpenChange={handoff.setRatingBeforeSend}
+                onDone={handoff.continueSend}
+                figures={figures}
+                recipeName={record.recipeName}
+                rating={judgement.rating}
+                note={judgement.note}
+                onRate={handoff.rateBrew}
+                onNote={handoff.annotateBrew}
+                onNoteDraft={handoff.setNoteDraft}
+                footer={
+                    <XStack accessibilityRole="button"
+                            accessibilityLabel="Send without rating it"
+                            testID="send-without-rating"
+                            onPress={handoff.continueSend}
+                            height={44} alignItems="center" justifyContent="center">
+                        <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
+                                       color={palette.dim}>
+                            SEND WITHOUT RATING
+                        </DotMatrixText>
+                    </XStack>
+                }/>
             <CompareWithSheet
                 open={pickingComparison}
                 candidates={comparisonCandidates}

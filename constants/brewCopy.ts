@@ -353,3 +353,50 @@ export function compareDriftSentence(
     }
     return `The plans differ in ${words}, but the chart shape is the same.`;
 }
+
+/**
+ * The line under the stars on the finished brew screen.
+ *
+ * The screen asks at the moment the machine stops, which is the moment the user
+ * has least to say: the cup is under the spout and has not been tasted. The
+ * control stays because somebody who does have an opinion should not have to
+ * go looking for a history screen to give it. This line is what makes walking
+ * away a choice rather than a loss.
+ */
+export const RATING_CAN_WAIT = "No rush. You can rate it later.";
+
+/** Drawn on the rating bar's second row, after the recipe name. */
+export const RATING_PROMPT_QUESTION = "HOW WAS IT";
+
+/**
+ * The accessibility label for the rating bar's left hand tap target, which
+ * opens the brew record.
+ */
+export const RATING_PROMPT_OPEN_LABEL = "Open the last brew";
+
+/**
+ * The accessibility label for the rating bar's close control.
+ *
+ * Not visible text: the control is an icon.
+ */
+export const RATING_PROMPT_DISMISS_LABEL = "Not now";
+
+/** The title of the rating sheet that opens behind a star. */
+export const RATING_SHEET_TITLE = "How was it?";
+
+/** Visible text on the rating sheet's confirm control. */
+export const RATING_SHEET_DONE = "DONE";
+
+/**
+ * What the Beanconqueror door says once a brew has gone over.
+ *
+ * Phrased as what this app did rather than what the other app received:
+ * opening a deep link proves nothing about installation, understanding or the
+ * user cancelling out of it. The second sentence is the honest description of
+ * an envelope with no brew id in it, which is why the button is never disabled.
+ * It stays conditional because the first envelope may not have reached
+ * Beanconqueror at all.
+ */
+export function HANDOFF_ALREADY_SENT(when: string): string {
+    return `Sent ${when}. Sending again will add another brew rather than update the one you sent.`;
+}
