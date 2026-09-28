@@ -12,7 +12,8 @@ import {cupLineFor, palette} from "@/constants/colors";
  * Same rule as `constants/colors.ts` and `constants/motion.ts`: a value that is
  * not in the module cannot take part when the thing is retuned.
  *
- * KEEP IN STEP WITH: `components/BrewTrace.tsx`, `components/CompareTrace.tsx`.
+ * KEEP IN STEP WITH: `components/BrewTrace.tsx`,
+ * `components/CompareTrace.tsx`, `components/__tests__/traceGrammar.test.tsx`.
  */
 
 export type Channel = "water" | "cup" | "plan";

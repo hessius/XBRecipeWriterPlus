@@ -182,6 +182,11 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
 /** what was asked for, what the machine did, what landed
  * in the cup.
  *
+ * KEEP IN STEP WITH: `components/CompareTrace.tsx` and
+ * `components/__tests__/traceGrammar.test.tsx`. The two charts share their
+ * appearance through `library/brew/traceStyle.ts`; nothing in this file should
+ * set a stroke width or a dash pattern for a shared channel on its own.
+ *
  * The axis is sized to the longer of the plan and the run, so a brew held by
  * overflow protection ends right of its plan by exactly the time it lost and
  * the chart records the hold for free. Squeezing the run back onto the plan's
