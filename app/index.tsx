@@ -60,9 +60,10 @@ import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
     availableFilters,
+    chipFilters,
     filterLabel,
-    STOCK_FILTERS,
-    type FilterId
+    isStockFilter,
+    STOCK_FILTERS
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
 import {parseHidden, toggleHidden} from "@/library/hiddenShelves";
@@ -371,13 +372,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const SELECTED_CHIP = "picker:selected";
     /** The bean picker chip is a door into a sheet, not a filter id. */
     const BEANS_CHIP = "picker:beans";
-    const offeredFilterIds = asStockFilters(availableFilters(
+    const offeredStockFilterIds = asStockFilters(availableFilters(
         library.filterCounts,
         library.librarySize,
         // What is already applied, so suppression cannot withdraw a filter the
         // user switched on and strand the library narrowed with no control.
         libraryQuery.query.filters
     ));
+    const offeredFilterIds = chipFilters(offeredStockFilterIds);
     // Every applied filter the stock row cannot offer, which in practice means
     // the shelf the user just opened from the grid. Without these the tag stays
     // in the query and in the filter button's count with no chip naming it, so
@@ -386,7 +388,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // recipe that is not already on it, which is most of the ones the user came
     // to add.
     const appliedNonStock = libraryQuery.query.filters.filter(
-        (id) => !offeredFilterIds.includes(id as FilterId)
+        (id) => !isStockFilter(id)
     );
     const railFilters: RailFilter[] = [
         // Drawn first and only while picking, because from inside a narrowed

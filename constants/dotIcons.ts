@@ -583,7 +583,7 @@ export const DOT_ICONS = {
     /**
      * The shelf marks, one per auto shelf.
      *
-     * Eighteen glyphs is a lot to add to a set whose own rule is "keep it small",
+     * Twenty glyphs is a lot to add to a set whose own rule is "keep it small",
      * and the rule still holds: these are one closed set, drawn once, for one
      * job. The auto shelves ship with the app and never change, so every glyph
      * is authored at design time and no user ever picks one -- which is exactly
@@ -854,6 +854,24 @@ export const DOT_ICONS = {
         ".........",
         ".#######.",
         "..#####..",
+        "........."
+    ],
+    /**
+     * Nine dots on an even grid: the whole field rather than a part of it.
+     *
+     * Not a stack of rows like `list` or `shelfMostBrewed`, which both mean a
+     * number of things. This one means every thing, so it fills the square in
+     * both directions instead of counting up one of them.
+     */
+    shelfAllRecipes: [
+        ".........",
+        ".#..#..#.",
+        ".........",
+        ".........",
+        ".#..#..#.",
+        ".........",
+        ".........",
+        ".#..#..#.",
         "........."
     ]
 } as const satisfies Record<string, readonly string[]>;

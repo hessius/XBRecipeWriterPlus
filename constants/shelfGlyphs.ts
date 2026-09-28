@@ -39,7 +39,8 @@ export const SHELF_GLYPHS: Record<FilterId, DotIconName> = {
     mine:          "shelfMine",
     mostBrewed:    "shelfMostBrewed",
     neverBrewed:   "shelfNeverBrewed",
-    recentlyAdded: "shelfRecent"
+    recentlyAdded: "shelfRecent",
+    allRecipes:    "shelfAllRecipes"
 };
 
 /**

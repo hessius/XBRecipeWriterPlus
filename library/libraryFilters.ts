@@ -58,7 +58,8 @@ export type FilterId =
     | "slowBrew"
     | "favourites"
     | "neverBrewed"
-    | "mostBrewed";
+    | "mostBrewed"
+    | "allRecipes";
 
 type StockFilter = {
     /** The chip label, in Doto caps, taken from the design's shelf names. */
@@ -68,6 +69,16 @@ type StockFilter = {
      * app worked out, which exempts it from suppression. See `isOffered`.
      */
     authored?: true;
+    /**
+     * Drawn in the grid, never offered as a chip.
+     *
+     * The one declared exception to "the rail and the grid cannot disagree".
+     * ALL RECIPES narrows nothing, so a chip for it would be a control that
+     * does not control anything, sitting on the one row whose entire purpose is
+     * narrowing. Declared here rather than special-cased at the rail, so a
+     * reader who notices the difference finds the reason on the filter itself.
+     */
+    gridOnly?: true;
     /**
      * The clause is a function, not a value, so the one time-relative filter
      * (`recentlyAdded`) computes its cutoff when the query is built rather than
@@ -226,6 +237,18 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
             where: `(${countedBrews("COUNT(*)")}) >= ?`,
             params: [MOST_BREWED_BREWS]
         })
+    },
+    // `1 = 1` rather than a special case anywhere downstream. The clause runs
+    // in three query shapes and every one of them takes it unchanged, so the
+    // count, the list and the shelf art all come through the ordinary path.
+    allRecipes: {
+        label: "ALL RECIPES",
+        clause: () => ({where: "1 = 1"}),
+        // Its count is the whole library, so it fails the 80% ceiling at every
+        // size above the floor. Waived for the same reason FAVOURITES is: this
+        // is not the app inventing a category, it is the way out of one.
+        authored: true,
+        gridOnly: true
     }
 };
 
@@ -239,7 +262,7 @@ export const STOCK_FILTER_ORDER: readonly FilterId[] = [
     "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "fewStages",
     "manyStages", "grinderOff", "xbloom", "shortRatio", "longRatio",
     "quickBrew", "slowBrew", "hot", "mine",
-    "mostBrewed", "neverBrewed", "recentlyAdded"
+    "mostBrewed", "neverBrewed", "recentlyAdded", "allRecipes"
 ];
 
 /**
@@ -270,6 +293,18 @@ export function isStockFilter(value: unknown): value is FilterId {
 export function asStockFilters(value: unknown): FilterId[] {
     if (!Array.isArray(value)) return [];
     return value.filter(isStockFilter);
+}
+
+/**
+ * The ids that may be drawn as chips, from the ids that may be drawn at all.
+ *
+ * `availableFilters` stays the single suppression gate; this is not a second
+ * one. It removes only what has said on its own entry that it does not belong
+ * on the rail, so the grid and the chips still cannot disagree about which
+ * shelves exist, only about which of them a chip can usefully name.
+ */
+export function chipFilters(ids: readonly FilterId[]): FilterId[] {
+    return ids.filter((id) => STOCK_FILTERS[id].gridOnly !== true);
 }
 
 /**

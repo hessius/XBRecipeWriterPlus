@@ -4,6 +4,7 @@ import {
     authorFromFilterId,
     availableFilters,
     asLibraryFilters,
+    chipFilters,
     filterLabel,
     resolveLibraryFilter,
     asStockFilters,
@@ -587,7 +588,40 @@ describe("FAVOURITES is not suppressed", () => {
         // `authored` shelf added later is a deliberate act and not a typo that
         // quietly opts a shelf out of suppression.
         const authored = STOCK_FILTER_ORDER.filter((id) => STOCK_FILTERS[id].authored);
-        expect(authored).toEqual(["favourites"]);
+        expect(authored).toEqual(["favourites", "allRecipes"]);
+    });
+});
+
+describe("ALL RECIPES", () => {
+    it("resolves to a clause that matches everything", () => {
+        expect(resolveStockFilter("allRecipes")).toEqual({where: "1 = 1"});
+    });
+
+    it("is offered however much of the library it holds", () => {
+        // Its count is the library, so the 80% ceiling would take it away the
+        // moment it worked. It waives both gates the way FAVOURITES does.
+        expect(availableFilters({allRecipes: 40}, 40, [])).toContain("allRecipes");
+        expect(availableFilters({allRecipes: 1}, 1, [])).toContain("allRecipes");
+    });
+
+    it("is not offered by an empty library", () => {
+        expect(availableFilters({allRecipes: 0}, 0, [])).not.toContain("allRecipes");
+    });
+
+    it("is last in the stock order", () => {
+        expect(STOCK_FILTER_ORDER[STOCK_FILTER_ORDER.length - 1]).toBe("allRecipes");
+    });
+});
+
+describe("chipFilters", () => {
+    it("drops a grid-only filter from the rail", () => {
+        // A chip that narrows nothing is noise on a rail whose whole job is
+        // narrowing. The grid still draws the tile.
+        expect(chipFilters(["tea", "allRecipes", "mine"])).toEqual(["tea", "mine"]);
+    });
+
+    it("leaves every other filter alone", () => {
+        expect(chipFilters(["tea", "mine"])).toEqual(["tea", "mine"]);
     });
 });
 
