@@ -3043,3 +3043,74 @@ find only mock URLs and assertions, never a live call.
 - [ ] The app builds and the catalogue screen opens on a device, with a real
       network, against the live endpoint. Nothing in this plan can be verified
       against the real catalogue in Jest, and the data is provably dirty.
+
+---
+
+# Amendment: the server's filters do not work, so the catalogue comes to us
+
+Written after Tasks 1 to 4, on evidence gathered against the live API. Tasks 5
+onward are changed by it, and Task 4's `hubQuery.ts` is rewritten.
+
+## What was measured
+
+Every facet id in the server's own vocabulary, probed against both machines:
+
+| Filter | Studio (J15) rows | Original (J20) rows |
+| --- | --- | --- |
+| `originIds`, all 28 ids | 9 ids match anything, best is Colombia at **12** | **0 ids match anything** |
+| `varietalIds`, first 12 ids | 7 match | **0** |
+| `processIds`, first 12 ids | 6 match | **0** |
+| `flavorIds`, first 12 ids | 11 match | **0** |
+| `roastList` | works | works, 216 rows |
+| `cupTypeList` | works | works, 1,323 rows |
+| `keyword: "colombia"` | **5** | 4 |
+
+The partitions hold 1,643 Studio and 1,323 Original rows. So:
+
+1. **Every structured facet returns zero rows for an Original owner.** Shipping
+   the planned rail would give half the userbase four chips that always answer
+   "nothing found". That is not a filter, it is a bug with a label on it.
+2. **The facets barely work for a Studio owner either.** 106 rows carry
+   Colombia in their origin and `originIds` finds 12 of them.
+3. **`keyword` is no better**: 5 rows for "colombia" against 106 that say it.
+
+Whatever the server indexes, it is a small curated subset, and the criteria
+endpoint is global: it ignores `machineList` and `recipeType` entirely, so it
+cannot even be asked which of its own values are worth offering.
+
+## What we do instead
+
+**Fetch the machine's whole partition once per session and answer every
+question locally.** `hubRow.ts` already cleans the metadata, so the app has
+better material than the server's index does: real origin, process, varietal
+and flavour values off the rows themselves.
+
+Measured: both partitions together are 2,966 rows and 1.89 MB over 30 requests
+in 25 s. One machine is roughly half that, so about 1 MB over 17 requests.
+
+That is too long to block on, and it does not have to. **The load is
+progressive**: each page is appended as it lands, so the first 100 rows are on
+screen in under a second and the user scrolls while the rest arrives. Server
+paging was never cheaper, because reaching page five costs five sequential
+round trips either way. Search and filters answer over what has arrived, and
+the screen says while it is still arriving.
+
+This also removes work. There are no facet ids to send, no `originIds` to keep
+in sync with a vocabulary, and no question about what a chip means when the
+server disagrees with the row it returned.
+
+## What changes
+
+- `hubQuery.ts` stops building a filtered request and becomes two things: the
+  page request for the loader (machine and page index, nothing else) and the
+  local matcher and sorter that answers a `HubQuery` over `HubRecipe[]`.
+- **New Task 4b, `library/hub/hubCatalogue.ts`**: the progressive loader.
+- `hubCriteria.ts` keeps `loadHubCriteria` and `roastLabel`: the roast words
+  are still the server's, and roast is still a real filter. The four facet
+  vocabularies are no longer used for filtering, only as `splitFacet`'s space
+  gate, which is what Task 2 already uses them for.
+- The rail's facet chips are built from the **rows that arrived**, with counts,
+  so a chip never offers a value that finds nothing.
+- Task 6's `useHubBrowse` loses its paging state machine and gains the
+  catalogue's loading progress.
+
