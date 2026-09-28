@@ -21,8 +21,8 @@ describe("DOT_ICONS", () => {
              "shelfAllRecipes", "shelfAuthor",
              "shelfFewStages", "shelfGrinderOff", "shelfHot",
              "shelfLongRatio", "shelfManyStages", "shelfMine", "shelfMostBrewed",
-             "shelfNeverBrewed", "shelfOtherBrewer",
-             "shelfOverflowOff", "shelfPods", "shelfQuickBrew", "shelfRecent",
+             "shelfNeverBrewed", "shelfOmniDripper",
+             "shelfOtherBrewer", "shelfPods", "shelfQuickBrew", "shelfRecent",
              "shelfShortRatio", "shelfSinglePour", "shelfSlowBrew", "shelfTea",
              "shelfXbloom",
              "shelves", "sort", "success", "write"]

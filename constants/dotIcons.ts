@@ -639,8 +639,14 @@ export const DOT_ICONS = {
         "...###...",
         "........."
     ],
-    /** A cup with the brew coming over its rim. */
-    shelfOverflowOff: [
+    /**
+     * A cup with the brew coming over its rim.
+     *
+     * This drew the OVERFLOW OFF shelf until #151, which established that the
+     * cup type without overflow protection is OTHER. The drawing did not
+     * change; it simply belongs to the shelf it was always describing.
+     */
+    shelfOtherBrewer: [
         ".........",
         ".#.....#.",
         ".##...##.",
@@ -651,8 +657,8 @@ export const DOT_ICONS = {
         "..#####..",
         "........."
     ],
-    /** A cone dripper on its stand: a brewer that is not the machine. */
-    shelfOtherBrewer: [
+    /** A cone dripper on its stand, which is what an Omni Dripper is. */
+    shelfOmniDripper: [
         ".........",
         "#########",
         ".#######.",

@@ -759,10 +759,10 @@ describe("filter counts", () => {
         }
 
         const counts = db.countRecipesByFilter(
-            ["pods", "overflowOff"], resolveStockFilter
+            ["pods", "omniDripper"], resolveStockFilter
         );
 
-        expect(counts).toEqual({pods: 1, overflowOff: 2});
+        expect(counts).toEqual({pods: 1, omniDripper: 2});
     });
 });
 
