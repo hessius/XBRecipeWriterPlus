@@ -1,18 +1,45 @@
 import React from "react";
 import {Pressable, ScrollView} from "react-native";
-import type {NativeScrollEvent, NativeSyntheticEvent} from "react-native";
+import type {LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent} from "react-native";
+import {Gesture, GestureDetector} from "react-native-gesture-handler";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming
+} from "react-native-reanimated";
+import type {SharedValue} from "react-native-reanimated";
+import {scheduleOnRN} from "react-native-worklets";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import ShelfTile from "@/components/ShelfTile";
+import ShelfTile, {TILE_HEIGHT} from "@/components/ShelfTile";
 import {palette} from "@/constants/colors";
+import {DURATION, EASING, SPRING, useReducedMotion} from "@/constants/motion";
 import type {ShelfMarkMembers} from "@/hooks/useRecipeLibrary";
 import {hides} from "@/library/hiddenShelves";
+import {
+    moveShelfIdToSlot,
+    shelfSlotAt,
+    shelfSlotOrigin
+} from "@/library/shelfDrag";
+import type {ShelfDragGeometry} from "@/library/shelfDrag";
 import type {Shelf} from "@/library/shelves";
 
 /** Two per row. Three is a tile too narrow for a tag of ordinary length. */
 const COLUMNS = 2;
+/**
+ * `$3`, as a number.
+ *
+ * Every other section lays its tiles out with `gap="$3"` and lets Tamagui
+ * resolve it. The arrangeable section positions its tiles absolutely so it can
+ * animate them, and an absolute offset cannot take a token, so the one value
+ * has to be written out here. It must stay equal to `$3`, or YOUR SHELVES sits
+ * a pixel tighter than the sections under it and the tiles come out a different
+ * width from every other tile on the screen.
+ */
+const GRID_GAP = 13;
 
 function Heading({label}: {label: string}) {
     return (
@@ -52,13 +79,250 @@ function NewShelfButton({onPress}: {onPress: () => void}) {
     );
 }
 
-function Rows({shelves, marks, inverted, onOpen, onActions, onHide}: {
+function arrangedIndex(index: number, activeIndex: number, targetSlot: number): number {
+    "worklet";
+    if (activeIndex === -1 || index === activeIndex || activeIndex === targetSlot) return index;
+    if (activeIndex < targetSlot && index > activeIndex && index <= targetSlot) return index - 1;
+    if (targetSlot < activeIndex && index >= targetSlot && index < activeIndex) return index + 1;
+    return index;
+}
+
+function ArrangedShelfTile({
+    shelf, members, index, order, tileWidth, geometry, reduced, activeIndex,
+    targetSlot, dragX, dragY, dragging, onOpen, onActions, onCommit
+}: {
+    shelf: Shelf;
+    members?: ShelfMarkMembers;
+    index: number;
+    order: readonly string[];
+    tileWidth: number;
+    geometry: ShelfDragGeometry;
+    reduced: boolean;
+    activeIndex: SharedValue<number>;
+    targetSlot: SharedValue<number>;
+    dragX: SharedValue<number>;
+    dragY: SharedValue<number>;
+    dragging: SharedValue<number>;
+    onOpen: (id: string) => void;
+    onActions: (tag: string) => void;
+    onCommit: (id: string, slot: number) => void;
+}) {
+    const canArrange = order.length > 1;
+    const startX = useSharedValue(0);
+    const startY = useSharedValue(0);
+    const touchX = useSharedValue(0);
+    const touchY = useSharedValue(0);
+    const ended = useSharedValue(0);
+
+    const pan = Gesture.Pan()
+        .enabled(canArrange)
+        .activateAfterLongPress(DURATION.lift)
+        .onStart((event) => {
+            const origin = shelfSlotOrigin(index, geometry);
+            activeIndex.set(index);
+            targetSlot.set(index);
+            ended.set(0);
+            startX.set(origin.x);
+            startY.set(origin.y);
+            touchX.set(event.x);
+            touchY.set(event.y);
+            dragX.set(origin.x);
+            dragY.set(origin.y);
+            dragging.set(1);
+        })
+        .onUpdate((event) => {
+            const pointer = {
+                x: startX.get() + touchX.get() + event.translationX,
+                y: startY.get() + touchY.get() + event.translationY
+            };
+            dragX.set(pointer.x - touchX.get());
+            dragY.set(pointer.y - touchY.get());
+            targetSlot.set(shelfSlotAt(pointer, geometry, order.length));
+        })
+        .onEnd((event) => {
+            const slot = targetSlot.get();
+            const destination = shelfSlotOrigin(slot, geometry);
+            if (reduced) {
+                dragX.set(destination.x);
+                dragY.set(destination.y);
+            } else {
+                dragX.set(withSpring(destination.x, {...SPRING.gentle, velocity: event.velocityX}));
+                dragY.set(withSpring(destination.y, {...SPRING.gentle, velocity: event.velocityY}));
+            }
+            ended.set(1);
+            dragging.set(withTiming(0, {duration: DURATION.fast, easing: EASING.out}, () => {
+                activeIndex.set(-1);
+                targetSlot.set(-1);
+            }));
+            if (slot !== index) {
+                scheduleOnRN(onCommit, shelf.id, slot);
+            }
+        })
+        .onFinalize(() => {
+            if (activeIndex.get() === index && ended.get() === 0) {
+                const origin = shelfSlotOrigin(index, geometry);
+                dragX.set(reduced
+                    ? origin.x
+                    : withSpring(origin.x, SPRING.gentle));
+                dragY.set(reduced
+                    ? origin.y
+                    : withSpring(origin.y, SPRING.gentle));
+                dragging.set(withTiming(0, {duration: DURATION.fast, easing: EASING.out}));
+                activeIndex.set(-1);
+                targetSlot.set(-1);
+            }
+        });
+
+    const style = useAnimatedStyle(() => {
+        const active = activeIndex.get() === index;
+        const visualIndex = arrangedIndex(index, activeIndex.get(), targetSlot.get());
+        const origin = shelfSlotOrigin(visualIndex, geometry);
+        const moving = dragging.get() === 1 && visualIndex !== index;
+        const x = active ? dragX.get() : origin.x;
+        const y = active ? dragY.get() : origin.y;
+        return {
+            width:  tileWidth,
+            zIndex: active ? 10 : 0,
+            opacity: active
+                ? withTiming(0.92, {duration: DURATION.fast, easing: EASING.out})
+                : withTiming(reduced && moving ? 0.72 : 1, {
+                    duration: DURATION.fast,
+                    easing:   EASING.out
+                }),
+            transform: [
+                {
+                    translateX: active || reduced
+                        ? x
+                        : withSpring(x, SPRING.gentle)
+                },
+                {
+                    translateY: active || reduced
+                        ? y
+                        : withSpring(y, SPRING.gentle)
+                },
+                {
+                    scale: active && !reduced
+                        ? withSpring(1.03, SPRING.snappy)
+                        : withTiming(1, {duration: DURATION.fast, easing: EASING.out})
+                }
+            ]
+        };
+    });
+
+    return (
+        <GestureDetector gesture={pan}>
+            <Animated.View style={[{position: "absolute"}, style]}>
+                <ShelfTile shelf={shelf}
+                           members={members}
+                           onPress={() => onOpen(shelf.id)}
+                           onActions={() => onActions(shelf.label)}
+                           // Manual shelf long press belongs to arranging, not
+                           // the sheet shortcut. With fewer than two shelves it
+                           // deliberately does nothing. The sheet still has a
+                           // drawn door: the more glyph inside the tile, plus
+                           // the accessibility action for screen readers.
+                           onLongPress={null}
+                           // The hint is read by a screen reader and nobody
+                           // else, so it does not describe the gesture: a
+                           // reader cannot make a long press, let alone drag.
+                           // What it can do is take the actions, which is where
+                           // moving a shelf is offered to it.
+                           accessibilityHint={canArrange
+                               ? "Shelf options, including moving this shelf, are in the actions."
+                               : "Shelf options are in the actions."}/>
+            </Animated.View>
+        </GestureDetector>
+    );
+}
+
+function ArrangeableRows({shelves, marks, onOpen, onActions, onRearrange}: {
+    shelves: readonly Shelf[];
+    marks: Readonly<Record<string, ShelfMarkMembers>>;
+    onOpen: (id: string) => void;
+    onActions: (tag: string) => void;
+    onRearrange: (order: readonly string[]) => void;
+}) {
+    const [width, setWidth] = React.useState(0);
+    const reduced = useReducedMotion();
+    const activeIndex = useSharedValue(-1);
+    const targetSlot = useSharedValue(-1);
+    const dragX = useSharedValue(0);
+    const dragY = useSharedValue(0);
+    const dragging = useSharedValue(0);
+    const tileWidth = width > GRID_GAP ? (width - GRID_GAP) / COLUMNS : 0;
+    const geometry = {
+        columns:    COLUMNS,
+        tileWidth,
+        tileHeight: TILE_HEIGHT,
+        gapX:       GRID_GAP,
+        gapY:       GRID_GAP
+    };
+    const rows = Math.ceil(shelves.length / COLUMNS);
+    const height = rows * TILE_HEIGHT + Math.max(0, rows - 1) * GRID_GAP;
+    const order = shelves.map((shelf) => shelf.id);
+
+    function onLayout(event: LayoutChangeEvent) {
+        setWidth(event.nativeEvent.layout.width);
+    }
+
+    function commit(id: string, slot: number) {
+        const next = moveShelfIdToSlot(order, id, slot);
+        if (next.some((shelfId, index) => shelfId !== order[index])) {
+            onRearrange(next);
+        }
+    }
+
+    return (
+        <YStack onLayout={onLayout} height={height}>
+            {tileWidth > 0 && shelves.map((shelf, index) => (
+                <ArrangedShelfTile key={shelf.id}
+                                   shelf={shelf}
+                                   members={marks[shelf.id]}
+                                   index={index}
+                                   order={order}
+                                   tileWidth={tileWidth}
+                                   geometry={geometry}
+                                   reduced={reduced}
+                                   activeIndex={activeIndex}
+                                   targetSlot={targetSlot}
+                                   dragX={dragX}
+                                   dragY={dragY}
+                                   dragging={dragging}
+                                   onOpen={onOpen}
+                                   onActions={onActions}
+                                   onCommit={commit}/>
+            ))}
+            {/*
+              * Before the first layout there is no width, so there is no tile
+              * geometry and nothing can be positioned. The ordinary rows stand
+              * in for that frame, with the long press already withheld so the
+              * section does not answer a gesture one way on the first frame
+              * and another way on the second.
+              *
+              * This is also the only path the test renderer ever takes: it
+              * reports no layout, so a component test of this section is a
+              * test of the rows. The dragging itself is covered by
+              * `library/shelfDrag.ts`, which is why the arithmetic lives
+              * there.
+              */}
+            {tileWidth === 0 && (
+                <Rows shelves={shelves} marks={marks}
+                      onOpen={onOpen} onActions={onActions}
+                      actionsOnLongPress={false}/>
+            )}
+        </YStack>
+    );
+}
+
+function Rows({shelves, marks, inverted, onOpen, onActions, onHide,
+    actionsOnLongPress = true}: {
     shelves: readonly Shelf[];
     marks: Readonly<Record<string, ShelfMarkMembers>>;
     inverted?: boolean;
     onOpen: (id: string) => void;
     onActions?: (tag: string) => void;
     onHide?: (id: string) => void;
+    actionsOnLongPress?: boolean;
 }) {
     const rows: Shelf[][] = [];
     for (let i = 0; i < shelves.length; i += COLUMNS) {
@@ -75,6 +339,7 @@ function Rows({shelves, marks, inverted, onOpen, onActions, onHide}: {
                                    inverted={inverted}
                                    onPress={() => onOpen(shelf.id)}
                                    onActions={onActions && (() => onActions(shelf.label))}
+                                   onLongPress={actionsOnLongPress ? undefined : null}
                                    onHide={onHide && (() => onHide(shelf.id))}/>
                     ))}
                     {row.length < COLUMNS && <YStack flex={1}/>}
@@ -147,7 +412,7 @@ function HiddenShelves({shelves, onShow}: {
  */
 export default function ShelfGrid({
     shelves, marks = {}, invertAuto = false,
-    hidden = [], onOpen, onNewShelf, onShelfActions, onHideShelf, onScroll,
+    hidden = [], onOpen, onNewShelf, onShelfActions, onRearrange, onHideShelf, onScroll,
     paddingBottom = 0
 }: {
     shelves: readonly Shelf[];
@@ -169,6 +434,8 @@ export default function ShelfGrid({
     onNewShelf: () => void;
     /** Open the menu of what can be done to a shelf or promoted tag, by its tag. */
     onShelfActions: (tag: string) => void;
+    /** Store a complete new order for the shelves the user made. */
+    onRearrange?: (order: readonly string[]) => void;
     /** Put an auto shelf away, or bring it back. The same act both ways. */
     onHideShelf?: (id: string) => void;
     /** Drives the screen's collapsing header. */
@@ -220,8 +487,14 @@ export default function ShelfGrid({
             <YStack gap="$2">
                 <Heading label="YOUR SHELVES"/>
                 {manual.length > 0 && (
-                    <Rows shelves={manual} marks={marks}
-                          onOpen={onOpen} onActions={onShelfActions}/>
+                    onRearrange !== undefined ? (
+                        <ArrangeableRows shelves={manual} marks={marks}
+                                         onOpen={onOpen} onActions={onShelfActions}
+                                         onRearrange={onRearrange}/>
+                    ) : (
+                        <Rows shelves={manual} marks={marks}
+                              onOpen={onOpen} onActions={onShelfActions}/>
+                    )
                 )}
                 {/*
                   * The one heading always drawn over what might be nothing. It

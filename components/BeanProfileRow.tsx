@@ -4,8 +4,17 @@ import {Text, XStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {CHIP_HEIGHT} from "@/components/RailChip";
 import {palette} from "@/constants/colors";
+import {PROFILE_FLOOR} from "@/library/beanProfile";
 
 const FIELD_WIDTH = 82;
+/**
+ * A floor, not a fixed width.
+ *
+ * The column exists so the rightmost figure lines up down the deck, and right
+ * alignment keeps that true at any width. A row that has to say what its
+ * average rests on grows leftwards into the value, which flexes and truncates;
+ * every other row sits at the same 72 it always did.
+ */
 const FIGURES_WIDTH = 72;
 
 type Props = {
@@ -47,9 +56,21 @@ export function BeanProfileRow({
     // took. What is left is the count, and where the count has already been
     // shown there is nothing left to print at all.
     const average = rated === 0 ? "" : rating.toFixed(1);
-    const figures = brews === null
-        ? average
-        : average === "" ? `${brews}` : `${average} · ${brews}`;
+    // An average below the floor is the one figure on this row that cannot say
+    // what it rests on. `4.5 · 11` reads as eleven brews' worth of evidence and
+    // may be two, which is why the row can fail the highly rated filter with
+    // nothing on screen explaining it. A row at or above the floor says nothing
+    // extra: it qualifies, so the third figure would only cost a glance.
+    //
+    // The untagged row is left out. It is not in `rows`, so no filter can
+    // refuse it and no floor can hold it back, and it keeps the single figure
+    // its shape was designed around.
+    const thin = brews !== null && rated > 0 && rated < PROFILE_FLOOR;
+    const figures = [
+        average,
+        brews === null ? "" : `${brews}`,
+        thin ? `${rated} RATED` : ""
+    ].filter((part) => part !== "").join(" · ");
 
     return (
         <XStack
@@ -83,7 +104,8 @@ export function BeanProfileRow({
                 weight="bold"
                 letterSpacing={1.2}
                 color={accent}
-                style={{width: FIGURES_WIDTH, textAlign: "right"}}>
+                numberOfLines={1}
+                style={{minWidth: FIGURES_WIDTH, flexShrink: 0, textAlign: "right"}}>
                 {figures}
             </DotMatrixText>
         </XStack>

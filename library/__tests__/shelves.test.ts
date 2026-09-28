@@ -21,6 +21,31 @@ describe("building the shelves", () => {
         });
     });
 
+    it("puts a person's shelves in the order they arranged them", () => {
+        // Not the order the tags came back in. The counts below are ascending
+        // and the stored list is not, so a build that fell through to the tag
+        // order would draw these the other way round.
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts:    [{tag: "decaf", count: 2}, {tag: "mornings", count: 9}],
+            librarySize:  20,
+            myShelves:    ["tag:mornings", "tag:decaf"]
+        });
+
+        expect(shelves.map((shelf) => shelf.label)).toEqual(["mornings", "decaf"]);
+    });
+
+    it("folds a shelf's id before placing it in the arrangement", () => {
+        const shelves = buildShelves({
+            filterCounts: {},
+            tagCounts:    [{tag: "Decaf", count: 2}, {tag: "Mornings", count: 9}],
+            librarySize:  20,
+            myShelves:    ["tag:mornings", "tag:decaf"]
+        });
+
+        expect(shelves.map((shelf) => shelf.label)).toEqual(["Mornings", "Decaf"]);
+    });
+
     it("labels an auto shelf from the one filter vocabulary", () => {
         const [shelf] = buildShelves({
             filterCounts: {singlePour: 5}, tagCounts: NO_TAGS, librarySize: 20

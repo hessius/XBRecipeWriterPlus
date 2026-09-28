@@ -170,6 +170,14 @@ stage, and the long drawdown wait before it will look like a stalled pour. The
 app therefore enters a `bypass` phase on 40520 and gives it a lane of its own;
 see `docs/superpowers/specs/2026-09-10-brew-bypass-display-design.md`.
 
+The same ordering decides where the drawdown is measured from. `settling` opens
+on BREWER_STOP, which this capture puts 69 s after the last pour's water: a
+drawdown timed from there would report 8 s of one that had already run for over
+a minute. `drawdownFrom` in `library/brew/BrewRecord.ts` therefore reads the
+last rise in *brew* water, ignoring the bypass lane, because the bypass goes
+straight to the cup partway through the drawdown and its few millilitres would
+otherwise restart the measurement.
+
 ### `pour_index` is zero-based
 
 Worth stating on its own, because getting it wrong is silently survivable: the

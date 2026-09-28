@@ -61,6 +61,13 @@ type Props = {
     /** The bypass this brew had, if any. Absent on every record without one. */
     bypass?: BypassView;
     /**
+     * Seconds of drawdown, or null when there are none to report.
+     *
+     * Null on the live screen, where the brew has not finished drawing down
+     * yet and any figure would be a running clock the user would read as final.
+     */
+    drawdown?: number | null;
+    /**
      * The height the summary may draw in, from the screen's scroll viewport.
      *
      * Absent — or zero — keeps the frozen bands, which is what a caller that
@@ -84,7 +91,7 @@ export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
-    availableHeight = 0
+    drawdown = null, availableHeight = 0
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -160,6 +167,7 @@ export default function BrewSummary({
                 seconds={seconds}
                 accent={accent}
                 bypass={bypass?.delivered}
+                drawdown={drawdown}
             />
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the

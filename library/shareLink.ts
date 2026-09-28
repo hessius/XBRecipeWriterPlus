@@ -56,7 +56,9 @@ export type ShareBlockReason = "noPours" | "volumeMismatch" | "incomplete";
  *
  * Local `OMNI` is 2 and cloud Omni is 2 by coincidence; local `OTHER` is 1 and
  * cloud Other is 3. A `+1` would silently turn every Other recipe into an Omni
- * one, which changes overflow protection.
+ * one, which turns overflow protection back on for a brewer the machine cannot
+ * measure. Pour patterns cross in the same place, for the same reason; see
+ * `cloudPattern` below.
  */
 function cloudCupType(cupType: number): number {
     switch (cupType) {

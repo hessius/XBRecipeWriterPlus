@@ -48,6 +48,13 @@ export function canonicalShelfId(id: string): string {
     // produces on purpose rather than a collision between two strangers.
     const tag = tagFromFilterId(trimmed);
     if (tag !== null) return `${TAG_FILTER_PREFIX}${tagKey(tag)}`;
+    // A stock id is otherwise its own canonical form, so a renamed shelf needs
+    // saying here or the user's answer quietly stops matching anything. #151
+    // renamed OVERFLOW OFF to OMNI DRIPPER after establishing that the cup
+    // type without overflow protection is OTHER, not OMNI. The shelf is the
+    // same shelf and selects the same recipes; only its name changed, so
+    // somebody who put it away meant to put this one away.
+    if (trimmed === "overflowOff") return "omniDripper";
     return trimmed;
 }
 

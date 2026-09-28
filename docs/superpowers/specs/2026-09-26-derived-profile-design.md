@@ -79,7 +79,7 @@ visible. It is not a property of coffee and so sits slightly oddly among rows
 that are. That is the price of the denominator being impossible to miss, and it
 is worth paying. It also gives tagging an obvious front door.
 
-### The floor counts rated brews, and this is a known wart
+### The floor counts rated brews, and a thin row says so
 
 A row may rank on its average only when at least **3 rated** brews back it.
 
@@ -87,13 +87,21 @@ The floor must count rated brews rather than counted ones, or a row with eleven
 brews and one rating would rank on an average of one number, which is the error
 the floor exists to prevent.
 
-The cost is that the displayed count is the *counted* count, so a row reading
-`4.5 · 11` can fail a floor of 3 with nothing on screen explaining why. The
-alternative was to print the rated count as a third figure
-(`4.5 · 11 · 2 rated`), which was rejected as too busy for a glance.
+The displayed count is the *counted* count, so a row reading `4.5 · 11` once
+failed a floor of 3 with nothing on screen explaining why. That shipped as a
+deliberate wart, was raised as #153, and is now answered the way the issue
+proposed: a row whose average rests on fewer than three rated brews prints the
+rated count as a third figure, `4.5 · 11 · 2 RATED`.
 
-**This is deliberately shipped as a wart.** Raise a follow-up issue recording
-the objection, and decide in practice whether the silence generates confusion.
+Only that row prints it. A row at or above the floor qualifies, so a third
+figure there would cost a glance and explain nothing, and a row with no rating
+at all has no average to qualify. The untagged row is left out too: it is not
+in `rows`, so no filter can refuse it and no floor can hold it back.
+
+The figures column is a `minWidth`, not a width. Right alignment keeps the
+rightmost figure in line down the deck at any width, so the rare row that has
+to explain itself grows leftwards into the value, which flexes and truncates.
+
 Do not quietly change the floor to count counted brews: that undoes the
 decision rather than revisiting it.
 
@@ -415,9 +423,9 @@ Every test must be mutated to prove it can fail before it is accepted.
 
 ---
 
-## Follow-up to raise
+## Follow-up raised, and answered
 
 The floor counts rated brews while the row displays counted brews, so a row
-reading `4.5 · 11` can fail a floor of 3 with nothing explaining why. Record the
-objection and the rejected alternative (`4.5 · 11 · 2 rated`) and decide from
-use, not from argument.
+reading `4.5 · 11` could fail a floor of 3 with nothing explaining why. Raised
+as #153 and settled in use rather than in argument: the rated count is now
+printed as a third figure, on the rows below the floor and nowhere else.

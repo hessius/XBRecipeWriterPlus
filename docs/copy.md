@@ -164,9 +164,9 @@ from `library/Recipe.ts`.
 | `recipe.name.duplicate` | `library/Recipe.ts:313` (`duplicate`) | Placeholder display name for a duplicated recipe. | `Copy` |
 | `recipe.name.manual` | `library/Recipe.ts:314` (`manual`) | Placeholder display name for a manually created recipe with no name. | `Untitled Brew` |
 | `recipe.cup.xpod` | `library/Recipe.ts:365` | Cup-type name, xPod. | `xPod` |
-| `recipe.cup.omni` | `library/Recipe.ts:367` | Cup-type name, Omni ("overflow protection off"). | `Omni` |
+| `recipe.cup.omni` | `library/Recipe.ts:367` | Cup-type name, Omni (xBloom's own dripper, overflow protection on). | `Omni` |
 | `recipe.cup.tea` | `library/Recipe.ts:369` | Cup-type name, Tea. | `Tea` |
-| `recipe.cup.other` | `library/Recipe.ts:371` | Cup-type name, Other. | `Other` |
+| `recipe.cup.other` | `library/Recipe.ts:371` | Cup-type name, Other (a brewer the machine cannot measure, overflow protection off). | `Other` |
 | `recipe.cup.unknown` | `library/Recipe.ts:373` | Cup-type name fallback. | `Unknown` |
 
 ### Brew-settings deck
@@ -303,9 +303,9 @@ lines — the cited line is the property's first line.
 | `help.grinder.question` | `constants/recipeHelp.ts:75` | Grinder help-sheet heading. | `Can I turn the grinder off?` |
 | `help.grinder.detail` | `constants/recipeHelp.ts:76` | Grinder long-form help. Note: says grind size **81** disables the grinder, and that this only applies to cards. | `It depends on how you brew it. Brewing straight from the app sends the machine its own value for a grinder that stays off, so pre-ground coffee works normally and there is nothing to watch out for. A card has no such value: turning the grinder off writes grind size 81, one past the maximum, and the machine will refuse a card in that state outright. The workaround is to load any other recipe with the grinder enabled first: a shortcut button, another card, or the xBloom app. After which this card will be accepted and the machine will show '--' for the grind size. There is no better way to disable the grinder from a recipe card.` |
 | `help.cup.title` | `constants/recipeHelp.ts:86` | Cup field label. | `Cup` |
-| `help.cup.hint` | `constants/recipeHelp.ts:87` | Cup field hint. | `Omni turns overflow protection off.` |
+| `help.cup.hint` | `constants/recipeHelp.ts:87` | Cup field hint. | `Other turns overflow protection off.` |
 | `help.cup.question` | `constants/recipeHelp.ts:88` | Cup help-sheet heading. | `Which cup type should I pick?` |
-| `help.cup.detail` | `constants/recipeHelp.ts:89` | Cup long-form help. | `Omni disables overflow protection. Other is for third-party brewers.` |
+| `help.cup.detail` | `constants/recipeHelp.ts:89` | Cup long-form help. | `Omni is xBloom's own dripper, so the machine knows when your cup is full and stops. Other is for third-party brewers it cannot measure, so nothing stops it.` |
 | `help.xid.title` | `constants/recipeHelp.ts:93` | Recipe ID field label. | `Recipe ID` |
 | `help.xid.hint` | `constants/recipeHelp.ts:94` | Recipe ID field hint. | `xBloom online lookup ID. Without one, a written card reads back nameless (but works the same).` |
 | `help.xid.question` | `constants/recipeHelp.ts:96` | Recipe ID help-sheet heading. | `What is the recipe ID for?` |

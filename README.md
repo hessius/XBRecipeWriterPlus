@@ -31,8 +31,10 @@ These are properties of the cards and the machine, not of this app:
   for you, which can shift the total slightly — volumes are written as whole
   millilitres.
 * **Ratios are whole numbers.** No `.5`.
-* If the machine pauses excessively on your recipe, turn off *overflow
-  protection*, which changes the pod type so it does not hit overflow.
+* If the machine pauses excessively on your recipe, set the cup type to
+  *Other*, which turns overflow protection off so the machine stops waiting
+  for your cup to drain. *Omni* is xBloom's own dripper, which the machine
+  can measure, so it keeps protection on.
 
 ## Data format
 

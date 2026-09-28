@@ -106,17 +106,25 @@ describe("ShelfGrid", () => {
         expect(onShelfActions).toHaveBeenCalledTimes(1);
     });
 
-    it("opens the same actions from a long press on the tile", async () => {
-        // The shortcut, for the hand that already knows where it is. It is
-        // never the only door: the glyph above draws the same menu.
+    it("keeps shelf actions on the drawn glyph when long press arranges", async () => {
+        // A manual tile's long press now belongs to dragging, because the
+        // visible glyph is the discoverable door to the same sheet.
         const onShelfActions = jest.fn();
         await renderWithProviders(
-            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()} onShelfActions={onShelfActions}
-                       shelves={[shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2})]}/>
+            <ShelfGrid onOpen={jest.fn()} onNewShelf={jest.fn()}
+                       onShelfActions={onShelfActions}
+                       onRearrange={jest.fn()}
+                       shelves={[
+                           shelf({id: "tag:morning", label: "morning", kind: "manual", count: 2}),
+                           shelf({id: "tag:evening", label: "evening", kind: "manual", count: 2})
+                       ]}/>
         );
 
         await fireEvent(screen.getByTestId("shelf-tag:morning"), "longPress");
-        expect(onShelfActions).toHaveBeenCalledTimes(1);
+        expect(onShelfActions).not.toHaveBeenCalled();
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        expect(onShelfActions).toHaveBeenCalledWith("morning");
     });
 
     it("gives an auto shelf no actions and no long press", async () => {
