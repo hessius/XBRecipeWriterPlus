@@ -2,13 +2,11 @@ import React from "react";
 import Svg, {Path} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import TraceLegendItem from "@/components/TraceLegendItem";
-import {palette} from "@/constants/colors";
+import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {type Box, livePoints, type Point, toPath} from "@/library/brew/brewShape";
-import type {PourVerdict} from "@/library/brew/compare";
-import {channelStyle, referenceCupColour, referenceWaterColour}
-    from "@/library/brew/traceStyle";
+import {gapBand, type PourVerdict} from "@/library/brew/compare";
+import {channelStyle} from "@/library/brew/traceStyle";
 
 /**
  * Two brews on one axis.
@@ -35,12 +33,14 @@ import {channelStyle, referenceCupColour, referenceWaterColour}
 const GAP_OPACITY = 0.14;
 
 /**
- * The plan is context here, not the subject. Fainter than `BrewTrace` draws it:
- * two brews plus a plan is three lines, and the plan must recede.
+ * The plan is context here, not the subject. Fainter than `BrewTrace`'s
+ * default `planOpacity` of 1: two brews plus a plan is three lines, and the
+ * plan must recede.
  */
 const PLAN_OPACITY = 0.25;
 
-const LEGEND_HEIGHT = 16;
+/** Minimum SVG plot height in pixels, matching `BrewTrace`'s collapsed floor. */
+const PLOT_FLOOR = 10;
 
 type Props = {
     subject: BrewSample[];
@@ -58,27 +58,30 @@ type Props = {
     referencePlan?: string;
 };
 
-/**
- * The region between the two cup curves.
- *
- * Out along the subject and back along the reference, which closes into a
- * polygon that is above the axis where the subject led and below where it
- * lagged. `toPath` already emits `M` then a run of `L`, so the return leg is
- * the same call with its opening `M` turned into an `L`.
- */
-function gapBand(subject: Point[], reference: Point[], box: Box): string {
-    if (subject.length < 2 || reference.length < 2) return "";
-    const out = toPath(subject, box);
-    const back = toPath([...reference].reverse(), box);
-    if (out === "" || back === "") return "";
-    return `${out} ${back.replace(/^M/, "L")} Z`;
+function closedPath(points: Point[], box: Box): string {
+    const path = toPath(points, box);
+    return path === "" ? "" : `${path} Z`;
+}
+
+function lastCup(points: Point[]): number | null {
+    return points.length === 0 ? null : points[points.length - 1].v;
+}
+
+function accessibilityText(oneWater: boolean, cupDifference: number | null): string {
+    const cup = cupDifference === null
+        ? "Cup difference is not drawn because a trace is missing."
+        : `Cups finished ${cupDifference} ml apart.`;
+    const water = oneWater
+        ? "Water matched, so one coloured water line stands for both brews."
+        : "Water differed, so coloured and grey water lines are both drawn.";
+    return `Brew comparison. This brew is coloured and that brew is grey. ${cup} ${water}`;
 }
 
 export default function CompareTrace({
     subject, reference, accent, verdict, width, height, maxT, maxV,
     subjectPlan, referencePlan
 }: Props) {
-    const svgHeight = Math.max(0, height - LEGEND_HEIGHT);
+    const svgHeight = Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
     const box: Box = {width, height: svgHeight, maxT, maxV};
 
     const subjectCup = livePoints(subject, "cup");
@@ -95,39 +98,50 @@ export default function CompareTrace({
     const cupReference = channelStyle("cup", {accent, role: "reference"});
     const waterSubject = channelStyle("water", {accent});
     const waterReference = channelStyle("water", {accent, role: "reference"});
-    const planStyle = channelStyle("plan", {accent});
+    const sharedPlan = channelStyle("plan", {accent});
+    // When two stored plans differ in shape, colour keeps the subject/reference
+    // grammar: this brew stays coloured and that brew stays grey.
+    const subjectPlanStyle = channelStyle("plan", {
+        accent,
+        planColour: (referencePlan ?? "") === "" ? undefined : accent
+    });
+    const referencePlanStyle = channelStyle("plan", {accent});
 
-    const band = gapBand(subjectCup, referenceCup, box);
-    const accessibilityLabel = oneWater
-        ? "Brew comparison, both water lines matched and the cup lines show the difference"
-        : "Brew comparison, water and cup lines compare the two brews";
+    const band = closedPath(gapBand(subjectCup, referenceCup), box);
     const paths = {
         cupSubject:     toPath(subjectCup, box),
         cupReference:   toPath(referenceCup, box),
         waterSubject:   toPath(subjectWater, box),
         waterReference: toPath(referenceWater, box)
     };
+    const cupA = lastCup(subjectCup);
+    const cupB = lastCup(referenceCup);
+    const cupDifference = cupA === null || cupB === null ? null : Math.round(Math.abs(cupA - cupB));
+    const accessibilityLabel = accessibilityText(oneWater, cupDifference);
+    const hasSubjectPlan = (subjectPlan ?? "") !== "";
+    const hasReferencePlan = (referencePlan ?? "") !== "";
+    const hasTwoPlans = hasSubjectPlan && hasReferencePlan;
 
     return (
         <YStack width={width}>
             <Svg width={width} height={svgHeight} accessibilityRole="image"
                  accessibilityLabel={accessibilityLabel}>
-                {subjectPlan !== undefined && subjectPlan !== "" && (
+                {hasSubjectPlan && (
                     <Path
                         testID="trace-plan-subject"
                         d={subjectPlan}
                         strokeOpacity={PLAN_OPACITY}
                         fill="none"
-                        {...planStyle}
+                        {...(hasTwoPlans ? subjectPlanStyle : sharedPlan)}
                     />
                 )}
-                {referencePlan !== undefined && referencePlan !== "" && (
+                {hasReferencePlan && (
                     <Path
                         testID="trace-plan-reference"
                         d={referencePlan}
                         strokeOpacity={PLAN_OPACITY}
                         fill="none"
-                        {...planStyle}
+                        {...referencePlanStyle}
                     />
                 )}
                 {band !== "" && (
@@ -135,7 +149,9 @@ export default function CompareTrace({
                         testID="trace-cup-gap"
                         d={band}
                         stroke="none"
-                        fill={accent}
+                        // The region is bounded by cup curves, so it uses the
+                        // cup hue rather than the water accent.
+                        fill={cupSubject.stroke}
                         fillOpacity={GAP_OPACITY}
                     />
                 )}
@@ -155,6 +171,7 @@ export default function CompareTrace({
                         {...waterSubject}
                     />
                 )}
+                {/* Cup is drawn above water here because cup is the comparison subject. */}
                 {paths.cupReference !== "" && (
                     <Path
                         testID="trace-cup-reference"
@@ -172,19 +189,36 @@ export default function CompareTrace({
                     />
                 )}
             </Svg>
-            <XStack testID="compare-legend-row" gap="$3" paddingTop="$1" flexWrap="wrap">
-                {oneWater ? (
-                    <TraceLegendItem colour={accent} label="WATER, BOTH" />
+            <XStack testID="compare-legend-row" height={rowHeight(LEGEND_SIZE)}
+                    alignItems="center" gap="$3" paddingTop="$1" flexWrap="wrap">
+                {oneWater ? paths.waterSubject !== "" && (
+                    <TraceLegendItem colour={waterSubject.stroke} label="WATER, BOTH" />
                 ) : (
                     <React.Fragment>
-                        <TraceLegendItem colour={accent} label="WATER, THIS" />
-                        <TraceLegendItem colour={referenceWaterColour} label="WATER, THAT" />
+                        {paths.waterSubject !== "" && (
+                            <TraceLegendItem colour={waterSubject.stroke} label="WATER, THIS" />
+                        )}
+                        {paths.waterReference !== "" && (
+                            <TraceLegendItem
+                                colour={waterReference.stroke}
+                                label="WATER, THAT"
+                            />
+                        )}
                     </React.Fragment>
                 )}
-                <TraceLegendItem colour={cupSubject.stroke} label="CUP, THIS" dotted />
-                <TraceLegendItem colour={referenceCupColour} label="CUP, THAT" dotted />
-                {(subjectPlan ?? "") !== "" && (
-                    <TraceLegendItem colour={palette.muted} label="PLAN" dashed />
+                {paths.cupSubject !== "" && (
+                    <TraceLegendItem colour={cupSubject.stroke} label="CUP, THIS" dotted />
+                )}
+                {paths.cupReference !== "" && (
+                    <TraceLegendItem colour={cupReference.stroke} label="CUP, THAT" dotted />
+                )}
+                {hasTwoPlans ? (
+                    <React.Fragment>
+                        <TraceLegendItem colour={subjectPlanStyle.stroke} label="PLAN, THIS" dashed />
+                        <TraceLegendItem colour={referencePlanStyle.stroke} label="PLAN, THAT" dashed />
+                    </React.Fragment>
+                ) : (hasSubjectPlan || hasReferencePlan) && (
+                    <TraceLegendItem colour={sharedPlan.stroke} label="PLAN" dashed />
                 )}
             </XStack>
         </YStack>

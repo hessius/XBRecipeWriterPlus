@@ -2,9 +2,9 @@ import React from "react";
 import {processColor} from "react-native";
 
 import CompareTrace from "@/components/CompareTrace";
-import {palette} from "@/constants/colors";
+import {cupLineFor} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {referenceCupColour} from "@/library/brew/traceStyle";
+import {referenceCupColour, referenceWaterColour} from "@/library/brew/traceStyle";
 import {renderWithProviders} from "@/test-utils/render";
 
 const ACCENT = "#C86A3B";
@@ -51,12 +51,15 @@ describe("CompareTrace", () => {
     });
 
     it("greys the reference and colours the subject", async () => {
-        const {getByTestId} = await draw();
+        const {getByTestId} = await draw({verdict: "differed"});
+        expect(getByTestId("trace-water-reference").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(referenceWaterColour)})
+        );
         expect(getByTestId("trace-cup-reference").props.stroke).toEqual(
             expect.objectContaining({payload: processColor(referenceCupColour)})
         );
-        expect(getByTestId("trace-cup-subject").props.stroke).not.toEqual(
-            expect.objectContaining({payload: processColor(referenceCupColour)})
+        expect(getByTestId("trace-cup-subject").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(cupLineFor(ACCENT))})
         );
     });
 
@@ -65,6 +68,7 @@ describe("CompareTrace", () => {
         const band = getByTestId("trace-cup-gap").props.d as string;
         expect(band.startsWith("M")).toBe(true);
         expect(band.endsWith("Z")).toBe(true);
+        expect(band).not.toContain("NaN");
     });
 
     it("draws nothing where a brew has no stream", async () => {
@@ -85,15 +89,25 @@ describe("CompareTrace", () => {
         expect(two.getByTestId("trace-plan-reference")).toBeTruthy();
     });
 
-    it("keeps the amber of a held brew out of it", async () => {
-        // `holding` is a live-brew idea. A finished record never holds, and a
-        // comparison is always of finished records.
-        const {getByTestId} = await draw({verdict: "differed"});
-        expect(getByTestId("trace-water-subject").props.stroke).toEqual(
-            expect.objectContaining({payload: processColor(ACCENT)})
-        );
-        expect(getByTestId("trace-water-subject").props.stroke).not.toEqual(
-            expect.objectContaining({payload: processColor(palette.warn)})
-        );
+    it("does not claim a legend entry for a line it did not draw", async () => {
+        const {queryByText} = await draw({subject: [], reference: [], verdict: "same"});
+        expect(queryByText("WATER, BOTH")).toBeNull();
+        expect(queryByText("CUP, THIS")).toBeNull();
+        expect(queryByText("CUP, THAT")).toBeNull();
+    });
+
+    it("labels a reference-only plan", async () => {
+        const {getByText, getByTestId} = await draw({referencePlan: "M0 100 L300 20"});
+        expect(getByTestId("trace-plan-reference")).toBeTruthy();
+        expect(getByText("PLAN")).toBeTruthy();
+    });
+
+    it("says which brew is coloured, which is grey, and how far the cups differed", async () => {
+        const {getByLabelText} = await draw();
+        expect(getByLabelText(
+            "Brew comparison. This brew is coloured and that brew is grey. "
+            + "Cups finished 7 ml apart. Water matched, so one coloured water line "
+            + "stands for both brews."
+        )).toBeTruthy();
     });
 });

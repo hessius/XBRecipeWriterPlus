@@ -5,7 +5,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
-import TraceLegendItem, {LEGEND_SIZE} from "@/components/TraceLegendItem";
+import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
@@ -78,22 +78,6 @@ type Props = {
 };
 /** Point size of the overrun label. */
 const OVERRUN_SIZE = 12;
-
-/**
- * The height a row of dot-matrix text needs.
- *
- * Doto's line box is close to 1.35em, the same ratio `DigitRoll` uses, applied
- * to the size the glyphs are actually *drawn* at rather than the size asked
- * for. Both halves matter here. Sixteen points was a point short of twelve
- * point text even at the default text size, so a real brew's `+96 S` lost its
- * descenders; and `DotMatrixText` will not draw Doto below eleven points
- * however small a size a call site asks for, so the nine-point legend needs a
- * fifteen-point row rather than a fourteen-point one. Accessibility text
- * sizing widens both gaps.
- */
-function rowHeight(fontSize: number): number {
-    return Math.ceil(drawnFontSize(fontSize) * 1.35);
-}
 
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;

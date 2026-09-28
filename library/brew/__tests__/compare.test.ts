@@ -5,6 +5,7 @@ import {
     COMPARE_WATER_TOLERANCE_ML,
     compareBrews,
     cupGap,
+    gapBand,
     planDrift,
     pourVerdict
 } from "@/library/brew/compare";
@@ -217,6 +218,40 @@ describe("cupGap", () => {
     it("stops where the shorter stream stops", () => {
         const gap = cupGap(stream([0, 0], [20, 200]), stream([0, 0], [8, 80]));
         expect(gap[gap.length - 1].t).toBe(8);
+    });
+});
+
+describe("gapBand", () => {
+    it("returns a closed polygon leg out on subject and back on reference", () => {
+        const band = gapBand(
+            [{t: 0, v: 0}, {t: 5, v: 50}, {t: 12, v: 120}],
+            [{t: 0, v: 0}, {t: 4, v: 24}, {t: 8, v: 40}]
+        );
+
+        expect(band).toEqual([
+            {t: 0, v: 0},
+            {t: 5, v: 50},
+            {t: 8, v: 80},
+            {t: 8, v: 40},
+            {t: 4, v: 24},
+            {t: 0, v: 0}
+        ]);
+    });
+
+    it("uses only the common watched extent", () => {
+        const band = gapBand(
+            [{t: 0, v: 0}, {t: 10, v: 100}, {t: 20, v: 200}],
+            [{t: 0, v: 0}, {t: 8, v: 40}]
+        );
+
+        expect(band).toHaveLength(4);
+        expect(band.map((point) => point.t)).toEqual([0, 8, 8, 0]);
+        expect(Math.max(...band.map((point) => point.t))).toBe(8);
+    });
+
+    it("is empty when either curve cannot draw a line", () => {
+        expect(gapBand([{t: 0, v: 0}], [{t: 0, v: 0}, {t: 1, v: 1}])).toEqual([]);
+        expect(gapBand([{t: 0, v: 0}, {t: 1, v: 1}], [])).toEqual([]);
     });
 });
 

@@ -40,8 +40,11 @@ same, every difference below is the coffee, the grind or the bean.
   trace to draw. Comparison degrades rather than refusing, and says why.
 - **`brews.plan` records what each brew actually ran.** Recipes are mutable, so
   two brews "of the same recipe" may not be comparable. Detect it and say so.
-- **Stalls survive the overlay.** A brew that stalled is not simply a slower
-  brew, and the amber that marks a stall elsewhere keeps its meaning here.
+- **Stalls survive the verdict, not the overlay.** A brew that stalled is not
+  simply a slower brew, so the comparison names the stall before any difference
+  in totals. The overlay does not draw stall marks yet: `BrewTrace` has no
+  reusable stall mark to borrow, only a live overflow-hold tint, and adding a
+  one-off mark here would make the two charts disagree.
 - **Accent identifies a recipe**, so two brews of one recipe share one. They are
   told apart by something other than hue.
 - **Two, not n.** An n-way overlay is a different visual problem with no
@@ -169,7 +172,9 @@ drift, and the reduction is documented rather than accidental.
   non-text graphic.
 - Plan: one grey dashed line when the drift grade is not `shape`; two faint
   ones, one per brew, when it is.
-- Stalls keep their amber bar on whichever line carries them.
+- Stalls are named by the verdict and table. They do not draw an amber mark on
+  the overlay until `BrewTrace` has a reusable stall mark for both charts to
+  share.
 - Paths are named `trace-water-subject`, `trace-water-reference`,
   `trace-cup-subject`, `trace-cup-reference`.
 - One `accessibilityLabel` describing the comparison in words, the way
@@ -290,7 +295,7 @@ about what dotted means.
 - one water path when the verdict is `same`, two when it is not,
 - two plan paths on `shape` drift, one otherwise,
 - the surviving brew drawn alone when the other stream is missing,
-- a stall keeps its amber mark.
+- a stalled comparison names the stall without drawing an amber overlay mark.
 
 `app/__tests__/brewCompare.test.tsx`
 

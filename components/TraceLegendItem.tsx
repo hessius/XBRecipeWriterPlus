@@ -2,11 +2,24 @@ import React from "react";
 import Svg, {Line} from "react-native-svg";
 import {XStack} from "tamagui";
 
-import DotMatrixText from "@/components/DotMatrixText";
+import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 
 /** Point size of a legend label. */
 export const LEGEND_SIZE = 9;
+
+/**
+ * The height a row of dot-matrix text needs.
+ *
+ * Doto's line box is close to 1.35em, applied to the size the glyphs are
+ * actually drawn at rather than the size asked for. `DotMatrixText` will not
+ * draw Doto below eleven points, and accessibility text sizing can raise it
+ * further, so chart rows size themselves from this shared measurement instead
+ * of a literal.
+ */
+export function rowHeight(fontSize: number): number {
+    return Math.ceil(drawnFontSize(fontSize) * 1.35);
+}
 
 /**
  * One entry in the legend.

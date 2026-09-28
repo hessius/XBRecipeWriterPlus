@@ -256,6 +256,48 @@ export function cupGap(subject: BrewSample[], reference: BrewSample[]): Point[] 
     return gap;
 }
 
+function clipAt(points: Point[], end: number): Point[] {
+    if (points.length < 2 || end < points[0].t) return [];
+    const clipped: Point[] = [];
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        if (point.t < end) {
+            clipped.push(point);
+            continue;
+        }
+        if (point.t === end) {
+            clipped.push(point);
+            return clipped;
+        }
+
+        const before = points[i - 1];
+        if (before === undefined) return [];
+        const span = point.t - before.t;
+        const v = span <= 0
+            ? point.v
+            : before.v + ((end - before.t) / span) * (point.v - before.v);
+        clipped.push({t: end, v: Math.round(v * 10) / 10});
+        return clipped;
+    }
+    return clipped;
+}
+
+/**
+ * The polygon between two cup curves, in data coordinates.
+ *
+ * It runs out along the subject and back along the reference, clipped to the
+ * span both streams watched. Past the shorter stream there is no comparison to
+ * fill, so this uses the same common-extent rule as `cupGap`.
+ */
+export function gapBand(subject: Point[], reference: Point[]): Point[] {
+    if (subject.length < 2 || reference.length < 2) return [];
+    const end = Math.min(subject[subject.length - 1].t, reference[reference.length - 1].t);
+    const subjectLeg = clipAt(subject, end);
+    const referenceLeg = clipAt(reference, end);
+    if (subjectLeg.length < 2 || referenceLeg.length < 2) return [];
+    return [...subjectLeg, ...referenceLeg.reverse()];
+}
+
 /**
  * What each outcome is called in front of a user.
  *
