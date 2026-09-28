@@ -14,7 +14,7 @@ import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
         temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
-import {channelStyle} from "@/library/brew/traceStyle";
+import {channelStyle, type Role} from "@/library/brew/traceStyle";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -43,6 +43,8 @@ type Props = {
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
     holding?: boolean;
+    /** Which comparison role this compact lane carries. Defaults to the coloured subject. */
+    role?: Role;
     /** Driven by the screen's phase animations; plain numbers keep this testable. */
     planOpacity?: number;
     planColor?: string;
@@ -195,7 +197,7 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
 export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
     axis,
-    holding = false, planOpacity = 1, planColor = palette.muted,
+    holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
     compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
@@ -240,8 +242,8 @@ export default function BrewTrace({
     // Derived here rather than at each use so the compact render, the full
     // render and the legend cannot drift apart. From `traceStyle` rather than
     // inline so that `CompareTrace` cannot drift from either.
-    const waterStyle = channelStyle("water", {accent, holding});
-    const cupStyle = channelStyle("cup", {accent});
+    const waterStyle = channelStyle("water", {accent, holding, role});
+    const cupStyle = channelStyle("cup", {accent, role});
     const planStyle = channelStyle("plan", {
         accent, dashed: planDashed, planColour: planColor
     });

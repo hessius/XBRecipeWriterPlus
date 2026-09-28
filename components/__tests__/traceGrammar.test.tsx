@@ -78,4 +78,27 @@ describe("the two charts draw the same channels the same way", () => {
         expect(styleOf(two.getByTestId("trace-plan-subject")))
             .toEqual(styleOf(one.getByTestId("trace-plan")));
     });
+
+    it.each([
+        ["water", "trace-water", "trace-water-reference"],
+        ["cup", "trace-cup", "trace-cup-reference"]
+    ])("uses the same reference grammar for %s in separate and overlay", async (
+        _channel,
+        single,
+        paired
+    ) => {
+        const separate = await renderWithProviders(
+            <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
+                       role="reference" width={300} height={160}
+                       plannedSeconds={30} compact />
+        );
+        const overlay = await renderWithProviders(
+            <CompareTrace subject={SAMPLES} reference={SAMPLES} accent={ACCENT}
+                          verdict="differed" width={300} height={160}
+                          maxT={30} maxV={260} />
+        );
+
+        expect(styleOf(separate.getByTestId(single)))
+            .toEqual(styleOf(overlay.getByTestId(paired)));
+    });
 });

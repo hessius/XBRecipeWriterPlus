@@ -1,9 +1,16 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
-import type {BrewSample, PlanStage} from "./BrewRecord";
+import {poursFromPlan, type BrewSample, type PlanStage} from "./BrewRecord";
 import {formatBrewDuration} from "./brewFormat";
 import {countsAsBrewed, isMeasured} from "./brewPopulation";
-import {livePoints, type Point} from "./brewShape";
+import {
+    livePoints,
+    plannedSeconds,
+    planPoints,
+    toPath,
+    type Box,
+    type Point
+} from "./brewShape";
 import {NOISE_FLOOR_ML} from "./stalls";
 
 /**
@@ -160,9 +167,11 @@ const DETAIL_FIELDS = ["temperature", "pourPattern", "agitation"] as const;
  */
 export const PLAN_STAGE_COUNT_FIELD = "stages";
 
+export type PlanStageField = keyof PlanStage | typeof PLAN_STAGE_COUNT_FIELD;
+
 export function planDrift(
     subject: PlanStage[] | undefined, reference: PlanStage[] | undefined
-): {grade: PlanDrift; fields: string[]} {
+): {grade: PlanDrift; fields: PlanStageField[]} {
     // A row written before `plan` existed has nothing to disagree with. An
     // absence is not a difference, and grading it as one would banner every
     // old brew in the history with a drift it cannot show.
@@ -173,14 +182,14 @@ export function planDrift(
         return {grade: "shape", fields: [PLAN_STAGE_COUNT_FIELD]};
     }
 
-    const fields: string[] = [];
+    const fields: PlanStageField[] = [];
     for (const field of [...SHAPE_FIELDS, ...DETAIL_FIELDS]) {
         const differs = subject.some((stage, i) => stage[field] !== reference[i][field]);
         if (differs) fields.push(field);
     }
 
     const shape = fields.some(
-        (field) => (SHAPE_FIELDS as readonly string[]).includes(field)
+        (field) => (SHAPE_FIELDS as readonly PlanStageField[]).includes(field)
     );
     const grade: PlanDrift = shape ? "shape" : fields.length > 0 ? "detail" : "none";
     return {grade, fields};
@@ -191,11 +200,71 @@ export type CompareRow = {label: string; a: string; b: string; shared: boolean};
 
 export type BrewUnderComparison = {record: StoredBrew; samples: BrewSample[]};
 
+export function hasTrace({record, samples}: BrewUnderComparison): boolean {
+    return record.hasStream && samples.length >= 2;
+}
+
+export function lastSecond(samples: BrewSample[]): number {
+    return samples.reduce(
+        (latest, sample) => Math.max(latest, sample.at / 1000),
+        0
+    );
+}
+
+export function planTop(record: StoredBrew): number {
+    const points = planPoints(poursFromPlan(record.plan));
+    return points.length === 0 ? 0 : points[points.length - 1].v;
+}
+
+export type CompareAxis = {
+    maxT: number;
+    maxV: number;
+    subjectPours: ReturnType<typeof poursFromPlan>;
+    referencePours: ReturnType<typeof poursFromPlan>;
+};
+
+/**
+ * The one axis both brews share.
+ *
+ * Separate lanes are only honest if one second and one millilitre occupy the
+ * same pixels in both. The streams can be long, so the stream extent is found
+ * with a reduce rather than by spreading every sample onto the call stack.
+ */
+export function compareAxis(
+    subject: BrewUnderComparison,
+    reference: BrewUnderComparison
+): CompareAxis {
+    const subjectPours = poursFromPlan(subject.record.plan);
+    const referencePours = poursFromPlan(reference.record.plan);
+    return {
+        maxT: Math.max(
+            1,
+            lastSecond(subject.samples),
+            lastSecond(reference.samples),
+            plannedSeconds(subjectPours),
+            plannedSeconds(referencePours)
+        ),
+        maxV: Math.max(
+            1,
+            subject.record.waterTotal,
+            reference.record.waterTotal,
+            planTop(subject.record),
+            planTop(reference.record)
+        ),
+        subjectPours,
+        referencePours
+    };
+}
+
+export function planPath(record: StoredBrew, box: Box): string {
+    return toPath(planPoints(poursFromPlan(record.plan)), box);
+}
+
 export type Comparison = {
     subject: StoredBrew;
     reference: StoredBrew;
     pour: {verdict: PourVerdict; why: string};
-    drift: {grade: PlanDrift; fields: string[]};
+    drift: {grade: PlanDrift; fields: PlanStageField[]};
     rows: CompareRow[];
     cupGap: Point[];
 };

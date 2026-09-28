@@ -3,9 +3,11 @@ import type {BrewSample, PlanStage} from "@/library/brew/BrewRecord";
 import {
     COMPARE_TIME_TOLERANCE_SECONDS,
     COMPARE_WATER_TOLERANCE_ML,
+    compareAxis,
     compareBrews,
     cupGap,
     gapBand,
+    hasTrace,
     planDrift,
     pourVerdict
 } from "@/library/brew/compare";
@@ -252,6 +254,57 @@ describe("gapBand", () => {
     it("is empty when either curve cannot draw a line", () => {
         expect(gapBand([{t: 0, v: 0}], [{t: 0, v: 0}, {t: 1, v: 1}])).toEqual([]);
         expect(gapBand([{t: 0, v: 0}, {t: 1, v: 1}], [])).toEqual([]);
+    });
+});
+
+describe("compareAxis", () => {
+    it("uses one shared scale for both streams and both plans", () => {
+        const axis = compareAxis(
+            {
+                record: brew({
+                    plan: [
+                        stage({volume: 40, flowRate: 40, pauseTime: 10}),
+                        stage({pourNumber: 2, volume: 60, flowRate: 30, pauseTime: 0})
+                    ],
+                    waterTotal: 100
+                }),
+                samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 70_000, water: 100, cup: 90, pour: 2}
+                ]
+            },
+            {
+                record: brew({
+                    id: "b",
+                    plan: [stage({volume: 250, flowRate: 50, pauseTime: 0})],
+                    waterTotal: 250
+                }),
+                samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 40_000, water: 250, cup: 230, pour: 1}
+                ]
+            }
+        );
+
+        expect(axis.maxT).toBe(70);
+        expect(axis.maxV).toBe(250);
+        expect(axis.subjectPours).toHaveLength(2);
+        expect(axis.referencePours).toHaveLength(1);
+    });
+});
+
+describe("hasTrace", () => {
+    it("requires enough retained samples to draw a line", () => {
+        const record = brew({hasStream: true});
+        expect(hasTrace({record, samples: [{at: 0, water: 0, cup: 0, pour: 1}]}))
+            .toBe(false);
+        expect(hasTrace({
+            record,
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 1_000, water: 10, cup: 8, pour: 1}
+            ]
+        })).toBe(true);
     });
 });
 

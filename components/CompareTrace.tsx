@@ -42,6 +42,10 @@ const PLAN_OPACITY = 0.25;
 /** Minimum SVG plot height in pixels, matching `BrewTrace`'s collapsed floor. */
 const PLOT_FLOOR = 10;
 
+export function compareTracePlotHeight(height: number): number {
+    return Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
+}
+
 type Props = {
     subject: BrewSample[];
     reference: BrewSample[];
@@ -81,7 +85,7 @@ export default function CompareTrace({
     subject, reference, accent, verdict, width, height, maxT, maxV,
     subjectPlan, referencePlan
 }: Props) {
-    const svgHeight = Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
+    const svgHeight = compareTracePlotHeight(height);
     const box: Box = {width, height: svgHeight, maxT, maxV};
 
     const subjectCup = livePoints(subject, "cup");
@@ -155,7 +159,7 @@ export default function CompareTrace({
                         fillOpacity={GAP_OPACITY}
                     />
                 )}
-                {paths.waterReference !== "" && !oneWater && (
+                {paths.waterReference !== "" && (!oneWater || paths.waterSubject === "") && (
                     <Path
                         testID="trace-water-reference"
                         d={paths.waterReference}
@@ -191,8 +195,15 @@ export default function CompareTrace({
             </Svg>
             <XStack testID="compare-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3" paddingTop="$1" flexWrap="wrap">
-                {oneWater ? paths.waterSubject !== "" && (
-                    <TraceLegendItem colour={waterSubject.stroke} label="WATER, BOTH" />
+                {oneWater ? (paths.waterSubject !== "" || paths.waterReference !== "") && (
+                    <TraceLegendItem
+                        colour={
+                            paths.waterSubject !== ""
+                                ? waterSubject.stroke
+                                : waterReference.stroke
+                        }
+                        label="WATER, BOTH"
+                    />
                 ) : (
                     <React.Fragment>
                         {paths.waterSubject !== "" && (

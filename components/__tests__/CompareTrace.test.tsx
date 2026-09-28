@@ -78,6 +78,14 @@ describe("CompareTrace", () => {
         expect(queryByTestId("trace-cup-subject")).toBeTruthy();
     });
 
+    it("uses the surviving reference water as the shared water line", async () => {
+        const {getByTestId, queryByTestId, getByText} =
+            await draw({subject: [], reference: B, verdict: "same"});
+        expect(queryByTestId("trace-water-subject")).toBeNull();
+        expect(getByTestId("trace-water-reference")).toBeTruthy();
+        expect(getByText("WATER, BOTH")).toBeTruthy();
+    });
+
     it("draws one faint plan, or two when the plans differ in shape", async () => {
         const plan = "M0 100 L300 0";
         const one = await draw({subjectPlan: plan});

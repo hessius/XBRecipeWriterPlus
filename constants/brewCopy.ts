@@ -1,7 +1,12 @@
 import type {GlyphKind} from "@/components/PourGlyph";
 import {ACTIVE_BREW_PHASE_NAMES} from "@/library/machine/Machine";
 import {AGITATION} from "@/library/Pour";
-import type {PourVerdict} from "@/library/brew/compare";
+import {
+    PLAN_STAGE_COUNT_FIELD,
+    type PlanDrift,
+    type PlanStageField,
+    type PourVerdict
+} from "@/library/brew/compare";
 
 /** What each phase says. The wording is the feature. */
 export const PHASE_COPY: Record<string, string> = {
@@ -296,3 +301,47 @@ export const COMPARE_DEGRADED = {
     both: "Both of these brews have lost their traces to the retention sweep."
         + " The figures below are all that remain."
 };
+
+export const COMPARE_GUARD = {
+    same: {
+        title: "SAME BREW",
+        body: "Choose two different brews to compare. One brew can only repeat itself."
+    },
+    recipe: {
+        title: "DIFFERENT RECIPES",
+        body: "Choose two brews of the same recipe. Cross recipe comparison has no shared plan."
+    }
+} as const;
+
+export const COMPARE_PINNED = "Trace pinned";
+
+export const PLAN_FIELD_WORD: Record<PlanStageField, string> = {
+    pourNumber: "stage number",
+    volume: "volume",
+    temperature: "temperature",
+    flowRate: "flow rate",
+    agitation: "agitation",
+    pourPattern: "pour pattern",
+    pauseTime: "rest time",
+    [PLAN_STAGE_COUNT_FIELD]: "stage count"
+};
+
+function sentenceList(words: string[]): string {
+    if (words.length <= 1) return words[0] ?? "";
+    if (words.length === 2) return `${words[0]} and ${words[1]}`;
+    return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+export function compareDriftSentence(
+    grade: Exclude<PlanDrift, "none">,
+    fields: PlanStageField[]
+): string {
+    if (fields.includes(PLAN_STAGE_COUNT_FIELD)) {
+        return "The plans have different numbers of stages. Read the chart with care.";
+    }
+    const words = sentenceList(fields.map((field) => PLAN_FIELD_WORD[field]));
+    if (grade === "shape") {
+        return `The plan shapes differ in ${words}. Read the chart with care.`;
+    }
+    return `The plans differ in ${words}, but the chart shape is the same.`;
+}
