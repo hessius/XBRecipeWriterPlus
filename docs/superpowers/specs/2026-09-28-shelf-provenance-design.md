@@ -82,14 +82,19 @@ shelf put away under one spelling stays away under the other.
 
 ### It goes in the backup allowlist
 
-`myShelves` must be added to **both** `Settings.DEFAULTS` and `settingsSnapshot()`
-in `app/settings.tsx`. They are separate lists. Adding a key to `DEFAULTS` alone
-does not put it in a backup, which is how `showHints` went missing, and a
-restored library that forgot which shelves were yours would refile all of them
-under FROM TAGS.
+`myShelves` must be added to `Settings.DEFAULTS` and to `settingsSnapshot()` in
+`app/settings.tsx`.
 
-A test asserts the key is in the snapshot. The snapshot is an allowlist and
-allowlists rot silently.
+This is no longer a trap. `settingsSnapshot()` returns
+`Record<Exclude<SettingKey, BackupExcluded>, unknown>`, so a key in `DEFAULTS`
+that is missing from the snapshot and not named in `BackupExcluded` is a compile
+error. That guard was added after `showHints` went missing, and
+`backup.test.ts`'s "every setting is carried or deliberately excluded" pins the
+other half. No new test is needed for it; the typecheck is the test.
+
+What still needs a decision is which list it belongs on, and it belongs in the
+backup: a restored library that forgot which shelves were yours would refile all
+of them under FROM TAGS.
 
 ## The grid becomes three sections
 
@@ -222,7 +227,6 @@ Unit, in `library/`:
   the chip list while leaving it in the grid's.
 - `hiddenShelves.test.ts`: a `tag:` id folds, and a shelf put away under one
   spelling stays away under the other.
-- A settings test asserting `myShelves` is in `settingsSnapshot()`.
 
 Component:
 
