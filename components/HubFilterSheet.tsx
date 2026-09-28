@@ -1,5 +1,6 @@
-import React from "react";
-import {ScrollView, Text, XStack, YStack} from "tamagui";
+import React, {useState} from "react";
+import {Input, ScrollView, Text, XStack, YStack} from "tamagui";
+import type {ColorTokens} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import XbrwSheet from "@/components/XbrwSheet";
@@ -19,12 +20,30 @@ type Props = {
     onChange(values: string[]): void;
 };
 
+/**
+ * How many rows the sheet will draw at once.
+ *
+ * The catalogue is free text, so a partition carries 933 to 1,058 distinct
+ * flavours and more than half of them appear on exactly one recipe. Drawing a
+ * thousand rows would be slow and reading them would be worse, so the sheet
+ * draws the commonest handful and the field reaches the rest. Nothing is
+ * hidden: every value is one search away, and the line under the list says how
+ * many are waiting there.
+ */
+const SHOWN = 60;
+
 function key(value: string): string {
     return value.trim().toLowerCase();
 }
 
 function countLabel(count: number): string {
     return count === 1 ? "1 recipe" : `${count} recipes`;
+}
+
+function matching(options: readonly HubFilterOption[], term: string): readonly HubFilterOption[] {
+    const wanted = key(term);
+    if (wanted === "") return options;
+    return options.filter((option) => key(option.value).includes(wanted));
 }
 
 function emptyLabel(title: string): string {
@@ -91,8 +110,20 @@ export default function HubFilterSheet({
     selected,
     onChange
 }: Props) {
+    const [term, setTerm] = useState("");
+    const found = matching(options, term);
+    const shown = found.slice(0, SHOWN);
+    const rest = found.length - shown.length;
+
+    // Reset in the handler rather than in an effect on `open`: the React
+    // Compiler makes `set-state-in-effect` an error, and this is an event.
+    function close(next: boolean) {
+        if (!next) setTerm("");
+        onOpenChange(next);
+    }
+
     return (
-        <XbrwSheet open={open} onOpenChange={onOpenChange} title={title}
+        <XbrwSheet open={open} onOpenChange={close} title={title}
                    heightPercent={72}>
             <YStack gap="$4" paddingHorizontal="$2" paddingBottom="$4">
                 <XStack alignItems="center" justifyContent="space-between" gap="$3"
@@ -116,15 +147,35 @@ export default function HubFilterSheet({
                     </XStack>
                 </XStack>
 
+                {options.length > SHOWN && (
+                    <Input accessibilityLabel={`Search ${title.toLowerCase()}`}
+                           placeholder={`Search ${options.length} ${emptyLabel(title)}`}
+                           // The palette is a plain module of raw strings, not
+                           // Tamagui tokens; the cast reconciles that with
+                           // Tamagui typing this prop as `ColorTokens`.
+                           placeholderTextColor={palette.placeholder as ColorTokens}
+                           value={term}
+                           onChangeText={setTerm}
+                           autoCapitalize="none"
+                           autoCorrect={false}
+                           marginHorizontal="$2"/>
+                )}
+
                 {options.length === 0 ? (
                     <Text fontSize={14} color={palette.dim}
                           paddingHorizontal="$2" paddingVertical="$3">
                         {`No ${emptyLabel(title)} found yet. Keep loading the catalogue.`}
                     </Text>
                 ) : (
-                    <ScrollView>
+                    <ScrollView keyboardShouldPersistTaps="handled">
                         <YStack gap="$2" paddingBottom="$2">
-                            {options.map((option) => (
+                            {found.length === 0 && (
+                                <Text fontSize={14} color={palette.dim}
+                                      paddingHorizontal="$2" paddingVertical="$3">
+                                    {`Nothing here matches that.`}
+                                </Text>
+                            )}
+                            {shown.map((option) => (
                                 <HubFilterRow
                                     key={option.value}
                                     option={option}
@@ -132,6 +183,12 @@ export default function HubFilterSheet({
                                     onChange={onChange}
                                 />
                             ))}
+                            {rest > 0 && (
+                                <Text fontSize={13} color={palette.dim}
+                                      paddingHorizontal="$2" paddingVertical="$3">
+                                    {`${rest} more. Search to reach them.`}
+                                </Text>
+                            )}
                         </YStack>
                     </ScrollView>
                 )}

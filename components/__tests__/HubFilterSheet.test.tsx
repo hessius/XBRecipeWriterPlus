@@ -121,3 +121,85 @@ describe("HubFilterSheet", () => {
             .toEqual(expect.objectContaining({selected: false}));
     });
 });
+
+/**
+ * The scale the catalogue actually has.
+ *
+ * Origins and processes run to a few hundred distinct values per partition,
+ * and flavours to over a thousand, because the catalogue's metadata is free
+ * text and more than half of every facet's values appear on exactly one
+ * recipe. A sheet that drew all of them would be slow to render and worse to
+ * read, so the commonest are drawn and the field reaches the rest.
+ */
+describe("a facet with more values than anybody can scroll", () => {
+    const MANY = Array.from({length: 200}, (_, index) => ({
+        value: `Flavour ${String(index).padStart(3, "0")}`,
+        count: 200 - index
+    }));
+
+    function manySheet(onChange = jest.fn()) {
+        return (
+            <HubFilterSheet
+                open
+                title="FLAVOUR"
+                options={MANY}
+                selected={[]}
+                onChange={onChange}
+                onOpenChange={() => {}}
+            />
+        );
+    }
+
+    it("draws the commonest and says how many are waiting", async () => {
+        await renderWithProviders(manySheet());
+
+        expect(screen.getAllByTestId("hub-filter-row")).toHaveLength(60);
+        expect(screen.getByText("Flavour 000")).toBeTruthy();
+        expect(screen.queryByText("Flavour 199")).toBeNull();
+        expect(screen.getByText("140 more. Search to reach them.")).toBeTruthy();
+    });
+
+    it("reaches a value the list did not draw", async () => {
+        await renderWithProviders(manySheet());
+
+        await fireEvent.changeText(
+            screen.getByLabelText("Search flavour"), "flavour 199"
+        );
+
+        expect(screen.getByText("Flavour 199")).toBeTruthy();
+        expect(screen.getAllByTestId("hub-filter-row")).toHaveLength(1);
+        expect(screen.queryByText(/more\. Search to reach them\./)).toBeNull();
+    });
+
+    it("still reports the whole new selection when the list is filtered", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(manySheet(onChange));
+
+        await fireEvent.changeText(
+            screen.getByLabelText("Search flavour"), "flavour 199"
+        );
+        await pressOnSheet("Flavour 199, 1 recipe");
+
+        expect(onChange).toHaveBeenCalledWith(["Flavour 199"]);
+    });
+
+    it("says so rather than showing an empty list when nothing matches", async () => {
+        await renderWithProviders(manySheet());
+
+        await fireEvent.changeText(
+            screen.getByLabelText("Search flavour"), "bergamot"
+        );
+
+        expect(screen.queryAllByTestId("hub-filter-row")).toHaveLength(0);
+        expect(screen.getByText("Nothing here matches that.")).toBeTruthy();
+    });
+
+    it("offers no field at all when the whole list fits", async () => {
+        // Three origins do not need searching, and a field over three rows is
+        // clutter. The library's own filter rows do not have one either.
+        await renderWithProviders(sheet());
+
+        expect(screen.queryByLabelText("Search origin")).toBeNull();
+    });
+});
+
