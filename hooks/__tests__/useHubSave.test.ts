@@ -26,9 +26,11 @@ jest.mock("@/library/XBloomRecipe", () => ({
 
 const mockUpdate = jest.fn();
 const mockAll = jest.fn(() => [] as Recipe[]);
+const mockOpen = jest.fn();
 jest.mock("@/library/RecipeDatabase", () => ({
     __esModule: true,
     default: class {
+        constructor() { mockOpen(); }
         updateRecipe(...args: unknown[]) { return mockUpdate(...args); }
         retrieveAllRecipes() { return mockAll(); }
     }
@@ -266,3 +268,35 @@ describe("while it is running", () => {
         await act(async () => { release(); await first; });
     });
 });
+
+/**
+ * The lockout.
+ *
+ * Opening the database happens outside the per-row `catch`, so a throw there
+ * escapes the whole batch. If the running flag were cleared at the end of the
+ * happy path rather than in a `finally`, it would stay latched: the bar would
+ * be stuck saying it is saving and every later batch would be refused, for the
+ * rest of the session, with no way back short of relaunching.
+ */
+it("can save again after a batch failed before it started", async () => {
+    mockOpen.mockReset();
+    mockOpen.mockImplementationOnce(() => {
+        throw new Error("no database");
+    });
+
+    const {result} = await renderHook(() => useHubSave());
+
+    await expect(
+        act(async () => {
+            await result.current.save([hubRow(1)]);
+        })
+    ).rejects.toThrow("no database");
+
+    expect(result.current.saving).toBe(false);
+
+    // And the next batch is not refused.
+    const outcome = await act(async () => result.current.save([hubRow(1)]));
+    expect(outcome.refused).toBe(false);
+    expect(outcome.saved).toBe(1);
+});
+

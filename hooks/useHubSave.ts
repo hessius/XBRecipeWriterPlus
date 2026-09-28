@@ -17,7 +17,7 @@ import {assignAccent} from "@/library/accent";
 import {resolveOnOpen} from "@/library/duplicates";
 import type {HubRecipe} from "@/library/hub/hubRow";
 import {parseImportInput} from "@/library/importInput";
-import {asMachineModel} from "@/library/machine/machineModel";
+import {asMachineModel, type MachineModel} from "@/library/machine/machineModel";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {Settings} from "@/library/Settings";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
@@ -53,6 +53,29 @@ export function useHubSave(settings?: Settings): HubSave {
         setSaving(true);
         setProgress({done: 0, total: rows.length});
 
+        // `finally`, not a line at the end of the happy path. Opening the
+        // database is outside the per-row `catch`, so a throw there would
+        // otherwise leave `running` latched and refuse every batch for the
+        // rest of the session, with the bar stuck saying it is saving. The
+        // React Compiler bails out of a function containing `finally`; this
+        // hook is small and correctness is worth more than its memoisation,
+        // which is the same trade `useRecipeEditor` documents.
+        try {
+            return await runSave(rows, model, setProgress);
+        } finally {
+            running.current = false;
+            setSaving(false);
+        }
+    }
+
+    return {saving, progress, save};
+}
+
+async function runSave(
+    rows: readonly HubRecipe[],
+    model: MachineModel,
+    setProgress: (progress: {done: number; total: number}) => void
+): Promise<HubSaveOutcome> {
         const store = new RecipeDatabase();
         const outcome: HubSaveOutcome = {
             saved:        0,
@@ -90,12 +113,7 @@ export function useHubSave(settings?: Settings): HubSave {
             setProgress({done: index + 1, total: rows.length});
         }
 
-        running.current = false;
-        setSaving(false);
         return outcome;
-    }
-
-    return {saving, progress, save};
 }
 
 export default useHubSave;
