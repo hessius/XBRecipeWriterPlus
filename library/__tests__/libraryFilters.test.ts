@@ -249,13 +249,15 @@ describe("each stock fragment against a real database", () => {
 
     /**
      * The bug #151 fixed was these two shelves being confused with each other,
-     * so this says directly what the pair must never do. It is not implied by
-     * the test above: that one would still pass if both shelves selected both
-     * recipes and `labelsMatching` happened to sort them the same way.
+     * so this holds the label against the clause rather than either alone.
      *
-     * OMNI is what `newRecipe.ts` gives every new recipe, so a mistake that
-     * emptied this shelf into the other one would take most of the library
-     * with it.
+     * Swapping just the two labels is the bug re-committed, and it passes the
+     * test above and every other test in this file: the clauses still select
+     * the right recipes, they are just described the wrong way round. Only an
+     * assertion that ties OMNI DRIPPER to the OMNI clause catches it.
+     *
+     * OMNI is what `newRecipe.ts` gives every new recipe, so getting this pair
+     * the wrong way round would mislabel most of a library.
      */
     it("keeps the two cup shelves disjoint", () => {
         const db = new RecipeDatabase();

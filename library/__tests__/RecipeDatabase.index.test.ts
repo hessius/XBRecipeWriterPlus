@@ -744,7 +744,7 @@ describe("filter counts", () => {
         // Every clause pushes its parameters into one shared list, bound
         // positionally across the whole SELECT. Two parameterised clauses with
         // deliberately unequal counts are what makes a swapped binding visible:
-        // with one pod and two overflow-off recipes, scrambling the order
+        // with one pod and two omni-dripper recipes, scrambling the order
         // reports the counts the other way round rather than failing outright.
         const db = new RecipeDatabase();
         for (const [name, cupType] of [
