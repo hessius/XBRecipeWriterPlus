@@ -19,6 +19,9 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 jest.mock("@/library/RecipeDatabase", () => jest.fn());
+jest.mock("@/hooks/useBrewHistory", () => ({
+    sharedBrewDatabase: () => ({markSent: jest.fn()})
+}));
 
 const notifyMock = notify as jest.MockedFunction<typeof notify>;
 const RecipeDatabaseMock = RecipeDatabase as jest.MockedClass<typeof RecipeDatabase>;
@@ -87,6 +90,22 @@ describe("useBrewBatchHandoff", () => {
         expect(decode(opened).brews.map((envelope) => envelope.brew.note)).toHaveLength(2);
         expect(decode(opened).brews.map((envelope) => envelope.brew.waterIn.value))
             .toEqual([first.waterTotal, second.waterTotal]);
+    });
+
+    it("records every brew that went over in the batch", async () => {
+        const markSent = jest.fn();
+        const {result} = await renderHook(() => useBrewBatchHandoff(source({
+            a: {record: brew({id: "a"}), samples},
+            b: {record: brew({id: "b"}), samples: []}
+        }), {markSent}));
+
+        await act(async () => {
+            await result.current.send(["missing", "a", "b"]);
+        });
+
+        expect(markSent).toHaveBeenCalledTimes(2);
+        expect(markSent).toHaveBeenNthCalledWith(1, "a", expect.any(Number));
+        expect(markSent).toHaveBeenNthCalledWith(2, "b", expect.any(Number));
     });
 
     it("skips a missing record instead of aborting the batch", async () => {
