@@ -806,7 +806,7 @@ import {XStack, YStack} from "tamagui";
 import BrewJudgement from "@/components/BrewJudgement";
 import DotMatrixText from "@/components/DotMatrixText";
 import XbrwSheet from "@/components/XbrwSheet";
-import {RATING_PROMPT} from "@/constants/brewCopy";
+import {RATING_SHEET_DONE, RATING_SHEET_TITLE} from "@/constants/brewCopy";
 import {onAccent, palette} from "@/constants/colors";
 
 /**
@@ -839,7 +839,7 @@ export default function BrewNoteSheet({
 }) {
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange}
-                   title={RATING_PROMPT.sheetTitle} heightPercent={44}>
+                   title={RATING_SHEET_TITLE} heightPercent={44}>
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                 <YStack gap="$1">
                     <DotMatrixText fontSize={16} weight="bold" color={palette.text}>
@@ -864,7 +864,7 @@ export default function BrewNoteSheet({
                     backgroundColor={palette.text}>
                     <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.5}
                                    color={onAccent.text}>
-                        {RATING_PROMPT.sheetDone}
+                        {RATING_SHEET_DONE}
                     </DotMatrixText>
                 </XStack>
             </YStack>
@@ -975,7 +975,7 @@ import BrewStars from "@/components/BrewStars";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import {RATING_PROMPT} from "@/constants/brewCopy";
+import {RATING_PROMPT_DISMISS_LABEL, RATING_PROMPT_OPEN_LABEL, RATING_PROMPT_QUESTION} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {DURATION} from "@/constants/motion";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -1037,7 +1037,7 @@ export default function BrewRatingBar({
             >
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={RATING_PROMPT.openLabel}
+                    accessibilityLabel={RATING_PROMPT_OPEN_LABEL}
                     onPress={onOpen}
                     style={{flexDirection: "row", alignItems: "center", flex: 1, gap: 12}}
                 >
@@ -1056,7 +1056,7 @@ export default function BrewRatingBar({
                         </DotMatrixText>
                         <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.4}
                                        color={palette.dim}>
-                            {`${recipeName.toUpperCase()} · ${RATING_PROMPT.question}`}
+                            {`${recipeName.toUpperCase()} · ${RATING_PROMPT_QUESTION}`}
                         </DotMatrixText>
                     </YStack>
                 </Pressable>
@@ -1067,7 +1067,7 @@ export default function BrewRatingBar({
 
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={RATING_PROMPT.dismissLabel}
+                    accessibilityLabel={RATING_PROMPT_DISMISS_LABEL}
                     hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
                     onPress={onDismiss}
                 >
