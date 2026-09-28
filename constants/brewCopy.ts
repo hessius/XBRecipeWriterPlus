@@ -313,6 +313,10 @@ export const COMPARE_GUARD = {
     }
 } as const;
 
+export const COMPARE_SELECTION_COPY = {
+    notComparable: "These brews are of different recipes, so there is nothing to compare."
+} as const;
+
 export const COMPARE_PINNED = "Trace pinned";
 
 export const PLAN_FIELD_WORD: Record<PlanStageField, string> = {

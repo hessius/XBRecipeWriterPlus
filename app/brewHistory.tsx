@@ -11,6 +11,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import ExportButton from "@/components/ExportButton";
 import ScreenHeader from "@/components/ScreenHeader";
 import XbrwSheet from "@/components/XbrwSheet";
+import {COMPARE_SELECTION_COPY} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
@@ -112,8 +113,10 @@ function SelectionActionRow({
     fits,
     busy,
     canSend,
+    comparable,
     onSelect,
     onSend,
+    onCompare,
     onDelete,
     onCancel
 }: {
@@ -124,8 +127,10 @@ function SelectionActionRow({
     fits: boolean;
     busy: boolean;
     canSend: boolean;
+    comparable: boolean;
     onSelect: () => void;
     onSend: () => void;
+    onCompare: () => void;
     onDelete: () => void;
     onCancel: () => void;
 }) {
@@ -169,6 +174,20 @@ function SelectionActionRow({
                     </DotMatrixText>
                 </Button>
                 <XStack gap="$2" alignItems="center" flexShrink={1} minWidth={0}>
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Compare the selected brews"
+                        accessibilityState={{disabled: !comparable}}
+                        disabled={!comparable}
+                        opacity={comparable ? 1 : 0.5}
+                        chromeless
+                        size="$2"
+                        onPress={onCompare}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                       color={comparable ? palette.text : palette.dim}>
+                            COMPARE
+                        </DotMatrixText>
+                    </Button>
                     {/* The same outlined Doto button, and the same words, the
                         record screen sends a single brew with, so the batch
                         action reads as the same action rather than a second,
@@ -201,6 +220,11 @@ function SelectionActionRow({
             {tooLarge && (
                 <Text color={palette.warn} fontSize={12}>
                     Select fewer brews to send them together.
+                </Text>
+            )}
+            {count === 2 && !comparable && (
+                <Text testID="selection-not-comparable" color={palette.warn} fontSize={12}>
+                    {COMPARE_SELECTION_COPY.notComparable}
                 </Text>
             )}
             {/* A brew that was cancelled, that failed, or that the app stopped
@@ -320,6 +344,11 @@ export default function BrewHistory() {
         const brew = filtered.find((candidate) => candidate.id === id);
         return brew !== undefined && !canHandOff(brew.outcome);
     }).length;
+    const selectedBrews = selectedIds
+        .map((id) => filtered.find((brew) => brew.id === id))
+        .filter((brew): brew is StoredBrew => brew !== undefined);
+    const comparable = selectedBrews.length === 2
+        && selectedBrews[0].recipeUuid === selectedBrews[1].recipeUuid;
 
     function handlePress(brew: StoredBrew) {
         if (selecting) {
@@ -366,6 +395,16 @@ export default function BrewHistory() {
         if (blockedCount > 0) return;
         await handoff.send(selectedIds);
         handleSelectCancel();
+    }
+
+    function handleSelectionCompare() {
+        if (!comparable) return;
+        // Exactly two. Quietly taking the first two out of three would answer a
+        // different question than the one the user selected.
+        const [older, newer] = [...selectedBrews]
+            .sort((one, two) => one.startedAt - two.startedAt);
+        handleSelectCancel();
+        router.push({pathname: "/brewCompare", params: {a: older.id, b: newer.id}});
     }
 
     function handleSelectionDelete() {
@@ -437,8 +476,10 @@ export default function BrewHistory() {
                     fits={selectionFits}
                     busy={handoff.busy}
                     canSend={handoffEnabled}
+                    comparable={comparable}
                     onSelect={handleSelectStart}
                     onSend={() => void handleSelectionSend()}
+                    onCompare={handleSelectionCompare}
                     onDelete={() => setConfirmingBatchDelete(true)}
                     onCancel={handleSelectCancel}
                 />
