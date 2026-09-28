@@ -341,6 +341,17 @@ export class BleTransport implements MachineTransport {
         }
     }
 
+    /**
+     * Ask the Device Information Service what the machine is.
+     *
+     * The trailing-NUL strip is not defensive padding: a fixed-width GATT
+     * string characteristic is conventionally NUL-padded to its declared
+     * length, and an unstripped reading would never compare equal to a string
+     * constant — so detection would silently never fire.
+     *
+     * A refusal leaves the field empty rather than throwing, and empty means
+     * "this link did not learn", not "the machine has no model number".
+     */
     private async readModelNumber(id: string): Promise<void> {
         try {
             const bytes = await BleManager.read(
