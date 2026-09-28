@@ -1,21 +1,13 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {planFromPours} from "@/library/brew/BrewRecord";
-import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 export type BrewRecordOpenResult =
     {record: StoredBrew; samples: BrewSample[]; frames?: string} | null;
-
-const fixturePours = [
-    new Pour(1, 125, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10),
-    new Pour(2, 125, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10)
-];
 
 export const brewRecordFixture: StoredBrew = {
     id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
     accent: "#C86A3B", startedAt: 0, endedAt: 228_000, outcome: "done",
     failure: null, pours: 2, waterTotal: 250, cupTotal: 244, heldSeconds: 14,
-    plan: planFromPours(fixturePours),
     hasStream: true
 };
 
@@ -24,8 +16,7 @@ export function makeBrewRecordFixture(over: Partial<StoredBrew> = {}): StoredBre
 }
 
 export const brewRecordSamples: BrewSample[] = [
-    {at: 0, water: 0, cup: 0, pour: 1},
-    {at: 228_000, water: 250, cup: 244, pour: 2}
+    {at: 0, water: 0, cup: 0, pour: 1}
 ];
 
 export function makeBrewRecordSamples(over?: BrewSample[]): BrewSample[] {
@@ -42,7 +33,6 @@ export function createExpoRouterMock(config?: {
     setOptions: (...args: unknown[]) => unknown;
     params: () => ExpoRouterParams;
 }) {
-    let currentParams: ExpoRouterParams = defaultParams;
     const push = config?.push ?? jest.fn();
     const back = config?.back ?? jest.fn();
     const setOptions = config?.setOptions ?? jest.fn();
@@ -52,7 +42,6 @@ export function createExpoRouterMock(config?: {
         useLocalSearchParams: params,
         useNavigation: () => ({setOptions}),
         setParams: (next: ExpoRouterParams) => {
-            currentParams = next;
             if (config === undefined) defaultParams = next;
         },
         push,
@@ -73,7 +62,6 @@ export function createBrewHistoryMock(config?: {
      */
     judgementStore?: () => unknown;
 }) {
-    let records: Record<string, Exclude<BrewRecordOpenResult, null>> = defaultRecords;
     const brews = config?.brews ?? (() => Object.values(defaultRecords).map(({record}) => record));
     const opened = config?.opened ?? (() => null);
     const judgementStore = config?.judgementStore ?? (() => defaultJudgementStore);
@@ -81,7 +69,7 @@ export function createBrewHistoryMock(config?: {
         useBrewHistory: () => ({
             brews: brews(),
             remove: () => undefined,
-            open: (id: string) => (config === undefined ? defaultRecords : records)[id]
+            open: (id: string) => (config === undefined ? defaultRecords[id] : undefined)
                 ?? opened(),
             refresh: () => undefined,
             clear: () => undefined
@@ -96,7 +84,6 @@ export function createBrewHistoryMock(config?: {
         ).useBrewJudgement,
         sharedBrewDatabase: () => (judgementStore === undefined ? {} : judgementStore()),
         setRecords: (next: Record<string, Exclude<BrewRecordOpenResult, null>>) => {
-            records = next;
             if (config === undefined) defaultRecords = next;
         },
         setJudgementStore: (next: unknown) => {
