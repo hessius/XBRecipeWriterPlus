@@ -30,13 +30,13 @@ describe("asking the hub for a page", () => {
             respond({pageIndex: 1, pageSize: 100, totalPage: 3, total: 280, list: []})
         ) as unknown as typeof fetch;
 
-        const page = await fetchHubPage({pageIndex: 1, pageSize: 100, machineList: ["J15"]});
+        const page = await fetchHubPage({pageIndex: 1, pageSize: 100, recipeType: 1, machineList: ["J15"]});
 
         const {url, init} = lastRequest();
         expect(url).toBe(PAGE);
         expect(init.method).toBe("POST");
         expect(init.headers["content-type"]).toBe("application/json");
-        expect(JSON.parse(init.body)).toEqual({pageIndex: 1, pageSize: 100, machineList: ["J15"]});
+        expect(JSON.parse(init.body)).toEqual({pageIndex: 1, pageSize: 100, recipeType: 1, machineList: ["J15"]});
         expect(page.total).toBe(280);
         expect(page.list).toEqual([]);
     });
@@ -45,7 +45,7 @@ describe("asking the hub for a page", () => {
         // Every screen that fetches here can be left before the answer arrives.
         const controller = new AbortController();
 
-        await fetchHubPage({pageIndex: 1, pageSize: 1}, controller.signal);
+        await fetchHubPage({pageIndex: 1, pageSize: 1, recipeType: 1}, controller.signal);
 
         expect(lastRequest().init.signal).toBe(controller.signal);
     });
@@ -58,7 +58,7 @@ describe("asking the hub for a page", () => {
         // Asserting the status, not just the class: an envelope check alone
         // also throws a `HubApiError` here, so a bare `toThrow` would pass
         // with the transport check deleted.
-        await expect(fetchHubPage({pageIndex: 1, pageSize: 1}))
+        await expect(fetchHubPage({pageIndex: 1, pageSize: 1, recipeType: 1}))
             .rejects.toMatchObject({name: "HubApiError", status: 503});
     });
 
@@ -70,7 +70,55 @@ describe("asking the hub for a page", () => {
             ({ok: true, status: 200, json: async () => ({code: 500, msg: "boom", data: null})})
         ) as unknown as typeof fetch;
 
-        await expect(fetchHubPage({pageIndex: 1, pageSize: 1})).rejects.toThrow("boom");
+        // The hub's own words are kept for diagnosis and deliberately are not
+        // the message: they are server controlled, sometimes ungrammatical and
+        // may localise, and this app writes its own copy.
+        await expect(fetchHubPage({pageIndex: 1, pageSize: 1, recipeType: 1}))
+            .rejects.toMatchObject({code: 500, detail: {serverMessage: "boom"}});
+    });
+
+    it("tells a refusal apart from a fault, without reading English", async () => {
+        // Live, inside an HTTP 200: code 400 "The recipe has been removed by
+        // the person who shared it" is an ordinary thing to render calmly,
+        // code 500 "Operation Failed" is worth retrying. A screen must not
+        // have to match on prose to know which it has.
+        global.fetch = jest.fn(async () => ({
+            ok: true, status: 200,
+            json: async () => ({code: 400, msg: "Community Recipe don't exist", data: null})
+        })) as unknown as typeof fetch;
+
+        await expect(fetchHubDetail(164)).rejects.toMatchObject({isRefusal: true});
+
+        global.fetch = jest.fn(async () => ({
+            ok: true, status: 200,
+            json: async () => ({code: 500, msg: "Operation Failed", data: null})
+        })) as unknown as typeof fetch;
+
+        await expect(fetchHubDetail(164)).rejects.toMatchObject({isRefusal: false});
+    });
+
+    it("turns being offline into something a caller can catch", async () => {
+        // React Native's fetch throws a bare TypeError with no status when the
+        // phone has no connection, which is the likeliest failure of all and
+        // would otherwise sail past a caller catching HubApiError.
+        global.fetch = jest.fn(async () => {
+            throw new TypeError("Network request failed");
+        }) as unknown as typeof fetch;
+
+        await expect(fetchHubPage({pageIndex: 1, pageSize: 1, recipeType: 1}))
+            .rejects.toThrow(HubApiError);
+    });
+
+    it("lets an abort through as itself, so an unmount stays quiet", async () => {
+        // A screen that cancelled its own load has nothing to tell anybody.
+        global.fetch = jest.fn(async () => {
+            const aborted = new Error("Aborted");
+            aborted.name = "AbortError";
+            throw aborted;
+        }) as unknown as typeof fetch;
+
+        await expect(fetchHubPage({pageIndex: 1, pageSize: 1, recipeType: 1}))
+            .rejects.toMatchObject({name: "AbortError"});
     });
 });
 

@@ -65,6 +65,31 @@ here; do not "fix" them back.
   library picks it up on the way back. Do not add a callback or a param to the
   library route.
 
+### Corrections found during Task 1, verified live
+
+- **`fetchHubDetail` takes the *community* id.** A list row carries both
+  `communityRecipeId: 164` and `recipeId: 576` as plain numbers. Passing the
+  wrong one compiles, answers HTTP 200 with envelope code 200, and returns a
+  real recipe that is not the one somebody tapped. The parameter is named
+  `communityRecipeId` for that reason, and `HubRecipe.id` is the community id.
+- **The detail endpoint sends no `pourCount`.** `HubDetailRow` omits it, so
+  `normaliseRow(detail)` is a compile error; supply `pourList.length`.
+- **`recipeType` is required, not optional.** Omitting it returns 3,020 rows
+  instead of 2,966, and the extra 54 are tea.
+- **`sortType` is the direction**, 1 ascending and 2 descending, and it does
+  nothing without `sort`. It is not a second sort key.
+- **`type: 1` on the detail request is not the coffee/tea switch.** `type: 2`
+  answers "This requires you to log in first", and a tea row fetches fine with
+  `type: 1`. Tea is excluded by `recipeType` on the list request.
+- **The envelope's `code` is kept on the error**, because a removed recipe
+  comes back as code 400 inside an HTTP 200 and is an ordinary thing to render
+  calmly, while code 500 is worth a retry. `HubApiError.isRefusal` is that
+  question, so no screen has to match on English prose. The hub's `msg` is
+  kept as `detail.serverMessage` for diagnosis and is never displayed.
+- **An offline phone throws a bare `TypeError`**, which `post` turns into a
+  `HubApiError`. An `AbortError` is deliberately rethrown as itself so a screen
+  that cancelled its own load on unmount stays silent.
+
 ## File structure
 
 **New, pure TypeScript, no React:**
@@ -294,7 +319,7 @@ export type HubListRow = {
     rpm: number;
     pourCount: number;
     grandWater: number;
-    volume: string | number | null;
+    volume: string;
     likesCount: number;
     shareRecipeLink: string;
 };
@@ -318,7 +343,7 @@ export type HubPageRequest = {
     pageIndex: number;
     pageSize: number;
     keyword?: string;
-    recipeType?: number;
+    recipeType: number;
     recipeUserType?: number;
     sort?: number;
     sortType?: number;
