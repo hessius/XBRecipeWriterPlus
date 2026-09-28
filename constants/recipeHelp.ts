@@ -88,10 +88,11 @@ const ENTRIES = {
     },
     cup: {
         title:  "Cup",
-        hint:   "Omni turns overflow protection off.",
+        hint:   "Other turns overflow protection off.",
         question: "Which cup type should I pick?",
-        detail: "Omni disables overflow protection. Other is for " +
-                "third-party brewers."
+        detail: "Omni is xBloom's own dripper, so the machine knows when " +
+                "your cup is full and stops. Other is for third-party " +
+                "brewers it cannot measure, so nothing stops it."
     },
     xid: {
         title:  "Recipe ID",
