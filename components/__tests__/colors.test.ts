@@ -75,6 +75,29 @@ describe("the row actions revealed by a swipe", () => {
     });
 });
 
+describe("the support tile, filled with the brand magenta", () => {
+    // `brand` is not one of the twelve recipe accents. It is darker than all of
+    // them, so nothing the "accent inks" block above proves applies to it and
+    // each ink has to be measured against it separately.
+    it("carries both lines of copy in solid ink", () => {
+        expect(contrast(onAccent.text, palette.brand)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // The finding that decided the tile, pinned so it cannot be undone by
+    // someone reaching for the softer token to get a second line of hierarchy.
+    // `onAccent.label` promises 5.1:1 worst case and delivers it on every
+    // accent; on `brand` it is 3.80:1 and misses AA. Hierarchy in the tile
+    // comes from size and weight instead.
+    it("cannot use the softer label ink, which is why both lines are solid", () => {
+        expect(contrast(onAccent.label, palette.brand)).toBeLessThan(4.5);
+    });
+
+    // The chevron is a graphic, not text, so 3:1 is its floor.
+    it("carries the chevron", () => {
+        expect(contrast(onAccent.marker, palette.brand)).toBeGreaterThanOrEqual(3);
+    });
+});
+
 describe("palette inks on the base background", () => {
     it.each([
         ["text", palette.text],

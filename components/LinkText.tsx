@@ -1,11 +1,9 @@
 import React from "react";
-import {Linking, Pressable, type FlexAlignType} from "react-native";
+import {Pressable, type FlexAlignType} from "react-native";
 import {Text} from "tamagui";
 
-import {notify} from "@/components/XbrwToast";
+import {openLink} from "@/components/openLink";
 import {palette} from "@/constants/colors";
-
-export const LINK_OPEN_FAILED = "Could not open that link.";
 
 /**
  * A tappable line.
@@ -43,15 +41,7 @@ export default function LinkText({
             })}
             onPress={() => {
                 if (onPress !== undefined) return onPress();
-                // `openURL` rejects when nothing can handle the scheme - a
-                // managed device with no browser, say. Unhandled, that is a red
-                // box in development and silence in production.
-                if (url !== undefined) {
-                    Linking.openURL(url).catch(() => notify({
-                        tone:    "error",
-                        message: LINK_OPEN_FAILED
-                    }));
-                }
+                if (url !== undefined) openLink(url);
             }}>
             {/* Brand magenta rather than an underline: the only coloured thing
                 in a block of grey prose reads as "this is a link" without

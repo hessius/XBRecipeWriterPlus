@@ -12,6 +12,7 @@ import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
+import SupportTile from "@/components/SupportTile";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useBackup} from "@/hooks/useBackup";
@@ -422,6 +423,15 @@ export default function SettingsScreen({settings}: Props) {
                                        detail="Every brew you have recorded."
                                        onPress={() => router.push("/brewHistory")}/>
                 </SettingsSection>
+
+                {/* Between Brew history and the preferences, not down with
+                    About. Almost nobody opens an About screen, and the ask is
+                    worth more than the rows under it are. Not wrapped in
+                    `SettingsSection`: that draws a `surface` card and rules
+                    hairlines between its children, and this is one filled tile
+                    rather than a list of rows. It carries the section's own
+                    `$4` top gap so the rhythm of the screen is unbroken. */}
+                <SupportTile/>
 
                 <SettingsSection title="Recipe list">
                     <SettingsToggleRow

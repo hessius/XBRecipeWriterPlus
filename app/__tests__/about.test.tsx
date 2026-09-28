@@ -1,7 +1,9 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
+import {Linking} from "react-native";
 
 import AboutScreen from "@/app/about";
+import {SUPPORT_URL} from "@/components/SupportTile";
 import {renderWithProviders} from "@/test-utils/render";
 import {sharedSettings} from "@/hooks/useSetting";
 import {notify} from "@/components/XbrwToast";
@@ -173,5 +175,20 @@ describe("AboutScreen", () => {
             expect(screen.getByTestId("about-version").props.accessibilityRole)
                 .toBeUndefined();
         });
+    });
+
+    // The tile in Settings is the one most people will see, but About is where
+    // someone who went looking for it expects to find it, next to the source
+    // and the issue tracker.
+    it("offers the tip jar next to the source and the issues", async () => {
+        const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+        await renderWithProviders(<AboutScreen/>);
+
+        await fireEvent.press(screen.getByRole("link", {name: "Buy me a coffee"}));
+
+        // The same constant the tile uses. Two places naming the same URL is
+        // two places to get it wrong, so both read it from one export.
+        expect(openURL).toHaveBeenCalledWith(SUPPORT_URL);
+        openURL.mockRestore();
     });
 });

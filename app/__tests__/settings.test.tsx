@@ -4,6 +4,7 @@ import {screen, fireEvent, act, within, waitFor} from "@testing-library/react-na
 import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import SettingsScreen from "@/app/settings";
+import {SUPPORT_TITLE} from "@/components/SupportTile";
 import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
 import {DEFAULTS, NOT_IN_BACKUP, Settings, type SettingKey, type SettingsStorage} from "@/library/Settings";
@@ -813,6 +814,29 @@ describe("SettingsScreen", () => {
         expect(indexOf("RECIPE LIST")).toBeLessThan(indexOf("UNITS"));
         expect(indexOf("UNITS")).toBeLessThan(indexOf("XBLOOM ACCOUNT"));
         expect(indexOf("XBLOOM ACCOUNT")).toBeLessThan(indexOf("LIBRARY"));
+    });
+
+    // Placement is the whole argument for the tile. Put it down with About and
+    // it is a row almost nobody scrolls to; the point of it is that it sits
+    // among the things people actually open Settings for.
+    it("puts the tip jar above the preferences, not down with About", async () => {
+        await renderWithProviders(<SettingsScreen settings={accountOn()}/>);
+
+        expect(screen.getByTestId("support-tile")).toBeTruthy();
+
+        const order = renderOrder(screen.toJSON());
+        const indexOf = (text: string) => order.indexOf(text);
+        expect(indexOf(SUPPORT_TITLE)).toBeGreaterThan(indexOf("Brew history"));
+        expect(indexOf(SUPPORT_TITLE)).toBeLessThan(indexOf("RECIPE LIST"));
+    });
+
+    // It unlocks nothing, so it stores nothing. A key added here would also
+    // have to reach settingsSnapshot(), and the one that does not is the one
+    // that goes missing from a backup.
+    it("adds no setting of its own", () => {
+        expect(Object.keys(DEFAULTS)).not.toContain("supported");
+        expect(Object.keys(DEFAULTS).some((key) => /support|donat|tip/i.test(key)))
+            .toBe(false);
     });
 
     it("offers sign-in under its own heading when no account is connected", async () => {
