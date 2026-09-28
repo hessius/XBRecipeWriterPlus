@@ -109,3 +109,70 @@ describe("podCoffeeFromStored", () => {
         expect(podCoffeeFromStored(undefined)).toBeNull();
     });
 });
+
+describe("podCoffeeFromStored, the #159 fields", () => {
+    // Every case below has a name, so the reader cannot return null. Asserting
+    // that once here keeps the assertions about the field under test.
+    const stored = (value: unknown) => {
+        const coffee = podCoffeeFromStored(value);
+        if (coffee === null) throw new Error("expected a coffee block");
+        return coffee;
+    };
+    it("reads every field the BrewMind contract adds", () => {
+        expect(podCoffeeFromStored({
+            name: "Finca La Esperanza",
+            roaster: "Some Roastery",
+            roastDate: "2026-09-01",
+            roastLevel: "Medium",
+            country: "Colombia",
+            region: "Huila",
+            farm: "La Esperanza",
+            farmer: "Ana Ruiz",
+            fermentation: "Anaerobic",
+            elevation: 1750,
+            cuppingScore: 86.5,
+            decaf: false,
+            url: "https://example.com/coffee"
+        })).toEqual({
+            name: "Finca La Esperanza",
+            roaster: "Some Roastery",
+            roastDate: "2026-09-01",
+            roastLevel: "Medium",
+            country: "Colombia",
+            region: "Huila",
+            farm: "La Esperanza",
+            farmer: "Ana Ruiz",
+            fermentation: "Anaerobic",
+            elevation: 1750,
+            cuppingScore: 86.5,
+            decaf: false,
+            url: "https://example.com/coffee"
+        });
+    });
+
+    it("keeps a false decaf, which is a verdict and not an absence", () => {
+        // `decaf: false` is the roaster saying caffeinated. Dropping it as
+        // falsy would turn a stated fact into an unknown.
+        expect(stored({name: "X", decaf: false}).decaf).toBe(false);
+        expect(stored({name: "X", decaf: true}).decaf).toBe(true);
+        expect(stored({name: "X"}).decaf).toBeUndefined();
+    });
+
+    it("refuses a number that cannot be a real measurement", () => {
+        expect(stored({name: "X", elevation: 0}).elevation).toBeUndefined();
+        expect(stored({name: "X", elevation: -100}).elevation).toBeUndefined();
+        expect(stored({name: "X", elevation: 99_000}).elevation).toBeUndefined();
+        expect(stored({name: "X", elevation: 1750.4}).elevation).toBeUndefined();
+        expect(stored({name: "X", cuppingScore: 101}).cuppingScore).toBeUndefined();
+        expect(stored({name: "X", cuppingScore: NaN}).cuppingScore).toBeUndefined();
+        expect(stored({name: "X", url: "http://example.com"}).url).toBeUndefined();
+    });
+
+    it("gives a pod none of them, because a pod carries none of them", () => {
+        // The pod map names these keys so the exhaustiveness check passes, and
+        // this is the proof that naming them cannot put anything in a pod's
+        // block that xBloom did not send.
+        expect(podCoffeeFromPodsVo({theName: "Pod", roastDate: "2026-09-01"}))
+            .toEqual({name: "Pod", roastDate: "2026-09-01"});
+    });
+});
