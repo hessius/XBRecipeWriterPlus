@@ -83,6 +83,20 @@ function makeBrews(): StoredBrew[] {
     ];
 }
 
+/** Two brews of one recipe, for the cases that need a comparable pair. */
+function sameRecipe(): StoredBrew[] {
+    return [
+        {id: "newer", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
+         accent: "#C86A3B", startedAt: 900, endedAt: 1_000, outcome: "done",
+         failure: null, pours: 5, waterTotal: 250, cupTotal: 244,
+         heldSeconds: 0, hasStream: true},
+        {id: "older", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",
+         accent: "#C86A3B", startedAt: 100, endedAt: 200, outcome: "done",
+         failure: null, pours: 5, waterTotal: 248, cupTotal: 240,
+         heldSeconds: 0, hasStream: true}
+    ];
+}
+
 /**
  * Let a just-opened sheet finish arriving before it is touched.
  *
@@ -272,5 +286,71 @@ describe("brew history batch selection", () => {
 
         expect(screen.queryByLabelText("Send selected brews to Beanconqueror")).toBeNull();
         expect(screen.getByLabelText("Delete selected brews")).toBeTruthy();
+    });
+
+    it("keeps compare inert until two brews are ticked", async () => {
+        mockBrews = sameRecipe();
+        await renderWithProviders(<BrewHistory />);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        expect(screen.getByLabelText("Compare the selected brews")).toBeDisabled();
+
+        await fireEvent.press(screen.getAllByLabelText(/^Ethiopia Guji,/)[0]);
+        expect(screen.getByLabelText("Compare the selected brews")).toBeDisabled();
+    });
+
+    it("compares two brews of one recipe", async () => {
+        mockBrews = sameRecipe();
+        await renderWithProviders(<BrewHistory />);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        const rows = screen.getAllByLabelText(/^Ethiopia Guji,/);
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+
+        expect(screen.getByLabelText("Compare the selected brews")).not.toBeDisabled();
+        expect(screen.queryByTestId("selection-not-comparable")).toBeNull();
+    });
+
+    it("says why two brews of different recipes cannot be compared", async () => {
+        await renderWithProviders(<BrewHistory />);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        await fireEvent.press(screen.getByLabelText(/^Ethiopia Guji,/));
+        await fireEvent.press(screen.getByLabelText(/^Kenya Nyeri,/));
+
+        expect(screen.getByTestId("selection-not-comparable")).toBeTruthy();
+        expect(screen.getByLabelText("Compare the selected brews")).toBeDisabled();
+    });
+
+    it("opens the comparison with the newer brew leading", async () => {
+        mockBrews = sameRecipe();
+        await renderWithProviders(<BrewHistory />);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        const rows = screen.getAllByLabelText(/^Ethiopia Guji,/);
+        // Ticked oldest first, against a push that must come out newest
+        // first, so this pins the sort rather than the order of ticking.
+        await fireEvent.press(rows[1]);
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(screen.getByLabelText("Compare the selected brews"));
+
+        expect(mockPush).toHaveBeenCalledWith({
+            pathname: "/brewCompare",
+            params: {a: "newer", b: "older"}
+        });
+    });
+
+    it("leaves selection mode behind it", async () => {
+        mockBrews = sameRecipe();
+        await renderWithProviders(<BrewHistory />);
+
+        await fireEvent.press(screen.getByLabelText("Select brews"));
+        const rows = screen.getAllByLabelText(/^Ethiopia Guji,/);
+        await fireEvent.press(rows[0]);
+        await fireEvent.press(rows[1]);
+        await fireEvent.press(screen.getByLabelText("Compare the selected brews"));
+
+        expect(screen.getByLabelText("Select brews")).toBeTruthy();
     });
 });

@@ -46,7 +46,11 @@ let mockParams: {id?: string; latest?: string} = {id: "brew-1"};
 let mockBrews: StoredBrew[] = [];
 
 // The judgement writes the screen makes, recorded rather than performed.
-const mockJudgementStore = {judge: jest.fn(), setPinned: jest.fn()};
+const mockJudgementStore = {
+    judge: jest.fn(),
+    setPinned: jest.fn(),
+    brewsFor: jest.fn()
+};
 
 jest.mock("expo-router", () => {
     const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
@@ -140,6 +144,8 @@ describe("brew record", () => {
             samples: [{at: 0, water: 0, cup: 0, pour: 1},
                       {at: 228_000, water: 250, cup: 244, pour: 2}]
         };
+        mockJudgementStore.brewsFor.mockReset();
+        mockJudgementStore.brewsFor.mockReturnValue([record]);
     });
 
     it("draws the trace and the figures", async () => {
@@ -324,6 +330,66 @@ describe("brew record", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByLabelText("Save as image")).toBeTruthy();
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
+    });
+
+    it("does not offer comparison when this is the only brew of its recipe", async () => {
+        mockBrews = [record];
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByLabelText("Compare with another brew")).toBeNull();
+    });
+
+    it("compares this brew with another brew of the same recipe", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        mockJudgementStore.brewsFor.mockReturnValue([other, record]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+
+        expect(screen.queryByTestId("compare-candidate-brew-1")).toBeNull();
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("compare-candidate-brew-2"));
+            expect(mockPush).toHaveBeenCalledWith({
+                pathname: "/brewCompare",
+                params: {a: "brew-1", b: "brew-2"}
+            });
+        });
+    });
+
+    // The record is the newer of the two here, which is the case the sorted
+    // ordering used to get wrong: it turned the brew the user was looking at
+    // grey because the one they picked was older.
+    it("keeps the brew you came from leading, even when it is the newer", async () => {
+        const older = {...record, id: "brew-0", startedAt: 0};
+        const current = {...record, startedAt: 900_000};
+        mockBrews = [current, older];
+        mockJudgementStore.brewsFor.mockReturnValue([current, older]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("compare-candidate-brew-0"));
+            expect(mockPush).toHaveBeenCalledWith({
+                pathname: "/brewCompare",
+                params: {a: "brew-1", b: "brew-0"}
+            });
+        });
+    });
+
+    it("takes the record away from the reader while the compare sheet covers it", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        mockJudgementStore.brewsFor.mockReturnValue([other, record]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.getByTestId("brew-record-content").props.accessibilityElementsHidden)
+            .toBe(false);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+
+        expect(screen.getByTestId("brew-record-content", {includeHiddenElements: true})
+            .props.accessibilityElementsHidden).toBe(true);
     });
 
     describe("Beanconqueror handoff", () => {

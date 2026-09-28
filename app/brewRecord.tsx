@@ -7,6 +7,7 @@ import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
 import BrewSummary from "@/components/BrewSummary";
+import CompareWithSheet from "@/components/CompareWithSheet";
 import StageDetail from "@/components/StageDetail";
 import DotMatrixText from "@/components/DotMatrixText";
 import * as Clipboard from "expo-clipboard";
@@ -33,6 +34,7 @@ import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
+import type {StoredBrew} from "@/library/BrewDatabase";
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
@@ -136,6 +138,8 @@ export default function BrewRecord({recipeLookup}: Props) {
     // here and not in the batch path: once is a courtesy, once per brew across
     // a selection is a questionnaire.
     const [namingBean, setNamingBean] = useState(false);
+    const [pickingComparison, setPickingComparison] = useState(false);
+    const [comparisonCandidates, setComparisonCandidates] = useState<StoredBrew[]>([]);
 
     // Seeded from the record that is already in memory, so the screen shows
     // the verdict the user gave at the end of the brew rather than an empty
@@ -229,6 +233,37 @@ export default function BrewRecord({recipeLookup}: Props) {
     // The scale's running total includes the bypass, so the brew water is the
     // total less what the bypass put in. Same reasoning as the live screen.
     const brewWater = Math.max(0, record.waterTotal - (bypass?.delivered ?? 0));
+    const hasComparisonCandidate = brews.some(
+        (brew) => brew.recipeUuid === record.recipeUuid && brew.id !== record.id
+    );
+
+    function openComparisonPicker(): void {
+        const candidates = sharedBrewDatabase()
+            .brewsFor(record.recipeUuid)
+            .filter((brew) => brew.id !== record.id);
+        setComparisonCandidates(candidates);
+        setPickingComparison(true);
+    }
+
+    function compareWith(candidateId: string): void {
+        const other = comparisonCandidates.find((candidate) => candidate.id === candidateId);
+        if (other === undefined) return;
+        setPickingComparison(false);
+        setComparisonCandidates([]);
+        // The brew you came from leads, whether it is the older of the two or
+        // not. Arriving here you were already looking at one brew, and having
+        // it turn grey because the one you picked happened to be newer would
+        // answer a question you did not ask. The history door sorts instead,
+        // because arriving from a list you came from neither.
+        router.push({pathname: "/brewCompare", params: {a: record.id, b: other.id}});
+    }
+
+    function closeComparisonPicker(): void {
+        setPickingComparison(false);
+        setComparisonCandidates([]);
+    }
+
+    const screenCovered = namingBean || pickingComparison;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -237,9 +272,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                 nothing on its own, so the screen underneath stays reachable
                 unless it is hidden from here. The sheet sits outside this
                 subtree so it never hides itself. */}
-            <YStack flex={1} gap="$2"
-                    accessibilityElementsHidden={namingBean}
-                    importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
+            <YStack flex={1} gap="$2" testID="brew-record-content"
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
                 that name immediately below, and it has to, because the capture
                 needs it. A header repeating it would say the same word twice in
@@ -372,6 +407,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                         <ExportButton label="Export the data" busy={busy}
                                       onPress={() => void shareData()} />
                     </XStack>
+                    {hasComparisonCandidate && (
+                        <XStack>
+                            <ExportButton label="Compare" busy={false}
+                                          accessibilityLabel="Compare with another brew"
+                                          onPress={openComparisonPicker} />
+                        </XStack>
+                    )}
                     {showHandoff && (
                         // At Doto's maximum 1.4x accessibility scale, the
                         // Beanconqueror label cannot share a three-way split
@@ -410,6 +452,12 @@ export default function BrewRecord({recipeLookup}: Props) {
             <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
                            suggestion={beanNameFromRecipe(record.recipeName) ?? ""}
                            onConfirm={(name) => void sendHandoff(name)} />
+            <CompareWithSheet
+                open={pickingComparison}
+                candidates={comparisonCandidates}
+                onPick={compareWith}
+                onClose={closeComparisonPicker}
+            />
         </YStack>
     );
 }
