@@ -42,6 +42,9 @@ function countLabel(count: number): string {
 
 function matching(options: readonly HubFilterOption[], term: string): readonly HubFilterOption[] {
     const wanted = key(term);
+    // A shortcut, not a guard: `includes("")` is true for everything, so the
+    // filter below would answer the same. It is here so the common case does
+    // not walk a thousand values to conclude it wanted all of them.
     if (wanted === "") return options;
     return options.filter((option) => key(option.value).includes(wanted));
 }
