@@ -105,28 +105,3 @@ jest.mock("expo-clipboard", () => ({
     isPasteButtonAvailable: false,
     ClipboardPasteButton:   () => null
 }));
-
-/**
- * `react-native-ble-manager` is a native module used by the machine radio layer.
- * The test imports `@/app/settings` which eventually imports Transport and
- * therefore BleManager, so a mock is needed to run tests without the native layer.
- */
-jest.mock("react-native-ble-manager", () => {
-    const EventEmitter = require("events");
-    const emitter = new EventEmitter();
-    return {
-        __esModule: true,
-        default: class BleManager {
-            startScan() { return Promise.resolve(); }
-            stopScan() { return Promise.resolve(); }
-            connect() { return Promise.resolve(); }
-            disconnect() { return Promise.resolve(); }
-            state() { return Promise.resolve("PoweredOn"); }
-            on() { return () => {}; }
-            removeAllListeners() {}
-        },
-        BleState: {
-            PoweredOn: "PoweredOn"
-        }
-    };
-});

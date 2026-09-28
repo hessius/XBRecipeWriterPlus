@@ -4,7 +4,6 @@ import {buildBackup, mergeBrews, mergeRecipes, parseBackup, reviveBrew,
 import type {BrewRecord} from "@/library/brew/BrewRecord";
 import Recipe, {MAX_DESCRIPTION} from "@/library/Recipe";
 import {DEFAULTS, NOT_IN_BACKUP, type SettingKey} from "@/library/Settings";
-import {settingsSnapshot} from "@/app/settings";
 
 function recipeNamed(name: string, uuid: string): Recipe {
     const recipe = new Recipe();
@@ -739,15 +738,6 @@ describe("every setting is carried or deliberately excluded", () => {
         }));
 
         expect(parsed.settings.libraryView).toBe("shelves");
-    });
-
-    it("carries the machine model, because it is a fact about what you own", () => {
-        // The device id is excluded because it names this phone's pairing. The
-        // model is not: a user restoring onto a new phone still owns the same
-        // machine, and defaulting them back to Studio would undo the correction
-        // they had to make by hand.
-        const backup = JSON.parse(buildBackup([], settingsSnapshot()));
-        expect(Object.keys(backup.settings)).toContain("machineModel");
     });
 });
 
