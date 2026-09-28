@@ -640,79 +640,126 @@ git commit -m "Mint a share link for the machine the user actually owns"
 ## Task 6: The cloud library reads both partitions
 
 **Files:**
-- Modify: `library/cloud/cloudLibrary.ts:28-50`
+- Modify: `library/cloud/cloudLibrary.ts`
 - Test: `library/cloud/__tests__/cloudLibrary.test.ts`
 
 **Why this is not a substitution.** This function answers "what has this account minted". That answer does not depend on which machine the user owns today. If it read only the current partition, a user who corrected their setting would find every earlier link missing, and `useShareRecipe`'s fingerprint check would mint a duplicate row on every subsequent share. Spec §4.4.
 
-- [ ] **Step 1: Write the failing test**
+### Read this before you write anything
 
-Add to `library/cloud/__tests__/cloudLibrary.test.ts`:
+The existing page loop cannot simply be wrapped in a second loop. It carries three exits, and one of them is stateful:
+
+```ts
+if (!Array.isArray(response.list)) {
+    if (out.length > 0) {
+        throw new CloudError("server", "xBloom stopped mid-list");
+    }
+    break;
+}
+```
+
+`out.length > 0` is how the function tells "this account is empty" from "the server stopped part way through a walk". With a single shared accumulator across both partitions that test becomes wrong in the common case: nearly every user has rows in partition 1 and none in partition 2, so partition 2's first page would find `out.length > 0` and throw `"xBloom stopped mid-list"` on a perfectly healthy account. Sharing would break for almost everybody.
+
+**So extract the page walk into its own function, one that owns its own accumulator**, and have the partition loop concatenate the results. Each partition then judges its own emptiness, which is what the check was always asking.
+
+The other two exits are page-level and stay inside the extracted function: the short-page `break` ends that partition's walk, and the `MAX_PAGES` throw must stay a throw — reaching the cap is still a failure to find an ending, and it must abort the whole call rather than quietly returning one partition.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `library/cloud/__tests__/cloudLibrary.test.ts`. Match the file's existing way of injecting or mocking `post` — if the module imports `post` directly rather than receiving it, mock the module the way the neighbouring tests already do, and read them for the exact shape before writing.
 
 ```ts
 it("reads both partitions, because a link minted before a correction still exists", async () => {
+    // The same recipe is a different row on each machine, and this answers
+    // "what has this account minted", not "what can this phone brew".
     const asked: number[] = [];
-    const post = jest.fn(async (_path: string, body: Record<string, unknown>) => {
-        asked.push(body.adaptedModel as number);
-        return {list: [{tableId: body.adaptedModel}]};
-    });
-
-    const rows = await fetchCloudRecipes({memberId: 1, token: "t"}, post);
+    // ... respond with one row per partition, tagged so they can be told apart
+    const rows = await fetchCloudRecipes(aSession());
 
     expect(new Set(asked)).toEqual(new Set([1, 2]));
-    expect(rows.map((r) => r.tableId).sort()).toEqual([1, 2]);
+    expect(rows).toHaveLength(2);
+});
+
+it("lets the second partition be empty without calling it a broken walk", async () => {
+    // The regression this task is most likely to introduce. Nearly every user
+    // has rows under 1 and none under 2; if the two partitions share an
+    // accumulator, the emptiness check reads the first partition's rows and
+    // reports a healthy account as a server that stopped mid-list.
+    // Respond: partition 1 returns a short page of rows, partition 2 returns
+    // no `list` key at all.
+    const rows = await fetchCloudRecipes(aSession());
+
+    expect(rows).toHaveLength(/* however many partition 1 returned */);
+});
+
+it("still refuses a walk that stops part way through one partition", async () => {
+    // And the check must keep working *within* a partition: a first page that
+    // fills and a second that answers with no list is a broken walk, not an
+    // empty account.
+    await expect(fetchCloudRecipes(aSession()))
+        .rejects.toThrow(/stopped mid-list/);
 });
 ```
 
-Match the existing tests in that file for how `post` is injected or mocked; if the module imports `post` directly rather than receiving it, mock the module with `jest.mock` the way the neighbouring tests already do.
+`aSession()` is a stand-in; use whatever the file already uses. Fill in the response scripting to match the file's existing mocking style. The third test may already exist in some form — if it does, leave it alone and make sure it still passes rather than writing a second copy.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/cloud/__tests__/cloudLibrary.test.ts`
-Expected: FAIL, only partition `1` was asked for.
+Expected: FAIL. The first because only partition `1` was asked for.
 
-- [ ] **Step 3: Walk both**
+- [ ] **Step 3: Extract the page walk**
 
-In `library/cloud/cloudLibrary.ts`, add the import:
+Move the existing loop body into a function that takes the partition and returns the rows it found, owning its own `out`. Keep every comment attached to the logic it explains — they describe failures that actually happened and are worth more than the diff noise of moving them.
+
+```ts
+/**
+ * One partition's rows, walked to the end.
+ *
+ * Its own accumulator on purpose. The mid-list check below asks "have we
+ * already collected rows in *this* walk", which is how an empty account is
+ * told from a server that stopped part way through one. Sharing an accumulator
+ * across partitions would make a user with rows under 1 and none under 2 --
+ * which is nearly all of them -- look like a broken walk.
+ */
+async function fetchPartition(
+    session: Session,
+    adaptedModel: number,
+    signal?: AbortSignal
+): Promise<CloudRow[]> {
+```
+
+- [ ] **Step 4: Walk both**
+
+Add the import:
 
 ```ts
 import {ADAPTED_MODEL} from "@/library/machine/machineModel";
 ```
 
-Wrap the existing page loop in a loop over both partitions. The existing body is unchanged apart from the `adaptedModel` line:
+And replace the body of `fetchCloudRecipes`:
 
 ```ts
+    const out: CloudRow[] = [];
     // Both partitions, not the user's current one. This answers "what has this
     // account minted", and that does not change when somebody corrects which
     // machine they own. Reading only the current partition would hide every
     // earlier link from the fingerprint check, which would then mint a
     // duplicate row on every share. See the design spec, section 4.4.
     for (const adaptedModel of Object.values(ADAPTED_MODEL)) {
-        for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
-            const response = await post(
-                "tuMyTeaRecipeCreated.tuhtml",
-                {
-                    ...authFields(session.memberId, session.token),
-                    pageNumber,
-                    countPerPage: PAGE_SIZE,
-                    adaptedModel,
-                },
-                true,
-                signal
-            );
-            // ... the existing body of the loop, unchanged ...
-        }
+        out.push(...await fetchPartition(session, adaptedModel, signal));
     }
+    return out;
 ```
 
-Take care with the existing early-exit logic inside the loop: a `break` that ended the page walk must still end only the **page** walk, not the partition walk. Read the existing body carefully before wrapping it.
+Sequential rather than `Promise.all`, to keep the existing behaviour under an `AbortSignal` and to avoid doubling the load this puts on xBloom's endpoint in one burst.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `npx jest library/cloud/`
-Expected: PASS, including the pre-existing tests about partial page walks.
+Run: `npx jest library/cloud/ && npm run typecheck && npm run lint`
+Expected: PASS, including every pre-existing test about partial page walks. Those tests are the point: this task must not change what a broken walk means, only how many walks there are.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add library/cloud/cloudLibrary.ts library/cloud/__tests__/cloudLibrary.test.ts
