@@ -1,6 +1,7 @@
 import React, {createContext, useContext, useRef, useState} from "react";
 
 import {OVER} from "@/constants/brewCopy";
+import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {Stall} from "@/library/brew/stalls";
@@ -173,8 +174,6 @@ function RunOwner({
     setRatingNoteOpen: (open: boolean) => void;
     children: React.ReactNode;
 }) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const {useBrewRun} = require("@/hooks/useBrewRun") as typeof import("@/hooks/useBrewRun");
     const result = useBrewRun(recipe, store, runId);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,

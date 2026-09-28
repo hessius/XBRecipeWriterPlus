@@ -10,6 +10,7 @@ import {renderWithProviders} from "@/test-utils/render";
 const NOW = 1_700_000_000_000;
 let mockPathname = "/";
 let mockStore: RatingPromptStore & {next: StoredBrew | null};
+const mockSetRatingNoteOpen = jest.fn();
 
 const BREW: StoredBrew = {
     id: "b1",
@@ -39,7 +40,7 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/hooks/useLiveBrew", () => ({
-    useLiveBrew: () => ({run: null, dismiss: jest.fn(), setRatingNoteOpen: jest.fn()})
+    useLiveBrew: () => ({run: null, dismiss: jest.fn(), setRatingNoteOpen: mockSetRatingNoteOpen})
 }));
 
 jest.mock("@/hooks/useBrewHistory", () => ({
@@ -62,6 +63,7 @@ describe("LiveBrewBar rating prompt refresh", () => {
             lastMeasuredBrew: jest.fn(() => mockStore.next),
             judge: jest.fn()
         };
+        mockSetRatingNoteOpen.mockClear();
     });
 
     afterEach(() => {
@@ -135,6 +137,7 @@ describe("LiveBrewBar rating prompt refresh", () => {
 
         await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
         await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
+        expect(mockSetRatingNoteOpen).toHaveBeenCalledWith(true);
 
         const field = await screen.findByTestId("judgement-note");
         await fireEvent.changeText(field, "Sweet and round.");
@@ -144,5 +147,6 @@ describe("LiveBrewBar rating prompt refresh", () => {
                 note: "Sweet and round."
             });
         });
+        expect(mockSetRatingNoteOpen).toHaveBeenCalledWith(false);
     });
 });

@@ -1,3 +1,5 @@
+import BrewDatabase from "@/library/BrewDatabase";
+import type {BrewRecord} from "@/library/brew/BrewRecord";
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 
 let mockBacking: FakeSQLiteDatabase;
@@ -5,11 +7,6 @@ let mockBacking: FakeSQLiteDatabase;
 jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => mockBacking
 }));
-
-/* eslint-disable import/first */
-import BrewDatabase from "@/library/BrewDatabase";
-import type {BrewRecord} from "@/library/brew/BrewRecord";
-/* eslint-enable import/first */
 
 beforeEach(() => {
     mockBacking = createTestDatabase();

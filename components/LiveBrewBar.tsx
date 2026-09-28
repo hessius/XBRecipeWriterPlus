@@ -70,6 +70,7 @@ export default function LiveBrewBar() {
     function closeNoteSheet(): void {
         commitNoteDraft(true);
         setNoteOpen(false);
+        setRatingNoteOpen(false);
         const closing = noting?.id;
         if (closeTimer.current !== null) {
             clearTimeout(closeTimer.current);
@@ -78,6 +79,17 @@ export default function LiveBrewBar() {
             closeTimer.current = null;
             setNoting((was) => was?.id === closing ? null : was);
         }, EXIT_GRACE);
+    }
+
+    function openNoteSheet(brew: StoredBrew, rating: number): void {
+        if (closeTimer.current !== null) {
+            clearTimeout(closeTimer.current);
+            closeTimer.current = null;
+        }
+        setNoting({...brew, rating});
+        setNoteDraft(brew.note ?? "");
+        setNoteOpen(true);
+        setRatingNoteOpen(true);
     }
 
     useEffect(() => {
@@ -98,11 +110,6 @@ export default function LiveBrewBar() {
     useEffect(() => () => {
         if (closeTimer.current !== null) clearTimeout(closeTimer.current);
     }, []);
-
-    useEffect(() => {
-        setRatingNoteOpen(noteOpen);
-        return () => setRatingNoteOpen(false);
-    }, [noteOpen, setRatingNoteOpen]);
 
     if (SILENT.has(pathname)) {
         return null;
@@ -143,13 +150,7 @@ export default function LiveBrewBar() {
                     onRate={(rating) => {
                         // Written first, so dismissing the sheet loses nothing.
                         if (!prompt.rate(asking.id, rating)) return;
-                        if (closeTimer.current !== null) {
-                            clearTimeout(closeTimer.current);
-                            closeTimer.current = null;
-                        }
-                        setNoting({...asking, rating});
-                        setNoteDraft(asking.note ?? "");
-                        setNoteOpen(true);
+                        openNoteSheet(asking, rating);
                     }}
                     onDismiss={() => prompt.dismiss(asking.id)}
                 />
@@ -160,6 +161,7 @@ export default function LiveBrewBar() {
                     onOpenChange={(open) => {
                         if (open) {
                             setNoteOpen(true);
+                            setRatingNoteOpen(true);
                         } else {
                             closeNoteSheet();
                         }

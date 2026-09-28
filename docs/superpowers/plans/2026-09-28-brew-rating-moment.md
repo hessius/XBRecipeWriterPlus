@@ -685,8 +685,7 @@ export function useRatingPrompt(
             if (next === "active") setSeen(database().lastWatchedBrew());
         });
         return () => subscription.remove();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [store]);
 
     const brew = brewToRate({
         brew: seen, now: Date.now(), dismissedId, enabled

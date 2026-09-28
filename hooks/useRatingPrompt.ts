@@ -62,16 +62,14 @@ export function useRatingPrompt(
     useEffect(() => {
         const subscription = AppState.addEventListener("change", (next) => {
             if (next === "active") {
-                setCandidate({brew: database().lastMeasuredBrew(), now: Date.now()});
+                setCandidate({
+                    brew: (store ?? sharedBrewDatabase()).lastMeasuredBrew(),
+                    now: Date.now()
+                });
             }
         });
         return () => subscription.remove();
-        // The subscription is intentionally one per mount. `database` is a
-        // render-local resolver so production can avoid opening SQLite during
-        // render; adding it here would turn unrelated renders into app-state
-        // resubscriptions without making the foreground read more correct.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [store]);
 
     function refresh(): void {
         const next = database().lastMeasuredBrew();
