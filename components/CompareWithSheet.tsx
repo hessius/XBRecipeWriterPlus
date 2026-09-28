@@ -60,7 +60,7 @@ export default function CompareWithSheet({open, candidates, onPick, onClose}: Pr
 
     return (
         <XbrwSheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}
-                   title="Compare with">
+                   title="Compare">
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                 {ordered.length === 0 ? (
                     <Text testID="compare-no-candidates" color={palette.dim} fontSize={13}>

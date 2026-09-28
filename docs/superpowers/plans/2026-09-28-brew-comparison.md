@@ -44,7 +44,7 @@
 | `components/BrewTrace.tsx` | Read appearance from `traceStyle`, use `TraceLegendItem`, accept an optional `axis` override. |
 | `constants/brewCopy.ts` | The four verdict readings and the degradation copy. |
 | `app/brewHistory.tsx` | COMPARE in the selection row. |
-| `app/brewRecord.tsx` | COMPARE WITH control. |
+| `app/brewRecord.tsx` | COMPARE control. |
 
 ---
 
@@ -2057,7 +2057,7 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 ## Task 13: Door two, from a brew record
 
-The door a user finds without knowing the feature exists. COMPARE WITH on a record opens a sheet of that recipe's other brews, newest first.
+The door a user finds without knowing the feature exists. COMPARE on a record opens a sheet of that recipe's other brews, newest first.
 
 **Files:**
 - Create: `components/CompareWithSheet.tsx`
@@ -2139,7 +2139,7 @@ In `app/brewRecord.tsx`:
 
 - `const [picking, setPicking] = useState(false)`.
 - Candidates come from `sharedBrewDatabase().brewsFor(record.recipeUuid)` filtered to exclude `record.id`. Read them in the handler that opens the sheet, not during render: reading SQLite in render is the purity problem `react-hooks/purity` exists to catch, and `hooks/useBrewHistory.ts` spells out the house answer.
-- Add a COMPARE WITH control beside the existing export buttons, `accessibilityLabel="Compare with another brew"`, hidden entirely when the recipe has no other brews so the screen does not offer a door that opens on nothing.
+- Add a COMPARE control beside the existing export buttons, `accessibilityLabel="Compare with another brew"`, hidden entirely when the recipe has no other brews so the screen does not offer a door that opens on nothing.
 - `onPick` closes the sheet and pushes `{pathname: "/brewCompare", params: {a: older, b: newer}}`, again oldest first, so both doors land on the same arrangement.
 
 - [ ] **Step 6: Run the record's tests, typecheck, lint and commit**

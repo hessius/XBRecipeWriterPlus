@@ -409,7 +409,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     </XStack>
                     {hasComparisonCandidate && (
                         <XStack>
-                            <ExportButton label="Compare with" busy={false}
+                            <ExportButton label="Compare" busy={false}
                                           accessibilityLabel="Compare with another brew"
                                           onPress={openComparisonPicker} />
                         </XStack>

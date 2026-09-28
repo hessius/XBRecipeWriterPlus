@@ -228,7 +228,7 @@ are ticked and both carry the same `recipeUuid`. When it is not live, the
 existing blocked-reason line explains why: "Select two brews of the same recipe
 to compare them."
 
-**The brew record.** A COMPARE WITH control on `app/brewRecord.tsx` opens
+**The brew record.** A COMPARE control on `app/brewRecord.tsx` opens
 `components/CompareWithSheet.tsx`, an `XbrwSheet` listing that recipe's other
 brews from `BrewDatabase.brewsFor(recipeUuid)`, newest first, each row showing
 the date, the stars and the cup volume. Rows whose stream has expired are
