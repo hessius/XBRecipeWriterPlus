@@ -109,7 +109,7 @@ export function RailSearchField({state, text, active, onChangeText, onBlur, onCl
                 maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
                 style={[doto.style, {flex: 1, color: palette.text}]}
                 placeholder="SEARCH"
-                placeholderTextColor={palette.dim}
+                placeholderTextColor={palette.placeholder}
                 value={text}
                 onChangeText={onChangeText}
                 onBlur={onBlur}

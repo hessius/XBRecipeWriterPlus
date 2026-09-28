@@ -9,7 +9,7 @@ import type {DotIconName} from "@/constants/dotIcons";
  * The size the design fixes, and the reason it is fixed.
  *
  * §"Shelf art: a glyph for an auto shelf, a mosaic for a manual one" commits
- * to a 44 pt square for both marks so that changing the art cannot reflow the
+ * to a 44 pt square for every mark so that changing the art cannot reflow the
  * grid. The section used to leave the art itself open; the tester group has
  * since answered, but the geometry outlives the answer, which is why it is
  * still fixed here.
@@ -40,7 +40,7 @@ const RADIUS = 10;
  *
  * The design's central claim, now settled: an auto shelf is a closed set that
  * ships with the app, so it carries a glyph drawn at design time, while a
- * manual shelf is open ended and takes a mosaic of its members' accents. The
+ * non-auto shelf is open ended and takes a mosaic of its members' accents. The
  * art then says which kind of shelf it is, without a caption saying so.
  *
  * It was a setting while the tester group was deciding, and the losing
@@ -48,7 +48,7 @@ const RADIUS = 10;
  * an inlined conditional because the rule is the interesting part and it is
  * worth being able to read it, and test it, on its own.
  */
-export function markFor(kind: "auto" | "manual"): "mosaic" | "glyph" {
+export function markFor(kind: "auto" | "manual" | "tag"): "mosaic" | "glyph" {
     return kind === "auto" ? "glyph" : "mosaic";
 }
 
@@ -65,7 +65,7 @@ export function markFor(kind: "auto" | "manual"): "mosaic" | "glyph" {
 export default function ShelfMark({
     kind, glyph, accents = [], inverted = false
 }: {
-    kind: "auto" | "manual";
+    kind: "auto" | "manual" | "tag";
     /** The glyph an auto shelf carries. Auto shelves only. */
     glyph?: DotIconName | null;
     /** Member accents, dominant first. */

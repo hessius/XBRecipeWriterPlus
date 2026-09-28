@@ -105,12 +105,15 @@ export default function TextFieldRow({
                 {/* Not keyed here: the key belongs on the row, which is what owns
                     the `invalid` state this input feeds.
 
-                    The placeholder is `dim`, not `muted`: it is the only thing
-                    naming what the field wants when the field is empty, and
-                    muted on raised is 3.55:1, under the 4.5:1 floor. */}
+                    The placeholder grey is its own palette entry, and this
+                    row is the field that earned it: at `dim`, beside real
+                    values in white, an example reads as an entry, and a blank
+                    recipe looked like it already had a pod ID. Call sites
+                    phrase theirs as examples ("e.g. CGL12") so the colour is
+                    not asked to say it alone. */}
                 <TextInput ref={inputRef} accessibilityLabel={label}
                            defaultValue={initialValue} maxLength={maxLength}
-                           placeholder={placeholder} placeholderTextColor={palette.dim}
+                           placeholder={placeholder} placeholderTextColor={palette.placeholder}
                            autoCapitalize={autoCapitalize} onChangeText={onChangeText}
                            onFocus={() => onFocusChange?.(true)}
                            onBlur={() => onFocusChange?.(false)}

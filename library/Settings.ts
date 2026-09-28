@@ -167,7 +167,7 @@ export const DEFAULTS = {
      *
      * A modifier and not a sixth axis: it composes with the sort rather than
      * replacing it, so favourites keep the same order the rest are in. Off by
-     * default because a library nobody has starred yet would draw a FAVOURITES
+     * default because a library nobody has starred yet would draw a STARRED
      * and an ALL RECIPES heading over one populated section, which is a heading
      * over nothing.
      */
@@ -221,7 +221,7 @@ export const DEFAULTS = {
      */
     labsUnlocked: false,
     /**
-     * Auto shelves the user has put away, as a comma-separated list of ids.
+     * Auto shelves the user has put away, as a JSON array of ids.
      *
      * A string rather than an array because this table stores strings, and the
      * same reason the rest of the module does not pretend otherwise. Empty by
@@ -233,6 +233,25 @@ export const DEFAULTS = {
      * about a rule that does not describe how they brew is "not for me".
      */
     hiddenShelves: "",
+    /**
+     * The shelves the user made, as filter ids.
+     *
+     * A tag and a shelf are one row in `recipe_tags`, so nothing in the data
+     * says which door a tag came through: `setShelfMembers` writes a tag and so
+     * does the editor's TAGS field. This list is that missing fact. A tag named
+     * here is the user's shelf and is never suppressed; every other tag is a
+     * tag, and earns a tile only by clearing the same gate the app's own
+     * shelves clear.
+     *
+     * Stored in `hiddenShelves`' format, canonical ids in a JSON array, for the
+     * same reasons: a name somebody typed can contain a comma, and an id that
+     * is not on screen today must not be forgotten.
+     *
+     * Empty by default, including on upgrade. There is no record of which
+     * existing tags were shelves and inventing one would be a guess, so every
+     * tag starts as a tag and one tap promotes the ones that were not.
+     */
+    myShelves: "",
     /**
      * Draw an auto shelf's tile the other way round: the accent fills the card
      * and the glyph's square takes the quiet background.

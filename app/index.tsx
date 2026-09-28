@@ -60,12 +60,19 @@ import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
     availableFilters,
+    chipFilters,
     filterLabel,
-    STOCK_FILTERS,
-    type FilterId
+    isStockFilter,
+    tagFilterId,
+    STOCK_FILTERS
 } from "@/library/libraryFilters";
 import {buildShelves} from "@/library/shelves";
-import {parseHidden, toggleHidden} from "@/library/hiddenShelves";
+import {
+    canonicalShelfId,
+    parseHidden,
+    serialiseHidden,
+    toggleHidden
+} from "@/library/hiddenShelves";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
@@ -109,10 +116,15 @@ type RecipeListItem =
     | {kind: "heading"; id: string; label: string}
     | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
 
-function SectionHeading({label}: {label: string}) {
+// The id rides along only to name the test target. The two headings and the
+// rail chip beside them say the same words -- STARRED is the mark, whether it
+// is a section or a filter -- so a test that asks for the text alone cannot
+// say which one it found.
+function SectionHeading({id, label}: {id: string; label: string}) {
     return (
         <YStack paddingHorizontal="$3" paddingTop="$4" paddingBottom="$1">
-            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+            <DotMatrixText testID={`section-heading-${id}`}
+                           fontSize={12} weight="bold" letterSpacing={2}
                            color={palette.dim}>
                 {label}
             </DotMatrixText>
@@ -195,7 +207,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const navigation = useNavigation();
 
     const libraryQuery = useLibraryQuery(settings);
-    const library = useRecipeLibrary(db, libraryQuery.query);
+    const [myShelves, setMyShelves] = useSetting("myShelves", settings);
+    const library = useRecipeLibrary(db, libraryQuery.query, parseHidden(myShelves));
     const {collapsed, onScroll} = useCollapsibleHeader();
     // The picker's selection lives apart from the library's query, which is
     // what lets a ticked recipe survive a change of lens: filter to tea, tick
@@ -371,13 +384,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const SELECTED_CHIP = "picker:selected";
     /** The bean picker chip is a door into a sheet, not a filter id. */
     const BEANS_CHIP = "picker:beans";
-    const offeredFilterIds = asStockFilters(availableFilters(
+    const offeredStockFilterIds = asStockFilters(availableFilters(
         library.filterCounts,
         library.librarySize,
         // What is already applied, so suppression cannot withdraw a filter the
         // user switched on and strand the library narrowed with no control.
         libraryQuery.query.filters
     ));
+    const offeredFilterIds = chipFilters(offeredStockFilterIds);
     // Every applied filter the stock row cannot offer, which in practice means
     // the shelf the user just opened from the grid. Without these the tag stays
     // in the query and in the filter button's count with no chip naming it, so
@@ -386,7 +400,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // recipe that is not already on it, which is most of the ones the user came
     // to add.
     const appliedNonStock = libraryQuery.query.filters.filter(
-        (id) => !offeredFilterIds.includes(id as FilterId)
+        (id) => !isStockFilter(id)
     );
     const railFilters: RailFilter[] = [
         // Drawn first and only while picking, because from inside a narrowed
@@ -424,7 +438,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         tagCounts:    library.tagCounts,
         authorCounts: library.authorCounts,
         librarySize:  library.librarySize,
-        applied:      libraryQuery.query.filters
+        applied:      libraryQuery.query.filters,
+        myShelves:    parseHidden(myShelves)
     });
     // The rows the picker draws are the rows the list draws, so a filter, a
     // search and a sort narrow the picker exactly as they narrow the library.
@@ -524,7 +539,19 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             notify({tone: "error", message: `There is already a shelf called ${name}.`});
             return false;
         }
-        reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
+        const outcome = library.setShelfMembers(name, picker.chosen());
+        reportShelfWrite(outcome);
+        // Made through NEW SHELF, so it is the user's own from birth. This is
+        // the one place a shelf is created, so it is the one place that has to
+        // say so.
+        //
+        // Only if a recipe actually took the tag. The cap and a refused write
+        // can both leave a shelf that was never written, and a marker for a
+        // shelf that does not exist never expires: it would silently promote
+        // the same word typed as an ordinary tag months later.
+        if (outcome.members > 0) {
+            setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(name)]));
+        }
         setNamingShelf(false);
         stopPicking();
         return true;
@@ -563,7 +590,24 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // One pass over the library rather than an empty followed by a fill:
         // between two writes the shelf does not exist, and a refused second
         // write left its members with neither name.
-        reportShelfWrite(library.renameShelf(renamingShelf, name, picker.chosen()));
+        const outcome = library.renameShelf(renamingShelf, name, picker.chosen());
+        reportShelfWrite(outcome);
+        // The marker follows the name. Folded ids mean a rename that only
+        // changes case is already the same entry, so this is a no-op there and
+        // a move when the word itself changes.
+        //
+        // Both halves are conditional, because a partly refused rename leaves
+        // both shelves standing: the new name is marked only if it exists, and
+        // the old marker is kept while its own shelf still has members. Moving
+        // it unconditionally demoted a shelf that was still on the screen.
+        const was = canonicalShelfId(tagFilterId(renamingShelf));
+        const stored = parseHidden(myShelves);
+        if (stored.includes(was)) {
+            const kept = outcome.oldMembers > 0 ? stored : stored.filter((id) => id !== was);
+            setMyShelves(serialiseHidden(
+                outcome.members > 0 ? [...kept, tagFilterId(name)] : kept
+            ));
+        }
         setRenamingShelf(null);
         setRenameStartedEdit(false);
         stopPicking();
@@ -595,20 +639,55 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     function duplicateShelf(tag: string) {
         beginEditingShelf(tag);
         // Creating, not editing: the original keeps its tag and its members,
-        // and the name sheet writes a second shelf beside it.
+        // and the name sheet writes a second shelf beside it. The copy is
+        // therefore marked by `nameShelf`, because it is born through the same
+        // deliberate creation path as NEW SHELF.
         setNamingShelf(true);
     }
 
     /** Take a shelf away, keeping every recipe that was on it. */
     function deleteShelf(tag: string) {
-        reportShelfWrite(library.setShelfMembers(tag, []));
+        const outcome = library.setShelfMembers(tag, []);
+        reportShelfWrite(outcome);
+        // The shelf is gone, so the claim that the user made it is about
+        // nothing. Left behind, it would silently promote a tag of the same
+        // name typed months later.
+        //
+        // Only once it really is gone. A refused write leaves members on the
+        // shelf, and clearing the marker there would drop a shelf the user can
+        // still see out of YOUR SHELVES and into FROM TAGS.
+        if (outcome.members === 0) {
+            const id = canonicalShelfId(tagFilterId(tag));
+            setMyShelves(serialiseHidden(
+                parseHidden(myShelves).filter((stored) => stored !== id)
+            ));
+        }
         setDeletingShelf(null);
         stopPicking();
     }
 
+    /**
+     * Mark a tag as a shelf the user made, or unmark it.
+     *
+     * Folded through the same list helpers the hidden list uses, so a promotion
+     * survives a rename that only re-spells the name.
+     */
+    function promoteShelf(tag: string) {
+        setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(tag)]));
+        setShelfActions(null);
+    }
+
+    function demoteShelf(tag: string) {
+        const id = canonicalShelfId(tagFilterId(tag));
+        setMyShelves(serialiseHidden(
+            parseHidden(myShelves).filter((stored) => stored !== id)
+        ));
+        setShelfActions(null);
+    }
+
     const listItems: RecipeListItem[] = drawSections
         ? [
-            {kind: "heading", id: "favourites", label: "FAVOURITES"},
+            {kind: "heading", id: "favourites", label: "STARRED"},
             ...favouriteRecipes.map((recipe, recipeIndex) => (
                 {kind: "recipe" as const, recipe, recipeIndex}
             )),
@@ -1191,7 +1270,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                     // where members are chosen.
                     <ShelfRoom
                         label={openShelf?.label ?? filterLabel(libraryQuery.openShelfId ?? "")}
-                        manual={openShelf?.kind === "manual"}
+                        namedByUser={openShelf !== undefined && openShelf.kind !== "auto"}
                         recipes={library.recipes}
                         onBack={libraryQuery.closeShelf}
                         onScroll={onScroll}
@@ -1257,7 +1336,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 + (picker.active ? PICKER_BAR_HEIGHT : 0)
                         }}
                         renderItem={({item}: {item: RecipeListItem}) => item.kind === "heading" ? (
-                            <SectionHeading label={item.label}/>
+                            <SectionHeading id={item.id} label={item.label}/>
                         ) : picker.active ? (
                             <SelectableRecipeRow
                                 recipe={item.recipe}
@@ -1345,6 +1424,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 open={shelfActions !== null}
                 shelf={shelfActions ?? ""}
                 count={shelfActions === null ? 0 : shelfSize(shelfActions)}
+                mine={shelfActions !== null
+                    && parseHidden(myShelves)
+                        .includes(canonicalShelfId(tagFilterId(shelfActions)))}
                 onOpenChange={(next) => {
                     if (!next) setShelfActions(null);
                 }}
@@ -1367,7 +1449,13 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 onDuplicate={() => {
                     if (shelfActions !== null) duplicateShelf(shelfActions);
                 }}
-                onDelete={() => setDeletingShelf(shelfActions)}/>
+                onDelete={() => setDeletingShelf(shelfActions)}
+                onPromote={() => {
+                    if (shelfActions !== null) promoteShelf(shelfActions);
+                }}
+                onDemote={() => {
+                    if (shelfActions !== null) demoteShelf(shelfActions);
+                }}/>
 
             <RemoveShelfSheet open={deletingShelf !== null}
                               tag={deletingShelf ?? ""}
