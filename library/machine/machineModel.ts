@@ -41,3 +41,23 @@ export function isMachineModel(value: unknown): value is MachineModel {
     return typeof value === "string" &&
         (MACHINE_MODELS as readonly string[]).includes(value);
 }
+
+/**
+ * Narrows an unchecked value to a `MachineModel`, falling back to the Studio.
+ *
+ * Needed because `SettingValue` widens a stored union back to `string`, so
+ * `settings.get("machineModel")` can hand back anything a stale or hand-edited
+ * row holds. Readers coerce through here rather than refusing, because there is
+ * a correct answer to fall back on and refusing would turn an unreadable
+ * preference into a broken feature.
+ *
+ * The guard above is the other half, and they are not interchangeable: reading
+ * coerces, but *writing* a value that arrived in a backup uses `isMachineModel`
+ * and ignores a bad one, because overwriting a good stored answer with a
+ * default is a worse outcome than leaving it alone.
+ *
+ * The same shape as `asSortAxis` in `librarySort.ts`, for the same reason.
+ */
+export function asMachineModel(value: unknown): MachineModel {
+    return isMachineModel(value) ? value : "studio";
+}

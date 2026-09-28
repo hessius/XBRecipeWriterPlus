@@ -1,6 +1,7 @@
 import {
     ADAPTED_MODEL,
     adaptedModelFor,
+    asMachineModel,
     isMachineModel,
     MACHINE_MODELS
 } from "@/library/machine/machineModel";
@@ -21,12 +22,23 @@ describe("the machine model", () => {
         expect(Object.values(ADAPTED_MODEL).sort((a, b) => a - b)).toEqual([1, 2]);
     });
 
-    it("reads a stored value back, and refuses one it did not write", () => {
-        expect(isMachineModel("studio")).toBe(true);
+    it("reads a stored value back, and refuses one it did not write", () => {        expect(isMachineModel("studio")).toBe(true);
         expect(isMachineModel("original")).toBe(true);
         expect(isMachineModel("j15")).toBe(false);
         expect(isMachineModel("")).toBe(false);
         expect(isMachineModel(undefined)).toBe(false);
+    });
+
+    it("coerces a value it does not recognise to the Studio", () => {
+        // A stored setting comes back widened to `string`, so a stale or
+        // hand-edited row can hold anything. A reader wants an answer, not a
+        // refusal, and Studio is the documented default.
+        expect(asMachineModel("original")).toBe("original");
+        expect(asMachineModel("studio")).toBe("studio");
+        expect(asMachineModel("toaster")).toBe("studio");
+        expect(asMachineModel("")).toBe("studio");
+        expect(asMachineModel(undefined)).toBe("studio");
+        expect(asMachineModel(2)).toBe("studio");
     });
 
     it("gives every model a distinct wire value", () => {
