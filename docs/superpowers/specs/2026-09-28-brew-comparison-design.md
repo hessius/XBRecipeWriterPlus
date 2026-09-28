@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 Issue: #103 (part of #95, the brew history roadmap)
-Status: designed, not built
+Status: built, shipped in #163. Awaiting evaluation against two real brews.
 
 ## The problem
 
@@ -247,9 +247,16 @@ the sweep, so a figures comparison is still a comparison.
 
 **Plan drift.** A `shape` grade raises a banner above the chart naming the
 stages that differ, and the single plan line is replaced by one faint plan per
-brew. A `detail` grade raises no banner: the differing fields appear as ordinary
-rows in the table, which is where a difference that does not move the line
-belongs.
+brew.
+
+A `detail` grade was meant to raise no banner, on the reasoning that a
+difference which does not move the line belongs in the table as an ordinary
+row. It does not work, and the built behaviour differs: the ledger only carries
+dose, ratio, grind and RPM, so temperature, pour pattern and agitation have no
+row to appear in. Saying nothing would have dropped the finding entirely. Both
+grades therefore raise the banner, and the sentence carries the grade instead:
+a `shape` drift says to read the chart with care, a `detail` drift says the
+plans differ but the chart shape is the same.
 
 ## Guarding against drift between the two charts
 
