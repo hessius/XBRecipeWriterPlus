@@ -11,11 +11,16 @@ import type {DotIconName} from "@/constants/dotIcons";
 /**
  * How much of the screen the shelf menu takes.
  *
- * Up to five rows and nothing that scrolls, sized to them for the same reason the
- * recipe menu is: a sheet standing most of the way up the screen with two
- * thirds of it empty reads as one that failed to load.
+ * Sized to its rows rather than to its longest case, for the reason the recipe
+ * menu is: a sheet standing most of the way up the screen with two thirds of it
+ * empty reads as one that failed to load. A shelf the user made has five things
+ * that can be done to it; a tag has exactly one, and a sheet built for five
+ * would be almost all empty.
  */
 export const SHELF_OVERFLOW_HEIGHT = 48;
+
+/** The same sheet over a tag, which offers promotion and nothing else. */
+export const TAG_OVERFLOW_HEIGHT = 22;
 
 /**
  * What can be done to a shelf, or to a tag that is ready to become one.
@@ -87,7 +92,7 @@ export default function ShelfOverflowSheet({
 
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title={shelf}
-                   heightPercent={SHELF_OVERFLOW_HEIGHT}>
+                   heightPercent={mine ? SHELF_OVERFLOW_HEIGHT : TAG_OVERFLOW_HEIGHT}>
             <YStack gap="$2" paddingBottom="$4">
                 {/* A tag shelf is recipe metadata that happened to clear the
                     shelf threshold. Rename, duplicate, delete and member edits
