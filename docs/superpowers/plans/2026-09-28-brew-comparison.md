@@ -52,7 +52,7 @@
 
 `BrewTrace` hard-codes its stroke widths and dash patterns at each use. Extract them so a second chart cannot disagree. The values below are exactly what `BrewTrace` draws today, read off lines 300 to 560 of the current file, so this task changes no pixels.
 
-Note one existing inconsistency that this task settles: the compact cup path sets `strokeLinecap="round"` and the full-size one does not. Both get `round`, which is what the compact path (the one a user sees at a glance in `BrewMiniBar`) already chose.
+The plan channel is the one that is not a constant: `BrewTrace` takes a `planColor` prop and `app/brew.tsx` animates it, warming the plan line toward the accent as the recipe lands in the machine. So `channelStyle` takes an optional `planColour`. `planOpacity` deliberately stays out: that is animation state rather than grammar, and both charts pass their own.
 
 **Files:**
 - Create: `library/brew/traceStyle.ts`
@@ -264,7 +264,9 @@ import {channelStyle} from "@/library/brew/traceStyle";
     // inline so that `CompareTrace` cannot drift from either.
     const waterStyle = channelStyle("water", {accent, holding});
     const cupStyle = channelStyle("cup", {accent});
-    const planStyle = channelStyle("plan", {accent, dashed: planDashed});
+    const planStyle = channelStyle("plan", {
+        accent, dashed: planDashed, planColour: planColor
+    });
     const cupColour = cupStyle.stroke;
 ```
 
@@ -284,6 +286,11 @@ There are two `trace-cup` paths (compact and full), two `trace-water` paths, and
                         {...planStyle}
                     />
                 )}
+```
+
+`planColor` must reach `channelStyle` as `planColour` in Step 3, not be re-applied here. Overriding `stroke` at the use site would put the plan channel's colour back where it started and defeat the module.
+
+```tsx
                 {cupPath !== "" && (
                     <Path testID="trace-cup" d={cupPath} fill="none" {...cupStyle} />
                 )}
