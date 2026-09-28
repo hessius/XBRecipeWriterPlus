@@ -4,6 +4,7 @@ import {Text, XStack, YStack} from "tamagui";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {CompareRow} from "@/library/brew/compare";
+import {referenceCupColour} from "@/library/brew/traceStyle";
 
 type Props = {
     rows: CompareRow[];
@@ -18,6 +19,13 @@ function rowLabel(row: CompareRow): string {
 /**
  * Agreement is drawn, not omitted: shared figures form the centre spine and
  * differing figures are the only values that split into two columns.
+ *
+ * The two columns borrow the chart's grammar rather than inventing one. The
+ * subject is the accent and the reference is `referenceCupColour`, the same
+ * grey its cup line is drawn in, so a user who has just read which line is
+ * theirs does not have to learn a second code to read the table. A shared
+ * value is dimmer than either, because it is the thing they are not looking
+ * for.
  */
 export default function CompareTable({rows, accent}: Props) {
     if (rows.length === 0) {
@@ -71,7 +79,7 @@ export default function CompareTable({rows, accent}: Props) {
                             <YStack flex={1} alignItems="flex-end">
                                 <Text
                                     testID={`compare-b-${row.label}`}
-                                    color={palette.text}
+                                    color={referenceCupColour}
                                     fontSize={14}>
                                     {row.b}
                                 </Text>

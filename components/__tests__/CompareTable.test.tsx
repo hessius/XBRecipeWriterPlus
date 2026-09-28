@@ -2,6 +2,7 @@ import React from "react";
 
 import CompareTable from "@/components/CompareTable";
 import type {CompareRow} from "@/library/brew/compare";
+import {referenceCupColour} from "@/library/brew/traceStyle";
 import {renderWithProviders} from "@/test-utils/render";
 
 const ROWS: CompareRow[] = [
@@ -53,5 +54,15 @@ describe("CompareTable", () => {
     it("says nothing at all when there is nothing to say", async () => {
         const {getByTestId} = await draw([]);
         expect(getByTestId("compare-table-empty")).toBeTruthy();
+    });
+
+    // The chart tells the user which line is theirs by colour against grey.
+    // The table has to answer with the same code or they have to learn two.
+    it("colours the columns the way the chart colours the lines", async () => {
+        const {getByTestId} = await draw();
+        expect(getByTestId("compare-a-GRIND").props.style)
+            .toEqual(expect.objectContaining({color: "#C86A3B"}));
+        expect(getByTestId("compare-b-GRIND").props.style)
+            .toEqual(expect.objectContaining({color: referenceCupColour}));
     });
 });
