@@ -125,8 +125,14 @@ const POLY_TABLE = [
 ];
 
 
-/** Where a recipe came from. Drives the placeholder name. */
-export type RecipeSource = "read" | "import" | "duplicate" | "manual";
+/**
+ * Where a recipe came from. Drives the placeholder name.
+ *
+ * A closed union on purpose. The verb table in `placeholderName` is typed
+ * against it, so a new source cannot be added without deciding what a nameless
+ * recipe from that source should be called.
+ */
+export type RecipeSource = "read" | "import" | "duplicate" | "manual" | "brewmind";
 
 class Recipe {
     public uuid: string = "";
@@ -579,7 +585,12 @@ class Recipe {
             read:      "Read",
             import:    "Imported Recipe",
             duplicate: "Copy",
-            manual:    "Untitled Brew"
+            manual:    "Untitled Brew",
+            // Named for where it came from rather than for how it arrived. A
+            // BrewMind link is an import, but it is the only import that also
+            // carries a coffee, and a card reading "Imported Recipe" would
+            // lose the one thing that made this one different.
+            brewmind:  "BrewMind Recipe"
         };
 
         if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {

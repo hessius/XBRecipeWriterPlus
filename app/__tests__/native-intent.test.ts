@@ -24,6 +24,25 @@ describe("redirectSystemPath", () => {
         expect(redirectSystemPath({path, initial: true})).toBeNull();
     });
 
+    it("stays put when an import link arrives", () => {
+        // There is no `import` route, so a returned path resolves to the
+        // unmatched screen. On a cold start that happens before the library
+        // mounts, and the screen that acts on the link never sees it.
+        const path = "xbrw://import?v=1&source=brewmind&share=https%3A%2F%2Fxbloom.com%2Fs%2Fabc";
+
+        expect(redirectSystemPath({path, initial: true})).toBeNull();
+        expect(redirectSystemPath({path, initial: false})).toBeNull();
+    });
+
+    it("lets a malformed import link through to the router", () => {
+        // Only a link this build can actually read is claimed. One that fails
+        // the version gate is not ours to swallow, and the unmatched screen is
+        // a visible failure rather than a silent one.
+        const path = "xbrw://import?v=2&share=https%3A%2F%2Fxbloom.com%2Fs%2Fabc";
+
+        expect(redirectSystemPath({path, initial: false})).toBe(path);
+    });
+
     it("lets an ordinary deep link through untouched", () => {
         // Only the share handle is special. Every other URL is still the
         // router's business, and rewriting one here would break it.
