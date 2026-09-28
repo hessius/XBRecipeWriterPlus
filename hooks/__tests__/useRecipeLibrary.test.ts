@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
+import {useRecipeLibrary, type RecipeStore} from "@/hooks/useRecipeLibrary";
 import type {BackupPayload} from "@/library/backup";
 import {
     resolveLibraryFilter, resolveStockFilter, STOCK_FILTER_ORDER
@@ -35,7 +35,10 @@ function stubDb(recipes: Recipe[]) {
         ),
         countRecipesByTag: jest.fn((): {tag: string; count: number}[] => []),
         brewEvidence: jest.fn((): Record<string, RecipeEvidence> => ({})),
-        shelfMembers: jest.fn((): Record<string, Recipe[]> => ({})),
+        shelfMembers: jest.fn<
+            ReturnType<NonNullable<RecipeStore["shelfMembers"]>>,
+            Parameters<NonNullable<RecipeStore["shelfMembers"]>>
+        >(() => ({})),
         countRecipesByAuthor: jest.fn((): {author: string; count: number}[] => [])
     };
 }
@@ -48,6 +51,12 @@ function named(name: string): Recipe {
 
 function plainRecipe(): Recipe {
     return named("Ethiopia");
+}
+
+function tagged(name: string, tags: string[]): Recipe {
+    const recipe = named(name);
+    recipe.setTags(tags);
+    return recipe;
 }
 
 function favouriteRecipe(): Recipe {
@@ -493,6 +502,61 @@ describe("the store it reads through", () => {
     });
 
     describe("the art each shelf tile draws", () => {
+        it("reads art for a shelf the user made, however small", async () => {
+            // A marked tag is drawn at any count, so withholding its art leaves
+            // a blank square claiming to be a collection. This was the original
+            // bug: the grid and the art reader disagreed about the floor.
+            const member = tagged("Ethiopia", ["Mornings"]);
+            const db = stubDb([member]);
+            db.countRecipesByTag.mockReturnValue([{tag: "Mornings", count: 1}]);
+            db.shelfMembers.mockImplementation((ids): Record<string, Recipe[]> =>
+                ids.includes("tag:Mornings") ? {"tag:Mornings": [member]} : {}
+            );
+
+            const {result} = await renderHook(() =>
+                useRecipeLibrary(db, undefined, ["tag:mornings"])
+            );
+
+            expect(result.current.shelfMarks["tag:Mornings"]).toBeDefined();
+        });
+
+        it("does not read art for an unmarked tag below the floor", async () => {
+            const member = tagged("Ethiopia", ["Mornings"]);
+            const db = stubDb([member]);
+            db.countRecipesByTag.mockReturnValue([{tag: "Mornings", count: 1}]);
+            db.shelfMembers.mockImplementation((ids): Record<string, Recipe[]> =>
+                ids.includes("tag:Mornings") ? {"tag:Mornings": [member]} : {}
+            );
+
+            const {result} = await renderHook(() => useRecipeLibrary(db));
+
+            const [asked] = db.shelfMembers.mock.calls[0] as unknown as [string[]];
+            expect(asked).not.toContain("tag:Mornings");
+            expect(result.current.shelfMarks["tag:Mornings"]).toBeUndefined();
+        });
+
+        it("re-reads art when a small tag is promoted to a shelf", async () => {
+            const member = tagged("Ethiopia", ["Mornings"]);
+            const db = stubDb([member]);
+            db.countRecipesByTag.mockReturnValue([{tag: "Mornings", count: 1}]);
+            db.shelfMembers.mockImplementation((ids): Record<string, Recipe[]> =>
+                ids.includes("tag:Mornings") ? {"tag:Mornings": [member]} : {}
+            );
+
+            const {result, rerender} = await renderHook(
+                ({myShelves}: {myShelves: string[]}) =>
+                    useRecipeLibrary(db, undefined, myShelves),
+                {initialProps: {myShelves: []}}
+            );
+            expect(result.current.shelfMarks["tag:Mornings"]).toBeUndefined();
+
+            await act(async () => {
+                rerender({myShelves: ["tag:mornings"]});
+            });
+
+            expect(result.current.shelfMarks["tag:Mornings"]).toBeDefined();
+        });
+
         it("asks for every stock shelf and every tag", async () => {
             const db = stubDb([named("Ethiopia")]);
             db.countRecipesByTag.mockReturnValue([{tag: "morning", count: 3}]);

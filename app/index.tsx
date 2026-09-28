@@ -202,7 +202,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const navigation = useNavigation();
 
     const libraryQuery = useLibraryQuery(settings);
-    const library = useRecipeLibrary(db, libraryQuery.query);
+    const [myShelves, setMyShelves] = useSetting("myShelves", settings);
+    const library = useRecipeLibrary(db, libraryQuery.query, parseHidden(myShelves));
     const {collapsed, onScroll} = useCollapsibleHeader();
     // The picker's selection lives apart from the library's query, which is
     // what lets a ticked recipe survive a change of lens: filter to tea, tick
@@ -227,7 +228,6 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [invertAutoShelves] = useSetting("invertAutoShelves", settings);
     const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
-    const [myShelves, setMyShelves] = useSetting("myShelves", settings);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.

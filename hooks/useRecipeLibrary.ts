@@ -13,6 +13,7 @@ import type {FilterResolver, LibraryQuery,
 import type Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
+import {canonicalShelfId} from "@/library/hiddenShelves";
 import {tagKey} from "@/library/tagKey";
 
 /**
@@ -220,7 +221,8 @@ export type RecipeLibrary = {
  */
 export function useRecipeLibrary(
     db?: RecipeStore,
-    query: LibraryQuery = WHOLE_LIBRARY
+    query: LibraryQuery = WHOLE_LIBRARY,
+    myShelves: readonly string[] = []
 ): RecipeLibrary {
     // One store for the hook's lifetime. As a default parameter this ran on
     // every render, and every `new RecipeDatabase()` opens SQLite and replays
@@ -252,7 +254,7 @@ export function useRecipeLibrary(
     // what lets the compiler cache this across renders -- an array rebuilt each
     // render is a new dependency every time, and this reads SQLite.
     const shelfMarks = readShelfMarks(
-        store, shelfIdsOf(tagCounts, authorCounts), revision
+        store, shelfIdsOf(tagCounts, authorCounts, myShelves), revision
     );
 
     // A restore that a second tap re-enters before the first has repainted
@@ -618,20 +620,22 @@ function readEvidence(
  * stranger typed: `Smith, Anna` or a name carrying a newline would otherwise
  * fold into two ids, and the shelf would ask for art under a name nobody has.
  *
- * Only the shelves that clear `MIN_COUNT` are listed. The upper suppression
- * gate depends on what the rail is filtered by and the art does not, so it is
- * deliberately not applied here -- but the floor is a property of the library
- * itself, and a shelf under it is never drawn for anyone. The read below is one
- * synchronous query per id on the thread that is drawing, so a library shared
- * into by two hundred people must not pay two hundred reads to draw none.
+ * A tag the user made is drawn at any count, so its art is read at any count
+ * too. The floor still applies to every other tag: it is what keeps this read
+ * bounded, and the set it now lets through is bounded by hand, because a
+ * person makes shelves one at a time.
  */
 function shelfIdsOf(
     tagCounts: readonly {tag: string; count: number}[],
-    authorCounts: readonly {author: string; count: number}[]
+    authorCounts: readonly {author: string; count: number}[],
+    myShelves: readonly string[]
 ): string {
+    const mine = new Set(myShelves.map(canonicalShelfId));
     return JSON.stringify([
         ...STOCK_FILTER_ORDER,
-        ...tagCounts.filter(({count}) => count >= MIN_COUNT)
+        ...tagCounts.filter(({tag, count}) =>
+            count >= MIN_COUNT || mine.has(canonicalShelfId(tagFilterId(tag)))
+        )
             .map(({tag}) => tagFilterId(tag)),
         ...authorCounts.filter(({count}) => count >= MIN_COUNT)
             .map(({author}) => authorFilterId(author))
