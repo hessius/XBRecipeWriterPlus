@@ -76,7 +76,23 @@ async function runSave(
     model: MachineModel,
     setProgress: (progress: {done: number; total: number}) => void
 ): Promise<HubSaveOutcome> {
-        const store = new RecipeDatabase();
+        // Opening the database is the one step outside the per-row `catch`,
+        // and a throw here used to escape `save` entirely: both call sites
+        // `await` it bare, so the bar reset, no toast appeared, and the user
+        // was told nothing. A batch that cannot be opened is a batch that
+        // failed, and it reports as one.
+        let store: RecipeDatabase;
+        try {
+            store = new RecipeDatabase();
+        } catch {
+            return {
+                saved:       0,
+                alreadyHeld: 0,
+                failed:      rows.map((row) => row.name),
+                refused:     false
+            };
+        }
+
         const outcome: HubSaveOutcome = {
             saved:        0,
             alreadyHeld:  0,

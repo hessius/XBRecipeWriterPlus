@@ -278,7 +278,7 @@ describe("while it is running", () => {
  * be stuck saying it is saving and every later batch would be refused, for the
  * rest of the session, with no way back short of relaunching.
  */
-it("can save again after a batch failed before it started", async () => {
+it("reports a batch that could not open the database, rather than throwing", async () => {
     mockOpen.mockReset();
     mockOpen.mockImplementationOnce(() => {
         throw new Error("no database");
@@ -286,12 +286,15 @@ it("can save again after a batch failed before it started", async () => {
 
     const {result} = await renderHook(() => useHubSave());
 
-    await expect(
-        act(async () => {
-            await result.current.save([hubRow(1)]);
-        })
-    ).rejects.toThrow("no database");
+    // Both call sites `await save(...)` bare. If this rejected, the user would
+    // see the bar reset with no toast and no reason.
+    const failed = await act(async () =>
+        result.current.save([hubRow(1), hubRow(2)]));
 
+    expect(failed.refused).toBe(false);
+    expect(failed.saved).toBe(0);
+    expect(failed.alreadyHeld).toBe(0);
+    expect(failed.failed).toEqual(["Recipe 1", "Recipe 2"]);
     expect(result.current.saving).toBe(false);
 
     // And the next batch is not refused.
