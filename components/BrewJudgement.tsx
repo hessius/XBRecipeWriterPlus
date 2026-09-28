@@ -30,20 +30,23 @@ import {palette} from "@/constants/colors";
  * two rather than a paragraph, so it does the same. The wrapping is what
  * `multiline` is still here for.
  */
-export default function BrewJudgement({rating, note, onRate, onNote, testID}: {
+export default function BrewJudgement({rating, note, onRate, onNote, testID, showHeading = true}: {
     rating: number;
     note: string;
     onRate: (rating: number) => void;
     onNote: (note: string) => void;
     testID?: string;
+    showHeading?: boolean;
 }) {
     return (
         <YStack gap="$2" testID={testID ?? "brew-judgement"}>
             <XStack alignItems="center" justifyContent="space-between">
-                <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}
-                               color={palette.dim}>
-                    HOW WAS IT
-                </DotMatrixText>
+                {showHeading && (
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.4}
+                                   color={palette.dim}>
+                        HOW WAS IT
+                    </DotMatrixText>
+                )}
                 <BrewStars rating={rating} onRate={onRate} testID="judgement-stars"/>
             </XStack>
 

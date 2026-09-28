@@ -2,6 +2,7 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import BrewRatingBar from "@/components/BrewRatingBar";
+import {accents} from "@/constants/colors";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -11,7 +12,7 @@ function props(over = {}) {
         figures: "14:32 · 244 G",
         pours: [new Pour(1), new Pour(2)],
         samples: [],
-        accent: "#ff8800",
+        accent: accents.coffee[1],
         onOpen: jest.fn(),
         onRate: jest.fn(),
         onDismiss: jest.fn(),

@@ -3,6 +3,7 @@ import {AppState} from "react-native";
 
 import {useSetting} from "@/hooks/useSetting";
 import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
+import {isRating} from "@/library/brew/BrewRecord";
 import {brewToRate, RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {Settings} from "@/library/Settings";
@@ -29,9 +30,9 @@ type Candidate = {
  * prompt appears because they came back rather than because the brew screen
  * finished.
  *
- * The first database read happens in a lazy state initialiser, not during
- * render, and every later read happens inside an app-state subscription
- * callback. That keeps SQLite out of render while still letting tests inject a
+ * The first database read happens once per mount, in a lazy initialiser; that
+ * is where this repo already puts a synchronous first read. Every later read
+ * happens inside an app-state or navigation callback, so tests can inject a
  * tiny store instead of opening the native database.
  *
  * Nothing here writes rating columns by hand. `BrewDatabase.judge` is the one
@@ -46,6 +47,7 @@ export function useRatingPrompt(
     rate: (rating: number) => void;
     annotate: (note: string) => void;
     dismiss: () => void;
+    refresh: () => void;
 } {
     const [enabled] = useSetting("askForRatings", settings);
     const [dismissedId, setDismissedId] = useSetting("ratingPromptDismissed", settings);
@@ -69,6 +71,10 @@ export function useRatingPrompt(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    function refresh(): void {
+        setCandidate({brew: database().lastMeasuredBrew(), now: Date.now()});
+    }
+
     const brew = brewToRate({
         brew: candidate.brew,
         now: candidate.now,
@@ -83,12 +89,13 @@ export function useRatingPrompt(
             setCandidate((was) => was.brew?.id === brew.id
                 ? {...was, now: Math.max(Date.now(), expiresAt)}
                 : was);
-        }, Math.max(0, expiresAt - candidate.now));
+        }, Math.max(0, expiresAt - Date.now()));
         return () => clearTimeout(timer);
-    }, [brew, candidate.now]);
+    }, [brew]);
 
     function rate(rating: number): void {
         if (brew === null) return;
+        if (!isRating(rating) || rating < 1) return;
         database().judge(brew.id, {rating});
         // Written through and held locally so the bar leaves on this same
         // render pass, not on the next foreground read.
@@ -97,6 +104,7 @@ export function useRatingPrompt(
 
     function annotate(note: string): void {
         if (brew === null) return;
+        if (note === (brew.note ?? "")) return;
         database().judge(brew.id, {note});
         // Same local echo as `rate`: the screen should agree with the user's
         // action immediately rather than waiting for the next app visit.
@@ -108,7 +116,7 @@ export function useRatingPrompt(
         setDismissedId(brew.id);
     }
 
-    return {brew, rate, annotate, dismiss};
+    return {brew, rate, annotate, dismiss, refresh};
 }
 
 export default useRatingPrompt;

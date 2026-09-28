@@ -50,11 +50,11 @@ export default function BrewNoteSheet({
                 </YStack>
 
                 <BrewJudgement rating={rating} note={note}
-                               onRate={onRate} onNote={onNote}/>
+                               onRate={onRate} onNote={onNote} showHeading={false}/>
 
                 <XStack
                     accessibilityRole="button"
-                    accessibilityLabel="Done"
+                    accessibilityLabel={RATING_SHEET_DONE}
                     testID="brew-note-done"
                     onPress={() => onOpenChange(false)}
                     height={48} alignItems="center" justifyContent="center"

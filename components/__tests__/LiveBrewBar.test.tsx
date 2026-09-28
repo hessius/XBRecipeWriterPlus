@@ -2,6 +2,7 @@ import {fireEvent, screen} from "@testing-library/react-native";
 import React from "react";
 
 import LiveBrewBar from "@/components/LiveBrewBar";
+import {accents} from "@/constants/colors";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -13,14 +14,15 @@ const mockPrompt = {
     brew: null as unknown,
     rate: jest.fn(),
     annotate: jest.fn(),
-    dismiss: jest.fn()
+    dismiss: jest.fn(),
+    refresh: jest.fn()
 };
 
 const BREW = {
     id: "b1",
     recipeUuid: "r1",
     recipeName: "Morning Bloem",
-    accent: "#ff8800",
+    accent: accents.coffee[1],
     startedAt: 0,
     pouringAt: 1_000,
     endedAt: 873_000,
@@ -71,6 +73,7 @@ beforeEach(() => {
     mockPrompt.rate.mockClear();
     mockPrompt.annotate.mockClear();
     mockPrompt.dismiss.mockClear();
+    mockPrompt.refresh.mockClear();
     mockRun = {
         recipe: recipe(),
         samples: [],

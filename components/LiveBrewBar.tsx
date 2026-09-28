@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {usePathname} from "expo-router";
 
 import BrewMiniBar from "@/components/BrewMiniBar";
@@ -37,11 +37,20 @@ export default function LiveBrewBar() {
     const prompt = useRatingPrompt();
     const router = useSteadyRouter();
     const pathname = usePathname();
+    const wasSilent = useRef(SILENT.has(pathname));
     // The brew the note sheet is about, held here rather than read from the
     // prompt. Rating is what opens the sheet, and a rated brew is no longer a
     // brew the prompt offers -- so a sheet drawn from `prompt.brew` would be
     // unmounted by the very gesture that opened it.
     const [noting, setNoting] = useState<StoredBrew | null>(null);
+
+    useEffect(() => {
+        const silent = SILENT.has(pathname);
+        if (wasSilent.current && !silent) {
+            prompt.refresh();
+        }
+        wasSilent.current = silent;
+    }, [pathname, prompt]);
 
     if (SILENT.has(pathname)) return null;
 

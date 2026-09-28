@@ -1,6 +1,9 @@
 import {act, renderHook} from "@testing-library/react-native";
+import React from "react";
 import {AppState} from "react-native";
+import {act as rendererAct, create} from "react-test-renderer";
 
+import {accents} from "@/constants/colors";
 import {useRatingPrompt, type RatingPromptStore} from "@/hooks/useRatingPrompt";
 import {RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import {Settings, type SettingsStorage} from "@/library/Settings";
@@ -23,7 +26,7 @@ function measuredBrew(id: string, fields: Partial<StoredBrew> = {}): StoredBrew 
         id,
         recipeUuid: "recipe-1",
         recipeName: "Ethiopia Guji",
-        accent: "#C86A3B",
+        accent: accents.coffee[1],
         startedAt: NOW - 20 * 60 * 1000,
         pouringAt: NOW - 19 * 60 * 1000,
         endedAt: NOW - 10 * 60 * 1000,
@@ -113,6 +116,33 @@ describe("useRatingPrompt", () => {
         });
     });
 
+    it("does not annotate when the note is unchanged", async () => {
+        const store = fakeStore(measuredBrew("b1", {note: "Already said."}));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            result.current.annotate("Already said.");
+        });
+
+        expect(store.judge).not.toHaveBeenCalled();
+    });
+
+    it("ignores unrated and invalid ratings", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            result.current.rate(0);
+            result.current.rate(6);
+            result.current.rate(2.5);
+        });
+
+        expect(store.judge).not.toHaveBeenCalled();
+        expect(result.current.brew?.id).toBe("b1");
+    });
+
     it("dismisses by storing the brew id and removes the prompt immediately", async () => {
         const store = fakeStore(measuredBrew("b1"));
         const settings = new Settings(memoryStorage());
@@ -143,6 +173,53 @@ describe("useRatingPrompt", () => {
         });
         expect(result.current.brew).toBeNull();
         expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the expiry timer anchored to the current clock after a local annotation", async () => {
+        jest.restoreAllMocks();
+        jest.useFakeTimers({now: NOW});
+        const remaining = 5 * 60 * 1000;
+        const elapsedBeforeNote = 3 * 60 * 1000;
+        const store = fakeStore(measuredBrew("b1", {
+            endedAt: NOW - RATING_PROMPT_WINDOW_MS + remaining
+        }));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew?.id).toBe("b1");
+
+        await act(async () => {
+            jest.advanceTimersByTime(elapsedBeforeNote);
+            result.current.annotate("Still cooling.");
+        });
+        expect(result.current.brew?.id).toBe("b1");
+
+        await act(async () => {
+            jest.advanceTimersByTime(remaining - elapsedBeforeNote);
+        });
+        expect(result.current.brew).toBeNull();
+    });
+
+    it("cancels the expiry timer on unmount", async () => {
+        jest.restoreAllMocks();
+        jest.useFakeTimers({now: NOW});
+        jest.clearAllTimers();
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        function Subject() {
+            useRatingPrompt(store, settings);
+            return null;
+        }
+        let view!: ReturnType<typeof create>;
+        rendererAct(() => {
+            view = create(React.createElement(Subject));
+        });
+        expect(jest.getTimerCount()).toBeGreaterThan(0);
+
+        rendererAct(() => {
+            view.unmount();
+        });
+
+        expect(jest.getTimerCount()).toBe(0);
     });
 
     it("stays quiet when rating prompts are disabled", async () => {
@@ -190,5 +267,20 @@ describe("useRatingPrompt", () => {
 
         expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(2);
         expect(result.current.brew?.id).toBe("b2");
+    });
+
+    it("refreshes from the same source as the foreground path", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew?.id).toBe("b1");
+
+        store.next = measuredBrew("b1", {rating: 4});
+        await act(async () => {
+            result.current.refresh();
+        });
+
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(2);
+        expect(result.current.brew).toBeNull();
     });
 });
