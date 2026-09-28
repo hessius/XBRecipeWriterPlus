@@ -53,10 +53,9 @@ describe("reading a catalogue stage plan", () => {
 });
 
 /**
- * The one that would have shipped. `Pour.agitation` starts at -1, every bit of
- * -1 is set, and `BrewStageRung` asks the two boolean getters, so a stage
- * nobody set draws a shake at both ends. The catalogue sends no vibration
- * flags, so both must read false.
+ * The catalogue sends no vibration flags, so both ends must read off and the
+ * stored value must be a real byte rather than `Pour`'s -1 sentinel, which the
+ * byte encoder reads raw on the way to a card.
  */
 it("does not claim an agitation the catalogue never sent", () => {
     const pours = hubPours([

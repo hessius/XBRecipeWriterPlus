@@ -34,13 +34,14 @@ function patternOf(wire: number): number {
  * that has no rate, and a number written in here would be drawn as though the
  * recipe had asked for it.
  *
- * Agitation is set to ALL_OFF rather than left alone, and that difference
- * matters. `Pour.agitation` defaults to -1, and every bit of -1 is set, so
- * `getAgitationBefore` and `getAgitationAfter` both answer true on a pour
- * nobody set. `BrewStageRung` reads exactly those two, so an unset stage would
- * draw a shake before and a shake after on every catalogue recipe in the list.
- * The detail endpoint sends no vibration flags at all, so off is the only
- * honest reading, and it is what the share-link importer writes too.
+ * Agitation is set to ALL_OFF rather than left alone. `Pour.agitation` defaults
+ * to -1, which is the "nobody has said" sentinel, and the two boolean getters
+ * read it as neither end agitated, so the ladder would draw the right thing
+ * either way. The byte encoder does not: it calls `getAgitation()` raw, and -1
+ * is not a byte. The detail endpoint sends no vibration flags at all, so off is
+ * the only honest reading, and writing it here means a saved catalogue recipe
+ * carries a real value rather than a sentinel, the same as the share-link
+ * importer writes.
  */
 export function hubPours(plan: readonly HubPour[] | null | undefined): Pour[] {
     if (!plan) return [];
