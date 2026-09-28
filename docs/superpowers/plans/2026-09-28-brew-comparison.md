@@ -31,7 +31,7 @@
 |---|---|
 | `library/brew/traceStyle.ts` | The drawing grammar: stroke widths, dash patterns, colour resolvers, and the subject/reference role modifier. Appearance only; geometry stays in `brewShape.ts`. |
 | `library/brew/compare.ts` | Pure comparison: pour verdict, plan drift grade, ledger rows, cup gap. No React. |
-| `components/TraceLegend.tsx` | One legend item, promoted out of `BrewTrace` so both charts name channels identically. |
+| `components/TraceLegendItem.tsx` | One legend entry, promoted out of `BrewTrace` so both charts name channels identically. |
 | `components/CompareTrace.tsx` | OVERLAY mode only. |
 | `components/CompareTable.tsx` | The differences ledger. |
 | `components/CompareWithSheet.tsx` | The picker on the brew record. |
@@ -41,7 +41,7 @@
 
 | File | Change |
 |---|---|
-| `components/BrewTrace.tsx` | Read appearance from `traceStyle`, use `TraceLegend`, accept an optional `axis` override. |
+| `components/BrewTrace.tsx` | Read appearance from `traceStyle`, use `TraceLegendItem`, accept an optional `axis` override. |
 | `constants/brewCopy.ts` | The four verdict readings and the degradation copy. |
 | `app/brewHistory.tsx` | COMPARE in the selection row. |
 | `app/brewRecord.tsx` | COMPARE WITH control. |
@@ -320,10 +320,10 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 ## Task 3: A shared legend, and a shared axis
 
-Two small additions to `BrewTrace` that the comparison screen needs. `TraceLegend` is `LegendItem` lifted out verbatim. `axis` lets two lanes share a scale, which is the difference between a comparison and two unrelated charts.
+Two small additions to `BrewTrace` that the comparison screen needs. `TraceLegendItem` is `LegendItem` lifted out verbatim. `axis` lets two lanes share a scale, which is the difference between a comparison and two unrelated charts.
 
 **Files:**
-- Create: `components/TraceLegend.tsx`
+- Create: `components/TraceLegendItem.tsx`
 - Modify: `components/BrewTrace.tsx`
 - Test: `components/__tests__/BrewTrace.test.tsx`
 
@@ -404,7 +404,7 @@ Expected: PASS, two more tests than before.
 
 - [ ] **Step 6: Promote the legend item**
 
-Create `components/TraceLegend.tsx` with the body of `LegendItem` moved out of `BrewTrace.tsx` unchanged, plus the constant it reads:
+Create `components/TraceLegendItem.tsx` with the body of `LegendItem` moved out of `BrewTrace.tsx` unchanged, plus the constant it reads:
 
 ```tsx
 import React from "react";
@@ -428,7 +428,7 @@ export const LEGEND_SIZE = 9;
  * Shared by `BrewTrace` and `CompareTrace` so that the two charts cannot name
  * the same channel differently.
  */
-export default function TraceLegend({colour, label, dashed = false, dotted = false}: {
+export default function TraceLegendItem({colour, label, dashed = false, dotted = false}: {
     colour: string; label: string; dashed?: boolean; dotted?: boolean;
 }) {
     return (
@@ -450,14 +450,14 @@ export default function TraceLegend({colour, label, dashed = false, dotted = fal
 }
 ```
 
-In `BrewTrace.tsx`: delete the local `LegendItem` function and the local `const LEGEND_SIZE = 9;`, import `TraceLegend, {LEGEND_SIZE}` from `@/components/TraceLegend`, and rename the three `<LegendItem .../>` uses to `<TraceLegend .../>`.
+In `BrewTrace.tsx`: delete the local `LegendItem` function and the local `const LEGEND_SIZE = 9;`, import `TraceLegendItem, {LEGEND_SIZE}` from `@/components/TraceLegendItem`, and rename the three `<LegendItem .../>` uses to `<TraceLegendItem .../>`.
 
 - [ ] **Step 7: Run the regression check, typecheck, commit**
 
 ```bash
 npx jest components/__tests__/BrewTrace.test.tsx
 npm run typecheck
-git add components/TraceLegend.tsx components/BrewTrace.tsx components/__tests__/BrewTrace.test.tsx
+git add components/TraceLegendItem.tsx components/BrewTrace.tsx components/__tests__/BrewTrace.test.tsx
 git commit -m "Let a brew trace take an axis, and share its legend
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
@@ -1298,7 +1298,7 @@ import React from "react";
 import Svg, {Path} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import TraceLegend from "@/components/TraceLegend";
+import TraceLegendItem from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {type Box, livePoints, type Point, toPath} from "@/library/brew/brewShape";
@@ -1431,15 +1431,15 @@ export default function CompareTrace({
             </Svg>
             <XStack testID="compare-legend-row" gap="$3" paddingTop="$1" flexWrap="wrap">
                 {oneWater
-                    ? <TraceLegend colour={accent} label="WATER, BOTH" />
+                    ? <TraceLegendItem colour={accent} label="WATER, BOTH" />
                     : <>
-                        <TraceLegend colour={accent} label="WATER, THIS" />
-                        <TraceLegend colour={referenceWaterColour} label="WATER, THAT" />
+                        <TraceLegendItem colour={accent} label="WATER, THIS" />
+                        <TraceLegendItem colour={referenceWaterColour} label="WATER, THAT" />
                     </>}
-                <TraceLegend colour={cupSubject.stroke} label="CUP, THIS" dotted />
-                <TraceLegend colour={referenceCupColour} label="CUP, THAT" dotted />
+                <TraceLegendItem colour={cupSubject.stroke} label="CUP, THIS" dotted />
+                <TraceLegendItem colour={referenceCupColour} label="CUP, THAT" dotted />
                 {(subjectPlan ?? "") !== "" && (
-                    <TraceLegend colour={palette.muted} label="PLAN" dashed />
+                    <TraceLegendItem colour={palette.muted} label="PLAN" dashed />
                 )}
             </XStack>
         </YStack>

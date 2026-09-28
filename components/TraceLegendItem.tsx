@@ -17,9 +17,11 @@ export const LEGEND_SIZE = 9;
  * collides with anything.
  *
  * Shared by `BrewTrace` and `CompareTrace` so that the two charts cannot name
- * the same channel differently.
+ * the same channel differently. One entry, not the whole row: the row's
+ * spacing and which entries appear belong to each chart, which draws a
+ * different set of channels.
  */
-export default function TraceLegend({colour, label, dashed = false, dotted = false}: {
+export default function TraceLegendItem({colour, label, dashed = false, dotted = false}: {
     colour: string; label: string; dashed?: boolean; dotted?: boolean;
 }) {
     return (

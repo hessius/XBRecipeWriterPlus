@@ -5,7 +5,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
-import TraceLegend, {LEGEND_SIZE} from "@/components/TraceLegend";
+import TraceLegendItem, {LEGEND_SIZE} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
@@ -33,6 +33,12 @@ type Props = {
      * mark has to be at the same x in both, and the same 200 ml at the same y.
      * Absent, the box is sized to whichever of the plan, the run and the
      * bypass box reaches furthest, which is what every other caller wants.
+     *
+     * Must be at least this lane's own extent in both dimensions. A smaller
+     * axis clips at the viewport rather than rescaling, so the lane would lose
+     * its tail with nothing on screen to say it had. And it is for `compact`
+     * lanes: the temperature band is not part of the axis, so two full-size
+     * lanes would still put the same temperature at different heights.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
@@ -575,10 +581,10 @@ export default function BrewTrace({
             ) : chart}
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3">
-                <TraceLegend colour={waterStyle.stroke} label="WATER" />
-                <TraceLegend colour={cupStyle.stroke} label="CUP" dotted />
+                <TraceLegendItem colour={waterStyle.stroke} label="WATER" />
+                <TraceLegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
-                    <TraceLegend colour={planStyle.stroke} label="PLAN" dashed />
+                    <TraceLegendItem colour={planStyle.stroke} label="PLAN" dashed />
                 )}
             </XStack>
             <XStack testID="trace-overrun-row" justifyContent="flex-end"
