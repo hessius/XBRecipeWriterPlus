@@ -1385,534 +1385,164 @@ git commit -m "Draw a plan before the recipe is owned" -m "Co-authored-by: Copil
 
 ---
 
-## Task 6: The browse state machine
+## Task 6: The browse state machine (rewritten after the amendment)
 
 **Files:**
 - Create: `hooks/useHubBrowse.ts`
 - Test: `hooks/__tests__/useHubBrowse.test.ts`
 
+> **This task was rewritten.** The version written before the amendment drove a
+> server paging state machine: `wanted`, `answer`, `more()`, `hasMore`, and
+> facets held as the server's ids. None of that survives. The server's filters
+> were measured not to work, the whole partition now arrives locally in under
+> three seconds, and every question is answered over the rows in hand. Read
+> this version, not the one in the history.
+
 Everything stateful about browsing lives here, so `app/hub.tsx` stays close to
-layout. This is the same division `useLibraryQuery` and `app/index.tsx` already
-have.
+layout. This is the same division `useLibraryQuery` and `app/index.tsx` have.
 
-**The React Compiler constraints that shape this file.** `react-hooks/set-state-in-effect`
-is an **error**, so no state may be set synchronously in an effect body. The
-house answer, worked out in `app/index.tsx:281` and `hooks/useBrewHistory.ts`,
-is that a setter called from an asynchronous callback the effect started is
-fine, because it is an event and not a render. So:
+**What the hook owns now:**
 
-- The effect starts a fetch and sets state only inside the promise
-  continuation.
-- "Loading" is **derived**, not set: the request that is wanted is state, the
-  answer that arrived is state, and loading is the two disagreeing.
-- Every handler that changes the question sets the wanted request at the same
-  time, in the handler, which is an event.
+1. **One load, started once.** `loadHubCatalogue(model, onProgress, signal)`
+   for the machine the user set. It is session-cached per machine, so a second
+   mount is free and the hook does not need to know that.
+2. **Progressive arrival.** `onProgress` fires after every page with the rows so
+   far. The hook holds those rows and the page counters, so the screen can draw
+   the first hundred immediately and keep drawing.
+3. **The question**, as a `HubQuery`: keyword, four value facets, roasts, sort.
+4. **The answer**, computed at render from the rows in hand:
+   `sortHubRows(rows.filter((r) => matchesHubQuery(r, query)), query.sort)`.
+5. **The chips**, from `hubFacetCounts(rows, facet)`, so a chip can never offer
+   a value that finds nothing.
+6. **Three states that must stay distinct**, because two of them are different
+   claims about the world:
+   - `failed` — the load threw. A broken connection.
+   - `arriving` — rows are still coming.
+   - `empty` — the load finished, rows arrived, and the *question* matches none
+     of them.
+   The screen must never say "nothing here" on the evidence of a failure.
 
-Do not hand-write `useMemo` or `useCallback`; the compiler owns that. Destructure
-rather than reading a whole options object inside the hook.
+**The React Compiler constraints that shape this file.**
+`react-hooks/set-state-in-effect` is an **error**, so no state may be set
+synchronously in an effect body. A setter called from an asynchronous callback
+the effect started is fine, because it is an event and not a render. So the
+effect starts the load and sets state only inside `onProgress` and in the
+promise's `.then`/`.catch`.
 
-- [ ] **Step 1: Write the failing test**
+Do not hand-write `useMemo` or `useCallback`; the compiler owns that.
+Destructure rather than reading a whole options object inside the hook.
+`try`/`finally` bails the compiler out of the whole component, so use
+`.then`/`.catch`, not `await` in a `try`.
 
-Create `hooks/__tests__/useHubBrowse.test.ts`:
+**The machine.** `useSetting("machineModel")` gives the `MachineModel`. When it
+changes, the question stays but the rows are the other machine's, so the hook
+must reload and must not show the old partition against the new machine's name.
+Hold the rows together with the model they came from and discard them at render
+when the two disagree, which is the house answer (`hooks/useTraceAnimation.ts`'s
+`ticked.phase`, `hooks/useBrewRun.ts`'s `heard.from`).
 
-```ts
-/**
- * Browsing the catalogue: what is asked for, what arrived, and what is chosen.
- *
- * `hubApi` is mocked at the module boundary. What is under test is the state
- * machine, not the wire, and `library/hub/__tests__/hubApi.test.ts` already
- * owns the wire.
- */
-import {act, renderHook, waitFor} from "@testing-library/react-native";
-
-import {useHubBrowse} from "@/hooks/useHubBrowse";
-import type {HubListRow} from "@/library/hub/hubApi";
-
-const mockPage = jest.fn();
-jest.mock("@/library/hub/hubApi", () => ({
-    ...jest.requireActual("@/library/hub/hubApi"),
-    fetchHubPage: (...args: unknown[]) => mockPage(...args)
-}));
-
-jest.mock("@/library/hub/hubCriteria", () => ({
-    loadHubCriteria: jest.fn(async () => null),
-    heldHubCriteria: () => null,
-    roastLabel: () => null,
-    vocabularyNames: () => []
-}));
-
-jest.mock("@/hooks/useSetting", () =>
-    require("@/test-utils/settingsMock").settingsMock());
-
-function row(id: number): HubListRow {
-    return {
-        communityRecipeId: id, recipeId: id, recipeName: `Recipe ${id}`,
-        imageUrl: null, userName: "xBloom Official", userAvatar: null,
-        official: 1, model: "Studio", cupType: "xPod", cupTypeInt: 1,
-        type: "Single Origin", origin: ["Colombia"], varietal: [], process: [],
-        flavor: [], roast: 1, dose: 15, grinderSize: 52, rpm: 120,
-        pourCount: 3, grandWater: 16, volume: "240", likesCount: 1,
-        shareRecipeLink: `https://share-h5.xbloom.com/?id=${id}`
-    };
-}
-
-function page(rows: HubListRow[], over: Record<string, unknown> = {}) {
-    return {pageIndex: 1, pageSize: 100, totalPage: 1, total: rows.length, list: rows, ...over};
-}
-
-beforeEach(() => {
-    mockPage.mockReset();
-    mockPage.mockResolvedValue(page([row(1), row(2)]));
-});
-
-describe("opening the catalogue", () => {
-    it("asks for the first page and hands back normalised rows", async () => {
-        const {result} = await renderHook(() => useHubBrowse());
-
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        expect(result.current.rows[0].name).toBe("Recipe 1");
-        expect(result.current.total).toBe(2);
-        expect(mockPage.mock.calls[0][0]).toMatchObject({pageIndex: 1, machineList: ["J15"]});
-    });
-
-    it("asks about the machine the user owns", async () => {
-        const {sharedSettings} = require("@/hooks/useSetting");
-        sharedSettings().set("machineModel", "original");
-
-        const {result} = await renderHook(() => useHubBrowse());
-
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        expect(mockPage.mock.calls[0][0].machineList).toEqual(["J20"]);
-    });
-
-    it("is loading until the first answer arrives", async () => {
-        let release: (value: unknown) => void = () => {};
-        mockPage.mockReturnValue(new Promise((resolve) => { release = resolve; }));
-
-        const {result} = await renderHook(() => useHubBrowse());
-        expect(result.current.loading).toBe(true);
-
-        await act(async () => { release(page([row(1)])); });
-        await waitFor(() => expect(result.current.loading).toBe(false));
-    });
-});
-
-describe("asking a narrower question", () => {
-    it("starts again from page one when the keyword changes", async () => {
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        mockPage.mockResolvedValue(page([row(9)]));
-
-        await act(async () => { result.current.setKeyword("ethiopia"); });
-
-        await waitFor(() => expect(result.current.rows).toEqual([
-            expect.objectContaining({id: 9})
-        ]));
-        expect(mockPage.mock.calls[1][0]).toMatchObject({pageIndex: 1, keyword: "ethiopia"});
-    });
-
-    it("starts again from page one when a filter changes", async () => {
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-
-        await act(async () => { result.current.toggleFacet("originIds", "5"); });
-
-        await waitFor(() => expect(mockPage).toHaveBeenCalledTimes(2));
-        expect(mockPage.mock.calls[1][0]).toMatchObject({pageIndex: 1, originIds: ["5"]});
-        expect(result.current.query.originIds).toEqual(["5"]);
-    });
-
-    it("takes a whole new list for a facet, which is what the picker reports", async () => {
-        // `HubFilterSheet` hands back what the selection should now be rather
-        // than a delta, the same contract `BeanFilterSheet` has.
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-
-        await act(async () => { result.current.setFacet("originIds", ["5", "9"]); });
-
-        await waitFor(() => expect(mockPage).toHaveBeenCalledTimes(2));
-        expect(mockPage.mock.calls[1][0]).toMatchObject({pageIndex: 1, originIds: ["5", "9"]});
-    });
-});
-
-describe("paging", () => {
-    it("appends the next page rather than replacing the list", async () => {
-        mockPage.mockResolvedValue(page([row(1), row(2)], {totalPage: 2, total: 4}));
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        mockPage.mockResolvedValue(page([row(3), row(4)], {pageIndex: 2, totalPage: 2, total: 4}));
-
-        await act(async () => { result.current.more(); });
-
-        await waitFor(() => expect(result.current.rows).toHaveLength(4));
-        expect(mockPage.mock.calls[1][0].pageIndex).toBe(2);
-    });
-
-    it("does not ask for a page past the end", async () => {
-        mockPage.mockResolvedValue(page([row(1)], {totalPage: 1, total: 1}));
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(1));
-
-        await act(async () => { result.current.more(); });
-
-        expect(mockPage).toHaveBeenCalledTimes(1);
-    });
-
-    it("ignores a page that arrives after the question changed", async () => {
-        // A slow page 2 landing after a new search would append the old
-        // catalogue underneath the new one, and the user would scroll into
-        // results for a search they had already replaced.
-        let releaseSlow: (value: unknown) => void = () => {};
-        mockPage.mockReturnValueOnce(new Promise((resolve) => { releaseSlow = resolve; }));
-        const {result} = await renderHook(() => useHubBrowse());
-
-        await act(async () => { result.current.setKeyword("ethiopia"); });
-        mockPage.mockResolvedValue(page([row(9)]));
-        await waitFor(() => expect(result.current.rows).toEqual([
-            expect.objectContaining({id: 9})
-        ]));
-
-        await act(async () => { releaseSlow(page([row(1), row(2)])); });
-
-        expect(result.current.rows).toEqual([expect.objectContaining({id: 9})]);
-    });
-});
-
-describe("when the catalogue is not answering", () => {
-    it("reports the failure rather than showing an empty catalogue", async () => {
-        // An empty list and a failed request look identical on screen unless
-        // they are different states here, and "no recipes match" is a lie
-        // about a catalogue of three thousand.
-        mockPage.mockRejectedValue(new Error("The recipe hub is not answering (503)."));
-
-        const {result} = await renderHook(() => useHubBrowse());
-
-        await waitFor(() =>
-            expect(result.current.failure).toBe("The recipe hub is not answering (503)."));
-        expect(result.current.loading).toBe(false);
-        expect(result.current.rows).toEqual([]);
-    });
-
-    it("can be asked again after a failure", async () => {
-        mockPage.mockRejectedValueOnce(new Error("offline"));
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.failure).toBe("offline"));
-
-        await act(async () => { result.current.retry(); });
-
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        expect(result.current.failure).toBeNull();
-    });
-});
-
-describe("choosing rows", () => {
-    it("holds a selection that survives the list being replaced", async () => {
-        // The same rule `useShelfPicker` follows: what you chose is yours, and
-        // narrowing the search does not un-choose it.
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-
-        await act(async () => { result.current.toggleSelected(1); });
-        expect(result.current.selected.has(1)).toBe(true);
-
-        mockPage.mockResolvedValue(page([row(9)]));
-        await act(async () => { result.current.setKeyword("ethiopia"); });
-        await waitFor(() => expect(result.current.rows).toHaveLength(1));
-
-        expect(result.current.selected.has(1)).toBe(true);
-        expect(result.current.selectedRows).toHaveLength(1);
-    });
-
-    it("clears the selection when asked", async () => {
-        const {result} = await renderHook(() => useHubBrowse());
-        await waitFor(() => expect(result.current.rows).toHaveLength(2));
-        await act(async () => { result.current.toggleSelected(1); });
-
-        await act(async () => { result.current.clearSelection(); });
-
-        expect(result.current.selected.size).toBe(0);
-    });
-});
-```
-
-- [ ] **Step 2: Run it and watch it fail**
-
-Run: `npx jest hooks/__tests__/useHubBrowse.test.ts`
-Expected: FAIL, module not found.
-
-- [ ] **Step 3: Write it**
-
-Create `hooks/useHubBrowse.ts`:
+**The shape:**
 
 ```ts
-/**
- * Browsing the community catalogue.
- *
- * Everything stateful about the browse screen is here, so `app/hub.tsx` stays
- * close to layout, the same split `useLibraryQuery` and `app/index.tsx` have.
- *
- * The shape is dictated by the React Compiler. `set-state-in-effect` is an
- * error, so nothing is set synchronously in an effect body: the effect starts a
- * fetch and writes only from its continuation, which is an event rather than a
- * render. "Loading" is therefore *derived* -- the request that is wanted and
- * the answer that arrived disagreeing -- rather than a flag somebody sets.
- */
-import {useEffect, useState} from "react";
-
-import {useSetting} from "@/hooks/useSetting";
-import {fetchHubPage} from "@/library/hub/hubApi";
-import {heldHubCriteria, loadHubCriteria, vocabularyNames} from "@/library/hub/hubCriteria";
-import {
-    buildHubRequest, EMPTY_HUB_QUERY, type HubQuery, type HubSort
-} from "@/library/hub/hubQuery";
-import {normaliseHubRow, type HubRecipe} from "@/library/hub/hubRow";
-import {asMachineModel} from "@/library/machine/machineModel";
-import type {Settings} from "@/library/Settings";
-
-/** The facets a chip can narrow by. The machine is not one: see `hubQuery.ts`. */
-export type HubFacet = "originIds" | "roastIds" | "processIds" | "flavourIds";
-
-/**
- * Which question a request belongs to.
- *
- * Every answer carries the key of the question it was asked, and an answer
- * whose key no longer matches is dropped. A slow page two landing after a new
- * search would otherwise append the old catalogue underneath the new one, and
- * the user would scroll into results for a search they had replaced.
- */
-function questionKey(query: HubQuery, model: string): string {
-    return JSON.stringify([
-        model, query.keyword.trim(), query.sort,
-        query.originIds, query.roastIds, query.processIds, query.flavourIds
-    ]);
-}
-
-type Answer = {
-    key: string;
-    page: number;
-    rows: HubRecipe[];
-    total: number;
-    totalPage: number;
-};
-
-const NOTHING_YET: Answer = {key: "", page: 0, rows: [], total: 0, totalPage: 0};
-
 export type HubBrowse = {
-    query: HubQuery;
+    /** The rows that match the question, in the chosen order. */
     rows: HubRecipe[];
-    total: number;
-    loading: boolean;
-    /** True while a later page is on its way, which the list foots rather than covers. */
-    loadingMore: boolean;
-    failure: string | null;
-    hasMore: boolean;
-    setKeyword: (keyword: string) => void;
-    setSort: (sort: HubSort) => void;
-    toggleFacet: (facet: HubFacet, id: string) => void;
-    /** The whole new list for one facet, which is what the picker sheet reports. */
-    setFacet: (facet: HubFacet, ids: readonly string[]) => void;
-    clearFacet: (facet: HubFacet) => void;
-    more: () => void;
-    retry: () => void;
-    selected: ReadonlySet<number>;
-    selectedRows: HubRecipe[];
-    toggleSelected: (id: number) => void;
-    clearSelection: () => void;
+    /** Every row of this machine's partition that has arrived. */
+    all: HubRecipe[];
+    query: HubQuery;
+    /** True until the last page lands. */
+    arriving: boolean;
+    /** Pages in and pages expected, for a progress line. */
+    page: number;
+    totalPage: number;
+    /** Set if the load threw. A broken connection, not an empty catalogue. */
+    failed: HubApiError | Error | null;
+    setKeyword(keyword: string): void;
+    setSort(sort: HubSort): void;
+    /** Replace one facet wholesale, which is what the filter sheet reports. */
+    setFacet(facet: HubFacet, values: readonly string[]): void;
+    /** Add or remove one value, which is what a rail chip does. */
+    toggleFacet(facet: HubFacet, value: string): void;
+    setRoasts(roasts: readonly number[]): void;
+    clearQuery(): void;
+    /** Commonest first, counted over `all`. Never offers a value finding zero. */
+    chips(facet: HubFacet): {value: string; count: number}[];
+    /** Try the load again after a failure. */
+    retry(): void;
 };
-
-export function useHubBrowse(settings?: Settings): HubBrowse {
-    const [storedModel] = useSetting("machineModel", settings);
-    const model = asMachineModel(storedModel);
-
-    const [query, setQuery] = useState<HubQuery>(EMPTY_HUB_QUERY);
-    const [wanted, setWanted] = useState(() => ({key: questionKey(EMPTY_HUB_QUERY, model), page: 1}));
-    const [answer, setAnswer] = useState<Answer>(NOTHING_YET);
-    const [failure, setFailure] = useState<{key: string; page: number; message: string} | null>(null);
-    /**
-     * What was chosen, by catalogue id.
-     *
-     * Deliberately not cleared when the list changes, and deliberately keyed by
-     * id rather than by position: `useShelfPicker` made the same choice for the
-     * same reason. Narrowing a search is not un-choosing a recipe.
-     */
-    const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set<number>());
-    const [chosen, setChosen] = useState<HubRecipe[]>([]);
-
-    /**
-     * The machine setting can change under an open screen.
-     *
-     * Adjusted during render rather than from an effect, which is React's own
-     * "adjusting state when a prop changes" and the only door the compiler
-     * leaves open. `useBeanProfile` does the same thing for the same reason.
-     */
-    const currentKey = questionKey(query, model);
-    if (wanted.key !== currentKey) setWanted({key: currentKey, page: 1});
-
-    useEffect(() => {
-        // Kicked off here, but nothing is written here: every setter below runs
-        // in a promise continuation, which is an event and not a render, which
-        // is what keeps `react-hooks/set-state-in-effect` satisfied.
-        let alive = true;
-        const controller = new AbortController();
-        const request = buildHubRequest(query, model, wanted.page);
-
-        fetchHubPage(request, controller.signal)
-            .then((page) => {
-                if (!alive) return;
-                const vocabulary = heldHubCriteria();
-                const rows = (page.list ?? []).map((raw) => normaliseHubRow(raw, {
-                    origin: vocabularyNames(vocabulary?.originList),
-                    process: vocabularyNames(vocabulary?.processingList)
-                }));
-                setFailure(null);
-                setAnswer((previous) => ({
-                    key: wanted.key,
-                    page: wanted.page,
-                    // Page one replaces; a later page extends. An answer to a
-                    // different question never extends anything.
-                    rows: wanted.page === 1 || previous.key !== wanted.key
-                        ? rows
-                        : [...previous.rows, ...rows],
-                    total: page.total ?? rows.length,
-                    totalPage: page.totalPage ?? 1
-                }));
-            })
-            .catch((error: unknown) => {
-                if (!alive) return;
-                if (controller.signal.aborted) return;
-                setFailure({
-                    key: wanted.key, page: wanted.page,
-                    message: (error as Error).message
-                });
-            });
-
-        return () => {
-            alive = false;
-            controller.abort();
-        };
-        // `query` and `model` are folded into `wanted.key`, which is the whole
-        // point of the key: one dependency, and it changes exactly when the
-        // question does.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [wanted]);
-
-    const answered = answer.key === wanted.key && answer.page >= wanted.page;
-    const failed = failure !== null && failure.key === wanted.key && failure.page === wanted.page;
-    const rows = answer.key === wanted.key ? answer.rows : [];
-    const loading = !answered && !failed;
-
-    function ask(next: HubQuery): void {
-        setQuery(next);
-        setWanted({key: questionKey(next, model), page: 1});
-    }
-
-    function toggleFacet(facet: HubFacet, id: string): void {
-        const current = query[facet];
-        ask({
-            ...query,
-            [facet]: current.includes(id)
-                ? current.filter((value) => value !== id)
-                : [...current, id]
-        });
-    }
-
-    function setFacet(facet: HubFacet, ids: readonly string[]): void {
-        ask({...query, [facet]: [...ids]});
-    }
-
-    function more(): void {
-        if (loading) return;
-        if (answer.key !== wanted.key) return;
-        if (answer.page >= answer.totalPage) return;
-        setWanted({key: wanted.key, page: answer.page + 1});
-    }
-
-    function retry(): void {
-        setFailure(null);
-        // A new object rather than the same one, so the effect runs again for a
-        // question whose key has not changed.
-        setWanted({key: wanted.key, page: wanted.page});
-    }
-
-    function toggleSelected(id: number): void {
-        const next = new Set(selected);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        setSelected(next);
-
-        const row = rows.find((candidate) => candidate.id === id);
-        setChosen((previous) => next.has(id)
-            // The row is kept, not just its id: a saved batch has to survive
-            // the list being replaced by a different search, and a row that is
-            // no longer on screen still has to be saveable.
-            ? (row === undefined ? previous : [...previous, row])
-            : previous.filter((candidate) => candidate.id !== id));
-    }
-
-    function clearSelection(): void {
-        setSelected(new Set<number>());
-        setChosen([]);
-    }
-
-    useEffect(() => {
-        // The vocabularies, wanted by the chips and by the normaliser's space
-        // rule. A failure here is not worth telling anybody about: the chips
-        // stay empty and search still works.
-        loadHubCriteria().catch(() => {});
-    }, []);
-
-    return {
-        query,
-        rows,
-        total: answer.key === wanted.key ? answer.total : 0,
-        loading: loading && wanted.page === 1,
-        loadingMore: loading && wanted.page > 1,
-        failure: failed ? failure.message : null,
-        hasMore: answer.key === wanted.key && answer.page < answer.totalPage,
-        setKeyword: (keyword) => ask({...query, keyword}),
-        setSort: (sort) => ask({...query, sort}),
-        toggleFacet,
-        setFacet,
-        clearFacet: (facet) => ask({...query, [facet]: []}),
-        more,
-        retry,
-        selected,
-        selectedRows: chosen,
-        toggleSelected,
-        clearSelection
-    };
-}
-
-export default useHubBrowse;
 ```
 
-- [ ] **Step 4: Run the test**
+`HubFacet` is `"origins" | "processes" | "varietals" | "flavours"`, which
+`hubQuery.ts` already names in `hubFacetCounts`'s signature; export it there if
+it is not exported yet.
 
-Run: `npx jest hooks/__tests__/useHubBrowse.test.ts`
-Expected: PASS, 12 tests. If the stale-answer test fails, the key comparison is
-wrong; do not weaken the test.
+**Keyword debounce.** The rail's field types into this hook. Filtering 1,300
+rows locally is fast enough that a debounce is not needed for the work, but it
+is needed so the list does not thrash a character at a time. `hooks/useRailSearch.ts`
+already owns exactly this for the library rail. **Read it first** and reuse it
+rather than writing a second debounce; if its shape does not fit, say so in
+your report rather than duplicating it.
 
-- [ ] **Step 5: Prove the stale guard is real**
+- [ ] **Step 1: Write the failing tests**
 
-Delete the `previous.key !== wanted.key` half of the ternary, run the test
-again, and confirm "ignores a page that arrives after the question changed"
-goes red. Then put it back. A guard no test can break is not a guard.
+Create `hooks/__tests__/useHubBrowse.test.ts`. Mock at the **catalogue**
+boundary, not the wire, because what is under test is the state machine:
 
-- [ ] **Step 6: Lint**
-
-Run: `npm run lint`
-Expected: 0 errors. If `react-hooks/set-state-in-effect` fires, something is
-being set in an effect body rather than in a continuation; fix the code, not
-the rule.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add hooks/useHubBrowse.ts hooks/__tests__/useHubBrowse.test.ts
-git commit -m "Hold the catalogue's paging, filtering and choosing in one hook" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+```ts
+jest.mock("@/library/hub/hubCatalogue", () => ({
+    loadHubCatalogue: (...args: unknown[]) => mockLoad(...args),
+    __resetHubCatalogue: () => {}
+}));
 ```
 
----
+`mockLoad` should call its `onProgress` argument more than once, so progressive
+arrival is actually exercised rather than assumed.
+
+Cover at least:
+
+1. **Rows arrive progressively.** Two `onProgress` calls, and after the first
+   the hook already reports rows and `arriving` true; after the promise settles,
+   `arriving` is false.
+2. **A filter narrows locally.** `toggleFacet("origins", "Colombia")` leaves only
+   the Colombian rows, with no second network call. Assert `mockLoad` was called
+   **once**.
+3. **`setFacet` replaces rather than adds**, which is what the sheet reports.
+4. **Chips never offer nothing.** Every value `chips("origins")` returns finds
+   at least one row when applied as a filter. Assert the counts equal the filter
+   results, since that agreement is the whole promise of the chip.
+5. **Empty and failed are different.** A load that throws leaves `failed` set
+   and `rows` empty; a load that succeeds against a question matching nothing
+   leaves `failed` null and `rows` empty. A test must be able to tell them apart
+   from the hook's surface alone.
+6. **`retry()` after a failure loads again** and clears `failed`.
+7. **Changing the machine does not show the other machine's rows.** Assert that
+   at no observed render do rows from the first model appear while the setting
+   says the second.
+8. **Sort is local.** `setSort("name")` reorders without a network call.
+9. **Unmounting mid-load does not set state.** Follow the house pattern:
+   `await act(async () => { unmount(); })`, then settle the pending promise and
+   assert no warning and no call.
+
+Remember: RNTL v14's `renderHook` is **async** — omit the `await` and `result`
+is `undefined`. Wrap `unmount()` in `await act(...)`.
+
+Use `require("@/test-utils/settingsMock").settingsMock()` to mock
+`@/hooks/useSetting`, the way the existing hook tests do. **Read
+`test-utils/settingsMock.ts` first** and follow whatever shape it actually has.
+
+- [ ] **Step 2: Implement `hooks/useHubBrowse.ts`**
+
+Write it to pass the tests. Keep the file about the state machine; anything
+about matching, sorting or counting belongs in `hubQuery.ts` and is already
+there.
+
+- [ ] **Step 3: Verify**
+
+`npx jest hooks/__tests__/useHubBrowse.test.ts`, `npm run typecheck`,
+`npx eslint hooks library`. Zero lint errors. Mutation-test every guard,
+especially the one keeping `empty` and `failed` apart and the one discarding
+the other machine's rows.
+
 
 ## Task 7: One catalogue row
 
