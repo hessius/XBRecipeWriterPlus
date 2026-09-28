@@ -2449,6 +2449,38 @@ The destination view. This is where somebody decides, so it shows the things
 the row could not: the whole note, the flavour notes, the author, and the
 stages drawn as the brew screen draws them.
 
+**Three corrections found after this task was written, all verified live:**
+
+1. **The route carries the community id, and there are two.** A list row has a
+   `communityRecipeId` *and* a `recipeId`, both numbers, and passing the wrong
+   one to `fetchHubDetail` returns a real but wrong recipe with a success code.
+   `HubRecipe.id` is the community id; the parameter on `fetchHubDetail` is
+   named `communityRecipeId` for this reason. Do not rename it back.
+
+2. **The detail endpoint sends no `pourCount`.** `HubDetailRow` is
+   `Omit<HubListRow, "pourCount"> & {...}`, so `normaliseRow(detail)` is a
+   compile error on purpose. Where a stage count is wanted, it is
+   `pourList.length`.
+
+3. **A refusal inside HTTP 200 is an ordinary thing, not a crash.** The
+   envelope's `code` can be non-200 while the transport succeeded. Live, code
+   400 means "The recipe has been removed by the person who shared it", which
+   deserves a calm sentence and no retry button, and code 500 means "Operation
+   Failed", which deserves a retry. `HubApiError.isRefusal` tells them apart.
+   **Never render `detail.serverMessage`**: it is server-controlled, sometimes
+   ungrammatical, and may localise. Write the app's own words.
+
+**The accent.** Use `hubAccent(id)` from `library/hub/hubRow.ts`, the same one
+the browse row uses, so a recipe keeps its colour on the way into the detail
+and back out. Do not call `resolveAccent`; that needs a `Recipe` and writes an
+index onto it, and nobody owns this yet.
+
+**The stages.** `hubPours(detail.pourList)` from `library/hub/hubStages.ts`.
+It already maps the catalogue's pattern numbering onto the app's, which are
+different and would mis-draw plausibly if fed raw, and it already sets
+agitation off rather than leaving it unset, which would otherwise draw a shake
+at both ends of every stage.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `app/__tests__/hubRecipe.test.tsx`, mocking `@/library/hub/hubApi` and
