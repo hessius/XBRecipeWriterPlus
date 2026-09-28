@@ -102,9 +102,21 @@ and the overflowing-cup drawing, today `shelfOverflowOff`, takes the freed name
 `shelfOtherBrewer`. No pixels change; only which shelf each set of pixels
 belongs to.
 
-Filter ids are transient. `hooks/useLibraryQuery.ts` persists only
+The id is persisted in one place, and the rename has to be spoken there.
+`hooks/useLibraryQuery.ts` holds the query itself in memory, persisting only
 `librarySort`, `librarySortDirection`, `libraryFavouritesFirst` and
-`libraryView`, so renaming `overflowOff` cannot orphan a stored value.
+`libraryView`. But the shelves a user has put away are a separate, durable
+answer: `hiddenShelves` and `myShelves` store canonical shelf ids as JSON, and
+`canonicalShelfId` in `library/hiddenShelves.ts` folds author and tag ids while
+returning a stock id unchanged. A stored `overflowOff` would therefore match no
+shelf after the rename, `OMNI DRIPPER` would reappear in the grid of anybody who
+had put it away, and the dead id would ride along in their backups.
+
+That is precisely the failure the module's own doc comment says it carries
+unknown ids to avoid. So `canonicalShelfId` folds `overflowOff` to `omniDripper`
+alongside the folds already there. Nothing on disk is rewritten in place: the
+stored string is folded on read, and rewritten the next time the list is
+touched, which is how the older comma-separated format is already handled.
 
 Rejected alternatives: keeping both labels and swapping only their clauses,
 which leaves `OTHER BREWER` selecting xBloom's own dripper; and deleting
