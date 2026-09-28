@@ -314,7 +314,7 @@ Shipped as index queries. None of them is stored, so none of them can be wrong.
 |---|---|
 | Tea | `isTea = 1` |
 | xBloom pods | `cupType = XPOD` |
-| Overflow protection off | `cupType = OMNI` |
+| Omni dripper | `cupType = OMNI` |
 | Other brewer | `cupType = OTHER` |
 | Single pour | `pourCount = 1` |
 | Few stages | `pourCount <= 2` |
@@ -368,8 +368,9 @@ else, so it stays hidden until enough of the library came from other people for
 the distinction to mean something -- which is the point at which somebody would
 want it.
 
-`cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`,
-`OMNI 0x02` (which the UI calls "overflow protection off"), `TEA 0x03`.
+`cupType` values come from `library/Recipe.ts:7`: `XPOD 0x00`, `OTHER 0x01`
+(the one the UI calls "overflow protection off", corrected in #151), `OMNI
+0x02`, `TEA 0x03`.
 
 ### Suppression applies to derived shelves only
 

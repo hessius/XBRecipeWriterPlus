@@ -223,7 +223,7 @@ documented anywhere. It cannot be dropped.
 
 **Hint lines are a setting, off by default** — and only on the BREW deck. Every label there gets a
 short line beneath it covering the ordinary case: the range, the unit, the
-gotcha in six words. "Whole numbers only." "Omni turns overflow protection off."
+gotcha in six words. "Whole numbers only." "Other turns overflow protection off."
 "Off is experimental — see Help."
 
 > **Departure, after device testing.** The stages deck has no hint lines. An

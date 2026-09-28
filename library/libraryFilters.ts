@@ -42,7 +42,7 @@ import {tagKey} from "./tagKey";
 export type FilterId =
     | "tea"
     | "pods"
-    | "overflowOff"
+    | "omniDripper"
     | "otherBrewer"
     | "singlePour"
     | "fewStages"
@@ -177,8 +177,14 @@ export const STOCK_FILTERS: Record<FilterId, StockFilter> = {
     // one source for what XPOD means, not a second copy of 0x00 living in a
     // string here.
     pods: {label: "XBLOOM PODS", clause: () => ({where: "cupType = ?", params: [CUP_TYPE.XPOD]})},
-    overflowOff: {
-        label: "OVERFLOW OFF",
+    // Named for the two cup types rather than for overflow protection, which
+    // is the thing #151 got wrong. OTHER is the type the machine cannot
+    // measure and so cannot protect, which would have made OVERFLOW OFF and
+    // OTHER BREWER two names for one shelf, while OMNI -- what every new
+    // recipe starts as -- had none at all. These are the editor's own words
+    // for the same choice, so the shelf and the segment agree.
+    omniDripper: {
+        label: "OMNI DRIPPER",
         clause: () => ({where: "cupType = ?", params: [CUP_TYPE.OMNI]})
     },
     otherBrewer: {
@@ -296,7 +302,7 @@ export const STOCK_FILTER_ORDER: readonly FilterId[] = [
     // after MINE, where the vocabulary stops asking about the recipe and starts
     // asking what has become of it, and RECENTLY ADDED closes as it always has.
     "favourites",
-    "tea", "pods", "overflowOff", "otherBrewer", "singlePour", "fewStages",
+    "tea", "pods", "omniDripper", "otherBrewer", "singlePour", "fewStages",
     "manyStages", "grinderOff", "xbloom", "shortRatio", "longRatio",
     "quickBrew", "slowBrew", "hot", "mine",
     "mostBrewed", "neverBrewed", "recentlyAdded", "allRecipes"
