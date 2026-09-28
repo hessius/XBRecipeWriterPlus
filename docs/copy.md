@@ -166,7 +166,7 @@ from `library/Recipe.ts`.
 | `recipe.cup.xpod` | `library/Recipe.ts:365` | Cup-type name, xPod. | `xPod` |
 | `recipe.cup.omni` | `library/Recipe.ts:367` | Cup-type name, Omni (xBloom's own dripper, overflow protection on). | `Omni` |
 | `recipe.cup.tea` | `library/Recipe.ts:369` | Cup-type name, Tea. | `Tea` |
-| `recipe.cup.other` | `library/Recipe.ts:371` | Cup-type name, Other. | `Other` |
+| `recipe.cup.other` | `library/Recipe.ts:371` | Cup-type name, Other (a brewer the machine cannot measure, overflow protection off). | `Other` |
 | `recipe.cup.unknown` | `library/Recipe.ts:373` | Cup-type name fallback. | `Unknown` |
 
 ### Brew-settings deck

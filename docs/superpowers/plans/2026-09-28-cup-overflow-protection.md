@@ -718,7 +718,7 @@ Expand the body from the spec at `docs/superpowers/specs/2026-09-28-cup-overflow
 
 ## Notes for the implementer
 
-**No hardware test is needed.** #151 asked for one because it proposed changing a byte written to a genuine card. This branch changes no byte. The naming it corrects is attested three ways: the report itself, xBloom's own cloud label `2 = Omni/Dripper`, and the recorded cup weight ranges in `docs/machine-integration/ble-protocol.md`.
+**No hardware test is needed.** #151 asked for one because it proposed changing a byte written to a genuine card. This branch changes no byte. The naming it corrects is attested two ways: the report itself, and xBloom's own cloud label `2 = Omni/Dripper`. The cup weight ranges in `docs/machine-integration/ble-protocol.md` are **not** a third attestation, and must not be cited as one: that section is headed a corroborated conflict, only one of the three sources splits its values by cup type, and our own `setCupFrame()` sends the same widest range for every coffee brew. See the spec for the full reasoning.
 
 **Leave the legacy migration alone.** `library/Recipe.ts:280` reads `else if (this.cupType === 0x04) { this.cupType = 0x01; // 0x01 is for Other }`. #151 raised it as a question that could not be settled from the comment, because a swap would have made the byte and the name disagree. With no swap both readings give the same answer, so it is correct exactly as written. Do not touch it, and do not add a migration anywhere else: no stored recipe's cup type changes.
 

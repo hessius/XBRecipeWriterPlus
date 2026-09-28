@@ -147,4 +147,21 @@ describe("the new editor glyphs", () => {
         const reverse = (row: string) => [...row].reverse().join("");
         DOT_ICONS.more.forEach((row) => expect(row).toBe(reverse(row)));
     });
+
+    it("gives each cup shelf the drawing that describes it", () => {
+        // #151 was the two cup types being confused with each other, and these
+        // two drawings exchanged owners to settle it. Nothing else in the
+        // suite would notice if they exchanged back: the names are the only
+        // thing the glyph map and the icon-name list check, so swapping the
+        // pixel arrays under the names compiles, passes every other test, and
+        // draws an overflowing cup on the shelf that cannot overflow.
+        //
+        // Row 1 alone separates them. The dripper is widest at the top, where
+        // its cone meets the stand; the cup is two walls with a gap between.
+        expect(DOT_ICONS.shelfOmniDripper[1]).toBe("#########");
+        expect(DOT_ICONS.shelfOtherBrewer[1]).toBe(".#.....#.");
+        // The brew coming over the rim, which is the whole point of the OTHER
+        // drawing and the thing a dripper's silhouette never does.
+        expect(DOT_ICONS.shelfOtherBrewer[2]).toBe(".##...##.");
+    });
 });
