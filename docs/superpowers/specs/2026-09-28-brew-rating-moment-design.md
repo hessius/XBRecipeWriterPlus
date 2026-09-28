@@ -1,6 +1,6 @@
 # The rating moment, and what happens on a resend
 
-Issue: #142. Status: designed, not yet built.
+Issue: #142. Status: built.
 
 ## The problem
 
