@@ -771,37 +771,73 @@ git commit -m "Walk both partitions, so correcting your machine does not hide yo
 ## Task 7: The pod lookup asks for the right machine
 
 **Files:**
-- Modify: `library/XBloomRecipe.ts:263`
-- Test: `library/__tests__/XBloomRecipe.endpoint.test.ts` (exists; the endpoint tests live there, and `XBloomRecipe.bypass.test.ts` and `xbloomPodCoffee.test.ts` are the other two halves)
+- Modify: `library/XBloomRecipe.ts` (the constructor at :26, `fromAccountRow` at :45, the `byXid` request body at :279)
+- Modify: `hooks/useRecipeImport.ts:272`
+- Modify: `hooks/useRecipeEditor.ts:231`, `:402`, `:416`
+- Test: `library/__tests__/XBloomRecipe.endpoint.test.ts` (the endpoint tests live there; `XBloomRecipe.bypass.test.ts`, `xbloomPodCoffee.test.ts`, `shareLink.test.ts` and `recipeAttribution.test.ts` also construct one and will need the new argument)
 
-**Scope note:** `adaptedModel` is sent only on the `byXid` path, which is the pod lookup at `tRecipeDetailOfPods.thtml`. The share-id path at `RecipeDetail.html` does not send one and does not need one. This is also why the community hub work in phase 2 is unaffected: hub rows import by share link.
+**Scope note:** `adaptedModel` is sent only on the `byXid` path, the pod lookup at `tRecipeDetailOfPods.thtml`. The share-id path at `RecipeDetail.html` does not send one and does not need one. This is also why the phase 2 hub work is unaffected: hub rows import by share link.
+
+### Read this before you write anything
+
+The plan's earlier draft of this task described a constructor that does not exist. The real one takes a single `ImportSource`, the discriminated union `parseImportInput` produces:
+
+```ts
+    constructor(source: ImportSource) {
+        this.byXid = source.kind === "xid";
+        this.id = source.kind === "xid" ? source.xid : source.id;
+    }
+```
+
+There are **four** production call sites, not one:
+
+| Site | What it is |
+| --- | --- |
+| `hooks/useRecipeImport.ts:272` | the import sheet's lookup |
+| `hooks/useRecipeEditor.ts:231` | refreshing a held recipe's xBloom name |
+| `hooks/useRecipeEditor.ts:402` | restore from XID |
+| `hooks/useRecipeEditor.ts:416` | restore from share link |
+
+Three of them are the ones #138 is actually about — a user who restores a recipe from its XID gets the Studio's grind silently written over their own.
+
+`XBloomRecipe.fromAccountRow` also constructs one, but it pre-populates `xbRecipeJSON` and its only caller (`library/cloud/mapRow.ts:47`) goes straight to `getRecipe()`. It never fetches, so the model is inert there.
+
+### The model is a required argument, not a defaulted one
+
+Give the constructor a second parameter with **no default**. A default would make a forgotten call site compile and silently ask for the Studio, which is exactly the shape of the bug this task closes. Making it required turns the next forgotten call site into a type error.
+
+`library/` must not import from `hooks/`, so `XBloomRecipe` does not read the setting itself. It is told.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `library/__tests__/XBloomRecipe.endpoint.test.ts`, following that file's existing fetch-mocking pattern:
+Add to `library/__tests__/XBloomRecipe.endpoint.test.ts`, following that file's existing fetch-mocking pattern (read it first; do not invent a new one):
 
 ```ts
 it("asks the pod endpoint for the machine the user owns", async () => {
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue({
-        ok: true,
-        json: async () => ({recipeVo: null})
-    } as Response);
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "original")
+        .fetchRecipeDetail();
 
-    await new XBloomRecipe("NLC001", {model: "original"}).fetchRecipeDetail();
-
-    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    const body = JSON.parse(bodyOfLastRequest());
     expect(body.adaptedModel).toBe(2);
+});
+
+it("still asks for the Studio when that is the machine", async () => {
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "studio")
+        .fetchRecipeDetail();
+
+    const body = JSON.parse(bodyOfLastRequest());
+    expect(body.adaptedModel).toBe(1);
 });
 ```
 
-Adjust the constructor call to the class's real signature, which you can read at the top of `library/XBloomRecipe.ts`. If the class currently takes `(id, byXid)`, add the model as an option rather than a positional boolean's neighbour.
+`bodyOfLastRequest()` is a stand-in: read how the existing tests reach the request body and use that. Both cases are needed — one alone cannot tell "reads the argument" from "hardcoded to the value the test happens to pass".
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest library/__tests__/XBloomRecipe.endpoint.test.ts`
-Expected: FAIL, the body carries `1`.
+Expected: FAIL. The first test fails because the body carries `1`; both may also fail to compile on the second argument, which is equally good evidence.
 
-- [ ] **Step 3: Thread the model in**
+- [ ] **Step 3: Take the model on the constructor**
 
 In `library/XBloomRecipe.ts`, add the import:
 
@@ -809,41 +845,88 @@ In `library/XBloomRecipe.ts`, add the import:
 import {adaptedModelFor, type MachineModel} from "@/library/machine/machineModel";
 ```
 
-Store it on the instance, defaulting to `studio` so existing callers keep working, and use it in the `byXid` body:
+Store it, required:
 
 ```ts
-        const requestBody = this.byXid ? {
-            ...baseBody,
-            xid:               this.id,
-            languageType:      0,
+    private model: MachineModel;
+
+    /**
+     * @param model which machine the recipe is being fetched for. Consulted
+     * only by the pod endpoint, which returns a different grind under each;
+     * the share endpoint has no such field. Required rather than defaulted
+     * because a forgotten call site silently asking for the Studio is #138.
+     */
+    constructor(source: ImportSource, model: MachineModel) {
+```
+
+Set `this.model = model;` alongside the existing assignments, keeping the comment already on that constructor attached to the lines it explains.
+
+In `fromAccountRow`, pass `"studio"` with a comment saying why the value cannot matter:
+
+```ts
+        // Inert: this instance is handed its `recipeVo` outright and never
+        // fetches, so no endpoint ever reads the model.
+        const instance = new XBloomRecipe({kind: "xid", xid}, "studio");
+```
+
+And in the `byXid` body, replace the hardcoded `1`:
+
+```ts
             // The pod carries one coffee and two recipes. Asking under the
-            // wrong machine returns a grind roughly twice what this machine
-            // expects, which is what #138 was opened about.
+            // wrong machine returns a grind on the other machine's scale,
+            // which is what #138 was opened about.
             adaptedModel:      adaptedModelFor(this.model),
-            isRefreshScanTime: 1,
-            appVersion:        "2.1.2"
-        } : {
 ```
 
-- [ ] **Step 4: Pass the setting from the import hook**
+- [ ] **Step 4: Pass the setting from all four call sites**
 
-In `hooks/useRecipeImport.ts`, read the setting with `useSetting("machineModel")` and pass it wherever `XBloomRecipe` is constructed. Find every construction with:
+Both hooks reach the setting through `sharedSettings()` rather than `useSetting`, because the value is read once at fetch time and a `useSetting` subscription would re-render the editor whenever any machine setting changed. `hooks/useMachine.ts:34` is the existing example of this choice.
 
-```bash
-grep -rn "new XBloomRecipe" --include=*.ts --include=*.tsx .
+In each of `hooks/useRecipeImport.ts` and `hooks/useRecipeEditor.ts`, add:
+
+```ts
+import {sharedSettings} from "@/hooks/useSetting";
+import {asMachineModel} from "@/library/machine/machineModel";
 ```
 
-Update each one. A call site that is not inside a React hook or component reads it with `sharedSettings().get("machineModel")` instead.
+(each file may already import one of these — check before adding a duplicate) and pass the model at every construction, for example:
 
-- [ ] **Step 5: Run the tests to verify they pass**
+```ts
+        const xb = new XBloomRecipe(
+            source, asMachineModel(sharedSettings().get("machineModel"))
+        );
+```
 
-Run: `npx jest library/__tests__/ hooks/__tests__/useRecipeImport.test.ts && npm run typecheck`
-Expected: PASS, no type errors.
+`asMachineModel` rather than a bare `get`, because `SettingValue` widens the stored union back to `string`; it coerces an unreadable value to the Studio rather than refusing.
 
-- [ ] **Step 6: Commit**
+Do all four. Verify none is left with:
 
 ```bash
-git add library/XBloomRecipe.ts hooks/useRecipeImport.ts library/__tests__/XBloomRecipe.endpoint.test.ts
+grep -rn "new XBloomRecipe" --include=*.ts --include=*.tsx . | grep -v node_modules
+```
+
+- [ ] **Step 5: Update the other constructions in tests**
+
+`shareLink.test.ts:260`, `xbloomPodCoffee.test.ts:135`, `XBloomRecipe.bypass.test.ts:40` and the remaining ones in `XBloomRecipe.endpoint.test.ts` all need the second argument. Pass `"studio"` — none of them is about the machine, and changing what they ask for would change what they test.
+
+Any hook test that now runs through `sharedSettings()` needs the settings mock rather than a real store, which under Jest throws `NativeDatabase is not a constructor`. The house pattern is per-file and documented at the top of `test-utils/settingsMock.ts`:
+
+```ts
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+```
+
+Do **not** add a global mock to `jest.setup.js`.
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run: `npx jest library/ hooks/ && npm run typecheck && npm run lint`
+Expected: PASS, no type errors, no new lint errors. Then run the full `npx jest` — this touches the editor and the importer, so the blast radius is wider than the two directories.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
 git commit -m "Ask a pod for this machine's recipe, not the Studio's"
 ```
 
