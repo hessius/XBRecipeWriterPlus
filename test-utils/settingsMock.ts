@@ -32,11 +32,15 @@ export function settingsMock() {
         }
     };
     const sharedSettings = () => settings;
-    const useSetting = (key: string) => {
+    // The second parameter is the real hook's injection seam, which several
+    // screens use to hand a test its own store. A mock that ignored it would
+    // quietly answer from this module's store instead, and the test would be
+    // asserting against settings it never wrote.
+    const useSetting = (key: string, injected = settings) => {
         const value = React.useSyncExternalStore(
-            settings.subscribe, () => settings.get(key)
+            injected.subscribe, () => injected.get(key)
         );
-        return [value, (next: unknown) => settings.set(key, next)];
+        return [value, (next: unknown) => injected.set(key, next)];
     };
     return {__esModule: true, default: useSetting, useSetting, sharedSettings};
 }
