@@ -2260,12 +2260,18 @@ git commit -m "Save catalogue rows through the importer that already exists" -m 
 
 ---
 
-## Task 10: The catalogue screen
+## Task 10: The catalogue screen (rewritten after the amendment)
 
 **Files:**
 - Create: `app/hub.tsx`
 - Modify: `app/_layout.tsx` (register the route)
 - Test: `app/__tests__/hub.test.tsx`
+
+> **This task was rewritten.** The version written before the amendment drove
+> server paging (`onEndReached`, `browse.more()`, `loadingMore`), held facets as
+> the server's id names (`originIds`, `flavorIds`), fed the filter sheet the
+> server's vocabulary, and kept the selection inside `useHubBrowse`. None of
+> that is true any more. Read this version, not the one in the history.
 
 The browse screen. A header, a rail, a list, and a save bar that appears only
 once somebody is choosing.
@@ -2274,6 +2280,13 @@ once somebody is choosing.
 a `useFocusEffect`, so a separate route can write to SQLite and the library
 picks the rows up on the way back. Do not add a callback, a param or a return
 value to the library route to carry saved recipes home.
+
+**What the screen owns and what it does not.** `useHubBrowse` owns the
+catalogue, the question and the answer. `useHubSave` owns writing rows into the
+library. The screen owns three things only: **which sheet is open**, **whether
+the user is choosing**, and **which rows are chosen**. The selection is not in
+either hook, deliberately: it is about this screen's mode, not about the
+catalogue.
 
 - [ ] **Step 1: Register the route**
 
@@ -2285,34 +2298,36 @@ In `app/_layout.tsx`, beside the existing `brewHistory` and `brewRecord` lines:
 ```
 
 Both screens draw the app's own `ScreenHeader`, so the native one is off, the
-same way every other route here does it.
+same way every other route here does.
 
 - [ ] **Step 2: Write the failing test**
 
-Create `app/__tests__/hub.test.tsx`. Mock `@/library/hub/hubApi` so the screen
-is tested against answers rather than the network, and mock
+Create `app/__tests__/hub.test.tsx`. Mock `@/library/hub/hubCatalogue` so the
+screen is tested against answers rather than the network, and mock
 `@/hooks/useSetting` with the shared settings mock. Cover:
 
 ```
 describe("the catalogue screen")
   it("names what it is and how much of it there is")
-      -- ScreenHeader title CATALOGUE with count={total}; the Doto superscript
-         only appears above zero, which is `ScreenTitle`'s own rule.
-  it("lists what came back")
-  it("says the catalogue is loading rather than that it is empty")
-      -- a first-page load shows a loading state and NOT the empty copy.
-  it("offers a retry when the request failed, and never calls it empty")
+      -- ScreenHeader title CATALOGUE with the count of rows shown. The Doto
+         superscript only appears above zero, which is ScreenTitle's own rule,
+         so pass the number rather than guarding it here.
+  it("draws the first rows before the rest have arrived")
+      -- the whole point of the progressive load: one page in, rows on screen,
+         and a line saying more is still coming.
+  it("says the catalogue is still arriving rather than that it is empty")
+  it("offers a retry when the load failed, and never calls it empty")
       -- the distinction the spec insists on: an empty catalogue and a broken
-         connection are different claims and the failure state must never make
+         connection are different claims, and the failure state must never make
          the first one.
   it("asks again when the retry is pressed")
-  it("says the catalogue holds nothing matching, only when it really answered")
-  it("asks for the next page when the list reaches its end")
-      -- fireEvent(list, "endReached"); expect a second page request.
-  it("does not ask for another page while one is already coming")
+  it("says nothing matches, only once the catalogue really answered")
+      -- rows in hand, a question that matches none of them, load finished.
+  it("narrows on a facet without asking the network again")
+      -- assert the catalogue was loaded exactly once across the whole test.
   it("searches on what was typed")
-      -- through RailSearchField; the debounce is useRailSearch's and its own
-         tests cover it, so advance timers here.
+      -- through RailSearchField driven by `browse.search`. The debounce is
+         useRailSearch's and has its own tests, so advance timers here.
   it("opens the detail screen on a press")
       -- router.push called with /hubRecipe and the row's id.
   it("starts choosing on a long press, and then a press picks instead of opens")
@@ -2325,80 +2340,95 @@ describe("the catalogue screen")
   it("leaves choosing and goes back to browsing once a batch has landed")
 ```
 
-Use `renderWithProviders`. Remember that `render`, `fireEvent` and `renderHook`
-are async here, and that pressing anything inside an `XbrwSheet` needs the
-`pressOnSheet` retry loop.
+Use `renderWithProviders` and `await` it. `render` and `fireEvent` are async.
+Pressing anything inside an `XbrwSheet` needs the `pressOnSheet` retry loop
+from `app/__tests__/brewHistory.test.tsx`.
 
 - [ ] **Step 3: Run it and watch it fail**
 
-Run: `npx jest app/__tests__/hub.test.tsx`
-Expected: FAIL, module not found.
+`npx jest app/__tests__/hub.test.tsx`. Expected: FAIL, module not found.
 
 - [ ] **Step 4: Write it**
 
-Create `app/hub.tsx`. Structure, top to bottom:
+Create `app/hub.tsx`:
 
 ```tsx
 export default function HubScreen() {
     const browse = useHubBrowse();
     const save = useHubSave();
-    const search = useRailSearch(browse.setKeyword);
-    const [criteria, setCriteria] = useState<HubCriteria | null>(null);
     const [openFacet, setOpenFacet] = useState<HubFacet | null>(null);
+    const [sortOpen, setSortOpen] = useState(false);
     const [choosing, setChoosing] = useState(false);
+    const [chosen, setChosen] = useState<ReadonlySet<number>>(new Set());
     ...
 }
 ```
 
-- **Header.** `<ScreenHeader title="CATALOGUE" count={browse.total} onBack={() => router.back()}/>`.
-  `count` is the Doto superscript and `ScreenTitle` already hides it at zero, so
-  pass the number rather than guarding it here.
-- **The rail.** A horizontal `ScrollView` holding, in order:
-  `<RailSearchChip>`/`<RailSearchField>` driven by `search`, a sort `RailChip`
-  opening `SortSheet`, and one `RailChip` per facet in
-  `["originIds", "processIds", "roastList", "varietalIds", "flavorIds"]`.
-  Each facet chip is `active` when `browse.query[facet].length > 0`, carries the
-  count in its `label`, and its `onPress` is `setOpenFacet(facet)`. The chip
-  opens nothing itself; the screen owns which sheet is up.
-- **The criteria.** Load once, in an effect that sets state **only in the
-  promise continuation**, never during render: the React Compiler makes
-  `react-hooks/set-state-in-effect` an error. `loadHubCriteria()` caches, so a
-  second visit costs nothing.
+- **Header.** `<ScreenHeader title="CATALOGUE" count={browse.rows.length}
+  onBack={() => router.back()}/>`.
+- **The rail.** A horizontal `ScrollView` holding, in order: the search chip
+  and field driven by **`browse.search`** (not a second `useRailSearch`; the
+  hook already owns one and hands out the whole `RailSearch`), a sort
+  `RailChip` opening the sort sheet, and one `RailChip` per facet in
+  `["origins", "processes", "varietals", "flavours"]`. A chip is `active` when
+  `browse.query[facet].length > 0`. Its `onPress` is `setOpenFacet(facet)`; the
+  chip opens nothing itself, the screen owns which sheet is up.
+
+  Roast is a chip too, but its values are the server's five words rather than
+  free text, so it uses `browse.setRoasts` and `roastLabel` from
+  `library/hub/hubCriteria.ts`. Load the criteria in an effect that sets state
+  **only in the promise continuation**; `react-hooks/set-state-in-effect` is an
+  error. `loadHubCriteria()` caches, so a second visit costs nothing. **If the
+  criteria have not arrived, the roast chip should not be drawn at all** rather
+  than drawn with numbers for names.
 - **The sheet.** One `<HubFilterSheet>`, driven by `openFacet`, with
-  `items={criteria ? criteria[vocabularyFor(openFacet)] : []}`,
-  `selected={browse.query[openFacet]}` and
-  `onChange={(ids) => browse.setFacet(openFacet, ids)}`.
+  `options={openFacet ? browse.chips(openFacet) : []}`,
+  `selected={openFacet ? browse.query[openFacet] : []}` and
+  `onChange={(values) => openFacet && browse.setFacet(openFacet, values)}`.
+  The options come from `browse.chips`, which counts over the rows in hand, so
+  the sheet can never offer a value that finds nothing.
 - **The list.** A `FlatList` with `testID="hub-list"`, `data={browse.rows}`,
-  `keyExtractor={(row) => String(row.id)}`, `onEndReached={browse.more}`,
-  `onEndReachedThreshold={0.5}`, rendering `<HubRow>` with
-  `selecting={choosing}`, `selected={browse.selected.has(row.id)}`,
-  `onPress` that toggles when choosing and pushes
-  `{pathname: "/hubRecipe", params: {id: String(row.id)}}` otherwise, and
-  `onLongPress` that turns choosing on and selects that row in one go.
-  `ListFooterComponent` shows a spinner while `browse.loadingMore`.
-- **The three states, kept apart.** While `browse.loading` and the list is
-  empty, draw a loading state. When `browse.failure !== null`, draw the failure
-  with a retry calling `browse.retry()`. Only when none of those hold and
-  `browse.rows.length === 0` may the screen say the catalogue holds nothing
-  matching. A broken connection and an empty catalogue are different claims and
-  the screen must never make the second one on the evidence of the first.
+  `keyExtractor={(row) => String(row.id)}`, rendering `<HubRow>` with
+  `selecting={choosing}`, `selected={chosen.has(row.id)}`, `onPress` that
+  toggles when choosing and otherwise pushes
+  `{pathname: "/hubRecipe", params: {id: String(row.id)}}`, and `onLongPress`
+  that turns choosing on and selects that row in one go.
+
+  **There is no `onEndReached`.** The whole partition is already coming. While
+  `browse.arriving`, `ListFooterComponent` says so, using `browse.page` and
+  `browse.totalPage` if a proportion helps.
+- **The three states, kept apart.** While `browse.arriving` and the list is
+  empty, draw an arriving state. When `browse.failed !== null`, draw the failure
+  with a retry calling `browse.retry()`. Only when neither holds and
+  `browse.rows.length === 0` may the screen say nothing matches. A broken
+  connection and an empty catalogue are different claims and the screen must
+  never make the second on the evidence of the first.
+
+  Note the ordering this implies: a failure that arrives **after** some rows
+  landed still shows those rows. `hubCatalogue` fires a last `onProgress`
+  before it rethrows for exactly that reason, so do not throw the rows away.
 - **The bar.** `<HubSaveBar>` rendered only while `choosing`, with
-  `count={browse.selected.size}`, `saving={save.saving}`,
-  `progress={save.progress}`, `onCancel` clearing the selection and leaving
-  choosing, and `onSave` awaiting `save.save(browse.selectedRows)` and then
-  reporting through `notify`:
+  `count={chosen.size}`, `saving={save.saving}`, `progress={save.progress}`,
+  `onCancel` clearing `chosen` and leaving choosing, and `onSave` awaiting
+  `save.save(rowsFor(chosen))` and then reporting through `notify`:
   - all landed: `notify({tone: "success", message: ...})`, clear, leave choosing
-  - some failed: the message **names** the rows, e.g.
+  - some failed: the message **names** the rows, for example
     `Saved 6. Could not save: Brian's Recipe, Morning Filter.` The hook returns
     `failed: string[]` precisely so this line can be written.
   - `refused` is a no-op; the bar is already showing progress.
+
+  A long list of failures should not become a paragraph. Name a few and count
+  the rest.
+- **If two sheets can be open at once, every open sheet must be named in the
+  screen's `screenCovered` guard.** On Android, `accessibilityViewIsModal` on
+  the sheet does not hide sibling screen content. `app/index.tsx` and
+  `app/editRecipe.tsx` both do this; follow them.
 - Colours from `constants/colors.ts`, timings from `constants/motion.ts`, Doto
   through `DotMatrixText`. No component declared inside another's body.
 
 - [ ] **Step 5: Run the test**
 
-Run: `npx jest app/__tests__/hub.test.tsx`
-Expected: PASS.
+`npx jest app/__tests__/hub.test.tsx`. Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
