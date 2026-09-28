@@ -1,0 +1,145 @@
+/**
+ * The catalogue's data is dirty and this is the only place that knows it.
+ *
+ * Every input below was observed in the live catalogue on 2026-09-28. A test
+ * here that stops holding is a row rendering as punctuation soup on the browse
+ * screen, so treat a changed expectation as a regression until proven
+ * otherwise.
+ */
+import type {HubListRow} from "@/library/hub/hubApi";
+import {normaliseHubRow, splitFacet} from "@/library/hub/hubRow";
+
+function row(over: Partial<HubListRow> = {}): HubListRow {
+    return {
+        communityRecipeId: 164, recipeId: 576, recipeName: "Brian's Recipe",
+        imageUrl: "https://example.com/a.png", userName: "xBloom Official",
+        userAvatar: null, official: 1, model: "Studio", cupType: "xPod",
+        cupTypeInt: 1, type: "Single Origin", origin: ["Colombia"],
+        varietal: ["Mix"], process: ["Washed"], flavor: [], roast: 1,
+        dose: 15, grinderSize: 52, rpm: 120, pourCount: 5, grandWater: 16,
+        volume: "240", likesCount: 910,
+        shareRecipeLink: "https://share-h5.xbloom.com/?id=abc",
+        ...over
+    };
+}
+
+describe("splitting a facet the server pre-joined", () => {
+    it("splits on all three separators the catalogue uses", () => {
+        // Official rows pack a whole list into element zero, and three
+        // different separators are in use across the catalogue. Picking one
+        // would leave two thirds of the rows showing a single run-on value.
+        expect(splitFacet(["Washed \u00b7 Anaerobic"])).toEqual(["Washed", "Anaerobic"]);
+        expect(splitFacet(["Washed \u2022 Anaerobic"])).toEqual(["Washed", "Anaerobic"]);
+        // The third separator is a plain space, and it is only safe with the
+        // vocabulary in hand. See the next test for why.
+        expect(splitFacet(["Colombia Brazil"], ["Colombia", "Brazil"]))
+            .toEqual(["Colombia", "Brazil"]);
+    });
+
+    it("keeps a multi-word value that was never joined", () => {
+        // The plain-space separator cannot be applied blindly: "Washed Thermal
+        // Shock" is one process and "Costa Rica" is one country. Only split on
+        // a space when neither of the two real separators is present AND every
+        // piece is a word the vocabulary knows.
+        expect(splitFacet(["Washed Thermal Shock"], ["Washed", "Natural"]))
+            .toEqual(["Washed Thermal Shock"]);
+        expect(splitFacet(["Washed Natural"], ["Washed", "Natural"]))
+            .toEqual(["Washed", "Natural"]);
+    });
+
+    it("throws away JSON that leaked through as a string", () => {
+        // Literally what the server sends for some rows.
+        expect(splitFacet(['["Washed"]'])).toEqual(["Washed"]);
+        expect(splitFacet(['["Washed","Natural"]'])).toEqual(["Washed", "Natural"]);
+    });
+
+    it("drops blanks, trims, and de-duplicates", () => {
+        expect(splitFacet(["  Washed  ", "", "Washed", null as unknown as string]))
+            .toEqual(["Washed"]);
+    });
+
+    it("survives a missing facet entirely", () => {
+        expect(splitFacet(null)).toEqual([]);
+        expect(splitFacet(undefined)).toEqual([]);
+    });
+});
+
+describe("normalising a row", () => {
+    it("repairs a name that was decoded with the wrong codepage", () => {
+        // "\u00ac\u2211" is the UTF-8 bytes of "\u00b7" read as Mac Roman. It is in real
+        // recipe names, and it renders as visible rubbish.
+        expect(normaliseHubRow(row({
+            recipeName: "Colombia Washed \u00ac\u2211 Double Anaerobic"
+        })).name).toBe("Colombia Washed \u00b7 Double Anaerobic");
+    });
+
+    it("reads an unset roast as unset rather than as the lightest", () => {
+        // 479 of 3,020 rows are 0 or null. Showing those as "Light Roast"
+        // would be inventing a fact about somebody's coffee.
+        expect(normaliseHubRow(row({roast: 0})).roast).toBeNull();
+        expect(normaliseHubRow(row({roast: null})).roast).toBeNull();
+        expect(normaliseHubRow(row({roast: 3})).roast).toBe(3);
+    });
+
+    it("keeps the share link verbatim, because the importer parses it", () => {
+        const link = "https://share-h5.xbloom.com/?id=MiGJDhQMUdG%2BttuEO8p8aQ%3D%3D";
+        expect(normaliseHubRow(row({shareRecipeLink: link})).shareLink).toBe(link);
+    });
+
+    it("reads the volume, which arrives as a string on every row", () => {
+        expect(normaliseHubRow(row({volume: "240"})).volume).toBe(240);
+    });
+
+    it("survives a volume the wire type says cannot happen", () => {
+        // Checked across all 2,966 coffee rows: `volume` is always a non-empty
+        // string, which is why `HubListRow` types it that way. This file is
+        // the quarantine, though, so the defence stays and the cast is the
+        // honest way to say these were never seen rather than pretending the
+        // wire is looser than it is.
+        const off = (volume: unknown) => row({volume} as Partial<HubListRow>);
+        expect(normaliseHubRow(off(240)).volume).toBe(240);
+        expect(normaliseHubRow(off(null)).volume).toBeNull();
+        expect(normaliseHubRow(off("")).volume).toBeNull();
+        expect(normaliseHubRow(off("not a number")).volume).toBeNull();
+    });
+
+    it("says whether a row is xBloom's own", () => {
+        expect(normaliseHubRow(row({official: 1})).official).toBe(true);
+        expect(normaliseHubRow(row({official: 2})).official).toBe(false);
+    });
+
+    it("gives a row with no author an empty author rather than the word null", () => {
+        expect(normaliseHubRow(row({userName: null})).author).toBe("");
+    });
+
+    it("turns an empty image URL into no image", () => {
+        // Empty strings sort like data downstream. This guard keeps the absence
+        // of artwork as null, the same shape as an actually missing image.
+        expect(normaliseHubRow(row({imageUrl: ""})).imageURL).toBeNull();
+    });
+
+    it("keeps missing display strings empty", () => {
+        // These fields are typed from what the live wire currently sends, but
+        // the normaliser is the quarantine. If one goes missing, render blank
+        // copy instead of throwing or leaking a JS null into UI text.
+        const broken = row(({
+            recipeName: null,
+            model: null,
+            cupType: null,
+            type: null
+        } as unknown) as Partial<HubListRow>);
+        expect(normaliseHubRow(broken)).toMatchObject({
+            name: "",
+            machine: "",
+            cupType: "",
+            coffeeType: ""
+        });
+    });
+
+    it("does not carry the likes count forward at all", () => {
+        // Every figure in the catalogue sits in the same narrow band, so it is
+        // not a popularity signal. Not displayed, and therefore not modelled:
+        // a field on the type is an invitation to show it.
+        expect("likes" in normaliseHubRow(row())).toBe(false);
+    });
+});
