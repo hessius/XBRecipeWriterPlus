@@ -212,14 +212,37 @@ describe("one catalogue recipe", () => {
         expect(mockFetchHubDetail).not.toHaveBeenCalled();
     });
 
-    it("says the same for an id that is not a number", async () => {
-        mockParams = {id: "not-a-number"};
+    /**
+     * `Number("")` is 0, not NaN, and so is `Number(" ")`. Guarding with
+     * `Number.isFinite` let an empty id through as recipe zero and sent a real
+     * request for it, which answered with CONNECTION LOST and a TRY AGAIN that
+     * could never help. A catalogue id is a positive whole number.
+     */
+    it.each([
+        ["not a number", "not-a-number"],
+        ["empty", ""],
+        ["only spaces", "   "],
+        ["fractional", "1.5"],
+        ["negative", "-3"],
+        ["zero", "0"]
+    ])("says the same for an id that is %s", async (_name, id) => {
+        mockParams = {id};
 
         await renderHubRecipe();
 
         expect(await screen.findByText("That link does not point at a hub recipe."))
             .toBeTruthy();
+        expect(screen.queryByLabelText("Try again")).toBeNull();
         expect(mockFetchHubDetail).not.toHaveBeenCalled();
+    });
+
+    it("still reads a padded id that is a whole number", async () => {
+        mockParams = {id: " 164 "};
+
+        await renderHubRecipe();
+
+        await waitFor(() => expect(mockFetchHubDetail).toHaveBeenCalled());
+        expect(mockFetchHubDetail.mock.calls[0][0]).toBe(164);
     });
 
     it("saves this one recipe", async () => {

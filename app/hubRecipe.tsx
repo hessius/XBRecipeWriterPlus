@@ -58,6 +58,19 @@ function rowFromDetail(detail: HubDetailRow): HubRecipe {
 const UNREADABLE_LINK = new Error("That link does not point at a hub recipe.");
 UNREADABLE_LINK.name = "UnreadableHubLink";
 
+/**
+ * The catalogue id a link carries, or NaN if it does not carry one.
+ *
+ * `Number` is too generous to ask on its own: it reads "" and " " as 0, which
+ * passes `Number.isFinite` and sends a real request for recipe zero, and it
+ * accepts "1.5" and "-3". A community recipe id is a positive whole number.
+ */
+function hubIdIn(id: string | undefined): number {
+    if (typeof id !== "string" || id.trim() === "") return NaN;
+    const value = Number(id.trim());
+    return Number.isInteger(value) && value > 0 ? value : NaN;
+}
+
 /** What an error should say, and whether trying again could possibly help. */
 function saying(error: Error): {heading: string; body: string; retry: boolean} {
     if (error === UNREADABLE_LINK) {
@@ -281,14 +294,14 @@ function RecipeDetail({
 
 export default function HubRecipeScreen() {
     const {id} = useLocalSearchParams<{id: string}>();
-    const recipeId = Number(id);
+    const recipeId = hubIdIn(id);
     const insets = useSafeAreaInsets();
     const save = useHubSave();
     const [retry, setRetry] = useState(0);
     const [loaded, setLoaded] = useState<Loaded | null>(null);
 
     useEffect(() => {
-        if (!Number.isFinite(recipeId)) return;
+        if (Number.isNaN(recipeId)) return;
 
         const request = `${recipeId}:${retry}`;
         const controller = new AbortController();
@@ -313,7 +326,7 @@ export default function HubRecipeScreen() {
     }, [recipeId, retry]);
 
     const request = `${recipeId}:${retry}`;
-    const readable = Number.isFinite(recipeId);
+    const readable = !Number.isNaN(recipeId);
     const arrived = loaded !== null && loaded.request === request;
     const detail = arrived ? loaded.detail : null;
     const error = readable ? (arrived ? loaded.error : null) : UNREADABLE_LINK;
