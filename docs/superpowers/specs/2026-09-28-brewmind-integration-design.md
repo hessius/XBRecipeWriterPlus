@@ -111,9 +111,15 @@ the caps live in the URL parser where the untrusted value arrives:
 | `aromatics` | 500 |
 | `note` | 2000 |
 | `roastDate` | ISO 8601 date, parsed |
-| `elevation` | integer 0..10000 |
-| `cuppingScore` | number 0..100 |
+| `elevation` | integer 1..10000 |
+| `cuppingScore` | number above 0, up to 100 |
 | `url`, `image` | https only, 2000 |
+
+Zero is refused for both numbers rather than kept. Nothing grows at sea level
+and nobody scores a coffee zero, so a zero is overwhelmingly an empty field
+serialised as a number, and keeping it would print a confident wrong figure on
+a bean card. This matches the rule the brew rating already follows, where 0 is
+unrated rather than a verdict of nothing.
 
 Over-length drops the field and keeps the rest, following
 `normaliseBeanTags`: a truncated farm is a different farm. A block with no usable
