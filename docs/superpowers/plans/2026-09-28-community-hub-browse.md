@@ -3114,3 +3114,185 @@ server disagrees with the row it returned.
 - Task 6's `useHubBrowse` loses its paging state machine and gains the
   catalogue's loading progress.
 
+## Task 4r: Rewrite `hubQuery.ts` as a local matcher
+
+**Files:**
+- Modify: `library/hub/hubQuery.ts`
+- Modify: `library/hub/__tests__/hubQuery.test.ts`
+
+The facets stop being server ids and become the **values off the rows**, which
+is the only vocabulary that describes what is actually in the catalogue.
+
+- [ ] **Step 1: Change the query shape**
+
+```ts
+export type HubQuery = {
+    keyword: string;
+    /** Values, not ids: `"Colombia"`, not `"4"`. Matched case-insensitively. */
+    origins: readonly string[];
+    processes: readonly string[];
+    varietals: readonly string[];
+    flavours: readonly string[];
+    /** Roast is still the server's five words, so this stays numeric. */
+    roasts: readonly number[];
+    sort: HubSort;
+};
+```
+
+`HUB_SORTS` becomes what can honestly be done over list rows:
+
+```ts
+export const HUB_SORTS = {
+    newest: {label: "NEWEST"},
+    name:   {label: "A TO Z"},
+    ratio:  {label: "STRONGEST"}
+} as const;
+```
+
+**`MOST SAVED` and `NEWEST` cannot both be local.** A list row carries no
+upload date, so "newest" can only be the order the server returned, and the
+loader can only ask for one order. It asks for newest, and `newest` sorts by
+arrival index. Asking for downloads instead would cost a second full load of
+the whole partition to get the other order, which is not worth a chip.
+`STRONGEST` is `ratio` ascending, because a lower ratio is a stronger cup, and
+it is the one ordering the rows genuinely support that somebody might want.
+
+- [ ] **Step 2: The matcher**
+
+```ts
+/**
+ * Whether one row answers the rail's question.
+ *
+ * Local because the server's own filters do not work: see the amendment above.
+ * Every facet is an AND across facets and an OR within one, which is what the
+ * library's filter rail already means by a chip.
+ */
+export function matchesHubQuery(row: HubRecipe, query: HubQuery): boolean;
+```
+
+Rules, each of which needs a test:
+- An empty facet list matches everything. All five empty plus an empty keyword
+  is the whole catalogue.
+- Within one facet, a row matches if **any** of its values is chosen.
+- Across facets it is AND: a row must satisfy every non-empty facet.
+- Comparison is `trim().toLowerCase()` on both sides, because the values came
+  off rows typed by different people and `"washed"` and `"Washed"` are one
+  process. Do not reach for SQLite collation ideas here; there is no database.
+- The keyword is matched against the name, the author, the coffee type and
+  every facet value, lower-cased, as a substring. It is deliberately broader
+  than the server's index, which finds 5 rows for "colombia" out of 106 that
+  say it.
+
+- [ ] **Step 3: The sorter and the counts**
+
+```ts
+/** The catalogue in the order the rail asked for. Never mutates its input. */
+export function sortHubRows(rows: readonly HubRecipe[], sort: HubSort): HubRecipe[];
+
+/**
+ * How many of these rows carry each value of one facet, commonest first.
+ *
+ * This is what builds the rail's chips, so a chip can never offer a value that
+ * finds nothing. Counted over the rows that have arrived, not over the
+ * server's vocabulary, which lists 93 flavours and indexes almost none of them.
+ */
+export function hubFacetCounts(
+    rows: readonly HubRecipe[],
+    facet: "origins" | "processes" | "varietals" | "flavours"
+): {value: string; count: number}[];
+```
+
+`sortHubRows` must be stable and must not mutate: `newest` returns a copy in
+the given order, `name` sorts with `localeCompare` so the CJK names order
+sensibly, `ratio` sorts ascending and puts a row without a ratio last.
+
+`hubFacetCounts` groups case-insensitively but reports the **most common
+spelling** of each value as its label, because `"Washed"` and `"washed"` are
+one chip and the one people wrote more often is the one to show.
+
+- [ ] **Step 4: The request the loader sends**
+
+`buildHubRequest` loses every filter field:
+
+```ts
+/**
+ * One page of one machine's partition.
+ *
+ * Carries no filters at all any more. The server's are measured not to work
+ * (see the amendment), and every field sent to an undocumented endpoint is a
+ * guess, so the only ones here are the four that are load bearing.
+ */
+export function buildHubRequest(model: MachineModel, pageIndex: number): HubPageRequest {
+    return {
+        pageIndex,
+        pageSize: HUB_PAGE_SIZE,
+        recipeType: 1,
+        machineList: [machineCode(model)],
+        sort: 1,
+        sortType: 2
+    };
+}
+```
+
+`recipeType: 1` is not optional: without it the answer carries 54 tea rows.
+`sort: 1, sortType: 2` is newest first, and arrival order is therefore the
+`newest` ordering; `sortType` is the direction and does nothing without `sort`.
+
+---
+
+## Task 4b: The catalogue, loaded progressively
+
+**Files:**
+- Create: `library/hub/hubCatalogue.ts`
+- Test: `library/hub/__tests__/hubCatalogue.test.ts`
+
+Pure TypeScript, no React. Fetches one machine's whole partition page by page,
+handing each page over as it lands.
+
+```ts
+export type HubCatalogueProgress = {
+    rows: HubRecipe[];
+    /** Pages answered so far, and the total once the first page has said. */
+    page: number;
+    totalPage: number;
+    total: number;
+};
+
+/**
+ * Load a machine's whole partition, a page at a time.
+ *
+ * Progressive rather than blocking: about 1 MB over 17 requests for a machine,
+ * which is 14 s to finish and under a second to show something. Server paging
+ * was never cheaper, since reaching page five costs five round trips either
+ * way, and this buys real filters at the end of it.
+ *
+ * `onProgress` is called after every page with the rows so far, so a screen can
+ * draw immediately and keep drawing. Sequential on purpose: the endpoint is
+ * undocumented and its rate limits are unknown.
+ */
+export function loadHubCatalogue(
+    model: MachineModel,
+    onProgress: (progress: HubCatalogueProgress) => void,
+    signal?: AbortSignal
+): Promise<HubRecipe[]>;
+```
+
+Requirements, each needing a test:
+- Calls `onProgress` after **every** page, including the first, with all rows
+  accumulated so far.
+- Stops when `pageIndex >= totalPage`, and asks for exactly `totalPage` pages,
+  not one more.
+- A partition of one page does not ask for a second.
+- Normalises every row through `normaliseHubRow`, passing the criteria
+  vocabularies when they are already held (`heldHubCriteria()`), and does not
+  wait for them: the space gate changes six values in the whole catalogue.
+- **A failure part way through keeps the rows that landed.** Rejecting and
+  discarding 1,400 rows because page 15 timed out is the worst possible
+  handling. It resolves with what it has and reports the failure through
+  `onProgress`... no: it **rethrows**, but only after a final `onProgress`, so
+  the caller holds the partial catalogue and can say it is incomplete.
+- An `AbortError` propagates untouched and fires no further progress.
+- The result is cached per machine for the session, so leaving the screen and
+  coming back does not refetch. A second call while one is in flight joins it
+  rather than starting a second, exactly as `loadHubCriteria` does.
+- `__resetHubCatalogue()` for tests.
