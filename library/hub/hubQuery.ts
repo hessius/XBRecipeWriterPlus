@@ -144,12 +144,14 @@ type CountedValue = {
     spellings: Map<string, CountedSpelling>;
 };
 
+export type HubFacet = "origins" | "processes" | "varietals" | "flavours";
+
 const FACET_FIELD = {
     origins: "origin",
     processes: "process",
     varietals: "varietal",
     flavours: "flavour"
-} as const satisfies Record<"origins" | "processes" | "varietals" | "flavours", keyof HubRecipe>;
+} as const satisfies Record<HubFacet, keyof HubRecipe>;
 
 /**
  * How many of these rows carry each value of one facet, commonest first.
@@ -160,7 +162,7 @@ const FACET_FIELD = {
  */
 export function hubFacetCounts(
     rows: readonly HubRecipe[],
-    facet: "origins" | "processes" | "varietals" | "flavours"
+    facet: HubFacet
 ): {value: string; count: number}[] {
     const counts = new Map<string, CountedValue>();
     let seen = 0;

@@ -1,0 +1,194 @@
+import {useEffect, useState} from "react";
+
+import {useRailSearch} from "@/hooks/useRailSearch";
+import {useSetting} from "@/hooks/useSetting";
+import {loadHubCatalogue} from "@/library/hub/hubCatalogue";
+import type {HubApiError} from "@/library/hub/hubApi";
+import {
+    EMPTY_HUB_QUERY,
+    hubFacetCounts,
+    matchesHubQuery,
+    sortHubRows,
+    type HubFacet,
+    type HubQuery,
+    type HubSort
+} from "@/library/hub/hubQuery";
+import type {HubRecipe} from "@/library/hub/hubRow";
+import {asMachineModel, type MachineModel} from "@/library/machine/machineModel";
+
+export type HubBrowse = {
+    /** The rows that match the question, in the chosen order. */
+    rows: HubRecipe[];
+    /** Every row of this machine's partition that has arrived. */
+    all: HubRecipe[];
+    query: HubQuery;
+    /** True until the last page lands. */
+    arriving: boolean;
+    /** Pages in and pages expected, for a progress line. */
+    page: number;
+    totalPage: number;
+    /** Set if the load threw. A broken connection, not an empty catalogue. */
+    failed: HubApiError | Error | null;
+    setKeyword(keyword: string): void;
+    setSort(sort: HubSort): void;
+    /** Replace one facet wholesale, which is what the filter sheet reports. */
+    setFacet(facet: HubFacet, values: readonly string[]): void;
+    /** Add or remove one value, which is what a rail chip does. */
+    toggleFacet(facet: HubFacet, value: string): void;
+    setRoasts(roasts: readonly number[]): void;
+    clearQuery(): void;
+    /** Commonest first, counted over `all`. Never offers a value finding zero. */
+    chips(facet: HubFacet): {value: string; count: number}[];
+    /** Try the load again after a failure. */
+    retry(): void;
+};
+
+type Reading = {
+    model: MachineModel;
+    rows: HubRecipe[];
+    page: number;
+    totalPage: number;
+    failed: HubApiError | Error | null;
+    done: boolean;
+};
+
+const EMPTY_READING: Omit<Reading, "model"> = {
+    rows: [],
+    page: 0,
+    totalPage: 0,
+    failed: null,
+    done: false
+};
+
+function replaceFacet(query: HubQuery, facet: HubFacet, values: readonly string[]): HubQuery {
+    return {...query, [facet]: [...values]};
+}
+
+function withoutValue(values: readonly string[], value: string): string[] {
+    return values.filter((held) => held !== value);
+}
+
+function withToggledValue(values: readonly string[], value: string): string[] {
+    return values.includes(value) ? withoutValue(values, value) : [...values, value];
+}
+
+export function useHubBrowse(): HubBrowse {
+    const [storedModel] = useSetting("machineModel");
+    const model = asMachineModel(storedModel);
+    const [query, setQuery] = useState<HubQuery>(EMPTY_HUB_QUERY);
+    const [reading, setReading] = useState<Reading | null>(null);
+    const [attempt, setAttempt] = useState(0);
+
+    const current = reading !== null && reading.model === model ? reading : EMPTY_READING;
+    const all = current.rows;
+    const rows = sortHubRows(all.filter((row) => matchesHubQuery(row, query)), query.sort);
+    const search = useRailSearch((keyword) =>
+        setQuery((was) => ({...was, keyword}))
+    );
+
+    useEffect(() => {
+        let alive = true;
+        const controller = new AbortController();
+        loadHubCatalogue(model, (progress) => {
+            if (!alive) return;
+            setReading({
+                model,
+                rows: progress.rows,
+                page: progress.page,
+                totalPage: progress.totalPage,
+                failed: null,
+                done: false
+            });
+        }, controller.signal)
+            .then((loaded) => {
+                if (!alive) return;
+                setReading((was) => {
+                    const latest = was !== null && was.model === model ? was : null;
+                    return {
+                        model,
+                        rows: latest?.rows ?? loaded,
+                        page: latest?.page ?? 0,
+                        totalPage: latest?.totalPage ?? 0,
+                        failed: null,
+                        done: true
+                    };
+                });
+            })
+            .catch((error: HubApiError | Error) => {
+                if (!alive || error.name === "AbortError") return;
+                setReading({
+                    model,
+                    rows: [],
+                    page: 0,
+                    totalPage: 0,
+                    failed: error,
+                    done: true
+                });
+            });
+        return () => {
+            alive = false;
+            controller.abort();
+        };
+    }, [model, attempt]);
+
+    function setKeyword(keyword: string): void {
+        search.onChangeText(keyword);
+    }
+
+    function setSort(sort: HubSort): void {
+        setQuery((was) => ({...was, sort}));
+    }
+
+    function setFacet(facet: HubFacet, values: readonly string[]): void {
+        setQuery((was) => replaceFacet(was, facet, values));
+    }
+
+    function toggleFacet(facet: HubFacet, value: string): void {
+        setQuery((was) => replaceFacet(was, facet, withToggledValue(was[facet], value)));
+    }
+
+    function setRoasts(roasts: readonly number[]): void {
+        setQuery((was) => ({...was, roasts: [...roasts]}));
+    }
+
+    function clearQuery(): void {
+        search.onClear();
+        setQuery(EMPTY_HUB_QUERY);
+    }
+
+    function chips(facet: HubFacet): {value: string; count: number}[] {
+        return hubFacetCounts(all, facet);
+    }
+
+    function retry(): void {
+        setReading({
+            model,
+            rows: [],
+            page: 0,
+            totalPage: 0,
+            failed: null,
+            done: false
+        });
+        setAttempt((was) => was + 1);
+    }
+
+    return {
+        rows,
+        all,
+        query,
+        arriving: current.failed === null && !current.done,
+        page: current.page,
+        totalPage: current.totalPage,
+        failed: current.failed,
+        setKeyword,
+        setSort,
+        setFacet,
+        toggleFacet,
+        setRoasts,
+        clearQuery,
+        chips,
+        retry
+    };
+}
+
+export default useHubBrowse;
