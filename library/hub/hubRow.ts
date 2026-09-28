@@ -9,6 +9,8 @@
  * at; it becomes a recipe only when somebody saves it, and only through the
  * existing share-link importer.
  */
+import {accents} from "@/constants/colors";
+
 import type {HubListRow} from "./hubApi";
 
 /**
@@ -225,4 +227,16 @@ export function normaliseHubRow(
         volume: volume === null || Number.isNaN(volume) ? null : volume,
         shareLink: raw.shareRecipeLink
     };
+}
+
+/**
+ * A stable colour for a catalogue row.
+ *
+ * Not `resolveAccent`: that one needs a `Recipe` and writes an accent index
+ * onto it, and a hub row is not owned by anybody. Keyed on the catalogue id so
+ * the browse row and the detail screen agree about a recipe's colour, and so
+ * the same recipe looks the same on the way back to it.
+ */
+export function hubAccent(id: number): string {
+    return accents.coffee[Math.abs(id) % accents.coffee.length];
 }
