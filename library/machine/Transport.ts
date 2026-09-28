@@ -9,13 +9,15 @@ import BleManager, {
 
 import {
     ATT_HEADER_BYTES,
-    RADIO_READY_MS,
     DEFAULT_MTU,
+    DEVICE_INFO_SERVICE,
     MACHINE_MTU,
     MACHINE_NAME_PREFIX,
     MACHINE_NOTIFY_CHARACTERISTIC,
     MACHINE_SERVICE,
     MACHINE_WRITE_CHARACTERISTIC,
+    MODEL_NUMBER_CHARACTERISTIC,
+    RADIO_READY_MS,
     SCAN_SECONDS
 } from "@/constants/machine";
 
@@ -31,6 +33,10 @@ export type FoundMachine = {id: string; name: string};
  */
 export interface MachineTransport {
     scan(seconds?: number): Promise<FoundMachine[]>;
+    /** What the connected machine says it is, or empty when it will not say. */
+    readonly modelNumber: string;
+    /** The name the machine advertised when it was found. */
+    readonly advertisedName: string;
     connect(id: string): Promise<void>;
     disconnect(): Promise<void>;
     /** Raw frame, already built. */
@@ -125,6 +131,19 @@ function propertyNames(properties: unknown): string[] {
  */
 export class BleTransport implements MachineTransport {
     private deviceId: string | null = null;
+    /** What the machine last said it was, or empty when it would not say. */
+    public modelNumber = "";
+    /** The names machines advertised, keyed by their peripheral identifiers. */
+    private readonly advertisedNames = new Map<string, string>();
+    /**
+     * The name advertised by the machine currently connected.
+     *
+     * A returning user skips scanning, so a missing entry means "did not learn",
+     * never "the machine is nameless".
+     */
+    get advertisedName(): string {
+        return this.deviceId === null ? "" : this.advertisedNames.get(this.deviceId) ?? "";
+    }
     private started = false;
     private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
     private disconnectListeners = new Set<() => void>();
@@ -240,6 +259,12 @@ export class BleTransport implements MachineTransport {
                     (uuid) => uuid.toUpperCase() === MACHINE_SERVICE.toUpperCase()
                 );
                 if (matchesService || name.toUpperCase().startsWith(MACHINE_NAME_PREFIX)) {
+                    // The first match only. `stop()` merely resolves a promise,
+                    // so the subscription is still live for a microtask or two
+                    // and a second machine in range can still be delivered --
+                    // and `attemptLink` takes `found[0]`, so last-match-wins
+                    // would record the name of the machine it did not connect to.
+                    this.advertisedNames.set(peripheral.id, name);
                     found.set(peripheral.id, {id: peripheral.id, name});
                     stop();
                 }
@@ -285,6 +310,12 @@ export class BleTransport implements MachineTransport {
         // a refusal looked exactly like a grant, and the only symptom would
         // have been long frames quietly not arriving.
         await this.negotiateMtu(id);
+        // Best effort, like the MTU above. The Device Information Service is
+        // optional and older firmware need not carry it, so a machine that
+        // will not say what it is still connects and still brews. Recorded
+        // rather than acted on here: what to do with the answer is a decision
+        // for the layer that owns the setting.
+        await this.readModelNumber(id);
         this.deviceId = id;
     }
 
@@ -312,6 +343,36 @@ export class BleTransport implements MachineTransport {
             this.channels.push(
                 `MTU refused (${(e as Error).message}) — ${this.frameBudget} bytes a frame`
             );
+        }
+    }
+
+    /**
+     * Ask the Device Information Service what the machine is.
+     *
+     * The trailing-NUL strip is not defensive padding: a fixed-width GATT
+     * string characteristic is conventionally NUL-padded to its declared
+     * length, and an unstripped reading would never compare equal to a string
+     * constant — so detection would silently never fire.
+     *
+     * A refusal leaves the field empty rather than throwing, and empty means
+     * "this link did not learn", not "the machine has no model number".
+     * Neither reading is cleared on disconnect, so between links both still
+     * describe the machine they were taken from, which is what makes them
+     * evidence rather than state.
+     *
+     * The decode is Latin-1 by construction: `fromCharCode` is applied per
+     * byte, and DIS strings are UTF-8. No model number is likely to need more,
+     * but it does mean `STUDIO_MODEL_STRINGS` must be filled from a value this
+     * code produced rather than transcribed off a datasheet or a label.
+     */
+    private async readModelNumber(id: string): Promise<void> {
+        try {
+            const bytes = await BleManager.read(
+                id, DEVICE_INFO_SERVICE, MODEL_NUMBER_CHARACTERISTIC
+            );
+            this.modelNumber = String.fromCharCode(...bytes).replace(/\0+$/, "").trim();
+        } catch {
+            this.modelNumber = "";
         }
     }
 

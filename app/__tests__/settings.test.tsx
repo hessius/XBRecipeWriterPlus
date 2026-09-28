@@ -454,6 +454,28 @@ describe("SettingsScreen", () => {
         }
     });
 
+    it("restores which machine you own, not just the default", async () => {
+        // The generic restore test flips booleans, so a string setting round-trips
+        // its own default through it and proves nothing. This one names a value
+        // that is not the default: somebody who corrected their machine by hand
+        // and then moved phones must not silently land back on Studio.
+        const storage = memoryStorage();
+        mockPickBackup.mockResolvedValue(
+            backupOf([recipeNamed("A", "u1")], {machineModel: "original"})
+        );
+        mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+        await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+        await fireEvent.press(screen.getByRole("button",
+            {name: "Restore from a backup, Adds anything your library does not already have."}));
+        await settleSheet();
+        await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                        "checkedChange", true);
+        await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+        expect(new Settings(storage).get("machineModel")).toBe("original");
+    });
+
     it("reports a backup that could not be shared", async () => {
         mockExportBackup.mockResolvedValue({ok: false, reason: "This device cannot share files."});
         await renderWithProviders(<SettingsScreen settings={new Settings(memoryStorage())}/>);
@@ -683,7 +705,8 @@ describe("SettingsScreen", () => {
         // good value is applied; a malformed one is ignored rather than trusted.
         const storage = memoryStorage();
         mockPickBackup.mockResolvedValue(
-            backupOf([recipeNamed("A", "u1")], {temperatureUnit: "K", dotMatrixProfile: true})
+            backupOf([recipeNamed("A", "u1")],
+                     {temperatureUnit: "K", dotMatrixProfile: true, machineModel: "toaster"})
         );
         mockApplyRestore.mockReturnValue({status: "restored", added: 1});
         await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
@@ -698,6 +721,9 @@ describe("SettingsScreen", () => {
         const restored = new Settings(storage);
         expect(restored.get("temperatureUnit")).toBe("C");
         expect(restored.get("dotMatrixProfile")).toBe(true);
+        // A machine that does not exist would be stored and then read back as
+        // one, which is what `isMachineModel` is there to stop.
+        expect(restored.get("machineModel")).toBe("studio");
     });
 
     it("presents its sheets outside the screen's flex container", async () => {

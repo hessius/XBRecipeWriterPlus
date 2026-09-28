@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import type {SortAxis, SortDirection} from './librarySort';
 import type {LibraryView} from './libraryView';
+import type {MachineModel} from './machine/machineModel';
 
 /**
  * Every setting, with its default.
@@ -76,6 +77,42 @@ export const DEFAULTS = {
      * dead button on every recipe would be worse than no button.
      */
     machineDeviceId: "",
+    /**
+     * Which xBloom this phone is driving.
+     *
+     * The setting is what the app acts on, and detection may only ever
+     * overrule it on a certainty: a model string somebody has read off real
+     * hardware. There is no "refining" a wrong guess into a right one, so the
+     * one correction that can fire replaces the answer outright and says so in
+     * the machine console.
+     *
+     * A scan would find an original: `Transport.scan` is unfiltered and matches the
+     * name prefix as well as the service UUID. But everything after discovery
+     * is the Studio's: `MACHINE_SERVICE` and its characteristics are what a
+     * connection resolves, and the model is read over that connection. A
+     * machine we cannot finish connecting to therefore never yields a reading,
+     * so its owner would sit on a wrong default forever. Detection would help
+     * everyone except the people it exists for.
+     *
+     * The default is Studio because that is what every user was served before
+     * this key existed.
+     */
+    machineModel: "studio" as MachineModel,
+    /**
+     * What the connected machine said it was, verbatim.
+     *
+     * Recorded and not acted upon, except through a positive match against a
+     * string we have read off real hardware. We own no original xBloom, so
+     * "not the Studio's string" cannot be verified as meaning Original, and it
+     * would misfire on a firmware revision. Stored so that #138's first open
+     * question can eventually be answered from devices rather than guessed at.
+     */
+    machineModelString: "",
+    /**
+     * The name the machine advertised, which `Transport.scan` has always read
+     * and thrown away. Same purpose as `machineModelString`: evidence.
+     */
+    machineName: "",
     /**
      * Whether a brew has ever run from this phone.
      *
@@ -320,16 +357,21 @@ export type SettingKey = keyof typeof DEFAULTS;
  * their recipes back, not for LABS. The cost of holding it out is that a new
  * phone needs seven taps again.
  *
+ * `machineModelString` and `machineName` are held out because they are
+ * readings, and a reading restored onto a phone that never took it is not
+ * evidence any more. The whole reason they are stored is to be trustworthy
+ * about what a real machine said.
+ *
  * Named here rather than simply omitted from the snapshot so that the
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
 export type BackupExcluded =
-    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff"
-    | "ratingPromptDismissed";
+    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff" |
+    "machineModelString" | "machineName" | "ratingPromptDismissed";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
     "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff",
-    "ratingPromptDismissed"
+    "machineModelString", "machineName", "ratingPromptDismissed"
 ];
 
 /**

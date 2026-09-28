@@ -5,6 +5,8 @@ import Recipe from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 
 jest.mock("@/library/RecipeDatabase");
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 jest.mock("@/library/XBloomRecipe");
 
 /**

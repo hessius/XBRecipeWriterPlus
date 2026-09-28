@@ -12,6 +12,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import {RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import type {Settings} from "@/library/Settings";
+import {MACHINE_MODELS, isMachineModel, type MachineModel} from "@/library/machine/machineModel";
 
 /** How many taps on the firmware row open the console. */
 const CONSOLE_TAPS = 7;
@@ -22,6 +23,24 @@ const RETENTION_OPTIONS = [
     {value: "200", label: "200"},
     {value: "0",   label: "Don't keep traces"}
 ] as const;
+
+/**
+ * What each model is called on screen.
+ *
+ * A `Record` rather than a hand-written option list, so adding a third machine
+ * is a compile error here rather than a button that quietly never appears.
+ * `SegmentOption.value` is a bare `string`, so restating the values would have
+ * had no link to `MACHINE_MODELS` at all: a typo would compile, the guard below
+ * would reject it, and the segment would simply do nothing.
+ */
+const MACHINE_MODEL_LABELS: Record<MachineModel, string> = {
+    studio:   "Studio",
+    original: "Original"
+};
+
+const MACHINE_MODEL_OPTIONS = MACHINE_MODELS.map(
+    (value) => ({value, label: MACHINE_MODEL_LABELS[value]})
+);
 
 /** One label-and-value line of the machine's own vitals. */
 function Vital({label, value}: {label: string; value: string}) {
@@ -48,11 +67,16 @@ function Vital({label, value}: {label: string; value: string}) {
  * not rendered when there is no connection to report the firmware of.
  */
 export default function MachineSection({settings}: {settings?: Settings}) {
-    const {machine, status, error, remembered, connect, forget} = useMachine();
+    // The injected store matters: the link writes `machineModel` through it
+    // when it recognises a Studio, and a test that injected a store while the
+    // hook wrote to the shared one would watch the correction land somewhere
+    // this row cannot see.
+    const {machine, status, error, remembered, connect, forget} = useMachine(undefined, {settings});
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] = useSetting("brewTraceRetention", settings);
+    const [machineModel, setMachineModel] = useSetting("machineModel", settings);
     const [taps, setTaps] = useState(0);
     const info = machine.info;
     const ratingPromptHours = Math.round(RATING_PROMPT_WINDOW_MS / (60 * 60 * 1000));
@@ -84,6 +108,18 @@ export default function MachineSection({settings}: {settings?: Settings}) {
 
     return (
         <SettingsSection title="Machine">
+            <SettingsChoiceRow
+                label="Your xBloom"
+                description="The two machines grind on different scales, so a recipe written for one is wrong on the other. Pick yours and the app asks xBloom for the right version. Recipes already saved keep the numbers they were written with."
+                value={machineModel}
+                options={MACHINE_MODEL_OPTIONS}
+                onChange={(value) => {
+                    // Only the options above can arrive here, so a value that is
+                    // not a model is a bug in this file rather than a stale
+                    // preference to coerce. Hence the guard and not a fallback.
+                    if (isMachineModel(value)) setMachineModel(value);
+                }}/>
+
             {status !== "connected" && (
                 <Pressable accessibilityRole="text"
                            accessibilityLabel={idleStatus}
@@ -103,7 +139,15 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                 label={status === "connected" ? "Connected" : "Connect to my machine"}
                 detail={status === "connected"
                     ? "The link is held while XBRW++ is open."
-                    : "Your xBloom Studio has to be switched on and nearby."}
+                    // Naming the Studio to somebody who just said they own an
+                    // original reads as if the app forgot. It is also the one
+                    // place worth admitting that a scan will find their machine
+                    // and the connection after it probably will not finish: the
+                    // Bluetooth protocol here is the Studio's throughout, and
+                    // nobody has had an original in front of them to check.
+                    : machineModel === "original"
+                        ? "Your xBloom has to be switched on and nearby. Only the Studio has been tested."
+                        : "Your xBloom Studio has to be switched on and nearby."}
                 onPress={() => {
                     // The throw is for the brew path, which needs the reason.
                     // Here the reason is already on screen, in `error`.

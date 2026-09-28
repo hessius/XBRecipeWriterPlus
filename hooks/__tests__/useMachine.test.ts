@@ -1,9 +1,12 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {
-    connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine, __resetSharedMachine
+    applyMachineReading, connectRememberedMachine, holdLinkAcrossAppState, openLink, useMachine,
+    __resetSharedMachine, type MachineReading
 } from "@/hooks/useMachine";
-import {CONNECT_DELAYS_MS} from "@/constants/machine";
+import {CONNECT_DELAYS_MS, STUDIO_MODEL_STRINGS} from "@/constants/machine";
+import {sharedSettings} from "@/hooks/useSetting";
+import {DEFAULTS} from "@/library/Settings";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
 
@@ -14,24 +17,22 @@ import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Mach
 jest.mock("react-native-ble-manager", () => ({__esModule: true, default: {}}));
 
 // `useSetting` reaches for the shared SQLite-backed store, which cannot open
-// under Jest. The settings tests avoid this by injecting an in-memory `Settings`,
-// but `useMachine` takes no store to inject, so the store is mocked here instead
-// with a per-hook in-memory value that starts at the real default. Same spirit
-// as the `jest.mock("@/library/RecipeDatabase")` the other hook tests use.
-const mockSeed: Record<string, unknown> = {};
-
-jest.mock("@/hooks/useSetting", () => {
-    const React = require("react");
-    const {DEFAULTS} = require("@/library/Settings");
-    const useSetting = (key: string) =>
-        React.useState(key in mockSeed ? mockSeed[key] : DEFAULTS[key]);
-    return {__esModule: true, default: useSetting, useSetting};
-});
+// under Jest. This file now needs `sharedSettings` as well, because the link
+// records what the machine said through it -- and a per-hook stand-in would
+// give the writer and the reader two different stores, so a correction would
+// be invisible to every assertion here.
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 
 describe("the machine link", () => {
     beforeEach(() => {
         __resetSharedMachine();
-        for (const key of Object.keys(mockSeed)) delete mockSeed[key];
+        // The mock's store outlives each test, unlike the seed object it
+        // replaced, so every key a test writes has to be put back by hand.
+        for (const key of ["machineDeviceId", "machineModel",
+                           "machineModelString", "machineName"] as const) {
+            sharedSettings().set(key, DEFAULTS[key]);
+        }
     });
 
     it("does not touch the radio until something asks it to", async () => {
@@ -151,7 +152,7 @@ describe("the machine link", () => {
         transport.refuseIds = ["OLD:ID"];
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        mockSeed.machineDeviceId = "OLD:ID";
+        sharedSettings().set("machineDeviceId", "OLD:ID");
         const {result} = await renderHook(() => useMachine(machine, {wait: async () => {}}));
 
         await act(async () => { await result.current.connect(); });
@@ -159,6 +160,126 @@ describe("the machine link", () => {
         expect(result.current.status).toBe("connected");
         expect(transport.connectedTo).toBe("NEW:ID");
         expect(result.current.remembered).toBe("NEW:ID");
+    });
+
+    it("records what the machine said, without touching the setting", async () => {
+        const transport = new FakeTransport();
+        transport.modelNumber = "XB-MYSTERY-9";
+        transport.advertisedName = "XBLOOM-77";
+        const recorded: MachineReading[] = [];
+        const store = {
+            rememberedId: () => "AA:BB",
+            rememberId: () => {},
+            recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
+        };
+
+        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
+
+        expect(recorded).toEqual([{model: "XB-MYSTERY-9", name: "XBLOOM-77"}]);
+    });
+
+    it("records the reading even when the machine was already remembered", async () => {
+        // Firmware can change under a machine whose identifier did not, so this
+        // must not ride along on the "new machine" branch.
+        const transport = new FakeTransport();
+        transport.modelNumber = "XB-2";
+        const recorded: MachineReading[] = [];
+        const store = {
+            rememberedId: () => "AA:BB",
+            rememberId: () => { throw new Error("should not re-remember a known machine"); },
+            recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
+        };
+
+        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
+
+        expect(recorded).toHaveLength(1);
+    });
+
+    it("keeps a working link when it cannot write down what the machine is", async () => {
+        // Writing the reading is a synchronous SQLite write and it can fail.
+        // The link is open by then, so a throw here would report a failure over
+        // a machine that is genuinely connected, and skip remembering it.
+        const transport = new FakeTransport();
+        const remembered: string[] = [];
+        const store = {
+            rememberedId: () => "",
+            rememberId: (id: string) => { remembered.push(id); },
+            recordMachine: () => { throw new Error("disk full"); }
+        };
+        const machine = new Machine(transport, {frameGapMs: 0});
+
+        await expect(openLink(machine, store, async () => true)).resolves.toBeUndefined();
+
+        expect(transport.connectedTo).not.toBeNull();
+        expect(remembered).toHaveLength(1);
+        expect(machine.linkHistory.some((event) => event.text.includes("disk full"))).toBe(true);
+    });
+
+    it("throws the readings away when the user unpairs", async () => {
+        // The one place discarding is right: the stored string described the
+        // machine being unpaired, not whatever gets paired next.
+        sharedSettings().set("machineModelString", "X15");
+        sharedSettings().set("machineName", "XBLOOM-77");
+        const transport = new FakeTransport();
+
+        const {result} = await renderHook(() => useMachine(new Machine(transport, {frameGapMs: 0})));
+        await act(async () => { await result.current.forget(); });
+
+        expect(sharedSettings().get("machineModelString")).toBe("");
+        expect(sharedSettings().get("machineName")).toBe("");
+    });
+
+    it("leaves the setting alone for a machine it does not recognise", async () => {
+        sharedSettings().set("machineModel", "original");
+        const transport = new FakeTransport();
+        transport.modelNumber = "XB-MYSTERY-9";
+
+        const {result} = await renderHook(() => useMachine(new Machine(transport, {frameGapMs: 0})));
+        await act(async () => { await result.current.connect(); });
+
+        // Unrecognised is not evidence of anything. The user's answer stands.
+        expect(result.current.machineModel).toBe("original");
+        // But it is still written down, which is the whole point of collecting it.
+        expect(sharedSettings().get("machineModelString")).toBe("XB-MYSTERY-9");
+    });
+
+    it("corrects the setting when the machine is certainly a Studio", async () => {
+        sharedSettings().set("machineModel", "original");
+        const transport = new FakeTransport();
+        transport.modelNumber = STUDIO_MODEL_STRINGS[0] ?? "nothing matches an empty list";
+
+        const {result} = await renderHook(() => useMachine(new Machine(transport, {frameGapMs: 0})));
+        await act(async () => { await result.current.connect(); });
+
+        // Written so it passes with STUDIO_MODEL_STRINGS empty and starts asserting
+        // real behaviour the moment Task 11 fills it in, without being edited.
+        const expected = STUDIO_MODEL_STRINGS.length > 0 ? "studio" : "original";
+        expect(result.current.machineModel).toBe(expected);
+    });
+
+    it("keeps what an earlier connect learned when this one learns nothing", async () => {
+        // The returning user's case: no scan, so no advertised name, and firmware
+        // that does not carry the Device Information Service says nothing either.
+        const settings = sharedSettings();
+        settings.set("machineModelString", "X15");
+        settings.set("machineName", "XBLOOM-77");
+
+        applyMachineReading(settings, {model: "", name: ""});
+
+        expect(settings.get("machineModelString")).toBe("X15");
+        expect(settings.get("machineName")).toBe("XBLOOM-77");
+    });
+
+    it("takes each half of a reading on its own", async () => {
+        // A returning user learns a model and no name, because the scan was
+        // skipped. Half a reading must not be thrown away with the other half.
+        const settings = sharedSettings();
+        settings.set("machineName", "XBLOOM-77");
+
+        applyMachineReading(settings, {model: "X15", name: ""});
+
+        expect(settings.get("machineModelString")).toBe("X15");
+        expect(settings.get("machineName")).toBe("XBLOOM-77");
     });
 });
 
@@ -448,7 +569,11 @@ describe("connecting to a machine that is already paired", () => {
         // can do for them, and the whole point of remembering the identifier.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const store = {rememberedId: () => "AA:BB", rememberId: jest.fn()};
+        const store = {
+            rememberedId: () => "AA:BB",
+            rememberId: jest.fn(),
+            recordMachine: () => false
+        };
 
         await connectRememberedMachine(machine, store, async () => true);
 
@@ -462,7 +587,11 @@ describe("connecting to a machine that is already paired", () => {
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
         const permission = jest.fn(async () => true);
-        const store = {rememberedId: () => "", rememberId: jest.fn()};
+        const store = {
+            rememberedId: () => "",
+            rememberId: jest.fn(),
+            recordMachine: () => false
+        };
 
         await connectRememberedMachine(machine, store, permission);
 
@@ -476,7 +605,11 @@ describe("connecting to a machine that is already paired", () => {
         const transport = new FakeTransport();
         transport.refuseConnection = true;
         const machine = new Machine(transport, {frameGapMs: 0});
-        const store = {rememberedId: () => "AA:BB", rememberId: jest.fn()};
+        const store = {
+            rememberedId: () => "AA:BB",
+            rememberId: jest.fn(),
+            recordMachine: () => false
+        };
 
         await expect(connectRememberedMachine(
             machine, store, async () => true, {wait: async () => {}}
@@ -487,7 +620,11 @@ describe("connecting to a machine that is already paired", () => {
 describe("opening a link that does not want to open", () => {
     const noWait = async () => {};
     const machine0 = (transport: FakeTransport) => new Machine(transport, {frameGapMs: 0});
-    const store = () => ({rememberedId: () => "AA:BB", rememberId: jest.fn()});
+    const store = () => ({
+        rememberedId: () => "AA:BB",
+        rememberId: jest.fn(),
+        recordMachine: () => false
+    });
 
     it("keeps trying, rather than making the user press Connect again", async () => {
         // On hardware this has taken up to five presses. Pressing a button over
@@ -555,7 +692,11 @@ describe("opening a link that does not want to open", () => {
         const transport = new FakeTransport();
         transport.refuseNextConnections = 2;
         let id = "AA:BB";
-        const store = {rememberedId: () => id, rememberId: jest.fn()};
+        const store = {
+            rememberedId: () => id,
+            rememberId: jest.fn(),
+            recordMachine: () => false
+        };
 
         const opening = openLink(machine0(transport), store, async () => true, {
             wait: async () => { id = ""; }

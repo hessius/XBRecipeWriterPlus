@@ -1,12 +1,13 @@
 import {useEffect, useState} from "react";
 import {AppState} from "react-native";
 
-import {CONNECT_DELAYS_MS} from "@/constants/machine";
+import {CONNECT_DELAYS_MS, STUDIO_MODEL_STRINGS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
 import Machine, {
     isActiveBrewPhase,
     type BrewPhase
 } from "@/library/machine/Machine";
+import {asMachineModel, type MachineModel} from "@/library/machine/machineModel";
 import type {Settings} from "@/library/Settings";
 import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
@@ -34,14 +35,28 @@ export function sharedMachine(): Machine {
 function settingsStore(): LinkStore {
     return {
         rememberedId: () => sharedSettings().get("machineDeviceId"),
-        rememberId: (id) => sharedSettings().set("machineDeviceId", id)
+        rememberId: (id) => sharedSettings().set("machineDeviceId", id),
+        recordMachine: (reading) => applyMachineReading(sharedSettings(), reading)
     };
 }
+
+/** What the radio heard about the machine itself, as opposed to the link. */
+export type MachineReading = {model: string; name: string};
 
 /** Where the remembered machine is kept. Injected, so the algorithm is testable. */
 export type LinkStore = {
     rememberedId: () => string;
     rememberId: (id: string) => void;
+    /**
+     * Record what the machine said it was.
+     *
+     * Separate from `rememberId` because it answers a different question. The
+     * id is how to find this machine again; this is what the machine is, and
+     * it is kept as evidence rather than as configuration. See issue #138.
+     *
+     * Returns whether it overruled the user's machine setting.
+     */
+    recordMachine: (reading: MachineReading) => boolean;
 };
 
 /** How a caller overrides the retrying, which is only ever a test. */
@@ -58,6 +73,57 @@ export type AppStateLike = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Store what the machine said, and change the setting only when it is certain.
+ *
+ * Exported for its own tests: this is the rule, and the rest of this file is
+ * the plumbing that carries a reading to it.
+ *
+ * The reading is kept always. It is allowed to overrule the user only on a
+ * positive match against a string read off real hardware, because a string we
+ * have never seen is not evidence of an original xBloom: we own none to read
+ * one from, and a firmware revision would produce an unfamiliar string too.
+ * `STUDIO_MODEL_STRINGS` is empty until somebody fills it in, and an empty list
+ * matches nothing, so detection is inert rather than wrong.
+ *
+ * A blank reading is "did not learn", never "learned it is blank", so it is
+ * dropped rather than written, and each half is judged on its own. Both halves
+ * go blank in ordinary use and neither is a discovery: the Device Information
+ * Service is optional, and `advertisedName` is only ever filled in by a scan,
+ * which `attemptLink` skips for a returning user. Writing a blank through would
+ * erase what an earlier connect found out, on the reconnect after it, for
+ * almost everybody, and these two keys exist to be trustworthy about what a
+ * real machine said.
+ *
+ * Returns whether it overruled the user, so the caller can say so in the
+ * console. A setting that changes itself and mentions it to nobody is the
+ * hardest kind of bug to hear about from the field.
+ */
+export function applyMachineReading(settings: Settings, reading: MachineReading): boolean {
+    if (reading.model !== "") settings.set("machineModelString", reading.model);
+    if (reading.name !== "") settings.set("machineName", reading.name);
+    // The emptiness half of this is not redundant. `[].includes("")` is already
+    // false, but a later edit that put "" on the list by accident would
+    // otherwise promote every machine that stayed silent to a Studio.
+    const certain = reading.model !== "" && STUDIO_MODEL_STRINGS.includes(reading.model);
+    if (!certain || settings.get("machineModel") === "studio") return false;
+    settings.set("machineModel", "studio");
+    return true;
+}
+
+/**
+ * Throw away what the machine said, for a user pairing a different one.
+ *
+ * The opposite of the rule above, and not a contradiction of it. A blank
+ * reading on reconnect means "did not learn"; unpairing means "this is no
+ * longer the machine I was describing". Left behind, `machineModelString`
+ * would go on standing as evidence about whatever gets paired next.
+ */
+export function forgetMachineReadings(settings: Settings): void {
+    settings.set("machineModelString", "");
+    settings.set("machineName", "");
+}
 
 type LinkLifecycleMachine = {
     phase: BrewPhase;
@@ -308,6 +374,20 @@ async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
         if (id === remembered) throw e;
         await machine.connect(id);
     }
+    // Every successful connect, not only a new machine: firmware can change
+    // under an identifier that did not.
+    try {
+        const corrected = store.recordMachine({
+            model: machine.modelNumber, name: machine.advertisedName
+        });
+        if (corrected) machine.note(`recognised a Studio — machine setting corrected`);
+    } catch (error) {
+        // Best effort, like every other self-description step in this path.
+        // The link is already open and usable; throwing here would skip
+        // remembering a newly scanned id and report a failure over a machine
+        // that is in fact connected.
+        machine.note(`could not write down what the machine is — ${(error as Error).message}`);
+    }
     if (id !== remembered) {
         store.rememberId(id);
         // Written to the history because the consequence of it not happening is
@@ -334,6 +414,15 @@ export type MachineLink = {
      */
     connect: () => Promise<void>;
     forget: () => Promise<void>;
+    /**
+     * Which machine the user says this is. The setting, not a reading.
+     *
+     * Narrowed here so a consumer does not have to. Nothing in the app reads
+     * it yet: the settings row owns both halves of the setting and goes
+     * through `useSetting` directly. It is the seam this file's own tests use
+     * to see a correction land, and the one a brew screen would use.
+     */
+    machineModel: MachineModel;
 };
 
 /**
@@ -345,6 +434,7 @@ export type MachineLink = {
 export function useMachine(injected?: Machine, options: MachineOptions = {}): MachineLink {
     const machine = injected ?? sharedMachine();
     const [remembered, setRemembered] = useSetting("machineDeviceId", options.settings);
+    const [machineModelSetting] = useSetting("machineModel", options.settings);
     const [status, setStatus] = useState<LinkStatus>(
         // If already connected (e.g. the hook remounts with a live machine),
         // reflect that. Otherwise we genuinely do not know yet: no attempt has
@@ -387,7 +477,9 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         try {
             await openLink(machine, {
                 rememberedId: () => remembered,
-                rememberId: setRemembered
+                rememberId: setRemembered,
+                recordMachine: (reading) =>
+                    applyMachineReading(options.settings ?? sharedSettings(), reading)
             }, ensureBluetoothPermission, options);
             setStatus("connected");
         } catch (e) {
@@ -400,11 +492,18 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     async function forget(): Promise<void> {
         await machine.disconnect();
         setRemembered("");
+        forgetMachineReadings(options.settings ?? sharedSettings());
         setError(null);
         setStatus("idle");
     }
 
-    return {machine, status, error, remembered, connect, forget};
+    return {
+        machine, status, error, remembered, connect, forget,
+        // `SettingValue` widens the stored union back to `string`, so this has
+        // to be narrowed rather than asserted. Coerced rather than refused,
+        // because there is a correct answer to fall back on.
+        machineModel: asMachineModel(machineModelSetting)
+    };
 }
 
 export default useMachine;

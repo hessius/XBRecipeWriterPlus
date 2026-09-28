@@ -41,7 +41,7 @@ Unauthenticated read calls send **plain JSON** (no encryption) with the same Ref
 | Endpoint | Method | Body fields | Returns | Auth |
 |----------|--------|------------|---------|------|
 | `RecipeDetail.html` | POST (plain JSON) | `tableIdOfRSA`, `interfaceVersion: 19700101`, `skey: "testskey"` | `recipeVo` object | **None** |
-| `tRecipeDetailOfPods.thtml` | POST (plain JSON) | `xid`, `interfaceVersion`, `skey`, `languageType: 0`, `adaptedModel: 1`, `isRefreshScanTime: 1`, `appVersion: "2.1.2"` | `recipeVo` object | **None** |
+| `tRecipeDetailOfPods.thtml` | POST (plain JSON) | `xid`, `interfaceVersion`, `skey`, `languageType: 0`, `adaptedModel` (§C-ter), `isRefreshScanTime: 1`, `appVersion: "2.1.2"` | `recipeVo` object | **None** |
 
 `tableIdOfRSA` is the base64-encoded integer recipe ID (= the share-link `?id=` param).  
 `xid` is the ≤7-char XID used for Pod/factory recipes.  
@@ -65,7 +65,7 @@ token: <string>
 | Endpoint | Method | Additional fields | Returns | Purpose |
 |----------|--------|------------------|---------|---------|
 | `tMemberLogin.thtml` | POST (**plain**, not encrypted) | `email`, `password`, `jpushId: ""` | `result: "success"`, `member.tableId`, `token` | **Login** — returns bearer token |
-| `tuMyTeaRecipeCreated.tuhtml` | POST (encrypted) | `pageNumber: 1`, `countPerPage: 100`, `adaptedModel: 1` | `list[]` of recipe objects | List user's recipes |
+| `tuMyTeaRecipeCreated.tuhtml` | POST (encrypted) | `pageNumber: 1`, `countPerPage: 100`, `adaptedModel` (§C-ter) | `list[]` of recipe objects | List user's recipes |
 | `tuRecipeAdd.tuhtml` | POST (encrypted) | see Recipe payload below | `result: "success"`, `tableId` | **Create recipe** |
 | `tuRecipeUpdate.tuhtml` | POST (encrypted) | same as add + `tableId` | `result: "success"` | Update existing recipe |
 | `tuRecipeDelete.tuhtml` | POST (encrypted) | `tableId` | `result: "success"` | Delete recipe |
@@ -143,7 +143,7 @@ All sources set `Referer: https://share-h5.xbloom.com/` and `User-Agent: Mozilla
 | `grinderSize` | number | Grind size 1–80 |
 | `rpm` | number | Grinder RPM 60–120 |
 | `cupType` | number | 1=xPod, 2=Omni/Dripper, 3=Other, 4=Tea |
-| `adaptedModel` | number | `1` in pourpilot/denull0; `2` in KhalidOnzi — discrepancy, `single-source` each |
+| `adaptedModel` | number | Which machine the recipe is for: `1` Studio, `2` original xBloom. Not a constant, and it partitions the account's rows as well. See §C-ter. |
 | `isEnableBypassWater` | number | `2` = disabled |
 | `isSetGrinderSize` | number | `1` = grinder on, `2` = off |
 | `theColor` | string | Hex colour, e.g. `"#C9D5B8"` |
@@ -243,7 +243,7 @@ not from reading someone else's client. Where it contradicts section C above, **
    **The response does not contain the share link.** This is the reason for step 3.
 
 3. `POST tuMyTeaRecipeCreated.tuhtml` (encrypted, `pageNumber: 1`, `countPerPage: N`,
-   `adaptedModel: 1`) — list the account's recipes newest-first, find the record whose `tableId`
+   the same `adaptedModel` the mint sent, §C-ter) — list the account's recipes newest-first, find the record whose `tableId`
    equals the one from step 2, and read its `shareRecipeLink` field verbatim:
 
    ```
@@ -276,7 +276,7 @@ because they are user-visible.
 
 | Question | Answer | Evidence |
 |---|---|---|
-| `adaptedModel` `1` or `2`? | **`1`** | Both are accepted, but the value **partitions the library**: `tuMyTeaRecipeCreated` with `adaptedModel: 1` returned 3 of the 4 test recipes and `totalCount: 3`; with `adaptedModel: 2` it returned only the fourth. A mismatch between mint and lookup makes the new recipe invisible to step 3. `1` matches pourpilot, denull0, and XBRW++'s own `XBloomRecipe.fetchRecipeDetail`. |
+| `adaptedModel` `1` or `2`? | **Both. It is not a constant.** *(Superseded, see §C-ter.)* | Both are accepted, but the value **partitions the library**: `tuMyTeaRecipeCreated` with `adaptedModel: 1` returned 3 of the 4 test recipes and `totalCount: 3`; with `adaptedModel: 2` it returned only the fourth. A mismatch between mint and lookup makes the new recipe invisible to step 3. The original answer here was “hardcode `1`”, matching pourpilot, denull0 and XBRW++'s own `XBloomRecipe.fetchRecipeDetail`. That was wrong, for the reason the next section gives. |
 | `bypassVolume` `0.0` or `5.0`? | **`0.0`** | Both accepted and stored verbatim (`0.00` / `5.00`). Neither is rejected, so this is a cosmetic default. `0.0` is the honest value when `isEnableBypassWater: 2`. |
 | Is `pourCount` required? | **No, but send it** | A mint omitting `pourCount` entirely still came back with `pourCount: 2` — the server derives it from `pourDataJSONStr`. But XBRW++'s own importer reads `recipeVo.pourCount` and loops on it, so sending it explicitly costs nothing and removes a dependency on server-side derivation. |
 
@@ -302,6 +302,50 @@ because they are user-visible.
   The share page reads through `RecipeDetail.html`, which ignores `adaptedModel`, so this
   probably does not matter — but it has not been tested on a device.
 - Whether xBloom throttles or suspends an account that mints at volume.
+
+---
+
+## C-ter. `adaptedModel` is two things at once
+
+`adaptedModel` says which machine a recipe is for. xBloom sells the Studio (`1`) and the
+original xBloom (`2`), and they grind on scales that **do not convert**: across 918 recipes
+that exist on both, the best linear fit is R² = 0.444 and lands within two steps only 20% of
+the time. The Studio's band is roughly 32 to 74 and the Original's roughly 2 to 30, so a number
+carried across unchanged is not a worse recipe, it is a different one.
+
+It is also, as the table above records, the key the service account's stored rows are
+partitioned by. Those two jobs pull in opposite directions, and the resolution is that
+**each call answers to whichever job is actually its own**:
+
+- **Minting follows the user's machine.** `settings.machineModel` decides the `adaptedModel`
+  on `tuRecipeAdd.tuhtml`, so a recipe written by somebody with an Original is stored as an
+  Original recipe. See `library/machine/machineModel.ts` for the pair and its wire values.
+- **The mint's own lookup follows the payload it just sent**, not the setting. The mint
+  cannot find the row it made by listing a partition it did not write to.
+- **The library walk reads both partitions.** `library/cloud/cloudLibrary.ts` asks for each
+  `adaptedModel` in turn and concatenates. A single-partition read would hide every recipe the
+  user minted before they changed the setting, and there is no way for the app to know which
+  partition a given row is in without asking.
+- **The pod lookup follows the setting.** `tRecipeDetailOfPods.thtml` returns a grind number
+  in the band of whichever machine is asked for, so asking as a Studio hands an Original owner
+  a grind from a scale their machine does not have. That was issue #138.
+
+The page-walk in `cloudLibrary` gives each partition its **own accumulator**. The walk tells
+“empty account” from “server stopped mid-list” by whether anything has arrived yet, and a
+shared accumulator would make the second partition's first empty page look like a truncated
+list for nearly every user.
+
+`canonicalSnapshot` hashes `adaptedModel` along with the rest of the recipe, so changing the
+machine setting changes a recipe's fingerprint and mints a fresh row. That is correct rather
+than wasteful: two machines genuinely are two recipes, and the old link keeps working.
+
+The reading in the other direction — asking the machine over BLE what it is — is recorded but
+almost never acted on. `hooks/useMachine.ts` stores the Device Information Service model string
+and the advertised scan name, and overrules the user's setting only on a positive match against
+`STUDIO_MODEL_STRINGS` in `constants/machine.ts`, which ships **empty**. Nobody has read a model
+string off real hardware yet, and “not the Studio's string” is not evidence of an Original: we
+own none to check against, and a firmware revision would look the same. An empty list matches
+nothing, so detection is inert rather than wrong.
 
 ---
 
@@ -417,7 +461,7 @@ No source documents xBloom blocking any user agent. The Mozilla/iPhone UA is use
 | Question | Status |
 |----------|--------|
 | Login: encrypted or plain? | Pourpilot/denull0 send plain; KhalidOnzi encrypts. Both reportedly work. `single-source` each. |
-| `adaptedModel` value: `1` vs `2` | Pourpilot/denull0 use `1`; KhalidOnzi uses `2`. Unknown effect. `single-source` each. |
+| ~~`adaptedModel` value: `1` vs `2`~~ | **Settled.** It names the machine and partitions the library. See §C-ter. |
 | `bypassVolume`: `0.0` vs `5.0` | Varies. No observed functional difference. |
 | `getRecipeCodeJ15` URL | Not observed in any community source. `inferred` from APK decompilation description in PROTOCOL.md only. |
 | Exact share URL seen by recipient in official app | Not confirmed. Whether the creator's account name is visible is `inferred`. |

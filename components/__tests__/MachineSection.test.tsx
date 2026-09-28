@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import MachineSection from "@/components/MachineSection";
 import {renderWithProviders} from "@/test-utils/render";
@@ -192,5 +192,45 @@ describe("the machine section", () => {
         const toggle = screen.getByLabelText(/start brewing automatically/i);
         expect(toggle).toBeTruthy();
         expect(toggle.props.accessibilityState?.checked ?? toggle.props.value).toBe(false);
+    });
+
+    it("asks which xBloom you own, because the two grind on different scales", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        expect(screen.getByText("Your xBloom")).toBeTruthy();
+        expect(screen.getByText("Studio")).toBeTruthy();
+        expect(screen.getByText("Original")).toBeTruthy();
+    });
+
+    it("remembers the original xBloom when that is what you picked", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        // The Studio is the default, so this also pins that a fresh install
+        // starts somewhere rather than with nothing chosen.
+        expect(screen.getByLabelText("Studio").props.accessibilityState?.checked)
+            .toBe(true);
+
+        await fireEvent.press(screen.getByLabelText("Original"));
+
+        // The control is driven by the setting, so the value coming back is the
+        // evidence it was stored rather than merely pressed.
+        await waitFor(() =>
+            expect(screen.getByLabelText("Original").props.accessibilityState?.checked)
+                .toBe(true));
+    });
+
+    it("stops naming the Studio to somebody who said they own the other one", async () => {
+        // The connect row sat directly under the question, so an original owner
+        // read the app telling them to switch on a machine they had just said
+        // they do not have. It is also the one place worth admitting the link
+        // has only ever been tried against a Studio.
+        await renderWithProviders(<MachineSection/>);
+        expect(screen.getByText(/Your xBloom Studio has to be switched on/)).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Original"));
+
+        await waitFor(() =>
+            expect(screen.getByText(/Only the Studio has been tested/)).toBeTruthy());
+        expect(screen.queryByText(/Your xBloom Studio has to be switched on/)).toBeNull();
     });
 });

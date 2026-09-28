@@ -20,8 +20,22 @@ function drip(): Recipe {
 }
 
 describe("buildSharePayload", () => {
+    it("mints under the machine it was given", () => {
+        const recipe = drip();
+        expect(buildSharePayload(recipe, "studio").adaptedModel).toBe(1);
+        expect(buildSharePayload(recipe, "original").adaptedModel).toBe(2);
+    });
+
+    it("gives the two machines different fingerprints", () => {
+        // The same brew on two machines is two rows upstream, so it must not be
+        // possible for one link to stand in for the other.
+        const recipe = drip();
+        expect(canonicalSnapshot(buildSharePayload(recipe, "studio")))
+            .not.toBe(canonicalSnapshot(buildSharePayload(recipe, "original")));
+    });
+
     it("maps the scalar fields onto xBloom's names", () => {
-        const p = buildSharePayload(drip());
+        const p = buildSharePayload(drip(), "studio");
         expect(p.theName).toBe("Ethiopia Guji");
         expect(p.dose).toBe(18);
         // grandWater is the ratio, not a water volume. Getting this wrong
@@ -43,7 +57,7 @@ describe("buildSharePayload", () => {
         for (const [local, wire] of cases) {
             const r = drip();
             r.cupType = local;
-            expect(buildSharePayload(r).cupType).toBe(wire);
+            expect(buildSharePayload(r, "studio").cupType).toBe(wire);
         }
     });
 
@@ -51,45 +65,45 @@ describe("buildSharePayload", () => {
         const r = drip();
         r.pours[0].pourPattern = POUR_PATTERN.CENTERED;
         r.pours[1].pourPattern = POUR_PATTERN.CIRCULAR;
-        const pours = JSON.parse(buildSharePayload(r).pourDataJSONStr);
+        const pours = JSON.parse(buildSharePayload(r, "studio").pourDataJSONStr);
         expect(pours[0].pattern).toBe(1);
         expect(pours[1].pattern).toBe(3);
     });
 
     it("divides flow rate by ten, because the importer multiplies it", () => {
-        const pours = JSON.parse(buildSharePayload(drip()).pourDataJSONStr);
+        const pours = JSON.parse(buildSharePayload(drip(), "studio").pourDataJSONStr);
         expect(pours[0].flowRate).toBe(3.5);
         expect(pours[1].flowRate).toBe(3);
     });
 
     it("names the first pour Bloom and numbers the rest", () => {
-        const pours = JSON.parse(buildSharePayload(drip()).pourDataJSONStr);
+        const pours = JSON.parse(buildSharePayload(drip(), "studio").pourDataJSONStr);
         expect(pours[0].theName).toBe("Bloom");
         expect(pours[1].theName).toBe("Pour 2");
     });
 
     it("sends agitation as 1 for on and 2 for off, per side", () => {
-        const pours = JSON.parse(buildSharePayload(drip()).pourDataJSONStr);
+        const pours = JSON.parse(buildSharePayload(drip(), "studio").pourDataJSONStr);
         expect(pours[0].isEnableVibrationBefore).toBe(2);
         expect(pours[0].isEnableVibrationAfter).toBe(2);
         expect(pours[1].isEnableVibrationAfter).toBe(1);
     });
 
     it("carries pause time through as pausing", () => {
-        const pours = JSON.parse(buildSharePayload(drip()).pourDataJSONStr);
+        const pours = JSON.parse(buildSharePayload(drip(), "studio").pourDataJSONStr);
         expect(pours[0].pausing).toBe(30);
     });
 
     it("turns the grinder off with isSetGrinderSize 2", () => {
         const r = drip();
         r.grinder = false;
-        expect(buildSharePayload(r).isSetGrinderSize).toBe(2);
+        expect(buildSharePayload(r, "studio").isSetGrinderSize).toBe(2);
     });
 
     it("overrides grinder and rpm for tea", () => {
         const r = drip();
         r.cupType = CUP_TYPE.TEA;
-        const p = buildSharePayload(r);
+        const p = buildSharePayload(r, "studio");
         expect(p.cupType).toBe(4);
         expect(p.isSetGrinderSize).toBe(2);
         expect(p.grinderSize).toBe(DEFAULT_GRIND_SIZE);
@@ -100,40 +114,40 @@ describe("buildSharePayload", () => {
         const r = drip();
         r.name = "";
         r.xbloomName = "Kenya AA";
-        expect(buildSharePayload(r).theName).toBe("Kenya AA");
+        expect(buildSharePayload(r, "studio").theName).toBe("Kenya AA");
     });
 
     it("sends a hex accent colour", () => {
-        expect(buildSharePayload(drip()).theColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+        expect(buildSharePayload(drip(), "studio").theColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
     });
 });
 
 describe("canonicalSnapshot", () => {
     it("is stable across two builds of the same recipe", () => {
         const r = drip();
-        expect(canonicalSnapshot(buildSharePayload(r)))
-            .toBe(canonicalSnapshot(buildSharePayload(r)));
+        expect(canonicalSnapshot(buildSharePayload(r, "studio")))
+            .toBe(canonicalSnapshot(buildSharePayload(r, "studio")));
     });
 
     it("ignores key order", () => {
-        const a = buildSharePayload(drip());
+        const a = buildSharePayload(drip(), "studio");
         const b = {...a};
         expect(canonicalSnapshot(b)).toBe(canonicalSnapshot(a));
     });
 
     it("changes when a pour volume changes", () => {
         const r = drip();
-        const before = canonicalSnapshot(buildSharePayload(r));
+        const before = canonicalSnapshot(buildSharePayload(r, "studio"));
         r.pours[1].volume = 240;
-        expect(canonicalSnapshot(buildSharePayload(r))).not.toBe(before);
+        expect(canonicalSnapshot(buildSharePayload(r, "studio"))).not.toBe(before);
     });
 
     it("does not change when a field that is never sent changes", () => {
         const r = drip();
-        const before = canonicalSnapshot(buildSharePayload(r));
+        const before = canonicalSnapshot(buildSharePayload(r, "studio"));
         r.backup = [1, 2, 3];
         r.uid = [9];
-        expect(canonicalSnapshot(buildSharePayload(r))).toBe(before);
+        expect(canonicalSnapshot(buildSharePayload(r, "studio"))).toBe(before);
     });
 });
 
@@ -143,7 +157,7 @@ describe("bypass water", () => {
         r.bypassEnabled = true;
         r.bypassVolume = 100;
         r.bypassTemp = 90;
-        const p = buildSharePayload(r);
+        const p = buildSharePayload(r, "studio");
         expect(p.isEnableBypassWater).toBe(1);
         expect(p.bypassVolume).toBe(100);
         expect(p.bypassTemp).toBe(90);
@@ -159,21 +173,21 @@ describe("bypass water", () => {
         r.bypassEnabled = false;
         r.bypassVolume  = 45;
         r.bypassTemp    = 60;
-        const p = buildSharePayload(r);
+        const p = buildSharePayload(r, "studio");
         expect(p.bypassTemp).toBe(85);
         expect(p.bypassVolume).toBe(0);
         expect(p.isEnableBypassWater).toBe(2);
         // The same recipe with a different preserved temperature must snapshot
         // identically, which is the property the churn guarantee rests on.
         r.bypassTemp = 90;
-        expect(canonicalSnapshot(buildSharePayload(r))).toBe(canonicalSnapshot(p));
+        expect(canonicalSnapshot(buildSharePayload(r, "studio"))).toBe(canonicalSnapshot(p));
     });
 
     it("sends exactly {bypassTemp:85, bypassVolume:0, isEnableBypassWater:2} when bypass is off", () => {
         // The no-churn guarantee: a recipe with bypass off must produce a
         // payload byte-identical to the hardcoded constants it replaces, so
         // existing share snapshots remain valid and no duplicate rows are minted.
-        const p = buildSharePayload(drip());
+        const p = buildSharePayload(drip(), "studio");
         expect(p.bypassTemp).toBe(85);
         expect(p.bypassVolume).toBe(0);
         expect(p.isEnableBypassWater).toBe(2);
@@ -185,13 +199,13 @@ describe("bypass water", () => {
         const r = drip();
         r.bypassEnabled = false;
         r.bypassVolume = 120;
-        expect(buildSharePayload(r).bypassVolume).toBe(0);
+        expect(buildSharePayload(r, "studio").bypassVolume).toBe(0);
     });
 
     it("preserves the canonical snapshot of a non-bypass recipe", () => {
         // Pin the exact snapshot so any future drift in the no-churn guarantee
         // is caught as an explicit regression.
-        const p = buildSharePayload(drip());
+        const p = buildSharePayload(drip(), "studio");
         const snap = canonicalSnapshot(p);
         expect(snap).toContain('"bypassTemp":85');
         expect(snap).toContain('"bypassVolume":0');
@@ -206,7 +220,7 @@ describe("bypass water", () => {
         r.bypassEnabled = true;
         r.bypassVolume = 120;
         r.bypassTemp = 80;
-        const p = buildSharePayload(r);
+        const p = buildSharePayload(r, "studio");
         expect(p.isEnableBypassWater).toBe(2);
         expect(p.bypassVolume).toBe(0);
         expect(p.bypassTemp).toBe(85);
@@ -242,8 +256,8 @@ describe("the round trip through the importer", () => {
     // into the other is the only check that the two enum orderings agree; a
     // mismatch there is not a crash, it is a different brew.
     function reimport(recipe: Recipe): Recipe {
-        const payload = buildSharePayload(recipe);
-        const importer = new XBloomRecipe({kind: "share", id: "test-share-id"});
+        const payload = buildSharePayload(recipe, "studio");
+        const importer = new XBloomRecipe({kind: "share", id: "test-share-id"}, "studio");
         const importerInternals = importer as unknown as {
             xbRecipeJSON: unknown;
             name: string;
@@ -327,7 +341,7 @@ describe("share fields survive serialisation", () => {
         const r = drip();
         r.sharedTableId = 1353046;
         r.shareUrl = "https://share-h5.xbloom.com/?id=hmFKjxldtOFbZ2Kve%2BlxKw%3D%3D";
-        r.shareSnapshot = canonicalSnapshot(buildSharePayload(r));
+        r.shareSnapshot = canonicalSnapshot(buildSharePayload(r, "studio"));
         const back = new Recipe(undefined, JSON.stringify(r));
         expect(back.sharedTableId).toBe(1353046);
         expect(back.shareUrl).toBe(r.shareUrl);
@@ -362,7 +376,7 @@ describe("share payload churn", () => {
         // adding bypass fields to the model changed nothing on the wire. If
         // this test fails, every already-shared recipe now reads as stale and
         // re-mints a duplicate row in the shared service account.
-        const payload = buildSharePayload(new Recipe());
+        const payload = buildSharePayload(new Recipe(), "studio");
 
         expect(payload.isEnableBypassWater).toBe(2);
         expect(payload.bypassVolume).toBe(0);
@@ -375,7 +389,7 @@ describe("share payload churn", () => {
         recipe.bypassVolume  = 45;
         recipe.bypassTemp    = 60;
 
-        const payload = buildSharePayload(recipe);
+        const payload = buildSharePayload(recipe, "studio");
 
         expect(payload.isEnableBypassWater).toBe(1);
         expect(payload.bypassVolume).toBe(45);
@@ -389,7 +403,7 @@ describe("share payload churn", () => {
         recipe.bypassVolume  = 45;
         recipe.bypassTemp    = 60;
 
-        const payload = buildSharePayload(recipe);
+        const payload = buildSharePayload(recipe, "studio");
 
         expect(payload.isEnableBypassWater).toBe(2);
         expect(payload.bypassVolume).toBe(0);

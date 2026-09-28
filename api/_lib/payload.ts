@@ -106,7 +106,9 @@ export type SharePayload = {
     appPlace: number[];
     isShortcuts: number;
     isEnableBypassWater: number;
-    adaptedModel: 1;
+    // Duplicates library/machine/machineModel.ts because api/ deploys alone;
+    // change the two together.
+    adaptedModel: 1 | 2;
     pourCount: number;
     pourDataJSONStr: string;
 };
@@ -159,8 +161,8 @@ export function parseSharePayload(payload: unknown): {payload: SharePayload; rea
         }
     }
 
-    if (p.adaptedModel !== 1) {
-        return {payload: null, reason: "adaptedModel must be 1"};
+    if (p.adaptedModel !== 1 && p.adaptedModel !== 2) {
+        return {payload: null, reason: "adaptedModel must be 1 or 2"};
     }
 
     if (typeof p.pourDataJSONStr !== "string") {
@@ -232,7 +234,7 @@ export function parseSharePayload(payload: unknown): {payload: SharePayload; rea
             appPlace:            [...p.appPlace],
             isShortcuts:         p.isShortcuts as number,
             isEnableBypassWater: p.isEnableBypassWater as number,
-            adaptedModel:        1,
+            adaptedModel:        p.adaptedModel as 1 | 2,
             pourCount:           p.pourCount as number,
             pourDataJSONStr:     JSON.stringify(cleanPours)
         },

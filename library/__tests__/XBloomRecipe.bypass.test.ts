@@ -37,7 +37,7 @@ function makeRecipeVo(overrides: Record<string, unknown> = {}) {
 
 /** Build an XBloomRecipe whose fetch has already been simulated. */
 function buildRecipe(recipeVo: Record<string, unknown>) {
-    const xb = new XBloomRecipe({kind: "share", id: "test123"});
+    const xb = new XBloomRecipe({kind: "share", id: "test123"}, "studio");
     // Inject the payload as though fetchRecipeDetail completed.
     (xb as any).xbRecipeJSON = {recipeVo};
     return xb.getRecipe();

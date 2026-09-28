@@ -10,7 +10,12 @@ import {act, renderHook, waitFor} from "@testing-library/react-native";
 
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import {XBloomRecipe} from "@/library/XBloomRecipe";
+import {sharedSettings} from "@/hooks/useSetting";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
+
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
 
 /** A recipe as the xBloom mapper would produce it. */
 function importedRecipe(xid = "ETH120"): Recipe {
@@ -66,6 +71,10 @@ function setup(stored: Recipe[] = []) {
 beforeEach(() => {
     mockFetchRecipeDetail.mockReset().mockResolvedValue(undefined);
     mockGetRecipe.mockReset().mockReturnValue(importedRecipe());
+    (XBloomRecipe as unknown as jest.Mock).mockClear();
+    // The mock store outlives each test, so a case that changes the machine
+    // would otherwise leave it changed for every case after it.
+    sharedSettings().set("machineModel", "studio");
 });
 
 describe("a paste", () => {
@@ -974,5 +983,47 @@ describe("the abandonment hint", () => {
         });
 
         expect(result.current.hint).toBe(false);
+    });
+});
+
+describe("the machine a pod is looked up for", () => {
+    /**
+     * A pod carries one coffee and two recipes, and the two grind scales do not
+     * convert, so asking under the wrong machine returns a grind that means
+     * nothing on this one. That is #138.
+     *
+     * The constructor argument is required, which stops a call site *omitting*
+     * the model. It cannot stop one passing a literal, and a literal is exactly
+     * what #138 was. Hence a test that changes the setting and watches it
+     * arrive: without this, reverting the hook to a hardcoded "studio" leaves
+     * the whole suite green.
+     */
+    it("is the one the user says they own", async () => {
+        sharedSettings().set("machineModel", "original");
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledWith(
+            {kind: "xid", xid: "ETH120"}, "original"
+        ));
+    });
+
+    it("follows the setting rather than a default", async () => {
+        // The other half: one case alone cannot tell "reads the setting" from
+        // "hardcoded to the value this test happens to store".
+        const {onOpenRecipe, stored} = setup();
+        const {result} = await renderHook(() => useRecipeImport({stored, onOpenRecipe}));
+
+        await act(async () => {
+            result.current.resolveNow({kind: "xid", xid: "ETH120"}, "atomic");
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledWith(
+            {kind: "xid", xid: "ETH120"}, "studio"
+        ));
     });
 });

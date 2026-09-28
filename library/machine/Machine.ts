@@ -376,6 +376,12 @@ export default class Machine {
         return this.transport.scan();
     }
 
+    /** What the radio last heard the machine call itself. Delegated, not stored:
+     *  a copy here would go stale the moment the transport reconnected. */
+    get modelNumber(): string { return this.transport.modelNumber; }
+
+    get advertisedName(): string { return this.transport.advertisedName; }
+
     async connect(id: string): Promise<void> {
         this.note(`connecting to ${id}`);
         try {

@@ -51,6 +51,9 @@ jest.mock("expo-share-intent", () => ({
     useShareIntentContext: () => mockShareIntentState
 }));
 
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+
 jest.mock("@/library/RecipeDatabase");
 
 // Configurable so a test can leave a lookup in flight (a never-resolving

@@ -1,4 +1,5 @@
 import {resolveAccent} from "./accent";
+import {adaptedModelFor, type MachineModel} from "./machine/machineModel";
 import type Pour from "./Pour";
 import {POUR_PATTERN} from "./Pour";
 import Recipe, {CUP_TYPE, DEFAULT_GRIND_SIZE} from "./Recipe";
@@ -107,7 +108,7 @@ function cloudPour(pour: Pour, index: number) {
  * a recipe the official app renders with a grinder setting the machine will not
  * honour.
  */
-export function buildSharePayload(recipe: Recipe): SharePayload {
+export function buildSharePayload(recipe: Recipe, model: MachineModel): SharePayload {
     const tea = recipe.cupType === CUP_TYPE.TEA;
     return {
         theName:             recipe.displayName(),
@@ -135,9 +136,11 @@ export function buildSharePayload(recipe: Recipe): SharePayload {
         appPlace:            [4],
         isShortcuts:         2,
         isEnableBypassWater: tea ? 2  : enabled(recipe.bypassEnabled),
-        // Load-bearing: this value partitions the account's library, and the
-        // mint function looks the new row up in the `adaptedModel: 1` list.
-        adaptedModel:        1,
+        // Load-bearing twice over: it says which machine the recipe is for, and
+        // it partitions the account's rows, so the mint's own lookup has to use
+        // the same value. Passed in rather than read from settings here, so this
+        // module stays free of I/O and the value is visible in a test.
+        adaptedModel:        adaptedModelFor(model),
         pourCount:           recipe.pours.length,
         pourDataJSONStr:     JSON.stringify(recipe.pours.map(cloudPour))
     };

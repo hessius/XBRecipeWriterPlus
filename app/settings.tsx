@@ -25,6 +25,7 @@ import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {type BackupPayload} from "@/library/backup";
 import type {BrewRecord} from "@/library/brew/BrewRecord";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
+import {isMachineModel} from "@/library/machine/machineModel";
 import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {isLibraryView} from "@/library/libraryView";
 import {asTemperatureUnit} from "@/library/units";
@@ -130,8 +131,9 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("machineConsoleAcknowledged", settings);
     const [machineConsoleConfirmations, setMachineConsoleConfirmations] =
         useSetting("machineConsoleConfirmations", settings);
-    // Shown as a row inside MachineSection, not here. Read anyway, because a
-    // backup carries every preference and this is one.
+    // Shown as rows inside MachineSection, not here. Read anyway, because a
+    // backup carries every preference and these are two.
+    const [machineModel, setMachineModel] = useSetting("machineModel", settings);
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
@@ -190,7 +192,8 @@ export default function SettingsScreen({settings}: Props) {
             temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, animateBrewChart, askForRatings, brewTraceRetention,
+            machineModel, machineAutoStart, animateBrewChart, askForRatings,
+            brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
             libraryView, invertAutoShelves, hiddenShelves, myShelves
         };
@@ -276,6 +279,12 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.machineConsoleConfirmations === "boolean") {
             setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
+        }
+        // Validated rather than assigned: this value came out of a file the
+        // user could have edited, and an unrecognised model would be stored
+        // and then read back as a machine that does not exist.
+        if (isMachineModel(incoming.machineModel)) {
+            setMachineModel(incoming.machineModel);
         }
         if (typeof incoming.machineAutoStart === "boolean") {
             setMachineAutoStart(incoming.machineAutoStart);

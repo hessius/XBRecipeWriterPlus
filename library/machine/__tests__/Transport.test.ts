@@ -10,7 +10,13 @@
 import {Platform} from "react-native";
 import BleManager from "react-native-ble-manager";
 
-import {MACHINE_SERVICE, MACHINE_WRITE_CHARACTERISTIC, RADIO_READY_MS} from "@/constants/machine";
+import {
+    DEVICE_INFO_SERVICE,
+    MACHINE_SERVICE,
+    MACHINE_WRITE_CHARACTERISTIC,
+    MODEL_NUMBER_CHARACTERISTIC,
+    RADIO_READY_MS
+} from "@/constants/machine";
 import {buildType1, buildType1Bytes} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
 import {BleTransport} from "@/library/machine/Transport";
@@ -31,6 +37,7 @@ jest.mock("react-native-ble-manager", () => ({
         retrieveServices: jest.fn().mockResolvedValue({}),
         startNotification: jest.fn().mockResolvedValue(undefined),
         requestMTU: jest.fn().mockResolvedValue(247),
+        read: jest.fn().mockResolvedValue([]),
         writeWithoutResponse: jest.fn().mockResolvedValue(undefined),
         disconnect: jest.fn().mockResolvedValue(undefined),
         onDidUpdateValueForCharacteristic: jest.fn(() => ({remove: jest.fn()})),
@@ -164,6 +171,35 @@ describe("writing a frame", () => {
 
 describe("connecting", () => {
     beforeEach(() => jest.clearAllMocks());
+
+    it("reads what the machine calls itself", async () => {
+        // NUL-padded, because a fixed-width GATT string characteristic is
+        // padded to its declared length. Unstripped, this would never compare
+        // equal to a string constant and detection would silently never fire.
+        (BleManager.read as jest.Mock).mockResolvedValueOnce([0x58, 0x31, 0x35, 0x00, 0x00]);
+        const transport = new BleTransport();
+
+        await transport.connect("device-1");
+
+        expect(transport.modelNumber).toBe("X15");
+        expect(BleManager.read).toHaveBeenCalledWith(
+            "device-1", DEVICE_INFO_SERVICE, MODEL_NUMBER_CHARACTERISTIC
+        );
+    });
+
+    it("connects anyway when the machine will not say", async () => {
+        // Older firmware need not implement the Device Information Service, and a
+        // machine that brews perfectly well is not a connection failure.
+        (BleManager.read as jest.Mock).mockRejectedValueOnce(new Error("no such characteristic"));
+        const transport = new BleTransport();
+
+        await expect(transport.connect("device-1")).resolves.toBeUndefined();
+        expect(transport.modelNumber).toBe("");
+        // Resolving is not the claim. The claim is that it still brews, which
+        // means the link is usable -- so write a frame down it.
+        await expect(transport.write(buildType1Bytes(8001, new Uint8Array(4)))).resolves
+            .toBeUndefined();
+    });
 
     it("clears a link the system is still holding and tries once more", async () => {
         // After a reload or a crash the radio can still be connected while this

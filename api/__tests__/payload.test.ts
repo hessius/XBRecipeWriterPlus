@@ -1,4 +1,4 @@
-import {validateSharePayload} from "../_lib/payload";
+import {parseSharePayload, validateSharePayload} from "../_lib/payload";
 
 function valid() {
     return {
@@ -93,9 +93,25 @@ describe("validateSharePayload", () => {
         expect(validateSharePayload({...valid(), cupType: 7})).toBe("cupType is out of range");
     });
 
-    it("rejects any adaptedModel except the partition used for lookup", () => {
-        expect(validateSharePayload({...valid(), adaptedModel: 2}))
-            .toBe("adaptedModel must be 1");
+    it("accepts either machine, because the same recipe is two rows", () => {
+        expect(validateSharePayload({...valid(), adaptedModel: 1})).toBeNull();
+        expect(validateSharePayload({...valid(), adaptedModel: 2})).toBeNull();
+    });
+
+    it("rejects a partition xBloom returns nothing for", () => {
+        // Only 1 and 2 have rows. A link minted under 0 or 3 would be a row
+        // nothing can ever look up again.
+        expect(validateSharePayload({...valid(), adaptedModel: 0}))
+            .toBe("adaptedModel must be 1 or 2");
+        expect(validateSharePayload({...valid(), adaptedModel: 3}))
+            .toBe("adaptedModel must be 1 or 2");
+        expect(validateSharePayload({...valid(), adaptedModel: "1"}))
+            .toBe("adaptedModel must be 1 or 2");
+    });
+
+    it("mints under the partition it was given, not a constant", () => {
+        const {payload} = parseSharePayload({...valid(), adaptedModel: 2});
+        expect(payload?.adaptedModel).toBe(2);
     });
 
     it("rejects unknown top-level fields before they can reach xBloom", () => {

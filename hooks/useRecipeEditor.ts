@@ -5,8 +5,10 @@ import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_DEFAULT_VOLUME, clampBypassVolume,
     clampBypassTemp, isUsableBypassTemp
 } from "@/library/bypassLimits";
+import {sharedSettings} from "@/hooks/useSetting";
 import {cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
+import {asMachineModel} from "@/library/machine/machineModel";
 import {editsPendingSave, snapshotForSave} from "@/library/recipeDirty";
 import Recipe from "@/library/Recipe";
 import Pour from "@/library/Pour";
@@ -228,7 +230,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
             else apply();
         };
         try {
-            const xbRecipe = new XBloomRecipe({kind: "xid", xid: r.xid});
+            const xbRecipe = new XBloomRecipe(
+                {kind: "xid", xid: r.xid},
+                asMachineModel(sharedSettings().get("machineModel"))
+            );
             await xbRecipe.fetchRecipeDetail();
 
             let recipeTitle = xbRecipe.getRecipeTitle();
@@ -399,7 +404,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
                 return;
             }
             case "xid": {
-                const xbRecipe = new XBloomRecipe({kind: "xid", xid: recipe.xid});
+                const xbRecipe = new XBloomRecipe(
+                    {kind: "xid", xid: recipe.xid},
+                    asMachineModel(sharedSettings().get("machineModel"))
+                );
                 await xbRecipe.fetchRecipeDetail();
                 const restoredRecipe = xbRecipe.getRecipe();
                 if (restoredRecipe) {
@@ -413,7 +421,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
                 return;
             }
             case "share": {
-                const xbRecipe = new XBloomRecipe({kind: "share", id: recipe.shareId});
+                const xbRecipe = new XBloomRecipe(
+                    {kind: "share", id: recipe.shareId},
+                    asMachineModel(sharedSettings().get("machineModel"))
+                );
                 await xbRecipe.fetchRecipeDetail();
                 const restoredRecipe = xbRecipe.getRecipe();
                 if (restoredRecipe) {
