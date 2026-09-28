@@ -671,6 +671,26 @@ describe("brew record", () => {
                 .toContain("Bright and silky.");
         });
 
+        it("commits the record note field before building the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4
+                }),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await fireEvent.changeText(screen.getByTestId("judgement-note"), "Bright and silky.");
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.note)
+                .toContain("Bright and silky.");
+        });
+
         it("does not offer the handoff without the action", async () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);

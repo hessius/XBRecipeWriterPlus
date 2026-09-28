@@ -18,6 +18,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewRecordHandoff} from "@/hooks/useBrewRecordHandoff";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import BeanNameSheet from "@/components/BeanNameSheet";
 import BrewNoteSheet from "@/components/BrewNoteSheet";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
@@ -116,6 +117,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // and the "brew not found" return below is earlier.
     const [consoleFound] = useSetting("machineConsoleAcknowledged");
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const {ratingNoteOpen} = useLiveBrew();
 
     // Cleared before the PNG is taken. A shaded band and a tinted rung are
     // answers to a tap, and a picture cannot be tapped: baked in they would
@@ -261,7 +263,8 @@ export default function BrewRecord({recipeLookup}: Props) {
         setComparisonCandidates([]);
     }
 
-    const screenCovered = handoff.namingBean || handoff.ratingBeforeSend || pickingComparison;
+    const screenCovered = handoff.namingBean || handoff.ratingBeforeSend || pickingComparison
+        || ratingNoteOpen;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -370,7 +373,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
                 <BrewJudgement rating={judgement.rating} note={judgement.note}
                                onRate={handoff.rateBrew}
-                               onNote={handoff.annotateBrew}/>
+                               onNote={handoff.annotateBrew}
+                               onNoteDraft={handoff.setNoteDraft}/>
                 {judgement.pinned && (
                     // The pin as a state rather than a question. It is set by
                     // judging, so the user is told what happened and offered

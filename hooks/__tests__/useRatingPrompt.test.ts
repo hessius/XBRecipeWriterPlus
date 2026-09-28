@@ -382,4 +382,19 @@ describe("useRatingPrompt", () => {
         expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(2);
         expect(result.current.brew).toBeNull();
     });
+
+    it("retires the offered brew when history no longer returns it", async () => {
+        const store = fakeStore(measuredBrew("newer", {startedAt: NOW - 5 * 60 * 1000}));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew?.id).toBe("newer");
+
+        store.next = measuredBrew("older", {startedAt: NOW - 60 * 60 * 1000});
+        await act(async () => {
+            result.current.refresh();
+        });
+
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(2);
+        expect(result.current.brew).toBeNull();
+    });
 });

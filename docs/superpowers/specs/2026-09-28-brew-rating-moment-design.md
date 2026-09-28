@@ -234,7 +234,7 @@ New:
 | File | Holds |
 | --- | --- |
 | `library/brew/ratingPrompt.ts` | The rule, in plain TypeScript: given a row and a `now`, is this a brew worth asking about? Plus `RATING_PROMPT_WINDOW_MS`. |
-| `hooks/useRatingPrompt.ts` | The candidate, re-read on mount and on foreground; `rate`, `dismiss`. |
+| `hooks/useRatingPrompt.ts` | The candidate from `lastMeasuredBrew()`, re-read on mount and on foreground; `brewToRate` owns the rating, dismissal and age filter; `rate`, `dismiss`. |
 | `components/BrewRatingBar.tsx` | The bar. Presentational; every decision arrives as a prop. |
 | `components/BrewNoteSheet.tsx` | The sheet behind the stars, shared with the pre-send ask. |
 
@@ -243,7 +243,7 @@ Changed:
 | File | Change |
 | --- | --- |
 | `components/LiveBrewBar.tsx` | Chooses which bar occupies the slot. |
-| `library/BrewDatabase.ts` | `lastUnrated(now)`; `sentAt` column, migration, `markSent(id, at)`; `sentAt` through hydrate and insert. |
+| `library/BrewDatabase.ts` | `lastMeasuredBrew()` with no rating or age filtering; `sentAt` column, migration, `markSent(id, at)`; `sentAt` through hydrate and insert. |
 | `library/Settings.ts` | `ratingPromptDismissed`, `askForRatings`; the first also in `NOT_IN_BACKUP`. |
 | `app/settings.tsx` | The `askForRatings` row, and both keys in `settingsSnapshot()` or its exclusion list. |
 | `constants/brewCopy.ts` | The rating prompt's words, the wait-a-while line, the already-sent line. |
@@ -263,10 +263,10 @@ write path, unchanged, so the pin-with-the-verdict rule holds here for free.
 
 - `ratingPrompt.ts`: each clause alone, the window boundary at sixteen hours
   either side, a hand-logged row, a cancelled row, a rated row, a dismissed row.
-- `BrewDatabase`: `lastUnrated` against a real SQLite database through
-  `test-utils/sqlite.ts`, including that it picks the newest of several and
-  ignores other recipes' brews and non-counted outcomes. `sentAt` survives
-  insert, hydrate and the migration path.
+- `BrewDatabase`: `lastMeasuredBrew()` against a real SQLite database through
+  `test-utils/sqlite.ts`, including that it picks the newest measured brew
+  without rating or age filtering and ignores hand-logged rows and non-counted
+  outcomes. `sentAt` survives insert, hydrate and the migration path.
 - `useRatingPrompt`: rating writes through and clears the prompt; dismissal
   persists; a foregrounding re-reads.
 - `LiveBrewBar`: a live run beats a pending question; a silent route hides both;

@@ -85,7 +85,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
-           error, watch} = useLiveBrew();
+           error, watch, ratingNoteOpen} = useLiveBrew();
 
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
@@ -266,8 +266,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
             not a modal, so on Android `accessibilityViewIsModal` on the sheet
             does not take the screen behind it out of the reader's path. */}
         <YStack flex={1} backgroundColor={palette.base} padding="$4" gap="$3"
-                accessibilityElementsHidden={namingBean}
-                importantForAccessibility={namingBean ? "no-hide-descendants" : "auto"}>
+                accessibilityElementsHidden={namingBean || ratingNoteOpen}
+                importantForAccessibility={namingBean || ratingNoteOpen
+                    ? "no-hide-descendants"
+                    : "auto"}>
             {running && <BrewWakeLock />}
             {/* The nav row the mockup drew. `brew` is declared in the navigator
                 with `headerShown: false`, so this is the only bar. */}

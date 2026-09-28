@@ -79,8 +79,9 @@ export function useBrewRecordHandoff(
 
     function requestSend(): void {
         if (opened === null) return;
+        commitNoteDraft();
         if (judgement.rating === 0) {
-            setNoteDraft(judgement.note);
+            setNoteDraft(verdictRef.current.note);
             setRatingBeforeSend(true);
             return;
         }

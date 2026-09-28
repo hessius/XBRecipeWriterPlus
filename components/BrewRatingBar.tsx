@@ -72,7 +72,7 @@ export default function BrewRatingBar({
             >
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={RATING_PROMPT_OPEN_LABEL}
+                    accessibilityLabel={`${RATING_PROMPT_OPEN_LABEL}: ${figures}, ${recipeName}`}
                     onPress={onOpen}
                     style={{flexDirection: "row", alignItems: "center", flex: 1, gap: 12}}
                 >

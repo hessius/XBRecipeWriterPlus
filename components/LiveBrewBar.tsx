@@ -35,7 +35,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 const SILENT = new Set(["/brew", "/brewRecord", "/brewHistory"]);
 
 export default function LiveBrewBar() {
-    const {run, dismiss} = useLiveBrew();
+    const {run, dismiss, setRatingNoteOpen} = useLiveBrew();
     const prompt = useRatingPrompt();
     const router = useSteadyRouter();
     const pathname = usePathname();
@@ -98,6 +98,11 @@ export default function LiveBrewBar() {
     useEffect(() => () => {
         if (closeTimer.current !== null) clearTimeout(closeTimer.current);
     }, []);
+
+    useEffect(() => {
+        setRatingNoteOpen(noteOpen);
+        return () => setRatingNoteOpen(false);
+    }, [noteOpen, setRatingNoteOpen]);
 
     if (SILENT.has(pathname)) {
         return null;

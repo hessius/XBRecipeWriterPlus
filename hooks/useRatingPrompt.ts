@@ -75,14 +75,20 @@ export function useRatingPrompt(
 
     function refresh(): void {
         const next = database().lastMeasuredBrew();
-        setCandidate((was) => (
+        setCandidate((was) => {
             // Navigation refresh only retires an existing prompt. It must not
             // promote a brew first seen while leaving /brew, because that is
-            // the just-declined end-of-brew question in a new slot.
-            next?.id === was.brew?.id || next === null
-                ? {brew: next, now: Date.now()}
-                : was
-        ));
+            // the just-declined end-of-brew question in a new slot. If the
+            // store's latest measured brew is now older than the offered one,
+            // the offered row was deleted and has to be retired instead.
+            if (next?.id === was.brew?.id || next === null) {
+                return {brew: next, now: Date.now()};
+            }
+            if (was.brew !== null && next.startedAt <= was.brew.startedAt) {
+                return {brew: null, now: Date.now()};
+            }
+            return was;
+        });
     }
 
     const brew = brewToRate({

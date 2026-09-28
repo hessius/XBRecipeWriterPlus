@@ -29,7 +29,9 @@ describe("BrewRatingBar", () => {
     it("opens the brew when the bar is pressed", async () => {
         const onOpen = jest.fn();
         await renderWithProviders(<BrewRatingBar {...props({onOpen})} />);
-        await fireEvent.press(screen.getByLabelText("Open the last brew"));
+        await fireEvent.press(screen.getByLabelText(
+            "Open the last brew: 14:32 · 244 G, Morning Bloem"
+        ));
         expect(onOpen).toHaveBeenCalled();
     });
 

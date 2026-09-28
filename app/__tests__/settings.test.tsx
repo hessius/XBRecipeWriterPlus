@@ -721,9 +721,9 @@ describe("SettingsScreen", () => {
         // The sheet is up...
         expect(screen.getByText(/deletes 1 recipe/i)).toBeTruthy();
         // ...and outside both the scroll view and the screen's flex container.
-        expect(within(screen.getByTestId("settings-scroll"))
+        expect(within(screen.getByTestId("settings-scroll", {includeHiddenElements: true}))
             .queryByText(/deletes 1 recipe/i)).toBeNull();
-        expect(within(screen.getByTestId("settings-screen"))
+        expect(within(screen.getByTestId("settings-screen", {includeHiddenElements: true}))
             .queryByText(/deletes 1 recipe/i)).toBeNull();
     });
 

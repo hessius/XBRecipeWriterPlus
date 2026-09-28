@@ -39,7 +39,7 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/hooks/useLiveBrew", () => ({
-    useLiveBrew: () => ({run: null, dismiss: jest.fn()})
+    useLiveBrew: () => ({run: null, dismiss: jest.fn(), setRatingNoteOpen: jest.fn()})
 }));
 
 jest.mock("@/hooks/useBrewHistory", () => ({
