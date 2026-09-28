@@ -108,6 +108,41 @@ export type BrewRecord = {
      * the grinder took.
      */
     pouringAt?: number;
+    /**
+     * Milliseconds into the brew that the drawdown began, on the same clock as
+     * `BrewSample.at`. 0 when it never did.
+     *
+     * The last rise in *brew* water: the moment the final stage stopped
+     * pouring and the bed was left to finish. Not the machine's `settling`
+     * phase, which opens on BREWER_STOP and is far too late. A verified frame
+     * log (2026-09-10, `docs/machine-integration/ble-protocol.md`) has the
+     * bypass firing 61 s after the last pour began and BREWER_STOP 8 s after
+     * that, so a drawdown measured from settling would have reported 8 s of a
+     * drawdown that had already run for a minute.
+     *
+     * Brew water, not all water, because the bypass goes straight to the cup
+     * partway through the drawdown and its 5 ml is a rise that would restart
+     * the measurement. The recorder puts bypass water in a lane of its own for
+     * exactly this reason, and this reads only the lanes below it.
+     *
+     * It is what keeps a mid-brew pause out of the figure: a pause between two
+     * stages is followed by another rise, which moves the boundary past it. A
+     * pause and a drawdown look identical in the stream, and only "was there
+     * any more water after this" tells them apart.
+     *
+     * Only a brew the machine ran to the end has one at all. A brew that was
+     * cancelled, failed, or lost contact stops with the bed part way through
+     * finishing, and the tail after the last water is an interruption rather
+     * than a drawdown -- reporting it would put a figure beside the water that
+     * a person could dial a grind against, derived from a brew that never got
+     * there.
+     *
+     * 0 rather than absent, matching `pouringAt`: an interrupted brew has no
+     * drawdown, and a row written before this existed cannot have one either.
+     * Neither is a drawdown of zero seconds, and `drawdownSeconds` returns
+     * null for both.
+     */
+    drawdownAt?: number;
     endedAt: number;
     outcome: BrewOutcome;
     failure: BrewFailure | null;
@@ -253,6 +288,30 @@ export function isRating(value: unknown): value is number {
 export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
 
 /**
+ * How long the bed took to finish, in seconds, or null if it was not measured.
+ *
+ * Derived rather than stored, because the two figures it comes from are stored
+ * already and a third would be a number that could disagree with them.
+ *
+ * Null, never 0, when there is nothing to report: a brew that was cancelled or
+ * failed never drew down, and a row written before the boundary was recorded
+ * cannot say. A drawdown of zero seconds is a different claim and not one this
+ * app is ever in a position to make.
+ *
+ * Returned unrounded, exactly as the record screen passes its own duration to
+ * the TIME figure. Rounding here would round *up* through the floor that
+ * `BrewFigures.clock` applies on the way out, and show 0:23 for a drawdown of
+ * 22.6 seconds -- the same bug that floor exists to prevent.
+ */
+export function drawdownSeconds(record: BrewRecord): number | null {
+    const opened = record.drawdownAt ?? 0;
+    if (opened <= 0) return null;
+    const zero = (record.pouringAt ?? 0) > 0 ? record.pouringAt! : record.startedAt;
+    const ended = record.endedAt - zero;
+    return Math.max(0, (ended - opened) / 1000);
+}
+
+/**
  * Whether the xBloom ground this brew's coffee.
  *
  * Two independent records of one fact: the boolean the recipe carried, and
@@ -274,6 +333,29 @@ export function grinderRan(record: BrewRecord): boolean {
  * identical in the stream — the plan is the only thing that can tell them
  * apart, and the difference in totals is exactly the unplanned part.
  */
+/**
+ * Where the drawdown began, in milliseconds on the sample clock, or 0.
+ *
+ * 0 both for a brew where water never moved and for one whose only reading is
+ * the first drop at 0. The second has no drawdown worth a figure either, so
+ * they need not be told apart.
+ *
+ * @param stages how many brew stages the recipe had. Samples above it are the
+ *   bypass, whose water is not the bed's and must not move the boundary.
+ */
+export function drawdownFrom(samples: BrewSample[], stages: number): number {
+    let at = 0;
+    let highest = 0;
+    for (const sample of samples) {
+        if (sample.pour < 1 || sample.pour > stages) continue;
+        if (sample.water > highest) {
+            highest = sample.water;
+            at = sample.at;
+        }
+    }
+    return at;
+}
+
 export function summarise(samples: BrewSample[], plannedSeconds: number): BrewSummary {
     const last = samples[samples.length - 1];
     if (last === undefined) return {waterTotal: 0, cupTotal: 0, heldSeconds: 0};

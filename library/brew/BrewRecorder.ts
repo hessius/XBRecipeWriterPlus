@@ -7,8 +7,8 @@ import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_CEILING_MS, SETTLE_FLAT_MS}
 import {EVENT, MACHINE_STATE} from "@/library/machine/protocol";
 
 import type {BrewRecord, BrewSample} from "./BrewRecord";
-import {finalOutcome, newBrewId, planFromPours, stageWaterFromSamples,
-        stallsFromSamples, summarise} from "./BrewRecord";
+import {drawdownFrom, finalOutcome, newBrewId, planFromPours,
+        stageWaterFromSamples, stallsFromSamples, summarise} from "./BrewRecord";
 import {plannedSeconds} from "./brewShape";
 import {NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
 
@@ -354,6 +354,9 @@ export default class BrewRecorder {
                 startedAt: this.bypassAt
               }
             : undefined;
+        const outcome = finalOutcome(
+            phase.name, figures.waterTotal - (bypass?.delivered ?? 0), plannedWater
+        );
         const record: BrewRecord = {
             id: (this.options.newId ?? newBrewId)(),
             recipeUuid: recipe.uuid,
@@ -361,8 +364,24 @@ export default class BrewRecorder {
             accent: resolveAccent(recipe),
             startedAt: this.startedAt,
             pouringAt: this.pouringAt,
+            // Where the last stage stopped pouring, on the sample clock. Read
+            // from the stream rather than stamped when `settling` opened: the
+            // machine announces that on BREWER_STOP, a minute after the bed
+            // actually began to finish on a recipe with a bypass.
+            //
+            // Only for a brew that reached the end. A cancelled or failed brew
+            // has water behind it and time after it, which is the shape of a
+            // drawdown without being one: the bed was interrupted part way
+            // through finishing, and the tail is how long it took somebody to
+            // stop the machine. `endedOnMachine` keeps its boundary, because
+            // it is a brew the machine ran to the end and merely delivered
+            // less water than the plan asked for.
+            drawdownAt: outcome === "cancelled" || outcome === "lostContact"
+                        || outcome === "failed"
+                ? 0
+                : drawdownFrom(this.collected, stages),
             endedAt: this.clock(),
-            outcome: finalOutcome(phase.name, figures.waterTotal - (bypass?.delivered ?? 0), plannedWater),
+            outcome,
             failure,
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
             stalls: stallsFromSamples(

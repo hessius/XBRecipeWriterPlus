@@ -2257,6 +2257,125 @@ describe("picking a shelf's members", () => {
         );
     });
 
+    describe("arranging the shelves a person made", () => {
+        /** Two shelves, drawn in the order the stored list gives them. */
+        async function twoShelves() {
+            const ethiopia = named("Ethiopia");
+            ethiopia.tags = ["morning"];
+            const kenya = named("Kenya");
+            kenya.tags = ["evening"];
+            const settings = shelfSettings("morning", "evening");
+            await renderWithProviders(
+                <HomeScreen db={store([ethiopia, kenya])} settings={settings}/>
+            );
+            await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+            return settings;
+        }
+
+        it("moves a shelf down the grid", async () => {
+            const settings = await twoShelves();
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await pressOnSheet("shelf-overflow-down");
+
+            await waitFor(() =>
+                expect(parseHidden(settings.get("myShelves")))
+                    .toEqual([tagFilterId("evening"), tagFilterId("morning")])
+            );
+        });
+
+        it("moves a shelf back up the grid", async () => {
+            const settings = await twoShelves();
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:evening"));
+            await pressOnSheet("shelf-overflow-up");
+
+            await waitFor(() =>
+                expect(parseHidden(settings.get("myShelves")))
+                    .toEqual([tagFilterId("evening"), tagFilterId("morning")])
+            );
+        });
+
+        it("draws the shelves in the order they were arranged", async () => {
+            const settings = await twoShelves();
+            expect(screen.getAllByTestId(/^shelf-tag:/).map((tile) => tile.props.testID))
+                .toEqual(["shelf-tag:morning", "shelf-tag:evening"]);
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await pressOnSheet("shelf-overflow-down");
+
+            await waitFor(() =>
+                expect(parseHidden(settings.get("myShelves"))[0])
+                    .toBe(tagFilterId("evening"))
+            );
+            await waitFor(() =>
+                expect(screen.getAllByTestId(/^shelf-tag:/)
+                    .map((tile) => tile.props.testID))
+                    .toEqual(["shelf-tag:evening", "shelf-tag:morning"])
+            );
+        });
+
+        // The rows say what can be done. A press that silently does nothing is
+        // indistinguishable from a press the app dropped.
+        it("offers no way up from the top of the grid", async () => {
+            await twoShelves();
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await settleSheet();
+
+            expect(screen.queryByTestId("shelf-overflow-up")).toBeNull();
+            expect(screen.getByTestId("shelf-overflow-down")).toBeTruthy();
+        });
+
+        it("offers no way down from the bottom of the grid", async () => {
+            await twoShelves();
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:evening"));
+            await settleSheet();
+
+            expect(screen.queryByTestId("shelf-overflow-down")).toBeNull();
+            expect(screen.getByTestId("shelf-overflow-up")).toBeTruthy();
+        });
+
+        it("offers neither to an only shelf", async () => {
+            const ethiopia = named("Ethiopia");
+            ethiopia.tags = ["morning"];
+            await renderWithProviders(
+                <HomeScreen db={store([ethiopia])} settings={shelfSettings("morning")}/>
+            );
+            await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await settleSheet();
+
+            expect(screen.queryByTestId("shelf-overflow-up")).toBeNull();
+            expect(screen.queryByTestId("shelf-overflow-down")).toBeNull();
+        });
+
+        // A tag in the nursery is a shelf the app invented, so there is no
+        // arrangement of the user's for it to have a place in.
+        it("offers neither to a tag that is not a shelf", async () => {
+            const tagged = ["A", "B", "C"].map((name) => {
+                const recipe = named(name);
+                recipe.tags = ["morning"];
+                return recipe;
+            });
+            // Enough untagged recipes to keep the tag under the ceiling that
+            // withdraws a shelf describing almost the whole library.
+            const rest = ["D", "E", "F"].map(named);
+            await renderWithProviders(
+                <HomeScreen db={store([...tagged, ...rest])} settings={shelfSettings()}/>
+            );
+            await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+
+            await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+            await settleSheet();
+
+            expect(screen.queryByTestId("shelf-overflow-up")).toBeNull();
+            expect(screen.queryByTestId("shelf-overflow-down")).toBeNull();
+        });
+    });
+
     // `screenCovered` guards the main stack, which ends above the bar, so the
     // bar stayed in the accessibility tree underneath the naming sheet. On
     // Android a sheet does not hide its siblings, so TalkBack could focus and

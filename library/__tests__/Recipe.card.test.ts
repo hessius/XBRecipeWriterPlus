@@ -145,6 +145,31 @@ describe('grind size encoding', () => {
 });
 
 describe('cup type byte 39', () => {
+    /**
+     * These four bytes are not ours to choose, and #151 proposed swapping two
+     * of them.
+     *
+     * The argument was that xBloom's cloud API numbers cups `1 xPod, 2 Omni,
+     * 3 Other, 4 Tea`, that every position but those two is the cloud value
+     * minus one, and that one crossed pair is likelier to be our mistake than
+     * the vendor's ordering. Pour patterns cross in exactly the same place:
+     * the card numbers them `CENTERED 0, CIRCULAR 1, SPIRAL 2` and the cloud
+     * numbers them `1 Centered, 2 Spiral, 3 Circular`. Two crossed pairs is a
+     * habit, not an anomaly. `OMNI 0x02` is also the oldest value in the enum,
+     * read off real cards before `OTHER` had a byte at all.
+     *
+     * A swap here would change what every already-stored recipe does on the
+     * machine, silently, in an update. So the values are held here rather than
+     * merely used, and anyone who wants to move one has to come through this
+     * comment first.
+     */
+    it('holds the four cup type values the machine reads', () => {
+        expect(CUP_TYPE.XPOD).toBe(0x00);
+        expect(CUP_TYPE.OTHER).toBe(0x01);
+        expect(CUP_TYPE.OMNI).toBe(0x02);
+        expect(CUP_TYPE.TEA).toBe(0x03);
+    });
+
     it('stores non-tea cup types in the low nibble with an empty high nibble', () => {
         for (const cupType of [CUP_TYPE.XPOD, CUP_TYPE.OTHER, CUP_TYPE.OMNI]) {
             const card = buildCard({...XPOD_CARD, cupType});

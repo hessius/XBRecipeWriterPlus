@@ -79,7 +79,7 @@ Other domain invariants:
 - The machine rejects a recipe unless the sum of pour volumes equals `dosage × ratio`. `isPourVolumeValid()` guards this; `autoFixPourVolumes()` rescales pours and redistributes rounding error so it holds exactly.
 - Ratios are whole numbers only — no `.5`.
 - Tea (`CUP_TYPE.TEA`) is special-cased throughout: volumes are clamped to 90 ml, dose defaults to 5 g, the ratio is recomputed with `fixRatio()`, and tea cards always write the default grind size.
-- `CUP_TYPE.OMNI` is what the UI calls "overflow protection off".
+- `CUP_TYPE.OTHER` is the cup type the machine brews without overflow protection, and the UI says so. `CUP_TYPE.OMNI` is xBloom's own dripper, whose shape the machine knows, so it stops. This file said the opposite until #151; the bytes never moved, and `Recipe.card.test.ts` now holds all four of them.
 - `backup` / `offline_backup` / `uid` on a `Recipe` hold raw card bytes for the restore feature — preserve them through any serialization change.
 - Legacy JSON migrations live in the `Recipe(json)` constructor (e.g. cup types `0x23`/`0x13`/`0x04`). Don't drop them.
 

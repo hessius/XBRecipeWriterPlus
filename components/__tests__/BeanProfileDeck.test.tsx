@@ -2,7 +2,12 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import {BeanProfileDeck} from "@/components/BeanProfileDeck";
-import {PROFILE_CAP, type BeanProfile, type BeanProfileRow} from "@/library/beanProfile";
+import {
+    PROFILE_CAP,
+    PROFILE_FLOOR,
+    type BeanProfile,
+    type BeanProfileRow
+} from "@/library/beanProfile";
 import {renderWithProviders} from "@/test-utils/render";
 
 const ACCENT = "#9FC3F0";
@@ -136,6 +141,76 @@ describe("BeanProfileDeck", () => {
         const line = screen.getByTestId("bean-profile-row");
         expect(line).toHaveTextContent(/5/);
         expect(line).not.toHaveTextContent(/0\.0/);
+    });
+
+    it("says what an average below the floor rests on", async () => {
+        // The floor counts rated brews and the row displays counted ones, so
+        // `4.5 · 11` can fail the highly rated filter looking like a row that
+        // obviously qualifies. The third figure is the whole explanation.
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:    [row({brews: 11, rated: 2, avgRating: 4.5})],
+                    counted: 11
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByTestId("bean-profile-row"))
+            .toHaveTextContent(/4\.5 · 11 · 2 RATED/);
+    });
+
+    it("leaves a row at the floor to its two figures", async () => {
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:    [row({brews: 11, rated: PROFILE_FLOOR, avgRating: 4.5})],
+                    counted: 11
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        const line = screen.getByTestId("bean-profile-row");
+        expect(line).toHaveTextContent(/4\.5 · 11/);
+        expect(line).not.toHaveTextContent(/RATED/);
+    });
+
+    it("says nothing about ratings on a row that has none", async () => {
+        // There is no average to explain, so there is nothing to qualify.
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:    [row({brews: 5, rated: 0, avgRating: 0})],
+                    counted: 5
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByTestId("bean-profile-row")).not.toHaveTextContent(/RATED/);
+    });
+
+    it("leaves the untagged row its single figure below the floor", async () => {
+        // No filter can refuse the untagged row and no floor holds it back, so
+        // it has nothing to explain and keeps the shape it was designed around.
+        await renderWithProviders(
+            <BeanProfileDeck
+                profile={profile({
+                    rows:     [row()],
+                    untagged: {brews: 9, rated: 2, avgRating: 3.9},
+                    counted:  18
+                })}
+                accent={ACCENT}
+                onShowAll={jest.fn()}
+            />
+        );
+
+        expect(screen.getByLabelText(/^Not tagged/)).not.toHaveTextContent(/RATED/);
     });
 
     it("caps tagged rows and shows the total row count in SHOW ALL", async () => {

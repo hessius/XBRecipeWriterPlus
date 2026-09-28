@@ -233,7 +233,7 @@ function labelsMatching(
 }
 
 describe("each stock fragment against a real database", () => {
-    it("selects tea, pod, overflow-off and other-brewer by cup type", () => {
+    it("selects tea, pod, omni-dripper and other-brewer by cup type", () => {
         const db = new RecipeDatabase();
         const uuids = seed(db, {
             tea: {createdAt: 1, cupType: CUP_TYPE.TEA},
@@ -243,8 +243,33 @@ describe("each stock fragment against a real database", () => {
         });
         expect(labelsMatching(db, "tea", uuids)).toEqual(["tea"]);
         expect(labelsMatching(db, "pods", uuids)).toEqual(["pod"]);
-        expect(labelsMatching(db, "overflowOff", uuids)).toEqual(["omni"]);
+        expect(labelsMatching(db, "omniDripper", uuids)).toEqual(["omni"]);
         expect(labelsMatching(db, "otherBrewer", uuids)).toEqual(["other"]);
+    });
+
+    /**
+     * The bug #151 fixed was these two shelves being confused with each other,
+     * so this holds the label against the clause rather than either alone.
+     *
+     * Swapping just the two labels is the bug re-committed, and it passes the
+     * test above and every other test in this file: the clauses still select
+     * the right recipes, they are just described the wrong way round. Only an
+     * assertion that ties OMNI DRIPPER to the OMNI clause catches it.
+     *
+     * OMNI is what `newRecipe.ts` gives every new recipe, so getting this pair
+     * the wrong way round would mislabel most of a library.
+     */
+    it("keeps the two cup shelves disjoint", () => {
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            omni: {createdAt: 1, cupType: CUP_TYPE.OMNI},
+            other: {createdAt: 2, cupType: CUP_TYPE.OTHER}
+        });
+
+        expect(labelsMatching(db, "omniDripper", uuids)).not.toContain("other");
+        expect(labelsMatching(db, "otherBrewer", uuids)).not.toContain("omni");
+        expect(filterLabel("omniDripper")).toBe("OMNI DRIPPER");
+        expect(filterLabel("otherBrewer")).toBe("OTHER BREWER");
     });
 
     it("selects single-pour, few-stages and many-stages by pour count", () => {

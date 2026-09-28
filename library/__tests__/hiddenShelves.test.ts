@@ -175,4 +175,26 @@ describe("tag ids fold like author ids", () => {
     it("leaves a stock id alone", () => {
         expect(canonicalShelfId("tea")).toBe("tea");
     });
+
+    /**
+     * `overflowOff` was renamed to `omniDripper` in #151, when OVERFLOW OFF
+     * turned out to describe the other cup shelf's recipes. A user who had put
+     * the old shelf away has its id in this list, and a stock id is otherwise
+     * its own canonical form, so without the fold their answer would match
+     * nothing and the shelf would come back on its own. That is the failure
+     * this module's own comment says unknown ids are carried to prevent, so
+     * the rename has to be spoken here rather than left to the id going stale.
+     */
+    it("folds the renamed overflow-off shelf onto its new id", () => {
+        expect(canonicalShelfId("overflowOff")).toBe("omniDripper");
+        // The literal string an older build wrote, rather than one this build
+        // serialises: `serialiseHidden` folds on the way in, so going through
+        // it would prove a round trip rather than the upgrade this is about.
+        expect(isHidden('["overflowOff"]', "omniDripper")).toBe(true);
+        // The fold has to leave the new id alone as well. `isHidden` puts an
+        // already-canonical list through `canonicalShelfId` a second time, so
+        // a fold written as a two-way swap would pass the line above and
+        // quietly unhide the shelf for everybody who never saw the old name.
+        expect(canonicalShelfId("omniDripper")).toBe("omniDripper");
+    });
 });

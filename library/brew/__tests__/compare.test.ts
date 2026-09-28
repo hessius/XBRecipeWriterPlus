@@ -346,6 +346,30 @@ describe("compareBrews", () => {
             .toEqual({label: "GRIND", a: "58", b: "not recorded", shared: false});
     });
 
+    it("puts the drawdown beside the figures it is read against", () => {
+        // The fixture is zeroed at 10 s and ends at 150 s, so a bed left to
+        // finish at 110 s drew down for 30 and one left at 120 s for 20. Two
+        // brews of one recipe with the same water and different drawdowns is
+        // the comparison this table exists to make.
+        const c = compareBrews(
+            {record: brew({drawdownAt: 110_000}), samples: []},
+            {record: brew({id: "b", drawdownAt: 120_000}), samples: []}
+        );
+        expect(c.rows.find((row) => row.label === "DRAWDOWN"))
+            .toEqual({label: "DRAWDOWN", a: "30 s", b: "20 s", shared: false});
+    });
+
+    it("omits the drawdown when neither brew measured one", () => {
+        // Two records from before the boundary was kept, or two interrupted
+        // brews. An empty row would say the drawdown was compared and found
+        // equal, which is the one thing that did not happen.
+        const c = compareBrews(
+            {record: brew(), samples: []},
+            {record: brew({id: "b"}), samples: []}
+        );
+        expect(c.rows.find((row) => row.label === "DRAWDOWN")).toBeUndefined();
+    });
+
     it("includes fermentation with the other bean descriptors", () => {
         const c = compareBrews(
             {record: brew({fermentation: "Anaerobic"}), samples: []},

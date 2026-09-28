@@ -5,7 +5,7 @@ const names = Object.keys(DOT_ICONS) as DotIconName[];
 describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
-            ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
+            ["back", "brew", "chevron-down", "chevron-right", "chevron-up", "close", "delete",
              "duplicate", "edit", "error", "favourite", "filter", "help", "history",
              "import", "info",
              // `link-gone` replaced `link-off`, a four-dot speck that read as
@@ -21,8 +21,8 @@ describe("DOT_ICONS", () => {
              "shelfAllRecipes", "shelfAuthor",
              "shelfFewStages", "shelfGrinderOff", "shelfHot",
              "shelfLongRatio", "shelfManyStages", "shelfMine", "shelfMostBrewed",
-             "shelfNeverBrewed", "shelfOtherBrewer",
-             "shelfOverflowOff", "shelfPods", "shelfQuickBrew", "shelfRecent",
+             "shelfNeverBrewed", "shelfOmniDripper",
+             "shelfOtherBrewer", "shelfPods", "shelfQuickBrew", "shelfRecent",
              "shelfShortRatio", "shelfSinglePour", "shelfSlowBrew", "shelfTea",
              "shelfXbloom",
              "shelves", "sort", "success", "write"]
@@ -40,6 +40,12 @@ describe("DOT_ICONS", () => {
                 right[DOT_ICON_GRID - 1 - c][r]).join(""));
 
         expect(DOT_ICONS["chevron-down"]).toEqual(rotated);
+    });
+
+    it("draws chevron-up as chevron-down flipped top to bottom", () => {
+        // The pair is seen together in the shelf menu, one row above the
+        // other, so a chevron redrawn by hand would read as a different mark.
+        expect(DOT_ICONS["chevron-up"]).toEqual([...DOT_ICONS["chevron-down"]].reverse());
     });
 
     it("draws plus as a square mark, as wide as it is tall", () => {
@@ -140,5 +146,22 @@ describe("the new editor glyphs", () => {
     it("draws more as a caret that is symmetric about the middle column", () => {
         const reverse = (row: string) => [...row].reverse().join("");
         DOT_ICONS.more.forEach((row) => expect(row).toBe(reverse(row)));
+    });
+
+    it("gives each cup shelf the drawing that describes it", () => {
+        // #151 was the two cup types being confused with each other, and these
+        // two drawings exchanged owners to settle it. Nothing else in the
+        // suite would notice if they exchanged back: the names are the only
+        // thing the glyph map and the icon-name list check, so swapping the
+        // pixel arrays under the names compiles, passes every other test, and
+        // draws an overflowing cup on the shelf that cannot overflow.
+        //
+        // Row 1 alone separates them. The dripper is widest at the top, where
+        // its cone meets the stand; the cup is two walls with a gap between.
+        expect(DOT_ICONS.shelfOmniDripper[1]).toBe("#########");
+        expect(DOT_ICONS.shelfOtherBrewer[1]).toBe(".#.....#.");
+        // The brew coming over the rim, which is the whole point of the OTHER
+        // drawing and the thing a dripper's silhouette never does.
+        expect(DOT_ICONS.shelfOtherBrewer[2]).toBe(".##...##.");
     });
 });

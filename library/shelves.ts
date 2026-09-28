@@ -85,7 +85,8 @@ export function buildShelves(input: {
         filterCounts, tagCounts, authorCounts = [], librarySize, applied = [], myShelves = []
     } = input;
 
-    const mine = new Set(myShelves.map(canonicalShelfId));
+    const order = [...new Set(myShelves.map(canonicalShelfId))];
+    const mine = new Set(order);
 
     const manual: Shelf[] = [];
     const tagged: Record<string, number> = {};
@@ -154,5 +155,16 @@ export function buildShelves(input: {
     const escape = auto.filter((shelf) => shelf.id === "allRecipes");
     const stock = auto.filter((shelf) => shelf.id !== "allRecipes");
 
-    return [...manual, ...byTag, ...stock, ...byAuthor, ...escape];
+    // The user's shelves sit in the user's order, which is the order of the
+    // `myShelves` list itself: it is written when a shelf is made and rewritten
+    // when one is dragged, so it is authored data and not a derived ranking.
+    // Everything else keeps the order the app gave it. A shelf somehow absent
+    // from the list sorts last rather than throwing the arrangement out.
+    const place = (shelf: Shelf) => {
+        const at = order.indexOf(canonicalShelfId(shelf.id));
+        return at === -1 ? order.length : at;
+    };
+    const arranged = [...manual].sort((a, b) => place(a) - place(b));
+
+    return [...arranged, ...byTag, ...stock, ...byAuthor, ...escape];
 }

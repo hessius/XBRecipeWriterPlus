@@ -73,6 +73,7 @@ import {
     serialiseHidden,
     toggleHidden
 } from "@/library/hiddenShelves";
+import {moveShelf, orderShelves} from "@/library/shelfOrder";
 import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
@@ -441,6 +442,28 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         applied:      libraryQuery.query.filters,
         myShelves:    parseHidden(myShelves)
     });
+    // The user's own shelves, in the order they are drawn in. Every rearrange
+    // is expressed against this rather than against the stored list, because
+    // the list can carry an id whose shelf is not on the grid and a user can
+    // only ever move a tile past a tile they can see.
+    const myShelfIds = shelves
+        .filter((shelf) => shelf.kind === "manual")
+        .map((shelf) => shelf.id);
+
+    function rearrangeShelves(order: readonly string[]) {
+        setMyShelves(orderShelves(myShelves, order));
+    }
+
+    function moveShelfBy(tag: string, delta: -1 | 1) {
+        setMyShelves(moveShelf(myShelves, myShelfIds, tagFilterId(tag), delta));
+    }
+
+    /** Where a shelf sits among the user's own, or -1 if it is not one. */
+    function shelfPlace(tag: string): number {
+        const wanted = canonicalShelfId(tagFilterId(tag));
+        return myShelfIds.findIndex((id) => canonicalShelfId(id) === wanted);
+    }
+
     // The rows the picker draws are the rows the list draws, so a filter, a
     // search and a sort narrow the picker exactly as they narrow the library.
     //
@@ -1296,6 +1319,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                onOpen={libraryQuery.openShelf}
                                onNewShelf={picker.startCreating}
                                onShelfActions={setShelfActions}
+                               onRearrange={rearrangeShelves}
                                onHideShelf={(id) =>
                                    setHiddenShelves(toggleHidden(hiddenShelves, id))}
                                onScroll={onScroll}
@@ -1435,6 +1459,19 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 onEdit={picker.active || shelfActions === null
                     ? undefined
                     : () => beginEditingShelf(shelfActions)}
+                // Withheld at either end of the arrangement, so the sheet says
+                // what can be done rather than offering a press that does
+                // nothing. This is also the single-pointer path WCAG 2.5.7
+                // requires beside the drag, so it stays whatever the gesture
+                // does.
+                onMoveUp={shelfActions === null || shelfPlace(shelfActions) <= 0
+                    ? undefined
+                    : () => moveShelfBy(shelfActions, -1)}
+                onMoveDown={shelfActions === null
+                    || shelfPlace(shelfActions) === -1
+                    || shelfPlace(shelfActions) >= myShelfIds.length - 1
+                    ? undefined
+                    : () => moveShelfBy(shelfActions, 1)}
                 onRename={() => {
                     // Renaming saves the ticks along with the name, so the
                     // shelf has to be under edit for there to be ticks to save.

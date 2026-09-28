@@ -56,11 +56,12 @@ export type BeanProfile = {
  * brews and one rating would then rank on an average of one number, which is
  * the whole error this floor exists to prevent.
  *
- * This leaves a known wart. The row displays its *counted* brews, so `4.5 · 11`
- * can fail a floor of 3 with nothing on screen saying why. That was weighed
- * against printing a third figure (`4.5 · 11 · 2 rated`) and shipped
- * deliberately. See the design note before changing it; quietly moving the
- * floor onto counted brews undoes the decision rather than revisiting it.
+ * The row displays its *counted* brews, so `4.5 · 11` used to fail a floor of 3
+ * with nothing on screen saying why. `BeanProfileRow` now prints the rated count
+ * as a third figure on exactly those rows (`4.5 · 11 · 2 RATED`), which was the
+ * alternative weighed and deferred when the deck shipped. A row at or above the
+ * floor still prints two figures. Moving the floor onto counted brews undoes
+ * the decision rather than revisiting it.
  */
 export const PROFILE_FLOOR = 3;
 
