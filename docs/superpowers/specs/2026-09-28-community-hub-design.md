@@ -165,10 +165,10 @@ Treating "not the Studio's string" as proof of an Original is forbidden. We own
 no Original, so that inference cannot be verified, and it would misfire on a
 firmware revision.
 
-`Transport.scan` already reads the advertised name into `FoundMachine.name` and
-discards it. That is persisted too. Neither reading changes behaviour in this
-phase; both exist so #138's first open question can eventually be answered from
-real devices rather than guessed at.
+`Transport.scan` already reads the advertised name into `FoundMachine.name`; this
+phase persists it as evidence. The name never changes behaviour. The model number
+changes the setting only on a positive match against `STUDIO_MODEL_STRINGS`, as
+described above.
 
 ### 4.3 Threading `adaptedModel`
 

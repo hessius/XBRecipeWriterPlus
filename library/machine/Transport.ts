@@ -133,17 +133,17 @@ export class BleTransport implements MachineTransport {
     private deviceId: string | null = null;
     /** What the machine last said it was, or empty when it would not say. */
     public modelNumber = "";
+    /** The names machines advertised, keyed by their peripheral identifiers. */
+    private readonly advertisedNames = new Map<string, string>();
     /**
-     * The name the machine advertised when it was found.
+     * The name advertised by the machine currently connected.
      *
-     * Only ever set by a scan, and `attemptLink` skips the scan whenever an
-     * identifier is remembered — so for a returning user this stays empty for
-     * the whole life of the link. Empty therefore means "did not learn", never
-     * "the machine is nameless", and the layer that stores it has to treat the
-     * two differently or a normal reconnect would erase what an earlier scan
-     * found out.
+     * A returning user skips scanning, so a missing entry means "did not learn",
+     * never "the machine is nameless".
      */
-    public advertisedName = "";
+    get advertisedName(): string {
+        return this.deviceId === null ? "" : this.advertisedNames.get(this.deviceId) ?? "";
+    }
     private started = false;
     private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
     private disconnectListeners = new Set<() => void>();
@@ -264,7 +264,7 @@ export class BleTransport implements MachineTransport {
                     // and a second machine in range can still be delivered --
                     // and `attemptLink` takes `found[0]`, so last-match-wins
                     // would record the name of the machine it did not connect to.
-                    if (found.size === 0) this.advertisedName = name;
+                    this.advertisedNames.set(peripheral.id, name);
                     found.set(peripheral.id, {id: peripheral.id, name});
                     stop();
                 }
