@@ -42,10 +42,14 @@ on, which is the opposite of what everyone reports.
 
 Independent support for the naming, from our own protocol notes:
 `docs/machine-integration/cloud-api.md:145` calls the cloud value `2 =
-Omni/Dripper`, and `docs/machine-integration/ble-protocol.md:311` records a cup
-weight range of 90-110 g for the xDripper against 80-200 g for "other". A 200 g
-ceiling is not protection. Omni is xBloom's own dripper and the machine knows its
-shape; a third-party brewer it cannot measure, so it does not try.
+Omni/Dripper`. Omni is xBloom's own dripper and the machine knows its shape; a
+third-party brewer it does not, so it does not try.
+
+`ble-protocol.md:311` records a narrower cup weight range for the xDripper than
+for "other", which points the same way, but it is not offered as evidence here:
+that section is headed a `corroborated conflict`, only one of its three sources
+splits the values by cup type at all, and our own `setCupFrame` sends the wider
+range for every brew. The naming does not need it.
 
 ## What changes
 
