@@ -154,6 +154,7 @@ jest.mock("@/hooks/useMachine", () => ({
 // test never mounts it. Stubbed here so a test can put a brew in flight and
 // check what the BREW capsule does while the machine is occupied.
 let mockLiveRun: Record<string, unknown> | null = null;
+let mockRatingNoteOpen = false;
 
 /** A run snapshot complete enough for the mini bar to draw. */
 function liveRun(recipe: Recipe, phase: string): Record<string, unknown> {
@@ -167,8 +168,10 @@ jest.mock("@/hooks/useLiveBrew", () => ({
     __esModule:  true,
     useLiveBrew: () => ({
         run:     mockLiveRun,
+        ratingNoteOpen: mockRatingNoteOpen,
         start:   jest.fn(),
         dismiss: jest.fn(),
+        setRatingNoteOpen: jest.fn(),
         watch: () => () => {},
         brew:    jest.fn(),
         error:   null
@@ -301,6 +304,7 @@ function store(recipes: Recipe[]) {
 
 beforeEach(() => {
     mockPush.mockClear();
+    mockRatingNoteOpen = false;
     mockNotify.mockClear();
     mockShareState = {status: "idle"};
     (XBloomRecipe as unknown as jest.Mock).mockClear();
@@ -2267,6 +2271,16 @@ describe("picking a shelf's members", () => {
 
         expect(screen.getByTestId("shelf-name-field")).toBeTruthy();
         expect(screen.queryByTestId("shelf-picker-bar")).toBeNull();
+    });
+
+    it("hides the library content while the live brew note sheet covers it", async () => {
+        mockRatingNoteOpen = true;
+        await renderHome({recipes: pickerLibrary()});
+
+        expect(screen.getByTestId("home-content", {includeHiddenElements: true})
+            .props.accessibilityElementsHidden).toBe(true);
+        expect(screen.getByTestId("home-content", {includeHiddenElements: true})
+            .props.importantForAccessibility).toBe("no-hide-descendants");
     });
 
     it("swaps the grid for tickable rows", async () => {

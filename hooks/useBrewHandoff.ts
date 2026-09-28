@@ -7,9 +7,12 @@ import {encodeHandoff} from "@/library/brew/handoff/encode";
 import {backfillFromRecipe} from "@/library/brew/handoff/backfill";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {BrewExportSource} from "@/hooks/useBrewExport";
+import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
 
 export const HANDOFF_OPEN_FAILED = "Could not open Beanconqueror. Make sure it is installed and try again.";
 export const HANDOFF_TOO_LARGE = "This brew is too large to hand over to Beanconqueror.";
+
+export type HandoffStore = {markSent: (id: string, at: number) => void};
 
 /**
  * Hands a finished brew to Beanconqueror over its deep link.
@@ -29,15 +32,18 @@ export const HANDOFF_TOO_LARGE = "This brew is too large to hand over to Beancon
  * double tap cannot open Beanconqueror twice. `busy` is the same fact as state,
  * for a caller that wants to disable a button.
  */
-export function useBrewHandoff(source: () => BrewExportSource | null) {
+export function useBrewHandoff(
+    source: () => BrewExportSource | null,
+    store?: HandoffStore
+) {
     // Guards against a second press while the deep link is still opening.
     const isSendingRef = useRef(false);
     const [busy, setBusy] = useState(false);
 
-    async function send(beanName?: string) {
-        if (isSendingRef.current) return;
+    async function send(beanName?: string): Promise<number | null> {
+        if (isSendingRef.current) return null;
         const opened = source();
-        if (opened === null) return;
+        if (opened === null) return null;
         isSendingRef.current = true;
         setBusy(true);
         try {
@@ -53,7 +59,7 @@ export function useBrewHandoff(source: () => BrewExportSource | null) {
                 ({url} = encodeHandoff(envelope));
             } catch {
                 notify({tone: "error", message: HANDOFF_TOO_LARGE});
-                return;
+                return null;
             }
             // Do not preflight with canOpenURL: on iOS it returns false without
             // LSApplicationQueriesSchemes, even when Beanconqueror is installed.
@@ -63,7 +69,15 @@ export function useBrewHandoff(source: () => BrewExportSource | null) {
                 // A share sheet can be cancelled; a deep link has no cancel
                 // outcome, so a rejection here is a real failure to surface.
                 notify({tone: "error", message: HANDOFF_OPEN_FAILED});
+                return null;
             }
+            // Recorded after the link opened, not before: a failure to open is
+            // the one case where nothing can have been received, and a brew
+            // marked sent that never left would make the warning on the record
+            // screen a lie.
+            const sentAt = Date.now();
+            (store ?? sharedBrewDatabase()).markSent(opened.record.id, sentAt);
+            return sentAt;
         } finally {
             // The compiler bailout costs nothing measurable on a hook this
             // small, and one reset point is safer than duplicating it across

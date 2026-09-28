@@ -146,6 +146,8 @@ export default function RootLayout() {
                                                           options={{headerShown: false}}/>
                                             <Stack.Screen name="brewRecord"
                                                           options={{headerShown: false}}/>
+                                            <Stack.Screen name="brewCompare"
+                                                          options={{headerShown: false}}/>
                                             <Stack.Screen name="hub"
                                                           options={{headerShown: false}}/>
                                             <Stack.Screen name="hubRecipe"

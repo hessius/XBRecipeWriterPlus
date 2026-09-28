@@ -174,6 +174,8 @@ export type BrewRecord = {
      * judgement whose trace has been swept is one that cannot be acted on.
      */
     pinned?: boolean;
+    /** When this brew was last handed to another app. Absent until it was. */
+    sentAt?: number;
     /**
      * Whether the app saw this brew happen. Absent means it did.
      *

@@ -5,6 +5,7 @@ import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-na
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
+import {gunzipSync} from "fflate";
 
 import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
@@ -13,6 +14,7 @@ import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 import {
     brewRecordFixture as record,
+    makeBrewRecordFixture,
     type BrewRecordOpenResult
 } from "@/test-utils/brewRecordMocks";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -20,6 +22,7 @@ import type Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -46,7 +49,12 @@ let mockParams: {id?: string; latest?: string} = {id: "brew-1"};
 let mockBrews: StoredBrew[] = [];
 
 // The judgement writes the screen makes, recorded rather than performed.
-const mockJudgementStore = {judge: jest.fn(), setPinned: jest.fn()};
+const mockJudgementStore = {
+    judge: jest.fn(),
+    setPinned: jest.fn(),
+    brewsFor: jest.fn(),
+    markSent: jest.fn()
+};
 
 jest.mock("expo-router", () => {
     const mocks = jest.requireActual<typeof import("@/test-utils/brewRecordMocks")>(
@@ -129,6 +137,33 @@ const twoPours = {
     ]
 } as unknown as Recipe;
 
+async function pressOnSheet(
+    target: () => Parameters<typeof fireEvent.press>[0],
+    landed?: () => boolean
+): Promise<void> {
+    await waitFor(async () => {
+        await fireEvent.press(target());
+        if (landed !== undefined) expect(landed()).toBe(true);
+    });
+}
+
+function decodeHandoffUrl(url: string): HandoffEnvelope {
+    const params = new URL(url).searchParams;
+    const joined = [...params.keys()]
+        .filter((key) => /^shareBrew\d+$/.test(key))
+        .map((key) => Number(key.slice("shareBrew".length)))
+        .sort((a, b) => a - b)
+        .map((index) => params.get(`shareBrew${index}`) ?? "")
+        .join("");
+    const padded = joined
+        .replace(/-/g, "+")
+        .replace(/_/g, "/")
+        .padEnd(Math.ceil(joined.length / 4) * 4, "=");
+    return JSON.parse(
+        new TextDecoder().decode(gunzipSync(Buffer.from(padded, "base64")))
+    ) as HandoffEnvelope;
+}
+
 describe("brew record", () => {
     beforeEach(() => {
         mockPush.mockReset();
@@ -140,6 +175,8 @@ describe("brew record", () => {
             samples: [{at: 0, water: 0, cup: 0, pour: 1},
                       {at: 228_000, water: 250, cup: 244, pour: 2}]
         };
+        mockJudgementStore.brewsFor.mockReset();
+        mockJudgementStore.brewsFor.mockReturnValue([record]);
     });
 
     it("draws the trace and the figures", async () => {
@@ -326,6 +363,66 @@ describe("brew record", () => {
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
     });
 
+    it("does not offer comparison when this is the only brew of its recipe", async () => {
+        mockBrews = [record];
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByLabelText("Compare with another brew")).toBeNull();
+    });
+
+    it("compares this brew with another brew of the same recipe", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        mockJudgementStore.brewsFor.mockReturnValue([other, record]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+
+        expect(screen.queryByTestId("compare-candidate-brew-1")).toBeNull();
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("compare-candidate-brew-2"));
+            expect(mockPush).toHaveBeenCalledWith({
+                pathname: "/brewCompare",
+                params: {a: "brew-1", b: "brew-2"}
+            });
+        });
+    });
+
+    // The record is the newer of the two here, which is the case the sorted
+    // ordering used to get wrong: it turned the brew the user was looking at
+    // grey because the one they picked was older.
+    it("keeps the brew you came from leading, even when it is the newer", async () => {
+        const older = {...record, id: "brew-0", startedAt: 0};
+        const current = {...record, startedAt: 900_000};
+        mockBrews = [current, older];
+        mockJudgementStore.brewsFor.mockReturnValue([current, older]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByTestId("compare-candidate-brew-0"));
+            expect(mockPush).toHaveBeenCalledWith({
+                pathname: "/brewCompare",
+                params: {a: "brew-1", b: "brew-0"}
+            });
+        });
+    });
+
+    it("takes the record away from the reader while the compare sheet covers it", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        mockJudgementStore.brewsFor.mockReturnValue([other, record]);
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.getByTestId("brew-record-content").props.accessibilityElementsHidden)
+            .toBe(false);
+
+        await fireEvent.press(screen.getByLabelText("Compare with another brew"));
+
+        expect(screen.getByTestId("brew-record-content", {includeHiddenElements: true})
+            .props.accessibilityElementsHidden).toBe(true);
+    });
+
     describe("Beanconqueror handoff", () => {
         let openURL: jest.SpiedFunction<typeof Linking.openURL>;
         const [handoffTarget] = HANDOFF_TARGETS;
@@ -356,6 +453,8 @@ describe("brew record", () => {
         });
 
         it("asks what the coffee was before handing over a brew from beans", async () => {
+            mockOpened = {record: makeBrewRecordFixture({rating: 4}), samples: []};
+
             const {getByLabelText} = await renderWithProviders(
                 <BrewRecord recipeLookup={mockLookup} />
             );
@@ -369,6 +468,8 @@ describe("brew record", () => {
         });
 
         it("opens Beanconqueror once the coffee question is answered", async () => {
+            mockOpened = {record: makeBrewRecordFixture({rating: 4}), samples: []};
+
             const {getByLabelText, getByTestId} = await renderWithProviders(
                 <BrewRecord recipeLookup={mockLookup} />
             );
@@ -387,7 +488,10 @@ describe("brew record", () => {
 
         it("opens Beanconqueror straight away for a pod brew, which knows its coffee", async () => {
             mockOpened = {
-                record: {...record, coffee: {name: "Kenya Sakami"}},
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4
+                }),
                 samples: []
             };
 
@@ -400,6 +504,193 @@ describe("brew record", () => {
             await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
             expect(screen.queryByTestId("bean-name-field")).toBeNull();
         });
+
+        it("says nothing about a previous send on a brew that never went", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(screen.queryByText(/Sending again/)).toBeNull();
+        });
+
+        it("warns that a second send is a second brew", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4,
+                    sentAt: 86_400_000
+                }),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            expect(await screen.findByText(/Sending again/)).toBeTruthy();
+            expect(screen.getByLabelText(handoffTarget.buttonLabel).props.accessibilityState)
+                .toEqual({disabled: false});
+        });
+
+        it("offers the stars before sending an unrated brew", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("brew-note-done") !== null
+            );
+
+            expect(await screen.findByTestId("brew-note-done")).toBeTruthy();
+            expect(openURL).not.toHaveBeenCalled();
+        });
+
+        it("sends anyway when the stars are skipped", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("send-without-rating") !== null
+            );
+            await pressOnSheet(
+                () => screen.getByTestId("send-without-rating"),
+                () => openURL.mock.calls.length > 0
+            );
+
+            expect(openURL).toHaveBeenCalled();
+        });
+
+        it("carries the rating given in the pre-send sheet into the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("brew-note-done") !== null
+            );
+            await pressOnSheet(
+                () => screen.getByLabelText("Rate 4 stars"),
+                () => mockJudgementStore.judge.mock.calls.some(
+                    ([id, verdict]) => id === "brew-1" && verdict.rating === 4
+                )
+            );
+            await pressOnSheet(
+                () => screen.getByTestId("brew-note-done"),
+                () => openURL.mock.calls.length > 0
+            );
+
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.rating).toBe(4);
+        });
+
+        it("does not ask again after the record-screen stars already rated the brew", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(screen.queryByTestId("brew-note-done")).toBeNull();
+        });
+
+        it("shows the already-sent line after the first send and still allows the second", async () => {
+            jest.spyOn(Date, "now").mockReturnValue(86_400_000);
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4
+                }),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(await screen.findByText(/Sending again/)).toBeTruthy();
+
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(2));
+        });
+
+        it("does not send when the pre-send sheet is dismissed", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByText("CLOSE") !== null
+            );
+
+            await fireEvent.press(screen.getByText("CLOSE"));
+
+            expect(openURL).not.toHaveBeenCalled();
+        });
+
+        it("commits a typed pre-send note before building the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("send-without-rating") !== null
+            );
+            await fireEvent.changeText(screen.getByTestId("judgement-note"), "Bright and silky.");
+            await pressOnSheet(
+                () => screen.getByTestId("send-without-rating"),
+                () => openURL.mock.calls.length > 0
+            );
+
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.note)
+                .toContain("Bright and silky.");
+        });
+
+        it("commits the record note field before building the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4
+                }),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await fireEvent.changeText(screen.getByTestId("judgement-note"), "Bright and silky.");
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.note)
+                .toContain("Bright and silky.");
+        });
+
         it("does not offer the handoff without the action", async () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
@@ -547,6 +838,7 @@ describe("a verdict on a record", () => {
         mockParams = {id: "brew-1"};
         mockJudgementStore.judge.mockReset();
         mockJudgementStore.setPinned.mockReset();
+        mockJudgementStore.markSent.mockReset();
         mockOpened = {record, samples: []};
     });
 

@@ -3,11 +3,18 @@ import {
     BLOCKED_WATER_HEADLINE,
     FAILURE_COPY,
     FIRST_BREW_REMINDER,
+    HANDOFF_ALREADY_SENT,
     AGITATION_SENTENCE,
     MINI_FAILURE_WHY,
     PATTERN_SENTENCE,
     PHASE_COPY,
     PRO_MODE_PROMPT,
+    RATING_CAN_WAIT,
+    RATING_PROMPT_DISMISS_LABEL,
+    RATING_PROMPT_OPEN_LABEL,
+    RATING_PROMPT_QUESTION,
+    RATING_SHEET_DONE,
+    RATING_SHEET_TITLE,
     blockedWaterCopy
 } from "@/constants/brewCopy";
 import {AGITATION} from "@/library/Pour";
@@ -23,12 +30,22 @@ const ALL: string[] = [
     BLOCKED_WATER_HEADLINE,
     FIRST_BREW_REMINDER,
     PRO_MODE_PROMPT,
+    RATING_CAN_WAIT,
+    RATING_PROMPT_QUESTION,
+    RATING_PROMPT_OPEN_LABEL,
+    RATING_PROMPT_DISMISS_LABEL,
+    RATING_SHEET_TITLE,
+    RATING_SHEET_DONE,
+    HANDOFF_ALREADY_SENT("2 March"),
     blockedWaterCopy(240)
 ];
 
 describe("brew copy", () => {
-    it("uses no em dashes", () => {
-        for (const line of ALL) expect(line).not.toContain("\u2014");
+    it("uses no dashes that read as machine written", () => {
+        for (const line of ALL) {
+            expect(line).not.toMatch(/[\u2013\u2014]/);
+            expect(line).not.toMatch(/ - /);
+        }
     });
 
     it("does not claim nothing was sent, because opening a session beeps", () => {

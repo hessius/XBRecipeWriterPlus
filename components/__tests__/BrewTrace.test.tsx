@@ -64,6 +64,14 @@ function svgScalar(value: number | number[]): number {
     return Array.isArray(value) ? value[0] : value;
 }
 
+function lastPathPoint(path: string): {x: number; y: number} {
+    const [, x, y] = path.match(/L([0-9.]+) ([0-9.]+)$/) ?? [];
+    if (x === undefined || y === undefined) {
+        throw new Error(`Expected path to end in an absolute line point: ${path}`);
+    }
+    return {x: Number(x), y: Number(y)};
+}
+
 function svgTextAnchor(node: {props: {font?: {textAnchor?: string}; textAnchor?: string}}): string {
     return node.props.font?.textAnchor ?? node.props.textAnchor ?? "start";
 }
@@ -872,6 +880,36 @@ describe("the trace as it was drawn", () => {
 
         expect(queryByText("PLAN")).toBeNull();
         expect(getByText("WATER")).toBeTruthy();
+    });
+});
+
+describe("a shared axis", () => {
+    it("sizes itself to its own run when no axis is given", async () => {
+        const {getByTestId} = await draw({
+            compact: true,
+            pours: [],
+            plannedSeconds: 0,
+            samples: samples([0, 0, 0], [35_000, 200, 180])
+        });
+
+        // With no plan, bypass, or imposed axis, the box is exactly the run:
+        // maxT = 35 s and maxV = 200 ml. The final point is therefore
+        // x = 35 / 35 * 300 and y = 140 - 200 / 200 * 140.
+        expect(lastPathPoint(getByTestId("trace-water").props.d)).toEqual({x: 300, y: 0});
+    });
+
+    it("draws short when handed a wider axis", async () => {
+        const {getByTestId} = await draw({
+            compact: true,
+            pours: [],
+            plannedSeconds: 0,
+            samples: samples([0, 0, 0], [35_000, 200, 180]),
+            axis: {maxT: 70, maxV: 400}
+        });
+
+        // The imposed comparison box is twice the run in both dimensions:
+        // x = 35 / 70 * 300 and y = 140 - 200 / 400 * 140.
+        expect(lastPathPoint(getByTestId("trace-water").props.d)).toEqual({x: 150, y: 70});
     });
 });
 
