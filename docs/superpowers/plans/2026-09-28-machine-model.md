@@ -1082,6 +1082,8 @@ it("connects anyway when the machine will not say", async () => {
 
 Add the imports for `DEVICE_INFO_SERVICE` and `MODEL_NUMBER_CHARACTERISTIC` from `@/constants/machine`, and follow the file's existing pattern for mocking `BleManager`.
 
+The existing `jest.mock("react-native-ble-manager", ...)` factory has no `read`. Add `read: jest.fn().mockResolvedValue([])` to it beside the others rather than assigning `BleManager.read = ...` inside a test, which would leak the stub into every test after it. Drive each case with `(BleManager.read as jest.Mock).mockResolvedValueOnce(...)` / `.mockRejectedValueOnce(...)`.
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest library/machine/__tests__/Transport.test.ts`
@@ -1130,7 +1132,16 @@ Add two public fields beside `deviceId`:
 ```ts
     /** What the machine last said it was, or empty when it would not say. */
     public modelNumber = "";
-    /** The name the machine advertised when it was found. */
+    /**
+     * The name the machine advertised when it was found.
+     *
+     * Only ever set by a scan, and `attemptLink` skips the scan whenever an
+     * identifier is remembered — so for a returning user this stays empty for
+     * the whole life of the link. Empty therefore means "did not learn", never
+     * "the machine is nameless", and the layer that stores it has to treat the
+     * two differently or a normal reconnect would erase what an earlier scan
+     * found out.
+     */
     public advertisedName = "";
 ```
 
@@ -1365,14 +1376,40 @@ Add to `hooks/useMachine.ts`, above `settingsStore`:
  * one from, and a firmware revision would produce an unfamiliar string too.
  * `STUDIO_MODEL_STRINGS` is empty until somebody fills it in, and an empty list
  * matches nothing, so detection is inert rather than wrong.
+ *
+ * A blank reading is "did not learn", never "learned it is blank", so it is
+ * dropped rather than written. Both readings go blank in ordinary use and
+ * neither is a discovery: the Device Information Service is optional, and
+ * `advertisedName` is only ever filled in by a scan, which `attemptLink` skips
+ * for a returning user. Writing the blank through would erase what an earlier
+ * connect found out, on the reconnect after it, for almost everybody — and
+ * these two keys exist to be trustworthy about what a real machine said.
  */
 function applyMachineReading(settings: Settings, reading: MachineReading): void {
-    settings.set("machineModelString", reading.model);
-    settings.set("machineName", reading.name);
+    if (reading.model !== "") settings.set("machineModelString", reading.model);
+    if (reading.name !== "") settings.set("machineName", reading.name);
     if (STUDIO_MODEL_STRINGS.includes(reading.model)) {
         settings.set("machineModel", "studio");
     }
 }
+```
+
+Note the match is deliberately outside the emptiness guard above it, so that an empty `STUDIO_MODEL_STRINGS` cannot be made to match an empty reading. `[].includes("")` is already `false`, but a later edit that adds `""` to the list by accident would otherwise promote every silent machine to a Studio.
+
+Two of the tests in Step 1 have to cover this directly, or the guards are untested:
+
+```ts
+it("keeps what an earlier connect learned when this one learns nothing", async () => {
+    // The returning user's case: no scan, so no advertised name, and firmware
+    // that does not carry the Device Information Service says nothing either.
+    settings.set("machineModelString", "X15");
+    settings.set("machineName", "XBLOOM-77");
+
+    applyMachineReading(settings, {model: "", name: ""});
+
+    expect(settings.get("machineModelString")).toBe("X15");
+    expect(settings.get("machineName")).toBe("XBLOOM-77");
+});
 ```
 
 Add the import for `STUDIO_MODEL_STRINGS` from `@/constants/machine`, and for the `Settings` type from `@/library/Settings` if it is not already imported.
