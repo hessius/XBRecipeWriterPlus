@@ -359,7 +359,16 @@ describe("useHubBrowse", () => {
             await load.promise;
         });
 
-        await act(async () => result.current.setKeyword("colombia"));
+        // Typing waits, so the list does not thrash a character at a time.
+        await act(async () => result.current.search.onChangeText("colombia"));
+
+        // Shown at once, because it is what the user typed. The rail draws
+        // `text`, so keeping only a setter would leave its field blank and
+        // make it arm a second debounce against the same keyword.
+        // Upper case because the rail's field is upper case, which is also why
+        // `matchesHubQuery` compares without case.
+        expect(result.current.search.text).toBe("COLOMBIA");
+        expect(result.current.search.active).toBe(true);
         expect(result.current.query.keyword).toBe("");
         expect(result.current.rows.map((r) => r.id)).toEqual([1, 2]);
 
@@ -369,5 +378,10 @@ describe("useHubBrowse", () => {
 
         expect(result.current.query.keyword).toBe("colombia");
         expect(result.current.rows.map((r) => r.id)).toEqual([1]);
+
+        // Setting it outright does not wait, because nobody is typing.
+        await act(async () => result.current.setKeyword("ethiopia"));
+        expect(result.current.query.keyword).toBe("ethiopia");
+        expect(result.current.rows.map((r) => r.id)).toEqual([2]);
     });
 });

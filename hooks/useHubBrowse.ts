@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 
-import {useRailSearch} from "@/hooks/useRailSearch";
+import {useRailSearch, type RailSearch} from "@/hooks/useRailSearch";
 import {useSetting} from "@/hooks/useSetting";
 import {loadHubCatalogue} from "@/library/hub/hubCatalogue";
 import type {HubApiError} from "@/library/hub/hubApi";
@@ -29,6 +29,15 @@ export type HubBrowse = {
     totalPage: number;
     /** Set if the load threw. A broken connection, not an empty catalogue. */
     failed: HubApiError | Error | null;
+    /**
+     * The rail's search field, whole. The hub rail wants the same field the
+     * library rail has, so it wants `text` to draw, `expanded` and `onExpand`
+     * to open, and `onBlur` to close. Handing out only a setter would leave the
+     * field with nothing to show and would make the rail build a second
+     * debounce against the same keyword.
+     */
+    search: RailSearch;
+    /** Set the keyword without going through the field, and without the wait. */
     setKeyword(keyword: string): void;
     setSort(sort: HubSort): void;
     /** Replace one facet wholesale, which is what the filter sheet reports. */
@@ -132,7 +141,7 @@ export function useHubBrowse(): HubBrowse {
     }, [model, attempt]);
 
     function setKeyword(keyword: string): void {
-        search.onChangeText(keyword);
+        setQuery((was) => ({...was, keyword}));
     }
 
     function setSort(sort: HubSort): void {
@@ -176,6 +185,7 @@ export function useHubBrowse(): HubBrowse {
         rows,
         all,
         query,
+        search,
         arriving: current.failed === null && !current.done,
         page: current.page,
         totalPage: current.totalPage,
