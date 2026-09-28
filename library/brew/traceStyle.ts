@@ -31,6 +31,15 @@ export type Role = "subject" | "reference";
 export const referenceCupColour = palette.dim;
 export const referenceWaterColour = palette.muted;
 
+/**
+ * The attributes a channel's line carries.
+ *
+ * Deliberately closed, and deliberately without `fill` or `strokeOpacity`. Both
+ * charts spread this **last** onto their `<Path>` elements so that a use site
+ * cannot quietly override the grammar, which means any key added here silently
+ * wins over the same attribute written at the site. `fill="none"` and the
+ * animated `strokeOpacity` are set locally and must stay out of this type.
+ */
 export type ChannelStyle = {
     stroke: string;
     strokeWidth: number;

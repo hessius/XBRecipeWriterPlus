@@ -240,7 +240,6 @@ export default function BrewTrace({
     const planStyle = channelStyle("plan", {
         accent, dashed: planDashed, planColour: planColor
     });
-    const cupColour = cupStyle.stroke;
     // The stages a temperature belongs to. `stages ?? pours` is the same
     // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
     // `stages`, so reading `pours` alone would draw nothing in history.
@@ -567,7 +566,7 @@ export default function BrewTrace({
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3">
                 <LegendItem colour={waterStyle.stroke} label="WATER" />
-                <LegendItem colour={cupColour} label="CUP" dotted />
+                <LegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
                     <LegendItem colour={planStyle.stroke} label="PLAN" dashed />
                 )}
