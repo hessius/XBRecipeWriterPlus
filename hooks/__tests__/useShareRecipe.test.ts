@@ -3,6 +3,7 @@ import {act, renderHook, waitFor} from "@testing-library/react-native";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {useShareRecipe} from "@/hooks/useShareRecipe";
+import {sharedSettings} from "@/hooks/useSetting";
 
 jest.mock("@/hooks/useSetting", () =>
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -46,6 +47,38 @@ describe("useShareRecipe", () => {
         expect(recipe.shareUrl).toBe("https://share-h5.xbloom.com/?id=ok");
         expect(recipe.shareSnapshot).toBeTruthy();
         await waitFor(() => expect(result.current.state).toEqual({status: "idle"}));
+    });
+
+    /**
+     * The hook reads the chosen machine and the payload builder maps it.
+     *
+     * Every other test here leaves `machineModel` at its default, and the
+     * builder's own tests only prove that a model handed in is mapped right,
+     * so hardcoding `"studio"` at the call site left the whole suite green.
+     * This is the one test that fails if the hook stops asking.
+     */
+    it("sends the machine the user actually chose", async () => {
+        const fetchMock = respond({tableId: 7, url: "https://share-h5.xbloom.com/?id=ok"});
+        global.fetch = fetchMock;
+        sharedSettings().set("machineModel", "original");
+        const {result} = await renderHook(() => useShareRecipe());
+
+        await act(async () => { await result.current.share(drip()); });
+
+        const sent = JSON.parse((fetchMock as jest.Mock).mock.calls[0][1].body);
+        expect(sent.payload.adaptedModel).toBe(2);
+    });
+
+    it("sends the Studio's model when that is what is stored", async () => {
+        const fetchMock = respond({tableId: 8, url: "https://share-h5.xbloom.com/?id=ok"});
+        global.fetch = fetchMock;
+        sharedSettings().set("machineModel", "studio");
+        const {result} = await renderHook(() => useShareRecipe());
+
+        await act(async () => { await result.current.share(drip()); });
+
+        const sent = JSON.parse((fetchMock as jest.Mock).mock.calls[0][1].body);
+        expect(sent.payload.adaptedModel).toBe(1);
     });
 
     it("reuses the stored link when nothing that is sent has changed", async () => {
