@@ -198,48 +198,26 @@ git commit -m "Trim the machine model to what its consumers actually need"
 
 **Files:**
 - Modify: `library/Settings.ts` (add to `DEFAULTS`, `BackupExcluded`, `NOT_IN_BACKUP`)
-- Modify: `app/settings.tsx` (`settingsSnapshot()`)
-- Test: `library/__tests__/backup.test.ts` already holds the exhaustiveness test; confirm it still passes.
+- Modify: `app/settings.tsx` (the `settingsSnapshot()` object, a `useSetting` read, and `applySettings`)
+- Test: `app/__tests__/settings.test.tsx`
 
-**Why this shape:** `settingsSnapshot()` returns `Record<Exclude<SettingKey, BackupExcluded>, unknown>`, so a key that is neither in the snapshot nor on `NOT_IN_BACKUP` is a **compile error**. That is the mechanism that stops a new setting being silently absent from backups, and it is why this task touches both files at once.
+**Read this before you start.** `settingsSnapshot()` is an **inner function** of `SettingsScreen`, declared at roughly line 184. It closes over the component's `useSetting` state variables and returns them as an object literal in shorthand form. It is **not** exported, takes no arguments, and must stay that way. Do not lift it to module scope, do not give it a `Settings` parameter, and do not give it a defaults fallback: a snapshot that can read anything other than the live state is a backup that can silently export defaults instead of the user's real settings, which is the exact `showHints` failure the comment above it describes.
 
-- [ ] **Step 1: Write the failing test**
+**Why this task touches two files at once:** `settingsSnapshot()` returns `Record<Exclude<SettingKey, BackupExcluded>, unknown>`. Adding a key to `DEFAULTS` that is neither in the returned object nor on `NOT_IN_BACKUP` is therefore a **compile error**. That type is the safety net, not a test — which is why Step 2 below runs `npm run typecheck` rather than Jest.
 
-Add to `library/__tests__/backup.test.ts`, inside the existing top-level `describe`:
+**There are three keys, and they are not alike.** `machineModel` is the user's answer and belongs in backups. `machineModelString` and `machineName` are readings taken off a physical machine; restoring them onto a phone that never took the reading would turn evidence into fiction, so they are excluded.
 
-```ts
-it("carries the machine model, because it is a fact about what you own", () => {
-    // The device id is excluded because it names this phone's pairing. The
-    // model is not: a user restoring onto a new phone still owns the same
-    // machine, and defaulting them back to Studio would undo the correction
-    // they had to make by hand.
-    const backup = buildBackup([], settingsSnapshot(), []);
-    expect(Object.keys(backup.settings)).toContain("machineModel");
-});
-```
+- [ ] **Step 1: Add the three keys to `Settings.ts`**
 
-If `settingsSnapshot` is not already imported in that file, add:
-
-```ts
-import {settingsSnapshot} from "@/app/settings";
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `npx jest library/__tests__/backup.test.ts -t "because it is a fact about what you own"`
-Expected: FAIL, the key is absent.
-
-- [ ] **Step 3: Add the three keys to `Settings.ts`**
-
-First the import, beside the two `import type` lines already at the top of the file:
+First the import, beside the two existing `import type` lines at the top of the file (note this file uses **single** quotes for imports):
 
 ```ts
 import type {MachineModel} from './machine/machineModel';
 ```
 
-`machineModel.ts` imports nothing from `Settings.ts`, so this is not a cycle.
+`machineModel.ts` imports nothing, so this is not a cycle.
 
-In `library/Settings.ts`, inside `DEFAULTS`, immediately after the `machineDeviceId` entry:
+In `DEFAULTS`, immediately after the `machineDeviceId` entry:
 
 ```ts
     /**
@@ -273,17 +251,7 @@ In `library/Settings.ts`, inside `DEFAULTS`, immediately after the `machineDevic
     machineName: "",
 ```
 
-Then extend the exclusions further down the file:
-
-```ts
-export type BackupExcluded =
-    "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff" |
-    "machineModelString" | "machineName";
-export const NOT_IN_BACKUP: readonly SettingKey[] = [
-    "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff",
-    "machineModelString", "machineName"
-];
-```
+Then **add** the two readings to the existing `BackupExcluded` union and `NOT_IN_BACKUP` array. Read the current members first and append to them; do not retype the list from memory, and do not remove anything already there.
 
 Add to the `NOT_IN_BACKUP` doc comment, after the `labsUnlocked` paragraph:
 
@@ -294,23 +262,101 @@ Add to the `NOT_IN_BACKUP` doc comment, after the `labsUnlocked` paragraph:
  * about what a real machine said.
 ```
 
-- [ ] **Step 4: Add `machineModel` to the snapshot**
+- [ ] **Step 2: Run the typecheck to watch the safety net fire**
 
-In `app/settings.tsx`, inside `settingsSnapshot()`, beside the other machine keys:
+Run: `npm run typecheck`
+Expected: **FAIL**, with an error on `settingsSnapshot`'s return type saying `machineModel` is missing. This is the compile error doing its job; if it does not fire, you have put `machineModel` in the wrong list and the rest of this task is unsafe.
+
+- [ ] **Step 3: Read the setting in the screen**
+
+In `app/settings.tsx`, beside the other machine reads at roughly line 129-133:
 
 ```ts
-        machineModel: settings.get("machineModel"),
+    const [machineModel, setMachineModel] = useSetting("machineModel", settings);
 ```
 
-- [ ] **Step 5: Run the tests and the typecheck**
+`machineAutoStart` directly above it carries a comment explaining that it is read here although it is shown elsewhere. The same is true of `machineModel`: Task 8 draws its row inside `MachineSection`. Extend that existing comment to cover both rather than writing a second one.
 
-Run: `npx jest library/__tests__/backup.test.ts && npm run typecheck`
-Expected: PASS, and no type errors. If `settingsSnapshot` complains about a missing key you have put one of the three in the wrong list.
+- [ ] **Step 4: Put it in the snapshot**
 
-- [ ] **Step 6: Commit**
+Add `machineModel` to the object literal inside `settingsSnapshot()`, in shorthand, on the line with the other machine keys:
+
+```ts
+            firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
+            machineModel, machineAutoStart, animateBrewChart, brewTraceRetention,
+```
+
+Run `npm run typecheck` again. It should now be clean. That is the whole of the export half of the contract.
+
+- [ ] **Step 5: Write the failing restore test**
+
+The import half needs a real test. The existing "restores every setting a backup carries" test builds its fixture with `typeof value === "boolean" ? !value : value`, so for a **string** setting it round-trips the default against the default and would pass even if restore were never wired. It cannot catch this key.
+
+Add to `app/__tests__/settings.test.tsx`, beside that test:
+
+```ts
+it("restores which machine you own, not just the default", async () => {
+    // The generic restore test flips booleans, so a string setting round-trips
+    // its own default through it and proves nothing. This one names a value
+    // that is not the default: somebody who corrected their machine by hand
+    // and then moved phones must not silently land back on Studio.
+    const storage = memoryStorage();
+    mockPickBackup.mockResolvedValue(
+        backupOf([recipeNamed("A", "u1")], {machineModel: "original"})
+    );
+    mockApplyRestore.mockReturnValue({status: "restored", added: 1});
+    await renderWithProviders(<SettingsScreen settings={new Settings(storage)}/>);
+
+    await fireEvent.press(screen.getByRole("button",
+        {name: "Restore from a backup, Adds anything your library does not already have."}));
+    await settleSheet();
+    await fireEvent(screen.getByLabelText(/settings from this backup/i),
+                    "checkedChange", true);
+    await fireEvent.press(screen.getByRole("button", {name: /add to my library/i}));
+
+    expect(new Settings(storage).get("machineModel")).toBe("original");
+});
+```
+
+Match the surrounding tests for the exact helper names and the button labels; `memoryStorage`, `backupOf`, `recipeNamed` and `settleSheet` are all already in that file. Copy the interaction sequence from "restores every setting a backup carries" rather than the one written above if the two disagree.
+
+- [ ] **Step 6: Run the test to verify it fails**
+
+Run: `npx jest app/__tests__/settings.test.tsx -t "restores which machine you own"`
+Expected: FAIL, the setting is still `"studio"`.
+
+- [ ] **Step 7: Handle it on the way back in**
+
+In `applySettings`, beside the other validated reads at roughly line 274:
+
+```ts
+        // Validated rather than assigned: this value came out of a file the
+        // user could have edited, and an unrecognised model would be stored
+        // and then read back as a machine that does not exist.
+        if (isMachineModel(incoming.machineModel)) {
+            setMachineModel(incoming.machineModel);
+        }
+```
+
+Add the import:
+
+```ts
+import {isMachineModel} from "@/library/machine/machineModel";
+```
+
+Note `app/settings.tsx` uses **double** quotes for imports, unlike `library/Settings.ts`. The neighbouring restores use `isSortAxis`, `isLibraryView` and `asTemperatureUnit` in the same shape, so follow those.
+
+- [ ] **Step 8: Run everything**
+
+Run: `npx jest app/__tests__/settings.test.tsx library/__tests__/backup.test.ts && npm run typecheck && npm run lint`
+Expected: PASS throughout, no type errors, no new lint errors.
+
+**Do not add a global mock to `jest.setup.js`.** If a test needs a native module stubbed, the house pattern is a per-file `jest.mock` with a comment saying why, as `hooks/__tests__/useMachine.test.ts` does for `react-native-ble-manager`. A global stub changes the behaviour of every suite in the repo, including the ones whose job is to exercise that module. If you find yourself needing one, stop and report it instead.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add library/Settings.ts app/settings.tsx library/__tests__/backup.test.ts
+git add library/Settings.ts app/settings.tsx app/__tests__/settings.test.tsx
 git commit -m "Store which machine this phone drives, and what it said it was"
 ```
 
