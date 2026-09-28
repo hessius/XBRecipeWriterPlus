@@ -1,7 +1,8 @@
 import React from "react";
 import {processColor} from "react-native";
 
-import CompareTrace from "@/components/CompareTrace";
+import CompareTrace, {compareTracePlotHeight} from "@/components/CompareTrace";
+import {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {cupLineFor} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {referenceCupColour, referenceWaterColour} from "@/library/brew/traceStyle";
@@ -84,6 +85,33 @@ describe("CompareTrace", () => {
         expect(queryByTestId("trace-water-subject")).toBeNull();
         expect(getByTestId("trace-water-reference")).toBeTruthy();
         expect(getByText("WATER, BOTH")).toBeTruthy();
+    });
+
+    it("says only the surviving water line was drawn when this trace expired", async () => {
+        const {getByLabelText} = await draw({subject: [], reference: B, verdict: "differed"});
+        expect(getByLabelText(
+            "Brew comparison. This brew is coloured and that brew is grey. "
+            + "Cup difference is not drawn because a trace is missing. "
+            + "Only that brew's water could be drawn because this trace is missing."
+        )).toBeTruthy();
+    });
+
+    // A fixed height and flexWrap together are a trap: the wrapped rows have
+    // nowhere to go and spill over whatever follows. The legend is left unsized
+    // so it may grow, and the plot spends only the one row it usually needs.
+    it("lets a six item legend wrap rather than sizing it to one row", async () => {
+        const height = 160;
+        const {getByTestId} = await draw({
+            verdict: "differed",
+            height,
+            subjectPlan: "M0 100 L300 0",
+            referencePlan: "M0 100 L300 20"
+        });
+
+        expect(getByTestId("compare-legend-row").props.height).toBeUndefined();
+        expect(compareTracePlotHeight(height)).toBe(height - rowHeight(LEGEND_SIZE));
+        expect(getByTestId("compare-trace-plot").props.height)
+            .toBe(compareTracePlotHeight(height));
     });
 
     it("draws one faint plan, or two when the plans differ in shape", async () => {

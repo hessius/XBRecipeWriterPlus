@@ -45,6 +45,7 @@ function ModeButton({
         <Button
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
+            accessibilityState={{selected: active}}
             chromeless
             size="$2"
             backgroundColor={active ? palette.control : palette.none}

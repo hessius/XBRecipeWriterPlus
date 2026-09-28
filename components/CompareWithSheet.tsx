@@ -1,6 +1,6 @@
 import React from "react";
 import {Pressable} from "react-native";
-import {Text, XStack, YStack} from "tamagui";
+import {ScrollView, Text, XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
 import DotMatrixText from "@/components/DotMatrixText";
@@ -16,14 +16,29 @@ type Props = {
     onClose: () => void;
 };
 
+function ratingAccessibilityLabel(rating: number): string {
+    if (rating <= 0) return "Not rated yet.";
+    return rating === 1 ? "Rated 1 star." : `Rated ${rating} stars.`;
+}
+
 function CandidateRow({brew, onPick}: {brew: StoredBrew; onPick: (id: string) => void}) {
     const when = `${formatBrewDate(brew.startedAt)} · ${formatBrewTime(brew.startedAt)}`;
     const rating = brew.rating ?? 0;
+    // Only the absence is worth saying. A trace being present is the ordinary
+    // case and the reason to mention it at all is that its loss changes what
+    // the comparison can draw, which a sighted reader learns from the warning
+    // line below and a screen reader would otherwise learn after choosing.
+    const expiry = brew.hasStream
+        ? ""
+        : " The trace for this brew has expired. Its figures are still here.";
+    const label = `${when}, ${Math.round(brew.cupTotal)} grams in the cup. `
+        + `${ratingAccessibilityLabel(rating)}${expiry}`;
+
     return (
         <Pressable
             testID={`compare-candidate-${brew.id}`}
             accessibilityRole="button"
-            accessibilityLabel={`${when}, ${Math.round(brew.cupTotal)} grams in the cup`}
+            accessibilityLabel={label}
             onPress={() => onPick(brew.id)}
             style={({pressed}) => ({
                 opacity: pressed ? 0.7 : 1,
@@ -72,11 +87,13 @@ export default function CompareWithSheet({open, candidates, onPick, onClose}: Pr
                                        color={palette.dim}>
                             CHOOSE A BREW
                         </DotMatrixText>
-                        <YStack>
-                            {ordered.map((brew) => (
-                                <CandidateRow key={brew.id} brew={brew} onPick={onPick} />
-                            ))}
-                        </YStack>
+                        <ScrollView testID="compare-candidates-scroll">
+                            <YStack paddingBottom="$2">
+                                {ordered.map((brew) => (
+                                    <CandidateRow key={brew.id} brew={brew} onPick={onPick} />
+                                ))}
+                            </YStack>
+                        </ScrollView>
                     </>
                 )}
             </YStack>

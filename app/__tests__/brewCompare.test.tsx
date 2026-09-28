@@ -86,6 +86,21 @@ describe("the comparison screen", () => {
         expect(queryByTestId("compare-lane-a")).toBeNull();
     });
 
+    it("announces the selected view mode", async () => {
+        pair();
+        const {getByLabelText} = await renderWithProviders(<BrewCompareScreen />);
+        expect(getByLabelText("Show the brews overlaid").props.accessibilityState)
+            .toEqual({selected: true});
+        expect(getByLabelText("Show the brews separately").props.accessibilityState)
+            .toEqual({selected: false});
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+        expect(getByLabelText("Show the brews overlaid").props.accessibilityState)
+            .toEqual({selected: false});
+        expect(getByLabelText("Show the brews separately").props.accessibilityState)
+            .toEqual({selected: true});
+    });
+
     it("splits into two lanes on the same axis", async () => {
         pair();
         const {getByTestId, getByLabelText} =
@@ -224,6 +239,20 @@ describe("the comparison screen", () => {
         expect(queryByLabelText("Keep this trace")).toBeNull();
     });
 
+    it("does not offer to keep a trace that is already pinned", async () => {
+        const a = makeBrewRecordFixture({id: "a", pinned: true});
+        const b = makeBrewRecordFixture({id: "b", hasStream: false});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
+            b: {record: b, samples: [], frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByText, queryByLabelText} =
+            await renderWithProviders(<BrewCompareScreen />);
+        expect(getByText(COMPARE_DEGRADED.one)).toBeTruthy();
+        expect(queryByLabelText("Keep this trace")).toBeNull();
+    });
+
     it("falls back to the table when neither trace survived", async () => {
         const a = makeBrewRecordFixture({id: "a", hasStream: false});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
@@ -265,6 +294,21 @@ describe("the comparison screen", () => {
         setParams({a: "a", b: "b"});
         const {getByTestId} = await renderWithProviders(<BrewCompareScreen />);
         expect(getByTestId("compare-drift")).toBeTruthy();
+    });
+
+    it("draws a shared plan from the reference when this brew has no stored plan", async () => {
+        const a = makeBrewRecordFixture({id: "a"});
+        const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByTestId, queryByTestId, queryByText} =
+            await renderWithProviders(<BrewCompareScreen />);
+        expect(queryByTestId("trace-plan-subject")).toBeNull();
+        expect(getByTestId("trace-plan-reference")).toBeTruthy();
+        expect(queryByText("PLAN, THAT")).toBeNull();
     });
 
     it("words plan drift without leaking field names", async () => {

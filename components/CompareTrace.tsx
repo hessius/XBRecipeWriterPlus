@@ -43,6 +43,14 @@ const PLAN_OPACITY = 0.25;
 const PLOT_FLOOR = 10;
 
 export function compareTracePlotHeight(height: number): number {
+    // One row is what the legend usually needs, and `height` is a budget for
+    // the ordinary case rather than a frame. A comparison can show six entries
+    // (water, cup and plan, each twice), and on a narrow screen those wrap.
+    // The legend row is deliberately left unsized so that it may: the chart
+    // sits in the compare screen's ScrollView, in flow, so a wrapped legend
+    // makes the block taller and nothing collides. Reserving the worst case
+    // here instead would spend a third of the plot on a row that is usually
+    // not drawn, and the plot is where the whole comparison happens.
     return Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
 }
 
@@ -71,13 +79,25 @@ function lastCup(points: Point[]): number | null {
     return points.length === 0 ? null : points[points.length - 1].v;
 }
 
-function accessibilityText(oneWater: boolean, cupDifference: number | null): string {
+function accessibilityText(
+    oneWater: boolean,
+    subjectWaterPresent: boolean,
+    referenceWaterPresent: boolean,
+    cupDifference: number | null
+): string {
     const cup = cupDifference === null
         ? "Cup difference is not drawn because a trace is missing."
         : `Cups finished ${cupDifference} g apart.`;
-    const water = oneWater
-        ? "Water matched, so one coloured water line stands for both brews."
-        : "Water differed, so coloured and grey water lines are both drawn.";
+    let water = "Water is not drawn because both traces are missing.";
+    if (subjectWaterPresent && referenceWaterPresent) {
+        water = oneWater
+            ? "Water matched, so one coloured water line stands for both brews."
+            : "Water differed, so coloured and grey water lines are both drawn.";
+    } else if (subjectWaterPresent) {
+        water = "Only this brew's water could be drawn because that trace is missing.";
+    } else if (referenceWaterPresent) {
+        water = "Only that brew's water could be drawn because this trace is missing.";
+    }
     return `Brew comparison. This brew is coloured and that brew is grey. ${cup} ${water}`;
 }
 
@@ -121,14 +141,19 @@ export default function CompareTrace({
     const cupA = lastCup(subjectCup);
     const cupB = lastCup(referenceCup);
     const cupDifference = cupA === null || cupB === null ? null : Math.round(Math.abs(cupA - cupB));
-    const accessibilityLabel = accessibilityText(oneWater, cupDifference);
+    const accessibilityLabel = accessibilityText(
+        oneWater,
+        paths.waterSubject !== "",
+        paths.waterReference !== "",
+        cupDifference
+    );
     const hasSubjectPlan = (subjectPlan ?? "") !== "";
     const hasReferencePlan = (referencePlan ?? "") !== "";
     const hasTwoPlans = hasSubjectPlan && hasReferencePlan;
 
     return (
         <YStack width={width}>
-            <Svg width={width} height={svgHeight} accessibilityRole="image"
+            <Svg testID="compare-trace-plot" width={width} height={svgHeight} accessibilityRole="image"
                  accessibilityLabel={accessibilityLabel}>
                 {hasSubjectPlan && (
                     <Path
@@ -193,7 +218,7 @@ export default function CompareTrace({
                     />
                 )}
             </Svg>
-            <XStack testID="compare-legend-row" height={rowHeight(LEGEND_SIZE)}
+            <XStack testID="compare-legend-row"
                     alignItems="center" gap="$3" paddingTop="$1" flexWrap="wrap">
                 {oneWater ? (paths.waterSubject !== "" || paths.waterReference !== "") && (
                     <TraceLegendItem
