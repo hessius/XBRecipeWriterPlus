@@ -150,7 +150,27 @@ export type RestoreOutcome =
  * has to be told rather than left with a tick that did not stick. `failed` is
  * the database refusing the write.
  */
-export type ShelfWriteOutcome = {full: number; failed: number};
+export type ShelfWriteOutcome = {
+    full: number;
+    failed: number;
+    /**
+     * How many recipes carry the shelf's tag once the pass is over, counted
+     * from what reached the database rather than from what was asked for.
+     *
+     * A shelf is its tag, so this is the only honest answer to "does this shelf
+     * exist now". The screen needs it because provenance outlives the write: a
+     * marker stored for a shelf that no recipe accepted would sit in the
+     * setting for ever and silently promote the same word typed months later.
+     */
+    members: number;
+    /**
+     * For a rename, how many recipes still carry the name it was renamed from.
+     *
+     * Non-zero only when the rename was partly refused, which leaves the old
+     * shelf standing beside the new one. Always zero for any other write.
+     */
+    oldMembers: number;
+};
 
 /** What a shelf's mark is drawn from: its first few members, in shelf order. */
 export type ShelfMarkMembers = {
@@ -358,11 +378,18 @@ export function useRecipeLibrary(
         const wanted = new Set(uuids);
         let full = 0;
         let failed = 0;
+        // Counted from what the database took, not from `uuids`. A recipe the
+        // cap or the disk refused keeps whatever it had, so the shelf's real
+        // size is the sum of the states that survived the pass.
+        let members = 0;
         for (const recipe of allRecipes()) {
             const tags = recipe.tags ?? [];
             const has = tags.some((existing) => tagKey(existing) === key);
             const should = wanted.has(recipe.uuid);
-            if (has === should) continue;
+            if (has === should) {
+                if (should) members += 1;
+                continue;
+            }
             recipe.setTags(should
                 ? [...tags, tag]
                 : tags.filter((existing) => tagKey(existing) !== key));
@@ -372,10 +399,12 @@ export function useRecipeLibrary(
             const landed = recipe.tags.some((existing) => tagKey(existing) === key);
             if (landed !== should) {
                 full += 1;
+                if (has) members += 1;
                 continue;
             }
             try {
                 store.updateRecipe(recipe.uuid, recipe);
+                if (should) members += 1;
             } catch {
                 // Counted rather than ignored, unlike toggleFavourite: a
                 // favourite the database refused is one flag the reload puts
@@ -383,10 +412,11 @@ export function useRecipeLibrary(
                 // silently missing member is indistinguishable from a tick that
                 // never registered.
                 failed += 1;
+                if (has) members += 1;
             }
         }
         reload();
-        return {full, failed};
+        return {full, failed, members, oldMembers: 0};
     }
 
     /**
@@ -413,6 +443,11 @@ export function useRecipeLibrary(
         const wanted = new Set(uuids);
         let full = 0;
         let failed = 0;
+        // Both names, because a refused row is put back under the old one: a
+        // partly refused rename leaves two shelves standing, and the screen
+        // cannot move the provenance marker safely without knowing that.
+        let members = 0;
+        let oldMembers = 0;
         for (const recipe of allRecipes()) {
             const tags = recipe.tags ?? [];
             const had = tags.some((existing) => tagKey(existing) === fromKey);
@@ -429,17 +464,22 @@ export function useRecipeLibrary(
             if (landed !== should) {
                 recipe.setTags(tags);
                 full += 1;
+                if (had) oldMembers += 1;
+                if (has) members += 1;
                 continue;
             }
             try {
                 store.updateRecipe(recipe.uuid, recipe);
+                if (should) members += 1;
             } catch {
                 recipe.setTags(tags);
                 failed += 1;
+                if (had) oldMembers += 1;
+                if (has) members += 1;
             }
         }
         reload();
-        return {full, failed};
+        return {full, failed, members, oldMembers};
     }
 
     /**

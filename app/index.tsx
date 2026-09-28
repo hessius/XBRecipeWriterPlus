@@ -534,11 +534,19 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             notify({tone: "error", message: `There is already a shelf called ${name}.`});
             return false;
         }
-        reportShelfWrite(library.setShelfMembers(name, picker.chosen()));
+        const outcome = library.setShelfMembers(name, picker.chosen());
+        reportShelfWrite(outcome);
         // Made through NEW SHELF, so it is the user's own from birth. This is
         // the one place a shelf is created, so it is the one place that has to
         // say so.
-        setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(name)]));
+        //
+        // Only if a recipe actually took the tag. The cap and a refused write
+        // can both leave a shelf that was never written, and a marker for a
+        // shelf that does not exist never expires: it would silently promote
+        // the same word typed as an ordinary tag months later.
+        if (outcome.members > 0) {
+            setMyShelves(serialiseHidden([...parseHidden(myShelves), tagFilterId(name)]));
+        }
         setNamingShelf(false);
         stopPicking();
         return true;
@@ -577,15 +585,22 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // One pass over the library rather than an empty followed by a fill:
         // between two writes the shelf does not exist, and a refused second
         // write left its members with neither name.
-        reportShelfWrite(library.renameShelf(renamingShelf, name, picker.chosen()));
+        const outcome = library.renameShelf(renamingShelf, name, picker.chosen());
+        reportShelfWrite(outcome);
         // The marker follows the name. Folded ids mean a rename that only
         // changes case is already the same entry, so this is a no-op there and
         // a move when the word itself changes.
+        //
+        // Both halves are conditional, because a partly refused rename leaves
+        // both shelves standing: the new name is marked only if it exists, and
+        // the old marker is kept while its own shelf still has members. Moving
+        // it unconditionally demoted a shelf that was still on the screen.
         const was = canonicalShelfId(tagFilterId(renamingShelf));
         const stored = parseHidden(myShelves);
         if (stored.includes(was)) {
+            const kept = outcome.oldMembers > 0 ? stored : stored.filter((id) => id !== was);
             setMyShelves(serialiseHidden(
-                [...stored.filter((id) => id !== was), tagFilterId(name)]
+                outcome.members > 0 ? [...kept, tagFilterId(name)] : kept
             ));
         }
         setRenamingShelf(null);
@@ -627,14 +642,21 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
 
     /** Take a shelf away, keeping every recipe that was on it. */
     function deleteShelf(tag: string) {
-        reportShelfWrite(library.setShelfMembers(tag, []));
+        const outcome = library.setShelfMembers(tag, []);
+        reportShelfWrite(outcome);
         // The shelf is gone, so the claim that the user made it is about
         // nothing. Left behind, it would silently promote a tag of the same
         // name typed months later.
-        const id = canonicalShelfId(tagFilterId(tag));
-        setMyShelves(serialiseHidden(
-            parseHidden(myShelves).filter((stored) => stored !== id)
-        ));
+        //
+        // Only once it really is gone. A refused write leaves members on the
+        // shelf, and clearing the marker there would drop a shelf the user can
+        // still see out of YOUR SHELVES and into FROM TAGS.
+        if (outcome.members === 0) {
+            const id = canonicalShelfId(tagFilterId(tag));
+            setMyShelves(serialiseHidden(
+                parseHidden(myShelves).filter((stored) => stored !== id)
+            ));
+        }
         setDeletingShelf(null);
         stopPicking();
     }
@@ -1243,7 +1265,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                     // where members are chosen.
                     <ShelfRoom
                         label={openShelf?.label ?? filterLabel(libraryQuery.openShelfId ?? "")}
-                        manual={openShelf?.kind === "manual"}
+                        namedByUser={openShelf !== undefined && openShelf.kind !== "auto"}
                         recipes={library.recipes}
                         onBack={libraryQuery.closeShelf}
                         onScroll={onScroll}

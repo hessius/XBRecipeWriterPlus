@@ -70,7 +70,7 @@ export type RoomRecipeActions = {
  * mounted behind the room, not to replay a saved offset here.
  */
 export default function ShelfRoom({
-    label, recipes, onBack, actionsFor, evidence = {}, manual = false,
+    label, recipes, onBack, actionsFor, evidence = {}, namedByUser = false,
     showCoffeeMarker = true, dottedProfile = false, onScroll, paddingBottom = 0,
     editing = false
 }: {
@@ -100,11 +100,17 @@ export default function ShelfRoom({
      */
     evidence?: Readonly<Record<string, RecipeEvidence>>;
     /**
-     * True for a tag shelf, whose name is the user's own word. It draws in a
-     * plain face so the matrix does not recase it; a stock shelf is already the
-     * app's Doto caps and draws in the matrix face, exactly as `ShelfTile` does.
+     * True for any shelf whose name is a word the user typed, which is both a
+     * shelf they made and a tag not yet promoted into one. It draws in a plain
+     * face so the matrix does not recase it; a stock shelf is already the app's
+     * Doto caps and draws in the matrix face, exactly as `ShelfTile` does.
+     *
+     * Asked as "did a person write this name" rather than "is this shelf
+     * manual", because those two questions came apart the moment a tag shelf
+     * existed and the room was left titling half the user's own words in caps
+     * they had not typed.
      */
-    manual?: boolean;
+    namedByUser?: boolean;
     showCoffeeMarker?: boolean;
     dottedProfile?: boolean;
     /** Drives the screen's collapsing header. */
@@ -136,7 +142,7 @@ export default function ShelfRoom({
               * name is already the app's Doto caps, so both land right in it.
               */}
             <YStack flex={1} gap="$1">
-                {manual ? (
+                {namedByUser ? (
                     <Text testID="shelf-room-title" fontSize={16} fontWeight="700"
                           color={palette.text} numberOfLines={1}>
                         {label}

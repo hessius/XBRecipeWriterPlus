@@ -1,4 +1,5 @@
 import React from "react";
+import {StyleSheet} from "react-native";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
@@ -62,6 +63,34 @@ describe("ShelfRoom", () => {
                        onBack={jest.fn()} actionsFor={actionsFor()}/>
         );
         expect(screen.getByTestId("shelf-room-count").props.children).toBe("1 recipe");
+    });
+
+    it("keeps a tag shelf's own spelling in its title", async () => {
+        // A tag is a word the user typed, and the matrix face is drawn in caps:
+        // rendering one in it hands back a recasing of their own word. The room
+        // used to ask whether the shelf was manual, which a tag shelf is not,
+        // so every promoted-in-waiting shelf was titled in the wrong voice.
+        await renderWithProviders(
+            <ShelfRoom label="Mornings" recipes={[named("Ethiopia")]}
+                       onBack={jest.fn()} actionsFor={actionsFor()} namedByUser/>
+        );
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("shelf-room-title").props.style
+        );
+        expect(style?.fontFamily).toBeUndefined();
+    });
+
+    it("draws an auto shelf's title in the matrix face", async () => {
+        await renderWithProviders(
+            <ShelfRoom label="TEA" recipes={[named("Sencha")]}
+                       onBack={jest.fn()} actionsFor={actionsFor()}/>
+        );
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("shelf-room-title").props.style
+        );
+        expect(style?.fontFamily).toMatch(/Doto/i);
     });
 
     it("draws a tile for every recipe on the shelf", async () => {

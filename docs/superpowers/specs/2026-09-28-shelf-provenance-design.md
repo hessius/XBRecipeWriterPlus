@@ -134,13 +134,16 @@ confusing to begin with.
 ### FROM TAGS is the nursery
 
 The section is the promotion hint in its cheapest form: a tag appears there
-exactly when it has grown enough to be worth a shelf. Its tile carries the tag
-actions plus **MAKE IT A SHELF**, which marks it and moves it up permanently.
-A YOUR SHELVES tile carries **MAKE IT A TAG**, so the promotion is reversible
-and a mistap is not a trap.
+exactly when it has grown enough to be worth a shelf. Its tile offers one
+action, "Make this a shelf", which marks it and moves it up permanently. A
+YOUR SHELVES tile offers "Make this a tag", so the promotion is reversible and
+a mistap is not a trap.
 
-A tag shelf draws like a manual one in a room. It is a tag either way, and its
-membership is editable either way.
+Nothing else is on offer until it is promoted. Renaming, duplicating, deleting
+and editing the membership are all things done to a shelf, and a tag is not one
+yet; offering them here would make the promotion decorative. A tag shelf opens
+into a room like any other, and the room keeps the user's own spelling of the
+name rather than recasing it.
 
 ### Nothing is marked at the upgrade
 

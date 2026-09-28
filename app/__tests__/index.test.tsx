@@ -9,7 +9,7 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 import {resolveLibraryFilter, tagFilterId, tagFromFilterId} from "@/library/libraryFilters";
-import {serialiseHidden} from "@/library/hiddenShelves";
+import {parseHidden, serialiseHidden} from "@/library/hiddenShelves";
 import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
@@ -2137,6 +2137,113 @@ describe("picking a shelf's members", () => {
         expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
             message: "Some recipes could not be saved."
         }));
+    });
+
+    // A marker for a shelf that does not exist never expires, so months later
+    // the same word typed as an ordinary tag would arrive already promoted.
+    it("does not remember a shelf no recipe could be saved onto", async () => {
+        const db = store([named("Ethiopia"), named("Kenya")]);
+        db.updateRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+        const settings = new Settings(memoryStorage());
+        await renderWithProviders(<HomeScreen db={db} settings={settings}/>);
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        await fireEvent.press(screen.getByTestId("new-shelf"));
+
+        await fireEvent.press(screen.getAllByRole("checkbox")[0]);
+        await fireEvent.press(screen.getByTestId("shelf-picker-done"));
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Mornings");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        expect(parseHidden(settings.get("myShelves"))).toEqual([]);
+    });
+
+    // The mirror. A refused delete leaves the shelf on the screen, and
+    // forgetting it there would drop it out of YOUR SHELVES into FROM TAGS
+    // without the user having touched anything.
+    it("keeps a shelf it could not empty", async () => {
+        const tagged = ["Ethiopia", "Kenya", "Colombia"].map((name) => {
+            const recipe = named(name);
+            recipe.tags = ["morning"];
+            return recipe;
+        });
+        const db = store(tagged);
+        const settings = shelfSettings("morning");
+        await renderWithProviders(<HomeScreen db={db} settings={settings}/>);
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        db.updateRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await pressOnSheet("shelf-overflow-delete");
+        await pressOnSheet("remove-shelf-confirm");
+
+        // Asserted on the stored marker rather than the tile, because this
+        // store hands out the same recipe objects it was given: the refused
+        // write has already been made to the model in memory, where a real
+        // database would hand back the rows it never changed.
+        await waitFor(() =>
+            expect(parseHidden(settings.get("myShelves")))
+                .toEqual([tagFilterId("morning")])
+        );
+    });
+
+    // A refused row is put back under the old name, so a partly refused rename
+    // leaves two shelves standing. Moving the marker demoted the half the user
+    // could still see under the name they had given it.
+    it("keeps both shelves when a rename was only half taken", async () => {
+        const ethiopia = named("Ethiopia");
+        ethiopia.tags = ["morning"];
+        const kenya = named("Kenya");
+        kenya.tags = ["morning"];
+        const db = store([ethiopia, kenya]);
+        const settings = shelfSettings("morning");
+        await renderWithProviders(<HomeScreen db={db} settings={settings}/>);
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        db.updateRecipe.mockImplementation((uuid: string) => {
+            if (uuid === kenya.uuid) throw new Error("disk full");
+        });
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await pressOnSheet("shelf-overflow-rename");
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Before work");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        // Both ids, folded: a stored list is read back through the same
+        // canonical form that makes a rename of case alone a no-op.
+        await waitFor(() =>
+            expect(parseHidden(settings.get("myShelves")))
+                .toEqual([tagFilterId("morning"), tagFilterId("before work")])
+        );
+    });
+
+    // And the other half of the same guard: a rename nothing took has not made
+    // a shelf, so there is nothing to remember under the new name.
+    it("does not remember a rename that nothing took", async () => {
+        const ethiopia = named("Ethiopia");
+        ethiopia.tags = ["morning"];
+        const db = store([ethiopia]);
+        const settings = shelfSettings("morning");
+        await renderWithProviders(<HomeScreen db={db} settings={settings}/>);
+        await fireEvent.press(screen.getByRole("tab", {name: "Shelves"}));
+        db.updateRecipe.mockImplementation(() => {
+            throw new Error("disk full");
+        });
+
+        await fireEvent.press(screen.getByTestId("shelf-edit-tag:morning"));
+        await pressOnSheet("shelf-overflow-rename");
+        await settleSheet();
+        await fireEvent.changeText(screen.getByTestId("shelf-name-field"), "Before work");
+        await fireEvent.press(screen.getByTestId("shelf-name-confirm"));
+
+        await waitFor(() =>
+            expect(parseHidden(settings.get("myShelves")))
+                .toEqual([tagFilterId("morning")])
+        );
     });
 
     // `screenCovered` guards the main stack, which ends above the bar, so the
