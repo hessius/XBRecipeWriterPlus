@@ -5,7 +5,7 @@ const names = Object.keys(DOT_ICONS) as DotIconName[];
 describe("DOT_ICONS", () => {
     it("has every icon the app needs", () => {
         expect(names.sort()).toEqual(
-            ["back", "brew", "chevron-down", "chevron-right", "close", "delete",
+            ["back", "brew", "chevron-down", "chevron-right", "chevron-up", "close", "delete",
              "duplicate", "edit", "error", "favourite", "filter", "help", "history",
              "import", "info",
              // `link-gone` replaced `link-off`, a four-dot speck that read as
@@ -40,6 +40,12 @@ describe("DOT_ICONS", () => {
                 right[DOT_ICON_GRID - 1 - c][r]).join(""));
 
         expect(DOT_ICONS["chevron-down"]).toEqual(rotated);
+    });
+
+    it("draws chevron-up as chevron-down flipped top to bottom", () => {
+        // The pair is seen together in the shelf menu, one row above the
+        // other, so a chevron redrawn by hand would read as a different mark.
+        expect(DOT_ICONS["chevron-up"]).toEqual([...DOT_ICONS["chevron-down"]].reverse());
     });
 
     it("draws plus as a square mark, as wide as it is tall", () => {

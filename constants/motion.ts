@@ -14,6 +14,16 @@ export const DURATION = {
     fast:       120,
     base:       240,
     hold:       320,
+    /**
+     * How long a finger rests on a shelf tile before it lifts to be dragged.
+     *
+     * Not `base` and not `deliberate`, which are how long motion takes rather
+     * than how long the app waits. It is shorter than React Native's own 500 ms
+     * long press because the tile is large and the gesture is the only thing
+     * that can happen to it, and long enough that a scroll begun with a thumb
+     * on a tile is a scroll rather than a lift.
+     */
+    lift:       320,
     deliberate: 400
 } as const;
 
