@@ -74,7 +74,7 @@ function lastCup(points: Point[]): number | null {
 function accessibilityText(oneWater: boolean, cupDifference: number | null): string {
     const cup = cupDifference === null
         ? "Cup difference is not drawn because a trace is missing."
-        : `Cups finished ${cupDifference} ml apart.`;
+        : `Cups finished ${cupDifference} g apart.`;
     const water = oneWater
         ? "Water matched, so one coloured water line stands for both brews."
         : "Water differed, so coloured and grey water lines are both drawn.";

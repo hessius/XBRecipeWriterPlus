@@ -381,6 +381,18 @@ describe("compareBrews", () => {
         expect(c.rows.find((row) => row.label === "WATER")?.a).toBe("250 ml");
     });
 
+    // The cup is weighed, not measured. WATER sits directly above it and is
+    // genuinely millilitres, so the two rows must not share a unit.
+    it("weighs the cup in grams, the way the rest of the app does", () => {
+        const c = compareBrews(
+            {record: brew({cupTotal: 244}), samples: []},
+            {record: brew({id: "b", cupTotal: 231}), samples: []}
+        );
+        const cup = c.rows.find((row) => row.label === "CUP");
+        expect(cup?.a).toBe("244 g");
+        expect(cup?.b).toBe("231 g");
+    });
+
     it("still compares what a hand logged brew does know", () => {
         const c = compareBrews(
             {record: brew({rating: 4}), samples: []},

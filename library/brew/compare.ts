@@ -417,7 +417,12 @@ const FIELDS: Field[] = [
         read: measured((r) => formatBrewDuration(pourStartMs(r), r.endedAt))
     },
     {label: "WATER", read: measured((r) => `${Math.round(r.waterTotal)} ml`)},
-    {label: "CUP", read: measured((r) => `${Math.round(r.cupTotal)} ml`)},
+    // Grams, not millilitres. `cupTotal` is a scale reading, and every other
+    // surface in the app says so: the history row, the figures block and the
+    // handoff envelope all call it grams. Sitting directly under WATER, which
+    // really is millilitres, makes this the one row where the wrong unit would
+    // be read as a fact rather than a typo.
+    {label: "CUP", read: measured((r) => `${Math.round(r.cupTotal)} g`)},
     {
         label: "BYPASS",
         read: measured(

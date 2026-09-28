@@ -114,7 +114,7 @@ describe("CompareTrace", () => {
         const {getByLabelText} = await draw();
         expect(getByLabelText(
             "Brew comparison. This brew is coloured and that brew is grey. "
-            + "Cups finished 7 ml apart. Water matched, so one coloured water line "
+            + "Cups finished 7 g apart. Water matched, so one coloured water line "
             + "stands for both brews."
         )).toBeTruthy();
     });
