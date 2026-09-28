@@ -1,4 +1,5 @@
 import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
+import {drawdownSeconds} from "@/library/brew/BrewRecord";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
@@ -168,6 +169,132 @@ describe("BrewRecorder", () => {
         fake.cup(240);
         expect(recorder.samples).toHaveLength(3);
         expect(recorder.samples[2]).toMatchObject({water: 200, cup: 240});
+    });
+
+    it("measures the drawdown from the last water, not from settling", () => {
+        // The boundary is where the bed was left to finish: the last rise in
+        // brew water. The machine's `settling` phase opens on BREWER_STOP,
+        // which a verified frame log puts a long way after that, so stamping
+        // the boundary there would report the tail of the drawdown as all of
+        // it. Here: last water at 20 s, brew ends at 45 s, drawdown 25 s.
+        const {fake, time, records} = build();
+        time.advance(30_000);              // waking and grinding, off the clock
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.water(200);                   // the last of the water
+        time.advance(20_000);
+        fake.cup(190);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(5_000);
+        fake.cup(190);                     // flat long enough to end it
+        expect(records).toHaveLength(1);
+        expect(records[0].record.drawdownAt).toBe(20_000);
+        expect(drawdownSeconds(records[0].record)).toBe(25);
+    });
+
+    it("leaves the drawdown unmeasured on a brew that never poured", () => {
+        // A brew refused or cancelled before a drop has no bed to finish. 0 is
+        // the stored shape for that, and the figure is null rather than a
+        // drawdown of no seconds, which would put an invented 0:00 on a record
+        // beside the water.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        time.advance(9_000);
+        fake.phase({name: "cancelled"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record.drawdownAt).toBe(0);
+        expect(drawdownSeconds(records[0].record)).toBeNull();
+    });
+
+    it("keeps a mid-brew pause out of the drawdown", () => {
+        // The issue this measurement exists for. A stage pause and a drawdown
+        // look identical in the stream, a flat water line and a clock running,
+        // and only "was there more water after this" tells them apart. The
+        // 25 s pause between the stages is followed by more water, so the
+        // boundary moves past it: 10 s of drawdown, not 35.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(25_000);              // the pause between stage 1 and 2
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);
+        time.advance(5_000);
+        fake.cup(190);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(5_000);
+        fake.cup(190);
+        expect(drawdownSeconds(records[0].record)).toBe(10);
+    });
+
+    it("does not let the bypass restart the drawdown", () => {
+        // The verified 2026-09-10 frame log: the bypass fires 61 s after the
+        // last pour began and BREWER_STOP 8 s later. Its water goes straight
+        // to the cup while the bed is still finishing, so counting it as a
+        // rise would report the 9 s after it instead of the 69 s of drawdown
+        // that had already run. The recorder gives it a lane above the stages
+        // and the boundary reads only the lanes below.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);                   // the last brew water
+        time.advance(61_000);
+        fake.phase({name: "bypass"});
+        fake.water(205);                   // the bypass, in its own lane
+        time.advance(4_000);
+        fake.cup(190);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(4_100);
+        fake.cup(190);
+        expect(records[0].record.drawdownAt).toBe(20_000);
+        // Unrounded, so the floor in `BrewFigures.clock` still has a fraction
+        // to floor. Rounded to 69 here it would already have crossed 69.
+        expect(drawdownSeconds(records[0].record)).toBeCloseTo(69.1);
+    });
+
+    it("does not call an interrupted brew's tail a drawdown", () => {
+        // The bed was part way through finishing when somebody stopped the
+        // machine, so the 30 s after the last water is how long it took them
+        // to reach it. It has the shape of a drawdown without being one, and
+        // reporting it would put a figure on the record that a person could
+        // dial a grind against, taken from a brew that never got there.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);
+        time.advance(30_000);
+        fake.phase({name: "cancelled"});
+        expect(records).toHaveLength(1);
+        expect(records[0].record.drawdownAt).toBe(0);
+        expect(drawdownSeconds(records[0].record)).toBeNull();
+    });
+
+    it("keeps the drawdown of a brew the machine ended short", () => {
+        // `endedOnMachine` is a brew the machine ran to the end that merely
+        // delivered less water than the plan asked for -- somebody changed the
+        // ratio on the machine, or the beans ran out. The bed still finished,
+        // so the figure is real and must survive the guard above.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.water(100);                   // well short of the plan's 200
+        time.advance(10_000);
+        fake.cup(95);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(5_000);
+        fake.cup(95);
+        expect(records[0].record.outcome).toBe("endedOnMachine");
+        expect(records[0].record.drawdownAt).toBe(20_000);
+        expect(drawdownSeconds(records[0].record)).toBe(15);
     });
 
     it("ends settling when the cup line has been flat long enough", () => {

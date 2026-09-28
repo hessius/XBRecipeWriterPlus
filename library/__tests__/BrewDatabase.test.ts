@@ -1,7 +1,7 @@
 import BrewDatabase, {ensureBrewTables} from "@/library/BrewDatabase";
 import BrewRecorder, {type RecorderMachine} from "@/library/brew/BrewRecorder";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
-import {unobservedBrew} from "@/library/brew/BrewRecord";
+import {drawdownSeconds, unobservedBrew} from "@/library/brew/BrewRecord";
 import {
     MAX_BEAN_TAG_LENGTH,
     MAX_BEAN_TAGS,
@@ -224,6 +224,7 @@ function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
         accent: "#C86A3B",
         startedAt: 1_000_000,
         pouringAt: 1_045_000,
+        drawdownAt: 0,
         endedAt: 1_240_000,
         outcome: "done",
         failure: null,
@@ -359,6 +360,18 @@ describe("BrewDatabase", () => {
         const db = new BrewDatabase();
         db.insert(record({id: "brew-dry", pouringAt: 0}), []);
         expect(db.get("brew-dry")?.pouringAt).toBe(0);
+    });
+
+    it("keeps the drawdown boundary through the database", () => {
+        // The figure is derived from two stored numbers, so the boundary is
+        // the only part a write can lose. 1_045_000 is the first drop and
+        // 1_240_000 the end, so a settle opening 180 s in leaves 15 s of
+        // drawdown.
+        const db = new BrewDatabase();
+        db.insert(record({id: "brew-settled", drawdownAt: 180_000}), []);
+        const back = db.get("brew-settled")!;
+        expect(back.drawdownAt).toBe(180_000);
+        expect(drawdownSeconds(back)).toBe(15);
     });
 
     it("restores null rather than the string 'null' for a clean brew", () => {
@@ -1410,5 +1423,9 @@ describe("today's brew", () => {
         expect(brew.process).toBeUndefined();
         expect(brew.fermentation).toBeUndefined();
         expect(brew.tags).toEqual([]);
+        // The column the drawdown is measured from was added after this row
+        // was written. It reads as not measured, not as an instant drawdown.
+        expect(brew.drawdownAt).toBe(0);
+        expect(drawdownSeconds(brew)).toBeNull();
     });
 });

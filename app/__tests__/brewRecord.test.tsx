@@ -1051,6 +1051,30 @@ describe("bypass on the record screen", () => {
     });
 });
 
+describe("the drawdown on the record screen", () => {
+    async function renderRecord(r: typeof record) {
+        mockParams = {id: r.id};
+        mockOpened = {record: r, samples: []};
+        return renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+    }
+
+    it("reports the time from the last water to the end of the brew", async () => {
+        // The fixture is zeroed at 0 and ends at 228 s, so a settle opening at
+        // 210 s leaves 18 seconds of drawdown. Measured from the boundary the
+        // machine announced, never from the brew's total, which would report
+        // the whole 3:48.
+        await renderRecord({...record, drawdownAt: 210_000});
+        expect(screen.getByText("DRAWDOWN 0:18")).toBeTruthy();
+    });
+
+    it("says nothing for a brew that never drew down", async () => {
+        // A record from before the boundary was kept, and a brew that was
+        // cancelled, both store 0. Neither is a drawdown of no seconds.
+        await renderRecord({...record, drawdownAt: 0});
+        expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+});
+
 // A brew somebody logged by hand. It has a rating, a note and a date, and
 // the machine never saw it: no trace, no figures, no stages. Drawing the
 // recipe's pours as though they had been poured would put a brew on the

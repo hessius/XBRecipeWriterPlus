@@ -1,6 +1,7 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
-import {numeric, poursFromPlan, type BrewSample, type PlanStage} from "./BrewRecord";
+import {drawdownSeconds, numeric, poursFromPlan, type BrewSample,
+        type PlanStage} from "./BrewRecord";
 import {resolvedOrigin, resolvedProcess} from "./beanTags";
 import {formatBrewDuration} from "./brewFormat";
 import {countsAsBrewed, isMeasured} from "./brewPopulation";
@@ -441,6 +442,18 @@ const FIELDS: Field[] = [
     // really is millilitres, makes this the one row where the wrong unit would
     // be read as a fact rather than a typo.
     {label: "CUP", read: measured((r) => `${Math.round(r.cupTotal)} g`)},
+    // Directly under the figures it is read against. How long the bed took to
+    // finish is one of the things a person changes a grind to change, so two
+    // brews of one recipe with the same water and different drawdowns is the
+    // comparison this table exists to make. Floored to whole seconds for the
+    // same reason POUR is: a drawdown shown as 23 s at 22.6 is wrong.
+    {
+        label: "DRAWDOWN",
+        read: measured((r) => {
+            const seconds = drawdownSeconds(r);
+            return seconds === null ? null : `${Math.floor(seconds)} s`;
+        })
+    },
     {
         label: "BYPASS",
         read: measured(

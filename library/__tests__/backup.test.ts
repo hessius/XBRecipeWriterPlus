@@ -786,6 +786,20 @@ describe("brew history through a backup", () => {
         expect(result.payload.skippedBrews).toBe(0);
     });
 
+    it("carries the drawdown boundary out and back", () => {
+        // The figure is derived, so a backup that dropped the boundary would
+        // restore a history whose drawdowns had all silently become
+        // unmeasured — and a person restores a phone precisely to keep the
+        // comparisons they have been building.
+        const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                 [brewNamed("b1", {drawdownAt: 150_000})]);
+        const result = parseBackup(text);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews[0].drawdownAt).toBe(150_000);
+    });
+
     it("reads a backup written before brews were carried", () => {
         const text = buildBackup([recipeNamed("A", "u1")], {});
         const envelope = JSON.parse(text);
