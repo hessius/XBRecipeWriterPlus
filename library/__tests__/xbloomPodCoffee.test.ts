@@ -132,7 +132,7 @@ describe("xBloom pod preview artwork", () => {
             })
         })) as unknown as typeof fetch;
 
-        const xb = new XBloomRecipe({kind: "xid", xid: "NLC001"});
+        const xb = new XBloomRecipe({kind: "xid", xid: "NLC001"}, "studio");
         await xb.fetchRecipeDetail();
         return xb.getImageURL();
     }

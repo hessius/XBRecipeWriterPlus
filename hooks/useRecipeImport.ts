@@ -1,8 +1,10 @@
 import {useEffect, useRef, useState} from "react";
 
 import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
+import {sharedSettings} from "@/hooks/useSetting";
 import {resolveOnOpen} from "@/library/duplicates";
 import {parseImportInput, type ImportSource} from "@/library/importInput";
+import {asMachineModel} from "@/library/machine/machineModel";
 import type Recipe from "@/library/Recipe";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
 
@@ -269,7 +271,9 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         inFlight.current = controller;
         setState({status: "resolving"});
 
-        const xb = new XBloomRecipe(source);
+        const xb = new XBloomRecipe(
+            source, asMachineModel(sharedSettings().get("machineModel"))
+        );
 
         // A failed lookup always restores the field, whatever the intent: an
         // error has nothing to navigate to, so the field must come back as the

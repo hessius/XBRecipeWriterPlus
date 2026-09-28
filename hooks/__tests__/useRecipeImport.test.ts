@@ -12,6 +12,9 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 
+jest.mock("@/hooks/useSetting", () =>
+    require("@/test-utils/settingsMock").settingsMock());
+
 /** A recipe as the xBloom mapper would produce it. */
 function importedRecipe(xid = "ETH120"): Recipe {
     const recipe = new Recipe();

@@ -51,6 +51,32 @@ jest.mock("expo-share-intent", () => ({
     useShareIntentContext: () => mockShareIntentState
 }));
 
+jest.mock("@/hooks/useSetting", () => {
+    const React = require("react");
+    const {DEFAULTS} = require("@/library/Settings");
+    const mockStore: Record<string, unknown> = {...DEFAULTS};
+    const mockListeners = new Set<() => void>();
+    const mockSettings = {
+        get: (key: string) => mockStore[key],
+        set: (key: string, value: unknown) => {
+            mockStore[key] = value;
+            mockListeners.forEach((notify) => notify());
+        },
+        subscribe: (notify: () => void) => {
+            mockListeners.add(notify);
+            return () => mockListeners.delete(notify);
+        }
+    };
+    const sharedSettings = () => mockSettings;
+    const useSetting = (key: string, settings = mockSettings) => {
+        const value = React.useSyncExternalStore(
+            settings.subscribe, () => settings.get(key)
+        );
+        return [value, (next: unknown) => settings.set(key, next)];
+    };
+    return {__esModule: true, default: useSetting, useSetting, sharedSettings};
+});
+
 jest.mock("@/library/RecipeDatabase");
 
 // Configurable so a test can leave a lookup in flight (a never-resolving

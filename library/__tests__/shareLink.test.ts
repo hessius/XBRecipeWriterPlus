@@ -257,7 +257,7 @@ describe("the round trip through the importer", () => {
     // mismatch there is not a crash, it is a different brew.
     function reimport(recipe: Recipe): Recipe {
         const payload = buildSharePayload(recipe, "studio");
-        const importer = new XBloomRecipe({kind: "share", id: "test-share-id"});
+        const importer = new XBloomRecipe({kind: "share", id: "test-share-id"}, "studio");
         const importerInternals = importer as unknown as {
             xbRecipeJSON: unknown;
             name: string;

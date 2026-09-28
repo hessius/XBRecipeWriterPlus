@@ -18,26 +18,44 @@ beforeEach(() => {
     global.fetch = jest.fn(async () => okResponse()) as unknown as typeof fetch;
 });
 
+function bodyOfLastRequest() {
+    const calls = (global.fetch as jest.Mock).mock.calls;
+    return JSON.parse(calls[calls.length - 1][1].body);
+}
+
 it("calls the pod endpoint for a pod code", async () => {
-    await new XBloomRecipe({kind: "xid", xid: "ETH120"}).fetchRecipeDetail();
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "studio").fetchRecipeDetail();
 
     expect(global.fetch).toHaveBeenCalledWith(POD_ENDPOINT, expect.anything());
-    expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).xid).toBe("ETH120");
+    expect(bodyOfLastRequest().xid).toBe("ETH120");
 });
 
 it("calls the share endpoint for a share id, however short it is", async () => {
     // Six characters. The old length heuristic sent this to the pod endpoint.
-    await new XBloomRecipe({kind: "share", id: "ab12cd"}).fetchRecipeDetail();
+    await new XBloomRecipe({kind: "share", id: "ab12cd"}, "studio").fetchRecipeDetail();
 
     expect(global.fetch).toHaveBeenCalledWith(SHARE_ENDPOINT, expect.anything());
-    expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).tableIdOfRSA)
-        .toBe("ab12cd");
+    expect(bodyOfLastRequest().tableIdOfRSA).toBe("ab12cd");
+});
+
+it("asks the pod endpoint for the machine the user owns", async () => {
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "original")
+        .fetchRecipeDetail();
+
+    expect(bodyOfLastRequest().adaptedModel).toBe(2);
+});
+
+it("still asks for the Studio when that is the machine", async () => {
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "studio")
+        .fetchRecipeDetail();
+
+    expect(bodyOfLastRequest().adaptedModel).toBe(1);
 });
 
 it("passes an abort signal through to fetch", async () => {
     const controller = new AbortController();
 
-    await new XBloomRecipe({kind: "xid", xid: "ETH120"})
+    await new XBloomRecipe({kind: "xid", xid: "ETH120"}, "studio")
         .fetchRecipeDetail(controller.signal);
 
     expect((global.fetch as jest.Mock).mock.calls[0][1].signal).toBe(controller.signal);
@@ -55,7 +73,7 @@ it("yields no recipe when the machine reports the pod does not exist", async () 
         json: async () => ({info: "The machine detected that the xPod does not exist", result: "fail"})
     })) as unknown as typeof fetch;
 
-    const xb = new XBloomRecipe({kind: "xid", xid: "ETH120"});
+    const xb = new XBloomRecipe({kind: "xid", xid: "ETH120"}, "studio");
     await xb.fetchRecipeDetail();
 
     expect(xb.getRecipe()).toBeNull();

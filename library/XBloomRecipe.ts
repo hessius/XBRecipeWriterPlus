@@ -3,6 +3,7 @@ import Recipe, {CUP_TYPE, GRINDER_OFF_VALUE} from "./Recipe";
 import {
     BYPASS_DEFAULT_TEMPERATURE, BYPASS_TEMPERATURE, BYPASS_VOLUME
 } from "@/library/bypassLimits";
+import {adaptedModelFor, type MachineModel} from "@/library/machine/machineModel";
 import {podCoffeeFromPodsVo, podImageUrl} from "@/library/podCoffee";
 import type {ImportSource} from "./importInput";
 
@@ -24,13 +25,21 @@ export class XBloomRecipe {
     private subtitle = "";
     private id = "";
     private byXid = false;
+    private model: MachineModel;
 
-    constructor(source: ImportSource) {
+    /**
+     * @param model which machine the recipe is being fetched for. Consulted
+     * only by the pod endpoint, which returns a different grind under each;
+     * the share endpoint has no such field. Required rather than defaulted
+     * because a forgotten call site silently asking for the Studio is #138.
+     */
+    constructor(source: ImportSource, model: MachineModel) {
         // Told, not guessed. The endpoint used to be chosen by `id.length <= 7`,
         // which sent a short share id to the pod endpoint; `parseImportInput`
         // has already distinguished the two by the time we get here.
         this.byXid = source.kind === "xid";
         this.id = source.kind === "xid" ? source.xid : source.id;
+        this.model = model;
     }
 
     /**
@@ -45,7 +54,9 @@ export class XBloomRecipe {
     public static fromAccountRow(row: Record<string, unknown>): XBloomRecipe {
         const pods = row.podsVo as {id?: unknown} | undefined;
         const xid = typeof pods?.id === "string" ? pods.id : "";
-        const instance = new XBloomRecipe({kind: "xid", xid});
+        // Inert: this instance is handed its `recipeVo` outright and never
+        // fetches, so no endpoint ever reads the model.
+        const instance = new XBloomRecipe({kind: "xid", xid}, "studio");
         instance.xbRecipeJSON = {recipeVo: row};
         return instance;
     }
@@ -276,7 +287,10 @@ export class XBloomRecipe {
             ...baseBody,
             xid:               this.id,
             languageType:      0,
-            adaptedModel:      1,
+            // The pod carries one coffee and two recipes. Asking under the
+            // wrong machine returns a grind on the other machine's scale,
+            // which is what #138 was opened about.
+            adaptedModel:      adaptedModelFor(this.model),
             isRefreshScanTime: 1,
             appVersion:        "2.1.2"
         } : {
