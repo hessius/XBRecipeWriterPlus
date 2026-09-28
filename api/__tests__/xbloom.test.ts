@@ -131,6 +131,59 @@ describe("mintRecipe", () => {
         expect(calls.filter((c) => c.url.endsWith("tuMyTeaRecipeCreated.tuhtml"))).toHaveLength(3);
     });
 
+    it("looks the new row up in the partition it created it in", async () => {
+        const encryptedPlaintexts: Record<string, unknown>[] = [];
+        const chunks: string[] = [];
+        const mockCrypto = () => {
+            const actual = jest.requireActual("node:crypto");
+            return {
+                ...actual,
+                publicEncrypt: jest.fn((_key: unknown, data: Buffer) => {
+                    chunks.push(Buffer.from(data).toString("utf8"));
+                    return Buffer.alloc(128);
+                })
+            };
+        };
+        jest.resetModules();
+        jest.doMock("node:crypto", mockCrypto);
+        jest.doMock("crypto", mockCrypto);
+        let run: Promise<unknown>;
+        jest.isolateModules(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const xbloom = require("../_lib/xbloom") as typeof import("../_lib/xbloom");
+            const {mintRecipe: isolatedMintRecipe} = xbloom;
+            const responses = [
+                {result: "success", member: {tableId: 1}, token: "tok"},
+                {result: "success", tableId: 42},
+                {result: "success", list: [
+                    {tableId: 42, shareRecipeLink: "https://share-h5.xbloom.com/?id=x"}
+                ]}
+            ];
+            let i = 0;
+            global.fetch = jest.fn(async () => {
+                const plaintext = chunks.splice(0).join("");
+                if (plaintext.length > 0) {
+                    encryptedPlaintexts.push(JSON.parse(plaintext));
+                }
+                const next = responses[i++];
+                return {ok: true, status: 200, json: async () => next, text: async () => JSON.stringify(next)};
+            }) as never;
+
+            run = isolatedMintRecipe(
+                {theName: "T", dose: 18, adaptedModel: 2},
+                {email: "e", password: "p"}
+            );
+        });
+        await run!;
+        jest.dontMock("node:crypto");
+        jest.dontMock("crypto");
+
+        const create = encryptedPlaintexts.find((b) => b.createTimeStamp !== undefined);
+        const lookup = encryptedPlaintexts.find((b) => b.pageNumber !== undefined);
+        expect(create?.adaptedModel).toBe(2);
+        expect(lookup?.adaptedModel).toBe(2);
+    });
+
     it("does not spread caller-supplied payload fields over authentication fields", () => {
         expect(mintRecipe.toString()).not.toContain("...payload");
     });

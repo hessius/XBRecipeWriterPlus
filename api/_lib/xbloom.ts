@@ -79,7 +79,8 @@ async function post(path: string, body: unknown, encrypted: boolean): Promise<un
  *
  * `adaptedModel` is not here: it belongs to the payload and to the lookup, and
  * the two must agree or the new row is invisible to the lookup. See the spike
- * notes in docs/machine-integration/cloud-api.md.
+ * notes in docs/machine-integration/cloud-api.md. Both now read it from the
+ * payload, so they cannot drift apart.
  */
 function authFields(memberId: number, token: string) {
     return {
@@ -110,7 +111,7 @@ function recipeFields(payload: Record<string, unknown>) {
         appPlace:            payload.appPlace,
         isShortcuts:         payload.isShortcuts,
         isEnableBypassWater: payload.isEnableBypassWater,
-        adaptedModel:        1,
+        adaptedModel:        payload.adaptedModel,
         pourCount:           payload.pourCount,
         pourDataJSONStr:     payload.pourDataJSONStr
     };
@@ -166,7 +167,7 @@ export async function mintRecipe(
             ...authFields(memberId, token),
             pageNumber,
             countPerPage: LIST_PAGE_SIZE,
-            adaptedModel: 1
+            adaptedModel: payload.adaptedModel
         }, true) as {list?: {tableId?: number; shareRecipeLink?: unknown}[]};
 
         const rows = list?.list ?? [];
