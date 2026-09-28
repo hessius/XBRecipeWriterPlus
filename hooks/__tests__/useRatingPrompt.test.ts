@@ -2,6 +2,7 @@ import {act, renderHook} from "@testing-library/react-native";
 import {AppState} from "react-native";
 
 import {useRatingPrompt, type RatingPromptStore} from "@/hooks/useRatingPrompt";
+import {RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
@@ -62,6 +63,7 @@ describe("useRatingPrompt", () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         jest.restoreAllMocks();
     });
 
@@ -124,6 +126,25 @@ describe("useRatingPrompt", () => {
         expect(result.current.brew).toBeNull();
     });
 
+    it("retires an offered brew when its rating window expires without re-reading", async () => {
+        jest.restoreAllMocks();
+        jest.useFakeTimers({now: NOW});
+        const remaining = 5 * 60 * 1000;
+        const store = fakeStore(measuredBrew("b1", {
+            endedAt: NOW - RATING_PROMPT_WINDOW_MS + remaining
+        }));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew?.id).toBe("b1");
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            jest.advanceTimersByTime(remaining);
+        });
+        expect(result.current.brew).toBeNull();
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(1);
+    });
+
     it("stays quiet when rating prompts are disabled", async () => {
         const store = fakeStore(measuredBrew("b1"));
         const settings = new Settings(memoryStorage());
@@ -151,6 +172,13 @@ describe("useRatingPrompt", () => {
         store.next = measuredBrew("background-brew");
         await act(async () => {
             onAppChange?.("background");
+        });
+        expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(1);
+        expect(result.current.brew).toBeNull();
+
+        store.next = measuredBrew("inactive-brew");
+        await act(async () => {
+            onAppChange?.("inactive");
         });
         expect(store.lastMeasuredBrew).toHaveBeenCalledTimes(1);
         expect(result.current.brew).toBeNull();

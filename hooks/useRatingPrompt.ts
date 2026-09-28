@@ -3,7 +3,7 @@ import {AppState} from "react-native";
 
 import {useSetting} from "@/hooks/useSetting";
 import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
-import {brewToRate} from "@/library/brew/ratingPrompt";
+import {brewToRate, RATING_PROMPT_WINDOW_MS} from "@/library/brew/ratingPrompt";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {Settings} from "@/library/Settings";
 
@@ -75,6 +75,17 @@ export function useRatingPrompt(
         dismissedId,
         enabled
     });
+
+    useEffect(() => {
+        if (brew === null) return;
+        const expiresAt = brew.endedAt + RATING_PROMPT_WINDOW_MS;
+        const timer = setTimeout(() => {
+            setCandidate((was) => was.brew?.id === brew.id
+                ? {...was, now: Math.max(Date.now(), expiresAt)}
+                : was);
+        }, Math.max(0, expiresAt - candidate.now));
+        return () => clearTimeout(timer);
+    }, [brew, candidate.now]);
 
     function rate(rating: number): void {
         if (brew === null) return;
