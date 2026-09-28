@@ -427,9 +427,9 @@ describe("brew route", () => {
     });
 
     it("holds the headline's height for every phase of a live brew", async () => {
-        // "Letting the last of the coffee drain…" wraps where "Grinding…"
-        // does not, and the headline is a sibling of the measured band
-        // region — so the ladder redrew itself at the end of every recipe.
+        // A long phase sentence wraps where "Grinding…" does not, and the
+        // headline is a sibling of the measured band region, so the ladder
+        // redrew itself in the middle of a brew.
         mockPhase = {name: "settling"} as BrewPhase;
         mockActiveIndex = 1;
         const {getByTestId} = await renderWithProviders(<Brew />);

@@ -86,7 +86,7 @@ export default function BeanNameSheet({
                     returnKeyType="done"
                     onSubmitEditing={() => confirm(trimmed)}
                     placeholder="ETHIOPIA GUJI"
-                    placeholderTextColor={palette.muted}
+                    placeholderTextColor={palette.placeholder}
                     maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
                     autoCapitalize="characters"
                     autoCorrect={false}

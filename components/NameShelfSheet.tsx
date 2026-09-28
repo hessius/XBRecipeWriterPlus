@@ -104,7 +104,7 @@ export default function NameShelfSheet({
                     returnKeyType="done"
                     onSubmitEditing={submit}
                     placeholder="MORNINGS"
-                    placeholderTextColor={palette.muted}
+                    placeholderTextColor={palette.placeholder}
                     maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
                     // Shift-locked, so a lower case letter is upper case before
                     // it is drawn rather than corrected a frame later. The rail's

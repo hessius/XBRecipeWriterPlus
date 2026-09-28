@@ -28,10 +28,12 @@ describe("NoteSection", () => {
     it("draws the placeholder at a readable contrast", async () => {
         // `muted` on `raised` is 3.55:1, under the 4.5:1 floor, and the
         // placeholder is the only thing saying what belongs in an empty field.
+        // `placeholder` clears the floor while staying below `dim`, so an
+        // example does not read as something already typed.
         await renderWithProviders(<NoteSection {...props()}/>);
 
         expect(screen.getByTestId("note-field").props.placeholderTextColor)
-            .toBe(palette.dim);
+            .toBe(palette.placeholder);
     });
 
     it("counts what is left while it is being typed", async () => {

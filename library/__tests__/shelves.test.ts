@@ -88,7 +88,7 @@ describe("building the shelves", () => {
     });
 
     it("draws a favourites tile of one, where an invented shelf needs three", () => {
-        // FAVOURITES carries `authored`, so the grid offers it on a single
+        // STARRED carries `authored`, so the grid offers it on a single
         // marked recipe. The tile beside it is the control: the same count
         // from a shelf the app invented is suppressed.
         const shelves = buildShelves({

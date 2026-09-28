@@ -113,14 +113,14 @@ function say(props: Props): {title: string; detail: string; line: string} {
         };
     }
 
-    // Settling: the last pour is done but coffee is still draining onto the
-    // scale. A phase *after* the pours, so it must not fall through to the
+    // Drawdown: the last pour is done but coffee is still coming through onto
+    // the scale. A phase *after* the pours, so it must not fall through to the
     // grinding default below and flip the bar back to "Grinding" while the
     // trace beside it is visibly still drawing.
     if (phase.name === "settling") {
         const cup = Math.round(samples[samples.length - 1]?.cup ?? 0);
         return {
-            title: "Draining",
+            title: "Drawdown",
             detail: `${cup} G · ${clock(elapsed)} · ALMOST THERE`,
             line: props.accent
         };

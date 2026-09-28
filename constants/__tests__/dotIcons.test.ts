@@ -14,7 +14,7 @@ describe("DOT_ICONS", () => {
              "link-gone", "link-on", "link-wait", "list", "minus", "more", "overflow", "plus",
              "refresh", "revert", "scan", "search", "settings", "share",
              // The twenty shelf marks: one per stock auto shelf, plus the
-             // one every per-author shelf shares, minus FAVOURITES, which
+             // one every per-author shelf shares, minus STARRED, which
              // reuses the `favourite` star rather than drawing a second one.
              // A closed set, drawn once: see the comment on them in
              // `dotIcons.ts`.

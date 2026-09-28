@@ -116,10 +116,15 @@ type RecipeListItem =
     | {kind: "heading"; id: string; label: string}
     | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
 
-function SectionHeading({label}: {label: string}) {
+// The id rides along only to name the test target. The two headings and the
+// rail chip beside them say the same words -- STARRED is the mark, whether it
+// is a section or a filter -- so a test that asks for the text alone cannot
+// say which one it found.
+function SectionHeading({id, label}: {id: string; label: string}) {
     return (
         <YStack paddingHorizontal="$3" paddingTop="$4" paddingBottom="$1">
-            <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+            <DotMatrixText testID={`section-heading-${id}`}
+                           fontSize={12} weight="bold" letterSpacing={2}
                            color={palette.dim}>
                 {label}
             </DotMatrixText>
@@ -682,7 +687,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
 
     const listItems: RecipeListItem[] = drawSections
         ? [
-            {kind: "heading", id: "favourites", label: "FAVOURITES"},
+            {kind: "heading", id: "favourites", label: "STARRED"},
             ...favouriteRecipes.map((recipe, recipeIndex) => (
                 {kind: "recipe" as const, recipe, recipeIndex}
             )),
@@ -1331,7 +1336,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 + (picker.active ? PICKER_BAR_HEIGHT : 0)
                         }}
                         renderItem={({item}: {item: RecipeListItem}) => item.kind === "heading" ? (
-                            <SectionHeading label={item.label}/>
+                            <SectionHeading id={item.id} label={item.label}/>
                         ) : picker.active ? (
                             <SelectableRecipeRow
                                 recipe={item.recipe}

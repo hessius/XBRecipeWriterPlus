@@ -419,8 +419,12 @@ describe("HomeScreen", () => {
             settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
         });
 
-        expect(screen.getByText("FAVOURITES")).toBeTruthy();
-        expect(screen.getByText("ALL RECIPES")).toBeTruthy();
+        // By test id, not by text: a starred recipe's own swipe tray says
+        // STARRED too, and the rail chip says it a third time.
+        expect(screen.getByTestId("section-heading-favourites"))
+            .toHaveTextContent("STARRED");
+        expect(screen.getByTestId("section-heading-all"))
+            .toHaveTextContent("ALL RECIPES");
     });
 
     it("draws no section heading when favourites first leaves only one populated section", async () => {
@@ -429,8 +433,8 @@ describe("HomeScreen", () => {
             settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
         });
 
-        expect(screen.queryByText("FAVOURITES")).toBeNull();
-        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.queryByTestId("section-heading-favourites")).toBeNull();
+        expect(screen.queryByTestId("section-heading-all")).toBeNull();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
     });
 
@@ -445,8 +449,8 @@ describe("HomeScreen", () => {
             settings: new Settings(memoryStorage({libraryFavouritesFirst: true}))
         });
 
-        expect(screen.queryByText("FAVOURITES")).toBeNull();
-        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.queryByTestId("section-heading-favourites")).toBeNull();
+        expect(screen.queryByTestId("section-heading-all")).toBeNull();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
     });
 
@@ -459,8 +463,8 @@ describe("HomeScreen", () => {
             settings: new Settings(memoryStorage({libraryFavouritesFirst: false}))
         });
 
-        expect(screen.queryByText("FAVOURITES")).toBeNull();
-        expect(screen.queryByText("ALL RECIPES")).toBeNull();
+        expect(screen.queryByTestId("section-heading-favourites")).toBeNull();
+        expect(screen.queryByTestId("section-heading-all")).toBeNull();
         expect(screen.getAllByTestId("recipe-card")).toHaveLength(2);
     });
 

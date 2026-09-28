@@ -83,7 +83,7 @@ export default function RenameSheet({open, onOpenChange, name, onRename}: {
                     returnKeyType="done"
                     onSubmitEditing={submit}
                     placeholder="Yirgacheffe"
-                    placeholderTextColor={palette.muted}
+                    placeholderTextColor={palette.placeholder}
                     autoCorrect={false}
                     style={{
                         fontSize:        16,

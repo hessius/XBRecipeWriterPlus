@@ -50,6 +50,22 @@ export const palette = {
     muted:   "#6E6E6E",
     /** Secondary text, including the superscript count. */
     dim:     "#A3A3A3",
+    /**
+     * Placeholder text in a field the user has not filled in.
+     *
+     * Its own entry because a placeholder answers to two things at once and
+     * neither existing grey satisfies both. `dim` is bright enough that an
+     * example set beside white values reads as a value: a blank recipe looked
+     * like it already had a pod ID. `muted` is 3.55:1 on `raised`, under the
+     * 4.5:1 floor, which is why the note field was moved off it.
+     *
+     * 4.97:1 on `raised` and better on `surface` and `base`, so it clears the
+     * floor wherever a field is drawn, while sitting far enough below `dim` to
+     * read as an example rather than an entry. Call sites help it say so by
+     * phrasing theirs as examples ("e.g. CGL12"); the colour is not asked to
+     * carry that alone.
+     */
+    placeholder: "#868686",
     /** Primary text. */
     text:    "#FFFFFF",
 

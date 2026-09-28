@@ -168,7 +168,7 @@ jest.mock("expo-sqlite", () => ({
 
 /* eslint-disable import/first */
 import RecipeDatabase from "@/library/RecipeDatabase";
-import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import Recipe, {CUP_TYPE, type RecipeSource} from "@/library/Recipe";
 import Pour from "@/library/Pour";
 /* eslint-enable import/first */
 
@@ -197,6 +197,7 @@ type Spec = {
     pauseTime?: number;
     sharedBy?: string;
     favourite?: boolean;
+    source?: RecipeSource;
 };
 
 function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, string> {
@@ -210,6 +211,7 @@ function seed(db: RecipeDatabase, specs: Record<string, Spec>): Record<string, s
         recipe.favourite = spec.favourite ?? false;
         if (spec.xid !== undefined) recipe.xid = spec.xid;
         if (spec.sharedBy !== undefined) recipe.sharedBy = spec.sharedBy;
+        if (spec.source !== undefined) recipe.source = spec.source;
         const count = spec.pourCount ?? 1;
         recipe.pours = Array.from({length: count}, (_unused, index) =>
             new Pour(index + 1, spec.volume, spec.maxTemp, spec.flowRate,
@@ -364,25 +366,39 @@ describe("each stock fragment against a real database", () => {
         expect(labelsMatching(db, "slowBrew", uuids)).toEqual([]);
     });
 
-    it("selects mine as everything that arrived from nobody", () => {
-        // The complement of the author shelves. A card read, a recipe typed in
-        // and a row from the user's own account all have no sharer; only a
-        // recipe somebody sent does.
+    it("selects mine as the recipes the user wrote", () => {
+        // Not the complement of the author shelves, which is what it used to
+        // be. Only a share link carries a sharer, so "nobody sent me this" was
+        // also true of a pod pulled off xBloom's catalogue, and MINE ended up
+        // holding almost every library and being withdrawn for saying nothing.
         const db = new RecipeDatabase();
         const uuids = seed(db, {
-            own:     {createdAt: 1},
-            account: {createdAt: 2, xid: "ABC12345"},
-            sent:    {createdAt: 3, sharedBy: "BrewMind"}
+            typed:     {createdAt: 1, source: "manual"},
+            card:      {createdAt: 2, source: "read"},
+            copied:    {createdAt: 3, source: "duplicate"},
+            catalogue: {createdAt: 4, source: "import", xid: "ABC12345"},
+            sent:      {createdAt: 5, source: "import", sharedBy: "BrewMind"}
         });
-        expect(labelsMatching(db, "mine", uuids)).toEqual(["account", "own"]);
+        expect(labelsMatching(db, "mine", uuids)).toEqual(["typed"]);
     });
 
-    it("leaves no recipe between mine and an author shelf", () => {
-        // The two are halves of one partition: every recipe is on exactly one
-        // side of "arrived from somebody". The accented name is where that
-        // could break, and did before `sharedByKey` -- under `sharedBy COLLATE
-        // NOCASE` the author clause misses "café" while MINE still excludes
-        // it, and the recipe is reachable from neither shelf.
+    it("keeps a recipe off mine however it reached the library", () => {
+        // The four ways in that are not writing one. Each has its own honest
+        // description on the card front, and none of them is authorship.
+        const db = new RecipeDatabase();
+        const uuids = seed(db, {
+            card:   {createdAt: 1, source: "read"},
+            copied: {createdAt: 2, source: "duplicate"},
+            sent:   {createdAt: 3, source: "import", sharedBy: "café"}
+        });
+        expect(labelsMatching(db, "mine", uuids)).toEqual([]);
+    });
+
+    it("still reaches an accented author through their own shelf", () => {
+        // MINE and the author shelves no longer partition the library, but the
+        // author half still has to match on the folded key: under `sharedBy
+        // COLLATE NOCASE` the clause misses "café" and the recipe is on no
+        // shelf at all.
         const db = new RecipeDatabase();
         const uuids = seed(db, {sent: {createdAt: 1, sharedBy: "café"}});
         const byUuid = Object.fromEntries(
@@ -393,7 +409,6 @@ describe("each stock fragment against a real database", () => {
         ).map((recipe) => byUuid[recipe.uuid]);
 
         expect(fromCafe).toEqual(["sent"]);
-        expect(labelsMatching(db, "mine", uuids)).toEqual([]);
     });
 
     it("selects hot by max temperature and excludes the templess", () => {
@@ -489,16 +504,16 @@ describe("the brew shelves", () => {
         expect(artFor(db, "neverBrewed")).toBe(1);
     });
 
-    it("puts a recipe on MOST BREWED at five cups and not at four", () => {
+    it("puts a recipe on MOST BREWED at three cups and not at two", () => {
         // The threshold pinned at its edge in both directions, because an
         // off-by-one changes which recipes the shelf claims are the ones the
         // user keeps going back to.
         const db = new RecipeDatabase();
-        const uuids = seed(db, {four: {createdAt: 1}, five: {createdAt: 2}});
-        brewed(uuids.four, 4);
-        brewed(uuids.five, 5);
+        const uuids = seed(db, {two: {createdAt: 1}, three: {createdAt: 2}});
+        brewed(uuids.two, 2);
+        brewed(uuids.three, 3);
 
-        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual(["five"]);
+        expect(labelsMatching(db, "mostBrewed", uuids)).toEqual(["three"]);
         expect(db.countRecipesByFilter(["mostBrewed"], resolveStockFilter))
             .toEqual({mostBrewed: 1});
         expect(artFor(db, "mostBrewed")).toBe(1);
@@ -561,7 +576,7 @@ describe("the brew shelves", () => {
     });
 });
 
-describe("FAVOURITES is not suppressed", () => {
+describe("STARRED is not suppressed", () => {
     // A favourite is a tap somebody made, so the shelf is exempt from both
     // gates the way a manual tag shelf is. It still goes through
     // `availableFilters`, because that is the one gate the chips and the grid
@@ -592,6 +607,40 @@ describe("FAVOURITES is not suppressed", () => {
     });
 });
 
+describe("the shelves that answer at one recipe", () => {
+    // A superlative and a calendar window. Both are true and complete answers
+    // at a single recipe, unlike a category such as HOT, which needs a few
+    // before it says anything the recipes do not say themselves.
+    it.each(["mostBrewed", "recentlyAdded"])("offers %s holding one", (id) => {
+        expect(availableFilters({[id]: 1}, 100)).toEqual([id]);
+    });
+
+    it("still refuses an invented category of one or two", () => {
+        expect(availableFilters({hot: 1}, 100)).toEqual([]);
+        expect(availableFilters({hot: 2}, 100)).toEqual([]);
+    });
+
+    it("keeps the 80% ceiling over them", () => {
+        // The lower floor is not the `authored` exemption. These are still
+        // questions the app asks, so one that has grown to the whole library
+        // is still the library wearing a name.
+        expect(availableFilters({mostBrewed: 81}, 100)).toEqual([]);
+        expect(availableFilters({recentlyAdded: 81}, 100)).toEqual([]);
+        expect(availableFilters({mostBrewed: 80}, 100)).toEqual(["mostBrewed"]);
+    });
+
+    it("lowers the floor for those two and nothing else", () => {
+        // Read off the vocabulary, so a third shelf given the lower floor is a
+        // deliberate act rather than a typo nobody notices.
+        const lowered = STOCK_FILTER_ORDER.filter((id) => STOCK_FILTERS[id].floor === 1);
+        expect(lowered).toEqual(["mostBrewed", "recentlyAdded"]);
+    });
+
+    it("does not offer either one empty", () => {
+        expect(availableFilters({mostBrewed: 0, recentlyAdded: 0}, 100)).toEqual([]);
+    });
+});
+
 describe("ALL RECIPES", () => {
     it("resolves to a clause that matches everything", () => {
         expect(resolveStockFilter("allRecipes")).toEqual({where: "1 = 1"});
@@ -599,7 +648,7 @@ describe("ALL RECIPES", () => {
 
     it("is offered however much of the library it holds", () => {
         // Its count is the library, so the 80% ceiling would take it away the
-        // moment it worked. It waives both gates the way FAVOURITES does.
+        // moment it worked. It waives both gates the way STARRED does.
         expect(availableFilters({allRecipes: 40}, 40, [])).toContain("allRecipes");
         expect(availableFilters({allRecipes: 1}, 1, [])).toContain("allRecipes");
     });

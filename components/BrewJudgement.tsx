@@ -53,7 +53,7 @@ export default function BrewJudgement({rating, note, onRate, onNote, testID}: {
                 accessibilityHint="What the cup was like, and what to change next time."
                 defaultValue={note}
                 placeholder="Sweet, a little thin. Grind finer."
-                placeholderTextColor={palette.muted}
+                placeholderTextColor={palette.placeholder}
                 multiline={true}
                 returnKeyType="done"
                 submitBehavior="blurAndSubmit"

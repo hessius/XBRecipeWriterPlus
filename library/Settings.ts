@@ -167,7 +167,7 @@ export const DEFAULTS = {
      *
      * A modifier and not a sixth axis: it composes with the sort rather than
      * replacing it, so favourites keep the same order the rest are in. Off by
-     * default because a library nobody has starred yet would draw a FAVOURITES
+     * default because a library nobody has starred yet would draw a STARRED
      * and an ALL RECIPES heading over one populated section, which is a heading
      * over nothing.
      */

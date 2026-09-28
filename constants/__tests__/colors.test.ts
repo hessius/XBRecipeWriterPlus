@@ -26,6 +26,29 @@ describe("the desaturated twins", () => {
         // same saturation.
         expect(contrastOnBase(twin)).toBeCloseTo(contrastOnBase(full), 0);
     });
+
+    function contrastOn(hex: string, background: string): number {
+        const pair = [luminance(hex), luminance(background)];
+        return (Math.max(...pair) + 0.05) / (Math.min(...pair) + 0.05);
+    }
+
+    // The entry exists to sit between two greys that each fail it one way, so
+    // it is worth pinning both ends. A placeholder is text and must clear AA on
+    // every surface a field is drawn on; it must also stay clearly below the
+    // secondary text colour, or an example reads as a value already typed.
+    it.each([
+        ["base", palette.base],
+        ["surface", palette.surface],
+        ["raised", palette.raised]
+    ])("keeps placeholder text readable on %s", (_name, background) => {
+        expect(contrastOn(palette.placeholder, background))
+            .toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("keeps a placeholder dimmer than a real value", () => {
+        expect(luminance(palette.placeholder)).toBeLessThan(luminance(palette.dim));
+        expect(luminance(palette.placeholder)).toBeGreaterThan(luminance(palette.muted));
+    });
 });
 
 /** Hue in degrees, 0-360. Local to the test so it cannot share a bug with the source. */
