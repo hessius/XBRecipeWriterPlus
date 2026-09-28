@@ -73,6 +73,14 @@ describe("ShelfRoom", () => {
         expect(screen.getAllByTestId("recipe-tile")).toHaveLength(3);
     });
 
+    it("shows each recipe's name in the room", async () => {
+        await renderWithProviders(
+            <ShelfRoom label="MORNINGS" recipes={[named("Ethiopia")]}
+                       onBack={jest.fn()} actionsFor={actionsFor()}/>
+        );
+        expect(screen.getByText("Ethiopia")).toBeTruthy();
+    });
+
     it("leaves the room when back is pressed", async () => {
         const onBack = jest.fn();
         await renderWithProviders(
