@@ -1,5 +1,5 @@
 import React from "react";
-import {Pressable, ScrollView} from "react-native";
+import {FlatList, Pressable} from "react-native";
 import type {NativeScrollEvent, NativeSyntheticEvent} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -53,10 +53,12 @@ export type RoomRecipeActions = {
  * tracking `ShelfGrid` uses, so the room reads as a titled section of the grid
  * rather than a different screen.
  *
- * A row-wrapping stack rather than a FlatList, the same choice `ShelfGrid` makes
- * and for the same reason: a shelf is bounded by what one person saved, nothing
- * here needs recycling, and a virtualised list inside a scroll view is the
- * shape React Native warns against.
+ * A `FlatList` of rows. This used to be a row-wrapping stack inside a
+ * `ScrollView`, on the argument that a shelf is bounded by what one person
+ * saved and nothing here needs recycling. ALL RECIPES is the shelf that is not
+ * bounded, so the argument stopped being true. The objection that comment
+ * raised, a virtualised list inside a scroll view, does not apply: the
+ * `ScrollView` it replaced was the scroll container itself, not a parent.
  *
  * Scroll position is deliberately not carried between the grid and the room.
  * The two are alternatives in one slot, so opening a room unmounts the grid's
@@ -116,55 +118,59 @@ export default function ShelfRoom({
 
     const recipeCount = recipes.length === 1 ? "1 recipe" : `${recipes.length} recipes`;
 
-    return (
-        <ScrollView testID="shelf-room"
-                    // The header collapses on this view's scroll the same way
-                    // it does on the list's. Without it the wordmark and the
-                    // tiles stayed up in the one view whose own content is
-                    // tiles, which is where the screen is most crowded.
-                    onScroll={onScroll}
-                    scrollEventThrottle={16}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{
-                        paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 12
-                    }}>
-            <XStack alignItems="center" gap="$3" paddingBottom="$2">
-                <Pressable accessibilityRole="button" accessibilityLabel="Back to shelves"
-                           testID="shelf-room-back" onPress={onBack} hitSlop={12}>
-                    <YStack backgroundColor={onAccent.key} borderRadius="$3"
-                            width={KEY_SIZE} height={KEY_SIZE}
-                            alignItems="center" justifyContent="center">
-                        <DotIcon name="back" size={16} color={palette.text}/>
-                    </YStack>
-                </Pressable>
-                {/*
-                  * The shelf's name in the grid's heading face and the count
-                  * beneath it, so a room announces which shelf it is the way a
-                  * section announces itself. A tag's own casing is kept -- the
-                  * matrix face would recase a user's word -- but a stock shelf's
-                  * name is already the app's Doto caps, so both land right in it.
-                  */}
-                <YStack flex={1} gap="$1">
-                    {manual ? (
-                        <Text testID="shelf-room-title" fontSize={16} fontWeight="700"
-                              color={palette.text} numberOfLines={1}>
-                            {label}
-                        </Text>
-                    ) : (
-                        <DotMatrixText testID="shelf-room-title" fontSize={14} weight="bold"
-                                       letterSpacing={1.6} color={palette.text}>
-                            {label}
-                        </DotMatrixText>
-                    )}
-                    <Text testID="shelf-room-count" fontSize={11} color={palette.dim}>
-                        {recipeCount}
-                    </Text>
+    const header = (
+        <XStack alignItems="center" gap="$3" paddingBottom="$2">
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to shelves"
+                       testID="shelf-room-back" onPress={onBack} hitSlop={12}>
+                <YStack backgroundColor={onAccent.key} borderRadius="$3"
+                        width={KEY_SIZE} height={KEY_SIZE}
+                        alignItems="center" justifyContent="center">
+                    <DotIcon name="back" size={16} color={palette.text}/>
                 </YStack>
-            </XStack>
+            </Pressable>
+            {/*
+              * The shelf's name in the grid's heading face and the count
+              * beneath it, so a room announces which shelf it is the way a
+              * section announces itself. A tag's own casing is kept -- the
+              * matrix face would recase a user's word -- but a stock shelf's
+              * name is already the app's Doto caps, so both land right in it.
+              */}
+            <YStack flex={1} gap="$1">
+                {manual ? (
+                    <Text testID="shelf-room-title" fontSize={16} fontWeight="700"
+                          color={palette.text} numberOfLines={1}>
+                        {label}
+                    </Text>
+                ) : (
+                    <DotMatrixText testID="shelf-room-title" fontSize={14} weight="bold"
+                                   letterSpacing={1.6} color={palette.text}>
+                        {label}
+                    </DotMatrixText>
+                )}
+                <Text testID="shelf-room-count" fontSize={11} color={palette.dim}>
+                    {recipeCount}
+                </Text>
+            </YStack>
+        </XStack>
+    );
 
-            <YStack gap="$3">
-                {rows.map((row) => (
-                    <XStack key={row[0].uuid} gap="$3">
+    return (
+        <FlatList testID="shelf-room"
+                  data={rows}
+                  keyExtractor={(row) => row[0].uuid}
+                  // The header collapses on this view's scroll the same way
+                  // it does on the list's. Without it the wordmark and the
+                  // tiles stayed up in the one view whose own content is
+                  // tiles, which is where the screen is most crowded.
+                  onScroll={onScroll}
+                  scrollEventThrottle={16}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{
+                      paddingHorizontal: 12, paddingTop: 12, paddingBottom, gap: 12
+                  }}
+                  ListHeaderComponent={header}
+                  renderItem={({item: row}) => (
+                      <XStack gap="$3">
                         {row.map((recipe) => {
                             const acts = actionsFor(recipe);
                             return (
@@ -190,9 +196,7 @@ export default function ShelfRoom({
                             keeps the width of every other tile rather than
                             stretching across the row. The grid does the same. */}
                         {row.length < COLUMNS && <YStack flex={1}/>}
-                    </XStack>
-                ))}
-            </YStack>
-        </ScrollView>
+                      </XStack>
+                  )}/>
     );
 }
