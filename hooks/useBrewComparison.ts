@@ -98,8 +98,9 @@ export function useBrewComparison({
         maxV: axis.maxV
     };
     const subjectPlan = planPath(subject.record, planBox);
-    const referencePlan = comparison.drift.grade === "shape"
-        ? planPath(reference.record, planBox)
+    const referencePlanPath = planPath(reference.record, planBox);
+    const referencePlan = comparison.drift.grade === "shape" || subjectPlan === ""
+        ? referencePlanPath === "" ? undefined : referencePlanPath
         : undefined;
     const subjectHasTrace = hasTrace(subject);
     const referenceHasTrace = hasTrace(reference);
@@ -108,7 +109,9 @@ export function useBrewComparison({
         ? subjectHasTrace ? subject : reference
         : null;
     const survivingId = survivingTrace?.record.id;
-    const canKeepTrace = survivingId !== undefined && !keptTraceIds.has(survivingId);
+    const canKeepTrace = survivingTrace !== null
+        && !survivingTrace.record.pinned
+        && !keptTraceIds.has(survivingTrace.record.id);
 
     function keepSurvivingTrace(): void {
         if (survivingId === undefined) return;
