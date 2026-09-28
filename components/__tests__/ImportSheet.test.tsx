@@ -34,7 +34,7 @@ jest.mock("expo-clipboard", () => ({
 
 let mockNativePasteOnPress: ((data: unknown) => void) | undefined;
 
-// The sheet pushes the account route directly, so `router` is mocked rather
+// The sheet pushes the catalogue route directly, so `router` is mocked rather
 // than `useRouter` -- see app/__tests__/settings.test.tsx for the spread that
 // keeps the typed-route helpers real.
 jest.mock("expo-router", () => ({
@@ -83,6 +83,13 @@ function foundState() {
             name: "Ethiopia Guji", subtitle: "Washed", imageURL: ""
         }
     };
+}
+
+async function pressOnSheet(label: RegExp | string, landed: () => boolean): Promise<void> {
+    await waitFor(async () => {
+        await fireEvent.press(screen.getByRole("button", {name: label}));
+        expect(landed()).toBe(true);
+    });
 }
 
 it("shows the field when there is something to type into it", async () => {
@@ -476,53 +483,63 @@ it("does not dismiss the keyboard when a shortcut degrades to the found panel", 
     dismiss.mockRestore();
 });
 
-const ACCOUNT = /YOUR XBLOOM ACCOUNT/i;
+const CATALOGUE = /catalogue/i;
 
-it("offers the xBloom account as a way in, as a row that promises departure", async () => {
+it("offers the catalogue as a way in", async () => {
     await renderWithProviders(
         <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
-    // The spec's row, not a filled button: a rule, the dot-matrix label in the
-    // sheet's own chrome register, and a caption saying what lies through it.
-    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
-    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
-    expect(screen.getByTestId("import-account-label")).toBeTruthy();
-    expect(screen.getByText("Bring in the recipes you've made")).toBeTruthy();
+    expect(screen.getByRole("button", {name: CATALOGUE})).toBeTruthy();
+    expect(screen.getByTestId("import-catalogue-rule")).toBeTruthy();
+    expect(screen.getByTestId("import-catalogue-label")).toHaveTextContent("BROWSE THE CATALOGUE");
+    expect(screen.getByText("Find recipes shared by other xBloom users.")).toBeTruthy();
 });
 
-it("names the row by both its lines, so it is not just an account", async () => {
+it("names the row by both its lines, so it is not just a label", async () => {
     await renderWithProviders(
         <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
     expect(screen.getByLabelText(
-        "YOUR XBLOOM ACCOUNT, Bring in the recipes you've made"
+        "BROWSE THE CATALOGUE, Find recipes shared by other xBloom users."
     )).toBeTruthy();
 });
 
-it("leaves the sheet and opens the account screen", async () => {
+it("closes itself on the way to the catalogue", async () => {
     const onOpenChange = jest.fn();
     await renderWithProviders(
         <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
     );
 
-    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
+    await pressOnSheet(CATALOGUE, () => onOpenChange.mock.calls.length > 0);
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(router.push).toHaveBeenCalledWith("/importCloud");
+});
+
+it("pushes the catalogue route", async () => {
+    const onOpenChange = jest.fn();
+    await renderWithProviders(
+        <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
+    );
+
+    await pressOnSheet(CATALOGUE, () => (router.push as jest.Mock).mock.calls.length > 0);
+
+    expect(router.push).toHaveBeenCalledWith("/hub");
 });
 
 it("closes before it pushes, not merely as well as", async () => {
     // Order is the whole point. A sheet left open behind the pushed screen is
-    // still there, over it, when the user comes back -- so "both happened" is
-    // not the guarantee; "closed first" is.
+    // still there, over it, when the user comes back, so both happened is not
+    // the guarantee. Closed first is.
     const onOpenChange = jest.fn();
     await renderWithProviders(
         <ImportSheet open onOpenChange={onOpenChange} importer={stubImport()}/>
     );
 
-    await fireEvent.press(screen.getByRole("button", {name: ACCOUNT}));
+    await pressOnSheet(CATALOGUE, () =>
+        onOpenChange.mock.calls.length > 0 && (router.push as jest.Mock).mock.calls.length > 0
+    );
 
     expect(onOpenChange.mock.invocationCallOrder[0])
         .toBeLessThan((router.push as jest.Mock).mock.invocationCallOrder[0]);
@@ -533,7 +550,7 @@ it.each([
     ["a lookup has failed",
         {status: "error", reason: "notFound", message: "No such pod code."} as const],
     ["a recipe has been found", undefined]
-])("does not offer the account door while %s", async (_name, state) => {
+])("does not offer the catalogue door while %s", async (_name, state) => {
     // The sheet then has one subject. A second import route competing with a
     // found recipe is noise at the moment of decision, and under a running
     // lookup it competes with the spinner.
@@ -542,7 +559,7 @@ it.each([
                      importer={stubImport({state: state ?? foundState()})}/>
     );
 
-    expect(screen.queryByRole("button", {name: ACCOUNT})).toBeNull();
+    expect(screen.queryByRole("button", {name: CATALOGUE})).toBeNull();
 });
 
 it("offers the door even when the field is hidden, because it is not part of the field", async () => {
@@ -554,18 +571,18 @@ it("offers the door even when the field is hidden, because it is not part of the
                      importer={stubImport({showField: false})}/>
     );
 
-    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
+    expect(screen.getByRole("button", {name: CATALOGUE})).toBeTruthy();
 });
 
 /**
- * The account door is drawn once, at the top, and only while nothing has been
+ * The catalogue door is drawn once, at the top, and only while nothing has been
  * found.
  */
-it("draws the account door", async () => {
+it("draws the catalogue door", async () => {
     await renderWithProviders(
         <ImportSheet open onOpenChange={() => {}} importer={stubImport()}/>
     );
 
-    expect(screen.getByRole("button", {name: ACCOUNT})).toBeTruthy();
-    expect(screen.getByTestId("import-account-rule")).toBeTruthy();
+    expect(screen.getByRole("button", {name: CATALOGUE})).toBeTruthy();
+    expect(screen.getByTestId("import-catalogue-rule")).toBeTruthy();
 });

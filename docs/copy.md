@@ -352,6 +352,9 @@ The import sheet (`components/ImportSheet.tsx`), its result panel
 | `import.field.hint` | `components/ImportSheet.tsx:15` (`FORMAT_HINT`) | Format hint under the field (shown when idle). | `Paste an xBloom share link, or a pod code like ETH120.` |
 | `import.paste.label` | `components/ImportSheet.tsx:37` | Doto label on the paste button. | `PASTE` |
 | `import.paste.a11y` | `components/ImportSheet.tsx:212` (a11y) | (a11y) The paste button. | `Paste from clipboard` |
+| `import.catalogue.a11y` | `components/ImportSheet.tsx:248` (a11y) | (a11y) The row that opens the community catalogue. Combines the two visible lines. | `BROWSE THE CATALOGUE, Find recipes shared by other xBloom users.` |
+| `import.catalogue.label` | `components/ImportSheet.tsx:273` | Doto label on the catalogue row. | `BROWSE THE CATALOGUE` |
+| `import.catalogue.caption` | `components/ImportSheet.tsx:277` | Sub-line under the catalogue row. | `Find recipes shared by other xBloom users.` |
 | `import.resolving` | `components/ImportSheet.tsx:226` | Status text while a code/link is being looked up. | `Looking it up…` |
 | `import.result.figure.a11y` | `components/ImportResult.tsx:50` (a11y) | (a11y) The grouped dose/ratio/stages figures. `${...}` hold dose grams, ratio and stage count. | `${recipe.dosage} grams, ratio 1 to ${recipe.ratio}, ${recipe.pours.length} stages` |
 | `import.result.stat.dose` | `components/ImportResult.tsx:132` | Doto figure label. | `DOSE` |
