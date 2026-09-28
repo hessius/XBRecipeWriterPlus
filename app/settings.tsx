@@ -21,6 +21,7 @@ import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
 import {useCloudSession} from "@/hooks/useCloudSession";
 import {useRecipeLibrary} from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {type BackupPayload} from "@/library/backup";
 import type {BrewRecord} from "@/library/brew/BrewRecord";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
@@ -91,6 +92,7 @@ function restoredMessage(recipes: number, brews: number): string {
  */
 export default function SettingsScreen({settings}: Props) {
     const router = useSteadyRouter();
+    const {ratingNoteOpen} = useLiveBrew();
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
     const [beanconquerorHandoff, setBeanconquerorHandoff] =
         useSetting("beanconquerorHandoff", settings);
@@ -134,6 +136,7 @@ export default function SettingsScreen({settings}: Props) {
     const [machineModel, setMachineModel] = useSetting("machineModel", settings);
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
+    const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
     // Owned by the library rail, not shown as rows here. Read anyway, because a
@@ -189,7 +192,8 @@ export default function SettingsScreen({settings}: Props) {
             temperatureUnit,
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineModel, machineAutoStart, animateBrewChart, brewTraceRetention,
+            machineModel, machineAutoStart, animateBrewChart, askForRatings,
+            brewTraceRetention,
             librarySort, librarySortDirection, libraryFavouritesFirst,
             libraryView, invertAutoShelves, hiddenShelves, myShelves
         };
@@ -290,6 +294,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.animateBrewChart === "boolean") {
             setAnimateBrewChart(incoming.animateBrewChart);
+        }
+        if (typeof incoming.askForRatings === "boolean") {
+            setAskForRatings(incoming.askForRatings);
         }
         if (typeof incoming.brewTraceRetention === "number") {
             setBrewTraceRetention(incoming.brewTraceRetention);
@@ -415,7 +422,11 @@ export default function SettingsScreen({settings}: Props) {
             as looking "exactly like a control that did nothing", and it is what
             made Delete all appear to do nothing at all. `app/index.tsx` and
             `app/editRecipe.tsx` both already use this shape. */}
-        <YStack testID="settings-screen" flex={1} backgroundColor={palette.base}>
+        <YStack testID="settings-screen" flex={1} backgroundColor={palette.base}
+                accessibilityElementsHidden={restoreOpen || confirmingDeleteAll || ratingNoteOpen}
+                importantForAccessibility={restoreOpen || confirmingDeleteAll || ratingNoteOpen
+                    ? "no-hide-descendants"
+                    : "auto"}>
             <ScreenHeader title="Settings" onBack={() => router.back()}/>
             <ScrollView testID="settings-scroll"
                         contentContainerStyle={{padding: 16, paddingBottom: 48}}>

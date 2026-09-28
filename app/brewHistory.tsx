@@ -11,9 +11,11 @@ import DotMatrixText from "@/components/DotMatrixText";
 import ExportButton from "@/components/ExportButton";
 import ScreenHeader from "@/components/ScreenHeader";
 import XbrwSheet from "@/components/XbrwSheet";
+import {COMPARE_SELECTION_COPY} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewBatchHandoff} from "@/hooks/useBrewBatchHandoff";
 import {useBrewHistory} from "@/hooks/useBrewHistory";
+import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
@@ -112,8 +114,10 @@ function SelectionActionRow({
     fits,
     busy,
     canSend,
+    comparable,
     onSelect,
     onSend,
+    onCompare,
     onDelete,
     onCancel
 }: {
@@ -124,8 +128,10 @@ function SelectionActionRow({
     fits: boolean;
     busy: boolean;
     canSend: boolean;
+    comparable: boolean;
     onSelect: () => void;
     onSend: () => void;
+    onCompare: () => void;
     onDelete: () => void;
     onCancel: () => void;
 }) {
@@ -169,6 +175,20 @@ function SelectionActionRow({
                     </DotMatrixText>
                 </Button>
                 <XStack gap="$2" alignItems="center" flexShrink={1} minWidth={0}>
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Compare the selected brews"
+                        accessibilityState={{disabled: !comparable}}
+                        disabled={!comparable}
+                        opacity={comparable ? 1 : 0.5}
+                        chromeless
+                        size="$2"
+                        onPress={onCompare}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                       color={comparable ? palette.text : palette.dim}>
+                            COMPARE
+                        </DotMatrixText>
+                    </Button>
                     {/* The same outlined Doto button, and the same words, the
                         record screen sends a single brew with, so the batch
                         action reads as the same action rather than a second,
@@ -201,6 +221,11 @@ function SelectionActionRow({
             {tooLarge && (
                 <Text color={palette.warn} fontSize={12}>
                     Select fewer brews to send them together.
+                </Text>
+            )}
+            {count === 2 && !comparable && (
+                <Text testID="selection-not-comparable" color={palette.warn} fontSize={12}>
+                    {COMPARE_SELECTION_COPY.notComparable}
                 </Text>
             )}
             {/* A brew that was cancelled, that failed, or that the app stopped
@@ -296,6 +321,7 @@ export default function BrewHistory() {
     // `pendingDeleteId` because the two delete different things and say so
     // differently: one names a brew, the other counts them.
     const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
+    const {ratingNoteOpen} = useLiveBrew();
     // Keep a ref to the currently-open swipeable so it can be closed when the
     // confirmation sheet is dismissed without deleting.
     const swipeableRef = useRef<SwipeableMethods | null>(null);
@@ -320,6 +346,11 @@ export default function BrewHistory() {
         const brew = filtered.find((candidate) => candidate.id === id);
         return brew !== undefined && !canHandOff(brew.outcome);
     }).length;
+    const selectedBrews = selectedIds
+        .map((id) => filtered.find((brew) => brew.id === id))
+        .filter((brew): brew is StoredBrew => brew !== undefined);
+    const comparable = selectedBrews.length === 2
+        && selectedBrews[0].recipeUuid === selectedBrews[1].recipeUuid;
 
     function handlePress(brew: StoredBrew) {
         if (selecting) {
@@ -368,6 +399,21 @@ export default function BrewHistory() {
         handleSelectCancel();
     }
 
+    function handleSelectionCompare() {
+        if (!comparable) return;
+        // Exactly two. Quietly taking the first two out of three would answer a
+        // different question than the one the user selected.
+        //
+        // The newer brew leads. Somebody comparing two brews is nearly always
+        // asking what their last one did differently, so the accent goes on
+        // the one they just made and the older brew is the grey it is held
+        // against. SWAP is there for the other reading.
+        const [older, newer] = [...selectedBrews]
+            .sort((one, two) => one.startedAt - two.startedAt);
+        handleSelectCancel();
+        router.push({pathname: "/brewCompare", params: {a: newer.id, b: older.id}});
+    }
+
     function handleSelectionDelete() {
         for (const id of selectedIds) remove(id);
         handleSelectCancel();
@@ -393,10 +439,17 @@ export default function BrewHistory() {
     // brew rows themselves (the name at brew time), so a since-renamed recipe
     // does not relabel its own history.
     const recipeName = recipeUuid ? filtered[0]?.recipeName : undefined;
+    // Every open sheet has to be named here. On Android a Tamagui sheet renders
+    // as a sibling of the screen and isolates nothing on its own, so one left
+    // out leaves the rows and the selection actions reachable underneath a
+    // destructive confirmation -- see `components/XbrwSheet.tsx`.
+    const screenCovered = pendingBrew !== null || confirmingBatchDelete || ratingNoteOpen;
 
     if (filtered.length === 0) {
         return (
-            <YStack flex={1} backgroundColor={palette.base}>
+            <YStack flex={1} backgroundColor={palette.base}
+                    accessibilityElementsHidden={screenCovered}
+                    importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 <HistoryHeader recipeName={recipeName} count={filtered.length} />
                 <YStack flex={1} padding="$4" alignItems="center"
                         justifyContent="center" gap="$2">
@@ -411,12 +464,6 @@ export default function BrewHistory() {
             </YStack>
         );
     }
-
-    // Every open sheet has to be named here. On Android a Tamagui sheet renders
-    // as a sibling of the screen and isolates nothing on its own, so one left
-    // out leaves the rows and the selection actions reachable underneath a
-    // destructive confirmation -- see `components/XbrwSheet.tsx`.
-    const screenCovered = pendingBrew !== null || confirmingBatchDelete;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -437,8 +484,10 @@ export default function BrewHistory() {
                     fits={selectionFits}
                     busy={handoff.busy}
                     canSend={handoffEnabled}
+                    comparable={comparable}
                     onSelect={handleSelectStart}
                     onSend={() => void handleSelectionSend()}
+                    onCompare={handleSelectionCompare}
                     onDelete={() => setConfirmingBatchDelete(true)}
                     onCancel={handleSelectCancel}
                 />

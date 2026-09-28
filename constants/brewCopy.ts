@@ -1,6 +1,12 @@
 import type {GlyphKind} from "@/components/PourGlyph";
 import {ACTIVE_BREW_PHASE_NAMES} from "@/library/machine/Machine";
 import {AGITATION} from "@/library/Pour";
+import {
+    PLAN_STAGE_COUNT_FIELD,
+    type PlanDrift,
+    type PlanStageField,
+    type PourVerdict
+} from "@/library/brew/compare";
 
 /** What each phase says. The wording is the feature. */
 export const PHASE_COPY: Record<string, string> = {
@@ -263,3 +269,134 @@ export const LONGEST_ACTIVE_HEADLINE = [...ACTIVE_BREW_PHASE_NAMES]
 export const LONGEST_NOW_SENTENCE =
     `${PATTERN_SENTENCE.circular}, then it rests 000 s. `
     + AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_ON];
+
+/**
+ * What the comparison screen says about the two pours.
+ *
+ * `tone` names a palette entry rather than holding a colour, because colour
+ * lives in `constants/colors.ts` and a hex here would be outside it.
+ *
+ * Only `same` is a success. The other readings are amber rather than red:
+ * none of them is a fault, they are all just reasons the water channel cannot
+ * carry the comparison, and a red chip on a perfectly good pair of brews would
+ * send somebody looking for a problem that is not there.
+ */
+export const COMPARE_COPY: Record<
+    PourVerdict,
+    {chip: string; tone: "success" | "warn"}
+> = {
+    same:       {chip: "POURED THE SAME", tone: "success"},
+    stalled:    {chip: "ONE STALLED",     tone: "warn"},
+    differed:   {chip: "THEY DIFFERED",   tone: "warn"},
+    incomplete: {chip: "ONE DID NOT FINISH", tone: "warn"},
+    unwatched:  {chip: "ONE WAS LOGGED BY HAND", tone: "warn"}
+};
+
+/** What the screen says when it cannot draw one or both traces. */
+export const COMPARE_DEGRADED = {
+    /** One stream survived the retention sweep and the other did not. */
+    one: "One of these brews has lost its trace to the retention sweep, so the"
+        + " chart shows the other alone. Pin a brew to keep its trace.",
+    /** Neither did. The chart is not drawn at all. */
+    both: "Both of these brews have lost their traces to the retention sweep."
+        + " The figures below are all that remain."
+};
+
+export const COMPARE_GUARD = {
+    missing: {
+        title: "BREW NOT FOUND",
+        body: "One of these brews is no longer here."
+    },
+    same: {
+        title: "SAME BREW",
+        body: "Choose two different brews to compare. One brew can only repeat itself."
+    },
+    recipe: {
+        title: "DIFFERENT RECIPES",
+        body: "Choose two brews of the same recipe. Cross recipe comparison has no shared plan."
+    }
+} as const;
+
+export const COMPARE_SELECTION_COPY = {
+    notComparable: "These brews are of different recipes, so there is nothing to compare."
+} as const;
+
+export const COMPARE_PINNED = "Trace pinned";
+
+export const PLAN_FIELD_WORD: Record<PlanStageField, string> = {
+    pourNumber: "stage number",
+    volume: "volume",
+    temperature: "temperature",
+    flowRate: "flow rate",
+    agitation: "agitation",
+    pourPattern: "pour pattern",
+    pauseTime: "rest time",
+    [PLAN_STAGE_COUNT_FIELD]: "stage count"
+};
+
+function sentenceList(words: string[]): string {
+    if (words.length <= 1) return words[0] ?? "";
+    if (words.length === 2) return `${words[0]} and ${words[1]}`;
+    return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+export function compareDriftSentence(
+    grade: Exclude<PlanDrift, "none">,
+    fields: PlanStageField[]
+): string {
+    if (fields.includes(PLAN_STAGE_COUNT_FIELD)) {
+        return "The plans have different numbers of stages. Read the chart with care.";
+    }
+    const words = sentenceList(fields.map((field) => PLAN_FIELD_WORD[field]));
+    if (grade === "shape") {
+        return `The plan shapes differ in ${words}. Read the chart with care.`;
+    }
+    return `The plans differ in ${words}, but the chart shape is the same.`;
+}
+
+/**
+ * The line under the stars on the finished brew screen.
+ *
+ * The screen asks at the moment the machine stops, which is the moment the user
+ * has least to say: the cup is under the spout and has not been tasted. The
+ * control stays because somebody who does have an opinion should not have to
+ * go looking for a history screen to give it. This line is what makes walking
+ * away a choice rather than a loss.
+ */
+export const RATING_CAN_WAIT = "No rush. You can rate it later.";
+
+/** Drawn on the rating bar's second row, after the recipe name. */
+export const RATING_PROMPT_QUESTION = "HOW WAS IT";
+
+/**
+ * The accessibility label for the rating bar's left hand tap target, which
+ * opens the brew record.
+ */
+export const RATING_PROMPT_OPEN_LABEL = "Open the last brew";
+
+/**
+ * The accessibility label for the rating bar's close control.
+ *
+ * Not visible text: the control is an icon.
+ */
+export const RATING_PROMPT_DISMISS_LABEL = "Not now";
+
+/** The title of the rating sheet that opens behind a star. */
+export const RATING_SHEET_TITLE = "How was it?";
+
+/** Visible text on the rating sheet's confirm control. */
+export const RATING_SHEET_DONE = "DONE";
+
+/**
+ * What the Beanconqueror door says once a brew has gone over.
+ *
+ * Phrased as what this app did rather than what the other app received:
+ * opening a deep link proves nothing about installation, understanding or the
+ * user cancelling out of it. The second sentence is the honest description of
+ * an envelope with no brew id in it, which is why the button is never disabled.
+ * It stays conditional because the first envelope may not have reached
+ * Beanconqueror at all.
+ */
+export function HANDOFF_ALREADY_SENT(when: string): string {
+    return `Sent ${when}. Sending again will add another brew rather than update the one you sent.`;
+}

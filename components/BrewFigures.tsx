@@ -3,6 +3,7 @@ import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
+import {formatBrewClock} from "@/library/brew/brewFormat";
 
 type Props = {
     water: number;
@@ -19,12 +20,6 @@ type Props = {
      */
     bypass?: number;
 };
-
-/** `2:06`. Floored, not rounded: a clock that shows 2:07 at 2:06.6 is wrong. */
-function clock(seconds: number): string {
-    const whole = Math.floor(Math.max(0, seconds));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
 function Figure({label, value, color, badge}: {
     label: string; value: string; color: string; badge?: React.ReactNode;
@@ -68,7 +63,7 @@ export default function BrewFigures({water, cup, seconds, accent, bypass}: Props
             <Figure label="WATER" value={String(Math.round(water))} color={accent}
                     badge={badge} />
             <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
-            <Figure label="TIME" value={clock(seconds)} color={palette.text} />
+            <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
         </XStack>
     );
 }

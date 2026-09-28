@@ -161,6 +161,25 @@ export const DEFAULTS = {
      */
     animateBrewChart: true,
     /**
+     * Offer the last brew's stars in the bottom bar on your next visit.
+     *
+     * On by default, because the whole point of #142 is that the rating asked
+     * for at the machine is asked too early and is therefore not given. Off is
+     * here because a bar that appears unbidden and cannot be silenced is a
+     * support request waiting to happen: somebody who never rates anything
+     * should be able to say so once rather than dismissing a brew at a time.
+     */
+    askForRatings: true,
+    /**
+     * The brew whose rating question was dismissed. Empty until one is.
+     *
+     * One id is all the state there is, because only the most recent brew is
+     * ever asked about: a newer brew makes this irrelevant rather than needing
+     * a second entry. A column on `brews` would carry the same fact at the
+     * cost of a migration and a field on every row that will never read it.
+     */
+    ratingPromptDismissed: "",
+    /**
      * How many brews keep their raw sample stream.
      *
      * A stream is about 2 400 samples — some tens of kilobytes — and only the
@@ -349,10 +368,10 @@ export type SettingKey = keyof typeof DEFAULTS;
  */
 export type BackupExcluded =
     "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff" |
-    "machineModelString" | "machineName";
+    "machineModelString" | "machineName" | "ratingPromptDismissed";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
     "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff",
-    "machineModelString", "machineName"
+    "machineModelString", "machineName", "ratingPromptDismissed"
 ];
 
 /**

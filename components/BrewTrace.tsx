@@ -5,7 +5,8 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
-import {cupLineFor, palette} from "@/constants/colors";
+import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
+import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
         type Box} from "@/library/brew/brewShape";
@@ -13,6 +14,7 @@ import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
         temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
+import {channelStyle, type Role} from "@/library/brew/traceStyle";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -23,8 +25,26 @@ type Props = {
     /** Total rendered height of the component. In non-compact mode this includes the legend and overrun rows. */
     height: number;
     plannedSeconds: number;
+    /**
+     * An axis imposed from outside, overriding the self-sizing below.
+     *
+     * Only the comparison screen sets it. Two lanes stacked one above the
+     * other are not a comparison unless they share a scale: the same 30 second
+     * mark has to be at the same x in both, and the same 200 ml at the same y.
+     * Absent, the box is sized to whichever of the plan, the run and the
+     * bypass box reaches furthest, which is what every other caller wants.
+     *
+     * Must be at least this lane's own extent in both dimensions. A smaller
+     * axis clips at the viewport rather than rescaling, so the lane would lose
+     * its tail with nothing on screen to say it had. And it is for `compact`
+     * lanes: the temperature band is not part of the axis, so two full-size
+     * lanes would still put the same temperature at different heights.
+     */
+    axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
     holding?: boolean;
+    /** Which comparison role this compact lane carries. Defaults to the coloured subject. */
+    role?: Role;
     /** Driven by the screen's phase animations; plain numbers keep this testable. */
     planOpacity?: number;
     planColor?: string;
@@ -58,26 +78,8 @@ type Props = {
      */
     bypass?: BypassView;
 };
-
-/** Point size of the overrun label, and of the legend's labels. */
+/** Point size of the overrun label. */
 const OVERRUN_SIZE = 12;
-const LEGEND_SIZE = 9;
-
-/**
- * The height a row of dot-matrix text needs.
- *
- * Doto's line box is close to 1.35em, the same ratio `DigitRoll` uses, applied
- * to the size the glyphs are actually *drawn* at rather than the size asked
- * for. Both halves matter here. Sixteen points was a point short of twelve
- * point text even at the default text size, so a real brew's `+96 S` lost its
- * descenders; and `DotMatrixText` will not draw Doto below eleven points
- * however small a size a call site asks for, so the nine-point legend needs a
- * fifteen-point row rather than a fourteen-point one. Accessibility text
- * sizing widens both gaps.
- */
-function rowHeight(fontSize: number): number {
-    return Math.ceil(drawnFontSize(fontSize) * 1.35);
-}
 
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
@@ -182,6 +184,11 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
 /** what was asked for, what the machine did, what landed
  * in the cup.
  *
+ * KEEP IN STEP WITH: `components/CompareTrace.tsx` and
+ * `components/__tests__/traceGrammar.test.tsx`. The two charts share their
+ * appearance through `library/brew/traceStyle.ts`; nothing in this file should
+ * set a stroke width or a dash pattern for a shared channel on its own.
+ *
  * The axis is sized to the longer of the plan and the run, so a brew held by
  * overflow protection ends right of its plan by exactly the time it lost and
  * the chart records the hold for free. Squeezing the run back onto the plan's
@@ -189,7 +196,8 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
  */
 export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
-    holding = false, planOpacity = 1, planColor = palette.muted,
+    axis,
+    holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
     compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
@@ -218,8 +226,8 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
-        maxV: Math.max(
+        maxT: axis?.maxT ?? Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
+        maxV: axis?.maxV ?? Math.max(
             planTop,
             water.length > 0 ? water[water.length - 1].v : 0,
             planTop + bypassMl
@@ -231,9 +239,14 @@ export default function BrewTrace({
     const planLength = pathLength(plan, box);
     const waterPath = toPath(water, box);
     const cupPath = toPath(cup, box);
-    // Derived here rather than at each use so the compact render, the full render
-    // and the legend cannot drift apart.
-    const cupColour = cupLineFor(accent);
+    // Derived here rather than at each use so the compact render, the full
+    // render and the legend cannot drift apart. From `traceStyle` rather than
+    // inline so that `CompareTrace` cannot drift from either.
+    const waterStyle = channelStyle("water", {accent, holding, role});
+    const cupStyle = channelStyle("cup", {accent, role});
+    const planStyle = channelStyle("plan", {
+        accent, dashed: planDashed, planColour: planColor
+    });
     // The stages a temperature belongs to. `stages ?? pours` is the same
     // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
     // `stages`, so reading `pours` alone would draw nothing in history.
@@ -301,33 +314,25 @@ export default function BrewTrace({
                     <Path
                         testID="trace-plan"
                         d={planPath}
-                        stroke={planColor}
                         strokeOpacity={planOpacity}
-                        strokeWidth={1.5}
-                        strokeDasharray={planDashed ? "4 4" : undefined}
                         fill="none"
+                        {...planStyle}
                     />
                 )}
                 {cupPath !== "" && (
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={cupColour}
-                        strokeWidth={2}
-                        strokeDasharray="1 3"
-                        strokeLinecap="round"
                         fill="none"
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
                     <Path
                         testID="trace-water"
                         d={waterPath}
-                        stroke={holding ? palette.warn : accent}
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
                         fill="none"
+                        {...waterStyle}
                     />
                 )}
             </Svg>
@@ -504,11 +509,9 @@ export default function BrewTrace({
                     <Path
                         testID="trace-plan"
                         d={planPath}
-                        stroke={planColor}
                         strokeOpacity={planOpacity}
-                        strokeWidth={1.5}
-                        strokeDasharray={planDashed ? "4 4" : undefined}
                         fill="none"
+                        {...planStyle}
                     />
                 )}
                 {planPath !== "" && planHeadAt < 1 && (
@@ -526,22 +529,16 @@ export default function BrewTrace({
                     <Path
                         testID="trace-cup"
                         d={cupPath}
-                        stroke={cupColour}
-                        strokeWidth={2}
-                        strokeDasharray="1 3"
-                        strokeLinecap="round"
                         fill="none"
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
                     <Path
                         testID="trace-water"
                         d={waterPath}
-                        stroke={holding ? palette.warn : accent}
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
                         fill="none"
+                        {...waterStyle}
                     />
                 )}
                 {bypassBox && (
@@ -575,10 +572,10 @@ export default function BrewTrace({
             ) : chart}
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
                     alignItems="center" gap="$3">
-                <LegendItem colour={holding ? palette.warn : accent} label="WATER" />
-                <LegendItem colour={cupColour} label="CUP" dotted />
+                <TraceLegendItem colour={waterStyle.stroke} label="WATER" />
+                <TraceLegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
-                    <LegendItem colour={planColor} label="PLAN" dashed />
+                    <TraceLegendItem colour={planStyle.stroke} label="PLAN" dashed />
                 )}
             </XStack>
             <XStack testID="trace-overrun-row" justifyContent="flex-end"
@@ -597,33 +594,4 @@ export default function BrewTrace({
 /** One decimal, as in `toPath`. Long SVG paths are mostly noise. */
 function round(n: number): number {
     return Math.round(n * 10) / 10;
-}
-
-/**
- * One entry in the legend.
- *
- * Beneath the graph rather than over it. Top-left is clear at the end of a
- * brew but sits on the plan dashes at the start, so overlaying it trades one
- * legibility problem for another; a dedicated row costs 14 pt and never
- * collides with anything.
- */
-function LegendItem({colour, label, dashed = false, dotted = false}: {
-    colour: string; label: string; dashed?: boolean; dotted?: boolean;
-}) {
-    return (
-        <XStack alignItems="center" gap="$1.5">
-            <Svg width={14} height={6}>
-                <Line
-                    x1={0} y1={3} x2={14} y2={3}
-                    stroke={colour}
-                    strokeWidth={2}
-                    strokeDasharray={dashed ? "3 3" : dotted ? "1 3" : undefined}
-                />
-            </Svg>
-            <DotMatrixText fontSize={LEGEND_SIZE} weight="bold" letterSpacing={1.2}
-                           color={palette.dim}>
-                {label}
-            </DotMatrixText>
-        </XStack>
-    );
 }
