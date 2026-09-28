@@ -353,3 +353,38 @@ export function compareDriftSentence(
     }
     return `The plans differ in ${words}, but the chart shape is the same.`;
 }
+
+/**
+ * The line under the stars on the finished brew screen.
+ *
+ * The screen asks at the moment the machine stops, which is the moment the user
+ * has least to say: the cup is under the spout and has not been tasted. The
+ * control stays because somebody who does have an opinion should not have to
+ * go looking for a history screen to give it. This line is what makes walking
+ * away a choice rather than a loss.
+ */
+export const RATING_CAN_WAIT = "No rush. You can rate it later.";
+
+/** The rating prompt along the bottom of the app. */
+export const RATING_PROMPT = {
+    /** Above the stars, on the row with the recipe name. */
+    question: "HOW WAS IT",
+    /** The bar as a whole, for a screen reader. */
+    openLabel: "Open the last brew",
+    dismissLabel: "Not now",
+    /** The sheet behind a star. */
+    sheetTitle: "How was it?",
+    sheetDone: "DONE"
+} as const;
+
+/**
+ * What the Beanconqueror door says once a brew has gone over.
+ *
+ * Phrased as what this app did rather than what the other app received:
+ * opening a deep link proves nothing about installation, understanding or the
+ * user cancelling out of it. The second sentence is the honest description of
+ * an envelope with no brew id in it, which is why the button is never disabled.
+ */
+export function HANDOFF_ALREADY_SENT(when: string): string {
+    return `Sent ${when}. Sending again adds a second brew over there rather than updating the first.`;
+}
