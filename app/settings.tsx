@@ -24,8 +24,10 @@ import {useSetting} from "@/hooks/useSetting";
 import {type BackupPayload} from "@/library/backup";
 import type {BrewRecord} from "@/library/brew/BrewRecord";
 import type {BackupExcluded, Settings, SettingKey} from "@/library/Settings";
+import {DEFAULTS} from "@/library/Settings";
 import {isSortAxis, isSortDirection} from "@/library/librarySort";
 import {isLibraryView} from "@/library/libraryView";
+import {isMachineModel} from "@/library/machine/machineModel";
 import {asTemperatureUnit} from "@/library/units";
 
 type Props = {
@@ -73,6 +75,65 @@ function restoredMessage(recipes: number, brews: number): string {
     if (brews > 0) parts.push(brews === 1 ? "1 brew" : `${brews} brews`);
     if (parts.length === 0) return "0 recipes restored";
     return `${parts.join(" and ")} restored`;
+}
+
+/**
+ * The settings a backup should carry.
+ *
+ * Used by the backup export and by tests that need the same snapshot without
+ * mounting the whole component.
+ */
+export function settingsSnapshot(settings?: Settings): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
+    // If settings provided, read from it; otherwise use defaults.
+    // This lets the function work in tests without database access.
+    if (settings) {
+        return {
+            showCoffeeMarker: settings.get("showCoffeeMarker"),
+            dotMatrixProfile: settings.get("dotMatrixProfile"),
+            showRecipeAvatars: settings.get("showRecipeAvatars"),
+            showHints: settings.get("showHints"),
+            temperatureUnit: settings.get("temperatureUnit"),
+            bypassTempEncoding: settings.get("bypassTempEncoding"),
+            firstBrewDone: settings.get("firstBrewDone"),
+            machineConsoleAcknowledged: settings.get("machineConsoleAcknowledged"),
+            machineConsoleConfirmations: settings.get("machineConsoleConfirmations"),
+            machineModel: settings.get("machineModel"),
+            machineAutoStart: settings.get("machineAutoStart"),
+            animateBrewChart: settings.get("animateBrewChart"),
+            brewTraceRetention: settings.get("brewTraceRetention"),
+            librarySort: settings.get("librarySort"),
+            librarySortDirection: settings.get("librarySortDirection"),
+            libraryFavouritesFirst: settings.get("libraryFavouritesFirst"),
+            libraryView: settings.get("libraryView"),
+            invertAutoShelves: settings.get("invertAutoShelves"),
+            hiddenShelves: settings.get("hiddenShelves"),
+            myShelves: settings.get("myShelves")
+        };
+    }
+    
+    // Fallback: return defaults for testing
+    return {
+        showCoffeeMarker: DEFAULTS.showCoffeeMarker,
+        dotMatrixProfile: DEFAULTS.dotMatrixProfile,
+        showRecipeAvatars: DEFAULTS.showRecipeAvatars,
+        showHints: DEFAULTS.showHints,
+        temperatureUnit: DEFAULTS.temperatureUnit,
+        bypassTempEncoding: DEFAULTS.bypassTempEncoding,
+        firstBrewDone: DEFAULTS.firstBrewDone,
+        machineConsoleAcknowledged: DEFAULTS.machineConsoleAcknowledged,
+        machineConsoleConfirmations: DEFAULTS.machineConsoleConfirmations,
+        machineModel: DEFAULTS.machineModel,
+        machineAutoStart: DEFAULTS.machineAutoStart,
+        animateBrewChart: DEFAULTS.animateBrewChart,
+        brewTraceRetention: DEFAULTS.brewTraceRetention,
+        librarySort: DEFAULTS.librarySort,
+        librarySortDirection: DEFAULTS.librarySortDirection,
+        libraryFavouritesFirst: DEFAULTS.libraryFavouritesFirst,
+        libraryView: DEFAULTS.libraryView,
+        invertAutoShelves: DEFAULTS.invertAutoShelves,
+        hiddenShelves: DEFAULTS.hiddenShelves,
+        myShelves: DEFAULTS.myShelves
+    };
 }
 
 /**
@@ -128,6 +189,8 @@ export default function SettingsScreen({settings}: Props) {
         useSetting("machineConsoleAcknowledged", settings);
     const [machineConsoleConfirmations, setMachineConsoleConfirmations] =
         useSetting("machineConsoleConfirmations", settings);
+    const [machineModel, setMachineModel] =
+        useSetting("machineModel", settings);
     // Shown as a row inside MachineSection, not here. Read anyway, because a
     // backup carries every preference and this is one.
     const [machineAutoStart, setMachineAutoStart] = useSetting("machineAutoStart", settings);
@@ -181,17 +244,6 @@ export default function SettingsScreen({settings}: Props) {
     // `NOT_IN_BACKUP` is subtracted from the key type rather than just left out
     // of the object, so a key excluded on purpose still cannot be confused with
     // a key someone forgot.
-    function settingsSnapshot(): Record<Exclude<SettingKey, BackupExcluded>, unknown> {
-        return {
-            showCoffeeMarker, dotMatrixProfile, showRecipeAvatars, showHints,
-            temperatureUnit,
-            bypassTempEncoding,
-            firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
-            machineAutoStart, animateBrewChart, brewTraceRetention,
-            librarySort, librarySortDirection, libraryFavouritesFirst,
-            libraryView, invertAutoShelves, hiddenShelves, myShelves
-        };
-    }
 
     async function onBackUp() {
         // The whole table, not `library.recipes`: the list is the answer to the
@@ -273,6 +325,9 @@ export default function SettingsScreen({settings}: Props) {
         }
         if (typeof incoming.machineConsoleConfirmations === "boolean") {
             setMachineConsoleConfirmations(incoming.machineConsoleConfirmations);
+        }
+        if (isMachineModel(incoming.machineModel)) {
+            setMachineModel(incoming.machineModel);
         }
         if (typeof incoming.machineAutoStart === "boolean") {
             setMachineAutoStart(incoming.machineAutoStart);
