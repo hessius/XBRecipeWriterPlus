@@ -1,7 +1,8 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 
-import type {PlanStage} from "./BrewRecord";
+import type {BrewSample, PlanStage} from "./BrewRecord";
 import {countsAsBrewed} from "./brewPopulation";
+import {livePoints, type Point} from "./brewShape";
 
 /**
  * Two brews of one recipe, held against each other.
@@ -38,8 +39,9 @@ export type PourVerdict = "same" | "stalled" | "differed" | "incomplete";
  * record screen uses, for rows written before `pouringAt` existed.
  */
 export function pourDurationSeconds(record: StoredBrew): number {
-    const pouredFrom = (record.pouringAt ?? 0) > 0
-        ? record.pouringAt
+    const pouringAt = record.pouringAt;
+    const pouredFrom = typeof pouringAt === "number" && pouringAt > 0
+        ? pouringAt
         : record.startedAt;
     return Math.max(0, (record.endedAt - pouredFrom) / 1000);
 }
@@ -143,4 +145,132 @@ export function planDrift(
     );
     const grade: PlanDrift = shape ? "shape" : fields.length > 0 ? "detail" : "none";
     return {grade, fields};
+}
+
+/** One line of the ledger. `shared` means the two brews agree. */
+export type CompareRow = {label: string; a: string; b: string; shared: boolean};
+
+export type BrewUnderComparison = {record: StoredBrew; samples: BrewSample[]};
+
+export type Comparison = {
+    subject: StoredBrew;
+    reference: StoredBrew;
+    pour: {verdict: PourVerdict; why: string};
+    drift: {grade: PlanDrift; fields: string[]};
+    rows: CompareRow[];
+    cupGap: Point[];
+};
+
+/** What a row says where a brew never recorded the figure. */
+export const NOT_RECORDED = "not recorded";
+
+/** The value of a curve at a whole second, linearly between its samples. */
+function valueAt(points: Point[], t: number): number | null {
+    if (points.length === 0) return null;
+    if (t < points[0].t || t > points[points.length - 1].t) return null;
+    for (let i = 1; i < points.length; i++) {
+        if (points[i].t < t) continue;
+        const from = points[i - 1];
+        const to = points[i];
+        const span = to.t - from.t;
+        if (span <= 0) return to.v;
+        return from.v + ((t - from.t) / span) * (to.v - from.v);
+    }
+    return points[points.length - 1].v;
+}
+
+/**
+ * Subject minus reference, on a one second grid.
+ *
+ * Both streams are already zeroed on the first drop: `livePoints` reads
+ * `sample.at` straight, and the recorder writes it relative to `pouringAt`. So
+ * there is no alignment to invent, only a common grid to interpolate onto,
+ * because two brews do not sample at the same instants.
+ *
+ * It stops where the shorter stream stops. Extrapolating past the end of a
+ * brew would draw a gap that grew after one of the brews was over.
+ */
+export function cupGap(subject: BrewSample[], reference: BrewSample[]): Point[] {
+    const a = livePoints(subject, "cup");
+    const b = livePoints(reference, "cup");
+    if (a.length < 2 || b.length < 2) return [];
+    const end = Math.floor(Math.min(a[a.length - 1].t, b[b.length - 1].t));
+    const gap: Point[] = [];
+    for (let t = 0; t <= end; t++) {
+        const here = valueAt(a, t);
+        const there = valueAt(b, t);
+        if (here === null || there === null) continue;
+        gap.push({t, v: Math.round((here - there) * 10) / 10});
+    }
+    return gap;
+}
+
+/** `2:06`. Floored, as everywhere else: 2:07 at 2:06.6 is wrong. */
+function clock(seconds: number): string {
+    const whole = Math.floor(Math.max(0, seconds));
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+type Field = {label: string; read: (record: StoredBrew) => string | null};
+
+/**
+ * The ledger, in the order it is read.
+ *
+ * What the brew did first, then what it was made with, then what the user
+ * thought of it. A row neither brew recorded is dropped; a row one of them
+ * recorded is kept, because "this one has a grind and that one does not" is
+ * itself a difference worth seeing.
+ */
+const FIELDS: Field[] = [
+    {label: "OUTCOME", read: (r) => r.outcome},
+    {label: "TIME", read: (r) => clock(pourDurationSeconds(r))},
+    {label: "WATER", read: (r) => `${Math.round(r.waterTotal)} ml`},
+    {label: "CUP", read: (r) => `${Math.round(r.cupTotal)} ml`},
+    {
+        label: "BYPASS",
+        read: (r) => r.bypass === undefined ? null : `${Math.round(r.bypass.delivered)} ml`
+    },
+    {label: "DOSE", read: (r) => r.dose === undefined ? null : `${r.dose} g`},
+    {label: "RATIO", read: (r) => r.ratio === undefined ? null : `1:${r.ratio}`},
+    {label: "GRIND", read: (r) => r.grindSize === undefined ? null : String(r.grindSize)},
+    {label: "RPM", read: (r) => r.grinderRpm === undefined ? null : String(r.grinderRpm)},
+    {label: "RATING", read: (r) => !r.rating ? null : `${r.rating} of 5`},
+    {label: "ORIGIN", read: (r) => r.origin ?? null},
+    {label: "ROAST", read: (r) => r.roast ?? null},
+    {label: "PROCESS", read: (r) => r.process ?? null},
+    {label: "FERMENT", read: (r) => r.fermentation ?? null},
+    {
+        label: "TAGS",
+        read: (r) => (r.tags ?? []).length === 0 ? null : (r.tags ?? []).join(", ")
+    }
+];
+
+function ledger(subject: StoredBrew, reference: StoredBrew): CompareRow[] {
+    const rows: CompareRow[] = [];
+    for (const {label, read} of FIELDS) {
+        const a = read(subject);
+        const b = read(reference);
+        if (a === null && b === null) continue;
+        rows.push({
+            label,
+            a: a ?? NOT_RECORDED,
+            b: b ?? NOT_RECORDED,
+            shared: a !== null && a === b
+        });
+    }
+    return rows;
+}
+
+/** The whole comparison, computed once, for the screen to lay out. */
+export function compareBrews(
+    subject: BrewUnderComparison, reference: BrewUnderComparison
+): Comparison {
+    return {
+        subject: subject.record,
+        reference: reference.record,
+        pour: pourVerdict(subject.record, reference.record),
+        drift: planDrift(subject.record.plan, reference.record.plan),
+        rows: ledger(subject.record, reference.record),
+        cupGap: cupGap(subject.samples, reference.samples)
+    };
 }

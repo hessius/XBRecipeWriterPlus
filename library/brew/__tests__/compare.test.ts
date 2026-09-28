@@ -1,8 +1,10 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
-import type {PlanStage} from "@/library/brew/BrewRecord";
+import type {BrewSample, PlanStage} from "@/library/brew/BrewRecord";
 import {
     COMPARE_TIME_TOLERANCE_SECONDS,
     COMPARE_WATER_TOLERANCE_ML,
+    compareBrews,
+    cupGap,
     planDrift,
     pourVerdict
 } from "@/library/brew/compare";
@@ -129,5 +131,87 @@ describe("planDrift", () => {
     it("reports no drift when a brew carries no plan at all", () => {
         expect(planDrift(undefined, [stage()])).toEqual({grade: "none", fields: []});
         expect(planDrift([stage()], undefined)).toEqual({grade: "none", fields: []});
+    });
+});
+
+function stream(...rows: [number, number][]): BrewSample[] {
+    return rows.map(([at, cup]) => ({at: at * 1000, water: 0, cup, pour: 1}));
+}
+
+describe("cupGap", () => {
+    it("is empty when either stream is missing", () => {
+        expect(cupGap(stream([0, 0], [10, 50]), [])).toEqual([]);
+        expect(cupGap([], stream([0, 0], [10, 50]))).toEqual([]);
+    });
+
+    it("subtracts the reference from the subject, second by second", () => {
+        const gap = cupGap(stream([0, 0], [10, 100]), stream([0, 0], [10, 50]));
+        expect(gap[0]).toEqual({t: 0, v: 0});
+        expect(gap[5]).toEqual({t: 5, v: 25});
+        expect(gap[10]).toEqual({t: 10, v: 50});
+    });
+
+    it("interpolates across different sample rates", () => {
+        const gap = cupGap(
+            stream([0, 0], [2, 20], [4, 40], [6, 60]),
+            stream([0, 0], [6, 60])
+        );
+        expect(gap.every((point) => point.v === 0)).toBe(true);
+    });
+
+    it("stops where the shorter stream stops", () => {
+        const gap = cupGap(stream([0, 0], [20, 200]), stream([0, 0], [8, 80]));
+        expect(gap[gap.length - 1].t).toBe(8);
+    });
+});
+
+describe("compareBrews", () => {
+    it("keeps a shared value once and marks it", () => {
+        const c = compareBrews(
+            {record: brew({grindSize: 58, dose: 18}), samples: []},
+            {record: brew({id: "b", grindSize: 62, dose: 18}), samples: []}
+        );
+        const dose = c.rows.find((row) => row.label === "DOSE");
+        const grind = c.rows.find((row) => row.label === "GRIND");
+        expect(dose).toEqual({label: "DOSE", a: "18 g", b: "18 g", shared: true});
+        expect(grind).toEqual({label: "GRIND", a: "58", b: "62", shared: false});
+    });
+
+    it("omits a row neither brew recorded", () => {
+        const c = compareBrews(
+            {record: brew(), samples: []},
+            {record: brew({id: "b"}), samples: []}
+        );
+        expect(c.rows.find((row) => row.label === "GRIND")).toBeUndefined();
+    });
+
+    it("keeps a row only one brew recorded, and says the other is unknown", () => {
+        const c = compareBrews(
+            {record: brew({grindSize: 58}), samples: []},
+            {record: brew({id: "b"}), samples: []}
+        );
+        expect(c.rows.find((row) => row.label === "GRIND"))
+            .toEqual({label: "GRIND", a: "58", b: "not recorded", shared: false});
+    });
+
+    it("includes fermentation with the other bean descriptors", () => {
+        const c = compareBrews(
+            {record: brew({fermentation: "Anaerobic"}), samples: []},
+            {record: brew({id: "b", fermentation: "Lactic"}), samples: []}
+        );
+        expect(c.rows.find((row) => row.label === "FERMENT"))
+            .toEqual({label: "FERMENT", a: "Anaerobic", b: "Lactic", shared: false});
+    });
+
+    it("carries the verdict, the drift and the gap", () => {
+        const c = compareBrews(
+            {record: brew(), samples: stream([0, 0], [10, 100])},
+            {record: brew({id: "b"}), samples: stream([0, 0], [10, 50])}
+        );
+        expect(c.pour.verdict).toBe("same");
+        expect(c.drift.grade).toBe("none");
+        expect(c.cupGap.length).toBeGreaterThan(0);
+        expect(c.subject.id).toBe("a");
+        expect(c.reference.id).toBe("b");
     });
 });
