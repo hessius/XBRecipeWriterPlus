@@ -47,7 +47,10 @@ describe("fetchCloudRecipes", () => {
 
         const out = await fetchCloudRecipes(session);
 
-        expect(asked).toEqual([1, 2]);
+        // Each partition asked exactly once. Which one goes first is
+        // incidental, so this does not pin the order.
+        expect(new Set(asked)).toEqual(new Set([1, 2]));
+        expect(asked).toHaveLength(2);
         expect(out).toHaveLength(3);
     });
 

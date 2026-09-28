@@ -1,5 +1,5 @@
 import type {Session} from "./session";
-import {ADAPTED_MODEL} from "@/library/machine/machineModel";
+import {ADAPTED_MODEL, type AdaptedModel} from "@/library/machine/machineModel";
 import {CloudError, authFields, post} from "./transport";
 
 /**
@@ -53,7 +53,7 @@ export async function fetchCloudRecipes(
  */
 async function fetchPartition(
     session: Session,
-    adaptedModel: number,
+    adaptedModel: AdaptedModel,
     signal?: AbortSignal
 ): Promise<CloudRow[]> {
     const out: CloudRow[] = [];
