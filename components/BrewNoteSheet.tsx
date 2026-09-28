@@ -24,7 +24,7 @@ import {onAccent, palette} from "@/constants/colors";
  * which cup is being asked about.
  */
 export default function BrewNoteSheet({
-    open, onOpenChange, figures, recipeName, rating, note, onRate, onNote, onNoteDraft
+    open, onOpenChange, figures, recipeName, rating, note, onRate, onNote, onNoteDraft, footer
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -36,6 +36,11 @@ export default function BrewNoteSheet({
     onRate: (rating: number) => void;
     onNote: (note: string) => void;
     onNoteDraft?: (note: string) => void;
+    /**
+     * An extra control under DONE. The sheet only collects a verdict; callers
+     * that put a send action here still decide what happens after it closes.
+     */
+    footer?: React.ReactNode;
 }) {
     function close(): void {
         Keyboard.dismiss();
@@ -73,6 +78,7 @@ export default function BrewNoteSheet({
                         {RATING_SHEET_DONE}
                     </DotMatrixText>
                 </XStack>
+                {footer}
             </YStack>
         </XbrwSheet>
     );

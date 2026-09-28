@@ -15,11 +15,11 @@ import * as Clipboard from "expo-clipboard";
 import ExportButton from "@/components/ExportButton";
 import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
-import {ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
 import {useBrewHandoff} from "@/hooks/useBrewHandoff";
 import BeanNameSheet from "@/components/BeanNameSheet";
+import BrewNoteSheet from "@/components/BrewNoteSheet";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStore}
@@ -27,6 +27,7 @@ import {sharedBrewDatabase, useBrewHistory, useBrewJudgement, type JudgementStor
 import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
+import {brewFigures} from "@/library/brew/brewFigures";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
@@ -35,6 +36,7 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
@@ -138,6 +140,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     // here and not in the batch path: once is a courtesy, once per brew across
     // a selection is a questionnaire.
     const [namingBean, setNamingBean] = useState(false);
+    const [ratingBeforeSend, setRatingBeforeSend] = useState(false);
     const [pickingComparison, setPickingComparison] = useState(false);
     const [comparisonCandidates, setComparisonCandidates] = useState<StoredBrew[]>([]);
 
@@ -236,6 +239,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const hasComparisonCandidate = brews.some(
         (brew) => brew.recipeUuid === record.recipeUuid && brew.id !== record.id
     );
+    const figures = brewFigures(record);
 
     function openComparisonPicker(): void {
         const candidates = sharedBrewDatabase()
@@ -263,7 +267,16 @@ export default function BrewRecord({recipeLookup}: Props) {
         setComparisonCandidates([]);
     }
 
-    const screenCovered = namingBean || pickingComparison;
+    function continueSend(): void {
+        setRatingBeforeSend(false);
+        if (handoffCoffee(record, recipe) === undefined) {
+            setNamingBean(true);
+            return;
+        }
+        void sendHandoff();
+    }
+
+    const screenCovered = namingBean || ratingBeforeSend || pickingComparison;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -422,6 +435,10 @@ export default function BrewRecord({recipeLookup}: Props) {
                             <ExportButton label={handoffTarget.buttonLabel}
                                           busy={handoffBusy}
                                           onPress={() => {
+                                              if ((record.rating ?? 0) === 0) {
+                                                  setRatingBeforeSend(true);
+                                                  return;
+                                              }
                                               if (handoffCoffee(record, recipe) === undefined) {
                                                   setNamingBean(true);
                                                   return;
@@ -429,6 +446,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                                               void sendHandoff();
                                           }} />
                         </XStack>
+                    )}
+                    {record.sentAt !== undefined && record.sentAt > 0 && (
+                        <Text fontSize={12} color={palette.dim}>
+                            {HANDOFF_ALREADY_SENT(
+                                new Date(record.sentAt).toLocaleDateString()
+                            )}
+                        </Text>
                     )}
                 </YStack>
             )}
@@ -452,6 +476,29 @@ export default function BrewRecord({recipeLookup}: Props) {
             <BeanNameSheet open={namingBean} onOpenChange={setNamingBean}
                            suggestion={beanNameFromRecipe(record.recipeName) ?? ""}
                            onConfirm={(name) => void sendHandoff(name)} />
+            <BrewNoteSheet
+                open={ratingBeforeSend}
+                onOpenChange={(open) => {
+                    if (!open) continueSend();
+                }}
+                figures={figures}
+                recipeName={record.recipeName}
+                rating={judgement.rating}
+                note={judgement.note}
+                onRate={judgement.rate}
+                onNote={judgement.annotate}
+                footer={
+                    <XStack accessibilityRole="button"
+                            accessibilityLabel="Send without rating it"
+                            testID="send-without-rating"
+                            onPress={continueSend}
+                            height={44} alignItems="center" justifyContent="center">
+                        <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
+                                       color={palette.dim}>
+                            SEND WITHOUT RATING
+                        </DotMatrixText>
+                    </XStack>
+                }/>
             <CompareWithSheet
                 open={pickingComparison}
                 candidates={comparisonCandidates}
