@@ -1756,164 +1756,114 @@ git commit -m "Draw a catalogue row" -m "Co-authored-by: Copilot <223556219+Copi
 
 ---
 
-## Task 8: The chips' picker
+## Task 8: The chips' picker (rewritten after the amendment)
 
 **Files:**
 - Create: `components/HubFilterSheet.tsx`
 - Test: `components/__tests__/HubFilterSheet.test.tsx`
 
+> **This task was rewritten.** The version written before the amendment fed the
+> sheet the **server's vocabulary** as `{name, value}` pairs with `value` an id,
+> on the reasoning that the rows' own text is dirty and the vocabulary is
+> clean. That reasoning was right about the text and wrong about the outcome:
+> the server does not index against its own vocabulary, so a sheet built from
+> it offers 93 flavours that find nothing, and on the Original machine every
+> single origin finds nothing. Read this version, not the one in the history.
+
 One sheet, reused by every facet chip. Modelled on `components/BeanFilterSheet.tsx`,
-which takes an already-built vocabulary and reports the whole new id array back.
+which takes an already-built list and reports the whole new selection back.
+
+**What it is fed now.** `hubFacetCounts(rows, facet)` from `library/hub/hubQuery.ts`,
+which returns `{value: string; count: number}[]`, commonest first, counted over
+the rows actually in hand. Two consequences that are the whole point:
+
+1. **Every option finds at least one recipe.** The count is not decoration, it
+   is the promise. Show it.
+2. **The values are the catalogue's own cleaned words**, so what the sheet
+   offers and what the chip says are the same string. `hubRow.ts` already did
+   the cleaning: splitting run-on lists on six different separators, repairing
+   mojibake, and dropping placeholders like `N/A` and `???`.
+
+**The shape:**
+
+```tsx
+type Props = {
+    open: boolean;
+    onOpenChange(open: boolean): void;
+    /** What this facet is called on the chip: ORIGIN, PROCESS, VARIETAL, FLAVOUR. */
+    title: string;
+    /** From `hubFacetCounts`. Commonest first. Never contains a dead option. */
+    options: readonly {value: string; count: number}[];
+    /** The values currently chosen. */
+    selected: readonly string[];
+    /** The whole new selection, which is what `setFacet` takes. */
+    onChange(values: string[]): void;
+};
+```
+
+Reporting the **whole new array** rather than one toggle is deliberate and
+matches `BeanFilterSheet`: it is what `useHubBrowse`'s `setFacet` takes, and it
+lets CLEAR be one call rather than a loop.
+
+**A long list.** Flavours run to hundreds of distinct values once the partition
+has landed. The sheet needs to stay usable, so: commonest first (already done
+for you), and a filter field if `BeanFilterSheet` has one. **Read
+`BeanFilterSheet.tsx` and follow whatever it does** rather than inventing a
+second answer. If it has no field and the list would be unusable without one,
+say so in your report instead of silently adding one.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `components/__tests__/HubFilterSheet.test.tsx`:
+Create `components/__tests__/HubFilterSheet.test.tsx`. Pressing a control
+inside an `XbrwSheet` needs a retry loop, because during the sheet's entrance
+the node is findable but the press is discarded. Use the `pressOnSheet` helper
+from `app/__tests__/brewHistory.test.tsx`:
 
 ```tsx
-/**
- * The picker every facet chip opens.
- *
- * Pressing a control inside an `XbrwSheet` needs a retry loop: during the
- * sheet's entrance the node is findable but the press is discarded. The
- * `pressOnSheet` helper here is the one from `app/__tests__/brewHistory.test.tsx`.
- */
-import React from "react";
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
-
-import HubFilterSheet from "@/components/HubFilterSheet";
-import {renderWithProviders} from "@/test-utils/render";
-
-const ORIGINS = [
-    {name: "Brazil", value: "1"},
-    {name: "Colombia", value: "5"},
-    {name: "Ethiopia", value: "9"}
-];
-
 async function pressOnSheet(label: string) {
     await waitFor(async () => {
         await fireEvent.press(screen.getByLabelText(label));
     });
 }
-
-describe("picking a facet", () => {
-    it("lists the server's vocabulary, not the words on the rows", async () => {
-        // The rows' own text is dirty; the vocabulary is what the server
-        // actually files them under.
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={ORIGINS} selected={[]}
-                            onOpenChange={() => {}} onChange={() => {}}/>
-        );
-
-        expect(await screen.findByLabelText("Brazil")).toBeTruthy();
-        expect(screen.getByLabelText("Ethiopia")).toBeTruthy();
-    });
-
-    it("marks what is already chosen", async () => {
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={ORIGINS} selected={["5"]}
-                            onOpenChange={() => {}} onChange={() => {}}/>
-        );
-
-        expect((await screen.findByLabelText("Colombia")).props.accessibilityState.checked)
-            .toBe(true);
-        expect(screen.getByLabelText("Brazil").props.accessibilityState.checked).toBe(false);
-    });
-
-    it("reports the whole new selection rather than a delta", async () => {
-        // The same contract `BeanFilterSheet` has: the owner holds the list
-        // and this hands back what it should now be.
-        const onChange = jest.fn();
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={ORIGINS} selected={["5"]}
-                            onOpenChange={() => {}} onChange={onChange}/>
-        );
-
-        await pressOnSheet("Ethiopia");
-
-        expect(onChange).toHaveBeenCalledWith(["5", "9"]);
-    });
-
-    it("takes a chosen one back off", async () => {
-        const onChange = jest.fn();
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={ORIGINS} selected={["5", "9"]}
-                            onOpenChange={() => {}} onChange={onChange}/>
-        );
-
-        await pressOnSheet("Colombia");
-
-        expect(onChange).toHaveBeenCalledWith(["9"]);
-    });
-
-    it("offers a way out of a long list", async () => {
-        // 93 flavours. Without this the only way back to everything is to
-        // remember and un-press each one.
-        const onChange = jest.fn();
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={ORIGINS} selected={["5", "9"]}
-                            onOpenChange={() => {}} onChange={onChange}/>
-        );
-
-        await pressOnSheet("Clear origin");
-
-        expect(onChange).toHaveBeenCalledWith([]);
-    });
-
-    it("says so rather than drawing nothing when the vocabulary never arrived", async () => {
-        // The criteria fetch can fail. An empty sheet reads as "this coffee
-        // does not exist in the catalogue", which is a different claim.
-        await renderWithProviders(
-            <HubFilterSheet open title="ORIGIN" items={[]} selected={[]}
-                            onOpenChange={() => {}} onChange={() => {}}/>
-        );
-
-        expect(await screen.findByText(/could not be loaded/i)).toBeTruthy();
-    });
-});
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+Cover at least:
 
-Run: `npx jest components/__tests__/HubFilterSheet.test.tsx`
-Expected: FAIL, module not found.
+1. **Every option is listed, commonest first**, in the order given.
+2. **Each option shows its count**, because the count is the promise that the
+   option finds something.
+3. **Choosing an unchosen option reports the whole new array**, with the new
+   value added.
+4. **Choosing a chosen option reports the array without it.**
+5. **CLEAR reports an empty array**, in one call.
+6. **An empty `options` list does not render an empty sheet with no
+   explanation.** This happens legitimately while the catalogue is still
+   arriving, so it must say something rather than look broken.
+7. **The selected options are marked accessibly**, with
+   `accessibilityState={{selected: true}}` or whatever `BeanFilterSheet`
+   actually uses. Follow it; a picker in this app should feel like the others.
 
-- [ ] **Step 3: Write it**
+Remember RNTL v14: `render` and `fireEvent` are async, `UNSAFE_getAllByType`
+and `root.findAllByType` are gone, and assertions go on rendered text, test IDs
+and accessible state. Render via `renderWithProviders` from
+`test-utils/render.tsx` and `await` it.
 
-Create `components/HubFilterSheet.tsx`, at module scope:
+- [ ] **Step 2: Implement `components/HubFilterSheet.tsx`**
 
-```ts
-type Props = {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    title: string;
-    items: readonly {name: string; value: string}[];
-    selected: readonly string[];
-    onChange: (ids: string[]) => void;
-};
-```
+Built on `XbrwSheet`, which already wraps the `Dialog` + `Adapt platform="touch"`
++ `Sheet` pattern so no consumer re-derives it. See `ImportSheet.tsx` for a
+consumer.
 
-Wrap the body in `<XbrwSheet open={open} onOpenChange={onOpenChange} title={title} prewarm>`,
-exactly as `SortSheet.tsx` does. Inside, a scrolling list of rows, each a
-`Pressable` with `accessibilityRole="checkbox"`,
-`accessibilityLabel={item.name}`, `accessibilityState={{checked: selected.includes(item.value)}}`,
-whose `onPress` calls `onChange` with the whole new array. Above the list, a
-`Clear {title.toLowerCase()}` control with that exact accessible label, shown
-whenever `selected.length > 0`. When `items.length === 0`, draw a single line
-of Inter saying the filters could not be loaded, rather than an empty list.
+**If this sheet is hosted alongside another open sheet on the same screen,
+every open sheet must be named in the host's `screenCovered` guard.** On
+Android, `accessibilityViewIsModal` on the sheet does not hide sibling screen
+content. That is Task 10's problem, but note it here so Task 10 does not miss it.
 
-Colours from `constants/colors.ts`; Doto through `DotMatrixText`.
+- [ ] **Step 3: Verify**
 
-- [ ] **Step 4: Run the test, then commit**
+`npx jest components/__tests__/HubFilterSheet.test.tsx`, `npm run typecheck`,
+`npx eslint components` with zero errors, and mutation-test every guard.
 
-Run: `npx jest components/__tests__/HubFilterSheet.test.tsx`
-Expected: PASS, 6 tests.
-
-```bash
-git add components/HubFilterSheet.tsx components/__tests__/HubFilterSheet.test.tsx
-git commit -m "One picker for every facet chip" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-```
-
----
 
 ## Task 9: Saving, one at a time
 
