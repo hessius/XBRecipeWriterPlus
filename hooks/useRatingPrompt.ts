@@ -44,9 +44,9 @@ export function useRatingPrompt(
     settings?: Settings
 ): {
     brew: StoredBrew | null;
-    rate: (rating: number) => void;
-    annotate: (note: string) => void;
-    dismiss: () => void;
+    rate: (id: string, rating: number) => void;
+    annotate: (id: string, note: string) => void;
+    dismiss: (id: string) => void;
     refresh: () => void;
 } {
     const [enabled] = useSetting("askForRatings", settings);
@@ -93,27 +93,41 @@ export function useRatingPrompt(
         return () => clearTimeout(timer);
     }, [brew]);
 
-    function rate(rating: number): void {
-        if (brew === null) return;
+    function offeredBrew(id: string): StoredBrew | null {
+        return candidate.brew?.id === id ? candidate.brew : null;
+    }
+
+    // The caller names the brew being written rather than asking this hook to
+    // remember "the last one it offered". LiveBrewBar already owns that state
+    // for the note sheet; duplicating it here would make the hook hold a stale
+    // historical prompt alongside the current candidate.
+    function rate(id: string, rating: number): void {
+        const target = offeredBrew(id);
+        if (target === null) return;
         if (!isRating(rating) || rating < 1) return;
-        database().judge(brew.id, {rating});
+        database().judge(target.id, {rating});
         // Written through and held locally so the bar leaves on this same
         // render pass, not on the next foreground read.
-        setCandidate((was) => ({...was, brew: {...brew, rating}}));
+        setCandidate((was) => was.brew?.id === target.id
+            ? {...was, brew: {...was.brew, rating}}
+            : was);
     }
 
-    function annotate(note: string): void {
-        if (brew === null) return;
-        if (note === (brew.note ?? "")) return;
-        database().judge(brew.id, {note});
+    function annotate(id: string, note: string): void {
+        const target = offeredBrew(id);
+        if (target === null) return;
+        if (note === (target.note ?? "")) return;
+        database().judge(target.id, {note});
         // Same local echo as `rate`: the screen should agree with the user's
         // action immediately rather than waiting for the next app visit.
-        setCandidate((was) => ({...was, brew: {...brew, note}}));
+        setCandidate((was) => was.brew?.id === target.id
+            ? {...was, brew: {...was.brew, note}}
+            : was);
     }
 
-    function dismiss(): void {
-        if (brew === null) return;
-        setDismissedId(brew.id);
+    function dismiss(id: string): void {
+        if (offeredBrew(id) === null) return;
+        setDismissedId(id);
     }
 
     return {brew, rate, annotate, dismiss, refresh};

@@ -1,4 +1,4 @@
-import {act, screen, waitFor} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import React from "react";
 
 import LiveBrewBar from "@/components/LiveBrewBar";
@@ -81,5 +81,19 @@ describe("LiveBrewBar rating prompt refresh", () => {
 
         await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
         expect(mockStore.lastMeasuredBrew).toHaveBeenCalledTimes(2);
+    });
+
+    it("saves a note from the sheet after the rating removes the prompt", async () => {
+        mockPathname = "/";
+        await renderWithProviders(<LiveBrewBar />);
+
+        await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+        await waitFor(() => expect(screen.queryByTestId("rating-bar")).toBeNull());
+
+        const field = await screen.findByTestId("judgement-note");
+        await fireEvent(field, "endEditing", {nativeEvent: {text: "Sweet and round."}});
+
+        expect(mockStore.judge).toHaveBeenCalledWith("b1", {rating: 4});
+        expect(mockStore.judge).toHaveBeenCalledWith("b1", {note: "Sweet and round."});
     });
 });

@@ -95,7 +95,7 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.rate(4);
+            result.current.rate("b1", 4);
         });
 
         expect(store.judge).toHaveBeenCalledWith("b1", {rating: 4});
@@ -108,9 +108,29 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.annotate("Opened up after it cooled.");
+            result.current.annotate("b1", "Opened up after it cooled.");
         });
 
+        expect(store.judge).toHaveBeenCalledWith("b1", {
+            note: "Opened up after it cooled."
+        });
+    });
+
+    it("annotates the rated brew after the prompt has gone quiet", async () => {
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+
+        await act(async () => {
+            result.current.rate("b1", 4);
+        });
+        expect(result.current.brew).toBeNull();
+
+        await act(async () => {
+            result.current.annotate("b1", "Opened up after it cooled.");
+        });
+
+        expect(store.judge).toHaveBeenCalledWith("b1", {rating: 4});
         expect(store.judge).toHaveBeenCalledWith("b1", {
             note: "Opened up after it cooled."
         });
@@ -122,7 +142,7 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.annotate("Already said.");
+            result.current.annotate("b1", "Already said.");
         });
 
         expect(store.judge).not.toHaveBeenCalled();
@@ -134,9 +154,9 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.rate(0);
-            result.current.rate(6);
-            result.current.rate(2.5);
+            result.current.rate("b1", 0);
+            result.current.rate("b1", 6);
+            result.current.rate("b1", 2.5);
         });
 
         expect(store.judge).not.toHaveBeenCalled();
@@ -149,7 +169,7 @@ describe("useRatingPrompt", () => {
         const {result} = await renderHook(() => useRatingPrompt(store, settings));
 
         await act(async () => {
-            result.current.dismiss();
+            result.current.dismiss("b1");
         });
 
         expect(settings.get("ratingPromptDismissed")).toBe("b1");
@@ -189,7 +209,7 @@ describe("useRatingPrompt", () => {
 
         await act(async () => {
             jest.advanceTimersByTime(elapsedBeforeNote);
-            result.current.annotate("Still cooling.");
+            result.current.annotate("b1", "Still cooling.");
         });
         expect(result.current.brew?.id).toBe("b1");
 

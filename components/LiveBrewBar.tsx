@@ -89,10 +89,10 @@ export default function LiveBrewBar() {
                     onOpen={() => router.push(`/brewRecord?id=${asking.id}`)}
                     onRate={(rating) => {
                         // Written first, so dismissing the sheet loses nothing.
-                        prompt.rate(rating);
+                        prompt.rate(asking.id, rating);
                         setNoting({...asking, rating});
                     }}
-                    onDismiss={prompt.dismiss}
+                    onDismiss={() => prompt.dismiss(asking.id)}
                 />
             )}
             {noting !== null && (
@@ -104,10 +104,10 @@ export default function LiveBrewBar() {
                     rating={noting.rating ?? 0}
                     note={noting.note ?? ""}
                     onRate={(rating) => {
-                        prompt.rate(rating);
+                        prompt.rate(noting.id, rating);
                         setNoting((was) => was === null ? was : {...was, rating});
                     }}
-                    onNote={prompt.annotate}
+                    onNote={(note) => prompt.annotate(noting.id, note)}
                 />
             )}
         </>
