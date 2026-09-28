@@ -79,7 +79,16 @@ export type HubPour = {
     pattern: number;
 };
 
-export type HubDetailRow = HubListRow & {
+/**
+ * One recipe in full.
+ *
+ * `pourCount` is dropped rather than inherited: the detail endpoint genuinely
+ * does not send it, verified live against recipe 164, even though every list
+ * row carries one. Omitting it makes `normaliseRow(detail)` a compile error
+ * instead of a row whose stage count is silently `undefined`, and the answer
+ * is to supply `pourList.length`, which is the same number the list row means.
+ */
+export type HubDetailRow = Omit<HubListRow, "pourCount"> & {
     uploadDate: string | null;
     introduce: string | null;
     pourList: HubPour[] | null;

@@ -308,7 +308,7 @@ export type HubPour = {
     pattern: number;
 };
 
-export type HubDetailRow = HubListRow & {
+export type HubDetailRow = Omit<HubListRow, "pourCount"> & {
     uploadDate: string | null;
     introduce: string | null;
     pourList: HubPour[] | null;
@@ -2792,6 +2792,11 @@ Create `app/hubRecipe.tsx`:
    pauseElapsed={0}/>`. All eight of its non-optional props are required. There
   is no brew running here, so nothing is active and nothing is filled.
   Render the ladder only when `hubPours(detail).length > 0`.
+- **A detail row has no stage count.** Verified live: the list endpoint sends
+  `pourCount` and the detail endpoint does not, so `HubDetailRow` omits it and
+  `normaliseRow(detail)` is a compile error on purpose. Where this screen wants
+  a normalised row, supply the count from the plan it already has:
+  `normaliseRow({...detail, pourCount: detail.pourList?.length ?? 0})`.
 - **The pattern numbering is not the app's.** `hubPours` owns that mapping
   (Task 5); do not feed a raw catalogue `pattern` to `glyphForPattern` here.
   The catalogue sends `1 centered, 2 spiral, 3 circular`; `POUR_PATTERN` is

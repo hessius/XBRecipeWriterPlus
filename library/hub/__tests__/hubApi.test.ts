@@ -55,7 +55,11 @@ describe("asking the hub for a page", () => {
             ok: false, status: 503, json: async () => ({})
         })) as unknown as typeof fetch;
 
-        await expect(fetchHubPage({pageIndex: 1, pageSize: 1})).rejects.toThrow(HubApiError);
+        // Asserting the status, not just the class: an envelope check alone
+        // also throws a `HubApiError` here, so a bare `toThrow` would pass
+        // with the transport check deleted.
+        await expect(fetchHubPage({pageIndex: 1, pageSize: 1}))
+            .rejects.toMatchObject({name: "HubApiError", status: 503});
     });
 
     it("refuses a page the server answered with a failure code", async () => {
@@ -97,5 +101,22 @@ describe("asking the hub about one recipe", () => {
         expect(lastRequest().url).toBe(DETAIL);
         expect(JSON.parse(lastRequest().init.body)).toEqual({id: 164, type: 1});
         expect(detail.recipeName).toBe("Brian's Recipe");
+    });
+
+    it("hands back a detail row that carries no stage count", async () => {
+        // Verified live against recipe 164: every list row has a `pourCount`
+        // and the detail endpoint sends none, so `HubDetailRow` omits it and
+        // the stage count comes from `pourList.length` instead. If this ever
+        // starts arriving, the type can inherit it again.
+        global.fetch = jest.fn(async () => respond({
+            communityRecipeId: 164,
+            recipeName: "Brian's Recipe",
+            pourList: [{theName: "Bloom", volume: 60, temperature: 95, pausing: 40, pattern: 3}]
+        })) as unknown as typeof fetch;
+
+        const detail = await fetchHubDetail(164);
+
+        expect("pourCount" in detail).toBe(false);
+        expect(detail.pourList).toHaveLength(1);
     });
 });
